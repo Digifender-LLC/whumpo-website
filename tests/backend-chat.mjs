@@ -39,5 +39,15 @@ try{
  assert.match((await guided(b,'/backend-state-review '+prepared.request.id)).turn.assistant_text,/Before: {}/);
  assert.match((await guided(b,'/confirm-backend-state '+prepared.request.id)).turn.assistant_text,/Applied data review/);
  assert.match((await guided(b,'/backend-state '+b.project)).turn.assistant_text,/"count":5/);
+ const history=await guided(b,'/backend-state-history '+b.project);assert.match(history.turn.assistant_text,new RegExp(prepared.request.id));
+ const downloaded=await guided(b,'/export-backend-state '+prepared.request.id);assert.equal(downloaded.turn.backend_state_export_id,prepared.request.id);
+ const restore=await guided(b,'/restore-backend-before '+prepared.request.id);assert.equal(restore.turn.backend_state_confirmation_id,restore.request.id);assert.match(restore.turn.assistant_text,/entire private data document/);
+ const shownAgain=await guided(b,'/backend-state-review '+restore.request.id);assert.equal(shownAgain.turn.backend_state_confirmation_id,restore.request.id);
+ await guided(b,'/confirm-backend-state '+restore.request.id);
+ const transcript=await readChat(db,b.user);assert.equal(transcript.turns.find(t=>t.id===restore.request.id).backend_state_confirmation_id,null);assert.equal(transcript.turns.find(t=>t.id===shownAgain.request.id).backend_state_confirmation_id,null);
+ assert.match((await guided(b,'/backend-state '+b.project)).turn.assistant_text,/"state":{}/);
+ const aiExport=await ai(b,{kind:'backend',operation:'exportState',snapshotId:prepared.request.id});assert.equal(aiExport.turn.backend_state_export_id,prepared.request.id);
+ const aiRestore=await ai(b,{kind:'backend',operation:'restoreState',snapshotId:prepared.request.id});assert.equal(aiRestore.turn.backend_state_confirmation_id,aiRestore.request.id);
+ assert.match((await guided(b,'/backend-state '+b.project)).turn.assistant_text,/"state":{}/);
  console.log('Backend chat checks passed: AI immutable drafts, exact server receipts, guided inspect/test/result, free guided usage, owner isolation, rejected publication/extra fields and replay-safe execution.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

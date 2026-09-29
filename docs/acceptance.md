@@ -56,4 +56,9 @@ Added September 29, 2026 at the owner's request. EmDash is an explicit CMS workl
 
 ## Reviewed backend data milestone
 
-September 29: owned bounded project JSON state, exact ten-minute data reviews, atomic revision guards and user-only confirmation are implemented. Generated functions operate on JSON snapshots without storage capabilities. Database concurrency/expiry/retry/isolation tests, local bound-runtime HTTP flow and guided chat flow passed. This is private application data support; public backend routing, application authentication, data history/export/restore UI and lifecycle retention remain incomplete. EmDash remains its own CMS integration and is not replaced by this document store.
+September 29: owned bounded project JSON state, exact ten-minute data reviews, atomic revision guards and user-only confirmation are implemented. Generated functions operate on JSON snapshots without storage capabilities. Database concurrency/expiry/retry/isolation tests, local bound-runtime HTTP flow and guided chat flow passed. This is private application data support; public backend routing, application authentication, lifecycle retention remain incomplete. Data history/export/reviewed restoration is available as described below. EmDash remains its own CMS integration and is not replaced by this document store.
+
+
+## Backend data recovery milestone
+
+Owned applied snapshots can be listed in chat, exported as private before/after JSON, and restored from either side through a new explicit review. Restoration preserves revision history and never reruns old code. Database tests verify foreign/pending snapshot rejection, exact restore content, initial-state recovery, stale review rejection, concurrent retries and lost acknowledgments. Chat tests verify server-issued download/confirmation controls, their removal after confirmation, and model prepare-only authority. Local HTTP tests verify attachment delivery, authentication/origin enforcement and restoration through the actual Worker API. This covers private JSON data recovery, not whole-account erasure, uploaded backup import, public backend deployment or platform disaster recovery.

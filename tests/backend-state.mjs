@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const code=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));}
-const {readBackendState,readBackendReview,prepareBackendState,confirmBackendState}=await module('src/backend-state.ts');
+const {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState}=await module('src/backend-state.ts');
 const {saveBackend}=await module('src/backend-versions.ts');
 const {backendAction,backendChatCommand}=await module('src/backend-chat.ts');
 const dir=await mkdtemp('/tmp/townhello-state-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
@@ -51,5 +51,29 @@ try{
  assert.match(await backendChatCommand(db,b.user,id(),'/confirm-backend-state '+rid,service)(),/Applied data review/);
  assert.equal((await readBackendState(db,b.user,b.project)).state.count,8);
  assert.match((await backendAction(db,b.user,id(),{kind:'backend',operation:'state',projectId:b.project},service)).reply,/"count":8/);
+ // Restoration uses exact applied snapshots, without dispatching historical code.
+ const history=await backendStateHistory(db,a.user,a.project);assert.equal(history.currentRevision,2);assert.equal(history.snapshots.length,2);
+ const exported=await exportBackendState(db,a.user,lostReview.id);assert.deepEqual(exported.before.data,{count:1});assert.deepEqual(exported.after.data,{count:3});assert.equal(exported.after.sha256.length,64);assert.equal('input_json'in exported,false);
+ await assert.rejects(exportBackendState(db,b.user,lostReview.id),e=>e.status===404);
+ await assert.rejects(exportBackendState(db,a.user,r),e=>e.status===409);
+ await assert.rejects(restoreBackendState(db,b.user,id(),lostReview.id),e=>e.status===404);
+ await assert.rejects(restoreBackendState(db,a.user,id(),r),e=>e.status===409);
+ const dispatches=calls,restoreId=id(),restored=await restoreBackendState(db,a.user,restoreId,lostReview.id,'before');
+ assert.equal(restored.status,'ready');assert.equal(restored.restore_side,'before');assert.equal(restored.after_json,'{"count":1}');assert.equal((await readBackendState(db,a.user,a.project)).state.count,3);
+ await assert.rejects(restoreBackendState(db,a.user,restoreId,lostReview.id,'after'),e=>e.status===409);
+ await assert.rejects(prepare(a,restoreId,null),e=>e.status===409);
+ await assert.rejects(db.prepare('UPDATE backend_state_reviews SET restore_review_id=? WHERE id=?').bind(winner.id,restoreId).run(),/immutable/);
+ const staleRestore=await restoreBackendState(db,a.user,id(),winner.id,'after');
+ await confirmBackendState(db,a.user,restoreId);assert.equal((await readBackendState(db,a.user,a.project)).state.count,1);
+ await assert.rejects(confirmBackendState(db,a.user,staleRestore.id),e=>e.status===409);
+ const reset=await restoreBackendState(db,a.user,id(),winner.id,'before');await confirmBackendState(db,a.user,reset.id);assert.deepEqual((await readBackendState(db,a.user,a.project)).state,{});assert.equal((await readBackendState(db,a.user,a.project)).revision,4);
+ const concurrentRestore=id();const repeated=await Promise.all(Array.from({length:6},()=>restoreBackendState(db,a.user,concurrentRestore,lostReview.id,'after')));assert.ok(repeated.every(x=>x.after_json==='{"count":3}'));
+ await confirmBackendState(lossy("UPDATE backend_state_reviews SET status='applied'"),a.user,concurrentRestore);await confirmBackendState(db,a.user,concurrentRestore);assert.equal((await readBackendState(db,a.user,a.project)).revision,5);assert.equal(calls,dispatches);
+ assert.equal((await backendStateHistory(db,a.user,a.project)).snapshots[0].restore_review_id,lostReview.id);
+ // Database refuses a restore reservation targeting another tenant and a forged replacement.
+ await assert.rejects(db.prepare("INSERT INTO backend_state_reviews(id,user_id,project_id,version_id,base_revision,before_json,input_json,restore_review_id,restore_side) VALUES(?,?,?,?,5,'{\"count\":3}','null',?,'after')").bind(id(),a.user,a.project,a.version,rid).run(),/restore_source/);
+ const forged=id();await db.prepare("INSERT INTO backend_state_reviews(id,user_id,project_id,version_id,base_revision,before_json,input_json,restore_review_id,restore_side) VALUES(?,?,?,?,5,'{\"count\":3}','null',?,'after')").bind(forged,a.user,a.project,a.version,winner.id).run();
+ await assert.rejects(db.prepare("UPDATE backend_state_reviews SET status='ready',after_json='{}',result_json='null' WHERE id=?").bind(forged).run(),/restore_immutable/);
+ console.log('Backend state recovery checks passed: applied-only snapshots, scoped export, before/after recovery, initial-state recovery, stale rejection, replay, lost acknowledgment and no runtime dispatch.');
  console.log('Backend state checks passed: owner separation, immutable exact reviews, CAS race, replay, lost acknowledgments, expiry, invalid output and agent/user authority separation.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

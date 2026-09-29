@@ -1,4 +1,4 @@
-import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState} from './backend-state';
+import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState} from './backend-state';
 import {BackendError,listBackends,saveBackend,testBackend} from './backend-versions';
 import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
@@ -185,6 +185,16 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  const historyRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backend-state\/history$/);
+  if(method==='GET'&&historyRoute)return json(await backendStateHistory(env.DB,user.id,historyRoute[1]));
+  const snapshotRoute=pathname.match(/^\/api\/backend-state-snapshots\/([0-9a-f-]{36})\/(export|restore)$/);
+  if(snapshotRoute){
+    if(method==='GET'&&snapshotRoute[2]==='export')return json(await exportBackendState(env.DB,user.id,snapshotRoute[1]),200,{'content-disposition':'attachment; filename="townhello-backend-state-'+snapshotRoute[1]+'.json"'});
+    if(method==='POST'&&snapshotRoute[2]==='restore'){
+      const data=await body(request);if(typeof data?.id!=='string'||(data.side!=='before'&&data.side!=='after'))return error(400,'Provide a review ID and before or after snapshot side');
+      return json(await restoreBackendState(env.DB,user.id,data.id,snapshotRoute[1],data.side));
+    }
+  }
   const stateRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backend-state$/);
   if(stateRoute){
     if(method==='GET')return json(await readBackendState(env.DB,user.id,stateRoute[1]));
