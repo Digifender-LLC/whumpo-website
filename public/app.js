@@ -528,6 +528,13 @@
         link.rel = "noopener noreferrer";
         answer.append(link);
       }
+      if (typeof turn.cms_preview_project_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_preview_project_id) && typeof turn.cms_preview_request_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_preview_request_id)) {
+        const link = text("a", "Open private CMS preview \u2197");
+        link.href = `/api/cms/${turn.cms_preview_project_id}/content/${turn.cms_preview_request_id}/preview`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        answer.append(link);
+      }
       if (typeof turn.cms_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_confirmation_id)) {
         const button = text("button", "Approve CMS setup request");
         button.onclick = () => sendMessage(`/confirm-cms ${turn.cms_confirmation_id}`);

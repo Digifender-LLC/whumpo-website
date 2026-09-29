@@ -20,3 +20,7 @@ assert.equal((await fetch(base+'/api/cms/'+project+'/status')).status,401);
 assert.equal((await fetch(base+'/api/cms/'+project+'/status',{headers:{cookie:other}})).status,404);
 assert.equal((await fetch(base+'/api/cms/'+project+'/status',{headers:{cookie}})).status,404);
 console.log('CMS status HTTP passed: authentication, foreign-owner denial and uninitialized-instance denial.');
+
+const previewPath=base+'/api/cms/'+project+'/content/'+id+'/preview';
+assert.equal((await fetch(previewPath)).status,401);assert.equal((await fetch(previewPath,{headers:{cookie:other}})).status,404);assert.equal((await fetch(previewPath,{headers:{cookie}})).status,404);
+console.log('CMS preview HTTP access checks passed.');

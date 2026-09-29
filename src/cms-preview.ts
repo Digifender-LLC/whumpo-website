@@ -1,0 +1,26 @@
+import {readCMSDraft} from './cms-content';
+import {CMSProjectError} from './cms-projects';
+import {previewHeaders} from './components';
+const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+/** Shared Whumpo article layout fed by native CMS data, never tenant HTML. */
+export function renderCMSDraft(snapshot:{collection:string;revision?:string;item:any}){
+ const {item}=snapshot,blocks=item?.data?.content,title=item?.data?.title;
+ if(item?.status!=='draft'||typeof title!=='string'||!Array.isArray(blocks)||blocks.length>30)throw new CMSProjectError(409,'This content is not a supported private draft');
+ const paragraphs=blocks.map(block=>{
+  if(block?._type!=='block'||block.style!=='normal'||!Array.isArray(block.markDefs)||block.markDefs.length||!Array.isArray(block.children))throw new CMSProjectError(409,'This draft needs a richer preview renderer');
+  return block.children.map((span:any)=>{if(span?._type!=='span'||typeof span.text!=='string'||!Array.isArray(span.marks)||span.marks.length)throw new CMSProjectError(409,'This draft needs a richer preview renderer');return span.text;}).join('');
+ });
+ if(title.length>100||new TextEncoder().encode(paragraphs.join('')).length>2400)throw new CMSProjectError(409,'This draft exceeds the current preview profile');
+ return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${escape(title)} · Private preview</title><style>
+*{box-sizing:border-box}body{margin:0;background:#faf7ef;color:#213f31;font-family:Arial,sans-serif}.notice{background:#e4eadc;padding:13px 24px;text-align:center;font-size:13px;line-height:1.6}header,main,footer{max-width:960px;margin:auto;padding:28px 32px}header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #d8dece}.brand{font-family:Georgia,serif;font-size:27px;letter-spacing:-1px}header span:last-child{font-size:12px;letter-spacing:.12em;text-transform:uppercase}article{max-width:710px;padding:55px 0 70px}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.18em;color:#52705b}h1{font-family:Georgia,serif;font-size:clamp(36px,7vw,64px);font-weight:400;line-height:1.08;letter-spacing:-.04em;margin:23px 0 38px;overflow-wrap:anywhere}.body p{font-size:19px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}footer{border-top:1px solid #d8dece;font-size:12px;line-height:1.8;color:#52705b}.revision{display:block;overflow-wrap:anywhere}@media(max-width:600px){header,main,footer{padding-left:22px;padding-right:22px}article{padding-top:34px}.body p{font-size:17px}.notice{padding:12px 22px}header span:last-child{font-size:10px}}
+</style></head><body><div class="notice">Private draft preview · Only visible to you while signed in · Not published</div><header><span class="brand">Whumpo</span><span>${snapshot.collection==='pages'?'Page':'Post'} preview</span></header><main><article><div class="eyebrow">A work in progress</div><h1>${escape(title)}</h1><div class="body">${paragraphs.map(p=>'<p>'+escape(p)+'</p>').join('')}</div></article></main><footer>Native EmDash content · Whumpo article theme<span class="revision">Revision: ${escape(snapshot.revision??'unavailable')}</span>Refresh to load your latest saved draft.</footer></body></html>`;
+}
+export async function cmsPreview(db:D1Database,user:string,project:string,request:string,env:Record<string,unknown>){return new Response(renderCMSDraft(await readCMSDraft(db,user,project,request,env)),{headers:previewHeaders});}
+export async function prepareCMSPreview(db:D1Database,user:string,project:string,request:string,turn:string,env:Record<string,unknown>){
+ const snapshot=await readCMSDraft(db,user,project,request,env);renderCMSDraft(snapshot);
+ try{await db.prepare('INSERT INTO cms_preview_links(turn_id,user_id,project_id,draft_request_id) VALUES(?,?,?,?)').bind(turn,user,project,request).run();}catch{}
+ const row=await db.prepare('SELECT * FROM cms_preview_links WHERE turn_id=? AND user_id=? AND project_id=? AND draft_request_id=?').bind(turn,user,project,request).first();
+ if(!row)throw new CMSProjectError(409,'CMS preview link capacity is full or request ID already used');
+ return {projectId:project,requestId:request,preview:'Private preview is ready. Open the preview button below; signing in is required. It loads the latest saved draft.'};
+}
+export async function cmsPreviewLinks(db:D1Database,user:string){return (await db.prepare("SELECT l.turn_id,l.project_id,l.draft_request_id FROM cms_preview_links l JOIN cms_draft_requests d ON d.id=l.draft_request_id JOIN projects p ON p.id=l.project_id JOIN chat_turns t ON t.id=l.turn_id AND t.user_id=l.user_id WHERE l.user_id=? AND d.user_id=l.user_id AND d.project_id=l.project_id AND p.owner_user_id=l.user_id AND t.status='completed' AND instr(t.assistant_text,'Private preview is ready. Open the preview button below; signing in is required. It loads the latest saved draft.')>0 ORDER BY t.revision DESC LIMIT 100").bind(user).all()).results;}

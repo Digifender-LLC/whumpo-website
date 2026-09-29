@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
@@ -7,6 +7,7 @@ async function module(path){const b=await build({entryPoints:[path],bundle:true,
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts'),{readCMSStatus}=await module('src/cms-status.ts');
 const {createCMSDraft,readCMSDraft,listCMSDrafts,cmsContentAction,cmsContentCommand}=await module('src/cms-content.ts'),{cmsRequestAllowed}=await module('src/cms-bridge.ts');
 const {sendChat,readChat}=await module('src/chat.ts'),{prepareSiteAction}=await module('src/site-agent.ts');
+const {cmsPreview,renderCMSDraft}=await module('src/cms-preview.ts');
 const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
 async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Deploy fixture','','draft',?,?)").bind(project,user,now,now).run();const review=await prepareCMS(db,user,id(),project,'My CMS','Our updates');await confirmCMS(db,user,review.id);const resources=new Map();await allocateCMSResources(db,project,{accountId:account,find:async(k,n)=>resources.get(k+n)??null,create:async(k,n)=>resources.set(k+n,k==='database'?id():k==='session'?id().replaceAll('-',''):n)});const origin='https://whumpo-cms-'+project.replaceAll('-','')+'.digifender.com',config={projectId:project,ownerId:user,origin,secret:await deriveCMSSecret(master,project,user,origin)};return {user,project,review,config};}
@@ -64,6 +65,14 @@ try{
  assert.match(await cmsContentCommand('/cms-retry-edit '+a.project+' '+editId,id(),execute)(),/cmV2LTI=/);
  await assert.rejects(db.prepare('UPDATE cms_edit_requests SET body=? WHERE id=?').bind('{}',editId).run(),/immutable/);
  const editProposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE',action:{kind:'cms',operation:'retryEdit',projectId:a.project,requestId:editId}}),{},{cmsContent:execute});assert.match(editProposal.reply,/not published/);assert.ok(!editProposal.reply.includes('FAKE'));
+ const previewTurn=id(),previewChat=await readChat(db,a.user);assert.equal((await sendChat(db,a.user,{id:previewTurn,revision:previewChat.state.revision,content:'/cms-preview '+a.project+' '+draftId},undefined,{cmsContent:execute})).status,200);
+ const previewLink=(await readChat(db,a.user)).turns.at(-1);assert.equal(previewLink.cms_preview_project_id,a.project);assert.equal(previewLink.cms_preview_request_id,draftId);
+ const previewResponse=await cmsPreview(db,a.user,a.project,draftId,env);assert.equal(previewResponse.status,200);assert.match(previewResponse.headers.get('content-security-policy'),/sandbox/);assert.equal(previewResponse.headers.get('cache-control'),'private, no-store');assert.match(await previewResponse.text(),/Edited/);
+ await assert.rejects(cmsPreview(db,id(),a.project,draftId,env),e=>e.status===404);
+ await assert.rejects(cmsContentAction(db,id(),{operation:'previewDraft',projectId:a.project,requestId:draftId},id(),env),e=>e.status===404);
+ const snapshot=await readCMSDraft(db,a.user,a.project,draftId,env);snapshot.item.data.title='A quieter corner of the web';snapshot.item.data.content[0].children[0].text='Good things take shape one idea at a time.\n\nThis private draft is ready for a thoughtful review. <script>alert(1)</script>';
+ const html=renderCMSDraft(snapshot);assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;'));await writeFile('.secrets/cms-preview.html',html);
+ snapshot.item.data.content[0].children[0].marks=['strong'];assert.throws(()=>renderCMSDraft(snapshot),/richer preview/);
  await db.batch(Array.from({length:88},()=>db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}')));
  await assert.rejects(createCMSDraft(db,a.user,a.project,id(),'posts','Over cap','Body',env),e=>e.status===409);
  await assert.rejects(db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}').run(),/not_available/);
