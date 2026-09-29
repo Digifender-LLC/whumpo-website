@@ -4,6 +4,7 @@ const wrangler = 'node_modules/wrangler/bin/wrangler.js';
 for (const args of [
  [wrangler,'d1','migrations','apply','whumpo-control','--remote'],
  ['tools/build.mjs'],
+ [wrangler,'deploy','--config','wrangler.runtime.jsonc'],
  [wrangler,'deploy','--config','wrangler.sites.jsonc'],
  [wrangler,'deploy']
 ]) {
