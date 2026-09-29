@@ -8,7 +8,7 @@ A unique grant ID and globally unique payment/reference ID identify an immutable
 
 ## Monthly behavior
 
-Explore supplies 25 units in each UTC month. A confirmed Launch receipt supplies 250 units for its specified month, and Studio supplies 800. The highest confirmed tier in a month wins. Receiving the same or a lower tier later does not reset usage or add a second allowance. Upgrading changes the allowance ceiling, preserving spent units, reservations and credit balances. For example, moving from Launch to Studio after using 40 units leaves 760 monthly units, not a fresh 800.
+Explore supplies 50 units in each UTC month. A confirmed Launch receipt supplies 250 units for its specified month, and Studio supplies 800. The highest confirmed tier in a month wins. Receiving the same or a lower tier later does not reset usage or add a second allowance. Upgrading changes the allowance ceiling, preserving spent units, reservations and credit balances. For example, moving from Launch to Studio after using 40 units leaves 760 monthly units, not a fresh 800.
 
 An invoice/renewal must grant each new paid month explicitly. Without a grant for the next month, that month uses Explore. A downgrade can take effect by granting the lower tier for the next month. The current month's paid entitlement is preserved. Current-month refunds, entitlement revocation, proration, renewal grace periods and payment dispute policy are not implemented and must be settled before subscriptions are enabled. No automatic plan-cancellation or billing-provider action is implied by the absence of a grant.
 
@@ -33,3 +33,10 @@ Still required for paid subscriptions: customer/subscription mappings, trusted p
 ## Deployment evidence — September 29, 2026
 
 Migration 0020 applied locally and remotely before deployment. Main Worker version `e75566e6-46d9-40be-997b-739d4ff9f896`; public Worker version `955bcbf9-dce2-4227-9d00-85c46fc9c302`. TypeScript, billing (including conflicting concurrent message IDs), plan-period, publication, checkout, site-agent and workspace-agent checks passed. A temporary production account signed in with a passkey and received one live Muse reply: Explore allowance 25, four units settled, zero held. Exact replay did not increase usage; conflicting text under the same ID returned 409. Checkout remained disabled. Logout passed and the temporary account was deleted. Paid receipt behavior was verified only in disposable local databases.
+
+
+## Explore allowance revision
+
+Migration 0032 raises the normal free allowance from 25 to 50 after live onboarding tests showed the old ceiling could block the first or second edit. Current and future stored 25-unit periods receive an audited 25-unit increase; past periods and paid allowances remain unchanged. Spent usage, pending/dispatched holds and credit balances are preserved. A compatibility trigger also raises current/future periods inserted by the previous Worker during rollout. New code takes the Explore allowance from the shared plan catalogue. Paid prices, paid allowances and credit-pack pricing are unchanged.
+
+`test:explore-allowance` runs the exact migration twice against existing spend and a dispatched hold, verifies one ledger adjustment, then settles the hold. It also covers historical periods, paid ceilings and an old-Worker insert. `test:billing`, `test:plan-periods` and `test:usage-recovery` retain concurrency, settlement, renewal and recovery coverage. This is a bounded invite-only testing allowance, not a promise that every request yields a fixed number of edits.

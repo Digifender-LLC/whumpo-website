@@ -14,12 +14,12 @@ const hash='a'.repeat(64), uid=crypto.randomUUID();
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
 try {
   const user=await account(), other=await account();
-  let state=await getBilling(db,user);assert.equal(state.quota.available,25);assert.equal(state.credits.overageEnabled,false);
-  const requests=await Promise.allSettled(Array.from({length:10},()=>reserveUsage(db,user,crypto.randomUUID(),hash,5)));
+  let state=await getBilling(db,user);assert.equal(state.quota.available,50);assert.equal(state.credits.overageEnabled,false);
+  const requests=await Promise.allSettled(Array.from({length:15},()=>reserveUsage(db,user,crypto.randomUUID(),hash,5)));
   const held=requests.filter(r=>r.status==='fulfilled').map(r=>r.value.operation);
-  assert.equal(held.length,5);assert.equal(requests.filter(r=>r.status==='rejected'&&r.reason.status===402).length,5);
-  state=await getBilling(db,user);assert.equal(state.quota.available,0);assert.equal(state.quota.reserved,25);
-  assert.equal((await getBilling(db,other)).quota.available,25);
+  assert.equal(held.length,10);assert.equal(requests.filter(r=>r.status==='rejected'&&r.reason.status===402).length,5);
+  state=await getBilling(db,user);assert.equal(state.quota.available,0);assert.equal(state.quota.reserved,50);
+  assert.equal((await getBilling(db,other)).quota.available,50);
   assert.equal(await getOperation(db,other,held[0].id),null);
   const replay=await reserveUsage(db,user,held[0].id,hash,5);assert.equal(replay.created,false);
   await assert.rejects(reserveUsage(db,user,held[0].id,'b'.repeat(64),5),{status:409});
@@ -30,14 +30,14 @@ try {
   for(const op of held.slice(1))await finishUsage(db,user,op.id,0);
   await Promise.all([grantCredits(db,user,'test-grant',50,'test'),grantCredits(db,user,'test-grant',50,'test')]);
   assert.equal((await getBilling(db,user)).credits.available,50);
-  await assert.rejects(reserveUsage(db,user,crypto.randomUUID(),hash,30),{status:402});
+  await assert.rejects(reserveUsage(db,user,crypto.randomUUID(),hash,55),{status:402});
   await setOverage(db,user,true);
-  const op=(await reserveUsage(db,user,crypto.randomUUID(),hash,30)).operation;assert.equal(op.quota_reserved,23);assert.equal(op.credits_reserved,7);
-  await dispatchUsage(db,user,op.id);await finishUsage(db,user,op.id,26);
-  state=await getBilling(db,user);assert.equal(state.quota.spent,25);assert.equal(state.credits.available,47);assert.equal(state.credits.reserved,0);
+  const op=(await reserveUsage(db,user,crypto.randomUUID(),hash,55)).operation;assert.equal(op.quota_reserved,48);assert.equal(op.credits_reserved,7);
+  await dispatchUsage(db,user,op.id);await finishUsage(db,user,op.id,51);
+  state=await getBilling(db,user);assert.equal(state.quota.spent,50);assert.equal(state.credits.available,47);assert.equal(state.credits.reserved,0);
   // Available allowance released by one operation must be used before another spends credits.
   const user2=await account();await grantCredits(db,user2,'test-grant-2',100,'test');await setOverage(db,user2,true);
-  const a=(await reserveUsage(db,user2,crypto.randomUUID(),hash,25)).operation;
+  const a=(await reserveUsage(db,user2,crypto.randomUUID(),hash,50)).operation;
   const b=(await reserveUsage(db,user2,crypto.randomUUID(),hash,20)).operation;
   await dispatchUsage(db,user2,a.id);await dispatchUsage(db,user2,b.id);await finishUsage(db,user2,a.id,1);await finishUsage(db,user2,b.id,10);
   state=await getBilling(db,user2);assert.equal(state.quota.spent,11);assert.equal(state.credits.available,100);
@@ -46,7 +46,7 @@ try {
   const x=(await reserveUsage(db,user2,crypto.randomUUID(),hash,10,start)).operation;
   const y=(await reserveUsage(db,user2,crypto.randomUUID(),hash,10,start)).operation;
   await dispatchUsage(db,user2,x.id,start);await uncertainUsage(db,user2,x.id);
-  state=await getBilling(db,user2,later);assert.equal(state.quota.available,25);
+  state=await getBilling(db,user2,later);assert.equal(state.quota.available,50);
   assert.equal((await getOperation(db,user2,y.id)).status,'released');assert.equal((await getOperation(db,user2,x.id)).status,'uncertain');
   await finishUsage(db,user2,x.id,4,later);assert.equal((await getBilling(db,user2,later)).quota.spent,0);
   const old=await db.prepare('SELECT spent,reserved FROM usage_periods WHERE user_id=? AND period=?').bind(user2,'2027-01').first();assert.deepEqual(old,{spent:4,reserved:0});

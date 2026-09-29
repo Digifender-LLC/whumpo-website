@@ -1,6 +1,6 @@
 # MVP acceptance evidence
 
-Audit date: September 29, 2026. Source snapshot: `771facf`, migrations 0001–0031. This audit maps the original Word design and later user requirements to the current implementation. It is not a completion declaration or a new reduction in scope. Source inspection and recorded checks are distinguished from fresh end-to-end acceptance. See deployment.md for immutable Worker versions and test milestones.
+Audit date: September 29, 2026. Design-audit source snapshot: `771facf`, migrations 0001–0031. Updated after migration 0032 for the first-use AI allowance and response contract. This audit maps the original Word design and later user requirements to the current implementation. It is not a completion declaration or a new reduction in scope. Source inspection and recorded checks are distinguished from fresh end-to-end acceptance. See deployment.md for immutable Worker versions and test milestones.
 
 ## Original acceptance criteria
 
@@ -8,7 +8,7 @@ Audit date: September 29, 2026. Source snapshot: `771facf`, migrations 0001–00
 | --- | --- | --- |
 | Register, authenticate and start without external accounts | `src/passkeys.ts`, `src/index.ts`, `src/chat.ts`; passkey/onboarding tests and live signed-assertion receipts | Implemented. Native synced-passkey enrollment and successful human Turnstile signup still need a device/browser acceptance run. |
 | Natural-language business site preview | `src/ai.ts`, `src/ai-chat.ts`, `src/site-agent.ts`, `src/components.ts`; recorded live Muse draft/edit checks | Delivered for reviewed static/photo components. General generated backend execution is absent. |
-| At least three subsequent chat edits | Focused edit ancestry and validation exist. `src/plans.ts` sets Explore to 25 units. Long regression fixtures sometimes inject credits. | Unverified as one fresh-account journey under normal allowance. Run creation plus three edits without extra grants, verify each preview and final usage. Do not substitute guided builds for requested AI edits. |
+| At least three subsequent chat edits | Compact action prompt, strict response envelope, edit ancestry and validation; Explore now has 50 units (migration 0032). Dedicated journey fixtures use no bonus credits. | Verified on the live Muse integration: new project/draft plus theme, exact headline and section edits used 31/50 units (9, 9, 6, 7), zero holds and no replay charges. Private previews, preserved fields and ancestry checked; no grants or guided substitutes. Model reliability across broader requests remains a separate gate. |
 | Durable publish and health result | `src/publications.ts`, `src/site-health.ts`, migrations 0008/0029; live published HTTP receipt | Delivered for shared-address HTML and photo response metadata. Custom domains, browser rendering and successful visitor submissions are outside that check. |
 | Restore prior version from UI/chat | Publication review/restore, comparison links and guided/model controls; publication and live comparison tests | Delivered for immutable website artifacts. Directory data has separate reviewed restoration. Automatic general-service rollback remains open. |
 | Upload files and incorporate through AI | `src/files.ts`, `src/photo-versions.ts`, exact version references and JPEG exports | Delivered for bounded JPEG photos. Arbitrary file types and generated build assets remain unsupported. |
@@ -40,7 +40,7 @@ A read-only Wrangler secret inventory in this audit returned only `AI_API_KEY`, 
 
 ## Remaining implementation gates
 
-1. Run the normal-quota creation-plus-three-edits journey and correct any budget or usability failure it exposes.
+1. Expand whole-journey usability and model reliability acceptance beyond the now-passing creation-plus-three-edits test. In particular, avoid unnecessary requests for page-copy fields and continue checking unsupported actions and factual invention.
 2. Finish broader dynamic workload and isolated execution support within the authorized cost boundary; preserve the original scope.
 3. Complete customer project/account lifecycle, transcript/audit retention, abuse suspension and disaster recovery. Individual artifact deletion is not account erasure.
 4. Verify real provider consent, backups, domain routing and TLS after setup. Implement registrar purchase beta only behind genuine capability/funding gates.

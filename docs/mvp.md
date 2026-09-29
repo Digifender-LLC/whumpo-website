@@ -2,7 +2,7 @@
 
 The public homepage advertises the product. The signed-in default is a conversation, with only compact service and usage stats. Account, domain, billing, and project details live in a secondary menu. This checklist preserves the full MVP scope; an unchecked item is not delivered.
 
-Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The Word design is updated to version 0.5; historical milestone paragraphs below retain their original sequence.
+Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The Word design v0.5 is a historical snapshot before the Explore allowance revision; this evidence map and later deployment milestones record subsequent changes. Historical milestone paragraphs below retain their original sequence.
 
 ## Acceptance checklist
 
