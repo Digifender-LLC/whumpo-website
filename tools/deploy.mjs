@@ -6,7 +6,7 @@ for (const args of [
  ['tools/build.mjs'],
  [wrangler,'deploy','--config','wrangler.runtime.jsonc'],
  [wrangler,'deploy','--config','wrangler.sites.jsonc'],
- [wrangler,'deploy']
+ ['tools/deploy-platform.mjs']
 ]) {
  const run=spawnSync(process.execPath,args,{stdio:'inherit'});
  if(run.error || run.status!==0) process.exit(run.status || 1);

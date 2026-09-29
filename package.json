@@ -65,7 +65,9 @@
     "test:cms-projects": "node tests/cms-projects.mjs",
     "test:cms-projects-http": "node tests/cms-projects-http.mjs",
     "test:cms-provision": "node tests/cms-provision.mjs",
-    "cms:provision": "node tools/provision-cms.mjs"
+    "cms:provision": "node tools/provision-cms.mjs",
+    "test:cms-deploy": "node tests/cms-deploy.mjs",
+    "test:cms-release": "node tests/cms-release.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

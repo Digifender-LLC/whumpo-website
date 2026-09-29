@@ -1,3 +1,4 @@
+import {readCMSStatus} from './cms-status';
 import {listCMS,readCMSReview,prepareCMS,confirmCMS,CMSProjectError} from './cms-projects';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState} from './backend-state';
 import {BackendError,listBackends,saveBackend,testBackend} from './backend-versions';
@@ -186,6 +187,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  const cmsStatusRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/status$/);
+  if(method==='GET'&&cmsStatusRoute)return json(await readCMSStatus(env.DB,user.id,cmsStatusRoute[1],env as unknown as Record<string,unknown>));
   if(method==='GET'&&pathname==='/api/cms')return json({instances:await listCMS(env.DB,user.id)});
   if(method==='POST'&&pathname==='/api/cms/setup-reviews'){
     const data=await body(request);
@@ -362,7 +365,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (method === "POST" && pathname === "/api/chat") {
     const data = await body(request);
     if (!data) return error(400, "A JSON message is required");
-    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
+    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
     return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "POST" && pathname === "/api/auth/logout") {
