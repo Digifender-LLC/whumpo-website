@@ -1,3 +1,4 @@
+import { publicationCommand, siteURL } from './publications';
 import { renderLaunch, type LaunchConfig } from './components';
 import { hashToken } from './security';
 import { plans } from './plans';
@@ -19,7 +20,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await reconcileChat(db, userId);
   const result = await db.batch([
     db.prepare('SELECT revision, step FROM workspace_state WHERE user_id = ?').bind(userId),
-    db.prepare('SELECT t.id, t.revision, t.user_text, t.assistant_text, t.created_at, t.mode, t.status, v.id AS version_id FROM chat_turns t LEFT JOIN site_versions v ON v.id = t.id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100').bind(userId),
+    db.prepare("SELECT t.id, t.revision, t.user_text, t.assistant_text, t.created_at, t.mode, t.status, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind FROM chat_turns t LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_actions a ON a.id = t.id AND a.user_id=t.user_id LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100").bind(userId),
     db.prepare("SELECT COUNT(*) AS projects, SUM(CASE WHEN status = 'live' THEN 1 ELSE 0 END) AS live FROM projects WHERE owner_user_id = ?").bind(userId)
   ]);
   const billing = await getBilling(db, userId);
@@ -35,7 +36,12 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const state = await chatState(db, userId);
   await reconcileChat(db, userId);
   if (await db.prepare("SELECT id FROM chat_turns WHERE user_id = ? AND status = 'pending' LIMIT 1").bind(userId).first()) return { status: 409, error: 'Your previous AI reply is still being prepared. Please wait a moment.' };
-  if (state.revision !== input.revision) return { status: 409, error: 'Your conversation changed in another tab. Review the latest messages and send again.' };
+  if (state.revision !== input.revision) {
+    // A simultaneous identical request may commit between the first read and state read.
+    const committed = await db.prepare('SELECT user_text FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string}>();
+    if (committed?.user_text === content) return {status:200};
+    return { status: 409, error: 'Your conversation changed in another tab. Review the latest messages and send again.' };
+  }
   if (state.revision >= 2000) return { status: 409, error: 'This test workspace has reached its conversation limit.' };
   let step = state.step;
   let idea = state.idea;
@@ -46,7 +52,9 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const command = content.toLowerCase();
   const known = ['/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel'];
   if (ai && (command.startsWith('/ask ') || (state.step === 'ready' && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
-  if (/^\/build(?:\s|$)/.test(command)) {
+  const publication = await publicationCommand(db,userId,input.id,command);
+  if (publication) reply = publication.reply;
+  else if (/^\/build(?:\s|$)/.test(command)) {
     const args = command.split(/\s+/);
     const theme = args[1] || 'ocean';
     if (!['ocean','clay','forest'].includes(theme) || args.length > 3 || (args[2] && !/^[0-9a-f-]{36}$/.test(args[2]))) return {status:400,error:'Use /build ocean, /build clay, or /build forest, optionally followed by a project ID.'};
@@ -60,7 +68,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     }
   } else if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
     const { results } = await db.prepare('SELECT id, name, purpose, status FROM projects WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ id: string; name: string; purpose: string; status: string }>();
-    reply = results.length ? results.map(p => `${p.name} — ${p.status}\n${p.purpose}\nID: ${p.id}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
+    reply = results.length ? results.map(p => `${p.name} — ${p.status}\n${p.purpose}\nID: ${p.id}${p.status === 'live' ? '\n' + siteURL(p.id) : ''}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
   } else if (['/usage', 'show usage', '/credits'].includes(command)) {
     const billing = await getBilling(db, userId);
     reply = `${billing.plan.name} · ${billing.period}\n${billing.quota.available} of ${billing.quota.allowance} monthly build units available. ${billing.quota.spent} used; ${billing.quota.reserved} held for pending work.\n${billing.credits.available} credits available; ${billing.credits.reserved} held.\nUsing existing credits after your monthly allowance is ${billing.credits.overageEnabled ? 'enabled' : 'disabled'}.\n\nGuided chat is free. Monthly units reset on the first day of each month (UTC); credits carry over. Use /credits on or /credits off to change overage use. Buying credits and paid upgrades are not enabled yet.`;
@@ -80,7 +88,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = ai ? 'AI is connected for website planning and coding questions. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Publishing, AI edits, domains, and provider connections are still being built.' : 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Publishing and AI edits are still being built.';
+    reply = ai ? 'AI is connected for website planning and coding questions. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. AI edits, domains, and provider connections are still being built.' : 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. AI edits are still being built.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
@@ -104,6 +112,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     db.prepare("INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at) SELECT ?, user_id, revision + 1, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending')").bind(input.id, content, reply, now, userId, state.revision, userId),
     db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, userId, state.revision, input.id, userId)
   ];
+  if (publication) statements.push(...publication.statements);
   if (version) {
     statements.push(db.prepare("INSERT INTO site_versions (id,project_id,component_id,config_json,html,digest,created_at) SELECT ?,?,'launch-page@1',?,?,?,? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?) AND EXISTS (SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?)").bind(input.id,version.projectId,JSON.stringify(version.config),version.html,version.digest,now,input.id,userId,version.projectId,userId));
     statements.push(db.prepare("INSERT INTO activity_events (id,user_id,project_id,action,summary,created_at) SELECT ?,?,?, 'site.preview.created','Created a private preview with launch-page@1',? WHERE EXISTS (SELECT 1 FROM site_versions WHERE id = ?)").bind(`preview:${input.id}`,userId,version.projectId,now,input.id));
@@ -118,8 +127,14 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   try {
     const results = await db.batch(statements);
-    if (results[0].meta.changes !== 1) return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
+    if (results[0].meta.changes !== 1) {
+      const committed = await db.prepare('SELECT user_text FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string}>();
+      if (committed?.user_text === content) return {status:200};
+      return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
+    }
   } catch (cause) {
+    if (String(cause).includes('published_site_quota')) return {status:409,error:'Your plan’s live-site limit is reached. Unpublish another site before confirming this one.'};
+    if (/publication_(changed|expired|version)/.test(String(cause))) return {status:409,error:'The reviewed publication is stale or expired. Request a fresh review before confirming.'};
     if (String(cause).includes('site_version_quota')) return {status:409,error:'This test project has reached its 25 saved preview limit.'};
     if (String(cause).includes('project_quota')) return { status: 409, error: 'The test platform allows 20 projects per account. Your brief is still saved.' };
     // A simultaneous retry can lose the primary-key race; verify ownership and payload.

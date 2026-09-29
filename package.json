@@ -9,7 +9,7 @@
     "check": "tsc --noEmit",
     "test:smoke": "node tests/smoke.mjs",
     "test:ai": "node tests/ai.mjs",
-    "deploy": "node tools/build.mjs && wrangler deploy",
+    "deploy": "node tools/deploy.mjs",
     "db:remote": "wrangler d1 migrations apply whumpo-control --remote",
     "invite": "node tools/create-invite.mjs",
     "test:chat": "node tests/chat.mjs",
@@ -17,7 +17,10 @@
     "test:passkeys": "node tests/passkeys.mjs",
     "test:billing": "node tests/billing.mjs",
     "test:runtime-ai": "node tests/runtime-ai.mjs",
-    "test:previews": "node tests/previews.mjs"
+    "test:previews": "node tests/previews.mjs",
+    "test:publications": "node tests/publications.mjs",
+    "deploy:sites": "wrangler deploy --config wrangler.sites.jsonc",
+    "dev:sites": "wrangler dev --config wrangler.sites.jsonc --port 8788"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

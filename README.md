@@ -4,7 +4,7 @@ The test platform is at **https://digifender.com**, with source in the private *
 
 The public homepage introduces the product. Sign in at `/workspace/`; invitation links open `/workspace/?signup=1`. The landing page is static and makes no API calls.
 
-Implemented: invitation-only signup with Turnstile, passkeys by default, optional password sign-in, recovery codes, revocable cookie sessions, persistent guided chat, conversational project onboarding, projects, activity, tenant isolation, authentication throttling, and test data quotas. Muse Spark 1.3 Contributor planning chat, monthly build-unit reservations, an immutable usage ledger, and opt-in credit spending are implemented. Paid entitlements and checkout are not enabled. Chat can assemble private, versioned previews from a reusable launch-page component without model usage. AI-generated edits, customer-site publishing, and customer domain management remain unfinished.
+Implemented: invitation-only signup with Turnstile, passkeys by default, optional password sign-in, recovery codes, revocable cookie sessions, persistent guided chat, conversational project onboarding, projects, activity, tenant isolation, authentication throttling, and test data quotas. Muse Spark 1.3 Contributor planning chat, monthly build-unit reservations, an immutable usage ledger, and opt-in credit spending are implemented. Paid entitlements and checkout are not enabled. Chat can assemble private, versioned previews from a reusable launch-page component without model usage. Confirmed publication, exact-version restore and unpublish are available through chat. AI-generated edits and customer domain management remain unfinished.
 
 ## Local development
 
@@ -26,7 +26,7 @@ GitHub is source storage only. There are no Actions workflows, paid marketplace 
 
 ## Budget and scope
 
-The user authorized the existing account's included Workers/D1 allowance. No plan upgrade or paid-only service is enabled. Workers Static Assets, one Worker API, one D1 database, and a free Turnstile widget form the deployed stack. Allowances are shared with existing apps; this is not a separate free account or an account-wide spending cap. See [deployment notes](docs/deployment.md).
+The user authorized the existing account's included Workers/D1 allowance. No plan upgrade or paid-only service is enabled. Workers Static Assets, a workspace Worker, a separate public-site Worker, one D1 database, and a free Turnstile widget form the deployed stack. Allowances are shared with existing apps; this is not a separate free account or an account-wide spending cap. See [deployment notes](docs/deployment.md).
 
 Test limits: 50 accounts, 20 projects per account, 10 retained sessions per user, 10 auth requests per minute per IP and location, and 120 API requests per minute per IP and location. Each account can save ten passkeys. New passkey accounts receive a one-use recovery code; using it rotates the code and revokes previous sessions. Adding/removing passkeys or replacing recovery codes requires authentication within ten minutes. Keep a backup passkey and store the recovery code safely. Email-based password reset is not implemented.
 
@@ -51,3 +51,7 @@ Guided onboarding and account commands are free. After creating a draft project,
 Billing endpoints: `GET /api/billing`, `POST /api/billing/preferences`. Browser input cannot grant credits or select a paid entitlement. Jarvis ports and remaining reusable components are documented in [docs/jarvis-reuse.md](docs/jarvis-reuse.md).
 
 Use `/build`, `/build clay`, or `/build forest` after creating a project to save a private first preview. An optional project UUID selects another project; otherwise the most recently created project is used. Each project retains up to 25 immutable previews. `pnpm test:previews` verifies the local preview flow, tenant boundaries, escaping and quotas.
+
+Publication commands: `/versions` lists saved versions; `/publish VERSION_ID` reviews a release; `/restore VERSION_ID` reviews restoring an earlier release; `/unpublish PROJECT_ID` reviews taking a site offline. Confirm the exact review within ten minutes using `/confirm REVIEW_ID` or its chat button. Explore allows one live site; the database enforces this at confirmation. Public pages are served by the separate `whumpo-sites` Worker at `sites.digifender.com/s/PROJECT_ID`.
+
+Deploy the public host with `pnpm deploy:sites` after applying remote migrations. It has only the D1 binding and exposes only read-only published-site routes. `pnpm test:publications` uses disposable local D1 state to verify confirmation, concurrency, ownership, quotas, restore and unpublish.

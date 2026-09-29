@@ -60,6 +60,12 @@ function renderChat(data) {
   for (const turn of data.turns) { bubble("user", turn.user_text); const answer = bubble("assistant", turn.assistant_text, turn.mode);
     if (typeof turn.version_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.version_id)) {
       const link = text('a', 'Open private preview ↗'); link.href = `/api/site-versions/${turn.version_id}/preview`; link.target = '_blank'; link.rel = 'noopener noreferrer'; answer.append(link);
+    }
+    if (typeof turn.confirmation_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.confirmation_id)) {
+      const confirm = text('button', 'Confirm reviewed change'); confirm.onclick = () => sendMessage(`/confirm ${turn.confirmation_id}`); answer.append(confirm);
+    }
+    if (turn.publication_kind !== 'unpublish' && typeof turn.published_project_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.published_project_id)) {
+      const link = text('a','Open published site ↗'); link.href = `https://sites.digifender.com/s/${turn.published_project_id}`; link.target = '_blank'; link.rel = 'noopener noreferrer'; answer.append(link);
     } }
   $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} · ${data.stats.live || 0} live`;
   $("#agent-mode").textContent = data.mode === "ai" ? "Muse Spark 1.3 · AI connected" : "Guided mode · No AI charges";

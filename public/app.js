@@ -496,6 +496,18 @@
         link.rel = "noopener noreferrer";
         answer.append(link);
       }
+      if (typeof turn.confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.confirmation_id)) {
+        const confirm2 = text("button", "Confirm reviewed change");
+        confirm2.onclick = () => sendMessage(`/confirm ${turn.confirmation_id}`);
+        answer.append(confirm2);
+      }
+      if (turn.publication_kind !== "unpublish" && typeof turn.published_project_id === "string" && /^[0-9a-f-]{36}$/.test(turn.published_project_id)) {
+        const link = text("a", "Open published site \u2197");
+        link.href = `https://sites.digifender.com/s/${turn.published_project_id}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        answer.append(link);
+      }
     }
     $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} \xB7 ${data.stats.live || 0} live`;
     $("#agent-mode").textContent = data.mode === "ai" ? "Muse Spark 1.3 \xB7 AI connected" : "Guided mode \xB7 No AI charges";
