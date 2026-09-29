@@ -90,7 +90,8 @@
     "test:cloudflare-token-refresh": "node tests/cloudflare-token-refresh.mjs",
     "test:app-lifecycle": "node tests/app-lifecycle.mjs",
     "test:workspace-navigation": "node tests/workspace-navigation.mjs",
-    "test:agent-inspection": "node tests/agent-inspection.mjs"
+    "test:agent-inspection": "node tests/agent-inspection.mjs",
+    "test:backend-diff": "node tests/backend-diff.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
