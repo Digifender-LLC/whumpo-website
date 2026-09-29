@@ -27,5 +27,21 @@ try{
  const request=(method,body,token=session,origin='https://whumpo.com')=>worker.fetch(new Request('https://whumpo.com/api/projects/'+project+'/details',{method,headers:{origin,'content-type':'application/json',cookie:'tellumo_session='+token},body:body===undefined?undefined:JSON.stringify(body)}),{DB:db,API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
  assert.equal((await request('GET')).status,200);assert.equal((await request('GET',undefined,'')).status,401);assert.equal((await request('PATCH',{...edit,revision:3},session,'https://foreign.example')).status,403);
  const response=await request('PATCH',{...edit,revision:3});assert.equal(response.status,200);assert.equal((await response.json()).revision,4);assert.equal((await request('PATCH',{...edit,revision:3})).status,409);
+ // Partial brief edits preserve identity and existing fields; direct onboarding writers invalidate stale editors.
+ const brief=await saveProjectDetails(db,user,project,{revision:4,audience:'Neighborhood families',style_notes:'Warm and welcoming',preferred_theme:'clay'});
+ assert.equal(brief.revision,5);assert.equal(brief.name,edit.name);assert.equal(brief.purpose,edit.purpose);
+ assert.equal((await readProjectDetails(db,user,project)).audience,'Neighborhood families');
+ assert.equal((await saveProjectDetails(db,user,project,{revision:5,audience:brief.audience})).revision,5);
+ for(const patch of [{audience:null},{style_notes:'x'.repeat(1001)},{preferred_theme:'neon'},{}])await assert.rejects(saveProjectDetails(db,user,project,{revision:5,...patch}),e=>e.status===400);
+ await db.prepare("UPDATE projects SET audience='Changed during onboarding' WHERE id=?").bind(project).run();
+ assert.equal((await readProjectDetails(db,user,project)).revision,6);
+ await assert.rejects(saveProjectDetails(db,user,project,{revision:5,style_notes:'Stale edit'}),e=>e.status===409);
+ const agentPatch=(revision,projectId=project)=>prepareSiteAction(db,user,crypto.randomUUID(),JSON.stringify({reply:'Published!',action:{kind:'projectDetails',projectId,revision,style_notes:'Accessible and calm'}}),{});
+ assert.match((await agentPatch(5)).reply,/not saved.*changed/);
+ assert.match((await agentPatch(6,crypto.randomUUID())).reply,/not saved.*not found/);
+ assert.match((await agentPatch(6)).reply,/Project details saved/);
+ const final=await readProjectDetails(db,user,project);assert.equal(final.revision,7);assert.equal(final.audience,'Changed during onboarding');assert.equal(final.style_notes,'Accessible and calm');assert.equal(final.preferred_theme,'clay');
+ assert.match(await inspectWorkspace(db,user,'project',project),/Accessible and calm/);
+ const context=await (await module('src/site-agent.ts')).siteContext(db,user);assert.equal(context.projects[0].style_notes,'Accessible and calm');assert.equal(context.projects[0].preferred_theme,'clay');
  console.log('Project details passed: validation, owner/HTTP/CSRF gates, atomic revision conflicts, no-op audit behavior, concurrency, model receipt and inspect revision.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
