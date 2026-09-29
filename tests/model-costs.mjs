@@ -59,7 +59,7 @@ try{
  const response=text=>Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text}]}],usage:{input_tokens:10,output_tokens:10}});
  const request=sendAIChat(db,ackUser,ackTurn,0,'Check my site',config,async(url,init)=>{
   const body=JSON.parse(init.body);
-  if(body.input[0].content.startsWith('Classify')){assert.equal(body.input.length,2);assert.equal(body.input[1].content,'Check my site');assert.equal(body.max_output_tokens,64);assert.equal(body.model,config.model);return response(JSON.stringify({intent:'troubleshooting'}));}
+  if(body.input[0].content.startsWith('Classify')){assert.equal(body.input.length,2);assert.equal(body.input[1].content,'Check my site');assert.equal(body.max_output_tokens,256);assert.equal(body.model,config.model);return response(JSON.stringify({intent:'troubleshooting'}));}
   await mainGate;return response(JSON.stringify({reply:'Here are the next steps.',action:null}));
  },{background:promise=>{background=promise;registeredResolve();}});
  await registered;await background;
