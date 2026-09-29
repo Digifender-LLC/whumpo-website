@@ -33,7 +33,7 @@ export async function connectionStatus(db:D1Database,userId:string,config:GitHub
  const c=await db.prepare('SELECT c.login,c.connected_at,t.expires_at,t.state FROM github_connections c LEFT JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=?').bind(userId).first<{login:string;connected_at:string;expires_at:string|null;state:string|null}>();
  const pending=await db.prepare("SELECT COUNT(*) AS n FROM github_token_vault WHERE user_id=? AND state='revoking' AND expires_at>?").bind(userId,new Date().toISOString()).first<{n:number}>();
  const connected=!!config&&c?.state==='active'&&!!c.expires_at&&c.expires_at>new Date().toISOString();
- return {github:{enabled:!!config,connected,login:c?.login??null,expiresAt:c?.expires_at??null,revocationPending:!!pending?.n,installURL:config?'https://github.com/apps/'+config.slug+'/installations/new':null,backupEnabled:false},cloudflare:{enabled:false,connected:false}};
+ return {github:{enabled:!!config,connected,login:c?.login??null,expiresAt:c?.expires_at??null,revocationPending:!!pending?.n,installURL:config?'https://github.com/apps/'+config.slug+'/installations/new':null,backupEnabled:connected},cloudflare:{enabled:false,connected:false}};
 }
 export async function startGitHub(db:D1Database,userId:string,sessionHash:string,configuration:GitHubConfig|undefined){
  const config=required(configuration);await db.prepare('DELETE FROM github_token_vault WHERE user_id=? AND expires_at<=?').bind(userId,new Date().toISOString()).run();const count=await db.prepare('SELECT COUNT(*) AS n FROM github_token_vault WHERE user_id=? AND expires_at>?').bind(userId,new Date().toISOString()).first<{n:number}>();if((count?.n??0)>=5)throw new ConnectionError(429,'Finish pending GitHub disconnects or wait for existing access to expire before reconnecting.');
@@ -89,3 +89,19 @@ export async function githubInstallations(db:D1Database,userId:string,configurat
  });
  return {installations,truncated:typeof data.total_count==='number'&&data.total_count>100};
 }
+
+/** Internal capability: no raw token is returned, and each request rechecks local access. */
+export async function githubAccess(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){
+ const config=required(configuration);
+ const current=await db.prepare("SELECT c.github_user_id,t.id FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.state='active' AND t.expires_at>?").bind(userId,new Date().toISOString()).first<{github_user_id:string;id:string}>();
+ if(!current)throw new ConnectionError(401,'Connect GitHub again before using repository backups.');
+ return {tokenId:current.id,githubUserId:current.github_user_id,async send(path:string,options:RequestInit={}){
+  if(!path.startsWith('/')||path.startsWith('//'))throw new ConnectionError(400,'Invalid GitHub API path.');
+  const row=await db.prepare("SELECT t.ciphertext FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.id=? AND t.state='active' AND t.expires_at>?").bind(userId,current.id,new Date().toISOString()).first<{ciphertext:string}>();
+  if(!row)throw new ConnectionError(401,'GitHub access changed. Reconnect and prepare a new review.');
+  const token=await unseal(config.key,aad(userId,current.id,'token'),row.ciphertext);
+  return request(API+path,{...options,headers:{...apiHeaders,'content-type':'application/json',authorization:'Bearer '+token}},transport);
+ }};
+}
+export {readJSON as readGitHubJSON};
+export type {GitHubConfig};

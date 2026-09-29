@@ -70,13 +70,13 @@
   };
 
   // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyRegistrationError.js
-  function identifyRegistrationError({ error, options }) {
-    const { publicKey } = options;
+  function identifyRegistrationError({ error, options: options2 }) {
+    const { publicKey } = options2;
     if (!publicKey) {
       throw Error("options was missing required publicKey property");
     }
     if (error.name === "AbortError") {
-      if (options.signal instanceof AbortSignal) {
+      if (options2.signal instanceof AbortSignal) {
         return new WebAuthnError({
           message: "Registration ceremony was sent an abort signal",
           code: "ERROR_CEREMONY_ABORTED",
@@ -92,7 +92,7 @@
         });
       } else if (
         // @ts-ignore: `mediation` doesn't yet exist on CredentialCreationOptions but it's possible as of Sept 2024
-        options.mediation === "conditional" && publicKey.authenticatorSelection?.userVerification === "required"
+        options2.mediation === "conditional" && publicKey.authenticatorSelection?.userVerification === "required"
       ) {
         return new WebAuthnError({
           message: "User verification was required during automatic registration but it could not be performed",
@@ -209,12 +209,12 @@
   }
 
   // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startRegistration.js
-  async function startRegistration(options) {
-    if (!options.optionsJSON && options.challenge) {
+  async function startRegistration(options2) {
+    if (!options2.optionsJSON && options2.challenge) {
       console.warn("startRegistration() was not called correctly. It will try to continue with the provided options, but this call should be refactored to use the expected call structure instead. See https://simplewebauthn.dev/docs/packages/browser#typeerror-cannot-read-properties-of-undefined-reading-challenge for more information.");
-      options = { optionsJSON: options };
+      options2 = { optionsJSON: options2 };
     }
-    const { optionsJSON, useAutoRegister = false } = options;
+    const { optionsJSON, useAutoRegister = false } = options2;
     if (!browserSupportsWebAuthn()) {
       throw new Error("WebAuthn is not supported in this browser");
     }
@@ -314,13 +314,13 @@
   };
 
   // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyAuthenticationError.js
-  function identifyAuthenticationError({ error, options }) {
-    const { publicKey } = options;
+  function identifyAuthenticationError({ error, options: options2 }) {
+    const { publicKey } = options2;
     if (!publicKey) {
       throw Error("options was missing required publicKey property");
     }
     if (error.name === "AbortError") {
-      if (options.signal instanceof AbortSignal) {
+      if (options2.signal instanceof AbortSignal) {
         return new WebAuthnError({
           message: "Authentication ceremony was sent an abort signal",
           code: "ERROR_CEREMONY_ABORTED",
@@ -359,12 +359,12 @@
   }
 
   // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startAuthentication.js
-  async function startAuthentication(options) {
-    if (!options.optionsJSON && options.challenge) {
+  async function startAuthentication(options2) {
+    if (!options2.optionsJSON && options2.challenge) {
       console.warn("startAuthentication() was not called correctly. It will try to continue with the provided options, but this call should be refactored to use the expected call structure instead. See https://simplewebauthn.dev/docs/packages/browser#typeerror-cannot-read-properties-of-undefined-reading-challenge for more information.");
-      options = { optionsJSON: options };
+      options2 = { optionsJSON: options2 };
     }
-    const { optionsJSON, useBrowserAutofill = false, verifyBrowserAutofillInput = true } = options;
+    const { optionsJSON, useBrowserAutofill = false, verifyBrowserAutofillInput = true } = options2;
     if (!browserSupportsWebAuthn()) {
       throw new Error("WebAuthn is not supported in this browser");
     }
@@ -451,11 +451,11 @@
     element.classList.add("visible");
     setTimeout(() => element.classList.remove("visible"), 4500);
   }
-  async function api(path, options = {}) {
+  async function api(path, options2 = {}) {
     const response = await fetch(`/api${path}`, {
       credentials: "same-origin",
-      headers: { "content-type": "application/json", ...options.headers },
-      ...options
+      headers: { "content-type": "application/json", ...options2.headers },
+      ...options2
     });
     const data = await response.json();
     if (!response.ok) {
@@ -551,7 +551,7 @@
   }
   async function sendMessage(content) {
     if (sending || !content.trim()) return;
-    if (["/connections", "show connections", "connect github", "disconnect github"].includes(content.trim().toLowerCase())) {
+    if (["/connections", "show connections", "connect github", "disconnect github", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) {
       await openConnections();
       return;
     }
@@ -655,10 +655,10 @@
   });
   async function passkeyFlow(kind, data = {}) {
     if (!browserSupportsWebAuthn()) throw new Error("This browser does not support passkeys. Try a current browser or use your existing password/recovery code.");
-    const { options } = await api(`/auth/passkeys/${kind}/options`, { method: "POST", body: JSON.stringify(data) });
+    const { options: options2 } = await api(`/auth/passkeys/${kind}/options`, { method: "POST", body: JSON.stringify(data) });
     let credential;
     try {
-      credential = kind === "login" ? await startAuthentication({ optionsJSON: options }) : await startRegistration({ optionsJSON: options });
+      credential = kind === "login" ? await startAuthentication({ optionsJSON: options2 }) : await startRegistration({ optionsJSON: options2 });
     } catch {
       throw new Error("Passkey setup or sign-in was canceled or unavailable. You can try again or choose another sign-in method.");
     }
@@ -959,12 +959,13 @@
     }
   };
   async function start() {
+    const callbackParams = new URLSearchParams(location.search);
     try {
       authConfig = await api("/config");
       const { user } = await api("/me");
       await loadDashboard(user);
-      if (new URLSearchParams(location.search).get("connection") === "github") {
-        const failed = new URLSearchParams(location.search).has("connection_error");
+      if (callbackParams.get("connection") === "github") {
+        const failed = callbackParams.has("connection_error");
         history.replaceState(null, "", location.pathname);
         await openConnections();
         if (failed) $("#connections-status").textContent = "GitHub authorization was cancelled, expired or could not be completed. You can start again.";
@@ -1034,12 +1035,15 @@
         const url = new URL(github.installURL);
         if (url.origin === "https://github.com" && url.pathname.startsWith("/apps/")) install.href = url.href;
       }
+      $("#github-backup-controls").hidden = !github.backupEnabled;
       const list = $("#github-installations");
       list.replaceChildren();
       $("#connections-status").textContent = "";
       $("#connections-dialog").showModal();
+      await renderBackups();
       if (github.connected) {
         const data = await api("/connections/github/installations");
+        await setupBackups(data.installations);
         for (const item of data.installations) list.append(text("p", `Installed for ${item.account} \xB7 ${item.repositorySelection === "selected" ? "Selected repositories" : "All repositories"}`));
         if (!data.installations.length) list.append(text("p", "No active installation found. Use Choose repositories on GitHub, then refresh."));
         if (data.truncated) list.append(text("p", "Only the first 100 installations were checked."));
@@ -1074,6 +1078,111 @@
       $("#connections-status").textContent = error.message;
     } finally {
       button.disabled = false;
+    }
+  };
+  var backupRepositories = [];
+  var backupPage = 1;
+  var backupReviewRequest = null;
+  function options(select, items, label, value) {
+    select.replaceChildren();
+    for (const item of items) {
+      const option = text("option", label(item));
+      option.value = value(item);
+      select.append(option);
+    }
+  }
+  async function setupBackups(installations) {
+    options($("#backup-installation"), installations, (i) => i.account, (i) => i.id);
+    const { projects } = await api("/projects");
+    options($("#backup-project"), projects, (p) => p.name, (p) => p.id);
+    await loadBackupVersions();
+    await loadBackupRepositories();
+  }
+  async function loadBackupVersions() {
+    const project = $("#backup-project").value;
+    const { versions } = project ? await api("/projects/" + project + "/versions") : { versions: [] };
+    options($("#backup-version"), versions, (v) => `${v.created_at} \xB7 ${v.component_id} \xB7 ${v.id}`, (v) => v.id);
+    backupReviewRequest = null;
+    updateBackupButton();
+  }
+  function updateBackupButton() {
+    $("#backup-review").disabled = !$("#backup-version").value || !$("#backup-repo").value;
+  }
+  async function loadBackupRepositories(more = false) {
+    if (!more) {
+      backupRepositories = [];
+      backupPage = 1;
+    } else backupPage++;
+    const installation = $("#backup-installation").value;
+    const result = installation ? await api(`/connections/github/repositories?installation=${installation}&page=${backupPage}`) : { repositories: [], hasMore: false };
+    backupRepositories.push(...result.repositories);
+    options($("#backup-repo"), backupRepositories, (r) => `${r.owner}/${r.name} \xB7 ${r.private ? "Private" : "PUBLIC"}`, (r) => r.id);
+    $("#backup-more").hidden = !result.hasMore;
+    backupReviewRequest = null;
+    updateBackupButton();
+  }
+  async function renderBackups() {
+    const { backups } = await api("/github/backups"), list = $("#github-backups");
+    list.replaceChildren();
+    if (backups.length) list.append(text("h3", "Backup reviews and receipts"));
+    for (const backup of backups) {
+      const row = text("article", "", "panel");
+      row.append(text("h4", backup.repository + " \xB7 " + (backup.private ? "Private repository" : "PUBLIC repository")), text("p", `State: ${backup.state}. Branch: ${backup.branch}`), text("p", "Version: " + backup.versionId), text("p", "Folder: " + backup.path), text("p", "Files: " + backup.files.join(", ")), text("p", "Source bundle SHA-256: " + backup.sha256), text("p", "Review expires: " + backup.expiresAt));
+      if (backup.state === "pending") row.append(text("p", backup.private ? "The selected repository\u2019s collaborators can read the site text, photos and configuration." : "Anyone can read the site text, photos and configuration in this public repository."));
+      if (backup.detail) row.append(text("p", backup.detail));
+      if (["pending", "dispatching", "uncertain"].includes(backup.state)) {
+        const confirm2 = text("button", backup.state === "pending" ? "Confirm GitHub backup" : "Check outcome");
+        confirm2.onclick = async () => {
+          confirm2.disabled = true;
+          try {
+            const result = await api("/github/backups/" + backup.id + "/confirm", { method: "POST", body: "{}" });
+            await renderBackups();
+            $("#connections-status").textContent = result.state === "complete" ? "Backup verified." : result.detail || "Backup state: " + result.state;
+          } catch (error) {
+            $("#connections-status").textContent = error.message;
+          } finally {
+            confirm2.disabled = false;
+          }
+        };
+        row.append(confirm2);
+      }
+      if (backup.url) {
+        const link = text("a", "View verified source on GitHub"), url = new URL(backup.url);
+        if (url.origin === "https://github.com") {
+          link.href = url.href;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          row.append(link);
+        }
+      }
+      list.append(row);
+    }
+  }
+  var backupError = (error) => {
+    $("#connections-status").textContent = error.message;
+  };
+  $("#backup-installation").onchange = () => loadBackupRepositories().catch(backupError);
+  $("#backup-project").onchange = () => loadBackupVersions().catch(backupError);
+  $("#backup-version").onchange = $("#backup-repo").onchange = () => {
+    backupReviewRequest = null;
+    updateBackupButton();
+  };
+  $("#backup-more").onclick = () => loadBackupRepositories(true).catch(backupError);
+  $("#backup-review").onclick = async () => {
+    const button = $("#backup-review");
+    button.disabled = true;
+    try {
+      const repo = backupRepositories.find((r) => String(r.id) === $("#backup-repo").value);
+      if (!repo) throw Error("Select a repository first.");
+      backupReviewRequest ??= { id: crypto.randomUUID(), versionId: $("#backup-version").value, owner: repo.owner, repo: repo.name, repoId: repo.id };
+      await api("/github/backups/review", { method: "POST", body: JSON.stringify(backupReviewRequest) });
+      backupReviewRequest = null;
+      await renderBackups();
+      $("#connections-status").textContent = "Review the destination and files, then confirm when ready.";
+    } catch (error) {
+      backupError(error);
+    } finally {
+      updateBackupButton();
     }
   };
 })();

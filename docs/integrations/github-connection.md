@@ -4,7 +4,7 @@
 
 The workspace has a Connected accounts panel, accessible through Details, `/connections`, `connect github` and `disconnect github`. GitHub App authorization, encrypted expiring user-token storage, installation discovery and disconnect/revocation are implemented. Until all operator configuration exists, the Connect button is disabled and API start returns 503. The operator's `gh` credential is never reused.
 
-This release does **not** back up code, bind a project to a repository, create repositories, grant access to the AI, refresh tokens automatically or implement customer Cloudflare authorization. Those capabilities remain required work. A GitHub App must be registered and a real consenting user must complete authorization before this integration can pass live acceptance. Setup is in [github-app-setup.md](github-app-setup.md).
+A separate [reviewed backup flow](github-backups.md) now selects repositories and writes readable source files after explicit confirmation. Creating repositories, persistent automatic project/repository synchronization, AI access, automatic token refresh and customer Cloudflare authorization remain unfinished. A GitHub App must be registered and a real consenting user must complete authorization before this integration can pass live acceptance. Setup is in [github-app-setup.md](github-app-setup.md).
 
 ## Authorization boundary
 
