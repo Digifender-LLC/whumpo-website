@@ -4,7 +4,13 @@ export const inspectionAllowance=10000;
 export function inspectionRequest(raw:string){
  let data;try{data=JSON.parse(raw);}catch{return false;}
  if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).some(k=>!['reply','action'].includes(k))||typeof data.reply!=='string'||!data.reply.trim()||data.reply.length>2000)return false;
- const a=data.action;if(!a||typeof a!=='object'||Array.isArray(a)||a.kind!=='inspect'||Object.keys(a).some(k=>!['kind','scope','targetId'].includes(k))||!inspectionScopes.includes(a.scope))return false;
+ const a=data.action;
+ if(a&&typeof a==='object'&&!Array.isArray(a)&&a.kind==='backend'){
+  const fields:Record<string,string>={list:'projectId',inspect:'versionId',result:'receiptId'};
+  const field=typeof a.operation==='string'&&Object.hasOwn(fields,a.operation)?fields[a.operation]:undefined;
+  return !!field&&Object.keys(a).every(k=>['kind','operation',field].includes(k))&&typeof a[field]==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(a[field]);
+ }
+ if(!a||typeof a!=='object'||Array.isArray(a)||a.kind!=='inspect'||Object.keys(a).some(k=>!['kind','scope','targetId'].includes(k))||!inspectionScopes.includes(a.scope))return false;
  const target=Object.hasOwn(a,'targetId');if(target&&(typeof a.targetId!=='string'||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(a.targetId)))return false;
  return !(['project','version'].includes(a.scope)&&!target||!['project','version','versions'].includes(a.scope)&&target);
 }
