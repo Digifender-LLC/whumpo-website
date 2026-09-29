@@ -6,8 +6,7 @@ const sessionHash=(token:string)=>hashToken('whumpo-app-session:'+token);
 type Identity={visitor_id:string;project_id:string;version_id:string;program_revision:number;token_hash:string};
 type Run={id:string;visitor_id:string;project_id:string;version_id:string;request_hash:string;base_revision:number;state:string;result_json:string|null};
 // INTERNAL ONLY: call after successful project-scoped visitor authentication.
-// Owner activation exists; visitor enrollment and session issuance are not yet
-// connected to an HTTP route or model tool. See app-auth.ts for verified flows.
+// Public visitor authentication uses app-auth.ts; this helper is not an AI tool.
 export async function issueAppSession(db:D1Database,visitor:string){
  if(!uuid.test(visitor))throw new BackendError(400,'Invalid visitor identity');
  const token=newSessionToken(),hash=await sessionHash(token);
@@ -16,11 +15,12 @@ export async function issueAppSession(db:D1Database,visitor:string){
  return token;
 }
 export async function revokeAppSession(db:D1Database,token:string){if(/^[0-9a-f]{64}$/.test(token))await db.prepare('DELETE FROM app_sessions WHERE token_hash=?').bind(await sessionHash(token)).run();}
-async function identity(db:D1Database,token:string,project:string):Promise<Identity>{
+export async function appIdentity(db:D1Database,token:string,project:string):Promise<Identity>{
  if(!/^[0-9a-f]{64}$/.test(token)||!uuid.test(project))throw new BackendError(401,'Application sign-in required');
  const row=await db.prepare("SELECT v.id AS visitor_id,v.project_id,a.version_id,a.revision AS program_revision,s.token_hash FROM app_sessions s JOIN app_visitors v ON v.id=s.visitor_id JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE s.token_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND v.revoked=0 AND a.enabled=1 AND v.project_id=?").bind(await sessionHash(token),project).first<Identity>();
  if(!row)throw new BackendError(401,'Application sign-in required');return row;
 }
+const identity=appIdentity;
 export async function readAppData(db:D1Database,token:string,project:string){
  const actor=await identity(db,token,project),doc=await db.prepare('SELECT revision,state_json FROM app_documents WHERE visitor_id=?').bind(actor.visitor_id).first<{revision:number;state_json:string}>();
  if(!doc)throw new BackendError(503,'Application data unavailable');return {revision:doc.revision,state:JSON.parse(doc.state_json)};
