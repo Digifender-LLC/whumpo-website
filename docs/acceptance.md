@@ -62,3 +62,7 @@ September 29: owned bounded project JSON state, exact ten-minute data reviews, a
 ## Backend data recovery milestone
 
 Owned applied snapshots can be listed in chat, exported as private before/after JSON, and restored from either side through a new explicit review. Restoration preserves revision history and never reruns old code. Database tests verify foreign/pending snapshot rejection, exact restore content, initial-state recovery, stale review rejection, concurrent retries and lost acknowledgments. Chat tests verify server-issued download/confirmation controls, their removal after confirmation, and model prepare-only authority. Local HTTP tests verify attachment delivery, authentication/origin enforcement and restoration through the actual Worker API. This covers private JSON data recovery, not whole-account erasure, uploaded backup import, public backend deployment or platform disaster recovery.
+
+## EmDash ownership bridge milestone
+
+The deployed private CMS now requires signed owner/project-bound requests and refuses access while unassigned. Actual local EmDash integration proves empty-content setup, pinned owner administration, collection-schema reads and setup closure; the D1 gateway suite covers signature isolation and non-repeating writes. Whumpo's project provisioning/consent and chat tools are not yet connected to this bridge. CMS content CRUD, media, reviewed publication, WordPress import and backup/restore remain explicit MVP gates. The private preview was not claimed by a test identity in production.

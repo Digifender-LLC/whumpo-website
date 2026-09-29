@@ -314,3 +314,9 @@ TypeScript, database state tests (concurrency/expiry/ownership/replay/lost ackno
 Migration 0035 applied remotely. Main Worker `cf8d9ce7-f9b3-40da-a964-9b122e07722b` deployed with applied-snapshot history, private JSON exports, reviewed before/after restoration and chat confirmation/download buttons. No service or plan upgrade. Post-deploy health returned 200.
 
 TypeScript, D1 recovery tests, chat action/control tests and local multi-Worker HTTP tests passed. A browser check using a disposable local password fixture verified the download link, exact restore review button, confirmation receipt, removal of the old button and a readback of revision 2 with the original empty document. This is local recovery acceptance, not native passkey acceptance. Screenshot is saved locally at `.secrets/backend-data-recovery.png`; it contains only synthetic fixture data. Temporary test tabs and local Worker processes were closed. Public backend publication, lifecycle retention, uploaded backup import and customer-ready EmDash remain unfinished.
+
+## EmDash signed ownership bridge — September 29, 2026
+
+Built and deployed private CMS `80586f76-8a62-4e8e-a738-8219f9cff821`. Its existing D1/R2/KV resources and absence of public routes are unchanged. A private service-binding probe returned 503 `CMS ownership is not configured`; no owner, project or bridge secret has been assigned in production. Main Whumpo remains on `cf8d9ce7-f9b3-40da-a964-9b122e07722b`.
+
+TypeScript, private profile checker, Wrangler dry-run, gateway D1 tests and the reproducible actual EmDash setup/auth/schema integration passed. The latter uses disposable local resources and fixed synthetic credentials only. The source build command now runs the installed workspace Astro CLI directly, avoiding dependency on a globally discoverable pnpm executable. Project provisioning, consent, chat content management and public CMS launch remain unfinished.
