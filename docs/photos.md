@@ -1,6 +1,6 @@
 # Project photo storage
 
-Private uploads are implemented. Connecting photos to page components, version references, public serving, archive export, and user-facing deletion controls remains outstanding. Uploading a photo alone does not publish it or send its bytes to the AI provider.
+Private uploads, versioned photo pages, authenticated previews, confirmed public serving, and portable image exports are implemented. User-facing deletion controls remain outstanding. Uploading a photo alone does not publish it or send its bytes to the AI provider.
 
 ## Upload contract
 
@@ -10,7 +10,7 @@ The server bounds the entire body to 1 MiB and accepts a constrained baseline JP
 
 ## Ownership and storage
 
-`project_files` records an immutable project, name, server-generated object path, checksum, dimensions and size. A pending reservation is written to D1 before R2 is called. D1 atomically enforces 20 photos per project, 50 per account and 500 across the test platform, including pending reservations. With 1 MiB per file, active photo storage is bounded to 500 MiB. There is no public bucket URL and no photo binding on the public-site Worker.
+`project_files` records an immutable project, name, server-generated object path, checksum, dimensions and size. A pending reservation is written to D1 before R2 is called. D1 atomically enforces 20 photos per project, 50 per account and 500 across the test platform, including pending reservations. With 1 MiB per file, active photo storage is bounded to 500 MiB. There is no public bucket URL. The public-site Worker uses its private bucket binding only after checking the current publication’s exact photo references.
 
 R2 writes use a create-only condition. Concurrent identical requests either create the object or verify its existing checksum and length. Different bytes or names under the same upload ID are rejected. A successful storage write is followed by an atomic D1 ready-state/audit commit. Lost R2 or D1 acknowledgements can be retried without overwriting or duplicating a photo. Pending reservations are not automatically expired; retry the original upload to finish them. Operator recovery is needed if the browser's prepared bytes were lost.
 
@@ -25,3 +25,11 @@ Deleting a project or account cascades D1 photo rows into a durable cleanup queu
 The existing account already had R2 enabled. Before adding TellUmo, its only listed bucket had 8 objects totaling 7.92 MB. The separate `tellumo-files` bucket uses Standard storage, with r2.dev public access disabled. Cloudflare's published free tier currently includes 10 GB-month storage, 1 million Class A operations and 10 million Class B operations per month for Standard storage. These allowances are shared across the account. The app's storage and request limits reduce usage but do not impose an account-wide bill cap or reserve unused allowances from other applications. No paid image transformation or image generation service is used.
 
 References: [R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/), [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [JPEG interchange format](https://www.w3.org/Graphics/JPEG/jfif3.pdf).
+
+## Versioned use and operation budgets
+
+Use in website or `/photo FILE_ID` creates a private immutable page version without inference. `photo-page@1` supports up to four ready photos from the same project. AI edits can change those references and alt text; the model sees photo names and dimensions, not pixels. Photo bytes never enter the generic component catalog.
+
+Private previews embed verified JPEG data URLs under a sandboxed CSP. Publication reviews disclose photo exposure; public assets are available only while referenced by the current published version. Restore switches the references with the saved HTML. Source ZIPs include exact JPEG dependencies under `public/assets`; unavailable or mismatched files fail the export. See [the version contract](photo-publication-plan.md).
+
+Atomic monthly counters cap application R2 reads at 100,000 and writes at 10,000. Reservations count attempted operations, including retries. A photo allowance error leaves text HTML available. The small daily cleanup workload is outside these counters. These caps do not cover other applications or constitute an account-wide billing limit.

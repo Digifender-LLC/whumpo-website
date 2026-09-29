@@ -199,7 +199,7 @@ async function refreshPhotos() {
   const data=await api(`/projects/${project}/files`);
   for(const file of data.files) {
     const row=text('article','', 'photo-row');row.append(text('p',`${file.name} · ${file.width} × ${file.height} · ${Math.ceil(file.size/1024)} KiB${file.status==='pending'?' · Upload awaiting confirmation':''}`));
-    if(file.status==='ready'){const img=document.createElement('img');img.src=`/api/files/${file.id}`;img.alt=file.name;img.loading='lazy';row.append(img);const link=text('a','Open private photo');link.href=img.src;link.target='_blank';link.rel='noopener noreferrer';row.append(link);}
+    if(file.status==='ready'){const img=document.createElement('img');img.src=`/api/files/${file.id}`;img.alt=file.name;img.loading='lazy';row.append(img);const link=text('a','Open private photo');link.href=img.src;link.target='_blank';link.rel='noopener noreferrer';row.append(link);const use=text('button','Use in website');use.type='button';use.onclick=()=>{$('#files-dialog').close();sendMessage(`/photo ${file.id}`);};row.append(use);}
     list.append(row);
   }
   if(!data.files.length)list.append(text('p','No photos uploaded to this project yet.'));

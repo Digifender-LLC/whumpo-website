@@ -84,9 +84,9 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     // Recover a committed answer/draft after an acknowledgement was lost. Never regenerate.
     const persisted = await db.prepare("SELECT input_tokens FROM chat_turns WHERE id=? AND user_id=?").bind(id,userId).first<{input_tokens:number|null}>();
     if(persisted?.input_tokens != null){await reconcileChat(db,userId);return {status:200};}
-    if(cause instanceof ProposalError || String(cause).includes('site_version_quota')) {
+    if(cause instanceof ProposalError || String(cause).includes('site_version_quota') || String(cause).includes('version_photo_owner')) {
       await finishUsage(db,userId,id,0);
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind(cause instanceof ProposalError ? 'The proposed change did not pass validation, so nothing was applied and no build units were charged. Try describing a smaller change.' : 'This project has reached its 25 saved-version limit. No change was applied and no build units were charged.',id,userId).run();
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind((cause instanceof ProposalError || String(cause).includes('version_photo_owner')) ? 'The proposed change did not pass validation, so nothing was applied and no build units were charged. Try describing a smaller change.' : 'This project has reached its 25 saved-version limit. No change was applied and no build units were charged.',id,userId).run();
       return {status:200};
     }
     // Jarvis-style fixed categories: never log envelopes, prompts, credentials or raw errors.

@@ -135,3 +135,13 @@ Created private Standard R2 bucket `tellumo-files`; Wrangler confirmed r2.dev pu
 Final workspace release `8626f466-75f6-45cc-a339-62e08f5a4765`; public host `c88aba48-a907-4bd2-b54b-27d0fee4b677`. TypeScript, `test:files`, and source-export regressions passed. Photo tests cover metadata stripping with independent pixel decoding, malformed/oversized input, owner isolation, concurrent upload IDs, conflicting reuse, lost R2 and D1 acknowledgements, quota-before-storage, authentication/Origin, cleanup and zero AI use. Browser upload converted a synthetic PNG to JPEG and displayed the saved private photo.
 
 A live signed-passkey check uploaded a 640 × 400 synthetic photo (11,586 cleaned bytes), removed injected metadata, verified authenticated access/anonymous 401, retried without another file and used zero AI units. The temporary account, R2 object and its cleanup row were removed. The cleanup routine was exercised locally; its first scheduled production execution has not yet been observed. Photo placement into versions and public pages remains the next milestone, described in photo-publication-plan.md.
+
+## Versioned photo pages — September 29, 2026
+
+Remote migration 0013 applied before deployment. Workspace Worker `aa2f7001-c439-4a36-83a1-7c6e93ab6ce3` and public host `cf0e528c-d740-4388-83b4-89158a9a224f` are deployed. Both now have private R2 bindings. Public routes expose only photos referenced by the current published version. No new service or paid capability was enabled.
+
+TypeScript and photo-version, file, publication, source-export and AI-agent tests passed. Checks cover owned dependencies, same-owner cross-project rejection, focused edits preserving photos, rejected foreign references, confirmed exposure, restore/unpublish revocation, complete ZIP image dependencies, missing-asset failures and atomic monthly operation budgets. The browser rendered an authenticated embedded-photo preview and an anonymous published image under their respective sandbox policies.
+
+A live signed-passkey workflow uploaded a metadata-stripped synthetic JPEG, attached it without inference, confirmed publication, downloaded an image-inclusive export, then unpublished and verified image HTTP 404. It spent zero AI units. The temporary account, site and R2 object were removed afterward. Independent ZIP CRC and pixel-decoding checks passed. Direct offline file opening was blocked by browser policy, so that browser acceptance check remains unverified.
+
+The landing page advertises photo-capable sites and still identifies forms and custom domains as upcoming. The files dialog explains publication exposure and that the AI cannot see image contents. Payments remain unconfigured and disabled.

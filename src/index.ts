@@ -1,3 +1,5 @@
+import { ownedPreview } from './photo-versions';
+import { StorageLimitError } from './storage-budget';
 import { FileError, uploadPhoto, listPhotos, readPhoto, cleanupPhotos } from './files';
 import { ownedExport } from './exports';
 import { checkoutEnabled, createCheckout, stripeWebhook } from './checkout';
@@ -178,13 +180,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (photoMatch && method === 'GET') return readPhoto(env,user.id,photoMatch[1]);
   const exportMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/export$/);
   if (method === 'GET' && exportMatch) {
-    const archive = await ownedExport(env.DB, user.id, exportMatch[1]);
+    const archive = await ownedExport(env.DB, user.id, exportMatch[1], env.FILES);
     return archive ? new Response(archive, {headers:{'content-type':'application/zip','content-disposition':`attachment; filename="tellumo-site-${exportMatch[1]}.zip"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer'}}) : error(404,'Saved version not found');
   }
   const previewMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/preview$/);
   if (method === 'GET' && previewMatch) {
-    const version = await env.DB.prepare('SELECT v.html FROM site_versions v JOIN projects p ON p.id = v.project_id WHERE v.id = ? AND p.owner_user_id = ?').bind(previewMatch[1],user.id).first<{html:string}>();
-    return version ? new Response(version.html,{headers:previewHeaders}) : error(404,'Preview not found');
+    return await ownedPreview(env,user.id,previewMatch[1]) ?? error(404,'Preview not found');
   }
   const versionsMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/versions$/);
   if (method === 'GET' && versionsMatch) {
@@ -282,7 +283,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError) return error(cause.status, cause.message);
+      if (cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

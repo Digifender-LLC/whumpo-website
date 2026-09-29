@@ -1,6 +1,7 @@
 /** Platform-authored source only. Never populate this catalog from tenant records. */
 export const componentCatalog = Object.freeze([
   Object.freeze({ id: 'launch-page@1', name: 'Launch page', version: 1, capabilities: [] as string[], source: 'TellUmo platform', configuration: ['name', 'description', 'theme'] }),
+  Object.freeze({ id: 'photo-page@1', name: 'Website with photos', version: 1, capabilities: ['project-photos'], source: 'TellUmo platform', configuration: ['name','description','theme','headline','aboutTitle','aboutText','sections','photos'] }),
   Object.freeze({ id: 'site-page@1', name: 'Information site', version: 1, capabilities: [] as string[], source: 'TellUmo platform', configuration: ['name','description','theme','headline','aboutTitle','aboutText','sections'] })
 ]);
 export type LaunchConfig = { name: string; description: string; theme: 'ocean' | 'clay' | 'forest' };
@@ -54,4 +55,24 @@ export function renderSite(value:SiteConfig){
  .replace('First draft · Made with TellUmo','Made with TellUmo');
  if(new TextEncoder().encode(html).length>32768)throw Error('Rendered site too large');
  return html;
+}
+
+export type PhotoConfig=SiteConfig & {photos:{id:string;alt:string}[]};
+export function photoConfig(value:unknown):PhotoConfig {
+ if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid photo page');
+ const {photos,...base}=value as Record<string,unknown>;
+ if(!Array.isArray(photos)||photos.length>4)throw Error('Use at most four photos');
+ const ids=new Set<string>();
+ const validated=photos.map(p=>{
+  if(!p||typeof p!=='object'||Array.isArray(p)||Object.keys(p).some(k=>!['id','alt'].includes(k))||typeof p.id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(p.id)||ids.has(p.id)||typeof p.alt!=='string'||!p.alt.trim()||p.alt.length>200)throw Error('Invalid photo reference');
+  ids.add(p.id);return {id:p.id,alt:p.alt.trim()};
+ });
+ const result={...siteConfig(base),photos:validated};
+ if(new TextEncoder().encode(JSON.stringify(result)).length>8192)throw Error('Photo page too large');return result;
+}
+export function renderPhotoPage(value:PhotoConfig){
+ const c=photoConfig(value);
+ const {photos,...base}=c;
+ const html=renderSite(base).replace('</main>',`<section class="photo-gallery" aria-label="Photos">${c.photos.map(p=>`<figure><img src="assets/${p.id}.jpg" alt="${escape(p.alt)}" loading="lazy"></figure>`).join('')}</section></main>`).replace('</style>',`.photo-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:24px;margin:40px 0}.photo-gallery figure{margin:0}.photo-gallery img{display:block;width:100%;height:auto;border-radius:18px}</style>`);
+ if(new TextEncoder().encode(html).length>32768)throw Error('Rendered site too large');return html;
 }
