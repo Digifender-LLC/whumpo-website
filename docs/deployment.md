@@ -107,3 +107,9 @@ Live HTTPS validation passed signed passkey login, private preview, a review wit
 Migration 0009 is applied. Workspace Worker `ec09d701-3a77-43b1-8263-f2b802663d9f` and public-site Worker `bd0adaed-de49-44d8-b6e8-9ce5008bbb96` are deployed. Real Muse Spark 1.3 Contributor generated a synthetic bakery draft through signed passkey login: 7 units settled, zero held, one saved version, no duplicate inference/charge on replay and no public page before confirmation. The temporary account and dependent records were removed.
 
 Isolated D1 checks cover owner isolation, schema/action rejection, escaped hostile text, version ancestry, version quota refund, review without publication and recovery after a lost commit acknowledgement. Billing regressions passed with structured model replies. `pnpm test:site-agent` runs these checks without provider credentials.
+
+## Disabled Stripe test checkout foundation — September 29, 2026
+
+Migration 0010 applied remotely before deployment. Workspace Worker `c77e6d3a-dc07-475a-8861-4be5b261287d` and public Worker `c07e15e7-88ce-4417-90bb-b98c4c36273e` are deployed. No Stripe account or credentials were configured, following the owner's decision to defer. Live readback confirms checkout and subscriptions disabled, unconfigured webhook 503, and healthy API. The usage dialog hides purchase controls and explains that test checkout is not connected.
+
+`pnpm test:checkout`, billing regressions and TypeScript passed. Browser inspection verified the disabled state and refresh control. No Stripe API or real-money transaction was attempted; subscriptions and real Stripe end-to-end verification remain outstanding.
