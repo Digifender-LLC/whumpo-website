@@ -6,7 +6,8 @@ const sessionHash=(token:string)=>hashToken('townhello-app-session:'+token);
 type Identity={visitor_id:string;project_id:string;version_id:string;program_revision:number;token_hash:string};
 type Run={id:string;visitor_id:string;project_id:string;version_id:string;request_hash:string;base_revision:number;state:string;result_json:string|null};
 // INTERNAL ONLY: call after successful project-scoped visitor authentication.
-// No HTTP route or model tool exposes enrollment, session issuance or activation.
+// Owner activation exists; visitor enrollment and session issuance are not yet
+// connected to an HTTP route or model tool. See app-auth.ts for verified flows.
 export async function issueAppSession(db:D1Database,visitor:string){
  if(!uuid.test(visitor))throw new BackendError(400,'Invalid visitor identity');
  const token=newSessionToken(),hash=await sessionHash(token);
@@ -23,6 +24,13 @@ async function identity(db:D1Database,token:string,project:string):Promise<Ident
 export async function readAppData(db:D1Database,token:string,project:string){
  const actor=await identity(db,token,project),doc=await db.prepare('SELECT revision,state_json FROM app_documents WHERE visitor_id=?').bind(actor.visitor_id).first<{revision:number;state_json:string}>();
  if(!doc)throw new BackendError(503,'Application data unavailable');return {revision:doc.revision,state:JSON.parse(doc.state_json)};
+}
+export async function readAppReceipt(db:D1Database,token:string,project:string,id:string){
+ const actor=await identity(db,token,project);
+ if(!uuid.test(id))throw new BackendError(400,'Provide an operation UUID');
+ const row=await db.prepare('SELECT id,state,result_json FROM app_runs WHERE id=? AND project_id=? AND visitor_id=?').bind(id,project,actor.visitor_id).first<{id:string;state:string;result_json:string|null}>();
+ if(!row)throw new BackendError(404,'Application receipt not found');
+ return {id:row.id,state:row.state,...(row.result_json?{result:JSON.parse(row.result_json)}:{message:'Operation pending or outcome unknown. This ID will not execute again.'})};
 }
 export async function transitionAppData(db:D1Database,service:Fetcher,token:string,project:string,id:string,revision:number,input:unknown){
  const actor=await identity(db,token,project);
