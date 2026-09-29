@@ -113,6 +113,18 @@ try{
  const html=renderCMSDraft(snapshot);assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;'));await writeFile('.secrets/cms-preview.html',html);
  snapshot.item.data.content[0].children[0].marks=['strong'];assert.match(renderCMSDraft(snapshot),/<strong>/);snapshot.item.data.content[0].children[0].marks=['unknown'];assert.throws(()=>renderCMSDraft(snapshot),/richer preview/);
  current.item.data.content[0].children[0].marks=['strong'];
+ const richBefore=structuredClone(current),richEditCount=(await db.prepare('SELECT COUNT(*) n FROM cms_edit_requests').first()).n,writeCountBefore=updates;
+ await assert.rejects(cmsContentAction(db,a.user,{...editAction,revision:current._rev,title:'Lossy',text:'Flattened'},id(),env),e=>e.status===409&&/formatting/.test(e.message));
+ assert.equal((await http('/'+draftId,'PATCH',{id:id(),revision:current._rev,title:'Lossy',text:'Flattened'})).status,409);
+ const agentBundle=await build({stdin:{contents:"export {prepareSiteAction} from './src/site-agent'; export {cmsContentAction} from './src/cms-content';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const agentHarness=await import('data:text/javascript;base64,'+Buffer.from(agentBundle.outputFiles[0].text).toString('base64'));
+ const deniedAgent=await agentHarness.prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE saved',action:{kind:'cms',operation:'editDraft',projectId:a.project,requestId:draftId,revision:current._rev,title:'Lossy',text:'Flattened'}}),{},{cmsContent:(action,turn)=>agentHarness.cmsContentAction(db,a.user,action,turn,env)});assert.match(deniedAgent.reply,/saved content is unchanged/);assert.ok(!deniedAgent.reply.includes('FAKE'));
+ assert.deepEqual(current,richBefore);assert.equal(updates,writeCountBefore);assert.equal((await db.prepare('SELECT COUNT(*) n FROM cms_edit_requests').first()).n,richEditCount);
+ const legacyEdit=id(),legacyBody=JSON.stringify({data:{title:'Legacy edit',content:[{_type:'block',_key:'paragraph',style:'normal',markDefs:[],children:[{_type:'span',_key:'text',text:'Would flatten',marks:[]}]}]},_rev:current._rev});
+ await db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(legacyEdit,draftId,legacyBody).run();
+ await assert.rejects(cmsContentAction(db,a.user,{operation:'retryEdit',projectId:a.project,requestId:legacyEdit},id(),env),e=>e.status===409&&/formatting/.test(e.message));assert.deepEqual(current,richBefore);assert.equal(updates,writeCountBefore);
+ // Completed historical receipts remain readable without rewriting the current rich draft.
+ await cmsContentAction(db,a.user,{operation:'retryEdit',projectId:a.project,requestId:editId},id(),env);assert.deepEqual(current,richBefore);assert.equal(updates,writeCountBefore);
  const publicationProposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE PUBLICATION SUCCESS',action:{kind:'cms',operation:'reviewPublication',projectId:a.project,requestId:draftId}}),{},{cmsContent:execute});assert.match(publicationProposal.reply,/Review CMS publication/);assert.ok(!publicationProposal.reply.includes('FAKE'));
  const staleReview=await prepareCMSPublication(db,a.user,a.project,draftId,id(),env);current._rev='cmV2LTM=';
  await assert.rejects(confirmCMSPublication(db,a.user,staleReview.id,env),e=>e.status===409);
@@ -138,7 +150,10 @@ try{
  const afterPub=(await readChat(db,a.user)).turns.find(t=>t.id===pubTurn);assert.equal(afterPub.cms_publication_confirmation_id,undefined);assert.equal(afterPub.cms_publication_url,cmsPublicURL(pubReview));
  await assert.rejects(cmsContentAction(db,a.user,{operation:'confirmPublication',projectId:a.project,requestId:pubTurn},id(),env),e=>e.status===400);
  current={item:structuredClone(publishReceipt.item),_rev:publishReceipt._rev};
- const liveBeforeStage=structuredClone(current.item.data),stageId=id(),stageRevision=current._rev;
+ await assert.rejects(cmsContentAction(db,a.user,{...editAction,revision:current._rev},id(),env),e=>e.status===409&&/formatting/.test(e.message));
+ // Simulate a separately staged native-editor change; the rich published data stays intact.
+ current.item.liveData=structuredClone(current.item.data);current.item.data=structuredClone(current.item.data);current.item.data.content[0].children[0].marks=[];current.item.draftRevisionId='native-editor-stage';current._rev='bmF0aXZlLXN0YWdl';
+ const liveBeforeStage=structuredClone(current.item.liveData),stageId=id(),stageRevision=current._rev;
  const stageFetch=p.service.fetch;p.service.fetch=async request=>{const v=await verifyCMSRequest(request,a.config);if(request.method==='PUT'&&v.path.endsWith('/'+nativeId)){const body=JSON.parse(v.body);assert.ok(cmsRequestAllowed(request.method,v.path,v.body));assert.equal(Object.hasOwn(body,'status'),false);assert.equal(body._rev,stageRevision);current={item:{...current.item,data:body.data,liveData:liveBeforeStage,draftRevisionId:'native-staged-fixture'},_rev:'c3RhZ2Vk'};return Response.json({success:true,data:current});}return stageFetch(request);};
  const stagedEdit=await cmsContentAction(db,a.user,{...editAction,title:'Private replacement',text:'Staged body',revision:stageRevision},stageId,env);assert.equal(stagedEdit.status,'published');assert.equal(stagedEdit.staged,true);assert.equal(stagedEdit.publicationChanged,false);
  assert.equal(await (await publicHost.fetch(publicRequest,{DB:db})).text(),pubReview.public_html);assert.ok(!(await (await publicHost.fetch(indexRequest,{DB:db})).text()).includes('Private replacement'));
@@ -215,7 +230,8 @@ try{
  assert.equal(await (await publicHost.fetch(publicRequest,{DB:db})).text(),beforeDiscardHTML);await assert.rejects(prepareCMSDiscard(db,a.user,replacementReview.id,id(),env),e=>e.status===409);
  current.item.draftRevisionId='later-edit';current.item.liveData=structuredClone(current.item.data);current.item.data.title='Later edit';current._rev='bGF0ZXI=';
  await confirmCMSDiscard(db,a.user,discardTurn,env);assert.equal(current.item.data.title,'Later edit');assert.equal(discardWrites,1);
- await db.batch(Array.from({length:87},()=>db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}')));
+ const occupied=await db.prepare('SELECT (SELECT COUNT(*) FROM cms_draft_requests WHERE project_id=?)+(SELECT COUNT(*) FROM cms_edit_requests e JOIN cms_draft_requests d ON d.id=e.draft_request_id WHERE d.project_id=?) AS n').bind(a.project,a.project).first();
+ await db.batch(Array.from({length:90-occupied.n},()=>db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}')));
  await assert.rejects(createCMSDraft(db,a.user,a.project,id(),'posts','Over cap','Body',env),e=>e.status===409);
  await assert.rejects(db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}').run(),/not_available/);
  p.replaceVersion();await assert.rejects(deployCMS(db,a.project,digest,a.config,p),/version changed/);

@@ -1,3 +1,4 @@
+import {editableCMS} from './cms-plain-text';
 type RecordValue=Record<string,unknown>;
 const record=(value:unknown):RecordValue|null=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as RecordValue:null;
 const text=(value:unknown,max=160)=>typeof value==='string'?value.slice(0,max):'';
@@ -39,7 +40,7 @@ export function describeCMSContent(result:unknown):string{
  if(item){
   const data=record(item.data),staged=!!item.draftRevisionId;
   const status=item.status==='published'?(staged?'Private edits to a published article. These edits have not been published.':'Saved CMS content with published status. Check its publication review for public availability.'):item.status==='draft'?'Private draft. This read does not publish it.':'Saved CMS content. Publication status is unavailable.';
-  return `${text(data?.title,100)||'Untitled content'}\n${status}\n\n${excerpt(data?.content)}\n\n${references}${typeof value.revision==='string'?'\nRevision: '+text(value.revision,256):''}`;
+  return `${text(data?.title,100)||'Untitled content'}\n${status}${editableCMS(value)?'':'\nThis content cannot be safely changed by the plain-text editor. Use preview or download to preserve its formatting.'}\n\n${excerpt(data?.content)}\n\n${references}${typeof value.revision==='string'?'\nRevision: '+text(value.revision,256):''}`;
  }
  if(id(value.editRequestId))return `Your edit was saved privately. This operation did not change the public article.\n\n${references}\nEdit request: ${id(value.editRequestId)}${typeof value.revision==='string'?'\nRevision: '+text(value.revision,256):''}\n\n${receiptNote}`;
  if(request&&typeof value.itemId==='string'&&value.status==='draft')return `Your private ${value.collection==='pages'?'page':'post'} was saved. Review it before publishing.\n\n${references}\n\n${receiptNote}`;
