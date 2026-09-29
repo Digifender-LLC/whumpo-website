@@ -1,6 +1,7 @@
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { plans, creditPack } from "./plans";
 import { readChat, sendChat } from "./chat";
+import { AuthError, passkeyOptions, passkeyVerify, recoverAccount } from "./passkeys";
 
 type User = { id: string; email: string };
 type Project = { id: string; name: string; purpose: string; status: string; created_at: string; updated_at: string };
@@ -59,13 +60,19 @@ async function currentUser(request: Request, env: Env): Promise<User | null> {
   return env.DB.prepare("SELECT users.id, users.email FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?")
     .bind(await hashToken(token), new Date().toISOString()).first<User>();
 }
-async function issueSession(request: Request, env: Env, user: User): Promise<Response> {
+async function recentSession(request: Request, env: Env): Promise<boolean> {
+  const token = sessionToken(request);
+  if (!token) return false;
+  const session = await env.DB.prepare("SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ? AND created_at > ?").bind(await hashToken(token), new Date().toISOString(), new Date(Date.now() - 600000).toISOString()).first();
+  return !!session;
+}
+async function issueSession(request: Request, env: Env, user: User, recoveryCode?: string): Promise<Response> {
   const token = newSessionToken();
   const now = new Date();
   const expiry = new Date(now.getTime() + sessionDays * 86400_000).toISOString();
   await env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
     .bind(await hashToken(token), user.id, expiry, now.toISOString()).run();
-  return json({ user }, 200, { "set-cookie": cookie(token, request) });
+  return json({ user, ...(recoveryCode ? { recoveryCode } : {}) }, 200, { "set-cookie": cookie(token, request) });
 }
 async function handle(request: Request, env: Env): Promise<Response> {
   const { pathname } = new URL(request.url);
@@ -76,8 +83,29 @@ async function handle(request: Request, env: Env): Promise<Response> {
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
   if (method === "GET" && pathname === "/api/plans") return json({ plans, creditPack, currency: "USD", draft: true, checkoutEnabled: false });
-  if (method === "POST" && ["/api/auth/register", "/api/auth/login"].includes(pathname)) {
+  if (method === "POST" && pathname.startsWith("/api/auth/") && pathname !== "/api/auth/logout") {
     if (!(await env.AUTH_LIMITER.limit({ key: ip })).success) return error(429, "Too many sign-in attempts. Try again in a minute.");
+  }
+
+  const passkeyRoute = pathname.match(/^\/api\/auth\/passkeys\/(signup|login|add)\/(options|verify)$/);
+  if (method === "POST" && passkeyRoute) {
+    const data = await body(request);
+    if (!data) return error(400, "A JSON request is required");
+    const kind = passkeyRoute[1] as "signup" | "login" | "add";
+    const signedIn = await currentUser(request, env);
+    if (kind === "add" && !(await recentSession(request, env))) return error(401, "Sign in again before adding a passkey");
+    if (passkeyRoute[2] === "options") {
+      const result = await passkeyOptions(request, env, kind, data, signedIn);
+      return json({ options: result.options }, 200, { "set-cookie": result.cookie });
+    }
+    const result = await passkeyVerify(request, env, kind, data, signedIn);
+    return kind === "add" ? json({ ok: true }) : issueSession(request, env, result.user, result.recoveryCode);
+  }
+  if (method === "POST" && pathname === "/api/auth/recover") {
+    const data = await body(request);
+    if (!data) return error(400, "A JSON request is required");
+    const result = await recoverAccount(env, data);
+    return issueSession(request, env, result.user, result.recoveryCode);
   }
 
   if (method === "POST" && pathname === "/api/auth/register") {
@@ -135,6 +163,29 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  if (method === "GET" && pathname === "/api/passkeys") {
+    const { results } = await env.DB.prepare("SELECT id, name, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY created_at").bind(user.id).all();
+    return json({ passkeys: results });
+  }
+  if (method === "POST" && pathname === "/api/auth/passkeys/remove") {
+    if (!(await recentSession(request, env))) return error(401, "Sign in again before removing a passkey");
+    const data = await body(request);
+    if (typeof data?.id !== "string") return error(400, "Passkey ID required");
+    const eventId = crypto.randomUUID();
+    const removed = await env.DB.batch([
+      env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, user_id, 'passkey.removed', 'Passkey removed; all sessions signed out', ? FROM passkeys WHERE id = ? AND user_id = ? AND ((SELECT COUNT(*) FROM passkeys WHERE user_id = ?) > 1 OR EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash != 'passkey-only'))").bind(eventId, new Date().toISOString(), data.id, user.id, user.id, user.id),
+      env.DB.prepare("DELETE FROM passkeys WHERE id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM activity_events WHERE id = ?)").bind(data.id, user.id, eventId),
+      env.DB.prepare("DELETE FROM sessions WHERE user_id = ? AND EXISTS (SELECT 1 FROM activity_events WHERE id = ?)").bind(user.id, eventId)
+    ]);
+    if (removed[0].meta.changes !== 1) return error(409, "Add another passkey before removing your last one, or refresh if it was already removed");
+    return json({ ok: true, signedOut: true }, 200, { "set-cookie": clearCookie(request) });
+  }
+  if (method === "POST" && pathname === "/api/auth/recovery-code") {
+    if (!(await recentSession(request, env))) return error(401, "Sign in again before replacing a recovery code");
+    const recoveryCode = newSessionToken();
+    await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, created_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, created_at = excluded.created_at").bind(user.id, await hashToken(recoveryCode), new Date().toISOString()).run();
+    return json({ recoveryCode });
+  }
   if (method === "GET" && pathname === "/api/me") return json({ user });
   if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id));
   if (method === "POST" && pathname === "/api/chat") {
@@ -190,6 +241,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
+      if (cause instanceof AuthError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

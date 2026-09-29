@@ -45,8 +45,10 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     reply = 'Custom domains are coming next. You’ll be able to connect a domain using DNS records, connect your own Cloudflare account, or review a domain purchase here. No domain has been connected or purchased.';
   } else if (['/connections', 'show connections'].includes(command)) {
     reply = 'Optional GitHub and Cloudflare account connections are being built. You’ll be able to start connection and disconnection here and authorize access on the provider’s website. Do not paste API keys or passwords into chat.';
+  } else if (['/security', '/passkeys'].includes(command)) {
+    reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, or /connections. Use /cancel to stop an unfinished brief. Website generation and publishing are still being built.';
+    reply = 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Website generation and publishing are still being built.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {

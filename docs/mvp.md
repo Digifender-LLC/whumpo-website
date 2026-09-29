@@ -6,7 +6,7 @@ The public homepage advertises the product. The signed-in default is a conversat
 
 - [x] Public landing page and separate invitation-only workspace deployed at digifender.com.
 - [x] Owner-scoped project records, session authentication, activity history, and account/project limits.
-- [ ] Passkeys are the default signup/login method, with single-use browser-bound challenges, user verification, credential management, and recovery.
+- [x] Passkeys are the default signup/login method, with single-use browser-bound challenges, user verification, credential management, and recovery.
 - [ ] Conversational onboarding collects the customer's idea and preferences, resumes after interruption, and clearly identifies guided mode until a model is configured.
 - [x] Persistent chat is the default workspace; owner-scoped history and minimal service/usage stats survive reloads.
 - [ ] OpenAI-compatible server adapter integrated with chat, with OpenCode Go configuration and verified live provider test when credentials are supplied.
@@ -54,3 +54,15 @@ The workspace now starts with persistent chat, compact project/live-site stats, 
 Migration 0003 adds owner-scoped workspace state and chat turns. Each request carries a UUID and expected revision. D1 batches atomically save the turn, advance onboarding, create a project, and append its audit event. Identical retries are idempotent; concurrent different turns return a conflict so the client can refresh. History displays the latest 100 turns; this test permits 2,000 turns per workspace.
 
 Verified locally: onboarding resumes from the saved step, commands do not discard a brief, simultaneous retries create one project, conflicting tabs cannot overwrite each other, and another account cannot read the conversation. Browser verification covered login, chat onboarding, and project creation. Passkeys and the AI tool loop remain pending.
+
+## Passkey milestone
+
+Passkeys are now the default signup and sign-in method. The optional password flow preserves existing accounts and provides a fallback on unsupported devices. Registration requires a discoverable credential and user verification. SimpleWebAuthn validates the RP ID, origin, challenge, public key, signature, user-verification flag, and authenticator counter. A discoverable login also checks that the credential's user handle matches its owner.
+
+Challenge tokens are random, hashed in D1, bound to a five-minute HttpOnly SameSite cookie, and atomically consumed before verification. Signup consumes the invitation and creates the user, passkey, and hashed recovery code in one transaction. Pending signup does not create a user. Recovery codes rotate on use and revoke prior sessions. Removing a passkey also revokes sessions atomically; a passkey-only account cannot remove its last credential. Security changes require a sign-in within ten minutes. `/security` or `/passkeys` opens the account security controls from chat.
+
+Production RP ID is `digifender.com`; development uses `localhost` at port 8787. Passkeys are scoped to the RP domain. When choosing the final brand/domain, retain access to the old account origin and implement an authenticated migration/re-enrollment flow before retiring it. Do not assume existing passkeys will work on the new domain.
+
+Verification includes independently generated ES256 registration and signed authentication fixtures, rejected wrong origins and missing user verification, cookie binding, replay/counter rejection, recovery rotation, session revocation, and backup credential removal. A signed assertion also passed against the live Cloudflare Worker, followed by authenticated chat and logout. Its temporary account was deleted. Browser UI checks covered the default passkey button, signup fields, and security menu. Native device prompts and actual synced passkeys still need a user-device acceptance check; no user credential was created by the agent.
+
+References: https://simplewebauthn.dev/docs/packages/server and https://simplewebauthn.dev/docs/packages/browser (checked September 29, 2026).

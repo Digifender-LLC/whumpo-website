@@ -3,19 +3,26 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --var ENVIRONMENT:local",
+    "dev": "node tools/build.mjs && wrangler dev --var ENVIRONMENT:local",
     "db:local": "wrangler d1 migrations apply whumpo-control --local",
     "types": "wrangler types",
     "check": "tsc --noEmit",
     "test:smoke": "node tests/smoke.mjs",
     "test:ai": "node tests/ai.mjs",
-    "deploy": "wrangler deploy",
+    "deploy": "node tools/build.mjs && wrangler deploy",
     "db:remote": "wrangler d1 migrations apply whumpo-control --remote",
     "invite": "node tools/create-invite.mjs",
-    "test:chat": "node tests/chat.mjs"
+    "test:chat": "node tests/chat.mjs",
+    "build": "node tools/build.mjs",
+    "test:passkeys": "node tests/passkeys.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "typescript": "7.0.2",
     "wrangler": "4.143.0"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.3"
   }
 }
