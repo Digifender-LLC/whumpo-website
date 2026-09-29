@@ -175,3 +175,7 @@ AI proposals can prepare domain TXT ownership instructions and check DNS using t
 ## Custom hostname provisioning implementation — September 29, 2026
 
 Reviewed provisioning, bounded provider access, exact-resource cleanup, direct-CNAME/TXT/certificate checks and expiring public-routing authorization are implemented. The Domains panel includes review/confirm/status/disconnect controls. Activation remains disabled pending the zone token, fallback origin, safe route exclusions and real TLS/routing acceptance. Unknown provider IDs after uncertain requests require operator reconciliation. Apex/proxied-DNS support and the long-lived ownership lifecycle remain unfinished. See [hosting design](integrations/domain-hosting.md). The full domain requirement remains open.
+
+## Hostname recovery and status ordering — September 29, 2026
+
+An operator-only inspect/apply tool can reconcile a known provider ID after an uncertain create, with a reviewed digest, independent evidence note and atomic immutable audit receipt. Routing remains disabled until normal checks pass. Status updates now use attempt IDs and current-proof checks to reject stale verification results. Missing-resource and stuck-creating recovery, provider setup and live acceptance remain outstanding.
