@@ -85,9 +85,8 @@
       picker.type = "file";
       picker.accept = "image/jpeg,image/png,image/webp";
       picker.id = "profile-photo-input";
-      picker.className = "sr-only";
-      const pickerLabel = text2("label", "Change photo", "button secondary");
-      pickerLabel.htmlFor = picker.id;
+      picker.hidden = true;
+      const pickerLabel = button("Change photo", () => picker.click(), "secondary");
       photoRow.append(img, pickerLabel, picker);
       const photoStatus = text2("p", "", "field-hint");
       photoStatus.setAttribute("role", "status");
@@ -229,8 +228,8 @@
     function appearance(container) {
       const s = section("Appearance", "Choose the light that feels right for you."), group = text2("div", "", "theme-options");
       group.setAttribute("aria-label", "Color theme");
-      for (const [value, label] of [["light", "Day"], ["dark", "Night"], ["system", "Use device setting"]]) {
-        const b = button(label, async () => {
+      for (const [value, label] of [["light", "Day"], ["dark", "Night"], ["system", "Device"]]) {
+        const b = button("", async () => {
           group.querySelectorAll("button").forEach((el) => el.disabled = true);
           try {
             await save({ theme: value });
@@ -239,6 +238,11 @@
             group.querySelectorAll("button").forEach((el) => el.disabled = false);
           }
         });
+        const preview = text2("span", "", "theme-preview theme-preview-" + value);
+        preview.setAttribute("aria-hidden", "true");
+        preview.append(text2("span", "", "theme-preview-nav"), text2("span", "", "theme-preview-content"));
+        b.append(preview, text2("span", label, "theme-label"));
+        b.setAttribute("aria-label", value === "system" ? "Use device setting" : label);
         b.setAttribute("aria-pressed", String(profile.theme === value));
         group.append(b);
       }
@@ -428,7 +432,7 @@
   var labels = { projects: "Projects", usage: "AI assistance", storage: "File storage", activity: "Recent activity", traffic: "Visitor traffic", cms: "Publishing desk", performance: "Processing performance" };
   function createDashboard({ api: api2, text: text2, sendMessage: sendMessage2, showMessage: showMessage2, controls }) {
     const $2 = (s) => document.querySelector(s);
-    let data, active = "chat", editing = "dashboard", loadSequence = 0;
+    let data, active = "chat", editing = "dashboard", loadSequence = 0, activePanel = null;
     const content = $2("#workspace-content");
     function button(label, run) {
       const b = text2("button", label);
@@ -516,11 +520,13 @@
       return a;
     }
     function closePanels() {
+      activePanel = null;
       document.querySelectorAll(".embedded-dialog[open]").forEach((d) => d.close());
     }
     function render() {
       if (!data) return;
       closePanels();
+      $2("#workspace-back").hidden = true;
       content.hidden = false;
       content.replaceChildren();
       const tab = data.layout.tabs.find((t) => t.id === active);
@@ -530,13 +536,15 @@
         else b.removeAttribute("aria-current");
       });
       $2("#workspace-stage").hidden = active === "chat";
-      $2(".chat-sidebar").hidden = active !== "chat";
+      $2(".chat-view").hidden = active !== "chat";
       content.className = ["settings", "profile", "visitors"].includes(active) ? "settings-content" : "";
       $2("#view-title").textContent = tab?.label || ({ settings: "Settings", profile: "Your profile", dashboard: "Dashboard", visitors: "Visitor access" }[active] ?? "");
       $2("#workspace-stage").setAttribute("aria-label", $2("#view-title").textContent || "Workspace");
       $2("#view-eyebrow").textContent = tab ? "YOUR CUSTOM PAGE" : active === "dashboard" ? "YOUR WORKSPACE" : active === "visitors" ? "PROJECT ACCESS" : "MAKE YOURSELF AT HOME";
       $2("#view-description").textContent = tab ? "The details that matter to your work." : { settings: "Make Whumpo work the way you do.", profile: "A little about you. A better way to work together.", dashboard: "A clear view of what you\u2019re building.", visitors: "Invite people and manage their access." }[active] ?? "";
       $2("#customize-dashboard").hidden = ["settings", "profile", "chat", "visitors"].includes(active);
+      document.title = (active === "chat" ? "Chat" : $2("#view-title").textContent) + " \u2014 Whumpo";
+      $2("#workspace-stage").classList.toggle("settings-stage", ["settings", "profile", "visitors"].includes(active));
       if (active === "chat") return;
       if (active === "profile") {
         profile.render(content);
@@ -661,7 +669,10 @@
         nav.append(cta);
       }
       for (const tab of data.layout.tabs) {
-        const b = button(tab.label, () => choose(tab.id));
+        const b = button("", () => choose(tab.id));
+        const icon = text2("span", "\u25A6", "workflow-icon");
+        icon.setAttribute("aria-hidden", "true");
+        b.append(icon, text2("span", tab.label));
         b.dataset.view = tab.id;
         nav.append(b);
       }
@@ -750,15 +761,25 @@
       d.showModal = () => {
         active = parent;
         render();
+        activePanel = d;
         content.hidden = true;
         $2("#view-title").textContent = d.querySelector("h2").textContent;
+        document.title = $2("#view-title").textContent + " \u2014 Whumpo";
+        $2("#workspace-stage").setAttribute("aria-label", $2("#view-title").textContent);
         $2("#view-description").textContent = "";
         $2("#customize-dashboard").hidden = true;
+        const back = $2("#workspace-back");
+        back.textContent = "\u2190 " + (parent === "settings" ? "Settings" : "Dashboard");
+        back.hidden = false;
+        back.onclick = () => choose(parent);
         $2("#workspace-stage").scrollTop = 0;
         d.show();
       };
       d.addEventListener("close", () => {
-        if (!document.querySelector(".embedded-dialog[open]")) render();
+        if (activePanel === d) {
+          activePanel = null;
+          render();
+        }
       });
     }
     return { openAccess, showChat() {

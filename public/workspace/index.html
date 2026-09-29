@@ -40,11 +40,12 @@
       <button id="auth-toggle" class="text-button" type="button">Create an account</button>
     </section>
     <section id="dashboard" hidden>
-      <section id="workspace-stage" aria-label="Dashboard">
+      <section id="workspace-stage" aria-label="Dashboard" hidden>
+        <button id="workspace-back" class="quiet workspace-back" type="button" hidden></button>
         <div class="workspace-heading"><div><p class="eyebrow" id="view-eyebrow">YOUR CORNER OF THE INTERNET</p><h1 id="view-title">Dashboard</h1><p id="view-description">A clear view of what you’re building.</p></div><button id="customize-dashboard">Customize</button></div>
         <div id="workspace-content"></div>
       </section>
-      <section class="chat-sidebar" aria-label="Whumpo chat"><div class="chat-heading"><div><p class="eyebrow">A LITTLE HELP GOES A LONG WAY</p><h1>Chat</h1></div><span class="connection-status" id="agent-mode">Guided mode</span></div>
+      <section class="chat-view" aria-label="Whumpo chat"><div class="chat-heading"><div><p class="eyebrow">A LITTLE HELP GOES A LONG WAY</p><h1>Chat</h1></div><span class="connection-status" id="agent-mode">Guided mode</span></div>
       <div class="workspace-stats" hidden><span id="service-stats"></span><span id="usage-stats"></span></div>
       <section class="conversation" aria-label="Workspace conversation"><div id="chat-messages" role="log" aria-live="polite" aria-relevant="additions"></div><div class="suggestions"><button data-command="/new">Start an idea</button><button data-command="/projects">My projects</button><button data-command="/help">What can you do?</button></div><form id="chat-form"><label class="sr-only" for="chat-input">Message Whumpo</label><textarea id="chat-input" name="content" maxlength="1000" rows="2" required placeholder="Tell me what you have in mind…"></textarea><button class="primary" type="submit">Send <span aria-hidden="true">↑</span></button></form><p id="ai-note" class="chat-note">Guided onboarding is available now. Create and refine a website through the conversation. Please keep passwords and API keys out of chat.</p></section>
       </section>
