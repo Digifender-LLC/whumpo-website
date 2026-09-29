@@ -25,12 +25,10 @@
       <button id="auth-toggle" class="text-button" type="button">Create an account</button>
     </section>
     <section id="dashboard" hidden>
-      <div class="hero"><p class="eyebrow">Your workspace</p><h1>What would you like to create?</h1><p>Start a project with a name and a short description. The assistant and publishing flow are coming next.</p></div>
-      <div class="grid">
-        <section class="panel"><div class="panel-heading"><h2>My projects</h2><span id="project-count" class="pill">0</span></div><div id="projects" class="stack"></div></section>
-        <section class="panel"><h2>Start a project</h2><form id="project-form"><label>Project name<input name="name" maxlength="100" placeholder="My business website" required></label><label>What is it for?<textarea name="purpose" maxlength="1000" placeholder="Tell us what you want people to do here"></textarea></label><button class="primary" type="submit">Create project</button></form></section>
-      </div>
-      <section class="panel activity-panel"><h2>Activity</h2><div id="activity" class="stack"></div></section>
+      <div class="workspace-heading"><div><p class="eyebrow">Your workspace</p><h1>Let’s make something.</h1></div><button id="menu-toggle" type="button" aria-expanded="false" aria-controls="workspace-menu">☰ Details</button></div>
+      <div class="workspace-stats"><span id="service-stats">Loading services…</span><span>Guided mode · No AI charges</span></div>
+      <aside id="workspace-menu" class="panel" hidden><h2>Your workspace details</h2><div class="menu-actions"><button data-command="/projects">Projects</button><button data-command="/activity">Activity</button><button data-command="/plans">Plans &amp; credits</button><button data-command="/domains">Domains</button><button data-command="/connections">Connected accounts</button></div><p>Choose a topic to see its details in the conversation.</p></aside>
+      <section class="conversation" aria-label="Workspace conversation"><div id="chat-messages" role="log" aria-live="polite" aria-relevant="additions"></div><div class="suggestions"><button data-command="/new">Start an idea</button><button data-command="/projects">My projects</button><button data-command="/help">What can you do?</button></div><form id="chat-form"><label class="sr-only" for="chat-input">Message TellUmo</label><textarea id="chat-input" name="content" maxlength="1000" rows="2" required placeholder="Tell me what you have in mind…"></textarea><button class="primary" type="submit">Send <span aria-hidden="true">↑</span></button></form><p class="chat-note">Guided onboarding is available now. AI website creation is being built. Please keep passwords and API keys out of chat.</p></section>
     </section>
     <p id="message" role="status" aria-live="polite"></p>
   </main>

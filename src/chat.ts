@@ -1,0 +1,88 @@
+import { plans } from './plans';
+
+type State = { revision: number; step: 'idea' | 'name' | 'ready'; idea: string };
+export const greeting = "Hi, I’m your TellUmo guide. What would you like to put online? Tell me about your business, project, or idea. I can save your brief and set up a project with you.";
+export async function chatState(db: D1Database, userId: string) {
+  await db.prepare('INSERT OR IGNORE INTO workspace_state (user_id) VALUES (?)').bind(userId).run();
+  const state = await db.prepare('SELECT revision, step, idea FROM workspace_state WHERE user_id = ?').bind(userId).first<State>();
+  if (!state) throw new Error('Missing workspace state');
+  return state;
+}
+export async function readChat(db: D1Database, userId: string) {
+  // Read revision and history together to avoid returning an old revision with newer turns.
+  await chatState(db, userId);
+  const result = await db.batch([
+    db.prepare('SELECT revision, step FROM workspace_state WHERE user_id = ?').bind(userId),
+    db.prepare('SELECT id, revision, user_text, assistant_text, created_at FROM chat_turns WHERE user_id = ? ORDER BY revision DESC LIMIT 100').bind(userId),
+    db.prepare("SELECT COUNT(*) AS projects, SUM(CASE WHEN status = 'live' THEN 1 ELSE 0 END) AS live FROM projects WHERE owner_user_id = ?").bind(userId)
+  ]);
+  return { mode: 'guided', greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0] };
+}
+
+export async function sendChat(db: D1Database, userId: string, input: Record<string, unknown>) {
+  const content = typeof input.content === 'string' ? input.content.trim() : '';
+  if (!content || content.length > 1000 || !Number.isSafeInteger(input.revision) || typeof input.id !== 'string' || !/^[0-9a-f-]{36}$/.test(input.id))
+    return { status: 400, error: 'Send a message of 1 to 1,000 characters with a valid request ID.' };
+  const previous = await db.prepare('SELECT user_text FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string }>();
+  if (previous) return previous.user_text === content ? { status: 200 } : { status: 409, error: 'This request ID was already used for another message.' };
+  const state = await chatState(db, userId);
+  if (state.revision !== input.revision) return { status: 409, error: 'Your conversation changed in another tab. Review the latest messages and send again.' };
+  if (state.revision >= 2000) return { status: 409, error: 'This test workspace has reached its conversation limit.' };
+  let step = state.step;
+  let idea = state.idea;
+  let reply: string;
+  let project: { id: string; name: string; purpose: string } | undefined;
+  const command = content.toLowerCase();
+  if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
+    const { results } = await db.prepare('SELECT name, purpose, status FROM projects WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ name: string; purpose: string; status: string }>();
+    reply = results.length ? results.map(p => `${p.name} — ${p.status}\n${p.purpose}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
+  } else if (['/plans', 'show plans', 'pricing', '/usage', 'show usage'].includes(command)) {
+    reply = 'Proposed plans (USD/month):\n' + plans.map(p => `${p.name}: $${p.monthlyCents / 100}, ${p.publishedSites} published site${p.publishedSites === 1 ? '' : 's'}, ${p.monthlyUnits} build units/month.`).join('\n') + '\n\nProposed extra credits: $5 for 100 units after your monthly allowance. Guided chat is free. Billing and paid upgrades are not enabled; no purchases or charges can be made here yet.';
+  } else if (['/activity', 'show activity'].includes(command)) {
+    const { results } = await db.prepare('SELECT summary, created_at FROM activity_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<{ summary: string; created_at: string }>();
+    reply = results.map(event => `${event.created_at.slice(0, 10)}: ${event.summary}`).join('\n') || 'No activity yet.';
+  } else if (['/domains', 'show domains'].includes(command)) {
+    reply = 'Custom domains are coming next. You’ll be able to connect a domain using DNS records, connect your own Cloudflare account, or review a domain purchase here. No domain has been connected or purchased.';
+  } else if (['/connections', 'show connections'].includes(command)) {
+    reply = 'Optional GitHub and Cloudflare account connections are being built. You’ll be able to start connection and disconnection here and authorize access on the provider’s website. Do not paste API keys or passwords into chat.';
+  } else if (['/help', 'help'].includes(command)) {
+    reply = 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, or /connections. Use /cancel to stop an unfinished brief. Website generation and publishing are still being built.';
+  } else if (command === '/new') {
+    step = 'idea'; idea = ''; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
+  } else if (command === '/cancel') {
+    step = 'ready'; idea = ''; reply = 'I’ve cleared the unfinished brief. Your existing projects are unchanged. Type /new whenever you’re ready.';
+  } else if (content.startsWith('/')) {
+    reply = 'I don’t recognize that command yet. Type /help to see what I can do.';
+  } else if (step === 'idea') {
+    idea = content; step = 'name'; reply = 'I’ve saved that brief. What would you like to call the project? You can change direction with /cancel.';
+  } else if (step === 'name') {
+    if (content.length > 100) reply = 'Let’s use a shorter project name—100 characters or fewer.';
+    else {
+      project = { id: input.id, name: content, purpose: idea };
+      step = 'ready'; idea = '';
+      reply = `Your project “${content}” is saved with your brief. Website generation and publishing are coming next. You can ask to show your projects, explore /plans, or start another idea with /new.`;
+    }
+  } else {
+    reply = 'I’ve kept your message in our conversation. In guided mode, use /new to turn an idea into a project, or /help to see the available actions. AI-generated changes are not enabled yet.';
+  }
+  const now = new Date().toISOString();
+  const statements = [
+    db.prepare('INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at) SELECT ?, user_id, revision + 1, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ?').bind(input.id, content, reply, now, userId, state.revision),
+    db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, userId, state.revision, input.id, userId)
+  ];
+  if (project) {
+    statements.push(db.prepare("INSERT INTO projects (id, owner_user_id, name, purpose, status, created_at, updated_at) SELECT ?, ?, ?, ?, 'draft', ?, ? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)").bind(project.id, userId, project.name, project.purpose, now, now, input.id, userId));
+    statements.push(db.prepare("INSERT INTO activity_events (id, user_id, project_id, action, summary, created_at) SELECT ?, ?, ?, 'project.created', ?, ? WHERE EXISTS (SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?)").bind(crypto.randomUUID(), userId, project.id, `Created project ${project.name} through chat`, now, project.id, userId));
+  }
+  try {
+    const results = await db.batch(statements);
+    if (results[0].meta.changes !== 1) return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
+  } catch (cause) {
+    if (String(cause).includes('project_quota')) return { status: 409, error: 'The test platform allows 20 projects per account. Your brief is still saved.' };
+    // A simultaneous retry can lose the primary-key race; verify ownership and payload.
+    const retry = await db.prepare('SELECT user_text FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string }>();
+    if (retry?.user_text === content) return { status: 200 };
+    throw cause;
+  }
+  return { status: 200 };
+}

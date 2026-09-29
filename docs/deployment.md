@@ -55,3 +55,9 @@ When replacing the temporary domain, update the Worker custom domain and Turnsti
 Deployed Worker version: `39e82470-efa3-411a-a7fb-bfd85ed20b91`.
 
 TypeScript and local smoke checks passed, including concurrent project quotas. Live HTTPS checks passed for sign in, Secure cookies, project creation/read, cross-tenant denial, activity, and session revocation. Two temporary test users were inserted solely for those API checks and removed afterward with their related records. Missing-invite signup is rejected. The signup screen and its real Turnstile widget were checked in the browser; the widget reported success automatically. A full human invitation signup remains for the first tester.
+
+## Chat workspace deployment — September 29, 2026
+
+Worker version `3efe35dd-d526-4bea-b70e-5362faf14d51` adds guided conversation at `/workspace/`, compact service stats, and a Details menu. Remote migration `0003_chat.sql` applied successfully. The model adapter and draft catalogue are in source; `/api/plans` explicitly reports `draft: true` and `checkoutEnabled: false`. No provider calls or payments are enabled.
+
+Local validation: TypeScript, JavaScript syntax, provider contract tests, original auth/project smoke tests, and chat integration tests passed. Browser checks exercised login, two-step onboarding, project creation, persisted history after reload, and 390-pixel mobile layout. Live readback confirmed workspace HTTP 200 with chat markup, unauthenticated chat HTTP 401, and the draft catalogue HTTP 200. Authenticated chat behavior was tested locally; this deployment did not create a production test account.

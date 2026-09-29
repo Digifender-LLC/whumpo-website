@@ -39,26 +39,22 @@ function text(tag, value, className) {
   if (className) node.className = className;
   return node;
 }
-function renderProjects(projects) {
-  $("#project-count").textContent = String(projects.length);
-  const container = $("#projects");
+let chatRevision = 0;
+let pendingMessage;
+let sending = false;
+function renderChat(data) {
+  chatRevision = data.state.revision;
+  const container = $("#chat-messages");
   container.replaceChildren();
-  if (!projects.length) return container.append(text("p", "Your projects will appear here.", "empty"));
-  for (const project of projects) {
-    const item = text("div", "", "project");
-    item.append(text("strong", project.name), text("p", project.purpose || "No description yet"), text("small", `Draft · Created ${new Date(project.created_at).toLocaleDateString()}`));
+  function bubble(role, content) {
+    const item = text("article", "", `chat-bubble ${role}`);
+    item.append(text("small", role === "user" ? "You" : "TellUmo · Guide"), text("p", content));
     container.append(item);
   }
-}
-function renderActivity(events) {
-  const container = $("#activity");
-  container.replaceChildren();
-  if (!events.length) return container.append(text("p", "No activity yet.", "empty"));
-  for (const event of events) {
-    const item = text("div", "", "event");
-    item.append(text("span", event.summary), text("small", new Date(event.created_at).toLocaleString()));
-    container.append(item);
-  }
+  bubble("assistant", data.greeting);
+  for (const turn of data.turns) { bubble("user", turn.user_text); bubble("assistant", turn.assistant_text); }
+  $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} · ${data.stats.live || 0} live`;
+  container.scrollTop = container.scrollHeight;
 }
 async function loadDashboard(user) {
   history.replaceState(null, "", "/workspace/");
@@ -69,10 +65,41 @@ async function loadDashboard(user) {
   const logout = text("button", "Sign out");
   logout.onclick = async () => { try { await api("/auth/logout", { method: "POST" }); location.reload(); } catch (error) { showMessage(error.message); } };
   account.append(logout);
-  const [projects, activity] = await Promise.all([api("/projects"), api("/activity")]);
-  renderProjects(projects.projects);
-  renderActivity(activity.activity);
+  renderChat(await api("/chat"));
 }
+async function sendMessage(content) {
+  if (sending || !content.trim()) return;
+  sending = true;
+  $("#chat-form button").disabled = true;
+  document.querySelectorAll("[data-command]").forEach(button => button.disabled = true);
+  // Keep the request ID after a network failure so retrying cannot create a second project.
+  if (!pendingMessage || pendingMessage.content !== content) pendingMessage = { content, revision: chatRevision, id: crypto.randomUUID() };
+  try {
+    renderChat(await api("/chat", { method: "POST", body: JSON.stringify(pendingMessage) }));
+    pendingMessage = undefined;
+    $("#chat-input").value = "";
+  } catch (error) {
+    showMessage(error.message);
+    if (error.status === 409) {
+      pendingMessage = undefined;
+      try { renderChat(await api("/chat")); } catch { showMessage("Could not refresh the conversation. Reload before trying again."); }
+    }
+  } finally {
+    sending = false;
+    $("#chat-form button").disabled = false;
+    document.querySelectorAll("[data-command]").forEach(button => button.disabled = false);
+  }
+}
+$("#menu-toggle").onclick = () => {
+  $("#workspace-menu").hidden = !$("#workspace-menu").hidden;
+  $("#menu-toggle").setAttribute("aria-expanded", String(!$("#workspace-menu").hidden));
+};
+document.querySelectorAll("[data-command]").forEach(button => button.onclick = () => {
+  $("#workspace-menu").hidden = true;
+  $("#menu-toggle").setAttribute("aria-expanded", "false");
+  sendMessage(button.dataset.command);
+});
+$("#chat-form").onsubmit = event => { event.preventDefault(); sendMessage($("#chat-input").value.trim()); };
 function showAuth() {
   $("#auth").hidden = false;
   $("#dashboard").hidden = true;
@@ -105,18 +132,6 @@ $("#auth-form").onsubmit = async (event) => {
     await loadDashboard(result.user);
   } catch (error) { showMessage(error.message); if (widgetId !== undefined) window.turnstile.reset(widgetId); }
   finally { button.disabled = false; }
-};
-$("#project-form").onsubmit = async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const data = Object.fromEntries(new FormData(form));
-  try {
-    await api("/projects", { method: "POST", body: JSON.stringify(data) });
-    form.reset();
-    const user = (await api("/me")).user;
-    await loadDashboard(user);
-    showMessage("Project created");
-  } catch (error) { showMessage(error.message); }
 };
 async function start() {
   try {

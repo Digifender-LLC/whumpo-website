@@ -1,5 +1,6 @@
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { plans, creditPack } from "./plans";
+import { readChat, sendChat } from "./chat";
 
 type User = { id: string; email: string };
 type Project = { id: string; name: string; purpose: string; status: string; created_at: string; updated_at: string };
@@ -135,6 +136,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
   if (method === "GET" && pathname === "/api/me") return json({ user });
+  if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id));
+  if (method === "POST" && pathname === "/api/chat") {
+    const data = await body(request);
+    if (!data) return error(400, "A JSON message is required");
+    const result = await sendChat(env.DB, user.id, data);
+    return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id));
+  }
   if (method === "POST" && pathname === "/api/auth/logout") {
     const token = sessionToken(request);
     if (token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await hashToken(token)).run();

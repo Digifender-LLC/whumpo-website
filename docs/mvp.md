@@ -8,7 +8,7 @@ The public homepage advertises the product. The signed-in default is a conversat
 - [x] Owner-scoped project records, session authentication, activity history, and account/project limits.
 - [ ] Passkeys are the default signup/login method, with single-use browser-bound challenges, user verification, credential management, and recovery.
 - [ ] Conversational onboarding collects the customer's idea and preferences, resumes after interruption, and clearly identifies guided mode until a model is configured.
-- [ ] Persistent chat is the default workspace; owner-scoped history and minimal service/usage stats survive reloads.
+- [x] Persistent chat is the default workspace; owner-scoped history and minimal service/usage stats survive reloads.
 - [ ] OpenAI-compatible server adapter integrated with chat, with OpenCode Go configuration and verified live provider test when credentials are supplied.
 - [ ] Chat tools create projects, show status/activity/usage, propose edits, preview, publish, and restore versions. Server-side permissions and confirmation gates govern actions.
 - [ ] Working site generation, isolated previews, published sites, retained versions, rollback, and bounded uploads.
@@ -46,3 +46,11 @@ References checked September 29, 2026:
 ## Deployment constraints
 
 GitHub free features only; no paid Actions, packages, or LFS. Cloudflare uses the existing account's included allowance, with no upgrades or paid-only services. Invitations remain required. Product pricing is independent of permission to spend on infrastructure. Payment-provider selection and customer domain purchases will require explicit configuration before real transactions are enabled.
+
+## Guided conversation milestone
+
+The workspace now starts with persistent chat, compact project/live-site stats, and a secondary Details menu. Guided onboarding saves a brief, asks for a name, and creates a project. The conversation supports /new, /cancel, /projects, /activity, /plans, /usage, /domains, /connections, and /help. Domain and connection commands report their pending status honestly; they do not implement those integrations yet.
+
+Migration 0003 adds owner-scoped workspace state and chat turns. Each request carries a UUID and expected revision. D1 batches atomically save the turn, advance onboarding, create a project, and append its audit event. Identical retries are idempotent; concurrent different turns return a conflict so the client can refresh. History displays the latest 100 turns; this test permits 2,000 turns per workspace.
+
+Verified locally: onboarding resumes from the saved step, commands do not discard a brief, simultaneous retries create one project, conflicting tabs cannot overwrite each other, and another account cannot read the conversation. Browser verification covered login, chat onboarding, and project creation. Passkeys and the AI tool loop remain pending.

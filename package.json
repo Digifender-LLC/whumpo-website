@@ -11,7 +11,8 @@
     "test:ai": "node tests/ai.mjs",
     "deploy": "wrangler deploy",
     "db:remote": "wrangler d1 migrations apply tellumo-control --remote",
-    "invite": "node tools/create-invite.mjs"
+    "invite": "node tools/create-invite.mjs",
+    "test:chat": "node tests/chat.mjs"
   },
   "devDependencies": {
     "typescript": "7.0.2",
