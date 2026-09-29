@@ -9,3 +9,7 @@ dist/
 
 # Operator-supplied provider credentials
 /opencode.key
+
+# EmDash generated build/runtime files
+**/.astro/
+**/.emdash/

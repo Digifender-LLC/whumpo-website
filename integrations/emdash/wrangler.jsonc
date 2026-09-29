@@ -1,0 +1,36 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "whumpo-emdash-preview",
+  "main": "./src/worker.ts",
+  "compatibility_date": "2026-09-29",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "whumpo-emdash-preview",
+      "database_id": "8276a807-46d5-4748-a0ee-56fae486d208"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "whumpo-emdash-preview-media"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "17 * * * *"
+    ]
+  },
+  "account_id": "f94d28e88a63fb6f34c3ecbc05aa3faf",
+  "kv_namespaces": [
+    {
+      "binding": "SESSION",
+      "id": "5e1a95236d3a40baa3e67dc10b3c99b5"
+    }
+  ]
+}
