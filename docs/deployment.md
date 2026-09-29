@@ -320,3 +320,9 @@ TypeScript, D1 recovery tests, chat action/control tests and local multi-Worker 
 Built and deployed private CMS `80586f76-8a62-4e8e-a738-8219f9cff821`. Its existing D1/R2/KV resources and absence of public routes are unchanged. A private service-binding probe returned 503 `CMS ownership is not configured`; no owner, project or bridge secret has been assigned in production. Main TownHello remains on `cf8d9ce7-f9b3-40da-a964-9b122e07722b`.
 
 TypeScript, private profile checker, Wrangler dry-run, gateway D1 tests and the reproducible actual EmDash setup/auth/schema integration passed. The latter uses disposable local resources and fixed synthetic credentials only. The source build command now runs the installed workspace Astro CLI directly, avoiding dependency on a globally discoverable pnpm executable. Project provisioning, consent, chat content management and public CMS launch remain unfinished.
+
+## Reviewed CMS setup queue — September 29, 2026
+
+Migration 0036 applied remotely. Main Worker `42c1bde7-2f75-4271-ac2d-1a5c52dcb78a` deployed with CMS setup reviews, user-only confirmation, deterministic isolated-resource registry and queued status in chat/HTTP. No CMS customer resources or credentials were created. The existing private CMS preview remains unassigned. Health returned 200.
+
+TypeScript, D1 ownership/immutability/race/expiry/capacity tests, guided chat controls, AI server-receipt replacement and local HTTP auth/origin checks passed. Provisioning is explicitly queued, not ready. The provider resource consumer and signed bootstrap verification remain next; public CMS content management and publication are not yet enabled.

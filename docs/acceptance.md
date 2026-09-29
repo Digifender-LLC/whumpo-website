@@ -66,3 +66,7 @@ Owned applied snapshots can be listed in chat, exported as private before/after 
 ## EmDash ownership bridge milestone
 
 The deployed private CMS now requires signed owner/project-bound requests and refuses access while unassigned. Actual local EmDash integration proves empty-content setup, pinned owner administration, collection-schema reads and setup closure; the D1 gateway suite covers signature isolation and non-repeating writes. TownHello's project provisioning/consent and chat tools are not yet connected to this bridge. CMS content CRUD, media, reviewed publication, WordPress import and backup/restore remain explicit MVP gates. The private preview was not claimed by a test identity in production.
+
+## CMS setup request milestone
+
+Chat and authenticated HTTP now prepare exact owned EmDash setup reviews. Separate user confirmation atomically creates an isolated-resource registry entry in queued state. Model proposals cannot confirm themselves or claim provisioning has completed. D1/chat/HTTP tests cover ownership, concurrent review approval, expiry, replay and cost-cap rollback. Provisioning, credential installation, signed bridge binding and native bootstrap are still the next implementation gate; confirming a request currently queues it without allocating provider resources.
