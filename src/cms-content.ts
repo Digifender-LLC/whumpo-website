@@ -1,3 +1,5 @@
+import {describeCMSContent} from './cms-content-description';
+export {describeCMSContent} from './cms-content-description';
 import {prepareCMSDiscard,describeCMSDiscard} from './cms-discard';
 import {prepareCMSUnpublish,describeCMSUnpublish} from './cms-unpublish';
 import {prepareCMSPublication,describeCMSPublication,readCMSPublication,listCMSPublications} from './cms-publication';
@@ -80,4 +82,3 @@ export function cmsContentCommand(content:string,requestId:string,execute?:CMSCo
   }catch(error){return error instanceof CMSProjectError?error.message:'CMS draft operation could not be confirmed. Inspect the saved request before creating another.';}
  };
 }
-export function describeCMSContent(result:unknown){return typeof result==='string'?result:'Private EmDash content result (saved operation receipts describe the operation at that time; use /cms-read for current content):\n'+JSON.stringify(result,null,2);}

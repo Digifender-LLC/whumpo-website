@@ -245,3 +245,13 @@ The command resolves only the ignored capture directory for those IDs, rejects s
 Acceptance now starts a second native EmDash instance over the restored local D1 database with fresh local session/media bindings. It verifies closed setup, the pinned owner, collection schemas, both post/page IDs/status/title/body, and a successful new native edit/revision after restoration. The database digest matched before boot (73 tables / 180 rows). Separate paired-artifact tests verify local D1/R2 restore with media metadata including cache expiry, artifact corruption/identity rejection, occupied-target refusal, forward foreign keys, FTS and atomic rollback after an injected failure. Expected workerd SQL errors in that failure test are part of the rollback fixture.
 
 This proves local restore and native application compatibility for the supported fixture. It does not prove a consistent production capture or a production recovery operation. The source snapshot still needs coordinated write quiescence; original keys, compiled artifacts, Whumpo control/publication state and verified isolated Cloudflare resource restoration/traffic switching remain required. No live resource was created or replaced by these tests.
+
+### Readable content results in Chat
+
+CMS read results now show the saved title and body text with an explicit draft/staged/publication-status explanation. Save receipts distinguish private changes from publication and explain that replaying a saved operation does not prove the article's current state. Lists show content/review/edit identifiers and whether an outcome needs recovery, without serializing provider objects into the conversation. The publishing desk remains the place to inspect current content and review publication.
+
+The renderer includes only known fields, bounds long excerpts, and labels omitted non-text content. It does not expose unknown provider metadata or flatten rich content into a write. Existing review descriptions, exact confirmation commands and preview-link confirmation text are preserved. Historical messages are unchanged; new results use the readable form.
+
+Verification: dedicated description tests cover readable paragraphs, staged edits, historical save receipts, recovery identifiers, omission of unknown metadata/non-text content, bounded output and preservation of the preview-link phrase. The full CMS deployment/publication/recovery suite passed with the new descriptions, including its authenticated HTTP checks and exact preview links. Backend/frontend type checks and production build passed. No live tenant CMS content was modified for this presentation change.
+
+Deployed platform version `d6e0698a-d4f8-4c98-926e-24b23f693367`; live landing/health and anonymous CMS denial checks passed.

@@ -46,9 +46,9 @@ try{
  await assert.rejects(readCMSDraft(db,id(),a.project,draftId,env),e=>e.status===404);
  await assert.rejects(cmsContentAction(db,a.user,{operation:'draft',projectId:a.project,collection:'posts',title:'Bad',text:'Body',status:'published'},id(),env),e=>e.status===400);
  const execute=(action,rid)=>cmsContentAction(db,a.user,action,rid,env);assert.match(await cmsContentCommand('/cms-read '+a.project+' '+draftId,id(),execute)(),/Draft title/);
- assert.match(await cmsContentCommand('/cms-retry '+a.project+' '+draftId,id(),execute)(),/Private EmDash content result/);assert.equal(creates,1);
+ assert.match(await cmsContentCommand('/cms-retry '+a.project+' '+draftId,id(),execute)(),/Your private post was saved/);assert.equal(creates,1);
  const chat=await readChat(db,a.user);assert.equal((await sendChat(db,a.user,{id:id(),revision:chat.state.revision,content:'/cms-read '+a.project+' '+draftId},undefined,{cmsContent:execute})).status,200);assert.match((await readChat(db,a.user)).turns.at(-1).assistant_text,/Draft title/);
- const proposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE PUBLISHED CLAIM',action:{kind:'cms',operation:'retryDraft',projectId:a.project,requestId:draftId}}),{},{cmsContent:execute});assert.match(proposal.reply,/Private EmDash content result/);assert.ok(!proposal.reply.includes('FAKE'));assert.equal(creates,1);
+ const proposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE PUBLISHED CLAIM',action:{kind:'cms',operation:'retryDraft',projectId:a.project,requestId:draftId}}),{},{cmsContent:execute});assert.match(proposal.reply,/Your private post was saved/);assert.ok(!proposal.reply.includes('FAKE'));assert.equal(creates,1);
  await assert.rejects(db.prepare('UPDATE cms_draft_requests SET body=? WHERE id=?').bind('{}',draftId).run(),/immutable/);
  const worker=(await module('src/index.ts')).default,{hashToken}=await module('src/security.ts');
  const session='c'.repeat(64),sessionStamp=new Date().toISOString();
@@ -91,7 +91,7 @@ try{
  console.log('CMS workspace HTTP passed: authenticated owner reads, foreign-owner/CSRF denial, exact draft/edit replay, stale revision rejection and publication-field rejection.');
  assert.match(await cmsContentCommand('/cms-retry-edit '+a.project+' '+editId,id(),execute)(),/cmV2LTI=/);
  await assert.rejects(db.prepare('UPDATE cms_edit_requests SET body=? WHERE id=?').bind('{}',editId).run(),/immutable/);
- const editProposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE',action:{kind:'cms',operation:'retryEdit',projectId:a.project,requestId:editId}}),{},{cmsContent:execute});assert.match(editProposal.reply,/Private EmDash content result/);assert.ok(!editProposal.reply.includes('FAKE'));
+ const editProposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE',action:{kind:'cms',operation:'retryEdit',projectId:a.project,requestId:editId}}),{},{cmsContent:execute});assert.match(editProposal.reply,/Your edit was saved privately/);assert.ok(!editProposal.reply.includes('FAKE'));
  const previewTurn=id(),previewChat=await readChat(db,a.user);assert.equal((await sendChat(db,a.user,{id:previewTurn,revision:previewChat.state.revision,content:'/cms-preview '+a.project+' '+draftId},undefined,{cmsContent:execute})).status,200);
  const previewLink=(await readChat(db,a.user)).turns.at(-1);assert.equal(previewLink.cms_preview_project_id,a.project);assert.equal(previewLink.cms_preview_request_id,draftId);
  const previewResponse=await cmsPreview(db,a.user,a.project,draftId,env);assert.equal(previewResponse.status,200);assert.match(previewResponse.headers.get('content-security-policy'),/sandbox/);assert.equal(previewResponse.headers.get('cache-control'),'private, no-store');assert.match(await previewResponse.text(),/Edited/);

@@ -96,7 +96,8 @@
     "dev:frontend": "vite",
     "test:chat-delivery": "node tests/chat-delivery.mjs",
     "test:cms-editor": "node tests/cms-editor-shape.mjs",
-    "test:traffic": "node tests/site-traffic.mjs"
+    "test:traffic": "node tests/site-traffic.mjs",
+    "test:cms-descriptions": "node tests/cms-content-description.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
