@@ -178,3 +178,11 @@ Workspace Worker `2d7ecf99-2ad1-4283-82ee-5f11ea90ba44` and public host `c809f0f
 TypeScript, workspace-read tests and workspace-agent regressions passed. Coverage includes server-derived output, foreign/missing targets, rejected query/URL fields, replay, guided zero-unit access, all twenty project identities and preview ownership beyond the five-project detailed context.
 
 A live Muse request listed both exact database versions for a synthetic project, including the earlier version absent from its initial detailed context. The result was the server inspection receipt. Replay made no extra charge; `/inspect` returned the earlier forest version at no additional cost. The project remained unpublished (public HTTP 404). Six units settled with zero held. The temporary account and dependent project/version records were removed.
+
+## Optional GitHub authorization foundation — September 29, 2026
+
+Remote migration 0016 applied before deployment. Final workspace Worker `f07260cf-2a6e-4834-9abe-a7c3cc81de8a` and public host `26069cb4-7cef-4040-940a-35799b84b72f` are deployed. No GitHub App credentials or connection-encryption key are installed, so authorization remains disabled. No operator GitHub credential was copied into the platform.
+
+TypeScript, GitHub connection tests and chat regressions passed. Controlled-provider checks cover PKCE, one-time session state, encrypted context binding, tenant boundaries, installation filtering, replacement, callback cancellation/disconnect races, queued single-token revocation, expiry, invalid/nonexpiring tokens, response bounds and lost commit acknowledgement recovery. Browser testing opened Connected accounts from chat and verified the disabled setup state.
+
+Live signed-passkey testing verified authenticated connection status, disabled start 503, anonymous 401, cross-origin 403, a fixed no-referrer callback redirect, local disconnect and zero AI spending. It made no GitHub provider call and its ephemeral account was removed. Actual provider consent/revocation remains unverified pending the operator's GitHub App; repository backup is not implemented yet. Setup and credential-file instructions are in `docs/integrations/github-app-setup.md`. The existing daily maintenance handler now waits for photo and GitHub cleanup independently; real scheduled GitHub revocation has not been observed.

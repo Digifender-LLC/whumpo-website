@@ -158,3 +158,8 @@ The validated AI action vocabulary now includes atomic project-plus-private-webs
 ## Workspace inspection milestone — September 29, 2026
 
 Natural-language inspection can now request owner-scoped projects, a specific project, saved versions, a specific version, activity, usage and domains. Server records replace model-written status claims for accepted inspection actions. Exact deterministic commands remain available without AI charges. The agent receives all project identities and can inspect versions outside its latest-draft context, then act on exact IDs in a subsequent turn. Automatic multi-step tool chaining is not implemented. See [workspace actions](workspace-agent.md).
+
+
+## GitHub authorization foundation — September 29, 2026
+
+The secondary Connected accounts panel can initiate GitHub App authorization and disconnect; chat opens the same controls. One-time session-bound PKCE, encrypted expiring user tokens, installation filtering, local revocation and queued provider deletion are implemented and tested with controlled responses. Configuration is absent, so deployment stays disabled. Real GitHub consent/revocation, repository selection and source backup remain unverified or unfinished. Customer Cloudflare authorization remains unfinished. See [GitHub connection design](integrations/github-connection.md).
