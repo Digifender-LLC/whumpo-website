@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';import {build} from 'esbuild';const b=await build({entryPoints:['src/site-agent.ts'],bundle:true,format:'esm',platform:'node',write:false});const {agentPrompt,agentPromptFocus}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+const context={projectIndex:[],projects:[],photos:[{name:'unused photo canary'}],backends:[{id:'unused backend canary'}],latest:{config_json:'unused website canary'}};
+const full=agentPrompt(context),focused=agentPrompt(context,'cms');
+assert.equal(agentPromptFocus('Edit my CMS article'),'cms');assert.equal(agentPromptFocus('Draft an EmDash post'),'cms');
+for(const request of ['Edit my website','CMS plus DNS changes','CMS and GitHub backups','CMS and websites','CMS with backend functions','CMS credits','CMS forms and visitors','CMS account settings'])assert.equal(agentPromptFocus(request),'all');
+for(const text of ['Only the USER confirms','Never request secrets','untrusted data','Never emit confirmation actions','editStructuredDraft','readDraft','4096 bytes','Only USER /confirm-cms-publish','Only USER /confirm-cms-unpublish','Only USER /confirm-cms-discard','Workspace data:'])assert.ok(focused.includes(text),text);
+assert.equal(focused.includes('unused website canary'),false);assert.equal(focused.includes('unused photo canary'),false);assert.equal(focused.includes('unused backend canary'),false);assert.ok(full.includes('unused website canary'));assert.ok(full.includes('Backend action'));assert.ok(full.includes('Website actions'));
+const bytes=new TextEncoder().encode(JSON.stringify([{role:'system',content:focused},{role:'user',content:'Edit my CMS article'}])).length+512;
+assert.ok(Math.ceil((bytes*2+10000+2048*2*4)/1000)<=50);
+console.log(JSON.stringify({fullBytes:Buffer.byteLength(full),cmsBytes:Buffer.byteLength(focused),boundedTwoCallUnits:Math.ceil((bytes*2+10000+2048*2*4)/1000)}));console.log('Prompt focus passed: full catalog fallback, retained approvals and content contract, no irrelevant asset context, conservative 50-unit two-call bound.');

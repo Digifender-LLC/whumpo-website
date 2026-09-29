@@ -5,7 +5,7 @@ import { museTestRoute } from './model-policy';
 import {cloudflareStatus} from './cloudflare-connection';
 import type {DNSChatOptions} from './dns-chat';
 import {DomainError} from './domains';
-import { siteContext, agentPrompt, prepareSiteAction, ProposalError } from './site-agent';
+import { siteContext, agentPrompt,agentPromptFocus, prepareSiteAction, ProposalError } from './site-agent';
 import { complete, ProviderError, type AIConfig, type ChatMessage } from './ai';
 import { dispatchUsage, finishUsage, getBilling, getOperation, usageReservationStatement, uncertainUsage } from './billing';
 import { buildUnits } from './plans';
@@ -50,7 +50,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const dnsStatus=await cloudflareStatus(db,userId,dnsOptions?.config);
   context.dnsConnection={enabled:dnsStatus.enabled,connected:dnsStatus.connected,expiresAt:dnsStatus.expiresAt};
   const { results: history } = await db.prepare("SELECT user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' ORDER BY revision DESC LIMIT 4").bind(userId).all<{ user_text: string; assistant_text: string }>();
-  const system = agentPrompt(context);
+  const system = agentPrompt(context,agentPromptFocus(content));
   // Keep each transport message within its limit without dropping system policy.
   // Budget reservations still include every byte across all chunks.
   const messages: ChatMessage[] = [];

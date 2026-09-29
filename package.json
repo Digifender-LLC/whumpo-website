@@ -90,6 +90,7 @@
     "test:cloudflare-token-refresh": "node tests/cloudflare-token-refresh.mjs",
     "test:app-lifecycle": "node tests/app-lifecycle.mjs",
     "test:workspace-navigation": "node tests/workspace-navigation.mjs",
+    "test:agent-prompt-focus": "node tests/agent-prompt-focus.mjs",
     "test:agent-inspection": "node tests/agent-inspection.mjs",
     "test:backend-diff": "node tests/backend-diff.mjs",
     "test:backend-checks": "node tests/backend-checks.mjs",
