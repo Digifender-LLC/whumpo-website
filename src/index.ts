@@ -1,4 +1,5 @@
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
+import { plans, creditPack } from "./plans";
 
 type User = { id: string; email: string };
 type Project = { id: string; name: string; purpose: string; status: string; created_at: string; updated_at: string };
@@ -73,6 +74,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && !sameOrigin(request)) return error(403, "Origin check failed");
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
+  if (method === "GET" && pathname === "/api/plans") return json({ plans, creditPack, currency: "USD", draft: true, checkoutEnabled: false });
   if (method === "POST" && ["/api/auth/register", "/api/auth/login"].includes(pathname)) {
     if (!(await env.AUTH_LIMITER.limit({ key: ip })).success) return error(429, "Too many sign-in attempts. Try again in a minute.");
   }
