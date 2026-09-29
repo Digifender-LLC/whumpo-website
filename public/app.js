@@ -535,6 +535,25 @@
         link.rel = "noopener noreferrer";
         answer.append(link);
       }
+      if (typeof turn.cms_publication_url === "string" && /^https:\/\/sites\.digifender\.com\/s\/[0-9a-f-]{36}\/cms\/(posts|pages)\/[0-9A-HJKMNP-TV-Z]{26}$/.test(turn.cms_publication_url)) {
+        const link = text("a", "Open published CMS article \u2197");
+        link.href = turn.cms_publication_url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        answer.append(link);
+      }
+      if (typeof turn.cms_publication_review_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_publication_review_id)) {
+        const link = text("a", "Review exact CMS article \u2197");
+        link.href = `/api/cms-publication-reviews/${turn.cms_publication_review_id}/preview`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        answer.append(link);
+      }
+      if (typeof turn.cms_publication_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_publication_confirmation_id)) {
+        const button = text("button", "Publish reviewed CMS article");
+        button.onclick = () => sendMessage(`/confirm-cms-publish ${turn.cms_publication_confirmation_id}`);
+        answer.append(button);
+      }
       if (typeof turn.cms_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_confirmation_id)) {
         const button = text("button", "Approve CMS setup request");
         button.onclick = () => sendMessage(`/confirm-cms ${turn.cms_confirmation_id}`);

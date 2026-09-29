@@ -8,7 +8,7 @@ import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns'
 import {DomainError} from './domains';
 import {hostingConnections} from './domain-hosting';
 import {ConnectionError} from './github-connection';
-export type DNSChatOptions=HostingChatOptions & BackupChatOptions & HealthOptions & {cmsContent?:CMSContent;cms?:CMSRead;backendRuntime?:Fetcher;config?:CloudflareConfig;transport?:typeof fetch;hostingReady?:boolean};
+export type DNSChatOptions=HostingChatOptions & BackupChatOptions & HealthOptions & {cmsPublication?:(turn:string,content:string)=>(()=>Promise<string>)|undefined;cmsContent?:CMSContent;cms?:CMSRead;backendRuntime?:Fetcher;config?:CloudflareConfig;transport?:typeof fetch;hostingReady?:boolean};
 const uuid=/^[0-9a-f-]{36}$/;
 type Receipt=Awaited<ReturnType<typeof reviewTXT>>;
 function describe(a:Receipt){

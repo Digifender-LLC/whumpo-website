@@ -37,6 +37,10 @@ for(const collection of ['posts','pages']){
  const contenders=await Promise.all(['One','Two'].map(title=>call(path,cmsEditBody(title,'Race',editData.data._rev),id(),config,'PUT')));assert.deepEqual(contenders.map(r=>r.status).sort(),[200,409]);
  assert.equal((await call('/_emdash/api/content/'+collection,{...draftBody,status:'published'})).status,403);
  assert.equal((await call('/_emdash/api/content/'+collection+'/'+item.id+'/publish',{})).status,403);
+ const latest=(await (await call(path)).json()).data,publishPath=path+'/publish',publishId=id();
+ assert.equal((await call(publishPath,{_rev:snapshot._rev})).status,409);
+ const published=await call(publishPath,{_rev:latest._rev},publishId),publishedData=await published.json();assert.equal(published.status,200,JSON.stringify(publishedData));assert.equal(publishedData.data.item.status,'published');assert.equal(JSON.stringify(publishedData.data.item.data),JSON.stringify(latest.item.data));
+ assert.deepEqual(await (await call(publishPath,{_rev:latest._rev},publishId)).json(),publishedData);
  assert.equal((await fetch(base+'/posts/'+item.slug)).status,403);
 }
-console.log('Actual native EmDash drafts passed: posts/pages create, read, exact replay, changed-request conflict, forced draft state, revision-bound editing, stale/concurrent edit conflicts and publication denial.');
+console.log('Actual native EmDash drafts passed: posts/pages create, read, exact replay, changed-request conflict, forced draft state, revision-bound editing, stale/concurrent edit conflicts and revision-bound native publication with exact replay.');

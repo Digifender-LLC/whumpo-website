@@ -1,3 +1,4 @@
+import {prepareCMSPublication,describeCMSPublication} from './cms-publication';
 import {prepareCMSPreview} from './cms-preview';
 import {cmsEditAction} from './cms-edits';
 import {cmsConnection} from './cms-status';
@@ -45,6 +46,7 @@ export async function cmsContentAction(db:D1Database,user:string,action:Record<s
  if(action.operation==='draft')return createCMSDraft(db,user,project,id,String(action.collection),action.title,action.text,env);
  if(action.operation==='listDrafts')return listCMSDrafts(db,user,project,env);
  if(typeof action.requestId!=='string'||!uuid.test(action.requestId))throw new CMSProjectError(400,'Choose a CMS draft request ID');
+ if(action.operation==='reviewPublication')return describeCMSPublication(await prepareCMSPublication(db,user,project,action.requestId,id,env));
  if(action.operation==='previewDraft')return prepareCMSPreview(db,user,project,action.requestId,id,env);
  if(action.operation==='readDraft')return readCMSDraft(db,user,project,action.requestId,env);
  if(action.operation==='retryDraft'){
@@ -73,4 +75,4 @@ export function cmsContentCommand(content:string,requestId:string,execute?:CMSCo
   }catch(error){return error instanceof CMSProjectError?error.message:'CMS draft operation could not be confirmed. Inspect the saved request before creating another.';}
  };
 }
-export function describeCMSContent(result:unknown){return 'Private EmDash content result (not published):\n'+JSON.stringify(result,null,2);}
+export function describeCMSContent(result:unknown){return typeof result==='string'?result:'Private EmDash content result (saved operation receipts describe the operation at that time; use /cms-read for current content):\n'+JSON.stringify(result,null,2);}
