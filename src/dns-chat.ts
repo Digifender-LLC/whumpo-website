@@ -1,9 +1,10 @@
+import type {HostingChatOptions} from './hosting-chat';
 import {cloudflareZones,type CloudflareConfig} from './cloudflare-connection';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {DomainError} from './domains';
 import {hostingConnections} from './domain-hosting';
 import {ConnectionError} from './github-connection';
-export type DNSChatOptions={config?:CloudflareConfig;transport?:typeof fetch;hostingReady?:boolean};
+export type DNSChatOptions=HostingChatOptions & {config?:CloudflareConfig;transport?:typeof fetch;hostingReady?:boolean};
 const uuid=/^[0-9a-f-]{36}$/;
 type Receipt=Awaited<ReturnType<typeof reviewTXT>>;
 function describe(a:Receipt){

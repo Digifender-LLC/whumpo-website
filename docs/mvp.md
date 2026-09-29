@@ -225,3 +225,8 @@ Customers can inspect exact saved changes through `/diff`, natural-language comp
 ### Reviewed website-routing CNAMEs (September 29)
 
 Implemented fixed-target DNS-only CNAME reviews through Domains, `/review-routing`, and the validated AI action. Explicit user confirmation remains required. Conflicting records are preserved, dispatch rechecks ownership/access/hosting state, and uncertain results are only observed. Migration 0027 extends the existing DNS review ledger. See [the DNS integration contract](integrations/cloudflare-dns.md#website-routing--migration-0027). Real customer OAuth and custom-hostname setup remain gated; apex routing, DNS replacement/removal and domain purchasing are not implemented. Stripe remains disconnected at the user's request.
+
+
+### Hosting lifecycle in chat (September 29)
+
+The existing hosting review/confirm/status/disconnect operations are now available through `/hosting`, `/review-hosting`, `/confirm-hosting`, `/check-hosting` and `/disconnect-hosting`. AI requests can list or prepare reviews; explicit user commands retain provider mutation authority. This closes the panel-only hosting-control gap. Real provider configuration, consent, DNS/TLS acceptance, general backend generation and domain purchases remain open; Stripe is still deferred.

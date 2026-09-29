@@ -71,8 +71,8 @@ export async function disconnectHosting(db:D1Database,user:string,id:string,conf
  }catch{/* Retain exact resource and fail-closed cleanup state for a later retry. */}
  return view(await owned(db,user,id));
 }
-export async function refreshHosting(db:D1Database,user:string,id:string,configuration:HostingConfig|undefined,transport:typeof fetch=fetch){
- const c=await owned(db,user,id);if(c.state==='disconnecting')return disconnectHosting(db,user,id,configuration,transport);
+export async function refreshHosting(db:D1Database,user:string,id:string,configuration:HostingConfig|undefined,transport:typeof fetch=fetch,allowCleanup=true){
+ const c=await owned(db,user,id);if(c.state==='disconnecting')return allowCleanup?disconnectHosting(db,user,id,configuration,transport):view(c);
  if(!['active','provisioning'].includes(c.state)||!c.provider_id)return view(c);
  // Expired checks and outages cannot keep old routing authorization alive.
  const checkId=crypto.randomUUID();

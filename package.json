@@ -33,6 +33,7 @@
     "test:github-connection": "node tests/github-connection.mjs",
     "test:github-backups": "node tests/github-backups.mjs",
     "test:domain-agent": "node tests/domain-agent.mjs",
+    "test:hosting-chat": "node tests/hosting-chat.mjs",
     "test:domain-hosting": "node tests/domain-hosting.mjs",
     "test:domain-recovery": "node tests/domain-recovery.mjs",
     "test:plan-periods": "node tests/plan-periods.mjs",
