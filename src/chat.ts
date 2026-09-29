@@ -1,3 +1,4 @@
+import {domainCommand} from './domains';
 import { attachPhoto } from './photo-versions';
 import { publicationCommand, siteURL } from './publications';
 import { renderLaunch, type LaunchConfig } from './components';
@@ -54,10 +55,12 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const command = content.toLowerCase();
   const known = ['/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
+  const domain = await domainCommand(db,userId,input.id,command);
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
-  if (photoDraft) reply = photoDraft.reply;
+  if (domain) reply = domain.reply;
+  else if (photoDraft) reply = photoDraft.reply;
   else if (publication) reply = publication.reply;
   else if (/^\/export(?:\s|$)/.test(command) || ['export my website','download my website'].includes(command)) {
     const args=command.startsWith('/export')?command.split(/\s+/):['/export'];
@@ -95,14 +98,13 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     reply = results.map(event => `${event.created_at.slice(0, 10)}: ${event.summary}`).join('\n') || 'No activity yet.';
   } else if (['/files','show files','show photos','upload a photo'].includes(command)) {
     reply='Open Details → Project photos to upload a private photo or view existing files. Uploads use no AI units. Photos are not published automatically.';
-  } else if (['/domains', 'show domains'].includes(command)) {
-    reply = 'Custom domains are coming next. You’ll be able to connect a domain using DNS records, connect your own Cloudflare account, or review a domain purchase here. No domain has been connected or purchased.';
+
   } else if (['/connections', 'show connections'].includes(command)) {
     reply = 'Optional GitHub and Cloudflare account connections are being built. You’ll be able to start connection and disconnection here and authorize access on the provider’s website. Do not paste API keys or passwords into chat.';
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = ai ? 'AI is connected for website planning and private draft edits. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /files for private project photos; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Custom backend code, domains, and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
+    reply = ai ? 'AI is connected for website planning and private draft edits. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /files for private project photos; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Use /domains to prepare or check domain ownership. Domain hosting connection, custom backend code and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
@@ -126,6 +128,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     db.prepare("INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at) SELECT ?, user_id, revision + 1, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending')").bind(input.id, content, reply, now, userId, state.revision, userId),
     db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, userId, state.revision, input.id, userId)
   ];
+  if (domain) statements.push(...domain.statements);
   if (publication) statements.push(...publication.statements);
   if (photoDraft) statements.push(...photoDraft.statements);
   if (exportId) statements.push(db.prepare("INSERT OR IGNORE INTO chat_exports(turn_id,version_id) SELECT id,? FROM chat_turns WHERE id=? AND user_id=?").bind(exportId,input.id,userId));
@@ -149,6 +152,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
     }
   } catch (cause) {
+    if (String(cause).includes('domain_claim_quota')) return {status:409,error:'Domain test limit reached: 3 per project, 10 per account and 80 platform-wide.'};
     if (String(cause).includes('published_site_quota')) return {status:409,error:'Your plan’s live-site limit is reached. Unpublish another site before confirming this one.'};
     if (/publication_(changed|expired|version)/.test(String(cause))) return {status:409,error:'The reviewed publication is stale or expired. Request a fresh review before confirming.'};
     if (String(cause).includes('site_version_quota')) return {status:409,error:'This test project has reached its 25 saved preview limit.'};
