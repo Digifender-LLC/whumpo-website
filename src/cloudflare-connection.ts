@@ -45,7 +45,7 @@ export async function cleanupCloudflare(db:D1Database,config:CloudflareConfig|un
 export async function cloudflareStatus(db:D1Database,userId:string,config:CloudflareConfig|undefined){
  const row=await db.prepare("SELECT id,created_at,expires_at FROM cloudflare_token_vault WHERE user_id=? AND state='active' AND expires_at>?").bind(userId,now()).first<{created_at:string;expires_at:string}>();
  const pending=await db.prepare("SELECT COUNT(*) n FROM cloudflare_token_vault WHERE user_id=? AND state='revoking' AND expires_at>?").bind(userId,now()).first<{n:number}>();
- return {enabled:!!config,connected:!!config&&!!row,expiresAt:row?.expires_at??null,connectedAt:row?.created_at??null,revocationPending:!!pending?.n,dnsChangesEnabled:false};
+ return {enabled:!!config,connected:!!config&&!!row,expiresAt:row?.expires_at??null,connectedAt:row?.created_at??null,revocationPending:!!pending?.n,dnsChangesEnabled:!!config&&!!row};
 }
 export async function startCloudflare(db:D1Database,userId:string,sessionHash:string,configuration:CloudflareConfig|undefined){
  const config=required(configuration),state=newSessionToken(),stateHash=await hashToken(state),verifier=newSessionToken();
@@ -107,3 +107,18 @@ export async function cloudflareZones(db:D1Database,userId:string,configuration:
  const info=data.result_info as Record<string,unknown>|undefined;
  return {zones,page,hasMore:typeof info?.total_pages==='number'&&info.total_pages>page};
 }
+
+/** Server-only capability; each call rechecks the owner's exact current credential. */
+export async function cloudflareAccess(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,transport:typeof fetch=fetch,expectedToken?:string){
+ const config=required(configuration);
+ const row=await db.prepare("SELECT id FROM cloudflare_token_vault WHERE user_id=? AND state='active' AND expires_at>?").bind(userId,now()).first<{id:string}>();
+ if(!row||expectedToken&&row.id!==expectedToken)throw new ConnectionError(401,'Cloudflare access changed. Connect and prepare a fresh DNS review.');
+ return {tokenId:row.id,async send(path:string,method:'GET'|'POST'='GET',body?:unknown){
+  if(!/^\/zones\/[0-9a-f]{32}(?:\/dns_records(?:\/[0-9a-f]{32})?)?(?:\?[^#]*)?$/.test(path)||method==='POST'&&!/^\/zones\/[0-9a-f]{32}\/dns_records$/.test(path))throw new ConnectionError(400,'Invalid Cloudflare DNS operation.');
+  const active=await db.prepare("SELECT ciphertext FROM cloudflare_token_vault WHERE id=? AND user_id=? AND state='active' AND expires_at>?").bind(row.id,userId,now()).first<{ciphertext:string}>();
+  if(!active)throw new ConnectionError(401,'Cloudflare access changed. Refresh its status.');
+  const tokens=JSON.parse(await unseal(config.key,aad(userId,row.id,'token'),active.ciphertext)) as Tokens;
+  return json(await request('https://api.cloudflare.com/client/v4'+path,{method,headers:{authorization:'Bearer '+tokens.access,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)},transport));
+ }};
+}
+export type {CloudflareConfig};
