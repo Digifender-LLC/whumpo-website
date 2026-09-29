@@ -361,3 +361,15 @@ Live Muse acceptance passed: two Responses calls, 9,541 reported input tokens an
 The current conservative two-call reservation exceeds the 50-unit Explore fixture allowance even though this observed run consumed 17 units. Small-balance requests retain the existing single-call fallback; reducing irrelevant prompt overhead without weakening permissions remains usability work before broad beta acceptance.
 
 Follow-up: the CMS-focused prompt now passes the same real Muse edit with the normal Explore allowance (`--explore`), without any quota override: two calls, 13 settled units, unchanged unrequested content and replay protection. See [CMS prompt budgeting](pricing-and-model-policy.md#cms-prompt-budgeting--september-29-2026) for scope and limitations. The preceding 1,000-unit fixture result remains historical evidence; it is no longer the only accepted budget path.
+
+## Private media inventory — September 29, 2026
+
+The publishing desk's Media library and free `/cms-media PROJECT_ID [PAGE]` command now browse existing native CMS media metadata. The model can request the same read with `{kind:"cms",operation:"media",projectId,page}`. The owner-only platform route is `GET /api/cms/:project/media?page=N`; it rechecks project ownership/readiness before using the signed service connection. Pages contain at most 20 records, with a maximum page of 1,000 and an explicit browsing-limit indication.
+
+The native bridge permits exactly the canonical GET path `/_emdash/api/media?page=N&limit=20`. The entire path and query are signed; reordered/extra query parameters, invalid pages and changed page signatures are rejected. All other query-bearing native routes remain denied. Upload, mutation, provider search, usage details and file download routes are not opened. Newly built native artifacts advertise metadata version 1; older artifacts return the normal unavailable message.
+
+Only media ID, filename, MIME type, size, dimensions and alt text are projected into the owner response. Native storage keys, URLs, authors and other metadata are excluded. No image pixels are downloaded or sent to a model. Buckets remain private. Upload, private file viewing and reviewed image insertion/publication remain necessary next steps; this is not a completed media pipeline.
+
+Verification: canonical signing/query tamper/method/file-route checks, owner denial, projection canaries, page bounds and guided Chat passed in `test:cms-media`. Actual local EmDash accepted the signed first-page read and returned an empty inventory after setup; its content/publication/replay/restore suite also passed. Bridge regressions, capability checks, focused-prompt budget checks, TypeScript and build passed. A synthetic populated API fixture rendered correctly at 360px with no document overflow; screenshot `.secrets/cms-media-mobile.png`. Populated native media and live tenant provisioning remain unverified.
+
+Deployed platform version `1b3402fa-328b-42b1-af6d-d0892297c1e2`. Live anonymous media reads return 401; frontend assets match the tested build byte-for-byte. No native customer artifact, stored file or bucket policy changed.

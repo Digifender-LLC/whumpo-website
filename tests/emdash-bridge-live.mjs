@@ -11,7 +11,7 @@ assert.equal((await fetch(base+capabilityPath)).status,403);
 assert.equal((await call(capabilityPath,undefined,id(),{...config,ownerId:id()})).status,403);
 assert.equal((await call(capabilityPath,{})).status,403);
 const capability=await call(capabilityPath);assert.equal(capability.status,200);assert.equal(capability.headers.get('cache-control'),'no-store');
-assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,structuredContent:{version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
+assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,media:{metadataVersion:1,pageSize:20},structuredContent:{version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
 assert.equal((await fetch(base+'/_emdash/api/setup/status')).status,403);
 assert.equal((await call('/_emdash/api/setup/status',undefined,id(),{...config,ownerId:id()})).status,403);
 const before=await call('/_emdash/api/setup/status');assert.equal(before.status,200);const initial=await before.json();assert.equal(initial.data.needsSetup,true,JSON.stringify(initial));
@@ -21,11 +21,12 @@ assert.deepEqual(await (await call('/_emdash/api/setup',body,requestId)).json(),
 assert.equal((await call('/_emdash/api/setup',{...body,title:'Forged replay'},requestId)).status,409);
 const me=await call('/_emdash/api/auth/me');const owner=await me.json();assert.equal(me.status,200,JSON.stringify(owner));assert.equal(owner.data.email,config.ownerId+'@owners.whumpo.invalid');assert.equal(owner.data.role,50);
 const collections=await call('/_emdash/api/schema/collections');assert.equal(collections.status,200);const schema=await collections.json();assert.ok(JSON.stringify(schema).includes('posts'));
+const media=await call('/_emdash/api/media?page=1&limit=20');assert.equal(media.status,200);const mediaData=await media.json();assert.deepEqual(mediaData.data.items,[]);assert.equal(mediaData.data.totalCount,0);
 const after=await (await call('/_emdash/api/setup/status')).json();assert.equal(after.data.needsSetup,false);
 assert.equal((await call('/_emdash/api/setup/admin',{email:'attacker@example.test'})).status,403);
 assert.equal((await call('/_emdash/api/plugins')).status,403);
 assert.equal((await fetch(base+'/_emdash/admin/setup')).status,403);
-const service={fetch:async request=>{const u=new URL(request.url);return fetch(base+u.pathname,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),signal:request.signal});}};assert.deepEqual((await verifyCMSInitialization(service,config)).collections.sort(),['pages','posts']);
+const service={fetch:async request=>{const u=new URL(request.url);return fetch(base+u.pathname+u.search,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),signal:request.signal});}};assert.deepEqual((await verifyCMSInitialization(service,config)).collections.sort(),['pages','posts']);
 console.log('Actual EmDash bridge passed: unsigned/wrong-owner denial, empty-content setup, replay/conflict handling, pinned owner administration, schema reads, setup closed and other management routes denied.');
 const shapeBuild=await build({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsDraftBody,cmsEditBody,cmsStagedEditBody,cmsRichDraftBody,cmsRichEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeBuild.outputFiles[0].text).toString('base64'));
 for(const collection of ['posts','pages']){
