@@ -37,5 +37,25 @@ try{
  const noReceipt=await account(),one=await project(noReceipt,'One'),two=await project(noReceipt,'Two');await db.prepare("UPDATE billing_accounts SET plan_id='studio' WHERE user_id=?").bind(noReceipt).run();assert.equal((await getBilling(db,noReceipt)).plan.id,'explore');assert.equal((await publish(noReceipt,one.version)).result.status,200);assert.equal((await publish(noReceipt,two.version)).result.status,409);
  // Existing sites remain editable above a downgraded cap; no new slot can be added.
  await db.prepare("INSERT INTO publications(project_id,version_id,revision) VALUES(?,?,1) ON CONFLICT(project_id) DO UPDATE SET version_id=excluded.version_id").bind(two.project,two.version).run();assert.equal((await publish(noReceipt,two.version)).result.status,200);const three=await project(noReceipt,'Three');assert.equal((await publish(noReceipt,three.version)).result.status,409);
+ // New catalogue entitlements are authoritative; historic plans remain unchanged.
+ const modern=await account();
+ for (const [tier,units,slots] of [['starter',250,1],['personal',800,5],['business',1600,10],['business-pro',3200,25]]) {
+  await grantPlan(db,modern,'new-'+tier,period,tier,'new-invoice-'+tier);
+  const bill=await getBilling(db,modern,stamp);assert.equal(bill.plan.id,tier);assert.equal(bill.quota.allowance,units);assert.equal(bill.plan.publishedSites,slots);
+ }
+ await grantPlan(db,modern,'late-starter',period,'starter','late-starter-invoice');assert.equal((await getBilling(db,modern,stamp)).plan.id,'business-pro');
+ assert.equal((await getBilling(db,modern,next)).plan.id,'explore');
+ const {plans,publicPlans,quoteDomainBenefit}=await module('src/plans.ts');
+ for(const plan of plans){const row=await db.prepare('SELECT monthly_units,published_sites FROM plan_catalog WHERE id=?').bind(plan.id).first();assert.equal(row.monthly_units,plan.monthlyUnits);assert.equal(row.published_sites,plan.publishedSites);}
+ assert.deepEqual(plans.slice(1).map(p=>[p.monthlyCents,p.annualCents]),[[1700,17000],[3000,30000],[7900,79000],[13900,139000]]);
+ assert.ok(publicPlans.every(p=>!('monthlyUnits' in p)));
+ assert.equal(quoteDomainBenefit('starter','year',1999,false).coveredCents,1999);
+ assert.equal(quoteDomainBenefit('business-pro','year',3100,false).remainingWholesaleCents,1100);
+ assert.equal(quoteDomainBenefit('business-pro','year',3100,false).annualDomainCount,2);
+ assert.equal(quoteDomainBenefit('starter','month',1500,false).coveredCents,0);
+ assert.equal(quoteDomainBenefit('starter','year',1500,true).coveredCents,0);
+ assert.equal(quoteDomainBenefit('starter','year',1500,false).redemptionEnabled,false);
+ assert.throws(()=>quoteDomainBenefit('unknown','year',1500,false));
+ const pricing=await chat(modern,'/plans');assert.equal(pricing.result.status,200);assert.match((await readChat(db,modern)).turns.at(-1).assistant_text,/Starter: \$17/);
  console.log('Plan periods passed: atomic upgrades preserve usage/holds, receipt replay/ownership/reference protection, ledger totals, no paid rollover without renewal, downgrade renewal, persistent credits, late settlement, lost acknowledgement and current-period publication limits.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

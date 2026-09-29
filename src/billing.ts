@@ -1,4 +1,4 @@
-import { plans } from './plans';
+import { plans, entitlementPlans } from './plans';
 
 export class BillingError extends Error {
   status: number;
@@ -11,9 +11,9 @@ export async function ensureBilling(db: D1Database, userId: string, date = new D
   const period = date.toISOString().slice(0, 7);
   await db.prepare('INSERT OR IGNORE INTO billing_accounts (user_id) VALUES (?)').bind(userId).run();
   // Select receipts inside the INSERT so an overlapping grant cannot be missed by a stale JS read.
-  await db.prepare("INSERT OR IGNORE INTO usage_periods(user_id,period,allowance) SELECT ?,?,COALESCE(MAX(CASE plan_id WHEN 'studio' THEN 800 ELSE 250 END),?) FROM plan_grants WHERE user_id=? AND period=?").bind(userId,period,plans[0].monthlyUnits,userId,period).run();
-  const entitlement=await db.prepare("SELECT COALESCE(MAX(CASE plan_id WHEN 'studio' THEN 2 ELSE 1 END),0) AS tier FROM plan_grants WHERE user_id=? AND period=?").bind(userId,period).first<{tier:number}>();
-  const plan=plans[entitlement?.tier??0];
+  await db.prepare("INSERT OR IGNORE INTO usage_periods(user_id,period,allowance) SELECT ?,?,COALESCE(MAX(c.monthly_units),?) FROM plan_grants g JOIN plan_catalog c ON c.id=g.plan_id WHERE user_id=? AND period=?").bind(userId,period,plans[0].monthlyUnits,userId,period).run();
+  const entitlement=await db.prepare("SELECT c.id FROM plan_grants g JOIN plan_catalog c ON c.id=g.plan_id WHERE user_id=? AND period=? ORDER BY c.tier DESC,c.monthly_units DESC,c.published_sites DESC,c.id LIMIT 1").bind(userId,period).first<{id:string}>();
+  const plan=entitlementPlans.find(p=>p.id===entitlement?.id)??plans[0];
   // Only work never sent to a provider expires automatically. Uncertain calls retain their hold.
   await db.prepare("UPDATE usage_operations SET status = 'released', actual_units = 0, quota_charged = 0, credits_charged = 0, updated_at = ? WHERE user_id = ? AND status = 'reserved' AND expires_at <= ?").bind(date.toISOString(), userId, date.toISOString()).run();
   return { period, plan };
@@ -88,7 +88,7 @@ export async function grantCredits(db: D1Database, userId: string, grantId: stri
 /** Fulfillment boundary only. A provider adapter must verify payment, owner and calendar period first.
  * Never expose this function with caller-selected plans or periods in an HTTP/model tool. */
 export async function grantPlan(db:D1Database,userId:string,id:string,period:string,planId:string,reference:string){
- if(!/^[0-9a-z:_-]{1,120}$/i.test(id)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)||!['launch','studio'].includes(planId)||!reference||reference.length>200||/[\x00-\x1f\x7f]/.test(reference))throw new BillingError(400,'Invalid plan entitlement');
+ if(!/^[0-9a-z:_-]{1,120}$/i.test(id)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)||!entitlementPlans.some(p=>p.id===planId && p.id!=='explore')||!reference||reference.length>200||/[\x00-\x1f\x7f]/.test(reference))throw new BillingError(400,'Invalid plan entitlement');
  await db.prepare('INSERT OR IGNORE INTO billing_accounts(user_id) VALUES(?)').bind(userId).run();
  try{await db.prepare('INSERT INTO plan_grants(id,user_id,period,plan_id,reference,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,userId,period,planId,reference,new Date().toISOString()).run();}
  catch(cause){const saved=await db.prepare('SELECT id FROM plan_grants WHERE id=? AND user_id=? AND period=? AND plan_id=? AND reference=?').bind(id,userId,period,planId,reference).first();if(!saved){if(String(cause).includes('UNIQUE constraint'))throw new BillingError(409,'Payment reference already fulfilled');throw cause;}}

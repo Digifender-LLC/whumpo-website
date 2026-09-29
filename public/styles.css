@@ -29,3 +29,5 @@ button{color:var(--ink)}.primary{background:var(--green);color:#fffdf5;border:1p
 #recovery-value{background:#e9eddf}dialog::backdrop{background:#243e3477}.project,.event{border-color:var(--line)}#message{background:#2d503e}.ledger-entry{border-color:var(--line)}
 @media(max-width:600px){.brand{font-size:28px}.town-mark{width:43px;height:43px}.workspace-heading h1{font-size:29px}.auth-card{margin:32px auto}.topbar{min-height:80px}.workspace-heading{gap:12px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+
+.chat-transient{display:flex;flex-direction:column;gap:20px}

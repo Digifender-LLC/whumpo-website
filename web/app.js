@@ -1,3 +1,4 @@
+import { presentWithAcknowledgment } from './ack-timing.js';
 import { startRegistration, startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 const $ = (selector) => document.querySelector(selector);
 let registering = false;
@@ -52,7 +53,7 @@ function renderChat(data) {
   container.replaceChildren();
   function bubble(role, content, mode = "guided") {
     const item = text("article", "", `chat-bubble ${role}`);
-    item.append(text("small", role === "user" ? "You" : mode === "ai" ? "TownHello · AI" : "TownHello · Guide"), text("p", content));
+    item.append(text("small", role === "user" ? "You" : "TownHello"), text("p", content));
     container.append(item);
     return item;
   }
@@ -95,12 +96,12 @@ function renderChat(data) {
     } }
   $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} · ${data.stats.live || 0} live${data.stats.cms_articles ? ` · ${data.stats.cms_articles} CMS article${data.stats.cms_articles===1?'':'s'}` : ''}`;
   $("#chat-input").placeholder = data.state.brief_stage === "audience" ? "Who is it for, and what should visitors do?" : data.state.brief_stage === "style" ? "Ocean, clay, forest, or describe your style…" : "Tell me what you’d like to build or change…";
-  $("#agent-mode").textContent = data.mode === "ai" ? "Muse Spark 1.3 · AI connected" : "Guided mode · No AI charges";
-  $("#usage-stats").textContent = data.usage ? `${data.usage.available} units available · ${data.usage.reserved} held` : "";
+  $("#agent-mode").textContent = data.mode === "ai" ? "AI assistance connected" : "Guided mode · No AI charges";
+  $("#usage-stats").textContent = data.usage ? (data.usage.reserved ? "AI request in progress" : data.usage.available ? "AI assistance available" : "AI test allowance reached") : "";
   $("#ai-note").textContent = data.mode === "ai" ? "Setup and commands are free. AI replies use build units. This Contributor model may use messages for training; avoid confidential information." : "Guided mode uses no AI units. You can create, preview, and publish a simple site. Please keep passwords and API keys out of chat.";
   clearTimeout(chatPoll);
   if (data.turns.some(turn => turn.status === "pending")) chatPoll = setTimeout(async () => {
-    try { renderChat(await api("/chat")); } catch (error) { showMessage(error.message); }
+    try { const update=await api("/chat");if(!sending)renderChat(update); } catch (error) { showMessage(error.message); }
   }, 2000);
   container.scrollTop = container.scrollHeight;
 }
@@ -123,13 +124,25 @@ async function sendMessage(content) {
   if (["/files", "show files", "show photos", "upload a photo", "delete a photo", "remove a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
   if (["/security", "/passkeys"].includes(content.trim().toLowerCase())) { await openSecurity(); return; }
   sending = true;
+  clearTimeout(chatPoll);
   $("#chat-form button").disabled = true;
   $("#chat-form button").textContent = "Sending…";
   document.querySelectorAll("[data-command]").forEach(button => button.disabled = true);
   // Keep the request ID after a network failure so retrying cannot create a second project.
   if (!pendingMessage || pendingMessage.content !== content) pendingMessage = { content, revision: chatRevision, id: crypto.randomUUID() };
+  const activeRequest = pendingMessage.id;
+  const transient = text('div', '', 'chat-transient');
+  const userBubble = text('article', '', 'chat-bubble user');
+  userBubble.append(text('small','You'),text('p',content));transient.append(userBubble);
+  $('#chat-messages').append(transient);
+  $('#chat-messages').scrollTop=$('#chat-messages').scrollHeight;
   try {
-    renderChat(await api("/chat", { method: "POST", body: JSON.stringify(pendingMessage) }));
+    const response=await presentWithAcknowledgment(api("/chat", { method: "POST", body: JSON.stringify(pendingMessage) }), {
+      readAck: async()=> (await api(`/chat/${activeRequest}/ack`)).ack,
+      showAck: content=>{const bubble=text('article','','chat-bubble assistant');bubble.setAttribute('role','status');bubble.append(text('small','TownHello'),text('p',content));transient.append(bubble);$('#chat-messages').scrollTop=$('#chat-messages').scrollHeight;},
+      hideAck: ()=>transient.remove()
+    });
+    renderChat(response);
     pendingMessage = undefined;
     $("#chat-input").value = "";
   } catch (error) {
