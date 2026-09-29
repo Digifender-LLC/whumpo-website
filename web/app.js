@@ -1,3 +1,4 @@
+import { workspaceNavigation } from '../src/workspace-navigation.ts';
 import { createDashboard } from './dashboard.js';
 import { presentWithAcknowledgment } from './ack-timing.js';
 import { startRegistration, startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
@@ -116,6 +117,8 @@ async function loadDashboard(user) {
 }
 async function sendMessage(content) {
   if (sending || !content.trim()) return;
+  const navigation=workspaceNavigation(content);
+  if(navigation){try{if(navigation.view==='billing')await openBilling();else await workspace.navigate(navigation);if($('#chat-input').value.trim()===content.trim())$('#chat-input').value='';}catch(error){showMessage(error.message);}return;}
   const visitorAccess=content.trim().toLowerCase().match(/^\/visitor-access(?:\s+([0-9a-f-]{36}))?$/);
   if(visitorAccess||['visitor access','manage visitor access'].includes(content.trim().toLowerCase())){workspace.openAccess(visitorAccess?.[1]??'');return;}
   if (["/inbox", "show inbox", "my inbox"].includes(content.trim().toLowerCase())) { await openInbox(); return; }

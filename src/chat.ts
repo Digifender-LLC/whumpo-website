@@ -1,3 +1,5 @@
+import {workspaceNavigation,workspaceNavigationHelp} from './workspace-navigation';
+import {readLayout} from './workspace-dashboard';
 import {readAppAccess} from './app-access';
 import {chatHelp} from './chat-help';
 import {cmsDiscardLinks} from './cms-discard';
@@ -86,9 +88,10 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   let exportId: string | undefined;
   let version: { projectId: string; config: LaunchConfig; html: string; digest: string } | undefined;
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
+  const navigation=workspaceNavigation(content);
   const help=chatHelp(command,!!ai);
   const known = ['visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
-  if (ai && !help && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
+  if (ai && !help && !navigation && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
   const backup=backupChatCommand(db,userId,input.id,command,dnsOptions);
@@ -105,7 +108,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
-  if(cms)reply='CMS command recorded. Inspect /cms or /cms-review '+input.id+' to recover its saved state.';
+  if(navigation){const pages=(navigation.view==='pages'||navigation.view==='page')?(await readLayout(db,userId)).layout.tabs:[];reply=workspaceNavigationHelp+(navigation.view==='pages'||navigation.view==='page'?'\n'+(pages.length?'Your pages: '+pages.map(p=>p.label).join(', '):'No custom pages yet. Ask Whumpo to create one for your workflow.'):'');}
+  else if(cms)reply='CMS command recorded. Inspect /cms or /cms-review '+input.id+' to recover its saved state.';
   else if(backend)reply='Backend command recorded. Its result is not saved yet. Use /backend-result '+input.id+' to inspect a test receipt. Replaying this message will not execute again.';
   else if(health)reply='Website check recorded; the result is not saved yet. Use /health for current status.';
   else if(backup)reply='Backup command recorded; its result has not yet been saved. Use /backups to inspect reviews. Replaying this message will not dispatch it again.';
