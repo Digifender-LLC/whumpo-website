@@ -1,0 +1,9 @@
+import type {Traffic} from './lib/api';
+export function TrafficCard({traffic,projectId}:{traffic?:Traffic;projectId?:string|null}){
+ if(!traffic)return <p className="text-sm text-muted-foreground">Traffic measurements are unavailable.</p>;
+ const rows=traffic.rows.filter(row=>!projectId||row.project_id===projectId);
+ const total=rows.reduce((sum,row)=>sum+row.requests,0);
+ const daily=Array.from({length:7},(_,index)=>{const date=new Date();date.setUTCDate(date.getUTCDate()-6+index);const day=date.toISOString().slice(0,10);return {day,count:rows.filter(row=>row.day===day).reduce((sum,row)=>sum+row.requests,0)}});
+ const max=Math.max(1,...daily.map(row=>row.count));
+ return <div className="space-y-4"><div><p className="text-4xl font-bold">{total.toLocaleString()}</p><p className="text-sm text-muted-foreground mt-2">Recorded page requests · last 30 UTC dates</p></div><ol aria-label="Page requests over the last seven UTC dates" className="space-y-2">{daily.map(row=><li key={row.day} className="grid grid-cols-[3rem_1fr_3rem] gap-3 items-center text-xs"><time dateTime={row.day}>{row.day.slice(5)}</time><span aria-hidden="true" className="rounded-full bg-secondary h-2 overflow-hidden"><span className="block h-full bg-primary rounded-full" style={{width:(traffic.enabledAt&&row.day<traffic.enabledAt.slice(0,10)?0:row.count/max*100)+'%'}}/></span><span className="text-right tabular-nums">{traffic.enabledAt&&row.day<traffic.enabledAt.slice(0,10)?'—':row.count.toLocaleString()}</span></li>)}</ol><p className="text-xs text-muted-foreground">Includes bots, checks and repeat visits. These are best-effort request counts, not unique visitors. Images, APIs and visitor apps are excluded.</p><p className="text-xs text-muted-foreground">Collection enabled {traffic.enabledAt?new Date(traffic.enabledAt).toLocaleDateString():'—'}. No earlier history or visitor identifiers are stored.</p></div>;
+}

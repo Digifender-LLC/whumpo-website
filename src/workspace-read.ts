@@ -1,12 +1,14 @@
+import {readTraffic,trafficDescription} from './site-traffic';
 import {savedPage} from './photo-versions';
 import {getBilling} from './billing';
 import {domainCommand} from './domains';
 import {publicationCommand,siteURL} from './publications';
 
-export const inspectionScopes=['projects','project','versions','version','activity','usage','domains'] as const;
+export const inspectionScopes=['projects','project','versions','version','activity','usage','domains','traffic'] as const;
 export type InspectionScope=typeof inspectionScopes[number];
 /** Read-only, owner-scoped records. Model text never supplies query fragments or URLs. */
 export async function inspectWorkspace(db:D1Database,userId:string,scope:InspectionScope,targetId?:string){
+ if(scope==='traffic')return trafficDescription(await readTraffic(db,userId));
  if(scope==='usage'){
   const b=await getBilling(db,userId);
   return `${b.plan.name} · ${b.period}\n${b.quota.available} of ${b.quota.allowance} monthly build units available; ${b.quota.spent} used; ${b.quota.reserved} held.\n${b.credits.available} credits available; ${b.credits.reserved} held. Existing-credit overage is ${b.credits.overageEnabled?'enabled':'disabled'}.\nMonthly units reset each UTC calendar month. Purchases and paid upgrades are disabled. /usage reads this balance without AI charges.`;

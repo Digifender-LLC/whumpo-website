@@ -41,7 +41,7 @@ try{
  await assert.rejects(()=>workspaceAction(db,a,{kind:'workspace',operation:'saveCapacity',...preference}));
  const context=await siteContext(db,a);assert.equal(context.workspace.revision,2);
  const action=await prepareSiteAction(db,a,crypto.randomUUID(),JSON.stringify({reply:'Arranging your dashboard.',action:{kind:'workspace',operation:'save',revision:2,layout:{...layout,widgets:['usage','projects','activity']}}}),context);assert.match(action.reply,/Workspace updated/);
- const dashboard=await dashboardData(db,a);assert.equal(dashboard.projects.length,1);assert.equal(dashboard.billing.plan.id,'explore');assert.equal(dashboard.traffic,null);assert.equal(dashboard.capacity.capacityPercent,null);
+ const dashboard=await dashboardData(db,a);assert.equal(dashboard.projects.length,1);assert.equal(dashboard.billing.plan.id,'explore');assert.deepEqual(dashboard.traffic.rows,[]);assert.equal(dashboard.traffic.metric,'successful_html_requests');assert.equal(dashboard.capacity.capacityPercent,null);
  assert.equal((await dashboardData(db,b)).projects.length,0);
  console.log('Dashboard tests passed: isolation, strict card schema, CAS concurrency, draft-only preferences, model authority, honest measurements, proration, warnings and two-cycle recommendations.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
