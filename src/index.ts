@@ -1,0 +1,187 @@
+import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
+
+type User = { id: string; email: string };
+type Project = { id: string; name: string; purpose: string; status: string; created_at: string; updated_at: string };
+const sessionDays = 7;
+const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
+
+function json(data: unknown, status = 200, headers?: HeadersInit): Response {
+  return new Response(JSON.stringify(data), { status, headers: { ...jsonHeaders, ...headers } });
+}
+function error(status: number, message: string): Response { return json({ error: message }, status); }
+function cookie(token: string, request: Request): string {
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  return `whumpo_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${sessionDays * 86400}${secure}`;
+}
+function clearCookie(request: Request): string { return cookie("", request).replace(/Max-Age=\d+/, "Max-Age=0"); }
+function sessionToken(request: Request): string | null {
+  const value = request.headers.get("cookie")?.match(/(?:^|;\s*)whumpo_session=([0-9a-f]{64})(?:;|$)/);
+  return value?.[1] ?? null;
+}
+async function body(request: Request): Promise<Record<string, unknown> | null> {
+  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return null;
+  if (Number(request.headers.get("content-length") ?? 0) > 16_384) return null;
+  try {
+    const reader = request.body?.getReader();
+    if (!reader) return null;
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > 16_384) { await reader.cancel(); return null; }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    const raw = new TextDecoder().decode(bytes);
+    const data: unknown = JSON.parse(raw);
+    return data !== null && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : null;
+  } catch { return null; }
+}
+function localMode(request: Request, env: Env): boolean {
+  return String(env.ENVIRONMENT) === "local";
+}
+function passwordPepper(request: Request, env: Env): string {
+  return localMode(request, env) ? "local-development-only-pepper-not-for-production" : env.PASSWORD_PEPPER ?? "";
+}
+function sameOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  return origin !== null && origin === new URL(request.url).origin;
+}
+async function currentUser(request: Request, env: Env): Promise<User | null> {
+  const token = sessionToken(request);
+  if (!token) return null;
+  return env.DB.prepare("SELECT users.id, users.email FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?")
+    .bind(await hashToken(token), new Date().toISOString()).first<User>();
+}
+async function issueSession(request: Request, env: Env, user: User): Promise<Response> {
+  const token = newSessionToken();
+  const now = new Date();
+  const expiry = new Date(now.getTime() + sessionDays * 86400_000).toISOString();
+  await env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
+    .bind(await hashToken(token), user.id, expiry, now.toISOString()).run();
+  return json({ user }, 200, { "set-cookie": cookie(token, request) });
+}
+async function handle(request: Request, env: Env): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  const method = request.method;
+  if (method === "GET" && pathname === "/api/health") return json({ status: "ok" });
+  if (method === "GET" && pathname === "/api/config") return json({ inviteRequired: !localMode(request, env), turnstileSiteKey: localMode(request, env) ? null : env.TURNSTILE_SITE_KEY });
+  if (!["GET", "HEAD", "OPTIONS"].includes(method) && !sameOrigin(request)) return error(403, "Origin check failed");
+  const ip = request.headers.get("cf-connecting-ip") || "local";
+  if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
+  if (method === "POST" && ["/api/auth/register", "/api/auth/login"].includes(pathname)) {
+    if (!(await env.AUTH_LIMITER.limit({ key: ip })).success) return error(429, "Too many sign-in attempts. Try again in a minute.");
+  }
+
+  if (method === "POST" && pathname === "/api/auth/register") {
+    const data = await body(request);
+    const email = typeof data?.email === "string" ? data.email.trim().toLowerCase() : "";
+    const password = data?.password;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || typeof password !== "string" || password.length < 12 || password.length > 128)
+      return error(400, "Use a valid email and a password of 12 to 128 characters");
+    const local = localMode(request, env);
+    const now = new Date().toISOString();
+    const inviteHash = typeof data?.inviteCode === "string" ? await hashToken(data.inviteCode.trim()) : "";
+    if (!local && !(await env.DB.prepare("SELECT code_hash FROM invitations WHERE code_hash = ? AND used_by IS NULL AND expires_at > ?").bind(inviteHash, now).first())) return error(403, "A valid unused invitation is required");
+    const turnstileSecret = env.TURNSTILE_SECRET;
+    if (!local && turnstileSecret) {
+      if (typeof data?.turnstileToken !== "string") return error(400, "Verification required");
+      const form = new FormData();
+      form.set("secret", turnstileSecret); form.set("response", data.turnstileToken);
+      form.set("remoteip", ip);
+      const check = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: form, signal: AbortSignal.timeout(10_000) });
+      const result = await check.json<{ success: boolean; hostname?: string; action?: string }>();
+      if (!result.success || result.hostname !== new URL(request.url).hostname || result.action !== "register") return error(400, "Verification failed. Please try again.");
+    } else if (!local) {
+      return error(503, "Registration is not configured");
+    }
+    const passwordInfo = await hashPassword(password, passwordPepper(request, env));
+    const user = { id: crypto.randomUUID(), email };
+    try {
+      const insert = local
+        ? env.DB.prepare("INSERT INTO users (id, email, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?, ?)").bind(user.id, user.email, passwordInfo.salt, passwordInfo.hash, now)
+        : env.DB.prepare("INSERT INTO users (id, email, password_salt, password_hash, created_at) SELECT ?, ?, ?, ?, ? FROM invitations WHERE code_hash = ? AND used_by IS NULL AND expires_at > ?").bind(user.id, user.email, passwordInfo.salt, passwordInfo.hash, now, inviteHash, now);
+      const result = await env.DB.batch([
+        insert,
+        env.DB.prepare("UPDATE invitations SET used_by = ? WHERE code_hash = ? AND used_by IS NULL AND EXISTS (SELECT 1 FROM users WHERE id = ?)").bind(user.id, inviteHash, user.id),
+        env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, id, 'user.created', 'Account created', ? FROM users WHERE id = ?").bind(crypto.randomUUID(), now, user.id)
+      ]);
+      if (result[0].meta.changes !== 1) return error(403, "Invitation already used or expired");
+    } catch (cause) {
+      if (String(cause).includes("user_quota")) return error(409, "The test platform has reached its account limit");
+      if (String(cause).includes("UNIQUE constraint failed: users.email")) return error(409, "An account with this email already exists");
+      throw cause;
+    }
+    return issueSession(request, env, user);
+  }
+  if (method === "POST" && pathname === "/api/auth/login") {
+    const data = await body(request);
+    const email = typeof data?.email === "string" ? data.email.trim().toLowerCase() : "";
+    const password = data?.password;
+    if (!email || email.length > 254 || typeof password !== "string" || password.length > 128) return error(400, "Email and password required");
+    const row = await env.DB.prepare("SELECT id, email, password_salt, password_hash FROM users WHERE email = ?")
+      .bind(email).first<User & { password_salt: string; password_hash: string }>();
+    const valid = await verifyPassword(password, row?.password_salt ?? "00".repeat(16), row?.password_hash ?? "", passwordPepper(request, env));
+    if (!row || !valid) return error(401, "Invalid email or password");
+    return issueSession(request, env, { id: row.id, email: row.email });
+  }
+
+  const user = await currentUser(request, env);
+  if (!user) return error(401, "Sign in required");
+  if (method === "GET" && pathname === "/api/me") return json({ user });
+  if (method === "POST" && pathname === "/api/auth/logout") {
+    const token = sessionToken(request);
+    if (token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await hashToken(token)).run();
+    return json({ ok: true }, 200, { "set-cookie": clearCookie(request) });
+  }
+  if (method === "GET" && pathname === "/api/projects") {
+    const { results } = await env.DB.prepare("SELECT id, name, purpose, status, created_at, updated_at FROM projects WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 100")
+      .bind(user.id).all<Project>();
+    return json({ projects: results });
+  }
+  if (method === "POST" && pathname === "/api/projects") {
+    const data = await body(request);
+    const name = typeof data?.name === "string" ? data.name.trim() : "";
+    const purpose = typeof data?.purpose === "string" ? data.purpose.trim() : "";
+    if (!name || name.length > 100 || purpose.length > 1000) return error(400, "Name is required and must be 100 characters or fewer");
+    const now = new Date().toISOString();
+    const project: Project = { id: crypto.randomUUID(), name, purpose, status: "draft", created_at: now, updated_at: now };
+    try { await env.DB.batch([
+      env.DB.prepare("INSERT INTO projects (id, owner_user_id, name, purpose, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(project.id, user.id, name, purpose, project.status, now, now),
+      env.DB.prepare("INSERT INTO activity_events (id, user_id, project_id, action, summary, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), user.id, project.id, "project.created", `Created project ${name}`, now)
+    ]); } catch (cause) {
+      if (String(cause).includes("project_quota")) return error(409, "The test platform allows 20 projects per account");
+      throw cause;
+    }
+    return json({ project }, 201);
+  }
+  const projectMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})$/);
+  if (method === "GET" && projectMatch) {
+    const project = await env.DB.prepare("SELECT id, name, purpose, status, created_at, updated_at FROM projects WHERE id = ? AND owner_user_id = ?")
+      .bind(projectMatch[1], user.id).first<Project>();
+    return project ? json({ project }) : error(404, "Project not found");
+  }
+  if (method === "GET" && pathname === "/api/activity") {
+    const { results } = await env.DB.prepare("SELECT id, project_id, action, summary, created_at FROM activity_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 100")
+      .bind(user.id).all();
+    return json({ activity: results });
+  }
+  return error(404, "Not found");
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const requestId = crypto.randomUUID();
+    try {
+      if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
+      return env.ASSETS.fetch(request);
+    } catch (cause) {
+      console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
+      return json({ error: "Internal error", requestId }, 500);
+    }
+  }
+} satisfies ExportedHandler<Env>;

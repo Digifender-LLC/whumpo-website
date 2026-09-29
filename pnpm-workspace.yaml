@@ -1,0 +1,10 @@
+packages:
+  - .
+allowBuilds:
+  esbuild: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - wrangler@4.143.0
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

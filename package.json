@@ -1,0 +1,19 @@
+{
+  "name": "whumpo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --var ENVIRONMENT:local",
+    "db:local": "wrangler d1 migrations apply whumpo-control --local",
+    "types": "wrangler types",
+    "check": "tsc --noEmit",
+    "test:smoke": "node tests/smoke.mjs",
+    "deploy": "wrangler deploy",
+    "db:remote": "wrangler d1 migrations apply whumpo-control --remote",
+    "invite": "node tools/create-invite.mjs"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "wrangler": "4.143.0"
+  }
+}
