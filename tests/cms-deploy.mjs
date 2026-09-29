@@ -158,6 +158,7 @@ try{
  current=structuredClone(publishReceipt);
  const restoreCurrent=structuredClone(current);current={item:JSON.parse(staleReplacement.snapshot).item,_rev:staleReplacement.revision};await assert.rejects(confirmCMSPublication(db,a.user,staleReplacement.id,env),e=>e.status===409);current=restoreCurrent;
  const activeBefore=await (await publicHost.fetch(publicRequest,{DB:db})).text();
+ const {readTraffic}=await module('src/site-traffic.ts');const trafficBefore=(await readTraffic(db,a.user)).rows.reduce((n,r)=>n+r.requests,0);await publicHost.fetch(indexRequest,{DB:db});await publicHost.fetch(publicRequest,{DB:db});assert.equal((await readTraffic(db,a.user)).rows.reduce((n,r)=>n+r.requests,0),trafficBefore+2);
  current.item.liveData=structuredClone(current.item.data);current.item.data={...current.item.data,title:'Confirmed replacement'};current.item.draftRevisionId='second-staged-fixture';current._rev='cmVwbGFjZW1lbnQ=';
  const replacementReview=await prepareCMSPublication(db,a.user,a.project,draftId,id(),env),competitor=await prepareCMSPublication(db,a.user,a.project,draftId,id(),env);
  assert.equal(replacementReview.replaces_publication_id,republishReview.id);

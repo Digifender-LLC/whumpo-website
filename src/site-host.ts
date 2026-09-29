@@ -1,3 +1,4 @@
+import {recordTraffic} from './site-traffic';
 import {customerProject,visitorProject,projectOrigin} from './hosts';
 import {activeBackendForm} from './backend-forms';
 import {backendFormScriptPolicy} from './backend-form-render';
@@ -10,7 +11,7 @@ import {publishedHTML} from './published-html';
 import { previewHeaders } from './components';
 import {reserveStorage,StorageLimitError} from './storage-budget';
 /** Public serving boundary: only current published HTML and its exact photo dependencies. */
-export default {
+const serving = {
  async fetch(request:Request,env:Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher}):Promise<Response>{
   const url=new URL(request.url),headers={...previewHeaders,'cache-control':'no-store'};
   const local=['localhost','127.0.0.1'].includes(url.hostname),project=customerProject(url.hostname);
@@ -54,3 +55,23 @@ export default {
   }catch(cause){return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
  }
 } satisfies ExportedHandler<Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher}>;
+
+export default {
+ async fetch(request:Request,env:Parameters<typeof serving.fetch>[1],ctx?:ExecutionContext):Promise<Response>{
+  const response=await serving.fetch(request,env);
+  if(request.method==='GET'&&response.status===200&&response.headers.get('content-type')?.startsWith('text/html')){
+   const url=new URL(request.url);
+   if(!visitorProject(url.hostname)){
+    const count=async()=>{
+     let project=customerProject(url.hostname);
+     if(!project&&['localhost','127.0.0.1'].includes(url.hostname))project=url.pathname.match(/^\/s\/([0-9a-f-]{36})(?:\/|$)/)?.[1]??null;
+     if(!project){const mapping=await env.DB.prepare("SELECT project_id FROM domain_connections WHERE hostname=? AND state='active' AND serve_until>? AND provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();project=mapping?.project_id??null;}
+     if(project)await recordTraffic(env.DB,project);
+    };
+    const task=count().catch(()=>{console.warn('site.traffic.unavailable')});
+    if(ctx)ctx.waitUntil(task);else await task;
+   }
+  }
+  return response;
+ }
+} satisfies ExportedHandler<Parameters<typeof serving.fetch>[1]>;

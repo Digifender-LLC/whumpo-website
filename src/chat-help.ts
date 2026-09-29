@@ -73,7 +73,7 @@ GitHub backups: /help backups`,
  billing:`Plans and usage
 /plans shows available plan information; /usage shows usage and allowances.
 /credits shows credit settings. /credits on opts into spending available credits beyond your plan allowance; /credits off disables that choice.
-/activity shows recorded workspace activity.
+/activity shows recorded workspace activity. /traffic shows recorded public-page requests.
 
 Payments and credit purchases are not enabled yet. Help and guided commands do not consume AI units. Some operations, such as private backend tests, have separate limits.`,
  backends:`Private backend functions and data
@@ -116,7 +116,7 @@ A website source export is not a whole-account or CMS backup. CMS backup/restore
 const menu=`What would you like to do?
 
 Start a site: describe your idea, or use /new.
-See your services: /projects. Check usage: /usage.
+See your services: /projects. Check usage: /usage. Read page traffic: /traffic.
 
 Choose a guide:
 /help workspace — navigate your workspace and custom pages

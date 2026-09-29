@@ -1,3 +1,4 @@
+import {readTraffic} from './site-traffic';
 import { BillingError, getBilling } from './billing';
 import {capacityPolicy} from './capacity-policy';
 export const widgetKinds=['projects','usage','storage','activity','traffic','cms','performance'] as const;
@@ -41,13 +42,13 @@ export async function saveCapacity(db:D1Database,user:string,value:unknown){
  return readCapacity(db,user);
 }
 export async function dashboardData(db:D1Database,user:string){
- const [layout,billing,capacity,projects,activity,storage]=await Promise.all([
+ const [layout,billing,capacity,projects,activity,storage,traffic]=await Promise.all([
   readLayout(db,user),getBilling(db,user),readCapacity(db,user),
   db.prepare('SELECT id,name,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id=? ORDER BY updated_at DESC LIMIT 20').bind(user).all(),
   db.prepare('SELECT project_id,summary,created_at FROM activity_events WHERE user_id=? ORDER BY created_at DESC LIMIT 20').bind(user).all(),
-  db.prepare("SELECT f.project_id,COUNT(*) AS files,SUM(f.size) AS bytes FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND f.status='ready' GROUP BY f.project_id").bind(user).all()
+  db.prepare("SELECT f.project_id,COUNT(*) AS files,SUM(f.size) AS bytes FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND f.status='ready' GROUP BY f.project_id").bind(user).all(),readTraffic(db,user)
  ]);
- return {...layout,billing,capacity,projects:projects.results,activity:activity.results,storage:storage.results,measuredAt:new Date().toISOString(),traffic:null,performance:null};
+ return {...layout,billing,capacity,projects:projects.results,activity:activity.results,storage:storage.results,measuredAt:new Date().toISOString(),traffic,performance:null};
 }
 export async function workspaceAction(db:D1Database,user:string,action:Record<string,unknown>){
  if(action.operation==='read'&&exact(action,['kind','operation']))return {reply:JSON.stringify(await readLayout(db,user)),statements:[] as D1PreparedStatement[]};

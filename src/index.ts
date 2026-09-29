@@ -1,3 +1,4 @@
+import {cleanupTraffic} from './site-traffic';
 import {compareBackends} from './backend-diff';
 import {cleanupAppLifecycle} from './app-lifecycle';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage} from './app-pages';
@@ -539,7 +540,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
     if(_event.cron==='47 * * * *'){const checks=await Promise.allSettled([maintainHosting(env.DB,hostingConfig(env)),maintainHealth(env.DB)]);if(checks.some(r=>r.status==='rejected'))throw Error('Scheduled website checks failed');return;}
-    const results=await Promise.allSettled([cleanupAppLifecycle(env.DB),cleanupContacts(env.DB),cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env)),cleanupCloudflare(env.DB,cloudflareConfig(env))]);
+    const results=await Promise.allSettled([cleanupTraffic(env.DB),cleanupAppLifecycle(env.DB),cleanupContacts(env.DB),cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env)),cleanupCloudflare(env.DB,cloudflareConfig(env))]);
     if(results.some(result=>result.status==='rejected'))throw Error('Scheduled maintenance failed');
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
