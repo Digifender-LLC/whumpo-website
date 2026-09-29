@@ -1,3 +1,4 @@
+import {dnsChatCommand,type DNSChatOptions} from './dns-chat';
 import {listPhotos} from './files';
 import {photoRemovalCommand} from './photo-removal';
 import {inspectWorkspace} from './workspace-read';
@@ -32,7 +33,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   return { mode: aiEnabled ? 'ai' : 'guided', greeting: aiEnabled ? greeting + ' After we save your brief, we can discuss your website with AI. Use /ask followed by a question at any time.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };
 }
 
-export async function sendChat(db: D1Database, userId: string, input: Record<string, unknown>, ai?: AIConfig) {
+export async function sendChat(db: D1Database, userId: string, input: Record<string, unknown>, ai?: AIConfig, dnsOptions?: DNSChatOptions) {
   const content = typeof input.content === 'string' ? input.content.trim() : '';
   if (!content || content.length > 1000 || !Number.isSafeInteger(input.revision) || typeof input.id !== 'string' || !/^[0-9a-f-]{36}$/.test(input.id))
     return { status: 400, error: 'Send a message of 1 to 1,000 characters with a valid request ID.' };
@@ -61,12 +62,14 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
   const known = ['/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
+  const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
   const removal = await photoRemovalCommand(db,userId,input.id,command);
   const domain = await domainCommand(db,userId,input.id,command);
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
-  if (removal) reply = removal.reply;
+  if (dns) reply = 'DNS command recorded; its result has not yet been saved. Use /dns to inspect saved reviews. Replaying this message will not dispatch it again.';
+  else if (removal) reply = removal.reply;
   else if (domain) reply = domain.reply;
   else if (photoDraft) reply = photoDraft.reply;
   else if (publication) reply = publication.reply;
@@ -130,7 +133,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = ai ? 'AI is connected for website planning, new projects and private draft edits. Ask for a new project with a name and purpose, or request the source for a saved version. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea, choose a project name, and share your audience and style preferences to get a private first draft. Use /skip for optional questions, /brief to view saved preferences, and /cancel to leave setup. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /photos to list photo IDs in chat, /files for private project photos and /delete-photo PHOTO_ID to review removal of an unused photo; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /project PROJECT_ID for current project details and /inspect VERSION_ID for saved content. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Use /domains to prepare or check domain ownership. Domain hosting connection, custom backend code and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /photos to list photo IDs in chat, /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
+    reply = ai ? 'AI is connected for website planning, new projects and private draft edits. Ask for a new project with a name and purpose, or request the source for a saved version. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea, choose a project name, and share your audience and style preferences to get a private first draft. Use /skip for optional questions, /brief to view saved preferences, and /cancel to leave setup. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /photos to list photo IDs in chat, /files for private project photos and /delete-photo PHOTO_ID to review removal of an unused photo; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /project PROJECT_ID for current project details and /inspect VERSION_ID for saved content. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Use /domains to prepare or check domain ownership. /dns lists Cloudflare TXT reviews, /dns-zones lists authorized zones, /review-dns CLAIM_ID ZONE_ID prepares a review, /confirm-dns REVIEW_ID authorizes it, and /check-dns REVIEW_ID checks its result without resending. Domain hosting connection, custom backend code and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /photos to list photo IDs in chat, /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; briefProject = null; briefStage = null; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
@@ -207,6 +210,10 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     const retry = await db.prepare('SELECT user_text FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string }>();
     if (retry?.user_text === content) return { status: 200 };
     throw cause;
+  }
+  if(dns){
+    const result=await dns();
+    await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=? AND user_id=?').bind(result,input.id,userId).run();
   }
   return { status: 200 };
 }

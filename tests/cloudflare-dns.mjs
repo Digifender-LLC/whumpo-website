@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';import {mkdtemp,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const {sendChat,readChat}=await module('src/chat.ts');
 const {reviewTXT,confirmTXT,listDNSActions}=await module('src/cloudflare-dns.ts'),{seal}=await module('src/connection-vault.ts'),{getBilling}=await module('src/billing.ts');
 const dir=await mkdtemp('/tmp/whumpo-cf-dns-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const config={clientId:'fixture',clientSecret:'fixture-secret',key:'a'.repeat(64)},zone='b'.repeat(32),now=()=>new Date().toISOString();
@@ -28,6 +29,33 @@ try{
  const saved=await account(),d=provider(),dr=await review(saved,d);const lossy=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const statement=target.prepare(sql);if(!sql.startsWith("UPDATE cloudflare_dns_actions SET state='applied'"))return statement;return {bind(...args){const bound=statement.bind(...args);return {async run(){await bound.run();throw Error('Lost D1 acknowledgement');}};}};};const v=target[key];return typeof v==='function'?v.bind(target):v;}});assert.equal((await confirm(saved,d,dr.id,lossy)).state,'applied');assert.equal(d.posts,1);
  const disconnected=await account(),off=provider(),offReview=await review(disconnected,off);await db.prepare("UPDATE cloudflare_token_vault SET state='revoking' WHERE user_id=?").bind(disconnected.user).run();await assert.rejects(confirm(disconnected,off,offReview.id),{status:401});assert.equal(off.posts,0);
  const wrongZone=await account(),wrong=provider();await assert.rejects(reviewTXT(db,wrongZone.user,crypto.randomUUID(),wrongZone.claim,zone,config,async()=>Response.json({success:true,result:{id:zone,name:'not-example.com',status:'active'}})),{status:409});
+ // Chat dispatch requires a committed user turn; checks and replays never authorize another write.
+ const conversational=await account(),cp=provider(),opts={config,transport:cp.send};
+ async function message(content,id=crypto.randomUUID(),revision){const state=await readChat(db,conversational.user);return sendChat(db,conversational.user,{id,content,revision:revision??state.state.revision},{baseURL:'https://unused.invalid/v1',apiKey:'unused',model:'unused'},opts);}
+ const zoneTurn=crypto.randomUUID();let zoneReads=0;
+ const zoneTransport=async(url,init)=>{zoneReads++;const u=new URL(url);assert.equal(u.pathname,'/client/v4/zones');assert.equal(u.searchParams.get('page'),'2');return Response.json({success:true,result:[{id:zone,name:'example.com',status:'active'}],result_info:{total_pages:3}});};
+ await readChat(db,conversational.user);assert.equal((await sendChat(db,conversational.user,{id:zoneTurn,revision:0,content:'/dns-zones 2'},undefined,{config,transport:zoneTransport})).status,200);assert.equal(zoneReads,1);assert.match((await readChat(db,conversational.user)).turns.at(-1).assistant_text,/Next page: \/dns-zones 3/);
+ const chatReview=crypto.randomUUID();assert.equal((await message('/review-dns '+conversational.claim+' '+zone,chatReview)).status,200);assert.equal(cp.posts,0);
+ assert.match((await readChat(db,conversational.user)).turns.at(-1).assistant_text,/To authorize this exact addition/);
+ assert.equal((await message('/check-dns '+chatReview)).status,200);assert.equal(cp.posts,0);assert.match((await readChat(db,conversational.user)).turns.at(-1).assistant_text,/No DNS write was authorized/);
+ assert.equal((await message('/confirm-dns '+chatReview,crypto.randomUUID(),0)).status,409);assert.equal(cp.posts,0);
+ const confirmTurn=crypto.randomUUID(),chatRevision=(await readChat(db,conversational.user)).state.revision;
+ const duplicates=await Promise.all([message('/confirm-dns '+chatReview,confirmTurn,chatRevision),message('/confirm-dns '+chatReview,confirmTurn,chatRevision)]);assert.ok(duplicates.every(r=>r.status===200));assert.equal(cp.posts,1);
+ assert.match((await readChat(db,conversational.user)).turns.at(-1).assistant_text,/applied/);
+ assert.equal((await message('/confirm-dns '+chatReview,confirmTurn,chatRevision)).status,200);assert.equal(cp.posts,1);
+ assert.equal((await message('/check-dns '+chatReview,confirmTurn,chatRevision)).status,409);
+ await message('/check-dns '+chatReview);assert.equal(cp.posts,1);
+ await message('/confirm-dns '+r.id);assert.match((await readChat(db,conversational.user)).turns.at(-1).assistant_text,/not found/);assert.equal(cp.posts,1);
+ await assert.rejects(message('/review-dns invalid'),{status:400});
+ await message('/dns');const history=(await readChat(db,conversational.user)).turns.at(-1).assistant_text;assert.ok(history.includes(chatReview));assert.ok(!history.includes(r.id));
+ assert.equal((await getBilling(db,conversational.user)).quota.spent,0);
+ // Losing a chat claim acknowledgement stops dispatch. Its durable text accurately reports no saved result.
+ const interrupted=await account(),ip=provider();await readChat(db,interrupted.user);const lostTurn=crypto.randomUUID();
+ const lostChatDB=new Proxy(db,{get(target,key){if(key==='batch')return async statements=>{await target.batch(statements);throw Error('Lost chat acknowledgement');};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
+ assert.equal((await sendChat(lostChatDB,interrupted.user,{id:lostTurn,revision:0,content:'/review-dns '+interrupted.claim+' '+zone},undefined,{config,transport:ip.send})).status,200);
+ assert.equal((await listDNSActions(db,interrupted.user)).actions.length,0);assert.equal(ip.posts,0);assert.match((await readChat(db,interrupted.user)).turns.at(-1).assistant_text,/not yet been saved/);
+ const disabledTurn=crypto.randomUUID();assert.equal((await sendChat(db,interrupted.user,{id:disabledTurn,revision:1,content:'/dns-zones'})).status,200);assert.match((await readChat(db,interrupted.user)).turns.at(-1).assistant_text,/awaiting platform configuration/);
+ console.log('DNS chat checks passed: review before confirmation, read-only checks, stale revision, simultaneous replay, payload conflict, owner isolation, lost chat acknowledgement, disabled configuration and zero AI usage.');
  const unknown=await account(),n=provider(),nr=await review(unknown,n);const noAck=async(url,init)=>{if(init.method==='POST'){n.posts++;throw Error('Disconnected before response');}return n.send(url,init);};assert.equal((await confirmTXT(db,unknown.user,nr.id,config,noAck)).state,'uncertain');assert.equal((await confirm(unknown,n,nr.id)).state,'uncertain');assert.equal(n.posts,1);
  assert.equal((await getBilling(db,owner.user)).quota.spent,0);
  console.log('Cloudflare DNS checks passed: owner/zone binding, no write before confirmation, exact TXT quoting, preservation of existing records, stale-inventory/proof rejection, concurrent distinct reviews, single-dispatch recovery, unresolved outcomes, credential revocation and zero AI units.');

@@ -45,3 +45,19 @@ Migration 0023 was applied locally and remotely. The deployed platform version i
 Local browser verification exercised zone selection, exact TXT review, explicit confirmation and a fixture acknowledgement while the domain stayed awaiting DNS and not connected. This was a simulated provider response, not real Cloudflare DNS acceptance.
 
 Live acceptance used an ephemeral signed-passkey account and an owned domain proof. It verified disabled DNS status, anonymous 401, cross-origin 403, configured-access-required 503 on review, foreign confirmation 404, no saved DNS action and zero AI usage. Passkey replay rejection and logout also passed. The ephemeral account and its project/claim were removed. No live DNS mutation occurred; real OAuth and provider-write acceptance remain pending client setup.
+
+## Conversational controls
+
+The same reviewed TXT flow is available in chat without AI usage:
+
+- `/dns`: list owned historical reviews, exact TXT values and next steps.
+- `/dns-zones [PAGE]`: list authorized zones, fifty per page, up to page 100.
+- `/review-dns CLAIM_ID ZONE_ID`: read the selected zone and prepare the exact owned TXT proof review.
+- `/confirm-dns REVIEW_ID`: explicitly authorize that reviewed addition.
+- `/check-dns REVIEW_ID`: inspect an unconfirmed review without authorizing it, or reconcile a dispatched result without resending.
+
+The chat turn and revision are claimed in one D1 transaction before any provider operation. Only the request that inserted that turn executes its deferred command. Replays and stale/conflicting turns cannot dispatch it. The provisional transcript says the command was recorded but no result has been saved; it never claims a DNS write succeeded. Lost acknowledgement of the chat claim stops execution. An interruption before provider dispatch can therefore leave a recorded command with no DNS action: inspect `/dns` and submit a new review if needed. An interruption after dispatch is recovered through the existing action's read-only reconciliation. No automatic retry of a command occurs.
+
+Command results update their exact owned chat turn. Known provider/domain errors become sanitized conversational messages. A failed final transcript update does not undo the DNS receipt; `/dns` remains authoritative for saved actions. Other chat turns may proceed while a DNS request is in flight; the DNS state machine, pinned proof and credential, inventory checks and dispatch uniqueness still govern the external operation. Conversational model-proposed reviews remain a separate unfinished feature; the model may explain these commands but cannot invoke confirmation.
+
+Conversational deployment evidence: platform `d0259f65-0d0e-4b75-b3ed-45f109a1b506`, public-site Worker `4584a6d9-363a-4cb2-b43a-cd8582c43c14`. TypeScript and disposable DNS/chat tests passed, including zone pagination, AI-configured commands with zero AI usage, simultaneous duplicate confirmation, stale revisions, foreign actions and lost chat-claim acknowledgements. Live signed-passkey checks passed for review discovery, disabled provider responses, chat replay/payload conflicts, owned-claim review gates, foreign action checks, Origin/authentication gates, logout and zero AI usage. No live provider operation occurred. Initial fixture cleanup encountered an expired operator token (401); Wrangler refreshed its existing authorization, and an exact synthetic-account match was removed with absence verified. No setup credentials or account permissions were changed.
