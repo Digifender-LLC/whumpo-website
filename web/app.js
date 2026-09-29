@@ -98,7 +98,7 @@ async function loadDashboard(user) {
 }
 async function sendMessage(content) {
   if (sending || !content.trim()) return;
-  if (["/connections", "show connections", "connect github", "disconnect github", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) { await openConnections(); return; }
+  if (["/connections", "show connections", "connect github", "disconnect github", "connect cloudflare", "disconnect cloudflare", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) { await openConnections(); return; }
   if (["/domains", "show domains", "connect my domain", "disconnect my domain", "check domain hosting"].includes(content.trim().toLowerCase())) { await openDomains(); return; }
   if (["/files", "show files", "show photos", "upload a photo", "delete a photo", "remove a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
   if (["/security", "/passkeys"].includes(content.trim().toLowerCase())) { await openSecurity(); return; }
@@ -313,7 +313,7 @@ async function start() {
     authConfig = await api("/config");
     const { user } = await api("/me");
     await loadDashboard(user);
-    if(callbackParams.get('connection')==='github'){const failed=callbackParams.has('connection_error');history.replaceState(null,'',location.pathname);await openConnections();if(failed)$('#connections-status').textContent='GitHub authorization was cancelled, expired or could not be completed. You can start again.';}
+    if(['github','cloudflare'].includes(callbackParams.get('connection'))){const failed=callbackParams.has('connection_error');history.replaceState(null,'',location.pathname);await openConnections();if(failed)$('#connections-status').textContent='Provider authorization was cancelled, expired or could not be completed. Refresh the connection status before starting again.';}
   } catch (error) {
     showAuth();
     if (authConfig) await setAuthMode(new URLSearchParams(location.search).get("signup") === "1");
@@ -352,15 +352,22 @@ async function openDomains() {
 $('#domains-open').onclick=openDomains;$('#domains-close').onclick=()=>$('#domains-dialog').close();
 $('#domain-form').onsubmit=event=>{event.preventDefault();const name=$('#domain-hostname').value.trim(), project=$('#domain-project').value;if(!project)return;$('#domains-dialog').close();sendMessage(`/domain ${name} ${project}`);};
 
+let cloudflarePage=1;
+async function loadCloudflareZones(){const data=await api('/connections/cloudflare/zones?page='+cloudflarePage);const list=$('#cloudflare-zones');for(const zone of data.zones)list.append(text('p',`${zone.name} · ${zone.status==='active'?'Active zone':'Zone not active'}`));if(!data.zones.length&&cloudflarePage===1)list.append(text('p','No authorized zones found.'));$('#cloudflare-more').hidden=!data.hasMore||cloudflarePage>=100;}
 async function openConnections(){
  try{
-  const {github}=await api('/connections');
+  const {github,cloudflare}=await api('/connections');
+  $('#cloudflare-status').textContent=!cloudflare.enabled?'Cloudflare connection is awaiting platform configuration.':cloudflare.connected?`Authorized until ${cloudflare.expiresAt}.`:'Not connected. Sign in recently before connecting.';
+  if(cloudflare.revocationPending)$('#cloudflare-status').textContent+=' Local access is disabled; provider revocation is pending. You can also revoke this application in Cloudflare settings.';
+  $('#cloudflare-connect').disabled=!cloudflare.enabled||cloudflare.connected||cloudflare.revocationPending;$('#cloudflare-disconnect').hidden=!cloudflare.connected&&!cloudflare.revocationPending;
+  $('#cloudflare-zones').replaceChildren();$('#cloudflare-more').hidden=true;cloudflarePage=1;
   $('#github-status').textContent=!github.enabled?'GitHub connection is awaiting platform configuration.':github.connected?`Authorized as ${github.login} until ${github.expiresAt}.`:'Not connected. Sign in recently before connecting.';
   if(github.revocationPending)$('#github-status').textContent+=' Local access is disabled for disconnected tokens; provider revocation is pending. You can also revoke access in GitHub settings.';
   $('#github-connect').disabled=!github.enabled;$('#github-connect').textContent=github.connected?'Reconnect GitHub':'Connect GitHub';$('#github-disconnect').hidden=!github.connected&&!github.revocationPending;
   const install=$('#github-install');install.hidden=!github.connected;install.removeAttribute('href');if(github.connected&&github.installURL){const url=new URL(github.installURL);if(url.origin==='https://github.com'&&url.pathname.startsWith('/apps/'))install.href=url.href;}
   $('#github-backup-controls').hidden=!github.backupEnabled;
   const list=$('#github-installations');list.replaceChildren();$('#connections-status').textContent='';$('#connections-dialog').showModal();
+  if(cloudflare.connected){try{await loadCloudflareZones();}catch(error){$('#cloudflare-zones').append(text('p',error.message));}}
   await renderBackups();
   if(github.connected){const data=await api('/connections/github/installations');await setupBackups(data.installations);for(const item of data.installations)list.append(text('p',`Installed for ${item.account} · ${item.repositorySelection==='selected'?'Selected repositories':'All repositories'}`));if(!data.installations.length)list.append(text('p','No active installation found. Use Choose repositories on GitHub, then refresh.'));if(data.truncated)list.append(text('p','Only the first 100 installations were checked.'));}
  }catch(error){$('#connections-status').textContent=error.message;if(!$('#connections-dialog').open)showMessage(error.message);}
@@ -411,3 +418,7 @@ $('#backup-review').onclick=async()=>{
  const button=$('#backup-review');button.disabled=true;
  try{const repo=backupRepositories.find(r=>String(r.id)===$('#backup-repo').value);if(!repo)throw Error('Select a repository first.');backupReviewRequest??={id:crypto.randomUUID(),versionId:$('#backup-version').value,owner:repo.owner,repo:repo.name,repoId:repo.id};await api('/github/backups/review',{method:'POST',body:JSON.stringify(backupReviewRequest)});backupReviewRequest=null;await renderBackups();$('#connections-status').textContent='Review the destination and files, then confirm when ready.';}catch(error){backupError(error);}finally{updateBackupButton();}
 };
+
+$('#cloudflare-connect').onclick=async()=>{const button=$('#cloudflare-connect');button.disabled=true;try{const result=await api('/connections/cloudflare/start',{method:'POST',body:'{}'}),url=new URL(result.url);if(url.origin!=='https://dash.cloudflare.com'||url.pathname!=='/oauth2/auth')throw Error('Unexpected authorization destination');location.assign(url.href);}catch(error){$('#connections-status').textContent=error.message;button.disabled=false;}};
+$('#cloudflare-disconnect').onclick=async()=>{const button=$('#cloudflare-disconnect');button.disabled=true;try{await api('/connections/cloudflare/disconnect',{method:'POST',body:'{}'});await openConnections();}catch(error){$('#connections-status').textContent=error.message;}finally{button.disabled=false;}};
+$('#cloudflare-more').onclick=async()=>{const button=$('#cloudflare-more');button.disabled=true;cloudflarePage++;try{await loadCloudflareZones();}catch(error){cloudflarePage--;$('#connections-status').textContent=error.message;}finally{button.disabled=false;}};
