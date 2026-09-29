@@ -5,6 +5,8 @@ import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts'),{readCMSStatus}=await module('src/cms-status.ts');
+const {createCMSDraft,readCMSDraft,listCMSDrafts,cmsContentAction,cmsContentCommand}=await module('src/cms-content.ts'),{cmsRequestAllowed}=await module('src/cms-bridge.ts');
+const {sendChat,readChat}=await module('src/chat.ts'),{prepareSiteAction}=await module('src/site-agent.ts');
 const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
 async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Deploy fixture','','draft',?,?)").bind(project,user,now,now).run();const review=await prepareCMS(db,user,id(),project,'My CMS','Our updates');await confirmCMS(db,user,review.id);const resources=new Map();await allocateCMSResources(db,project,{accountId:account,find:async(k,n)=>resources.get(k+n)??null,create:async(k,n)=>resources.set(k+n,k==='database'?id():k==='session'?id().replaceAll('-',''):n)});const origin='https://whumpo-cms-'+project.replaceAll('-','')+'.digifender.com',config={projectId:project,ownerId:user,origin,secret:await deriveCMSSecret(master,project,user,origin)};return {user,project,review,config};}
@@ -22,10 +24,30 @@ try{
  await assert.rejects(db.prepare("UPDATE cms_instances SET state='ready',deployed_version_id=? WHERE project_id=?").bind(id(),a.project).run(),/readiness_not_verified/);
  const platform=id();await connectCMS(db,a.project,platform);await connectCMS(db,a.project,platform);assert.equal((await db.prepare('SELECT state FROM cms_instances WHERE project_id=?').bind(a.project).first()).state,'ready');
  const env={CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:p.service};assert.deepEqual((await readCMSStatus(db,a.user,a.project,env)).collections,['posts','pages']);await assert.rejects(readCMSStatus(db,id(),a.project,env),e=>e.status===404);
+ const originalFetch=p.service.fetch,receipts=new Map();let creates=0,lose=true;const nativeId='01ARZ3NDEKTSV4RRFFQ69G5FAV';
+ p.service.fetch=async request=>{const v=await verifyCMSRequest(request,a.config);assert.ok(cmsRequestAllowed(request.method,v.path,v.body));
+  if(v.path==='/_emdash/api/content/posts'){
+   let data=receipts.get(v.id);if(!data){creates++;data={item:{id:nativeId,status:'draft',data:JSON.parse(v.body).data}};receipts.set(v.id,data);}
+   if(lose){lose=false;throw Error('lost response');}return Response.json({success:true,data});
+  }
+  if(v.path==='/_emdash/api/content/posts/'+nativeId)return Response.json({success:true,data:[...receipts.values()][0]});return originalFetch(request);
+ };
+ const draftId=id();await assert.rejects(createCMSDraft(db,a.user,a.project,draftId,'posts','Draft title','Private text',env),e=>e.status===503);
+ const draft=await cmsContentAction(db,a.user,{operation:'retryDraft',projectId:a.project,requestId:draftId},id(),env);assert.equal(draft.itemId,nativeId);assert.equal(creates,1);
+ await assert.rejects(createCMSDraft(db,a.user,a.project,draftId,'posts','Changed','Private text',env),e=>e.status===409);
+ await assert.rejects(createCMSDraft(db,id(),a.project,id(),'posts','Foreign','Private text',env),e=>e.status===404);
+ assert.equal((await readCMSDraft(db,a.user,a.project,draftId,env)).item.data.title,'Draft title');assert.equal((await listCMSDrafts(db,a.user,a.project,env)).length,1);
+ await assert.rejects(readCMSDraft(db,id(),a.project,draftId,env),e=>e.status===404);
+ await assert.rejects(cmsContentAction(db,a.user,{operation:'draft',projectId:a.project,collection:'posts',title:'Bad',text:'Body',status:'published'},id(),env),e=>e.status===400);
+ const execute=(action,rid)=>cmsContentAction(db,a.user,action,rid,env);assert.match(await cmsContentCommand('/cms-read '+a.project+' '+draftId,id(),execute)(),/Draft title/);
+ assert.match(await cmsContentCommand('/cms-retry '+a.project+' '+draftId,id(),execute)(),/not published/);assert.equal(creates,1);
+ const chat=await readChat(db,a.user);assert.equal((await sendChat(db,a.user,{id:id(),revision:chat.state.revision,content:'/cms-read '+a.project+' '+draftId},undefined,{cmsContent:execute})).status,200);assert.match((await readChat(db,a.user)).turns.at(-1).assistant_text,/Draft title/);
+ const proposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE PUBLISHED CLAIM',action:{kind:'cms',operation:'retryDraft',projectId:a.project,requestId:draftId}}),{},{cmsContent:execute});assert.match(proposal.reply,/not published/);assert.ok(!proposal.reply.includes('FAKE'));assert.equal(creates,1);
+ await assert.rejects(db.prepare('UPDATE cms_draft_requests SET body=? WHERE id=?').bind('{}',draftId).run(),/immutable/);
  p.replaceVersion();await assert.rejects(deployCMS(db,a.project,digest,a.config,p),/version changed/);
  const b=await fixture(),bad=provider(b);bad.owner=id();await assert.rejects(deployCMS(db,b.project,digest,b.config,bad),/owner could not/);await assert.rejects(connectCMS(db,b.project,id()),/not recorded/);bad.owner=b.user;bad.missingPages=true;await assert.rejects(deployCMS(db,b.project,digest,b.config,bad),/collections are missing/);bad.missingPages=false;await deployCMS(db,b.project,digest,b.config,bad);assert.equal(bad.uploads,1);assert.equal(bad.setups,1);
  const c=await fixture(),uncertain=provider(c);uncertain.unresolved=true;await assert.rejects(deployCMS(db,c.project,digest,c.config,uncertain),/unresolved/);await assert.rejects(deployCMS(db,c.project,digest,c.config,uncertain),/unresolved/);assert.equal(uncertain.uploads,1);
  const d=await fixture(),collision=provider(d);collision.exists=async()=>true;await assert.rejects(deployCMS(db,d.project,digest,d.config,collision),/already exists/);assert.equal(collision.uploads,0);
  assert.notEqual(a.config.secret,b.config.secret);assert.equal(a.config.secret,await deriveCMSSecret(master,a.project,a.user,a.config.origin));
- console.log('CMS deployment checks passed: immutable artifact/key receipts, lost upload acknowledgment, no blind redeploy, exact setup request, owner/schema verification, readiness gate, platform status isolation and derived project keys.');
+ console.log('CMS deployment checks passed: immutable artifact/key receipts, lost upload acknowledgment, no blind redeploy, exact setup request, owner/schema verification, readiness gate, platform status isolation, derived project keys, native draft request recovery, owner isolation, guided chat and authoritative agent receipts.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
