@@ -74,3 +74,9 @@ The delay is presentation-only: backend commits and tool actions are never held 
 Remaining: real paid checkout, annual grant/redemption lifecycle, external sales handoff, paid API routing, evaluator/task runner, durable subagent enforcement, broader real-provider acknowledgment performance measurement and full beta acceptance.
 
 A synthetic live Muse classification check hit the output limit at 64 tokens. At 256 it returned a valid intent in 2,087 ms (86 input / 168 output tokens). This is one sample, not a latency guarantee; the 700 ms generic acknowledgment remains essential with this testing model.
+
+## Test deployment
+
+Released code commit `7e8fd4a` to the existing `tellumo-platform` Worker, version `4a07de28-dd68-49c2-8b9a-db418ed5d3ce`. Production migrations 0050, 0052 and 0053 applied; unfinished local activation migration 0051 and its routes were excluded. No new paid service, payment account or domain purchase was enabled.
+
+Live checks verified health, the four monthly/annual catalogue prices, disabled checkout/subscriptions/domain redemption, anonymous ACK access returning 401, pricing HTML and the published 700 ms / 1,000 ms timing constants. The exact release checkout passed type checking and model-cost/ACK integration tests against local D1. A populated SQLite migration check separately preserved historical receipts, the billing ledger, usage balances and foreign-key integrity. Browser inspection confirmed the pricing cards render in TownHello's theme.
