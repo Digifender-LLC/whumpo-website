@@ -8,6 +8,7 @@
     "types": "wrangler types",
     "check": "tsc --noEmit",
     "test:smoke": "node tests/smoke.mjs",
+    "test:ai": "node tests/ai.mjs",
     "deploy": "wrangler deploy",
     "db:remote": "wrangler d1 migrations apply tellumo-control --remote",
     "invite": "node tools/create-invite.mjs"
