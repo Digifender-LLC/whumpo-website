@@ -39,3 +39,23 @@ const restoreResponse=await post(snapshots+'/restore',{id:resetId,side:'before'}
 assert.equal((await post('/api/backend-state-reviews/'+resetId+'/confirm',{})).status,200);assert.deepEqual((await readState()).state,{});assert.equal((await readState()).revision,2);
 const history=await (await fetch(base+statePath+'/history',{headers:{cookie}})).json();assert.equal(history.snapshots.length,2);assert.equal(history.snapshots[0].restore_review_id,sr);
 console.log('HTTP state recovery passed: private JSON attachment, owned snapshot restore, CSRF, exact confirmation and revision history.');
+const publicationPath='/api/projects/'+pid+'/backend-publication',publicationId=crypto.randomUUID();
+assert.equal((await fetch(base+publicationPath)).status,401);
+assert.equal((await post(publicationPath,{id:publicationId,operation:'publish',versionId:version,runId:rid},other)).status,404);
+assert.equal((await post(publicationPath,{id:publicationId,operation:'publish',versionId:version,runId:rid},cookie,'https://evil.example')).status,403);
+assert.equal((await post(publicationPath,{id:publicationId,operation:'publish',versionId:version,runId:rid})).status,200);
+const publicationConfirm='/api/backend-publication-reviews/'+publicationId+'/confirm';
+assert.equal((await post(publicationConfirm,{},other)).status,404);
+assert.equal((await post(publicationConfirm,{},cookie,'https://evil.example')).status,403);
+const sites=process.env.TELLUMO_SITES_TEST_URL;
+if(sites){
+ assert.ok(['localhost','127.0.0.1'].includes(new URL(sites).hostname));
+ const invoke=()=>fetch(sites+'/s/'+pid+'/backend',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({values:[7,11,13]})});
+ assert.equal((await invoke()).status,404);
+ assert.equal((await post(publicationConfirm,{})).status,200);
+ const publicResult=await invoke();assert.equal(publicResult.status,200);assert.deepEqual(await publicResult.json(),{ok:true,value:{total:31}});
+ assert.equal(publicResult.headers.get('cache-control'),'no-store');assert.equal(publicResult.headers.get('access-control-allow-origin'),'*');
+ const off=crypto.randomUUID();assert.equal((await post(publicationPath,{id:off,operation:'unpublish',versionId:version})).status,200);
+ assert.equal((await post('/api/backend-publication-reviews/'+off+'/confirm',{})).status,200);assert.equal((await invoke()).status,404);
+ console.log('Public endpoint HTTP acceptance passed: owner/session/origin review boundary, actual bound QuickJS output, anonymous JSON headers and reviewed withdrawal.');
+}else{assert.equal((await post(publicationConfirm,{})).status,200);console.log('Publication API boundary passed; set TELLUMO_SITES_TEST_URL for actual public runtime acceptance.');}

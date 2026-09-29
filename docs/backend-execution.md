@@ -2,11 +2,13 @@
 
 The full MVP needs generated backend behavior, durable project data and recovery. Existing contact and directory components do not satisfy arbitrary backend execution. This work adds the execution boundary first; data capabilities, generated-app publication, migrations and recovery must build on it before claiming that broader requirement is delivered.
 
+Current status: private tests, reviewed private state transitions, and reviewed public stateless JSON endpoints are implemented. Generated website controls, public app authentication, durable visitor data and whole-app recovery remain open. The sections below record implementation milestones.
+
 ## Service and cost boundary
 
 Cloudflare Dynamic Workers are currently paid-plan-only, and the Sandbox SDK uses Containers. Neither is enabled under the owner's no-paid-only-services instruction. The execution engine is QuickJS compiled to WebAssembly inside an ordinary Worker, using the existing account's authorized allowance. Sources checked September 29, 2026: [Dynamic Workers pricing](https://developers.cloudflare.com/dynamic-workers/pricing/), [QuickJS embedding documentation](https://github.com/justjake/quickjs-emscripten), [Workers WebAssembly](https://developers.cloudflare.com/workers/runtime-apis/webassembly/).
 
-The execution service has no public route, preview URL, secret, D1 or R2 binding. A future platform gateway must authenticate the customer, pin the owned project/code version, enforce atomic platform/customer invocation limits, and expose only explicit project-scoped capabilities. Possession of source code is not authority over another project's data. The VM will not receive platform credentials, request cookies or arbitrary network access.
+The execution service has no public route, preview URL, secret, D1 or R2 binding. TownHello authenticates owners for private tests and reviewed publication, pins immutable code versions, and enforces atomic invocation limits. Public endpoints receive only caller JSON. Additional project-scoped capabilities remain unfinished. Possession of source code is not authority over another project's data. The VM will not receive platform credentials, request cookies or arbitrary network access.
 
 ## Initial protocol
 
@@ -102,3 +104,27 @@ Migration 0035 adds recovery provenance and owned chat controls. `/backend-state
 The agent can list, export or prepare either restore side, but cannot confirm. Guided operations consume neither AI units nor backend execution attempts. Chat now shows a confirmation button only for a saved complete review response whose snapshot is still current and unexpired. Reading an existing review restores this button after an interrupted response. Export links remain scoped to authenticated owned snapshots.
 
 HTTP additions: `GET /api/projects/:project/backend-state/history`, `GET /api/backend-state-snapshots/:id/export` (JSON attachment), and `POST /api/backend-state-snapshots/:id/restore` with `{id,side:"before"|"after"}`. The same user-only confirmation endpoint applies prepared restores. Arbitrary uploaded JSON import remains unavailable. Storage retention is still bounded by the original review ceilings.
+
+## Reviewed public stateless endpoints
+
+Migration 0047 adds publication reviews and one current endpoint per project. After saving a function and completing a successful test of that exact version:
+
+- `/publish-backend VERSION_ID SUCCESSFUL_TEST_RECEIPT_ID` prepares a ten-minute review containing source, digest, endpoint, test receipt and base publication revision.
+- `/backend-publication-review REVIEW_ID` reads that exact review again.
+- `/confirm-backend-publication REVIEW_ID` is the separate owner action that applies it.
+- `/backend-publication PROJECT_ID` reads current status.
+- `/unpublish-backend PROJECT_ID` prepares taking the current endpoint offline, using the same confirmation command.
+
+The model can prepare/read reviews but cannot confirm. Publication and withdrawal advance a monotonic revision; stale reviews fail, and replaying an old applied review cannot change a newer publication. Publishing an older tested version uses the same review flow for code rollback. Private state is unaffected. A successful example is required but does not certify correctness for all visitor inputs. Source appears in the private review/chat history and must contain no secrets.
+
+Authenticated HTTP: `GET /api/projects/:project/backend-publication`, `POST` with `{id,operation:"publish",versionId,runId}` or `{id,operation:"unpublish",versionId}`, `GET /api/backend-publication-reviews/:id`, and human `POST /api/backend-publication-reviews/:id/confirm`. Writes use the existing same-origin/session boundary. Review storage is initially bounded at 100/project and 1,000/platform.
+
+Approved code accepts anonymous `POST application/json` at `https://sites.digifender.com/s/PROJECT_ID/backend`. It returns `{ok:true,value:JSON}` or a fixed error envelope. Requests are limited to 8 KiB, responses to the existing 16 KiB runtime output bound. Responses are JSON, no-store and nosniff, with credential-free wildcard CORS; OPTIONS supports browser calls. The route serves no source. The caller's JSON is the entire guest input: request cookies, authorization, project state and provider credentials never reach the interpreter. Inputs/outputs are not retained by this public gateway. Code may return literals embedded in its source, so the owner must review that source before making it public.
+
+Before dispatch, a serialized D1 reservation enforces 100 attempts/project/day, 500/account/day and 1,000/platform/day in UTC. One counter row per project rolls over by date; publication changes cannot reset today's allowance. Failed execution and uncertain acknowledgments count. A lost reservation acknowledgment does not dispatch. Public calls have no idempotency/replay guarantee and retries consume another attempt; functions have no persistent mutation capability. Withdrawal prevents newly admitted requests; already admitted calls may finish. These initial ceilings are separate from AI credits and do not guarantee availability against deliberate quota exhaustion.
+
+This enables a public **stateless computation endpoint**. Attaching interactive controls to generated website templates, public application authentication, persistent visitor data, app migrations and whole-app recovery remain unfinished. The current generated HTML sandbox does not automatically gain scripts or a backend form because an endpoint is published. CMS continues to use its native EmDash integration.
+
+Verification: real local D1 tests cover successful-test admission, ownership, expired/competing reviews, exact replay, publication/withdrawal, lost reservation acknowledgments and concurrent project/account/platform quotas. The multi-Worker HTTP test covers session/origin enforcement and an anonymous public call through the actual bound QuickJS service (calculator result 31), followed by reviewed withdrawal returning 404. Existing private state and recovery HTTP tests still pass. Migration 0048 counts backend-only projects as live and exposes their endpoint in project chat reads; it does not imply a public static page exists.
+
+Deployment: migrations 0047–0048 applied remotely; public host `be4c9144-c4e0-467b-8dcd-c7d47eadd1ff` and platform `ee5770db-0a7e-4d0c-b49c-e58fad62cd12` verified. Production health returned 200, the anonymous owner API returned 401, an unpublished function endpoint returned fixed JSON 404 and its credential-free preflight returned 204. No customer function was published for this check. Actual successful function invocation was verified in the isolated local multi-Worker fixture, not a production customer account.

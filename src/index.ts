@@ -1,3 +1,4 @@
+import {readBackendPublication,prepareBackendPublication,readBackendPublicationReview,confirmBackendPublication} from './backend-publication';
 import {cmsDiscardCommand} from './cms-discard';
 import {cmsUnpublishCommand} from './cms-unpublish';
 import {cmsPublicationCommand,cmsPublicationPage} from './cms-publication';
@@ -233,6 +234,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
     if(method==='GET'&&!stateReviewRoute[2])return json(await readBackendReview(env.DB,user.id,stateReviewRoute[1]));
     if(method==='POST'&&stateReviewRoute[2])return json(await confirmBackendState(env.DB,user.id,stateReviewRoute[1]));
   }
+  const backendPublicationRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backend-publication$/);
+  if(backendPublicationRoute){
+    if(method==='GET')return json(await readBackendPublication(env.DB,user.id,backendPublicationRoute[1]));
+    if(method==='POST'){
+      const data=await body(request);
+      if(typeof data?.id!=='string'||typeof data.versionId!=='string'||(data.operation!=='publish'&&data.operation!=='unpublish')||data.operation==='publish'&&typeof data.runId!=='string')return error(400,'Provide a review ID, operation, version and successful test receipt');
+      return json(await prepareBackendPublication(env.DB,user.id,backendPublicationRoute[1],data.id,data.operation,data.versionId,typeof data.runId==='string'&&data.operation==='publish'?data.runId:null));
+    }
+  }
+  const backendPublicationReview=pathname.match(/^\/api\/backend-publication-reviews\/([0-9a-f-]{36})(\/confirm)?$/);
+  if(backendPublicationReview){
+    if(method==='GET'&&!backendPublicationReview[2])return json(await readBackendPublicationReview(env.DB,user.id,backendPublicationReview[1]));
+    if(method==='POST'&&backendPublicationReview[2])return json(await confirmBackendPublication(env.DB,user.id,backendPublicationReview[1]));
+  }
   const backendRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backends(?:\/([0-9a-f-]{36})\/test)?$/);
   if(backendRoute){
     if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1])});
@@ -383,7 +398,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return json({ ok: true }, 200, { "set-cookie": clearCookie(request) });
   }
   if (method === "GET" && pathname === "/api/projects") {
-    const { results } = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,cms_articles,created_at,updated_at FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 100")
+    const { results } = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles,created_at,updated_at FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 100")
       .bind(user.id).all<Project>();
     return json({ projects: results });
   }
@@ -405,7 +420,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   }
   const projectMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})$/);
   if (method === "GET" && projectMatch) {
-    const project = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,cms_articles,created_at,updated_at FROM project_service_status WHERE id = ? AND owner_user_id = ?")
+    const project = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles,created_at,updated_at FROM project_service_status WHERE id = ? AND owner_user_id = ?")
       .bind(projectMatch[1], user.id).first<Project>();
     return project ? json({ project }) : error(404, "Project not found");
   }

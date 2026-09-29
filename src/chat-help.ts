@@ -79,12 +79,15 @@ Ask the agent to create a pure JavaScript function for an existing project.
 /backends PROJECT_ID lists private drafts; /backend VERSION_ID reads source.
 /test-backend VERSION_ID JSON runs a non-sensitive example; /backend-result RECEIPT_ID reads its saved result.
 
+/backend-publication PROJECT_ID reads public endpoint status.
+/publish-backend VERSION_ID SUCCESSFUL_TEST_RECEIPT_ID reviews publication; /unpublish-backend PROJECT_ID reviews taking it offline.
+/backend-publication-review REVIEW_ID reads the exact code/review; /confirm-backend-publication REVIEW_ID applies it.
 /backend-state PROJECT_ID reads private JSON data.
 /review-backend-state VERSION_ID JSON prepares a state change; /backend-state-review REVIEW_ID reads it; /confirm-backend-state REVIEW_ID applies the exact review.
 /backend-state-history PROJECT_ID lists applied snapshots; /export-backend-state SNAPSHOT_ID downloads one.
 /restore-backend-state SNAPSHOT_ID reviews restoring its after state; /restore-backend-before SNAPSHOT_ID reviews its before state. Restoration requires confirmation.
 
-Functions remain private, with no network access or public endpoints. Guided tests use no AI units but have a separate execution allowance.`,
+Functions start private. Reviewed publication exposes a stateless JSON endpoint with no network or private data access. Website UI integration is not automatic. Guided tests use no AI units but have a separate execution allowance.`,
  directories:`Directories and visitor messages
 /directory PROJECT_ID shows private listings.
 /directory-add PROJECT_ID | title | description | optional HTTPS link prepares an addition.
