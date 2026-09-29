@@ -7,7 +7,7 @@ The public homepage advertises the product. The signed-in default is a conversat
 - [x] Public landing page and separate invitation-only workspace deployed at digifender.com.
 - [x] Owner-scoped project records, session authentication, activity history, and account/project limits.
 - [x] Passkeys are the default signup/login method, with single-use browser-bound challenges, user verification, credential management, and recovery.
-- [ ] Conversational onboarding collects the customer's idea and preferences, resumes after interruption, and clearly identifies guided mode until a model is configured.
+- [x] Conversational onboarding collects the customer's idea and preferences, resumes after interruption, and clearly identifies guided mode until a model is configured.
 - [x] Persistent chat is the default workspace; owner-scoped history and minimal service/usage stats survive reloads.
 - [x] OpenAI-compatible server adapter integrated with chat, with OpenCode Go configuration and a verified live Muse provider test.
 - [ ] Chat tools create projects, show status/activity/usage, propose edits, preview, publish, and restore versions. Server-side permissions and confirmation gates govern actions.
@@ -141,3 +141,10 @@ The revised Word design is v0.3. Original sections 1–25 retain product intent;
 Chat and Details → Domains can prepare, renew and verify project-specific DNS TXT proofs. The fixed resolver, exact proof matching, bounded responses, seven-day expiry, account isolation and atomic claim limits are implemented and tested. Verification consumes no model units. Live tests confirmed creation/replay, a real DNS nonmatch, authentication and the explicit not-connected state.
 
 Custom-hostname provisioning, certificates, domain routing, disconnect/removal, purchases and optional customer account authorization remain incomplete. Existing Wrangler authorization cannot access Cloudflare Custom Hostnames (403); a narrowly scoped provider token was requested. No additional paid service was enabled. See [domain design](domains.md).
+
+
+## Conversational preferences and first draft — September 29, 2026
+
+Guided setup now collects idea → name → audience/visitor goal → style, saves progress between requests, and finishes with a private launch-page preview. Audience and style can be skipped. Free-form style notes are retained for later AI edits; the initial renderer uses ocean unless an exact supported theme is chosen. `/brief [PROJECT_ID]` reads the private brief and `/build` uses the saved starting theme. `/new` and `/cancel` leave already created projects intact.
+
+The guided flow uses no inference even when AI is configured. Notes enter the owner's bounded AI context on later model requests; they are never automatically copied into the deterministic preview or exported as project metadata. AI drafts still require human review before publication. See [onboarding design](onboarding.md).

@@ -154,3 +154,11 @@ Migration 0014 applied remotely before deployment. Workspace Worker `5340083e-35
 TypeScript, domain integration tests and chat regressions passed. Domain tests cover exact DNS proof matching, malformed/oversized resolver responses, rejected redirects, owner isolation, independent same-hostname claims, retries, expiry/renewal, proof removal and atomic quotas. Browser inspection verified the Domains dialog and wrapping of long TXT values.
 
 Live HTTPS validation passed signed passkey login, claim creation, idempotent replay, real DNS nonmatch, unauthenticated rejection, explicit not-connected state, zero AI spending and logout. The ephemeral account and dependent claim/project records were removed. Positive DNS matching was verified with a controlled resolver locally; no live customer DNS proof was installed. Payments remain unconfigured and disabled.
+
+## Guided preferences and automatic first preview — September 29, 2026
+
+Remote migration 0015 applied before deployment. Workspace Worker `24450413-cdf4-404b-a90f-c83997c2d526` and public host `452e9451-e4eb-43de-86ca-fc977115b55d` are deployed. Existing users and versions retain their state; new project preference columns have empty/ocean defaults.
+
+TypeScript, onboarding integration, chat and site-agent regression tests passed. Onboarding checks cover concurrent replay, owner boundaries, saved preferences, interruption, skip/cancel, free-form style notes and rollback when the preview quota is exhausted. Browser testing resumed setup after reload and produced the private-preview link.
+
+Live signed-passkey HTTPS testing verified all four setup answers, a command interrupting setup, one first preview on replay, brief readback, private-note exclusion from HTML, anonymous denial, public HTTP 404 and zero AI units spent. The temporary account and dependent project/version records were removed. No real model call was needed for this guided workflow. Stripe remains disabled; custom-domain hosting still awaits provider access.
