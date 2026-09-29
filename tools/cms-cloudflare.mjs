@@ -1,9 +1,13 @@
 // Fixed-account control-plane client. Never print credentials or raw provider errors.
 import {execFileSync} from 'node:child_process';
-export function cloudflareClient(accountId,transport=fetch,credentials){
- if(!/^[0-9a-f]{32}$/.test(accountId))throw Error('Invalid Cloudflare account');
+export function cloudflareCredentials(credentials){
  if(!credentials){try{credentials=JSON.parse(execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','auth','token','--json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}));}catch{throw Error('Wrangler credentials could not be loaded');}}
  if(!['oauth','api_token'].includes(credentials.type)||typeof credentials.token!=='string')throw Error('A Wrangler OAuth or API token is required');
+ return credentials;
+}
+export function cloudflareClient(accountId,transport=fetch,credentials){
+ if(!/^[0-9a-f]{32}$/.test(accountId))throw Error('Invalid Cloudflare account');
+ credentials=cloudflareCredentials(credentials);
  return async function api(path,body){
   if(!path.startsWith('/')||path.includes('..'))throw Error('Invalid Cloudflare API path');
   let response,data;

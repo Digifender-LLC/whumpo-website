@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,rm,readFile,stat,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createHash} from 'node:crypto';
+import {gzipSync} from 'node:zlib';
+import {captureCMSMedia,mediaInventory,cmsMediaProvider,rawCloudflareObject,verifyCapturedCMSMedia} from '../tools/cms-media-snapshot.mjs';
+const dir=await mkdtemp(join(tmpdir(),'cms-media-snapshot-'));
+const body=gzipSync('Private compressed media'),etag=createHash('md5').update(body).digest('hex');
+const object={key:'photos/雪 #1.gz',etag,size:body.length,last_modified:'2026-09-29T00:00:00Z',storage_class:'Standard',ssec:false,http_metadata:{contentType:'application/octet-stream',contentEncoding:'gzip'},custom_metadata:{caption:'Private'}};
+const page=items=>({success:true,result:items,result_info:{is_truncated:false}}),provider={list:async()=>page([object]),get:async()=>new Response(body,{headers:{etag:'"'+etag+'"','content-length':String(body.length),'content-encoding':'gzip'}})};
+try{
+ const media=await captureCMSMedia(provider,join(dir,'capture'));assert.equal(media.objects.length,1);assert.deepEqual(await readFile(join(dir,'capture',media.objects[0].file)),body);assert.equal(media.objects[0].metadata.custom_metadata.caption,'Private');assert.equal((await stat(join(dir,'capture'))).mode&0o777,0o700);assert.equal((await stat(join(dir,'capture',media.objects[0].file))).mode&0o777,0o600);assert.equal(media.objects[0].sha256,createHash('sha256').update(body).digest('hex'));
+ assert.equal(await verifyCapturedCMSMedia(join(dir,'capture'),media),true);await writeFile(join(dir,'capture',media.objects[0].file),Buffer.alloc(body.length));await assert.rejects(verifyCapturedCMSMedia(join(dir,'capture'),media),/checksum/);
+ await assert.rejects(captureCMSMedia(provider,join(dir,'capture')),/EEXIST/);
+ const pages=[];const paged=await mediaInventory({list:async cursor=>{pages.push(cursor);return cursor?page([]):{success:true,result:[object],result_info:{is_truncated:true,cursor:'next'}};}});assert.equal(paged.length,1);assert.deepEqual(pages,['','next']);
+ await assert.rejects(mediaInventory({list:async()=>({success:true,result:[],result_info:{is_truncated:true,cursor:'same'}})}),/did not advance/);
+ assert.deepEqual(await mediaInventory({list:async()=>({success:true,result:[]})}),[]);await assert.rejects(mediaInventory({list:async()=>({success:true,result:[object]})}),/completion/);
+ await assert.rejects(mediaInventory({list:async()=>page([object,object])}),/metadata/);
+ for(const key of ['../private','x/./y','x/../y'])await assert.rejects(mediaInventory({list:async()=>page([{...object,key}])}),/metadata/);
+ for(const options of [{maxObjects:0},{maxObjectBytes:1},{maxTotalBytes:1}])await assert.rejects(mediaInventory(provider,options),/limit/);
+ await assert.rejects(mediaInventory({list:async()=>page([{...object,storage_class:'InfrequentAccess'}])}),/standard/);
+ await assert.rejects(mediaInventory({list:async()=>page([{...object,ssec:true}])}),/standard/);
+ for(const [label,get] of [['changed',async()=>new Response(body,{headers:{etag:'"changed"'}})],['truncated',async()=>new Response(body.subarray(1),{headers:{etag:'"'+etag+'"'}})],['oversized',async()=>new Response(Buffer.concat([body,body]),{headers:{etag:'"'+etag+'"'}})]])await assert.rejects(captureCMSMedia({...provider,get},join(dir,label)));
+ let scans=0;await assert.rejects(captureCMSMedia({...provider,list:async()=>page([{...object,custom_metadata:{caption:++scans===1?'first':'changed'}}])},join(dir,'drift')),/changed during/);
+ const account='a'.repeat(32),bucket='whumpo-cms-'+('b'.repeat(32))+'-media',credentials={type:'oauth',token:'fixture-secret'};let called=false;
+ const adapter=cmsMediaProvider(account,bucket,{credentials,transport:async(url,options)=>{assert.ok(url.startsWith('https://api.cloudflare.com/client/v4/accounts/'+account+'/r2/buckets/'+bucket+'/objects?'));assert.equal(options.redirect,'error');assert.equal(options.headers.authorization,'Bearer fixture-secret');return Response.json(page([]));},getObject:async(a,b,k,c)=>{assert.equal(a,account);assert.equal(b,bucket);assert.equal(k,object.key);assert.equal(c.token,'fixture-secret');called=true;return new Response(body);}});assert.deepEqual((await adapter.list('')).result,[]);await adapter.get(object.key);assert.ok(called);
+ assert.throws(()=>rawCloudflareObject(account,bucket,'../escape',credentials),/identity/);assert.throws(()=>cmsMediaProvider(account,'other-bucket',{credentials}),/source/);
+ console.log('CMS media capture passed: raw encoded bytes, metadata, checksums, private paths, pagination, changed/truncated/oversized objects, changing inventory and source bounds.');
+}finally{await rm(dir,{recursive:true,force:true});}
