@@ -6,27 +6,29 @@ import {prepareCMSUnpublish,describeCMSUnpublish} from './cms-unpublish';
 import {prepareCMSPublication,describeCMSPublication,readCMSPublication,listCMSPublications} from './cms-publication';
 import {prepareCMSPreview} from './cms-preview';
 import {cmsEditAction} from './cms-edits';
-import {cmsConnection} from './cms-status';
+import {cmsConnection,requireStructuredCMS} from './cms-status';
 import {callCMS} from './cms-bridge';
-import {cmsDraftBody,cmsItemId} from './cms-content-shape';
+import {cmsDraftBody,cmsRichDraftBody,cmsItemId} from './cms-content-shape';
 import {CMSProjectError} from './cms-projects';
+export type ContentFormat='plain'|'structured';
 type Environment=Record<string,unknown>;
-type Draft={id:string;project_id:string;user_id:string;collection:string;body:string;item_id:string|null};
+type Draft={id:string;project_id:string;user_id:string;collection:string;body:string;item_id:string|null;content_format:ContentFormat};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export async function listCMSDrafts(db:D1Database,user:string,project:string,env:Environment){
  await cmsConnection(db,user,project,env);
  const {results}=await db.prepare('SELECT id,collection,item_id,created_at FROM cms_draft_requests WHERE project_id=? AND user_id=? ORDER BY created_at DESC,id LIMIT 90').bind(project,user).all();return results;
 }
-export async function createCMSDraft(db:D1Database,user:string,project:string,id:string,collection:string,title:unknown,text:unknown,env:Environment){
+export async function createCMSDraft(db:D1Database,user:string,project:string,id:string,collection:string,title:unknown,text:unknown,env:Environment,format:ContentFormat='plain'){
  const {service,config}=await cmsConnection(db,user,project,env);
  if(!uuid.test(id)||!['posts','pages'].includes(collection))throw new CMSProjectError(400,'Choose posts or pages and a valid request ID');
- let body:string;try{body=JSON.stringify(cmsDraftBody(title,text));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
+ let body:string;try{body=JSON.stringify((format==='structured'?cmsRichDraftBody:cmsDraftBody)(title,text));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
  const read=()=>db.prepare('SELECT * FROM cms_draft_requests WHERE id=?').bind(id).first<Draft>();
  let row=await read();
- if(!row){try{await db.prepare('INSERT INTO cms_draft_requests(id,project_id,user_id,collection,body) VALUES(?,?,?,?,?)').bind(id,project,user,collection,body).run();}catch{}row=await read();}
+ if(!row){if(format==='structured')await requireStructuredCMS(db,user,project,env);try{await db.prepare('INSERT INTO cms_draft_requests(id,project_id,user_id,collection,body,content_format) VALUES(?,?,?,?,?,?)').bind(id,project,user,collection,body,format).run();}catch{}row=await read();}
  if(!row)throw new CMSProjectError(409,'CMS draft request capacity is full or unavailable');
- if(row.user_id!==user||row.project_id!==project||row.collection!==collection||row.body!==body)throw new CMSProjectError(409,'CMS draft request ID already used');
+ if(row.user_id!==user||row.project_id!==project||row.collection!==collection||row.body!==body||row.content_format!==format)throw new CMSProjectError(409,'CMS draft request ID already used');
  if(!row.item_id){
+  if(format==='structured')await requireStructuredCMS(db,user,project,env);
   // Exact retries use the same CMS gateway reservation; an unknown write is never dispatched twice.
   try{const result=await callCMS(service,config,'/_emdash/api/content/'+collection,id,JSON.parse(body));
    if(!cmsItemId.test(result?.item?.id??'')||result.item.status!=='draft')throw Error('Invalid draft receipt');
@@ -44,10 +46,11 @@ export async function readCMSDraft(db:D1Database,user:string,project:string,id:s
  try{const data=await callCMS(service,config,'/_emdash/api/content/'+row.collection+'/'+row.item_id,crypto.randomUUID());if(data?.item?.id!==row.item_id)throw Error('CMS item mismatch');return {requestId:id,projectId:project,collection:row.collection,revision:data._rev,item:data.item};}catch{throw new CMSProjectError(503,'CMS draft could not be read');}
 }
 export async function cmsContentAction(db:D1Database,user:string,action:Record<string,unknown>,id:string,env:Environment){
- if(['editDraft','listEdits','retryEdit'].includes(String(action.operation)))return cmsEditAction(db,user,action,id,env);
+ if(['editDraft','editStructuredDraft','listEdits','retryEdit'].includes(String(action.operation)))return cmsEditAction(db,user,action,id,env);
  const project=action.projectId;if(typeof project!=='string'||!uuid.test(project))throw new CMSProjectError(400,'Choose an owned CMS project ID');
- const allowed=action.operation==='draft'?['kind','operation','projectId','collection','title','text']:['listDrafts','listPublications'].includes(String(action.operation))?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
+ const allowed=['draft','structuredDraft'].includes(String(action.operation))?['kind','operation','projectId','collection','title',action.operation==='structuredDraft'?'content':'text']:['listDrafts','listPublications'].includes(String(action.operation))?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
  if(Object.keys(action).some(k=>!allowed.includes(k)))throw new CMSProjectError(400,'Unsupported CMS draft fields');
+ if(action.operation==='structuredDraft')return createCMSDraft(db,user,project,id,String(action.collection),action.title,action.content,env,'structured');
  if(action.operation==='draft')return createCMSDraft(db,user,project,id,String(action.collection),action.title,action.text,env);
  if(action.operation==='listPublications')return listCMSPublications(db,user,project);
  if(action.operation==='listDrafts')return listCMSDrafts(db,user,project,env);
@@ -62,7 +65,7 @@ export async function cmsContentAction(db:D1Database,user:string,action:Record<s
   await cmsConnection(db,user,project,env);
   const row=await db.prepare('SELECT * FROM cms_draft_requests WHERE id=? AND project_id=? AND user_id=?').bind(action.requestId,project,user).first<Draft>();
   if(!row)throw new CMSProjectError(404,'CMS draft request not found');
-  const body=JSON.parse(row.body);return createCMSDraft(db,user,project,row.id,row.collection,body.data.title,body.data.content[0].children[0].text,env);
+  const body=JSON.parse(row.body);return createCMSDraft(db,user,project,row.id,row.collection,body.data.title,row.content_format==='structured'?body.data.content:body.data.content[0].children[0].text,env,row.content_format);
  }
  throw new CMSProjectError(400,'Unsupported CMS content operation');
 }

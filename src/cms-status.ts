@@ -23,3 +23,7 @@ export async function readCMSCapabilities(db:D1Database,user:string,project:stri
   return {projectId:project,status:supported?'supported':'unsupported',structuredContent:supported};
  }catch{return {projectId:project,status:'unavailable',structuredContent:false};}
 }
+
+export async function requireStructuredCMS(db:D1Database,user:string,project:string,env:Record<string,unknown>){
+ if(!(await readCMSCapabilities(db,user,project,env)).structuredContent)throw new CMSProjectError(409,'Formatted editing could not be confirmed for this publishing space. No write was attempted by this call. If recovering a saved request, its earlier outcome is unchanged; retry that same request after its CMS connection is updated.');
+}

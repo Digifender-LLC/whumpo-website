@@ -255,9 +255,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const projectId=cmsContentRoute[1],requestId=cmsContentRoute[2],cmsEnv=env as unknown as Record<string,unknown>;
     if(method==='GET')return json(requestId?await readCMSDraft(env.DB,user.id,projectId,requestId,cmsEnv):{drafts:await listCMSDrafts(env.DB,user.id,projectId,cmsEnv),publications:await listCMSPublications(env.DB,user.id,projectId)});
     if((method==='POST'&&!requestId)||(method==='PATCH'&&requestId)){
-      const data=await body(request),allowed=requestId?['id','title','text','revision']:['id','title','text','collection'];
+      const data=await body(request),structured=!!data&&Object.hasOwn(data,'content'),field=structured?'content':'text',allowed=requestId?['id','title',field,'revision']:['id','title',field,'collection'];
       if(!data||typeof data.id!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(data.id)||Object.keys(data).some(k=>!allowed.includes(k)))return error(400,'Provide a request ID and supported content fields');
-      return json(await cmsContentAction(env.DB,user.id,{operation:requestId?'editDraft':'draft',projectId,...(requestId?{requestId,revision:data.revision}:{collection:data.collection}),title:data.title,text:data.text},data.id,cmsEnv));
+      return json(await cmsContentAction(env.DB,user.id,{operation:requestId?(structured?'editStructuredDraft':'editDraft'):(structured?'structuredDraft':'draft'),projectId,...(requestId?{requestId,revision:data.revision}:{collection:data.collection}),title:data.title,[field]:data[field]},data.id,cmsEnv));
     }
     return error(405,'Method not allowed');
   }
