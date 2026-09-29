@@ -1,3 +1,4 @@
+import {cmsItemId,validCMSDraft} from './cms-content-shape';
 // Private CMS request authentication. No browser cookie or model-provided identity is trusted.
 export type CMSBridgeConfig={projectId:string;ownerId:string;secret:string;origin:string};
 export class CMSBridgeError extends Error {constructor(readonly status:number,message:string){super(message);}}
@@ -40,6 +41,9 @@ export async function verifyCMSRequest(request:Request,config:CMSBridgeConfig,no
 }
 export function cmsRequestAllowed(method:string,path:string,body:string){
  if(method==='GET'&&['/_emdash/api/setup/status','/_emdash/api/auth/me','/_emdash/api/schema/collections'].includes(path)&&body==='')return true;
+ const item=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)$/);
+ if(method==='GET'&&item&&cmsItemId.test(item[2])&&body==='')return true;
+ if(method==='POST'&&/^\/_emdash\/api\/content\/(posts|pages)$/.test(path))return validCMSDraft(body);
  if(method!=='POST'||path!=='/_emdash/api/setup')return false;
  try{const value=JSON.parse(body);return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(k=>['title','tagline','includeContent'].includes(k))&&typeof value.title==='string'&&value.title.trim().length>0&&value.title.length<=100&&(value.tagline===undefined||typeof value.tagline==='string'&&value.tagline.length<=200)&&value.includeContent===false;}catch{return false;}
 }

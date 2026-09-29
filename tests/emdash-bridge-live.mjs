@@ -20,3 +20,15 @@ assert.equal((await call('/_emdash/api/plugins')).status,403);
 assert.equal((await fetch(base+'/_emdash/admin/setup')).status,403);
 const service={fetch:async request=>{const u=new URL(request.url);return fetch(base+u.pathname,{method:request.method,headers:request.headers,...(request.method==='POST'?{body:await request.text()}:{}),signal:request.signal});}};assert.deepEqual((await verifyCMSInitialization(service,config)).collections.sort(),['pages','posts']);
 console.log('Actual EmDash bridge passed: unsigned/wrong-owner denial, empty-content setup, replay/conflict handling, pinned owner administration, schema reads, setup closed and other management routes denied.');
+const shapeBuild=await build({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsDraftBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeBuild.outputFiles[0].text).toString('base64'));
+for(const collection of ['posts','pages']){
+ const rid=id(),draftBody=cmsDraftBody('Native '+collection,'A private paragraph. <script>plain text only</script>');
+ const created=await call('/_emdash/api/content/'+collection,draftBody,rid),data=await created.json();assert.equal(created.status,201,JSON.stringify(data));assert.equal(data.data.item.status,'draft');
+ assert.deepEqual(await (await call('/_emdash/api/content/'+collection,draftBody,rid)).json(),data);
+ assert.equal((await call('/_emdash/api/content/'+collection,cmsDraftBody('Changed','Different'),rid)).status,409);
+ const item=data.data.item,read=await call('/_emdash/api/content/'+collection+'/'+item.id);assert.equal(read.status,200);assert.equal((await read.json()).data.item.data.title,'Native '+collection);
+ assert.equal((await call('/_emdash/api/content/'+collection,{...draftBody,status:'published'})).status,403);
+ assert.equal((await call('/_emdash/api/content/'+collection+'/'+item.id+'/publish',{})).status,403);
+ assert.equal((await fetch(base+'/posts/'+item.slug)).status,403);
+}
+console.log('Actual native EmDash drafts passed: posts/pages create, read, exact replay, changed-request conflict, forced draft state and publication denial.');
