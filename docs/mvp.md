@@ -49,7 +49,7 @@ GitHub free features only; no paid Actions, packages, or LFS. Cloudflare uses th
 
 ## Guided conversation milestone
 
-The workspace now starts with persistent chat, compact project/live-site stats, and a secondary Details menu. Guided onboarding saves a brief, asks for a name, and creates a project. The conversation supports /new, /cancel, /projects, /activity, /plans, /usage, /domains, /connections, and /help. Domain and connection commands report their pending status honestly; they do not implement those integrations yet.
+The workspace now starts with persistent chat, compact project/live-site stats, and a secondary Details menu. Guided onboarding saves a brief, asks for a name, and creates a project. The conversation supports /new, /cancel, /projects, /activity, /plans, /usage, /domains, /connections, and /help. Domain commands now prepare and check DNS ownership proofs. Hosting connections and optional account connections remain pending.
 
 Migration 0003 adds owner-scoped workspace state and chat turns. Each request carries a UUID and expected revision. D1 batches atomically save the turn, advance onboarding, create a project, and append its audit event. Identical retries are idempotent; concurrent different turns return a conflict so the client can refresh. History displays the latest 100 turns; this test permits 2,000 turns per workspace.
 
@@ -134,3 +134,10 @@ Migration 0013 adds immutable version-photo references and atomic R2 operation b
 Private previews embed checksum-verified JPEGs under a sandbox. The public host checks current publication membership before serving image bytes; restore/unpublish updates access on the next request. ZIP exports include exact images and fail if dependencies cannot be verified. Tests cover cross-owner and same-owner cross-project rejection, replay, missing assets, version restoration, public visibility and operation-budget concurrency. Live signed-in checks and public browser rendering passed. Offline file opening was blocked by browser policy; independent ZIP/image checks passed.
 
 The revised Word design is v0.3. Original sections 1–25 retain product intent; sections 26–32 specify current implementation and remaining contracts. Payments remain disabled at the owner’s request.
+
+
+## Domain ownership milestone — September 29, 2026
+
+Chat and Details → Domains can prepare, renew and verify project-specific DNS TXT proofs. The fixed resolver, exact proof matching, bounded responses, seven-day expiry, account isolation and atomic claim limits are implemented and tested. Verification consumes no model units. Live tests confirmed creation/replay, a real DNS nonmatch, authentication and the explicit not-connected state.
+
+Custom-hostname provisioning, certificates, domain routing, disconnect/removal, purchases and optional customer account authorization remain incomplete. Existing Wrangler authorization cannot access Cloudflare Custom Hostnames (403); a narrowly scoped provider token was requested. No additional paid service was enabled. See [domain design](domains.md).

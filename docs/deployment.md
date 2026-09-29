@@ -145,3 +145,12 @@ TypeScript and photo-version, file, publication, source-export and AI-agent test
 A live signed-passkey workflow uploaded a metadata-stripped synthetic JPEG, attached it without inference, confirmed publication, downloaded an image-inclusive export, then unpublished and verified image HTTP 404. It spent zero AI units. The temporary account, site and R2 object were removed afterward. Independent ZIP CRC and pixel-decoding checks passed. Direct offline file opening was blocked by browser policy, so that browser acceptance check remains unverified.
 
 The landing page advertises photo-capable sites and still identifies forms and custom domains as upcoming. The files dialog explains publication exposure and that the AI cannot see image contents. Payments remain unconfigured and disabled.
+
+
+## Domain ownership proofs — September 29, 2026
+
+Migration 0014 applied remotely before deployment. Workspace Worker `5340083e-3570-4c36-ac5b-7f3b272fcd40` and public host `74c5dd44-9a7f-4aff-b5a9-e36697f6c4d6` are deployed. No provider custom hostnames, routes, certificates or DNS records were created.
+
+TypeScript, domain integration tests and chat regressions passed. Domain tests cover exact DNS proof matching, malformed/oversized resolver responses, rejected redirects, owner isolation, independent same-hostname claims, retries, expiry/renewal, proof removal and atomic quotas. Browser inspection verified the Domains dialog and wrapping of long TXT values.
+
+Live HTTPS validation passed signed passkey login, claim creation, idempotent replay, real DNS nonmatch, unauthenticated rejection, explicit not-connected state, zero AI spending and logout. The ephemeral account and dependent claim/project records were removed. Positive DNS matching was verified with a controlled resolver locally; no live customer DNS proof was installed. Payments remain unconfigured and disabled.

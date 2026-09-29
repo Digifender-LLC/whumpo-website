@@ -25,7 +25,8 @@
     "test:checkout": "node tests/checkout.mjs",
     "test:exports": "node tests/exports.mjs",
     "test:files": "node tests/files.mjs",
-    "test:photo-versions": "node tests/photo-versions.mjs"
+    "test:photo-versions": "node tests/photo-versions.mjs",
+    "test:domains": "node tests/domains.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

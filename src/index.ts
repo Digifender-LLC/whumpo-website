@@ -1,3 +1,4 @@
+import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
 import { StorageLimitError } from './storage-budget';
 import { FileError, uploadPhoto, listPhotos, readPhoto, cleanupPhotos } from './files';
@@ -172,6 +173,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  if (method === "GET" && pathname === "/api/domains") return json(await listDomains(env.DB,user.id));
   if (method === "GET" && pathname === "/api/components") return json({components:componentCatalog});
   const filesMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/files(?:\/([0-9a-f-]{36}))?$/);
   if (filesMatch && method === 'GET' && !filesMatch[2]) return json(await listPhotos(env.DB,user.id,filesMatch[1]));
@@ -283,7 +285,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
+      if (cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

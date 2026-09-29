@@ -94,6 +94,7 @@ async function loadDashboard(user) {
 }
 async function sendMessage(content) {
   if (sending || !content.trim()) return;
+  if (["/domains", "show domains"].includes(content.trim().toLowerCase())) { await openDomains(); return; }
   if (["/files", "show files", "show photos", "upload a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
   if (["/security", "/passkeys"].includes(content.trim().toLowerCase())) { await openSecurity(); return; }
   sending = true;
@@ -311,3 +312,22 @@ async function start() {
   }
 }
 start();
+
+async function openDomains() {
+ try {
+  const [{projects},{domains}]=await Promise.all([api('/projects'),api('/domains')]);
+  const select=$('#domain-project');select.replaceChildren();
+  for(const project of projects){const option=document.createElement('option');option.value=project.id;option.textContent=project.name;select.append(option);}
+  $('#domain-add').disabled=!projects.length;$('#domains-status').textContent=projects.length?'':'Create a project in chat first.';
+  const list=$('#domains-list');list.replaceChildren();
+  for(const domain of domains){
+   const row=text('article','', 'panel');row.append(text('h3',domain.hostname),text('p',domain.status.replaceAll('_',' ')+' · Not connected'));
+   row.append(text('p','TXT record name: '+domain.record.name),text('p','TXT record value: '+domain.record.value),text('p','Proof expires: '+domain.expiresAt));
+   const check=text('button',domain.status==='expired'?'Renew ownership proof':'Check DNS proof');check.type='button';check.onclick=()=>{$('#domains-dialog').close();sendMessage(domain.status==='expired'?`/domain ${domain.hostname} ${domain.projectId}`:`/verify-domain ${domain.id}`);};row.append(check);list.append(row);
+  }
+  if(!domains.length)list.append(text('p','No domains added yet.'));
+  $('#domains-dialog').showModal();
+ }catch(error){showMessage(error.message);}
+}
+$('#domains-open').onclick=openDomains;$('#domains-close').onclick=()=>$('#domains-dialog').close();
+$('#domain-form').onsubmit=event=>{event.preventDefault();const name=$('#domain-hostname').value.trim(), project=$('#domain-project').value;if(!project)return;$('#domains-dialog').close();sendMessage(`/domain ${name} ${project}`);};
