@@ -36,7 +36,8 @@
     "test:domain-hosting": "node tests/domain-hosting.mjs",
     "test:domain-recovery": "node tests/domain-recovery.mjs",
     "test:plan-periods": "node tests/plan-periods.mjs",
-    "test:photo-removal": "node tests/photo-removal.mjs"
+    "test:photo-removal": "node tests/photo-removal.mjs",
+    "test:cloudflare-connection": "node tests/cloudflare-connection.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

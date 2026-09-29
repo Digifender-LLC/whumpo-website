@@ -556,7 +556,7 @@
   }
   async function sendMessage(content) {
     if (sending || !content.trim()) return;
-    if (["/connections", "show connections", "connect github", "disconnect github", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) {
+    if (["/connections", "show connections", "connect github", "disconnect github", "connect cloudflare", "disconnect cloudflare", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) {
       await openConnections();
       return;
     }
@@ -981,11 +981,11 @@
       authConfig = await api("/config");
       const { user } = await api("/me");
       await loadDashboard(user);
-      if (callbackParams.get("connection") === "github") {
+      if (["github", "cloudflare"].includes(callbackParams.get("connection"))) {
         const failed = callbackParams.has("connection_error");
         history.replaceState(null, "", location.pathname);
         await openConnections();
-        if (failed) $("#connections-status").textContent = "GitHub authorization was cancelled, expired or could not be completed. You can start again.";
+        if (failed) $("#connections-status").textContent = "Provider authorization was cancelled, expired or could not be completed. Refresh the connection status before starting again.";
       }
     } catch (error) {
       showAuth();
@@ -1082,9 +1082,24 @@
     $("#domains-dialog").close();
     sendMessage(`/domain ${name} ${project}`);
   };
+  var cloudflarePage = 1;
+  async function loadCloudflareZones() {
+    const data = await api("/connections/cloudflare/zones?page=" + cloudflarePage);
+    const list = $("#cloudflare-zones");
+    for (const zone of data.zones) list.append(text("p", `${zone.name} \xB7 ${zone.status === "active" ? "Active zone" : "Zone not active"}`));
+    if (!data.zones.length && cloudflarePage === 1) list.append(text("p", "No authorized zones found."));
+    $("#cloudflare-more").hidden = !data.hasMore || cloudflarePage >= 100;
+  }
   async function openConnections() {
     try {
-      const { github } = await api("/connections");
+      const { github, cloudflare } = await api("/connections");
+      $("#cloudflare-status").textContent = !cloudflare.enabled ? "Cloudflare connection is awaiting platform configuration." : cloudflare.connected ? `Authorized until ${cloudflare.expiresAt}.` : "Not connected. Sign in recently before connecting.";
+      if (cloudflare.revocationPending) $("#cloudflare-status").textContent += " Local access is disabled; provider revocation is pending. You can also revoke this application in Cloudflare settings.";
+      $("#cloudflare-connect").disabled = !cloudflare.enabled || cloudflare.connected || cloudflare.revocationPending;
+      $("#cloudflare-disconnect").hidden = !cloudflare.connected && !cloudflare.revocationPending;
+      $("#cloudflare-zones").replaceChildren();
+      $("#cloudflare-more").hidden = true;
+      cloudflarePage = 1;
       $("#github-status").textContent = !github.enabled ? "GitHub connection is awaiting platform configuration." : github.connected ? `Authorized as ${github.login} until ${github.expiresAt}.` : "Not connected. Sign in recently before connecting.";
       if (github.revocationPending) $("#github-status").textContent += " Local access is disabled for disconnected tokens; provider revocation is pending. You can also revoke access in GitHub settings.";
       $("#github-connect").disabled = !github.enabled;
@@ -1102,6 +1117,13 @@
       list.replaceChildren();
       $("#connections-status").textContent = "";
       $("#connections-dialog").showModal();
+      if (cloudflare.connected) {
+        try {
+          await loadCloudflareZones();
+        } catch (error) {
+          $("#cloudflare-zones").append(text("p", error.message));
+        }
+      }
       await renderBackups();
       if (github.connected) {
         const data = await api("/connections/github/installations");
@@ -1245,6 +1267,43 @@
       backupError(error);
     } finally {
       updateBackupButton();
+    }
+  };
+  $("#cloudflare-connect").onclick = async () => {
+    const button = $("#cloudflare-connect");
+    button.disabled = true;
+    try {
+      const result = await api("/connections/cloudflare/start", { method: "POST", body: "{}" }), url = new URL(result.url);
+      if (url.origin !== "https://dash.cloudflare.com" || url.pathname !== "/oauth2/auth") throw Error("Unexpected authorization destination");
+      location.assign(url.href);
+    } catch (error) {
+      $("#connections-status").textContent = error.message;
+      button.disabled = false;
+    }
+  };
+  $("#cloudflare-disconnect").onclick = async () => {
+    const button = $("#cloudflare-disconnect");
+    button.disabled = true;
+    try {
+      await api("/connections/cloudflare/disconnect", { method: "POST", body: "{}" });
+      await openConnections();
+    } catch (error) {
+      $("#connections-status").textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  };
+  $("#cloudflare-more").onclick = async () => {
+    const button = $("#cloudflare-more");
+    button.disabled = true;
+    cloudflarePage++;
+    try {
+      await loadCloudflareZones();
+    } catch (error) {
+      cloudflarePage--;
+      $("#connections-status").textContent = error.message;
+    } finally {
+      button.disabled = false;
     }
   };
 })();

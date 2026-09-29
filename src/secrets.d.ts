@@ -1,5 +1,7 @@
 // Wrangler generates resource binding types; secret values are set separately.
 interface Env {
+  CLOUDFLARE_CLIENT_ID?: string;
+  CLOUDFLARE_CLIENT_SECRET?: string;
   CLOUDFLARE_DOMAINS_TOKEN?: string;
   DOMAIN_HOSTING_READY?: string;
   GITHUB_CLIENT_ID?: string;

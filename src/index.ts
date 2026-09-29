@@ -1,3 +1,4 @@
+import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
 import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubInstallations} from './github-connection';
@@ -239,7 +240,19 @@ async function handle(request: Request, env: Env): Promise<Response> {
     await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, created_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, created_at = excluded.created_at").bind(user.id, await hashToken(recoveryCode), new Date().toISOString()).run();
     return json({ recoveryCode });
   }
-  if (method === "GET" && pathname === "/api/connections") return json(await connectionStatus(env.DB,user.id,githubConfig(env)));
+  if (method === "GET" && pathname === "/api/connections") return json({...await connectionStatus(env.DB,user.id,githubConfig(env)),cloudflare:await cloudflareStatus(env.DB,user.id,cloudflareConfig(env))});
+  if(method==='POST'&&pathname==='/api/connections/cloudflare/start'){
+    if(!(await recentSession(request,env)))return error(401,'Sign in again before connecting Cloudflare.');
+    return json(await startCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),cloudflareConfig(env)));
+  }
+  if(method==='GET'&&pathname==='/api/connections/cloudflare/callback'){
+    const params=new URL(request.url).searchParams;let destination='/workspace/?connection=cloudflare';
+    try{if(params.has('error')){await cancelCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'');throw new ConnectionError(400,'Cloudflare authorization cancelled.');}await finishCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'',params.get('code')??'',cloudflareConfig(env));}
+    catch(cause){if(!(cause instanceof ConnectionError))throw cause;destination+='&connection_error=authorization';}
+    return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
+  }
+  if(method==='POST'&&pathname==='/api/connections/cloudflare/disconnect')return json(await disconnectCloudflare(env.DB,user.id,cloudflareConfig(env)));
+  if(method==='GET'&&pathname==='/api/connections/cloudflare/zones')return json(await cloudflareZones(env.DB,user.id,cloudflareConfig(env),Number(new URL(request.url).searchParams.get('page')??1)));
   if (method === "POST" && pathname === "/api/connections/github/start") {
     if(!(await recentSession(request,env)))return error(401,'Sign in again before connecting GitHub.');
     return json(await startGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),githubConfig(env)));
@@ -315,7 +328,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
     if(_event.cron==='47 * * * *'){await maintainHosting(env.DB,hostingConfig(env));return;}
-    const results=await Promise.allSettled([cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env))]);
+    const results=await Promise.allSettled([cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env)),cleanupCloudflare(env.DB,cloudflareConfig(env))]);
     if(results.some(result=>result.status==='rejected'))throw Error('Scheduled maintenance failed');
   },
   async fetch(request: Request, env: Env): Promise<Response> {

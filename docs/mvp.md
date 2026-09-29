@@ -188,3 +188,8 @@ An internal fulfillment boundary now grants a paid tier for one UTC month with u
 ## Reviewed photo removal — September 29, 2026
 
 The photo panel and `/photos`, `/delete-photo` and `/confirm-photo-delete` commands support owner-scoped, expiring reviews for removing unused photos. Confirmation atomically records the chat receipt, deletes metadata and queues storage cleanup. Original upload IDs cannot resurrect removed photos. Saved-version references block removal, including a reference added after review. Pending physical deletions count toward platform capacity. Saved-version deletion, customer account deletion and full long-lived retention controls remain unfinished. See [photo lifecycle](photos.md).
+
+
+## Customer Cloudflare OAuth foundation — September 29, 2026
+
+The optional Connected accounts panel now includes a Cloudflare Authorization Code flow with session-bound S256 PKCE, encrypted expiring credentials, cancellation/disconnect fencing, leased provider revocation and authorized-zone discovery. Chat can open the same controls. It stays disabled until a registered OAuth client and vault key are installed; the existing Wrangler login cannot manage OAuth clients (403). No live customer consent, DNS mutation or domain purchase has been performed. Reviewed DNS changes and their live acceptance remain unfinished. See [Cloudflare authorization](integrations/cloudflare-connection.md).
