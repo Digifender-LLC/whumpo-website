@@ -73,7 +73,7 @@ Navigation release: platform `79433041-baee-4ae7-b90e-f14b2dd56ede`, verified li
 
 ## Bounded inspection continuation (0059)
 
-One original request may make at most two sequential model calls: an allowlisted workspace inspection, then a final reply/action. This is not a general durable automation runner; backend/CMS tool chains, evaluators and subagents remain separate unfinished work. Both calls use the same configured Muse route during testing.
+One original request may make at most two sequential model calls: an allowlisted workspace inspection, then a final reply/action. This is not a general durable automation runner; general backend/CMS tool chains, evaluators and subagents remain separate unfinished work. Both calls use the same configured Muse route during testing.
 
 Before dispatch, the usage ledger reserves the conservative combined input/output bound when available units permit it. Otherwise it reserves a single call. Settlement sums reported input/output tokens and rounds once per completed user operation. The orchestrator inference row is the turn's aggregate shadow-cost receipt; ACK remains separate. The private `agent_inspections` record preserves the first call's token counts and bounded server lookup, rather than treating the aggregate as proof of one provider call. Future routing across different models/rates requires per-call settlement before activation.
 
@@ -84,3 +84,14 @@ The first lookup receipt is committed before calling the provider again. Lost da
 `test:agent-inspection` verifies read-then-draft, aggregate charging, exact replay, a maximum of two calls, interrupted follow-up, lost receipt acknowledgment, rejected foreign mutation, excessive token reports and a low-balance single-call fallback. The live synthetic probe `RUN_LIVE_MUSE=1 node tests/agent-inspection-live.mjs` uses only a temporary local database and the operator's ignored key; it requires two real Muse calls, a private draft and zero publications.
 
 Release evidence (29 September 2026): migration 0059 applied remotely and platform version `e87be46e-1d6b-4ba8-a9b7-5d89b15a1442` verified active. The live Muse probe completed exactly two calls, reported 7,938 input tokens and 2,124 output tokens, created the requested synthetic private draft, and published nothing. Its database was temporary/local and removed afterward. Existing model-cost and workspace-action regression suites passed alongside the new continuation suite; TypeScript and build checks passed.
+
+
+### Inspect backend source before editing
+
+The bounded continuation also recognizes exactly three backend reads: `list(projectId)`, `inspect(versionId)` and `result(receiptId)`. Each requires the exact allowed fields and a valid ID. Existing backend functions recheck ownership. Source and saved output are untrusted context, not executable instructions. Creating code, running tests, reading/exporting private state, restoring snapshots and preparing/applying reviews are not lookup steps and cannot trigger an automatic extra call.
+
+The final model step can use the existing validated `backend.create` action to save a new immutable private draft. It cannot replace the original source or publish it. A saved code draft is still untested until a separate execution is requested. The same two-call ceiling, aggregate budget reservation, persisted lookup receipt and uncertain-outcome handling apply.
+
+Automated acceptance seeds an original function, inspects it, creates a changed private version, and verifies the original source remains intact with no test runs or publication. `RUN_LIVE_MUSE=1 LIVE_INSPECTION_KIND=backend node tests/agent-inspection-live.mjs` uses a synthetic local account and a local runtime at `http://localhost:8794`; after the agent completes, the harness runs the generated source in the existing isolated QuickJS runtime against three non-sensitive inputs to verify the requested arithmetic change and preservation of unrelated output fields. This probe publishes nothing and changes no customer data.
+
+Backend continuation release: platform `6510fe26-08b9-4bba-bbe0-1b68e000d0ef` verified active. The live Muse backend probe completed two model calls (8,423 input tokens, 1,833 output tokens). Three subsequent local QuickJS executions confirmed the arithmetic change and unchanged label/nested metadata. The agent itself executed no code and published nothing; the test database was temporary and removed afterward. The continuation regression suite, malformed-operation check, TypeScript check and build passed.
