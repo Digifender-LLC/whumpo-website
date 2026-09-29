@@ -69,7 +69,8 @@
     "test:cms-deploy": "node tests/cms-deploy.mjs",
     "test:cms-release": "node tests/cms-release.mjs",
     "cms:snapshot-db": "node tools/snapshot-cms-database.mjs",
-    "test:cms-database-snapshot": "node tests/cms-database-snapshot.mjs"
+    "test:cms-database-snapshot": "node tests/cms-database-snapshot.mjs",
+    "test:cms-media-snapshot": "node tests/cms-media-snapshot.mjs && node tests/cms-media-local.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
