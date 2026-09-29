@@ -1,3 +1,4 @@
+import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState} from './backend-state';
 import {BackendError,listBackends,saveBackend,testBackend} from './backend-versions';
 import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
@@ -184,6 +185,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  const stateRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backend-state$/);
+  if(stateRoute){
+    if(method==='GET')return json(await readBackendState(env.DB,user.id,stateRoute[1]));
+    if(method==='POST'){
+      const data=await body(request);
+      if(typeof data?.id!=='string'||typeof data.versionId!=='string'||!('input' in data))return error(400,'Provide a review ID, backend version ID and JSON input');
+      return json(await prepareBackendState(env.DB,env.BACKEND_RUNTIME,user.id,stateRoute[1],data.versionId,data.id,data.input));
+    }
+  }
+  const stateReviewRoute=pathname.match(/^\/api\/backend-state-reviews\/([0-9a-f-]{36})(\/confirm)?$/);
+  if(stateReviewRoute){
+    if(method==='GET'&&!stateReviewRoute[2])return json(await readBackendReview(env.DB,user.id,stateReviewRoute[1]));
+    if(method==='POST'&&stateReviewRoute[2])return json(await confirmBackendState(env.DB,user.id,stateReviewRoute[1]));
+  }
   const backendRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backends(?:\/([0-9a-f-]{36})\/test)?$/);
   if(backendRoute){
     if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1])});

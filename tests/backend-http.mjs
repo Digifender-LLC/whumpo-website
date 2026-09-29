@@ -17,3 +17,17 @@ assert.equal((await post(path+'/'+version+'/test',{id:crypto.randomUUID(),input:
 const hostile=crypto.randomUUID();await post(path,{id:hostile,source:'export default ()=>{while(true){}}'});const bad=await (await post(path+'/'+hostile+'/test',{id:crypto.randomUUID(),input:null})).json();assert.deepEqual(bad.result,{ok:false,error:'work_limit'});
 const recovery=await (await post(path+'/'+version+'/test',{id:crypto.randomUUID(),input:{values:[1,2]}})).json();assert.deepEqual(recovery.result,{ok:true,value:{total:3}});
 console.log('HTTP backend checks passed with actual bound runtime: authentication, ownership, CSRF, immutable saves, execution, replay, conflict and post-exhaustion recovery.');
+const statePath='/api/projects/'+pid+'/backend-state',sv=crypto.randomUUID(),sr=crypto.randomUUID();
+assert.equal((await post(path,{id:sv,source:'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:"updated"})'})).status,201);
+assert.equal((await fetch(base+statePath)).status,401);
+assert.equal((await post(statePath,{id:sr,versionId:sv,input:{add:5}},other)).status,404);
+const reviewed=await post(statePath,{id:sr,versionId:sv,input:{add:5}});assert.equal(reviewed.status,200);assert.equal((await reviewed.json()).status,'ready');
+const readState=async()=> (await fetch(base+statePath,{headers:{cookie}})).json();assert.equal((await readState()).revision,0);
+const confirm='/api/backend-state-reviews/'+sr+'/confirm';
+assert.equal((await post(confirm,{},other)).status,404);
+assert.equal((await post(confirm,{},cookie,'https://evil.example')).status,403);
+assert.equal((await post(confirm,{})).status,200);assert.deepEqual((await readState()).state,{count:5});
+assert.equal((await post(confirm,{})).status,200);assert.equal((await readState()).revision,1);
+assert.equal((await fetch(base+'/api/backend-state-reviews/'+sr,{headers:{cookie:other}})).status,404);
+assert.equal((await (await post(statePath,{id:sr,versionId:sv,input:{add:5}})).json()).status,'applied');assert.equal((await readState()).revision,1);
+console.log('HTTP state checks passed with actual bound runtime: review leaves state unchanged, owner-only same-origin confirmation, persistent JSON and replay-safe revision.');

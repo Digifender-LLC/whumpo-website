@@ -302,3 +302,9 @@ Migration `0033_backend_versions.sql` and the BACKEND_RUNTIME service binding ar
 ## Backend chat generation and testing — September 29, 2026
 
 Main Worker `42201bb3-a257-427d-aec3-9ce6f4dcb1dc` exposes the existing private backend draft/test capability through guided chat and strict model actions. Guided source inspection and result retrieval are owned, tests are replay-safe, and generation records immutable drafts within the AI result transaction. No public backend publication or application data access was enabled. New chat suite, site-agent regression, first-AI-journey regression and TypeScript passed. One live Muse generation with disposable local D1 used 7 units and passed two actual workerd examples; live production health returned 200.
+
+## Reviewed backend project data — September 29, 2026
+
+Migration 0034 is applied remotely. Main Worker `d5832180-e364-4019-b954-5da94c72a421` serves owned bounded JSON state, exact transition reviews and user-only atomic confirmation. Private runtime redeployed as `e1881197-26e3-4c01-8aba-b1b87e76f78f`; no additional services or plans were added. `/api/health` returned 200 after deployment.
+
+TypeScript, database state tests (concurrency/expiry/ownership/replay/lost acknowledgments), guided chat integration and local multi-Worker HTTP tests with the real QuickJS runtime passed. The HTTP test proves preparation leaves data unchanged, foreign-owner and cross-origin confirmation fail, and accepted/retried confirmation advances revision exactly once. These are local authenticated fixtures, not a production-account data migration exercise. No public backend endpoint was introduced. Dedicated data export/restoration, retention and customer-ready EmDash provisioning remain unfinished.

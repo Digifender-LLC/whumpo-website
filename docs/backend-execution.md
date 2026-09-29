@@ -59,7 +59,7 @@ An invocation is reserved before service dispatch. A retry with the same ID and 
 
 ## Chat integration
 
-The model can now propose a `backend` action to create a private version, list versions for an owned project, inspect a version, run an explicitly requested synthetic example, or read a receipt. Creation uses the existing pending AI turn transaction, so a failed/closed response cannot leave a falsely acknowledged draft. Generated source is saved as a new immutable version; it is not executed on save. Action prose is replaced by a server receipt. Public backend publication and durable data are still unavailable. EmDash CMS requests must not be substituted with QuickJS functions.
+The model can now propose a `backend` action to create a private version, list versions for an owned project, inspect a version, run an explicitly requested synthetic example, or read a receipt. Creation uses the existing pending AI turn transaction, so a failed/closed response cannot leave a falsely acknowledged draft. Generated source is saved as a new immutable version; it is not executed on save. Action prose is replaced by a server receipt. Public backend publication is still unavailable. Reviewed private JSON data is available as described below. EmDash CMS requests must not be substituted with QuickJS functions.
 
 Guided commands, available without AI units:
 
@@ -73,3 +73,22 @@ Chat input remains limited to 1,000 characters; the developer API allows larger 
 `test:backend-chat` verifies metered model drafts, server receipts, source/result ownership, guided access without AI charges, forbidden publication/extra fields, replay and concurrent dispatch-once behavior. `test:backend-chat-live` is an explicit opt-in provider test (`TOWNHELLO_LIVE_AI=1`); it reads the local OpenCode key without printing it and needs the private runtime running locally on port 8797. It creates disposable local D1 records, makes one live inference and runs two generated-function examples in workerd.
 
 Live acceptance: Muse Spark 1.3 Contributor generated the requested calculator draft through the Responses adapter; two guided workerd examples returned 28 and 22, replay did not redispatch, no AI holds remained, and generation used 7 AI units. D1 fixtures were disposable/local; this proves the live-model-to-runtime path but is not a production-account enrollment test. Main Worker version `42201bb3-a257-427d-aec3-9ce6f4dcb1dc` deployed, health returned 200.
+
+## Reviewed private project data — September 29, 2026
+
+Migration 0034 adds one bounded JSON document per owned project, initially `{}` at revision zero. A saved function can receive `{state,input}` and return exactly `{state,result}`. State, transition input and result are each capped at 4 KiB; the complete runtime input remains capped at 8 KiB. The isolated runtime still receives no database binding or other host capability.
+
+Preparing a transition reserves its review before invoking the existing dispatch-once execution gateway. The review retains the exact base revision, previous JSON, input, proposed JSON, result, backend version and ten-minute expiry. Preparation never applies the result. A separate authenticated user confirmation changes both the review status and project state in one SQLite trigger transaction. A stale base revision, changed data or expired review rejects confirmation. Repeat confirmation returns the original receipt without changing the current revision again. Invalid function output becomes a failed review. Pending/uncertain execution is not rerun automatically; the user can inspect its receipt. Preparing the same API review ID resumes only that exact stored snapshot/input and uses the same execution reservation.
+
+Chat commands:
+
+- `/backend-state PROJECT_ID`: current private data and revision.
+- `/review-backend-state VERSION_ID JSON`: prepare the function's proposed change.
+- `/backend-state-review REVIEW_ID`: read the exact review.
+- `/confirm-backend-state REVIEW_ID`: user confirmation of that review.
+
+The agent can read or prepare a review but cannot confirm it. Guided commands do not consume AI units; preparing a transition consumes the existing backend execution quota. Requested state/review reads are included in chat history, so subsequent AI requests can receive that data. These test documents must not contain secrets or sensitive visitor data. They are never shared between users or published as endpoints.
+
+HTTP: `GET /api/projects/:project/backend-state` reads state; `POST` with `{id,versionId,input}` prepares a review; `GET /api/backend-state-reviews/:id` reads it; `POST /api/backend-state-reviews/:id/confirm` confirms it. All require an owned authenticated session and writes require the existing same-origin boundary. Full review JSON is available here; chat input retains its 1,000-character cap. Reviews are immutable after preparation, except for the single ready-to-applied transition, and are bounded at 100/project and 1,000/platform. Historical snapshots remain retained in reviews; dedicated history/export/restoration and lifecycle retention are unfinished. These hard ceilings are initial storage guards, not the final retention policy.
+
+Validation: `test:backend-state` uses real local D1 to check ownership, exact immutable content, competing confirmations, expiry, replay, lost acknowledgments and invalid output. `test:backend-http` verifies the actual bound QuickJS runtime and authenticated HTTP confirmation. `test:backend-chat` covers generation and guided review/read/confirm. No public backend endpoint is enabled by this milestone.

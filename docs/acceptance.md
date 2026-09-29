@@ -52,3 +52,8 @@ The latest revised Word design is version 0.5. Its original sections preserve pr
 ## EmDash support requirement
 
 Added September 29, 2026 at the owner's request. EmDash is an explicit CMS workload in MVP scope, not interchangeable with the static component renderer or QuickJS backend function runtime. The pinned Cloudflare integration lives in `integrations/emdash`; see `docs/emdash.md` for verified capabilities, provider constraints and remaining owner/chat/provisioning/migration gates. Full support must include an owned isolated CMS, chat management with reviewed publication, theme customization, media, content backup/restore and WordPress content import. A successful build alone does not complete this requirement.
+
+
+## Reviewed backend data milestone
+
+September 29: owned bounded project JSON state, exact ten-minute data reviews, atomic revision guards and user-only confirmation are implemented. Generated functions operate on JSON snapshots without storage capabilities. Database concurrency/expiry/retry/isolation tests, local bound-runtime HTTP flow and guided chat flow passed. This is private application data support; public backend routing, application authentication, data history/export/restore UI and lifecycle retention remain incomplete. EmDash remains its own CMS integration and is not replaced by this document store.
