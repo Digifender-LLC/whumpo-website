@@ -16,6 +16,7 @@ export async function prepareCMSPublication(db:D1Database,user:string,project:st
  const base=await db.prepare("SELECT id FROM cms_publication_reviews WHERE project_id=? AND collection=? AND item_id=? AND status='published' AND withdrawn=0").bind(project,snap.collection,snap.item.id).first<{id:string}>();
  if(snap.item.status==='published'&&(!base||!snap.item.draftRevisionId||!snap.item.liveData))throw new CMSProjectError(409,'Read and stage changes to the current live article before preparing its replacement.');
  if(snap.item.status==='draft'&&base)throw new CMSProjectError(409,'Native CMS and public article state need reconciliation before publication.');
+ if(new TextEncoder().encode(JSON.stringify(snap)).length>16384)throw new CMSProjectError(409,'This article exceeds the current publication snapshot limit');
  const privateHTML=renderCMSDraft(snap),publicHTML=renderCMSDraft(snap,true),digest=await hashToken(publicHTML);
  try{await db.prepare('INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,replaces_publication_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,draft,user,project,snap.collection,snap.item.id,snap.revision,JSON.stringify(snap),privateHTML,publicHTML,digest,base?.id??null).run();}catch{}
  const row=await readCMSPublication(db,user,id);if(row.project_id!==project||row.draft_request_id!==draft)throw new CMSProjectError(409,'Review ID already used');return row;
