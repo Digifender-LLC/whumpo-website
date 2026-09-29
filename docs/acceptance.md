@@ -1,3 +1,17 @@
+# Controlled visitor applications — September 29, 2026
+
+Release `21227d1` is active on `tellumo-apps` (`9511d3eb-a750-45cf-b9d1-c7ddaf151843`) and `tellumo-platform` (`d9f619ab-6f88-4856-b9c0-93eaaeba57e4`). Migration 0057 is applied remotely. The controlled host uses `apps.digifender.com`; no customer page is published automatically. A remote read confirmed zero rows in `app_live_pages` after deployment.
+
+Implemented owner-reviewed page publication/withdrawal, a fixed passkey-first visitor UI, exact form/page checks, scoped private data/receipt routes, session revocation on page changes and public-session admission pinned to the page review. Public recovery now has the visitor save a derived replacement code before committing; exact retries and recovery after acknowledgment loss were verified.
+
+Passed `test:app-auth`, `test:app-data`, `test:app-pages-http` (real local workerd + QuickJS), type checking, build, deployment dry run and diff checks. Signed ES256 fixtures cover enrollment, two visitors, private data/receipts, exact retry, page/field rejection, login/logout, recovery and replacement passkeys. Unit/database checks cover competing publication reviews, unauthorized/AI confirmation rejection, page withdrawal between signature verification and session commit, rollback of that enrollment, and withdrawal during an in-flight state transition.
+
+Browser acceptance used a synthetic authenticated local fixture: sign-in presentation, saving/reading a note through real QuickJS, concurrent-edit rejection, receipt-based refresh/resubmission and 390px width without overflow. Saved preview: `.secrets/verification/visitor-app.png`. This does not prove physical-device passkey enrollment; that remains an explicit acceptance item. Export/deletion/retention, full application backup and richer interfaces remain MVP work.
+
+Live host checks confirmed exact visitor JS/CSS and restrictive CSP/private-no-store headers; raw index, owner-account routes, unpublished pages and their data endpoints return 404. The deployed platform JS matches source. Owner page-review reads require authentication and cross-origin confirmation/visitor authentication requests are rejected.
+
+The platform uploaded successfully, but Wrangler rotated its ambient OAuth token during deployment and the wrapper's final verification/lease release received 403. A fresh authenticated read independently verified both active versions. The wrapper now reloads a changed ambient OAuth token and retries a confirmed 403 once; explicit credentials, unchanged tokens and uncertain failures never retry. Dedicated tests verify those boundaries. The old lease was left untouched to expire at `2026-09-29T19:54:53.491Z`; its process exited and must not be treated as ongoing deployment work. No second upload was performed.
+
 # Owner visitor access controls — September 29, 2026
 
 Release `147da57` deployed to `tellumo-platform`, version `e2bda454-676e-447c-af86-f223fefbcb61`. Migration 0056 is now applied remotely. Owner access metadata, invitation creation/cancellation and visitor revocation are available from Dashboard → Visitor access and the `/visitor-access` chat shortcut. The visitor gateway remains unmounted; no public visitor enrollment/data endpoint was enabled.
