@@ -1,7 +1,7 @@
 import {DiffError,compareVersions,compareReview,diffPage} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
-import {listDNSActions,reviewTXT,confirmTXT} from './cloudflare-dns';
+import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
@@ -258,8 +258,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const data=await body(request);if(typeof data?.id!=='string'||typeof data.claimId!=='string'||typeof data.zoneId!=='string')return error(400,'Choose a claim and Cloudflare zone.');
     return json(await reviewTXT(env.DB,user.id,data.id,data.claimId,data.zoneId,cloudflareConfig(env)));
   }
+  if(method==='POST'&&pathname==='/api/cloudflare/dns/routing-review'){
+    const data=await body(request);if(!data||Object.keys(data).some(k=>!['id','connectionId','zoneId'].includes(k))||typeof data.id!=='string'||typeof data.connectionId!=='string'||typeof data.zoneId!=='string')return error(400,'Choose a hosting connection and Cloudflare zone.');
+    return json(await reviewCNAME(env.DB,user.id,data.id,data.connectionId,data.zoneId,cloudflareConfig(env),fetch,!!hostingConfig(env)));
+  }
   const dnsConfirmation=pathname.match(/^\/api\/cloudflare\/dns\/([0-9a-f-]{36})\/confirm$/);
-  if(method==='POST'&&dnsConfirmation)return json(await confirmTXT(env.DB,user.id,dnsConfirmation[1],cloudflareConfig(env)));
+  if(method==='POST'&&dnsConfirmation)return json(await confirmDNS(env.DB,user.id,dnsConfirmation[1],cloudflareConfig(env),fetch,!!hostingConfig(env)));
   if(method==='POST'&&pathname==='/api/connections/cloudflare/start'){
     if(!(await recentSession(request,env)))return error(401,'Sign in again before connecting Cloudflare.');
     return json(await startCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),cloudflareConfig(env)));
@@ -301,7 +305,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (method === "POST" && pathname === "/api/chat") {
     const data = await body(request);
     if (!data) return error(400, "A JSON message is required");
-    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{config:cloudflareConfig(env)});
+    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{config:cloudflareConfig(env),hostingReady:!!hostingConfig(env)});
     return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "POST" && pathname === "/api/auth/logout") {

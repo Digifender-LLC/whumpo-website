@@ -1,10 +1,10 @@
-# Reviewed Cloudflare DNS proofs
+# Reviewed Cloudflare DNS proofs and routing
 
 ## Implemented scope
 
 An authenticated customer with an active Cloudflare OAuth connection can choose an authorized zone in Domains, review an existing owned Whumpo domain claim, and explicitly confirm adding its TXT proof. Chat phrases such as “connect my domain” open the same Domains controls. No model action can confirm DNS changes. Panel actions and guided commands are free of AI usage; natural-language model requests use the normal AI allowance.
 
-This release creates **ownership TXT proofs only**. It never patches/deletes DNS records, changes nameservers, alters website-routing records, purchases domains, or marks a domain connected. CNAME routing, exact-record update/removal and long-lived proof renewal remain unfinished. Live OAuth consent and DNS mutation acceptance require the separately requested client setup.
+This release creates **ownership TXT proofs and reviewed DNS-only routing CNAMEs**. It never patches/deletes existing DNS records, changes nameservers, purchases domains, or marks a domain connected merely because DNS creation succeeded. Exact-record update/removal, apex routing and long-lived proof renewal remain unfinished. Live OAuth consent and DNS mutation acceptance require the separately requested client setup.
 
 ## Review and authority
 
@@ -64,12 +64,29 @@ Conversational deployment evidence: platform `d0259f65-0d0e-4b75-b3ed-45f109a1b5
 
 ## Natural-language review actions
 
-The AI action contract accepts only `dns/zones` (page 1–100), `dns/reviews`, and `dns/review` (owned claim ID and authorized zone ID). Zone discovery returns one bounded page and a next-page command; the model can use a returned zone ID on a subsequent turn. Unknown or ambiguous targets require discovery or clarification. The prompt includes only a local configured/connected/expiry snapshot, never customer provider credentials. No provider reads are performed merely to build AI context.
+The AI action contract accepts `dns/zones` (page 1–100), `dns/reviews`, `dns/review` (owned claim ID and authorized zone ID), and `dns/routingReview` (owned hosting connection ID and authorized zone ID). Zone discovery returns one bounded page and a next-page command; the model can use a returned zone ID on a subsequent turn. Unknown or ambiguous targets require discovery or clarification. The prompt includes only a local configured/connected/expiry snapshot, never customer provider credentials. No provider reads are performed merely to build AI context.
 
-The server rejects extra fields, invalid IDs/pages, arbitrary record content, confirmation, deletion, and result-check operations before invoking DNS controls. It derives the exact proof from the owned claim and substitutes the authoritative server receipt for model prose. A model cannot select TXT contents, change routing, mark ownership verified or confirm any review. A user confirms via the existing Domains button or `/confirm-dns REVIEW_ID`.
+The server rejects extra fields, invalid IDs/pages, arbitrary record content, confirmation, deletion, and result-check operations before invoking DNS controls. It derives the exact proof from the owned claim and substitutes the authoritative server receipt for model prose. A model cannot select record contents, apply routing, mark ownership verified or confirm any review. A user confirms via the existing Domains button or `/confirm-dns REVIEW_ID`.
 
 These natural-language requests use the usual AI allowance; deterministic DNS commands remain free. Provider/configuration errors are recorded as sanitized receipts for the completed model response. Invalid action shapes are rejected using the existing no-charge validation path. Reviews can be saved before the final AI transcript transaction: if the transcript is interrupted, `/dns` still exposes the owned review, and the AI message is never regenerated automatically. No DNS write occurs during this path.
 
 `test:dns-agent` exercises the complete AI pipeline using controlled model and provider responses, including discovery, exact reviews, forbidden actions/fields, tenant isolation, model-claim replacement, replay, disabled configuration, usage settlement and lost transcript acknowledgement. Real provider DNS-write acceptance still requires OAuth configuration.
 
 Natural-language deployment evidence: platform `2bbc3fa8-308a-408d-af52-4bae5273d09f`, public-site Worker `88024373-00cb-434a-94ee-26a0e159036a`. TypeScript, DNS-agent tests, existing domain-agent tests and billing/AI concurrency tests passed. On the live platform, Muse handled “Show my saved Cloudflare DNS reviews” through the authoritative empty-review receipt. Usage settled at 7 units, replay added no charge, no DNS actions were created and Cloudflare remained disabled. Signed-passkey login/replay/logout passed; the ephemeral account was removed. This validates live model discovery of stored reviews, not real Cloudflare authorization or DNS writes.
+
+
+## Website routing — migration 0027
+
+`POST /api/cloudflare/dns/routing-review` accepts exactly `id`, `connectionId` and `zoneId`. `/review-routing CONNECTION_ID ZONE_ID` and the AI `dns/routingReview` action prepare the same review. `/dns` also lists eligible owned hosting connection IDs. The Domains panel exposes a review button and a separate **Confirm website routing** button.
+
+The server derives the subdomain and fixed destination `hosting.digifender.com` from an owned, known-provider hosting connection in provisioning/active state. Platform hosting must be configured. The original hosting proof hash must still match the current unexpired claim. No browser/model field can select another destination, record type, proxy status, arbitrary text or provider endpoint.
+
+Review pins the active customer OAuth credential, exact zone, record inventory (including CNAME proxy status), hosting connection, ownership token and ten-minute expiry. Apex names are refused. An empty name can receive one CNAME; a single existing exact DNS-only CNAME is a no-op. Every other exact-name record set is refused, including A, AAAA, NS, TXT, other targets and proxied CNAMEs. Existing TTLs are preserved on a no-op. A new record uses automatic TTL and `proxied:false`. Creation can supersede wildcard DNS for that hostname, which is disclosed in the review.
+
+Confirmation rechecks configuration, connection, current proof, credential, zone and complete inventory. D1 checks ownership, proof token/expiry, credential and connection state again when claiming dispatch. It preserves the existing one-dispatch/uncertain-observation rules. Configuration and hosting disconnect block new dispatches; a previously uncertain action can still be observed read-only using current customer authorization. Neither an acknowledged record nor an observed marker grants deletion authority or a live hosting lease. The user must check hosting status; existing TXT, direct-CNAME, provider and TLS validation determine whether the site can serve.
+
+An external administrator can race the final read: Cloudflare DNS creation has no compare-and-swap inventory precondition. Whumpo only creates, never overwrites; conflicts result in an uncertain receipt requiring inspection. A disconnect after durable dispatch also cannot cancel an already in-flight create. Disconnecting hosting does not remove the CNAME; customers must remove or redirect it at their DNS provider. General DNS replacement/removal remains future work.
+
+`test:cloudflare-routing` uses disposable D1 and controlled providers to verify the fixed target, owner and configuration gates, apex/conflict refusal, unchanged record handling, stale inventory, proof/connection/credential races at dispatch, read-only uncertain recovery, chat replay with no AI usage, and AI review-only authority. Existing TXT and AI-DNS regression suites are also run. These tests do not establish real OAuth consent, DNS mutation acceptance, propagation, or TLS readiness.
+
+Routing deployment evidence: migration 0027 applied remotely; platform `58c05390-8055-4448-be24-e71e789e304b`, public-site Worker `31e1dd27-f7c7-4f9a-ab4c-8c148fe1f971`. TypeScript, build, deployment dry run, routing tests, existing TXT/chat tests and DNS-agent regression tests passed. A local synthetic browser fixture verified review and explicit confirmation receipts while hosting stayed unverified. Live signed-passkey acceptance verified routing configuration 503, extra-target 400, anonymous 401, cross-origin 403, the guided disabled receipt, no saved action, zero AI units, session replay rejection and logout. The ephemeral account was removed. No real customer DNS mutation occurred; real consent, DNS and TLS acceptance remain pending setup.

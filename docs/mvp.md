@@ -197,17 +197,17 @@ The optional Connected accounts panel now includes a Cloudflare Authorization Co
 
 ## Reviewed customer DNS proofs — September 29, 2026
 
-The Domains panel can review and explicitly confirm additive TXT proof creation using a customer's own authorized Cloudflare zone. Reviews pin ownership, proof, credential, inventory and expiry. Existing records are preserved, identical proofs need no write, and uncertain requests are observed without retrying POST. Customer OAuth setup and real DNS acceptance remain pending. Website-routing CNAMEs, record update/removal and purchases remain unfinished. See [DNS proof workflow](integrations/cloudflare-dns.md).
+The Domains panel can review and explicitly confirm additive TXT proof creation using a customer's own authorized Cloudflare zone. Reviews pin ownership, proof, credential, inventory and expiry. Existing records are preserved, identical proofs need no write, and uncertain requests are observed without retrying POST. Customer OAuth setup and real DNS acceptance remain pending. Website-routing CNAMEs were subsequently implemented (migration 0027); record update/removal and purchases remain unfinished. See [DNS proof workflow](integrations/cloudflare-dns.md).
 
 Deployment verification: migration 0023 and the TXT-review controls are deployed. Disposable provider tests, local browser review/confirmation, and live disabled-access/tenant/Origin checks passed. Customer OAuth setup and real DNS-write acceptance remain pending; see `integrations/cloudflare-dns.md`. Stripe remains disconnected at the owner’s request.
 
 ## DNS controls in the conversation — September 29, 2026
 
-Customers can list authorized zones and owned reviews, prepare an exact TXT proof review, explicitly confirm it, and inspect uncertain results using `/dns-zones`, `/dns`, `/review-dns`, `/confirm-dns` and `/check-dns`. The commands consume no AI units and preserve onboarding state. A committed chat turn is required before provider dispatch; stale messages, conflicting IDs and replays cannot dispatch twice. The model can explain these commands but cannot confirm DNS actions. Provider configuration and real DNS acceptance remain pending; general DNS routing and model-proposed reviews remain unfinished.
+Customers can list authorized zones and owned reviews, prepare an exact TXT proof review, explicitly confirm it, and inspect uncertain results using `/dns-zones`, `/dns`, `/review-dns`, `/confirm-dns` and `/check-dns`. The commands consume no AI units and preserve onboarding state. A committed chat turn is required before provider dispatch; stale messages, conflicting IDs and replays cannot dispatch twice. The model can explain these commands but cannot confirm DNS actions. Provider configuration and real DNS acceptance remain pending; subsequent milestones below add model-proposed reviews and fixed-target CNAME routing.
 
 ## Natural-language DNS reviews — September 29, 2026
 
-The agent can now discover authorized zones, inspect saved reviews and prepare an exact TXT-proof review from a natural-language request. Strict action validation excludes confirmation and all record mutations. Authoritative server receipts replace model claims; users confirm separately through existing chat/panel controls. Zone discovery is paginated, and the agent asks for ambiguous targets. Website routing, general record management and domain purchases remain unfinished; customer OAuth and real DNS acceptance remain pending.
+The agent can now discover authorized zones, inspect saved reviews and prepare an exact TXT-proof review from a natural-language request. Strict action validation excludes confirmation and all record mutations. Authoritative server receipts replace model claims; users confirm separately through existing chat/panel controls. Zone discovery is paginated, and the agent asks for ambiguous targets. Fixed-target website-routing reviews were subsequently added below. General record management and domain purchases remain unfinished; customer OAuth and real DNS acceptance remain pending.
 
 ## Reviewed saved-version removal — September 29, 2026
 
@@ -220,3 +220,8 @@ The first shared dynamic backend now supports reviewed contact-form activation f
 ## Private version comparisons
 
 Customers can inspect exact saved changes through `/diff`, natural-language comparison requests, private draft links and publication-review links. Text, positional sections and photo references are compared with a selected or live baseline; chat links retain their exact baseline across later publications. Foreign/project-mismatched versions and stale review pages are rejected. This implements the saved-version comparison requirement for the existing components, with no model use for guided reads. It does not compare arbitrary backend code or application database state. See `docs/version-comparisons.md`.
+
+
+### Reviewed website-routing CNAMEs (September 29)
+
+Implemented fixed-target DNS-only CNAME reviews through Domains, `/review-routing`, and the validated AI action. Explicit user confirmation remains required. Conflicting records are preserved, dispatch rechecks ownership/access/hosting state, and uncertain results are only observed. Migration 0027 extends the existing DNS review ledger. See [the DNS integration contract](integrations/cloudflare-dns.md#website-routing--migration-0027). Real customer OAuth and custom-hostname setup remain gated; apex routing, DNS replacement/removal and domain purchasing are not implemented. Stripe remains disconnected at the user's request.
