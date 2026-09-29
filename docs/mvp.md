@@ -9,7 +9,7 @@ The public homepage advertises the product. The signed-in default is a conversat
 - [x] Passkeys are the default signup/login method, with single-use browser-bound challenges, user verification, credential management, and recovery.
 - [ ] Conversational onboarding collects the customer's idea and preferences, resumes after interruption, and clearly identifies guided mode until a model is configured.
 - [x] Persistent chat is the default workspace; owner-scoped history and minimal service/usage stats survive reloads.
-- [ ] OpenAI-compatible server adapter integrated with chat, with OpenCode Go configuration and verified live provider test when credentials are supplied.
+- [x] OpenAI-compatible server adapter integrated with chat, with OpenCode Go configuration and a verified live Muse provider test.
 - [ ] Chat tools create projects, show status/activity/usage, propose edits, preview, publish, and restore versions. Server-side permissions and confirmation gates govern actions.
 - [ ] Working site generation, isolated previews, published sites, retained versions, rollback, and bounded uploads.
 - [ ] Plans and monthly quotas enforced atomically; credits cover overage only with explicit opt-in; retries cannot charge twice; failures release reservations.
@@ -35,9 +35,9 @@ Reserve the maximum bounded cost before a model operation; settle actual usage a
 
 ## Provider interface
 
-`src/ai.ts` supports server-configured OpenAI Chat Completions and Responses text transports. Endpoint, key, model, and protocol are operator configuration, never prompt-controlled. HTTPS only, redirects disabled, 30-second timeout, bounded response size, bounded output, and sanitized errors. The adapter requires usage accounting and rejects truncated/unsupported responses. Tool dispatch and billing integration remain pending.
+`src/ai.ts` supports server-configured OpenAI Chat Completions and Responses text transports. Endpoint, key, model, and protocol are operator configuration, never prompt-controlled. HTTPS only, redirects disabled, 60-second timeout, bounded response size, bounded output, and sanitized errors. The adapter requires usage accounting and rejects truncated/unsupported responses. Billing integration is implemented; tool dispatch remains pending.
 
-For later OpenCode Go testing use base URL `https://opencode.ai/zen/go/v1`, a Go API key stored as a Worker secret, and a model supported by the chosen protocol. Model availability varies; no subscription or paid call has been initiated. Models using Anthropic Messages are outside this adapter's compatibility surface.
+The deployed OpenCode Go test uses base URL `https://opencode.ai/zen/go/v1`, the supplied Go API key stored as `AI_API_KEY`, and `muse-spark-1.3-contributor` via Responses. This uses the existing subscription explicitly authorized by the user. No upgrade or automatic fallback is enabled. Models using Anthropic Messages are outside this adapter's compatibility surface.
 
 References checked September 29, 2026:
 - https://developers.openai.com/api/docs/guides/migrate-to-responses
@@ -53,7 +53,7 @@ The workspace now starts with persistent chat, compact project/live-site stats, 
 
 Migration 0003 adds owner-scoped workspace state and chat turns. Each request carries a UUID and expected revision. D1 batches atomically save the turn, advance onboarding, create a project, and append its audit event. Identical retries are idempotent; concurrent different turns return a conflict so the client can refresh. History displays the latest 100 turns; this test permits 2,000 turns per workspace.
 
-Verified locally: onboarding resumes from the saved step, commands do not discard a brief, simultaneous retries create one project, conflicting tabs cannot overwrite each other, and another account cannot read the conversation. Browser verification covered login, chat onboarding, and project creation. Passkeys and the AI tool loop remain pending.
+Verified locally: onboarding resumes from the saved step, commands do not discard a brief, simultaneous retries create one project, conflicting tabs cannot overwrite each other, and another account cannot read the conversation. Browser verification covered login, chat onboarding, and project creation. Passkeys have since been delivered; the AI tool loop remains pending.
 
 ## Passkey milestone
 
@@ -66,3 +66,17 @@ Production RP ID is `digifender.com`; development uses `localhost` at port 8787.
 Verification includes independently generated ES256 registration and signed authentication fixtures, rejected wrong origins and missing user verification, cookie binding, replay/counter rejection, recovery rotation, session revocation, and backup credential removal. A signed assertion also passed against the live Cloudflare Worker, followed by authenticated chat and logout. Its temporary account was deleted. Browser UI checks covered the default passkey button, signup fields, and security menu. Native device prompts and actual synced passkeys still need a user-device acceptance check; no user credential was created by the agent.
 
 References: https://simplewebauthn.dev/docs/packages/server and https://simplewebauthn.dev/docs/packages/browser (checked September 29, 2026).
+
+## Metered AI chat milestone
+
+Migrations 0005 and 0006 add billing accounts, monthly periods, reservations, immutable credit/usage ledgers and pending/completed/failed/uncertain AI turns. Explore's 25 monthly units are enforced with atomic quota-first reservations. Existing credits can cover the balance only after explicit opt-in. Paid tiers and purchases are still disabled, so the complete commercial checklist remains open.
+
+A UUID and expected chat revision identify each operation. Pending messages serialize a conversation. Dispatch is claimed once, and answers/token usage are saved before settlement. Reconciliation can finish persisted results without another provider call. Uncertain requests retain their reservation for review; confirmed rejected requests release it. Undispatched reservations expire after five minutes. An exhausted output budget yields no user charge. Provider reasoning tokens count as output usage; reasoning text is never presented as the answer.
+
+The provider boundary adapts Jarvis response validation and safe diagnostics; see [Jarvis reuse](jarvis-reuse.md). A provider call is bounded to 60 seconds; pending-turn recovery waits two minutes. The model cannot grant itself execution authority or claim that draft sites have been published.
+
+The usage dialog shows allowance, spending, holds, credit balance and recent ledger entries. Read-only commands and onboarding remain free. Credits do not permit exceeding other test limits. There is currently no automated provider receipt reconciliation for unknown outcomes; an operator must check them before settling or releasing holds.
+
+## Reusable components
+
+The first site should be assembled from approved generic components where possible, with AI reserved for missing features and private customization. Shared source must contain no customer data. The component provenance, tenant isolation, promotion review, versioning and cache rules are specified in [shared-components.md](shared-components.md). This adds a delivery requirement for the site assembler; the library is not yet implemented.

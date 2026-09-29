@@ -474,21 +474,33 @@
   var chatRevision = 0;
   var pendingMessage;
   var sending = false;
+  var chatPoll;
   function renderChat(data) {
     chatRevision = data.state.revision;
     const container = $("#chat-messages");
     container.replaceChildren();
-    function bubble(role, content) {
+    function bubble(role, content, mode = "guided") {
       const item = text("article", "", `chat-bubble ${role}`);
-      item.append(text("small", role === "user" ? "You" : "TellUmo \xB7 Guide"), text("p", content));
+      item.append(text("small", role === "user" ? "You" : mode === "ai" ? "TellUmo \xB7 AI" : "TellUmo \xB7 Guide"), text("p", content));
       container.append(item);
     }
     bubble("assistant", data.greeting);
     for (const turn of data.turns) {
       bubble("user", turn.user_text);
-      bubble("assistant", turn.assistant_text);
+      bubble("assistant", turn.assistant_text, turn.mode);
     }
     $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} \xB7 ${data.stats.live || 0} live`;
+    $("#agent-mode").textContent = data.mode === "ai" ? "Muse Spark 1.3 \xB7 AI connected" : "Guided mode \xB7 No AI charges";
+    $("#usage-stats").textContent = data.usage ? `${data.usage.available} units available \xB7 ${data.usage.reserved} held` : "";
+    $("#ai-note").textContent = data.mode === "ai" ? "Setup and commands are free. AI replies use build units. This Contributor model may use messages for training; avoid confidential information." : "Guided onboarding is available now. AI website creation is being built. Please keep passwords and API keys out of chat.";
+    clearTimeout(chatPoll);
+    if (data.turns.some((turn) => turn.status === "pending")) chatPoll = setTimeout(async () => {
+      try {
+        renderChat(await api("/chat"));
+      } catch (error) {
+        showMessage(error.message);
+      }
+    }, 2e3);
     container.scrollTop = container.scrollHeight;
   }
   async function loadDashboard(user) {
@@ -517,6 +529,7 @@
     }
     sending = true;
     $("#chat-form button").disabled = true;
+    $("#chat-form button").textContent = "Sending\u2026";
     document.querySelectorAll("[data-command]").forEach((button) => button.disabled = true);
     if (!pendingMessage || pendingMessage.content !== content) pendingMessage = { content, revision: chatRevision, id: crypto.randomUUID() };
     try {
@@ -536,6 +549,7 @@
     } finally {
       sending = false;
       $("#chat-form button").disabled = false;
+      $("#chat-form button").textContent = "Send \u2191";
       document.querySelectorAll("[data-command]").forEach((button) => button.disabled = false);
     }
   }
@@ -665,6 +679,35 @@
       list.append(row);
     }
   }
+  function renderBilling(data) {
+    $("#billing-summary").textContent = `${data.plan.name} \xB7 ${data.period}: ${data.quota.available} of ${data.quota.allowance} monthly units available, ${data.quota.spent} used, ${data.quota.reserved} held. ${data.credits.available} credits available; ${data.credits.reserved} held. Monthly units reset on the first day (UTC). Credits carry over.`;
+    $("#overage-enabled").checked = data.credits.overageEnabled;
+    const history2 = $("#billing-history");
+    history2.replaceChildren();
+    for (const entry of data.ledger.slice(0, 10)) history2.append(text("p", `${entry.event.replaceAll("_", " ")} \xB7 ${entry.quota_delta > 0 ? "+" : ""}${entry.quota_delta} monthly units \xB7 ${entry.credits_delta > 0 ? "+" : ""}${entry.credits_delta} credits`, "ledger-entry"));
+  }
+  $("#billing-open").onclick = async () => {
+    try {
+      renderBilling(await api("/billing"));
+      $("#billing-dialog").showModal();
+    } catch (error) {
+      showMessage(error.message);
+    }
+  };
+  $("#billing-close").onclick = () => $("#billing-dialog").close();
+  $("#overage-enabled").onchange = async (event) => {
+    const toggle = event.currentTarget;
+    toggle.disabled = true;
+    try {
+      renderBilling(await api("/billing/preferences", { method: "POST", body: JSON.stringify({ overageEnabled: toggle.checked }) }));
+      showMessage("Credit preference saved");
+    } catch (error) {
+      toggle.checked = !toggle.checked;
+      showMessage(error.message);
+    } finally {
+      toggle.disabled = false;
+    }
+  };
   async function openSecurity() {
     try {
       await loadPasskeys();

@@ -14,7 +14,9 @@
     "invite": "node tools/create-invite.mjs",
     "test:chat": "node tests/chat.mjs",
     "build": "node tools/build.mjs",
-    "test:passkeys": "node tests/passkeys.mjs"
+    "test:passkeys": "node tests/passkeys.mjs",
+    "test:billing": "node tests/billing.mjs",
+    "test:runtime-ai": "node tests/runtime-ai.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
