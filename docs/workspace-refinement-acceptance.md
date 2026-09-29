@@ -16,3 +16,15 @@ Verified using the local Worker and synthetic account in the browser:
 Deployed platform version: `4ffc2240-4202-45af-89de-89424465ef98`. The live workspace HTML, stylesheet and JavaScript were checked byte-for-byte against the local build. Existing unfinished visitor lifecycle work was not activated or migrated by this UI release.
 
 Email editing remains unavailable until verified email changes are supported. Billing remains a preview; no payment account was connected.
+
+## Mobile interaction design — September 29, 2026
+
+Phones now use a full-width workspace with a five-item bottom navigation bar: Chat, Dashboard, Your pages, Settings and Profile. Your pages opens a bottom sheet containing existing workflow pages or the agent-led empty-state invitation. Desktop retains its sidebar. Chat stays a separate view, and account email remains inside Profile.
+
+The composer follows the visible viewport, supports multiline Enter on phones and uses the explicit Send button. Fine-pointer desktop Enter retains send behavior. Navigation yields space while a focused editor has a substantially reduced viewport. Safe-area padding, 44–52px touch targets, 16px form text, independently scrollable content, bounded bottom-sheet dialogs and compact page spacing support phone use. Landing navigation, hero actions and sign-in have dedicated mobile layouts. Sign-up requests the flexible Turnstile layout.
+
+Browser verification: 390px workspace, 360px landing/settings/navigation and 320px sign-in; no horizontal document overflow on the inspected landing, settings or final sign-in views. Verified multiline Enter did not send, sheet cancellation retained a chat draft, navigation labels and active states rendered, dashboard customization opened as a sheet, and 52px bottom-nav touch targets. Simulated reduced-height editing kept the Send button at y=414–458 in a 480px viewport. A discovered sheet transform issue and 320px sign-in overflow were corrected. TypeScript, production build, chat-delivery regression and acknowledgment-timing tests passed.
+
+The tests use browser viewport emulation and synthetic local account data. Physical iOS/Android keyboards, autofill, safe-area hardware, native passkey prompts and human Turnstile remain device acceptance work; this is not a claim of native application installation or OS integration.
+
+Deployed platform version `c0fc3f0c-fafa-487c-98a3-cbdc398a77c2`. Live verification confirmed the viewport metadata, exact tested JavaScript/CSS assets and platform health.
