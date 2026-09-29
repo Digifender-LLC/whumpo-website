@@ -1,5 +1,6 @@
 packages:
   - .
+  - integrations/emdash
 allowBuilds:
   esbuild: true
   workerd: true

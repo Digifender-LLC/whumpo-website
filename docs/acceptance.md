@@ -48,3 +48,7 @@ A read-only Wrangler secret inventory in this audit returned only `AI_API_KEY`, 
 6. Audit all privileged operations and known-good release behavior; keep application-specific recovery and general disaster recovery distinct.
 
 The latest revised Word design is version 0.5. Its original sections preserve product intent; its implementation sections and this evidence map describe current reality. The full MVP is not complete.
+
+## EmDash support requirement
+
+Added September 29, 2026 at the owner's request. EmDash is an explicit CMS workload in MVP scope, not interchangeable with the static component renderer or QuickJS backend function runtime. The pinned Cloudflare integration lives in `integrations/emdash`; see `docs/emdash.md` for verified capabilities, provider constraints and remaining owner/chat/provisioning/migration gates. Full support must include an owned isolated CMS, chat management with reviewed publication, theme customization, media, content backup/restore and WordPress content import. A successful build alone does not complete this requirement.
