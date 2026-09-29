@@ -35,3 +35,15 @@ The 700 ms acknowledgment delay and minimum 1,000 ms visible interval reuse the 
 - Live HTTPS probes confirm platform health, protected owner routes and 404 for unpublished customer/visitor hosts. The retired domains no longer resolve from the verification host.
 
 A physical passkey enrollment and human Turnstile completion have not been performed in this migration. Existing password sign-in is retained. Paid subscriptions remain disabled; no Stripe account is configured. Muse Contributor remains the testing model.
+
+## Publishing desk follow-through — September 29, 2026
+
+The React workspace now includes `/workspace/cms`, linked from CMS dashboard controls and available through “open publishing desk” or `/publishing` in Chat. Owners can select an initialized EmDash project, create a private post/page, edit supported plain text, reload its current revision, open a private preview, and prepare publication in Chat. Existing saved publication reviews and edit recovery receipts remain accessible. Publication, withdrawal and staged-edit discard retain their separate review/confirmation steps.
+
+The content API uses the existing owner checks, revision fences and durable request receipts. An uncertain save retains its exact request ID and payload for retry. Rich or malformed content is refused by this plain-text editor rather than flattened. The editor is limited to a 100-character title and 2,400 UTF-8 bytes of body text; richer authoring, media and WordPress import remain future work. CMS provisioning still requires the existing operator workflow.
+
+Migration 0060 updates the active database admission triggers for private CMS origins and customer DNS targets to Whumpo. It preserves ownership, approval, domain-proof and credential constraints. Production inventory before migration contained zero CMS instances/deployments. Historical migration files remain unchanged.
+
+Verification: backend/frontend type checks, production build, CMS editor shape checks, navigation checks, complete CMS deployment/publication suite and Cloudflare routing suite passed. A synthetic local browser session using the real platform HTTP handler and a mock native CMS service verified saved multiline text readback and a publication review containing the edited title. This is not a live native EmDash acceptance test.
+
+Migration 0060 applied successfully in production. Platform version `3fbc6c8c-0850-4f85-93c5-66b316c49b26` serves the publishing desk. Post-deployment checks confirmed HTTP 200 health and the exact built frontend asset, HTTP 401 for anonymous content reads, HTTP 403 for foreign-origin writes, and all three active database triggers using Whumpo origins without retired-domain targets.

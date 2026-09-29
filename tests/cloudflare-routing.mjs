@@ -18,7 +18,7 @@ async function account(apex=false){
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Routing fixture','Testing','draft',?,?)").bind(project,user,now(),now()).run();
  await db.prepare('INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at) VALUES(?,?,?,?,?,?)').bind(claim,project,hostname,proof,new Date(Date.now()+86400000).toISOString(),now()).run();
  await db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,?,'active')").bind(tokenId,user,await seal(config.key,`tellumo:cloudflare:token:${user}:${tokenId}`,JSON.stringify({access:'fixture-access'})),new Date(Date.now()+3600000).toISOString(),now()).run();
- await reviewHosting(db,user,connection,claim,{token:'synthetic',zone:'fbf8bf845a46cadbb793ffeb8b5716f5',target});
+ await reviewHosting(db,user,connection,claim,{token:'synthetic',zone:'8d46ee4e394514402479acf16579f7b5',target});
  await db.prepare("UPDATE domain_connections SET state='provisioning',provider_id=? WHERE id=?").bind(crypto.randomUUID(),connection).run();
  return {user,project,claim,tokenId,connection,proof,hostname};
 }
@@ -26,7 +26,7 @@ function provider(a){const p={records:[],posts:0,lose:false,async send(url,init)
  assert.equal(init.redirect,'manual');assert.equal(init.headers.authorization,'Bearer fixture-access');const u=new URL(url);assert.equal(u.origin,'https://api.cloudflare.com');
  if(u.pathname===`/client/v4/zones/${zone}`)return Response.json({success:true,result:{id:zone,name:'example.com',status:'active'}});
  assert.equal(u.pathname,`/client/v4/zones/${zone}/dns_records`);
- if(init.method==='POST'){p.posts++;const data=JSON.parse(init.body);assert.deepEqual(data,{type:'CNAME',name:a.hostname,content:target,ttl:1,proxied:false,comment:data.comment});assert.match(data.comment,/^TellUmo routing /);const created={...data,id:crypto.randomUUID().replaceAll('-','')};p.records.push(created);if(p.lose)throw Error('Lost response');return Response.json({success:true,result:created});}
+ if(init.method==='POST'){p.posts++;const data=JSON.parse(init.body);assert.deepEqual(data,{type:'CNAME',name:a.hostname,content:target,ttl:1,proxied:false,comment:data.comment});assert.match(data.comment,/^Whumpo routing /);const created={...data,id:crypto.randomUUID().replaceAll('-','')};p.records.push(created);if(p.lose)throw Error('Lost response');return Response.json({success:true,result:created});}
  assert.equal(u.searchParams.get('name.exact'),a.hostname);return Response.json({success:true,result:p.records,result_info:{total_count:p.records.length}});
  }};return p;}
 const review=(a,p,id=crypto.randomUUID(),database=db,ready=true)=>reviewCNAME(database,a.user,id,a.connection,zone,config,p.send,ready);

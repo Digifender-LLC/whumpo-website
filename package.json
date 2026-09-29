@@ -94,7 +94,8 @@
     "test:backend-diff": "node tests/backend-diff.mjs",
     "test:backend-checks": "node tests/backend-checks.mjs",
     "dev:frontend": "vite",
-    "test:chat-delivery": "node tests/chat-delivery.mjs"
+    "test:chat-delivery": "node tests/chat-delivery.mjs",
+    "test:cms-editor": "node tests/cms-editor-shape.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

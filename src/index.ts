@@ -13,7 +13,8 @@ import {cmsDiscardCommand} from './cms-discard';
 import {cmsUnpublishCommand} from './cms-unpublish';
 import {cmsPublicationCommand,cmsPublicationPage} from './cms-publication';
 import {cmsPreview} from './cms-preview';
-import {cmsContentAction} from './cms-content';
+import {cmsContentAction,listCMSDrafts,readCMSDraft} from './cms-content';
+import {listCMSPublications} from './cms-publication';
 import {readCMSStatus} from './cms-status';
 import {listCMS,readCMSReview,prepareCMS,confirmCMS,CMSProjectError} from './cms-projects';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState} from './backend-state';
@@ -244,6 +245,17 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(method==='GET'&&cmsPublicationRoute)return cmsPublicationPage(env.DB,user.id,cmsPublicationRoute[1]);
   const cmsPreviewRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content\/([0-9a-f-]{36})\/preview$/);
   if(method==='GET'&&cmsPreviewRoute)return cmsPreview(env.DB,user.id,cmsPreviewRoute[1],cmsPreviewRoute[2],env as unknown as Record<string,unknown>);
+  const cmsContentRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content(?:\/([0-9a-f-]{36}))?$/);
+  if(cmsContentRoute){
+    const projectId=cmsContentRoute[1],requestId=cmsContentRoute[2],cmsEnv=env as unknown as Record<string,unknown>;
+    if(method==='GET')return json(requestId?await readCMSDraft(env.DB,user.id,projectId,requestId,cmsEnv):{drafts:await listCMSDrafts(env.DB,user.id,projectId,cmsEnv),publications:await listCMSPublications(env.DB,user.id,projectId)});
+    if((method==='POST'&&!requestId)||(method==='PATCH'&&requestId)){
+      const data=await body(request),allowed=requestId?['id','title','text','revision']:['id','title','text','collection'];
+      if(!data||typeof data.id!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(data.id)||Object.keys(data).some(k=>!allowed.includes(k)))return error(400,'Provide a request ID and supported content fields');
+      return json(await cmsContentAction(env.DB,user.id,{operation:requestId?'editDraft':'draft',projectId,...(requestId?{requestId,revision:data.revision}:{collection:data.collection}),title:data.title,text:data.text},data.id,cmsEnv));
+    }
+    return error(405,'Method not allowed');
+  }
   const cmsStatusRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/status$/);
   if(method==='GET'&&cmsStatusRoute)return json(await readCMSStatus(env.DB,user.id,cmsStatusRoute[1],env as unknown as Record<string,unknown>));
   if(method==='GET'&&pathname==='/api/cms')return json({instances:await listCMS(env.DB,user.id)});

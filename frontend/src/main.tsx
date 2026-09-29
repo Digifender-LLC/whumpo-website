@@ -8,7 +8,7 @@ import {Workspace} from './workspace';
 import './styles.css';
 const rootRoute=createRootRoute({component:Outlet});
 const homeRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:Landing});
-const workspaceRoute=createRoute({getParentRoute:()=>rootRoute,path:'/workspace',validateSearch:(search:Record<string,unknown>):{signup?:boolean}=>({signup:search.signup===true||search.signup==='true'||search.signup==='1'}),component:Workspace});
+const workspaceRoute=createRoute({getParentRoute:()=>rootRoute,path:'/workspace',validateSearch:(search:Record<string,unknown>):{signup?:boolean;project?:string}=>({project:typeof search.project==='string'&&/^[0-9a-f-]{36}$/.test(search.project)?search.project:undefined,signup:search.signup===true||search.signup==='true'||search.signup==='1'}),component:Workspace});
 const workspaceView=createRoute({getParentRoute:()=>workspaceRoute,path:'$view',component:()=>null});
 const router=createRouter({routeTree:rootRoute.addChildren([homeRoute,workspaceRoute.addChildren([workspaceView])]),defaultNotFoundComponent:()=> <main className="page-pad"><h1 className="text-4xl font-bold">That page isn’t here.</h1><a href="/workspace" className="underline">Return to Whumpo</a></main>});
 declare module '@tanstack/react-router'{interface Register{router:typeof router}}
