@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';import {build} from 'esbuild';
+const bundle=await build({stdin:{contents:"export * from './src/cms-content-shape'; export {cmsRequestAllowed} from './src/cms-bridge';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const {cmsRichDraftBody:create,cmsRichEditBody:edit,validCMSDraft,validCMSEdit,cmsRequestAllowed}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const content=[{_type:'block',_key:'intro',style:'h2',markDefs:[],children:[{_type:'span',_key:'intro-text',text:'Keep this heading',marks:['strong']}]},{_type:'block',_key:'link-block',style:'normal',markDefs:[{_type:'link',_key:'url',href:'https://example.test/'}],children:[{_type:'span',_key:'link-text',text:'And this link',marks:['url','em']}]},{_type:'block',_key:'list',style:'normal',listItem:'number',level:1,markDefs:[],children:[{_type:'span',_key:'list-text',text:'A list item',marks:[]}]}];
+const draft=create('Formatted article',content),updated=edit('Revised title',content,'cmV2LTE=');
+assert.deepEqual(updated.data.content,content);assert.equal(Object.hasOwn(updated,'status'),false);assert.ok(validCMSDraft(JSON.stringify(draft)));assert.ok(validCMSEdit(JSON.stringify(updated)));
+assert.equal(cmsRequestAllowed('POST','/_emdash/api/content/posts',JSON.stringify(draft)),true);assert.equal(cmsRequestAllowed('PUT','/_emdash/api/content/posts/01ARZ3NDEKTSV4RRFFQ69G5FAV',JSON.stringify(updated)),true);
+for(const bad of [{...updated,status:'published'},{...updated,status:'draft'},{...updated,ownerId:'other'},{...updated,data:{...updated.data,privateSecret:'no'}},{...updated,_rev:''}])assert.equal(validCMSEdit(JSON.stringify(bad)),false);
+assert.equal(validCMSDraft(JSON.stringify({...draft,status:'published'})),false);
+for(const bad of [[],[{_type:'image',src:'https://example.test/a.png'}],content.map(b=>({...b,html:'<script>no</script>'})),[{...content[1],markDefs:[{_type:'link',_key:'url',href:'javascript:alert(1)'}]}]])assert.throws(()=>create('Title',bad));
+assert.throws(()=>edit('Title',content,'invalid revision'));
+const large=Array.from({length:12},(_,i)=>({_type:'block',_key:'block-'+i,style:'normal',markDefs:[],children:[{_type:'span',_key:'span-'+i,text:'x'.repeat(190),marks:['strong','em','underline']}]}));assert.throws(()=>create('Title',large),/4096 bytes/);
+console.log('CMS rich writes passed: exact structured-content round trip, staged edits without status changes, root-field allowlist, revision requirement, unsafe/unsupported content denial and byte bounds.');
