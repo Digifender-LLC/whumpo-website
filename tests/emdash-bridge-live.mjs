@@ -6,6 +6,12 @@ const config={projectId:'11111111-1111-4111-8111-111111111111',ownerId:'22222222
 const renderBuild=await build({entryPoints:['src/cms-preview.ts'],bundle:true,format:'esm',platform:'node',write:false});const {renderCMSDraft}=await import('data:text/javascript;base64,'+Buffer.from(renderBuild.outputFiles[0].text).toString('base64'));
 const base='http://localhost:8799',id=()=>crypto.randomUUID();
 async function call(path,body,requestId=id(),identity=config,verb){const request=await signCMSRequest(identity,path,requestId,body,Date.now(),verb);return fetch(base+path,{method:request.method,headers:request.headers,...(body===undefined?{}:{body:await request.text()})});}
+const capabilityPath='/_emdash/api/whumpo/capabilities';
+assert.equal((await fetch(base+capabilityPath)).status,403);
+assert.equal((await call(capabilityPath,undefined,id(),{...config,ownerId:id()})).status,403);
+assert.equal((await call(capabilityPath,{})).status,403);
+const capability=await call(capabilityPath);assert.equal(capability.status,200);assert.equal(capability.headers.get('cache-control'),'no-store');
+assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,structuredContent:{version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
 assert.equal((await fetch(base+'/_emdash/api/setup/status')).status,403);
 assert.equal((await call('/_emdash/api/setup/status',undefined,id(),{...config,ownerId:id()})).status,403);
 const before=await call('/_emdash/api/setup/status');assert.equal(before.status,200);const initial=await before.json();assert.equal(initial.data.needsSetup,true,JSON.stringify(initial));

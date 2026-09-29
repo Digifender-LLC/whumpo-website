@@ -99,6 +99,7 @@
     "test:traffic": "node tests/site-traffic.mjs",
     "test:cms-descriptions": "node tests/cms-content-description.mjs",
     "test:project-details": "node tests/project-details.mjs",
+    "test:cms-capabilities": "node tests/cms-capabilities.mjs",
     "test:cms-rich-writes": "node tests/cms-rich-writes.mjs",
     "test:cms-rich-text": "node tests/cms-rich-text.mjs",
     "test:project-brief-live": "node tests/project-brief-live.mjs"

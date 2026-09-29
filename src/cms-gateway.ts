@@ -1,3 +1,4 @@
+import {cmsCapabilities,cmsCapabilitiesPath} from './cms-capability-contract';
 import {cmsBridgeConfig,verifyCMSRequest,cmsRequestAllowed,CMSBridgeError} from './cms-bridge';
 const reply=(status:number,message:string)=>Response.json({error:message},{status,headers:{'cache-control':'no-store'}});
 // Reserved namespace in each isolated CMS database; never the platform account DB.
@@ -5,6 +6,7 @@ export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:
  try{
   const config=cmsBridgeConfig(env),verified=await verifyCMSRequest(request,config);
   if(!cmsRequestAllowed(request.method,verified.path,verified.body))return reply(403,'CMS operation not available');
+  if(verified.path===cmsCapabilitiesPath)return Response.json({success:true,data:cmsCapabilities},{headers:{'cache-control':'no-store'}});
   const headers=new Headers({'content-type':'application/json','origin':config.origin,'x-emdash-request':'1'});
   for(const name of ['x-townhello-cms-id','x-townhello-cms-expires','x-townhello-cms-signature'])headers.set(name,request.headers.get(name)!);
   const internal=new Request(request.url,{method:request.method,headers,...(request.method!=='GET'?{body:verified.body}:{})});

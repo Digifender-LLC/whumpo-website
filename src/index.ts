@@ -18,7 +18,7 @@ import {cmsPublicationCommand,cmsPublicationPage} from './cms-publication';
 import {cmsPreview} from './cms-preview';
 import {cmsContentAction,listCMSDrafts,readCMSDraft} from './cms-content';
 import {listCMSPublications} from './cms-publication';
-import {readCMSStatus} from './cms-status';
+import {readCMSCapabilities,readCMSStatus} from './cms-status';
 import {listCMS,readCMSReview,prepareCMS,confirmCMS,CMSProjectError} from './cms-projects';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState} from './backend-state';
 import {BackendError,listBackends,saveBackend,testBackend} from './backend-versions';
@@ -261,6 +261,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     }
     return error(405,'Method not allowed');
   }
+  const cmsCapabilitiesRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/capabilities$/);
+  if(method==='GET'&&cmsCapabilitiesRoute)return json(await readCMSCapabilities(env.DB,user.id,cmsCapabilitiesRoute[1],env as unknown as Record<string,unknown>));
   const cmsStatusRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/status$/);
   if(method==='GET'&&cmsStatusRoute)return json(await readCMSStatus(env.DB,user.id,cmsStatusRoute[1],env as unknown as Record<string,unknown>));
   if(method==='GET'&&pathname==='/api/cms')return json({instances:await listCMS(env.DB,user.id)});

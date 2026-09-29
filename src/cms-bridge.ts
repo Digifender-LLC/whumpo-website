@@ -1,3 +1,4 @@
+import {cmsCapabilitiesPath} from './cms-capability-contract';
 import {cmsItemId,validCMSDraft,validCMSEdit} from './cms-content-shape';
 // Private CMS request authentication. No browser cookie or model-provided identity is trusted.
 export type CMSBridgeConfig={projectId:string;ownerId:string;secret:string;origin:string};
@@ -40,7 +41,7 @@ export async function verifyCMSRequest(request:Request,config:CMSBridgeConfig,no
  return {id,path:url.pathname,body,requestHash:await digest(JSON.stringify([config.projectId,config.ownerId,config.origin,request.method,url.pathname,bodyHash]))};
 }
 export function cmsRequestAllowed(method:string,path:string,body:string){
- if(method==='GET'&&['/_emdash/api/setup/status','/_emdash/api/auth/me','/_emdash/api/schema/collections'].includes(path)&&body==='')return true;
+ if(method==='GET'&&[cmsCapabilitiesPath,'/_emdash/api/setup/status','/_emdash/api/auth/me','/_emdash/api/schema/collections'].includes(path)&&body==='')return true;
  const item=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)$/);
  if(method==='GET'&&item&&cmsItemId.test(item[2])&&body==='')return true;
  const publish=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)\/(?:publish|unpublish|discard-draft)$/);
