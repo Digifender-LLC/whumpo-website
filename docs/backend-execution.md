@@ -56,3 +56,20 @@ The database serializes admission: 25 versions/project, 1,000 versions/platform;
 An invocation is reserved before service dispatch. A retry with the same ID and request returns its saved result, or a pending/unknown receipt. It never executes again automatically. Lost reservation acknowledgments deliberately leave an unknown receipt without dispatch. Provider errors, non-JSON bodies, invalid envelopes and oversized results become a fixed unavailable result. There is a five-second client deadline. No cookies or provider credentials reach the service.
 
 `test:backend-versions` exercises real local D1, quota races, ownership, immutability, replay and lost acknowledgments. `test:backend-http` runs against local multi-Worker development and checks the HTTP auth/origin boundary and actual bound QuickJS execution, including recovery after a runaway function. Chat generation, inspection/test controls, durable application state, publication and rollback remain next integration gates.
+
+## Chat integration
+
+The model can now propose a `backend` action to create a private version, list versions for an owned project, inspect a version, run an explicitly requested synthetic example, or read a receipt. Creation uses the existing pending AI turn transaction, so a failed/closed response cannot leave a falsely acknowledged draft. Generated source is saved as a new immutable version; it is not executed on save. Action prose is replaced by a server receipt. Public backend publication and durable data are still unavailable. EmDash CMS requests must not be substituted with QuickJS functions.
+
+Guided commands, available without AI units:
+
+- `/backends PROJECT_ID`: list version IDs and hashes.
+- `/backend VERSION_ID`: inspect owned source, explicitly labeled as untrusted.
+- `/test-backend VERSION_ID JSON`: run a non-sensitive example (defaults to null when input is omitted).
+- `/backend-result RECEIPT_ID`: read a prior test result without dispatch.
+
+Chat input remains limited to 1,000 characters; the developer API allows larger bounded input. Displayed test output is truncated at 1,400 characters; the full result stays in the owned API receipt. Test outputs and inspected source become conversation history when requested here, and therefore can be used as AI context on subsequent requests. Do not use secrets or private visitor data as test inputs. AI generation/inspection requests use AI units; runtime test attempts use their separate bounded quota.
+
+`test:backend-chat` verifies metered model drafts, server receipts, source/result ownership, guided access without AI charges, forbidden publication/extra fields, replay and concurrent dispatch-once behavior. `test:backend-chat-live` is an explicit opt-in provider test (`TOWNHELLO_LIVE_AI=1`); it reads the local OpenCode key without printing it and needs the private runtime running locally on port 8797. It creates disposable local D1 records, makes one live inference and runs two generated-function examples in workerd.
+
+Live acceptance: Muse Spark 1.3 Contributor generated the requested calculator draft through the Responses adapter; two guided workerd examples returned 28 and 22, replay did not redispatch, no AI holds remained, and generation used 7 AI units. D1 fixtures were disposable/local; this proves the live-model-to-runtime path but is not a production-account enrollment test. Main Worker version `42201bb3-a257-427d-aec3-9ce6f4dcb1dc` deployed, health returned 200.

@@ -298,3 +298,7 @@ Added private `tellumo-runtime`, version `0cdb36f1-375d-49a8-bfa1-3d880220b960`,
 ## Owned backend draft/test gateway — September 29, 2026
 
 Migration `0033_backend_versions.sql` and the BACKEND_RUNTIME service binding are deployed. Workspace version `915fcccf-60d0-438b-b3b2-d0ab0db065c5` provides authenticated private version-save/list/test routes. TypeScript, D1 ownership/quota/replay suite and local HTTP tests with the actual bound runtime passed. Live health returned 200; unauthenticated backend listing returned 401. An authenticated production gateway execution was not performed in this rollout. Private runtime execution through a deployed service binding was verified in the preceding milestone. Full generated-app publication and data recovery remain incomplete.
+
+## Backend chat generation and testing — September 29, 2026
+
+Main Worker `42201bb3-a257-427d-aec3-9ce6f4dcb1dc` exposes the existing private backend draft/test capability through guided chat and strict model actions. Guided source inspection and result retrieval are owned, tests are replay-safe, and generation records immutable drafts within the AI result transaction. No public backend publication or application data access was enabled. New chat suite, site-agent regression, first-AI-journey regression and TypeScript passed. One live Muse generation with disposable local D1 used 7 units and passed two actual workerd examples; live production health returned 200.
