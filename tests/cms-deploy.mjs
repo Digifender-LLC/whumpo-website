@@ -102,6 +102,15 @@ try{
  const afterPub=(await readChat(db,a.user)).turns.find(t=>t.id===pubTurn);assert.equal(afterPub.cms_publication_confirmation_id,undefined);assert.equal(afterPub.cms_publication_url,cmsPublicURL(pubReview));
  await assert.rejects(cmsContentAction(db,a.user,{operation:'confirmPublication',projectId:a.project,requestId:pubTurn},id(),env),e=>e.status===400);
  current={item:structuredClone(publishReceipt.item),_rev:publishReceipt._rev};
+ const liveBeforeStage=structuredClone(current.item.data),stageId=id(),stageRevision=current._rev;
+ const stageFetch=p.service.fetch;p.service.fetch=async request=>{const v=await verifyCMSRequest(request,a.config);if(request.method==='PUT'&&v.path.endsWith('/'+nativeId)){const body=JSON.parse(v.body);assert.ok(cmsRequestAllowed(request.method,v.path,v.body));assert.equal(Object.hasOwn(body,'status'),false);assert.equal(body._rev,stageRevision);current={item:{...current.item,data:body.data,liveData:liveBeforeStage,draftRevisionId:'native-staged-fixture'},_rev:'c3RhZ2Vk'};return Response.json({success:true,data:current});}return stageFetch(request);};
+ const stagedEdit=await cmsContentAction(db,a.user,{...editAction,title:'Private replacement',text:'Staged body',revision:stageRevision},stageId,env);assert.equal(stagedEdit.status,'published');assert.equal(stagedEdit.staged,true);assert.equal(stagedEdit.publicationChanged,false);
+ assert.equal(await (await publicHost.fetch(publicRequest,{DB:db})).text(),pubReview.public_html);assert.ok(!(await (await publicHost.fetch(indexRequest,{DB:db})).text()).includes('Private replacement'));
+ assert.match(await (await cmsPreview(db,a.user,a.project,draftId,env)).text(),/Private replacement/);
+ const staleReplacement=await prepareCMSPublication(db,a.user,a.project,draftId,id(),env);assert.equal(staleReplacement.replaces_publication_id,pubTurn);
+ await assert.rejects(cmsContentAction(db,a.user,{...editAction,revision:stageRevision},id(),env),e=>e.status===409);
+ const historical=await cmsContentAction(db,a.user,{operation:'retryEdit',projectId:a.project,requestId:editId},id(),env);assert.equal(historical.revision,'cmV2LTI=');
+ assert.deepEqual((await readChat(db,a.user)).stats,{projects:1,live:1,cms_articles:1});
  const unpublishProposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE OFFLINE CLAIM',action:{kind:'cms',operation:'reviewUnpublish',projectId:a.project,requestId:pubTurn}}),{},{cmsContent:execute});assert.match(unpublishProposal.reply,/Review CMS unpublish/);assert.ok(!unpublishProposal.reply.includes('FAKE'));
  const competingOff=await prepareCMSUnpublish(db,a.user,pubTurn,id(),env),offTurn=id(),offOptions={cmsPublication:(turn,text)=>cmsUnpublishCommand(db,a.user,turn,text,env)??cmsPublicationCommand(db,a.user,turn,text,env)},offState=await readChat(db,a.user);
  assert.equal((await sendChat(db,a.user,{id:offTurn,revision:offState.state.revision,content:'/unpublish-cms '+pubTurn},undefined,offOptions)).status,200);assert.equal((await readChat(db,a.user)).turns.at(-1).cms_unpublish_confirmation_id,offTurn);
@@ -122,7 +131,33 @@ try{
  assert.deepEqual((await readChat(db,a.user)).stats,{projects:1,live:1,cms_articles:1});assert.equal((await publicHost.fetch(indexRequest,{DB:db})).status,200);
  const publicationHistory=await cmsContentAction(db,a.user,{operation:'listPublications',projectId:a.project},id(),env);assert.ok(publicationHistory.some(r=>r.id===pubTurn&&r.withdrawn===1));assert.ok(publicationHistory.some(r=>r.id===republishReview.id&&r.withdrawn===0&&r.status==='published'));
  await assert.rejects(cmsContentAction(db,id(),{operation:'listPublications',projectId:a.project},id(),env),e=>e.status===404);
- await db.batch(Array.from({length:88},()=>db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}')));
+ // A review of the old publication cannot replace its successor, even with matching native content.
+ current=structuredClone(publishReceipt);
+ const restoreCurrent=structuredClone(current);current={item:JSON.parse(staleReplacement.snapshot).item,_rev:staleReplacement.revision};await assert.rejects(confirmCMSPublication(db,a.user,staleReplacement.id,env),e=>e.status===409);current=restoreCurrent;
+ const activeBefore=await (await publicHost.fetch(publicRequest,{DB:db})).text();
+ current.item.liveData=structuredClone(current.item.data);current.item.data={...current.item.data,title:'Confirmed replacement'};current.item.draftRevisionId='second-staged-fixture';current._rev='cmVwbGFjZW1lbnQ=';
+ const replacementReview=await prepareCMSPublication(db,a.user,a.project,draftId,id(),env),competitor=await prepareCMSPublication(db,a.user,a.project,draftId,id(),env);
+ assert.equal(replacementReview.replaces_publication_id,republishReview.id);
+ await assert.rejects(db.prepare('UPDATE cms_publication_reviews SET replaces_publication_id=? WHERE id=?').bind(pubTurn,replacementReview.id).run(),/immutable/);
+ const competingWithdrawal=await prepareCMSUnpublish(db,a.user,republishReview.id,id(),env);
+ publishReceipt=null;lostPublish=true;
+ await assert.rejects(confirmCMSPublication(db,a.user,replacementReview.id,env),e=>e.status===503);
+ assert.equal(await (await publicHost.fetch(publicRequest,{DB:db})).text(),activeBefore);
+ await assert.rejects(confirmCMSPublication(db,a.user,competitor.id,env),e=>e.status===409);
+ await assert.rejects(confirmCMSUnpublish(db,a.user,competingWithdrawal.id,env),e=>e.status===409);
+ await db.prepare("CREATE TRIGGER fixture_swap_failure AFTER UPDATE OF status ON cms_publication_reviews WHEN NEW.status='published' BEGIN SELECT RAISE(ABORT,'fixture_failure'); END").run();
+ await assert.rejects(confirmCMSPublication(db,a.user,replacementReview.id,env),e=>e.status===503);assert.equal(await (await publicHost.fetch(publicRequest,{DB:db})).text(),activeBefore);assert.equal((await readCMSPublication(db,a.user,republishReview.id)).withdrawn,0);
+ await db.prepare('DROP TRIGGER fixture_swap_failure').run();
+ await confirmCMSPublication(db,a.user,replacementReview.id,env);
+ assert.equal(await (await publicHost.fetch(publicRequest,{DB:db})).text(),replacementReview.public_html);
+ assert.equal((await readCMSPublication(db,a.user,republishReview.id)).withdrawn,1);
+ assert.equal((await readCMSPublication(db,a.user,replacementReview.id)).withdrawn,0);
+ assert.match(await (await publicHost.fetch(indexRequest,{DB:db})).text(),/Confirmed replacement/);
+ assert.deepEqual((await readChat(db,a.user)).stats,{projects:1,live:1,cms_articles:1});
+ await confirmCMSPublication(db,a.user,republishReview.id,env);await confirmCMSUnpublish(db,a.user,offTurn,env);
+ assert.equal(await (await publicHost.fetch(publicRequest,{DB:db})).text(),replacementReview.public_html);
+ await assert.rejects(confirmCMSPublication(db,a.user,competitor.id,env),e=>e.status===409);
+ await db.batch(Array.from({length:87},()=>db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}')));
  await assert.rejects(createCMSDraft(db,a.user,a.project,id(),'posts','Over cap','Body',env),e=>e.status===409);
  await assert.rejects(db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}').run(),/not_available/);
  p.replaceVersion();await assert.rejects(deployCMS(db,a.project,digest,a.config,p),/version changed/);
@@ -130,5 +165,5 @@ try{
  const c=await fixture(),uncertain=provider(c);uncertain.unresolved=true;await assert.rejects(deployCMS(db,c.project,digest,c.config,uncertain),/unresolved/);await assert.rejects(deployCMS(db,c.project,digest,c.config,uncertain),/unresolved/);assert.equal(uncertain.uploads,1);
  const d=await fixture(),collision=provider(d);collision.exists=async()=>true;await assert.rejects(deployCMS(db,d.project,digest,d.config,collision),/already exists/);assert.equal(collision.uploads,0);
  assert.notEqual(a.config.secret,b.config.secret);assert.equal(a.config.secret,await deriveCMSSecret(master,a.project,a.user,a.config.origin));
- console.log('CMS deployment checks passed: immutable artifact/key receipts, lost upload acknowledgment, no blind redeploy, exact setup request, owner/schema verification, readiness gate, platform status isolation, derived project keys, native draft request recovery, owner isolation, guided chat, authoritative agent receipts, revision-bound edits, exact edit recovery combined content capacity, frozen publication reviews, expiry/staleness, prepare-only model authority, exact publish recovery gated public serving, reviewed withdrawal, native-loss recovery, publication history safe offline republishing, public index filtering/escaping, article navigation and deduplicated live service counts.');
+ console.log('CMS deployment checks passed: immutable artifact/key receipts, lost upload acknowledgment, no blind redeploy, exact setup request, owner/schema verification, readiness gate, platform status isolation, derived project keys, native draft request recovery, owner isolation, guided chat, authoritative agent receipts, revision-bound edits, exact edit recovery combined content capacity, frozen publication reviews, expiry/staleness, prepare-only model authority, exact publish recovery gated public serving, reviewed withdrawal, native-loss recovery, publication history safe offline republishing, staged live edits and private previews, exact replacement recovery, atomic same-URL swap/rollback, competing replacement/withdrawal denial, historical replay safety, public index filtering/escaping, article navigation and deduplicated live service counts.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
