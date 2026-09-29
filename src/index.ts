@@ -1,3 +1,4 @@
+import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubInstallations} from './github-connection';
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
 import { StorageLimitError } from './storage-budget';
@@ -15,7 +16,7 @@ import { configuredAI } from "./ai-chat";
 type User = { id: string; email: string };
 type Project = { id: string; name: string; purpose: string; status: string; created_at: string; updated_at: string };
 const sessionDays = 7;
-const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
+const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy":"no-referrer" };
 
 function json(data: unknown, status = 200, headers?: HeadersInit): Response {
   return new Response(JSON.stringify(data), { status, headers: { ...jsonHeaders, ...headers } });
@@ -229,6 +230,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
     await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, created_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, created_at = excluded.created_at").bind(user.id, await hashToken(recoveryCode), new Date().toISOString()).run();
     return json({ recoveryCode });
   }
+  if (method === "GET" && pathname === "/api/connections") return json(await connectionStatus(env.DB,user.id,githubConfig(env)));
+  if (method === "POST" && pathname === "/api/connections/github/start") {
+    if(!(await recentSession(request,env)))return error(401,'Sign in again before connecting GitHub.');
+    return json(await startGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),githubConfig(env)));
+  }
+  if (method === "GET" && pathname === "/api/connections/github/callback") {
+    const params=new URL(request.url).searchParams;
+    let destination='/workspace/?connection=github';
+    try{if(params.has('error')){await cancelGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'');throw new ConnectionError(400,'GitHub authorization was cancelled.');}await finishGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'',params.get('code')??'',githubConfig(env));}
+    catch(cause){if(!(cause instanceof ConnectionError))throw cause;destination+='&connection_error=authorization';}
+    return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
+  }
+  if (method === "POST" && pathname === "/api/connections/github/disconnect") return json(await disconnectGitHub(env.DB,user.id,githubConfig(env)));
+  if (method === "GET" && pathname === "/api/connections/github/installations") return json(await githubInstallations(env.DB,user.id,githubConfig(env)));
   if (method === "GET" && pathname === "/api/me") return json({ user });
   if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id, !!configuredAI(env)));
   if (method === "POST" && pathname === "/api/chat") {
@@ -278,14 +293,17 @@ async function handle(request: Request, env: Env): Promise<Response> {
 }
 
 export default {
-  async scheduled(_event: ScheduledController, env: Env) { await cleanupPhotos(env); },
+  async scheduled(_event: ScheduledController, env: Env) {
+    const results=await Promise.allSettled([cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env))]);
+    if(results.some(result=>result.status==='rejected'))throw Error('Scheduled maintenance failed');
+  },
   async fetch(request: Request, env: Env): Promise<Response> {
     const requestId = crypto.randomUUID();
     try {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
+      if (cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

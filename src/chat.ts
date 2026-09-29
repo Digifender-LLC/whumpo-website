@@ -115,7 +115,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     reply='Open Details → Project photos to upload a private photo or view existing files. Uploads use no AI units. Photos are not published automatically.';
 
   } else if (['/connections', 'show connections'].includes(command)) {
-    reply = 'Optional GitHub and Cloudflare account connections are being built. You’ll be able to start connection and disconnection here and authorize access on the provider’s website. Do not paste API keys or passwords into chat.';
+    reply = 'Open Details → Connected accounts, or type connect github, to start or disconnect GitHub authorization. The panel shows whether platform configuration is ready. GitHub repository backups and customer Cloudflare connections are still being built. Do not paste API keys or passwords into chat.';
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {

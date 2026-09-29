@@ -551,6 +551,10 @@
   }
   async function sendMessage(content) {
     if (sending || !content.trim()) return;
+    if (["/connections", "show connections", "connect github", "disconnect github"].includes(content.trim().toLowerCase())) {
+      await openConnections();
+      return;
+    }
     if (["/domains", "show domains"].includes(content.trim().toLowerCase())) {
       await openDomains();
       return;
@@ -959,6 +963,12 @@
       authConfig = await api("/config");
       const { user } = await api("/me");
       await loadDashboard(user);
+      if (new URLSearchParams(location.search).get("connection") === "github") {
+        const failed = new URLSearchParams(location.search).has("connection_error");
+        history.replaceState(null, "", location.pathname);
+        await openConnections();
+        if (failed) $("#connections-status").textContent = "GitHub authorization was cancelled, expired or could not be completed. You can start again.";
+      }
     } catch (error) {
       showAuth();
       if (authConfig) await setAuthMode(new URLSearchParams(location.search).get("signup") === "1");
@@ -1008,5 +1018,62 @@
     if (!project) return;
     $("#domains-dialog").close();
     sendMessage(`/domain ${name} ${project}`);
+  };
+  async function openConnections() {
+    try {
+      const { github } = await api("/connections");
+      $("#github-status").textContent = !github.enabled ? "GitHub connection is awaiting platform configuration." : github.connected ? `Authorized as ${github.login} until ${github.expiresAt}.` : "Not connected. Sign in recently before connecting.";
+      if (github.revocationPending) $("#github-status").textContent += " Local access is disabled for disconnected tokens; provider revocation is pending. You can also revoke access in GitHub settings.";
+      $("#github-connect").disabled = !github.enabled;
+      $("#github-connect").textContent = github.connected ? "Reconnect GitHub" : "Connect GitHub";
+      $("#github-disconnect").hidden = !github.connected && !github.revocationPending;
+      const install = $("#github-install");
+      install.hidden = !github.connected;
+      install.removeAttribute("href");
+      if (github.connected && github.installURL) {
+        const url = new URL(github.installURL);
+        if (url.origin === "https://github.com" && url.pathname.startsWith("/apps/")) install.href = url.href;
+      }
+      const list = $("#github-installations");
+      list.replaceChildren();
+      $("#connections-status").textContent = "";
+      $("#connections-dialog").showModal();
+      if (github.connected) {
+        const data = await api("/connections/github/installations");
+        for (const item of data.installations) list.append(text("p", `Installed for ${item.account} \xB7 ${item.repositorySelection === "selected" ? "Selected repositories" : "All repositories"}`));
+        if (!data.installations.length) list.append(text("p", "No active installation found. Use Choose repositories on GitHub, then refresh."));
+        if (data.truncated) list.append(text("p", "Only the first 100 installations were checked."));
+      }
+    } catch (error) {
+      $("#connections-status").textContent = error.message;
+      if (!$("#connections-dialog").open) showMessage(error.message);
+    }
+  }
+  $("#connections-open").onclick = openConnections;
+  $("#connections-refresh").onclick = openConnections;
+  $("#connections-close").onclick = () => $("#connections-dialog").close();
+  $("#github-connect").onclick = async () => {
+    const button = $("#github-connect");
+    button.disabled = true;
+    try {
+      const result = await api("/connections/github/start", { method: "POST", body: "{}" }), url = new URL(result.url);
+      if (url.origin !== "https://github.com" || url.pathname !== "/login/oauth/authorize") throw new Error("Unexpected authorization destination");
+      location.assign(url.href);
+    } catch (error) {
+      $("#connections-status").textContent = error.message;
+      button.disabled = false;
+    }
+  };
+  $("#github-disconnect").onclick = async () => {
+    const button = $("#github-disconnect");
+    button.disabled = true;
+    try {
+      await api("/connections/github/disconnect", { method: "POST", body: "{}" });
+      await openConnections();
+    } catch (error) {
+      $("#connections-status").textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
   };
 })();

@@ -65,3 +65,5 @@ Onboarding collects your idea, project name, intended audience and style, then c
 The AI can create a new project and its private website from a request with a name and purpose, and prepare an authenticated source download in ordinary language. These interpreted requests use AI units; `/new` and `/export` stay available without model charges. See [workspace AI actions](docs/workspace-agent.md).
 
 Ask the AI about current projects, saved versions, activity, usage or domain status to inspect authoritative workspace records. `/project PROJECT_ID` and `/inspect VERSION_ID` show exact details without model charges; `show my saved versions` is also free. The agent has an index of every owned project, including projects outside its bounded detailed context.
+
+Optional GitHub authorization has a Connected accounts panel with session-bound PKCE, encrypted expiring tokens and disconnect/revocation. It is disabled pending operator GitHub App configuration. Repository backup is not enabled yet. See [connection design](docs/integrations/github-connection.md) and [app setup](docs/integrations/github-app-setup.md).
