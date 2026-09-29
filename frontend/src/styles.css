@@ -81,3 +81,22 @@
  .landing a[class*="inline-flex"]{min-height:48px}
  .landing footer>a{min-height:44px;display:flex;align-items:center}
 }
+
+/* Phone controls use the visible viewport, including when a sheet opens a keyboard. */
+.control-back{margin-top:-16px;margin-left:-12px}
+@media(max-width:760px){
+ .workspace-main{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+ .workspace-dialog{bottom:var(--keyboard-inset,0px)}
+ .workspace-main input:not([type=checkbox]):not([type=radio]),.workspace-main select{min-height:48px}
+ .workspace-main label:has(input[type=checkbox]),.workspace-main label:has(input[type=radio]){min-height:44px;align-items:center}
+ .workspace-main button[class*="size-"],.chat-composer button[type=submit]{min-width:44px;flex-shrink:0}
+ .workspace-card .flex.gap-2{flex-wrap:wrap}
+ .workspace-main [role=tablist]{display:flex;justify-content:flex-start;max-width:100%;height:auto;overflow-x:auto;overscroll-behavior-x:contain}
+ .workspace-main [role=tab]{flex-shrink:0;white-space:nowrap}
+ .workspace-main a,.workspace-dialog a{overflow-wrap:anywhere}
+ .mobile-navigation>a:active,.mobile-navigation>button:active{background:var(--secondary)}
+ .landing h2{font-size:clamp(30px,8vw,40px);line-height:1.12}
+ .landing #how article{padding:24px}
+ .landing #how article h3{margin-top:16px}
+ .landing #pricing article{padding:24px}
+}
