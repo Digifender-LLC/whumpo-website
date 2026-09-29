@@ -1,4 +1,4 @@
-import {cmsItemId,validCMSDraft} from './cms-content-shape';
+import {cmsItemId,validCMSDraft,validCMSEdit} from './cms-content-shape';
 // Private CMS request authentication. No browser cookie or model-provided identity is trusted.
 export type CMSBridgeConfig={projectId:string;ownerId:string;secret:string;origin:string};
 export class CMSBridgeError extends Error {constructor(readonly status:number,message:string){super(message);}}
@@ -22,9 +22,9 @@ async function boundedBody(request:Request){
  try{return new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(all);}catch{throw new CMSBridgeError(400,'Invalid CMS request encoding');}
 }
 function canonical(config:CMSBridgeConfig,method:string,path:string,id:string,expires:number,bodyHash:string){return JSON.stringify(['whumpo-cms-v1',config.projectId,config.ownerId,config.origin,method,path,id,expires,bodyHash]);}
-export async function signCMSRequest(config:CMSBridgeConfig,path:string,id:string,body?:unknown,now=Date.now()){
+export async function signCMSRequest(config:CMSBridgeConfig,path:string,id:string,body?:unknown,now=Date.now(),verb?:'PUT'){
  if(!uuid.test(id)||!path.startsWith('/_emdash/api/')||/[?#%\\]/.test(path))throw new CMSBridgeError(400,'Invalid CMS request');
- const method=body===undefined?'GET':'POST',serialized=body===undefined?'':JSON.stringify(body),expires=Math.floor(now/1000)+60;
+ const method=verb??(body===undefined?'GET':'POST'),serialized=body===undefined?'':JSON.stringify(body),expires=Math.floor(now/1000)+60;
  if(encoder.encode(serialized).length>4096)throw new CMSBridgeError(413,'CMS request exceeds its bound');
  const signature=hex(await crypto.subtle.sign('HMAC',await key(config),encoder.encode(canonical(config,method,path,id,expires,await digest(serialized)))));
  return new Request(config.origin+path,{method,headers:{'content-type':'application/json','x-whumpo-cms-id':id,'x-whumpo-cms-expires':String(expires),'x-whumpo-cms-signature':signature},...(body===undefined?{}:{body:serialized})});
@@ -32,7 +32,7 @@ export async function signCMSRequest(config:CMSBridgeConfig,path:string,id:strin
 export async function verifyCMSRequest(request:Request,config:CMSBridgeConfig,now=Date.now()){
  const url=new URL(request.url),id=request.headers.get('x-whumpo-cms-id')??'',expiration=request.headers.get('x-whumpo-cms-expires')??'',signature=request.headers.get('x-whumpo-cms-signature')??'';
  const expires=Number(expiration),seconds=Math.floor(now/1000);
- if(url.origin!==config.origin||url.search||url.hash||url.username||url.password||!uuid.test(id)||!/^\d{10}$/.test(expiration)||expires<=seconds||expires>seconds+60||!/^[0-9a-f]{64}$/.test(signature)||!['GET','POST'].includes(request.method)||request.headers.has('cookie')||request.headers.has('authorization'))throw new CMSBridgeError(403,'CMS request not authorized');
+ if(url.origin!==config.origin||url.search||url.hash||url.username||url.password||!uuid.test(id)||!/^\d{10}$/.test(expiration)||expires<=seconds||expires>seconds+60||!/^[0-9a-f]{64}$/.test(signature)||!['GET','POST','PUT'].includes(request.method)||request.headers.has('cookie')||request.headers.has('authorization'))throw new CMSBridgeError(403,'CMS request not authorized');
  const body=await boundedBody(request.clone()),bodyHash=await digest(body),payload=canonical(config,request.method,url.pathname,id,expires,bodyHash);
  const valid=await crypto.subtle.verify('HMAC',await key(config),Uint8Array.from(signature.match(/../g)!,v=>parseInt(v,16)),encoder.encode(payload));
  if(!valid)throw new CMSBridgeError(403,'CMS request not authorized');
@@ -43,6 +43,7 @@ export function cmsRequestAllowed(method:string,path:string,body:string){
  if(method==='GET'&&['/_emdash/api/setup/status','/_emdash/api/auth/me','/_emdash/api/schema/collections'].includes(path)&&body==='')return true;
  const item=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)$/);
  if(method==='GET'&&item&&cmsItemId.test(item[2])&&body==='')return true;
+ if(method==='PUT'&&item&&cmsItemId.test(item[2]))return validCMSEdit(body);
  if(method==='POST'&&/^\/_emdash\/api\/content\/(posts|pages)$/.test(path))return validCMSDraft(body);
  if(method!=='POST'||path!=='/_emdash/api/setup')return false;
  try{const value=JSON.parse(body);return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(k=>['title','tagline','includeContent'].includes(k))&&typeof value.title==='string'&&value.title.trim().length>0&&value.title.length<=100&&(value.tagline===undefined||typeof value.tagline==='string'&&value.tagline.length<=200)&&value.includeContent===false;}catch{return false;}
@@ -52,8 +53,8 @@ export async function deriveCMSSecret(master:string,projectId:string,ownerId:str
  const key=await crypto.subtle.importKey('raw',encoder.encode(master),{name:'HMAC',hash:'SHA-256'},false,['sign']);
  return hex(await crypto.subtle.sign('HMAC',key,encoder.encode(JSON.stringify(['whumpo-cms-key-v1',projectId,ownerId,origin]))));
 }
-export async function callCMS(service:Fetcher,config:CMSBridgeConfig,path:string,id:string,body?:unknown){
- const request=await signCMSRequest(config,path,id,body),controller=new AbortController();
+export async function callCMS(service:Fetcher,config:CMSBridgeConfig,path:string,id:string,body?:unknown,verb?:'PUT'){
+ const request=await signCMSRequest(config,path,id,body,Date.now(),verb),controller=new AbortController();
  let timer:ReturnType<typeof setTimeout>;
  const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new CMSBridgeError(503,'CMS response timed out; check state before retrying a write'));},45000);});
  try{
@@ -64,6 +65,7 @@ export async function callCMS(service:Fetcher,config:CMSBridgeConfig,path:string
   for(;;){const {value,done}=await Promise.race([reader.read(),deadline]);if(done)break;length+=value.length;if(length>65536){void reader.cancel().catch(()=>{});throw new CMSBridgeError(502,'CMS response exceeds its bound');}parts.push(value);}
   const buffer=new Uint8Array(length);let offset=0;for(const part of parts){buffer.set(part,offset);offset+=part.length;}
   const result=JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(buffer));
+  if(response.status===409)throw new CMSBridgeError(409,'CMS revision conflict or unresolved receipt; read the draft and inspect this request before preparing another edit');
   if(!response.ok||result?.success!==true)throw new CMSBridgeError(502,'CMS operation was not confirmed');return result.data;
  }catch(error){if(error instanceof CMSBridgeError)throw error;throw new CMSBridgeError(503,'CMS response unavailable; check state before retrying a write');}finally{clearTimeout(timer!);}
 }

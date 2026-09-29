@@ -7,7 +7,7 @@ export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:
   if(!cmsRequestAllowed(request.method,verified.path,verified.body))return reply(403,'CMS operation not available');
   const headers=new Headers({'content-type':'application/json','origin':config.origin,'x-emdash-request':'1'});
   for(const name of ['x-whumpo-cms-id','x-whumpo-cms-expires','x-whumpo-cms-signature'])headers.set(name,request.headers.get(name)!);
-  const internal=new Request(request.url,{method:request.method,headers,...(request.method==='POST'?{body:verified.body}:{})});
+  const internal=new Request(request.url,{method:request.method,headers,...(request.method!=='GET'?{body:verified.body}:{})});
   if(request.method==='GET')return await dispatch(internal);
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS _whumpo_requests(id TEXT PRIMARY KEY,request_hash TEXT NOT NULL,status INTEGER,response TEXT,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))").run();
   type Receipt={request_hash:string;status:number|null;response:string|null};

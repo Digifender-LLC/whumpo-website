@@ -44,10 +44,33 @@ try{
  const chat=await readChat(db,a.user);assert.equal((await sendChat(db,a.user,{id:id(),revision:chat.state.revision,content:'/cms-read '+a.project+' '+draftId},undefined,{cmsContent:execute})).status,200);assert.match((await readChat(db,a.user)).turns.at(-1).assistant_text,/Draft title/);
  const proposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE PUBLISHED CLAIM',action:{kind:'cms',operation:'retryDraft',projectId:a.project,requestId:draftId}}),{},{cmsContent:execute});assert.match(proposal.reply,/not published/);assert.ok(!proposal.reply.includes('FAKE'));assert.equal(creates,1);
  await assert.rejects(db.prepare('UPDATE cms_draft_requests SET body=? WHERE id=?').bind('{}',draftId).run(),/immutable/);
+ const contentFetch=p.service.fetch,editReceipts=new Map();let updates=0,loseEdit=true,current={...(await readCMSDraft(db,a.user,a.project,draftId,env)),_rev:'cmV2LTE='};
+ p.service.fetch=async request=>{const v=await verifyCMSRequest(request,a.config);assert.ok(cmsRequestAllowed(request.method,v.path,v.body));
+  if(v.path==='/_emdash/api/content/posts/'+nativeId){
+   if(request.method==='GET')return Response.json({success:true,data:{item:current.item,_rev:current._rev}});
+   if(!editReceipts.has(v.id)){const body=JSON.parse(v.body);if(body._rev!==current._rev)return Response.json({success:false},{status:409});updates++;current={item:{...current.item,data:body.data},_rev:'cmV2LTI='};editReceipts.set(v.id,structuredClone(current));}
+   if(loseEdit){loseEdit=false;throw Error('lost edit response');}return Response.json({success:true,data:editReceipts.get(v.id)});
+  }return contentFetch(request);
+ };
+ const editId=id(),editAction={operation:'editDraft',projectId:a.project,requestId:draftId,title:'Edited',text:'Changed',revision:'cmV2LTE='};
+ await assert.rejects(cmsContentAction(db,a.user,editAction,editId,env),e=>e.status===503);
+ const edited=await cmsContentAction(db,a.user,{operation:'retryEdit',projectId:a.project,requestId:editId},id(),env);assert.equal(edited.revision,'cmV2LTI=');assert.equal(updates,1);
+ await cmsContentAction(db,a.user,{operation:'retryEdit',projectId:a.project,requestId:editId},id(),env);assert.equal(updates,1);
+ await assert.rejects(cmsContentAction(db,a.user,editAction,id(),env),e=>e.status===409);
+ await assert.rejects(cmsContentAction(db,a.user,{...editAction,title:'Forged'},editId,env),e=>e.status===409);
+ await assert.rejects(cmsContentAction(db,id(),{operation:'retryEdit',projectId:a.project,requestId:editId},id(),env),e=>e.status===404);
+ await assert.rejects(cmsContentAction(db,a.user,{...editAction,status:'published'},id(),env),e=>e.status===400);
+ assert.equal((await cmsContentAction(db,a.user,{operation:'listEdits',projectId:a.project,requestId:draftId},id(),env)).length,1);
+ assert.match(await cmsContentCommand('/cms-retry-edit '+a.project+' '+editId,id(),execute)(),/cmV2LTI=/);
+ await assert.rejects(db.prepare('UPDATE cms_edit_requests SET body=? WHERE id=?').bind('{}',editId).run(),/immutable/);
+ const editProposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE',action:{kind:'cms',operation:'retryEdit',projectId:a.project,requestId:editId}}),{},{cmsContent:execute});assert.match(editProposal.reply,/not published/);assert.ok(!editProposal.reply.includes('FAKE'));
+ await db.batch(Array.from({length:88},()=>db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}')));
+ await assert.rejects(createCMSDraft(db,a.user,a.project,id(),'posts','Over cap','Body',env),e=>e.status===409);
+ await assert.rejects(db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id(),draftId,'{}').run(),/not_available/);
  p.replaceVersion();await assert.rejects(deployCMS(db,a.project,digest,a.config,p),/version changed/);
  const b=await fixture(),bad=provider(b);bad.owner=id();await assert.rejects(deployCMS(db,b.project,digest,b.config,bad),/owner could not/);await assert.rejects(connectCMS(db,b.project,id()),/not recorded/);bad.owner=b.user;bad.missingPages=true;await assert.rejects(deployCMS(db,b.project,digest,b.config,bad),/collections are missing/);bad.missingPages=false;await deployCMS(db,b.project,digest,b.config,bad);assert.equal(bad.uploads,1);assert.equal(bad.setups,1);
  const c=await fixture(),uncertain=provider(c);uncertain.unresolved=true;await assert.rejects(deployCMS(db,c.project,digest,c.config,uncertain),/unresolved/);await assert.rejects(deployCMS(db,c.project,digest,c.config,uncertain),/unresolved/);assert.equal(uncertain.uploads,1);
  const d=await fixture(),collision=provider(d);collision.exists=async()=>true;await assert.rejects(deployCMS(db,d.project,digest,d.config,collision),/already exists/);assert.equal(collision.uploads,0);
  assert.notEqual(a.config.secret,b.config.secret);assert.equal(a.config.secret,await deriveCMSSecret(master,a.project,a.user,a.config.origin));
- console.log('CMS deployment checks passed: immutable artifact/key receipts, lost upload acknowledgment, no blind redeploy, exact setup request, owner/schema verification, readiness gate, platform status isolation, derived project keys, native draft request recovery, owner isolation, guided chat and authoritative agent receipts.');
+ console.log('CMS deployment checks passed: immutable artifact/key receipts, lost upload acknowledgment, no blind redeploy, exact setup request, owner/schema verification, readiness gate, platform status isolation, derived project keys, native draft request recovery, owner isolation, guided chat, authoritative agent receipts, revision-bound edits, exact edit recovery and combined content capacity.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

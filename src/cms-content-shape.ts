@@ -7,3 +7,10 @@ export function cmsDraftBody(title:unknown,text:unknown){
  return body;
 }
 export function validCMSDraft(body:string){try{const value=JSON.parse(body),text=value?.data?.content?.[0]?.children?.[0]?.text;return JSON.stringify(value)===JSON.stringify(cmsDraftBody(value?.data?.title,text));}catch{return false;}}
+export function cmsEditBody(title:unknown,text:unknown,revision:unknown){
+ if(typeof revision!=='string'||!/^[A-Za-z0-9+/=_-]{4,256}$/.test(revision))throw new Error('Read the draft and use its current revision token');
+ const body={...cmsDraftBody(title,text),_rev:revision};
+ if(new TextEncoder().encode(JSON.stringify(body)).length>4096)throw new Error('Encoded CMS edit exceeds 4096 bytes');
+ return body;
+}
+export function validCMSEdit(body:string){try{const v=JSON.parse(body);return JSON.stringify(v)===JSON.stringify(cmsEditBody(v?.data?.title,v?.data?.content?.[0]?.children?.[0]?.text,v?._rev));}catch{return false;}}
