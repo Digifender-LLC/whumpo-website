@@ -61,3 +61,11 @@ TypeScript and local smoke checks passed, including concurrent project quotas. L
 Worker version `3efe35dd-d526-4bea-b70e-5362faf14d51` adds guided conversation at `/workspace/`, compact service stats, and a Details menu. Remote migration `0003_chat.sql` applied successfully. The model adapter and draft catalogue are in source; `/api/plans` explicitly reports `draft: true` and `checkoutEnabled: false`. No provider calls or payments are enabled.
 
 Local validation: TypeScript, JavaScript syntax, provider contract tests, original auth/project smoke tests, and chat integration tests passed. Browser checks exercised login, two-step onboarding, project creation, persisted history after reload, and 390-pixel mobile layout. Live readback confirmed workspace HTTP 200 with chat markup, unauthenticated chat HTTP 401, and the draft catalogue HTTP 200. Authenticated chat behavior was tested locally; this deployment did not create a production test account.
+
+## Passkey deployment — September 29, 2026
+
+Worker version `4e941f8d-3978-4467-a16b-ada2cfbea849` deploys passkeys, recovery, and credential management. Migration `0004_passkeys.sql` applied remotely. Server/browser SimpleWebAuthn versions are pinned in package.json and pnpm-lock.yaml. No new Cloudflare service or paid capability was enabled.
+
+All local auth, chat, provider, and cryptographic passkey tests passed. A live ephemeral credential verified on Cloudflare, received a Secure/HttpOnly session, accessed its chat, failed a replay, and logged out successfully. The temporary user and credential were then removed. New passkey accounts have no usable password hash. Existing password accounts continue to sign in.
+
+Frontend source moved to `web/app.js`; `tools/build.mjs` produces the committed browser bundle. Both dev and deploy rebuild it. Local passkey tests require localhost:8787, since the development RP origin is explicit. A native passkey prompt on a real user device remains to be checked.

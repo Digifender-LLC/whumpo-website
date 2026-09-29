@@ -14,22 +14,28 @@
     <section id="auth" class="auth-card" hidden>
       <p class="eyebrow">Your space to make things</p>
       <h1 id="auth-title">Sign in</h1>
-      <p>Welcome to the TellUmo test platform. Create and organize your projects. New accounts require an invitation.</p>
-      <form id="auth-form">
+      <p>Hi, welcome to TellUmo. Let’s get you into your workspace. Use a passkey to sign in with your device, fingerprint, or security key.</p>
+      <button id="passkey-login" class="primary" type="button">Sign in with a passkey</button>
+      <form id="auth-form" hidden>
         <label>Email<input name="email" type="email" autocomplete="email" required></label>
-        <label>Password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="current-password" required></label>
+        <label id="password-field">Password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="current-password" required></label>
         <label id="invite-field" hidden>Invitation code<input name="inviteCode" autocomplete="off" maxlength="64" disabled></label>
         <div id="turnstile-slot" hidden></div>
         <button class="primary" type="submit">Continue</button>
       </form>
+      <button id="password-toggle" class="text-button" type="button">Use a password instead</button>
+      <button id="recover-toggle" class="text-button" type="button">Use a recovery code</button>
+      <form id="recovery-form" hidden><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Recovery code<input name="code" autocomplete="off" maxlength="64" required></label><button class="primary">Recover account</button></form>
       <button id="auth-toggle" class="text-button" type="button">Create an account</button>
     </section>
     <section id="dashboard" hidden>
       <div class="workspace-heading"><div><p class="eyebrow">Your workspace</p><h1>Let’s make something.</h1></div><button id="menu-toggle" type="button" aria-expanded="false" aria-controls="workspace-menu">☰ Details</button></div>
       <div class="workspace-stats"><span id="service-stats">Loading services…</span><span>Guided mode · No AI charges</span></div>
-      <aside id="workspace-menu" class="panel" hidden><h2>Your workspace details</h2><div class="menu-actions"><button data-command="/projects">Projects</button><button data-command="/activity">Activity</button><button data-command="/plans">Plans &amp; credits</button><button data-command="/domains">Domains</button><button data-command="/connections">Connected accounts</button></div><p>Choose a topic to see its details in the conversation.</p></aside>
+      <aside id="workspace-menu" class="panel" hidden><h2>Your workspace details</h2><div class="menu-actions"><button data-command="/projects">Projects</button><button data-command="/activity">Activity</button><button data-command="/plans">Plans &amp; credits</button><button data-command="/domains">Domains</button><button data-command="/connections">Connected accounts</button><button id="security-open">Passkeys &amp; recovery</button></div><p>Choose a topic to see its details in the conversation.</p></aside>
       <section class="conversation" aria-label="Workspace conversation"><div id="chat-messages" role="log" aria-live="polite" aria-relevant="additions"></div><div class="suggestions"><button data-command="/new">Start an idea</button><button data-command="/projects">My projects</button><button data-command="/help">What can you do?</button></div><form id="chat-form"><label class="sr-only" for="chat-input">Message TellUmo</label><textarea id="chat-input" name="content" maxlength="1000" rows="2" required placeholder="Tell me what you have in mind…"></textarea><button class="primary" type="submit">Send <span aria-hidden="true">↑</span></button></form><p class="chat-note">Guided onboarding is available now. AI website creation is being built. Please keep passwords and API keys out of chat.</p></section>
     </section>
+    <dialog id="security-dialog"><h2>Passkeys &amp; recovery</h2><p>Add a second passkey so you have a backup. Security changes require a sign-in within the last 10 minutes.</p><div id="passkey-list" class="stack"></div><label>New passkey name<input id="passkey-name" maxlength="80" placeholder="My laptop"></label><button id="passkey-add" class="primary">Add a passkey</button><button id="recovery-create" class="text-button">Replace recovery code</button><p>Replacing a code invalidates the previous code. Removing a passkey signs out all your sessions.</p><p class="dialog-status" role="status"></p><button id="security-close">Close</button></dialog>
+    <dialog id="recovery-dialog"><h2>Save your recovery code</h2><p>Store this in your password manager or another safe place. You’ll need it if you lose your passkeys. It is shown only now. Using it signs out existing sessions and replaces the code.</p><code id="recovery-value"></code><button id="recovery-saved" class="primary">I’ve saved my code</button></dialog>
     <p id="message" role="status" aria-live="polite"></p>
   </main>
 </body>
