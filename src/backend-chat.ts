@@ -1,3 +1,4 @@
+import {readApplication,readApplicationReview,prepareApplication,confirmApplication,describeApplicationReview} from './app-activation';
 import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm,describeBackendForm} from './backend-forms';
 import {readBackendPublication,prepareBackendPublication,readBackendPublicationReview,confirmBackendPublication,describeBackendPublication} from './backend-publication';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,describeBackendReview,backendStateHistory,exportBackendState,restoreBackendState,linkBackendState} from './backend-state';
@@ -11,13 +12,21 @@ export async function ownedBackend(db:D1Database,user:string,version:string){
 }
 function describeRun(run:{id:unknown;state:string;result?:unknown}){return `Private backend test: ${run.state}\nReceipt: ${run.id}\n`+(run.result?JSON.stringify(run.result).slice(0,1400)+(JSON.stringify(run.result).length>1400?'\nResult display truncated; full result remains in the private API receipt.':''):'Execution is pending or its outcome is unknown. This receipt will not be executed again.')+'\nNo application data or live website was changed. Test attempts use the separate backend allowance, not AI units.';}
 export function backendChatCommand(db:D1Database,user:string,turnId:string,content:string,service?:Fetcher){
- const match=content.match(/^\/(backend-form|backend-form-review|configure-backend-form|disable-backend-form|confirm-backend-form|backend-publication|backend-publication-review|confirm-backend-publication|publish-backend|unpublish-backend|backends|backend|backend-result|test-backend|backend-state|backend-state-review|review-backend-state|confirm-backend-state|backend-state-history|export-backend-state|restore-backend-state|restore-backend-before)(?:\s+([0-9a-f-]+))?(?:\s+([\s\S]+))?$/i);
+ const match=content.match(/^\/(application|application-review|enable-application|disable-application|confirm-application|backend-form|backend-form-review|configure-backend-form|disable-backend-form|confirm-backend-form|backend-publication|backend-publication-review|confirm-backend-publication|publish-backend|unpublish-backend|backends|backend|backend-result|test-backend|backend-state|backend-state-review|review-backend-state|confirm-backend-state|backend-state-history|export-backend-state|restore-backend-state|restore-backend-before)(?:\s+([0-9a-f-]+))?(?:\s+([\s\S]+))?$/i);
  if(!match)return;
  const [,raw,id,rest]=match,verb=raw.toLowerCase();
- if(!id||!uuid.test(id)||!['test-backend','review-backend-state','configure-backend-form','publish-backend'].includes(verb)&&rest)throw new BackendError(400,'Use /backends PROJECT_ID, /backend VERSION_ID, /backend-result RECEIPT_ID or /test-backend VERSION_ID JSON.');
+ if(!id||!uuid.test(id)||!['test-backend','review-backend-state','configure-backend-form','publish-backend','enable-application'].includes(verb)&&rest)throw new BackendError(400,'Use /backends PROJECT_ID, /backend VERSION_ID, /backend-result RECEIPT_ID or /test-backend VERSION_ID JSON.');
  let input:unknown;if(['test-backend','review-backend-state','configure-backend-form'].includes(verb)){try{input=JSON.parse(rest??'null');}catch{throw new BackendError(400,'Test input must be JSON.');}}
  return async()=>{
   try{
+   if(verb==='application')return JSON.stringify(await readApplication(db,user,id));
+   if(verb==='application-review')return describeApplicationReview(await readApplicationReview(db,user,id));
+   if(verb==='confirm-application')return describeApplicationReview(await confirmApplication(db,user,id));
+   if(verb==='disable-application')return describeApplicationReview(await prepareApplication(db,user,id,turnId,'disable',null,null));
+   if(verb==='enable-application'){
+    if(!rest||!uuid.test(rest))throw new BackendError(400,'Use /enable-application VERSION_ID SUCCESSFUL_TRANSITION_TEST_ID');
+    const version=await ownedBackend(db,user,id);return describeApplicationReview(await prepareApplication(db,user,version.project_id,turnId,'enable',id,rest));
+   }
    if(verb==='backend-form')return 'Website tool: '+JSON.stringify(await readBackendForm(db,user,id));
    if(verb==='backend-form-review')return describeBackendForm(await readBackendFormReview(db,user,id));
    if(verb==='confirm-backend-form')return describeBackendForm(await confirmBackendForm(db,user,id));
@@ -76,11 +85,11 @@ export async function backendAction(db:D1Database,user:string,turnId:string,acti
   if(Object.keys(action).some(k=>!['kind','operation','projectId','form'].includes(k))||typeof action.projectId!=='string'||!uuid.test(action.projectId)||!action.form)throw new BackendError(400,'Provide a project and form configuration');
   return {reply:describeBackendForm(await prepareBackendForm(db,user,action.projectId,turnId,action.form)),statements:[] as D1PreparedStatement[]};
  }
- if(operation==='reviewPublication'){
+ if(operation==='reviewPublication'||operation==='reviewApplication'){
   if(Object.keys(action).some(k=>!['kind','operation','versionId','runId'].includes(k))||typeof action.versionId!=='string'||!uuid.test(action.versionId)||typeof action.runId!=='string'||!uuid.test(action.runId))throw new BackendError(400,'Provide a version and successful test receipt');
-  return {reply:await backendChatCommand(db,user,turnId,`/publish-backend ${action.versionId} ${action.runId}`,service)!(),statements:[] as D1PreparedStatement[]};
+  return {reply:await backendChatCommand(db,user,turnId,`/${operation==='reviewApplication'?'enable-application':'publish-backend'} ${action.versionId} ${action.runId}`,service)!(),statements:[] as D1PreparedStatement[]};
  }
- const definitions:Record<string,{field:string;verb:string}>= {form:{field:'projectId',verb:'backend-form'},formReview:{field:'reviewId',verb:'backend-form-review'},reviewDisableForm:{field:'projectId',verb:'disable-backend-form'},publication:{field:'projectId',verb:'backend-publication'},publicationReview:{field:'reviewId',verb:'backend-publication-review'},reviewUnpublish:{field:'projectId',verb:'unpublish-backend'},list:{field:'projectId',verb:'backends'},inspect:{field:'versionId',verb:'backend'},test:{field:'versionId',verb:'test-backend'},result:{field:'receiptId',verb:'backend-result'},state:{field:'projectId',verb:'backend-state'},reviewState:{field:'versionId',verb:'review-backend-state'},stateReview:{field:'reviewId',verb:'backend-state-review'},stateHistory:{field:'projectId',verb:'backend-state-history'},exportState:{field:'snapshotId',verb:'export-backend-state'},restoreState:{field:'snapshotId',verb:'restore-backend-state'},restoreBefore:{field:'snapshotId',verb:'restore-backend-before'}};
+ const definitions:Record<string,{field:string;verb:string}>= {application:{field:'projectId',verb:'application'},applicationReview:{field:'reviewId',verb:'application-review'},reviewDisableApplication:{field:'projectId',verb:'disable-application'},form:{field:'projectId',verb:'backend-form'},formReview:{field:'reviewId',verb:'backend-form-review'},reviewDisableForm:{field:'projectId',verb:'disable-backend-form'},publication:{field:'projectId',verb:'backend-publication'},publicationReview:{field:'reviewId',verb:'backend-publication-review'},reviewUnpublish:{field:'projectId',verb:'unpublish-backend'},list:{field:'projectId',verb:'backends'},inspect:{field:'versionId',verb:'backend'},test:{field:'versionId',verb:'test-backend'},result:{field:'receiptId',verb:'backend-result'},state:{field:'projectId',verb:'backend-state'},reviewState:{field:'versionId',verb:'review-backend-state'},stateReview:{field:'reviewId',verb:'backend-state-review'},stateHistory:{field:'projectId',verb:'backend-state-history'},exportState:{field:'snapshotId',verb:'export-backend-state'},restoreState:{field:'snapshotId',verb:'restore-backend-state'},restoreBefore:{field:'snapshotId',verb:'restore-backend-before'}};
  if(typeof operation!=='string'||!definitions[operation])throw new BackendError(400,'Unknown backend action');
  const {field,verb}=definitions[operation],target=action[field],allowed=['kind','operation',field,...(['test','reviewState'].includes(operation)?['input']:[])];
  if(Object.keys(action).some(k=>!allowed.includes(k))||typeof target!=='string'||!uuid.test(target)||['test','reviewState'].includes(operation)&&!('input'in action))throw new BackendError(400,'Invalid backend action');

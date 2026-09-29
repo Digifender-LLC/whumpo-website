@@ -1,4 +1,5 @@
 import { readAcknowledgment } from './acknowledgment';
+import {readApplication,readApplicationReview,prepareApplication,confirmApplication} from './app-activation';
 import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm} from './backend-forms';
 import {readBackendPublication,prepareBackendPublication,readBackendPublicationReview,confirmBackendPublication} from './backend-publication';
 import {cmsDiscardCommand} from './cms-discard';
@@ -235,6 +236,16 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(stateReviewRoute){
     if(method==='GET'&&!stateReviewRoute[2])return json(await readBackendReview(env.DB,user.id,stateReviewRoute[1]));
     if(method==='POST'&&stateReviewRoute[2])return json(await confirmBackendState(env.DB,user.id,stateReviewRoute[1]));
+  }
+  const applicationRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/application$/);
+  if(applicationRoute){
+    if(method==='GET')return json(await readApplication(env.DB,user.id,applicationRoute[1]));
+    if(method==='POST'){const data=await body(request);if(typeof data?.id!=='string'||(data.operation!=='enable'&&data.operation!=='disable')||data.operation==='enable'&&(typeof data.versionId!=='string'||typeof data.runId!=='string'))return error(400,'Provide a review ID, operation and transition test');return json(await prepareApplication(env.DB,user.id,applicationRoute[1],data.id,data.operation,typeof data.versionId==='string'?data.versionId:null,typeof data.runId==='string'?data.runId:null));}
+  }
+  const applicationReview=pathname.match(/^\/api\/application-reviews\/([0-9a-f-]{36})(\/confirm)?$/);
+  if(applicationReview){
+    if(method==='GET'&&!applicationReview[2])return json(await readApplicationReview(env.DB,user.id,applicationReview[1]));
+    if(method==='POST'&&applicationReview[2])return json(await confirmApplication(env.DB,user.id,applicationReview[1]));
   }
   const backendFormRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backend-form$/);
   if(backendFormRoute){
