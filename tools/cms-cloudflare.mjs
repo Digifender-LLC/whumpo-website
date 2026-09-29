@@ -5,13 +5,24 @@ export function cloudflareCredentials(credentials){
  if(!['oauth','api_token'].includes(credentials.type)||typeof credentials.token!=='string')throw Error('A Wrangler OAuth or API token is required');
  return credentials;
 }
-export function cloudflareClient(accountId,transport=fetch,credentials){
+export function cloudflareClient(accountId,transport=fetch,credentials,loadCredentials=cloudflareCredentials){
  if(!/^[0-9a-f]{32}$/.test(accountId))throw Error('Invalid Cloudflare account');
- credentials=cloudflareCredentials(credentials);
+ const ambient=credentials===undefined;
+ credentials=loadCredentials(credentials);
  return async function api(path,body){
   if(!path.startsWith('/')||path.includes('..'))throw Error('Invalid Cloudflare API path');
   let response,data;
-  try{response=await transport('https://api.cloudflare.com/client/v4/accounts/'+accountId+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+credentials.token,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(20000),redirect:'error'});data=await response.json();}catch{throw Error('Cloudflare request outcome is unavailable');}
+  for(let attempt=0;attempt<2;attempt++){
+   try{response=await transport('https://api.cloudflare.com/client/v4/accounts/'+accountId+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+credentials.token,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(20000),redirect:'error'});data=await response.json();}catch{throw Error('Cloudflare request outcome is unavailable');}
+   // Wrangler can rotate its ambient OAuth token during a deployment. Only a
+   // confirmed authorization refusal with a changed local token is retried.
+   // Never retry timeouts, malformed responses, other errors or explicit keys.
+   if(attempt===0&&response.status===403&&data.success===false&&ambient&&credentials.type==='oauth'){
+    const fresh=loadCredentials();
+    if(fresh.type==='oauth'&&fresh.token!==credentials.token){credentials=fresh;continue;}
+   }
+   break;
+  }
   if(!response.ok||data.success!==true){const error=Error('Cloudflare request was not confirmed (HTTP '+response.status+')');error.status=response.status;throw error;}return data;
  };
 }

@@ -222,7 +222,7 @@ try {
  const rescued=await auth.recoverAppVisitor(db,a.project,savedFirst,null,'8'.repeat(64));assert.equal(rescued.visitorId,recoveryVisitor.visitorId);
  await denied(auth.recoverAppVisitor(db,a.project,recoveryVisitor.recoveryCode,null,nonce),401);
  console.log('App visitor auth passed: real signed passkeys, origin/UV/project separation, single-use challenges/invites, concurrent enrollment, epoch guards, private data, recovery rotation, credential race, owner revocation, disabled-app denial and hashed secrets.');
- console.log('App gateway passed: host isolation, HttpOnly secure project cookies, browser challenge binding, bounded JSON, origin/rate checks, no CORS, private state/receipts, idempotent retry, recovery and logout. Gateway is not publicly mounted.');
+ console.log('App gateway passed: host isolation, HttpOnly secure project cookies, browser challenge binding, bounded JSON, origin/rate checks, no CORS, private state/receipts, idempotent retry, recovery and logout. Handler tests do not establish live deployment availability.');
  console.log('Owner access routes passed: authenticated metadata, foreign-owner/CSRF/recent-session denial, single-display invitations, cancellation during enrollment, irreversible revocation and disabled-app management.');
  console.log('Application pages passed: strict form schema, owner-only approval, competing reviews, AI confirmation denial, controlled host/CSP, hidden-page denial, stale sign-in rollback, historical replay and in-flight transition revocation.');
 } finally {await proxy.dispose();await rm(dir,{recursive:true,force:true});}
