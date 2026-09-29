@@ -4,11 +4,29 @@ EmDash is an explicit Whumpo workload, added at the owner's request on September
 
 ## Implementation
 
+### Current support status — September 29, 2026
+
+The sections below record successive implementation milestones. Earlier verification notes describe the state at that milestone; this table summarizes the current boundary.
+
+| Capability | Whumpo status | Remaining acceptance work |
+| --- | --- | --- |
+| Native EmDash core | Pinned 1.0.1 Astro application; private Cloudflare preview deployed | Complete a real approved customer's provisioning and lifecycle on Cloudflare |
+| Tenant ownership | Dedicated Worker/D1/R2/KV provisioner, signed owner bridge, reviewed setup queue | Live customer allocation/bootstrap; multi-tenant production acceptance |
+| Chat authoring | Create/read/edit posts and pages, private previews, native revision checks | Media authoring, richer portable text, imported-item discovery |
+| Publication | Human-confirmed publish, same-URL replacement, withdrawal and staged-edit discard | CMS custom domains and scheduled publication |
+| Public delivery | Approved immutable article HTML and CMS index through the public site host | Native theme routes, archives, search and RSS are not exposed by this delivery path |
+| Recovery | Native database and paired media capture tools; isolated local D1/R2 restore and native boot verified | Coordinated production capture, protected keys/artifacts/control state, remote restore and traffic switch |
+| WordPress migration | Required in the integration contract; not implemented | WXR staging, conversion report, bounded media import and reviewed publication |
+| Plugin execution | Disabled in this profile | Cloudflare sandbox runner requires a paid-only Worker Loader; excluded by the current service constraint |
+| CMS administration | Whumpo owner authentication and narrowly allowed management operations | Public native admin UI, native passkey enrollment and additional CMS roles are not enabled |
+
+Use `/help cms` in Whumpo for available commands. Setup approval queues an instance for the operator provisioner; it does not itself make a CMS ready or public. The integration is **partial support under development**, not a claim of complete EmDash feature parity or customer-ready production recovery.
+
 `integrations/emdash` contains a pinned EmDash 1.0.1 + Cloudflare adapter 1.0.1 application. The blog theme, seed, live content loader and pages derive from upstream commit `5de3bdc4310f6bcca013f05002f05a61e208b2a4`; the MIT notice is retained in `UPSTREAM-LICENSE`. The template includes posts, pages, archives, search, RSS, rich content rendering and admin entry links. Content stays in EmDash's own schema. Fonts and cream/green theme defaults follow Whumpo; font licenses remain in `docs/licenses`.
 
 Run `pnpm install`, then `pnpm build:emdash` from the repository root. Run `pnpm --filter @whumpo/emdash dev` for local development. The existing Whumpo deploy command intentionally does not deploy/provision CMS tenants. Each deployment needs an owned project and a separately resolved resource map.
 
-The production profile uses dedicated D1, R2 and Astro session KV resources. It has no public route, workers.dev address or public preview URL. This protects the initial administrator setup while the ownership/bootstrap integration is being developed. The profile checker examines the generated Cloudflare configuration as well as the source, since Astro can insert bindings at build time.
+The production profile uses dedicated D1, R2 and Astro session KV resources. The native CMS Worker has no public route, workers.dev address or public preview URL. Ownership/bootstrap and content operations use the signed bridge described below; approved article snapshots are served separately by the public site host. The profile checker examines the generated Cloudflare configuration as well as the source, since Astro can insert bindings at build time.
 
 ## Cost and plugin boundary
 
@@ -26,9 +44,9 @@ Core EmDash supplies passkey-based administration and a REST/MCP management surf
 6. Back up CMS content, schemas, media references and required settings with versioned provenance. Restore into an isolated instance and verify it before switching traffic. A static HTML ZIP is not a CMS backup. Core upgrades need pinned releases, a migration snapshot and a tested restore path.
 7. Reuse the existing domain ownership/routing review flow, with an explicit CMS destination. Add per-project storage/CPU/request admission and plan accounting. Verify native passkeys, media, roles, publish/unpublish, draft privacy, backup/restore and concurrent tenants on Cloudflare before advertising customer-ready support.
 
-## Verification so far
+## Initial build verification (historical)
 
-Production build and Wrangler dry-run passed. The generated profile contains only ASSETS, DB, MEDIA and SESSION bindings. Local workerd initialized the CMS schema, rendered the blog homepage, returned setup status, redirected admin to setup and served the setup page. These checks do not prove completed owner enrollment, authenticated CRUD, WordPress migration or multi-tenant provisioning. Those remain integration gates, not silently dropped requirements.
+Production build and Wrangler dry-run passed. The generated profile contains only ASSETS, DB, MEDIA and SESSION bindings. Local workerd initialized the CMS schema, rendered the blog homepage, returned setup status, redirected admin to setup and served the setup page. These initial checks preceded the signed bridge. Later sections document owner bootstrap, native content lifecycle and local recovery verification; WordPress migration and production multi-tenant acceptance remain open.
 
 ## Primary references
 
