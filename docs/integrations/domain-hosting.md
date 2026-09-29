@@ -81,3 +81,22 @@ Each hosting refresh stores a unique check ID while disabling the prior serving 
 `test:domain-recovery` covers exact identity/time checks, digest tampering, evidence validation, atomic audit rollback, immutable receipts, concurrent/replayed/lost-ack application, cleanup-only recovery after disconnect, changed-state rejection, overlapping refreshes, disconnect races and proof rotation during verification. It uses disposable local D1 and controlled read-only provider responses. Real operator recovery remains unverified until an eligible real resource exists; no production recovery record was manufactured for testing.
 
 Recovery deployment evidence (September 29, 2026): migration 0019 applied locally and remotely; main Worker `149b5bce-7a9e-4a34-88ad-55b26248f3c1`, public Worker `a3fc7072-624a-41b5-aa27-37a501fbe777`. TypeScript, hosting and recovery tests passed. The initial remote migration request failed with Cloudflare 7403, correctly preventing deployment. Wrangler subsequently confirmed the expected account/D1 permission and a remote read confirmed the migration was still pending; the gated retry succeeded without credential changes. Live signed-passkey/disabled-hosting/auth/origin checks passed with zero AI units and temporary-account cleanup. No production reconciliation or provider mutation was attempted; the operator CLI's real provider/D1 recovery flow remains unverified pending an eligible resource and zone token.
+
+
+## Conversational hosting controls
+
+All existing hosting operations now have guided chat commands with no AI units:
+
+- `/hosting`: list owned connections, saved certificate/routing status and next steps.
+- `/review-hosting CLAIM_ID`: prepare the existing ten-minute hosting/certificate review. No provider hostname is created.
+- `/confirm-hosting CONNECTION_ID`: explicitly authorize that exact saved review.
+- `/check-hosting CONNECTION_ID`: revalidate DNS, hostname and TLS for a provisioning/active connection. This can disable a previous routing lease when verification fails. For review, uncertain or disconnecting states, it only reports saved status and never creates or removes a hostname.
+- `/disconnect-hosting CONNECTION_ID`: immediately disable local routing, cancel an unconfirmed review or request cleanup of the exact known provider hostname. It does not alter customer DNS or unpublish the project's shared URL. Repeating this command can retry known-resource cleanup.
+
+Provider work is deferred until the chat turn/revision is durably claimed. Only the inserting request dispatches its command; replays, stale revisions and lost claim acknowledgements do not repeat it. The provisional receipt identifies the result as unsaved and points to `/hosting`. Hosting state is authoritative if the final transcript update is interrupted. Existing uncertain-create/no-adoption, owner checks and exact-resource cleanup rules remain unchanged.
+
+The AI accepts only `hosting/list` and `hosting/review` with strict fields. It cannot confirm, refresh or disconnect hosting. Server receipts replace model prose. Provider configuration and transport remain internal options, never serialized into prompts. Natural-language requests use the existing AI allowance; malformed/forbidden actions use the existing validation refund path. Cloudflare account connection/disconnection still uses the explicit account panel.
+
+`test:hosting-chat` covers the full controlled lifecycle, owner isolation, stale revision, concurrent/replayed confirmation, a check that cannot create/delete, free guided usage, lost chat acknowledgement, AI action restrictions and absence of provider tokens from model input. These are controlled-provider tests; real Cloudflare setup and DNS/TLS acceptance remain pending.
+
+Chat deployment evidence (September 29): platform `9f9694c5-d4ce-4e49-9e4b-5ea66233a488`, public-site Worker `f5f4206e-7c63-4c79-95e9-30b3d9c372cc`. TypeScript, build, hosting-chat tests and the existing hosting regression suite passed. Live signed-passkey checks verified connection discovery, disabled review, foreign check/disconnect rejection, no provider resource creation and zero units for guided commands. Muse returned the authoritative hosting-list receipt; usage settled at 6 units with zero reserved and no replay charge. Logout and fixture cleanup passed. No real DNS or custom-hostname operation occurred.
