@@ -80,6 +80,7 @@ Payments and credit purchases are not enabled yet. Help and guided commands do n
 Ask the agent to create a pure JavaScript function for an existing project.
 /backends PROJECT_ID lists private drafts; /backend-diff NEW_VERSION_ID ORIGINAL_VERSION_ID compares saved source and reports the latest test status without executing or publishing.
 /backend VERSION_ID reads source.
+/check-backend VERSION_ID {"input":JSON,"expected":JSON} verifies an expected answer; object key order is ignored and array order is exact.
 /test-backend VERSION_ID JSON runs a non-sensitive example; /backend-result RECEIPT_ID reads its saved result.
 
 /application PROJECT_ID reads persistent app configuration. /enable-application VERSION_ID TRANSITION_TEST_ID prepares authority to use per-visitor data; /application-review REVIEW_ID reads it; /confirm-application REVIEW_ID applies it. /disable-application PROJECT_ID reviews disabling and revoking visitor sessions. /visitor-access opens private invitations and visitor access controls in the workspace; optionally add PROJECT_ID. Invitation codes stay outside chat. /app-page PROJECT_ID reads the visitor page. /configure-app-page PROJECT_ID FORM_JSON prepares publication, /app-page-review REVIEW_ID reads it, and only /confirm-app-page REVIEW_ID publishes it. /disable-app-page PROJECT_ID prepares withdrawal. Page changes sign out visitors.

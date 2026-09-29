@@ -12,8 +12,20 @@ export async function ownedBackend(db:D1Database,user:string,version:string){
  const row=await db.prepare('SELECT v.id,v.project_id,v.source,v.digest,p.name FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(version,user).first<{id:string;project_id:string;source:string;digest:string;name:string}>();
  if(!row)throw new BackendError(404,'Backend version not found');return row;
 }
-function describeRun(run:{id:unknown;state:string;result?:unknown}){return `Private backend test: ${run.state}\nReceipt: ${run.id}\n`+(run.result?JSON.stringify(run.result).slice(0,1400)+(JSON.stringify(run.result).length>1400?'\nResult display truncated; full result remains in the private API receipt.':''):'Execution is pending or its outcome is unknown. This receipt will not be executed again.')+'\nNo application data or live website was changed. Test attempts use the separate backend allowance, not AI units.';}
+function describeRun(run:{id:unknown;state:string;result?:unknown}){const data=run.result as {ok?:boolean;check?:{status?:string}}|undefined;const verdict=data?.check?'Expected-output check: '+(data.check.status==='not_run'?'not run; execution did not succeed':data.check.status): data?.ok===true?'Execution completed; no expected output was checked.':data?.ok===false?'Execution failed.':'No confirmed execution result.';return `Private backend test: ${run.state}\nReceipt: ${run.id}\n${verdict}\n`+(run.result?JSON.stringify(run.result).slice(0,1400)+(JSON.stringify(run.result).length>1400?'\nResult display truncated; full result remains in the private API receipt.':''):'Execution is pending or its outcome is unknown. This receipt will not be executed again.')+'\nNo application data or live website was changed. Test attempts use the separate backend allowance, not AI units.';}
 export function backendChatCommand(db:D1Database,user:string,turnId:string,content:string,service?:Fetcher){
+ if(/^\/check-backend(?:\s|$)/i.test(content)){
+  const match=content.trim().match(/^\/check-backend\s+([0-9a-f-]+)\s+([\s\S]+)$/i);
+  let sample:Record<string,unknown>;try{sample=JSON.parse(match?.[2]??'null');}catch{throw new BackendError(400,'Use /check-backend VERSION_ID {"input":JSON,"expected":JSON}');}
+  if(!match||!uuid.test(match[1])||!sample||typeof sample!=='object'||Array.isArray(sample)||Object.keys(sample).length!==2||!Object.hasOwn(sample,'input')||!Object.hasOwn(sample,'expected'))throw new BackendError(400,'Use /check-backend VERSION_ID {"input":JSON,"expected":JSON}');
+  return async()=>{
+   try{
+    if(!service)throw new BackendError(503,'Backend testing is not connected in this environment');
+    const version=await ownedBackend(db,user,match[1]);
+    return describeRun(await testBackend(db,service,user,version.project_id,version.id,turnId,sample.input,{expected:sample.expected}));
+   }catch(error){return error instanceof BackendError?error.message:'The check result could not be retrieved. Use /backend-result '+turnId+' to inspect its receipt. Replaying this message will not execute again.';}
+  };
+ }
  if(/^\/backend-diff(?:\s|$)/i.test(content)){
   const parts=content.trim().split(/\s+/);if(parts.length!==3||!uuid.test(parts[1])||!uuid.test(parts[2]))throw new BackendError(400,'Use /backend-diff NEW_VERSION_ID ORIGINAL_VERSION_ID');
   return async()=>{try{return describeBackendComparison(await compareBackends(db,user,parts[1],parts[2]));}catch(error){return error instanceof BackendError?error.message:'Comparison unavailable. Run /backend-diff again to read the saved versions.';}};
@@ -83,6 +95,10 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
 }
 export async function backendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher){
  const operation=action.operation;
+ if(operation==='check'){
+  if(Object.keys(action).some(k=>!['kind','operation','versionId','input','expected'].includes(k))||typeof action.versionId!=='string'||!uuid.test(action.versionId)||!Object.hasOwn(action,'input')||!Object.hasOwn(action,'expected'))throw new BackendError(400,'Provide a backend version, synthetic input and expected output');
+  return {reply:await backendChatCommand(db,user,turnId,`/check-backend ${action.versionId} ${JSON.stringify({input:action.input,expected:action.expected})}`,service)!(),statements:[] as D1PreparedStatement[]};
+ }
  if(operation==='compare'){
   if(Object.keys(action).some(k=>!['kind','operation','versionId','baselineId'].includes(k))||typeof action.versionId!=='string'||typeof action.baselineId!=='string')throw new BackendError(400,'Choose a new version and its original version');
   return {reply:describeBackendComparison(await compareBackends(db,user,action.versionId,action.baselineId)),statements:[] as D1PreparedStatement[]};

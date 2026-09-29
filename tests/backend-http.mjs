@@ -59,3 +59,16 @@ if(sites){
  assert.equal((await post('/api/backend-publication-reviews/'+off+'/confirm',{})).status,200);assert.equal((await invoke()).status,404);
  console.log('Public endpoint HTTP acceptance passed: owner/session/origin review boundary, actual bound QuickJS output, anonymous JSON headers and reviewed withdrawal.');
 }else{assert.equal((await post(publicationConfirm,{})).status,200);console.log('Publication API boundary passed; set TELLUMO_SITES_TEST_URL for actual public runtime acceptance.');}
+
+// Expected-output assertions use the same private runtime, receipt and quotas.
+const checkedId=crypto.randomUUID(),checkPath=path+'/'+version+'/test';
+const checked=await post(checkPath,{id:checkedId,input:{values:[2,3,7]},expected:{total:12}});assert.equal(checked.status,200);const checkedResult=await checked.json();assert.equal(checkedResult.result.check.status,'passed');
+assert.deepEqual(await (await post(checkPath,{id:checkedId,input:{values:[2,3,7]},expected:{total:12}})).json(),checkedResult);
+assert.equal((await post(checkPath,{id:checkedId,input:{values:[2,3,7]},expected:{total:13}})).status,409);
+const failedId=crypto.randomUUID(),wrong=await (await post(checkPath,{id:failedId,input:{values:[2,3,7]},expected:{total:13}})).json();assert.equal(wrong.result.ok,false);assert.equal(wrong.result.check.status,'failed');
+assert.equal((await post(publicationPath,{id:crypto.randomUUID(),operation:'publish',versionId:version,runId:failedId})).status,409);
+assert.equal((await post(checkPath,{id:crypto.randomUUID(),input:null,expected:null},other)).status,404);
+const chatBefore=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();const chatRun=crypto.randomUUID();
+assert.equal((await post('/api/chat',{id:chatRun,revision:chatBefore.state.revision,content:'/check-backend '+version+' {"input":{"values":[4,5]},"expected":{"total":9}}'})).status,200);
+const chatAfter=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();assert.match(chatAfter.turns.at(-1).assistant_text,/Expected-output check: passed/);assert.equal(chatAfter.usage.available,chatBefore.usage.available);
+console.log('Expected-output HTTP/runtime checks passed: correct/wrong answers, immutable replay, ownership, failed publication gate and free chat command.');
