@@ -2,6 +2,7 @@
 export const cmsCapabilitiesPath='/_emdash/api/whumpo/capabilities';
 export const cmsCapabilities={
  contract:'whumpo-cms-capabilities',version:1,
+ media:{metadataVersion:1,pageSize:20},
  structuredContent:{version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true},
 } as const;
 export function supportsStructuredCMS(value:unknown):boolean{

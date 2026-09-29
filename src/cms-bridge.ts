@@ -1,3 +1,4 @@
+import {cmsMediaListPath} from './cms-media-path';
 import {cmsCapabilitiesPath} from './cms-capability-contract';
 import {cmsItemId,validCMSDraft,validCMSEdit} from './cms-content-shape';
 // Private CMS request authentication. No browser cookie or model-provided identity is trusted.
@@ -24,7 +25,7 @@ async function boundedBody(request:Request){
 }
 function canonical(config:CMSBridgeConfig,method:string,path:string,id:string,expires:number,bodyHash:string){return JSON.stringify(['townhello-cms-v1',config.projectId,config.ownerId,config.origin,method,path,id,expires,bodyHash]);}
 export async function signCMSRequest(config:CMSBridgeConfig,path:string,id:string,body?:unknown,now=Date.now(),verb?:'PUT'){
- if(!uuid.test(id)||!path.startsWith('/_emdash/api/')||/[?#%\\]/.test(path))throw new CMSBridgeError(400,'Invalid CMS request');
+ if(!uuid.test(id)||!path.startsWith('/_emdash/api/')||(/[?#%\\]/.test(path)&&!cmsMediaListPath.test(path)))throw new CMSBridgeError(400,'Invalid CMS request');
  const method=verb??(body===undefined?'GET':'POST'),serialized=body===undefined?'':JSON.stringify(body),expires=Math.floor(now/1000)+60;
  if(encoder.encode(serialized).length>4096)throw new CMSBridgeError(413,'CMS request exceeds its bound');
  const signature=hex(await crypto.subtle.sign('HMAC',await key(config),encoder.encode(canonical(config,method,path,id,expires,await digest(serialized)))));
@@ -33,14 +34,15 @@ export async function signCMSRequest(config:CMSBridgeConfig,path:string,id:strin
 export async function verifyCMSRequest(request:Request,config:CMSBridgeConfig,now=Date.now()){
  const url=new URL(request.url),id=request.headers.get('x-townhello-cms-id')??'',expiration=request.headers.get('x-townhello-cms-expires')??'',signature=request.headers.get('x-townhello-cms-signature')??'';
  const expires=Number(expiration),seconds=Math.floor(now/1000);
- if(url.origin!==config.origin||url.search||url.hash||url.username||url.password||!uuid.test(id)||!/^\d{10}$/.test(expiration)||expires<=seconds||expires>seconds+60||!/^[0-9a-f]{64}$/.test(signature)||!['GET','POST','PUT'].includes(request.method)||request.headers.has('cookie')||request.headers.has('authorization'))throw new CMSBridgeError(403,'CMS request not authorized');
- const body=await boundedBody(request.clone()),bodyHash=await digest(body),payload=canonical(config,request.method,url.pathname,id,expires,bodyHash);
+ if(url.origin!==config.origin||(!!url.search&&!cmsMediaListPath.test(url.pathname+url.search))||url.hash||url.username||url.password||!uuid.test(id)||!/^\d{10}$/.test(expiration)||expires<=seconds||expires>seconds+60||!/^[0-9a-f]{64}$/.test(signature)||!['GET','POST','PUT'].includes(request.method)||request.headers.has('cookie')||request.headers.has('authorization'))throw new CMSBridgeError(403,'CMS request not authorized');
+ const body=await boundedBody(request.clone()),bodyHash=await digest(body),payload=canonical(config,request.method,url.pathname+url.search,id,expires,bodyHash);
  const valid=await crypto.subtle.verify('HMAC',await key(config),Uint8Array.from(signature.match(/../g)!,v=>parseInt(v,16)),encoder.encode(payload));
  if(!valid)throw new CMSBridgeError(403,'CMS request not authorized');
  // The stable hash excludes assertion expiry, so a fresh signature can read a prior receipt.
- return {id,path:url.pathname,body,requestHash:await digest(JSON.stringify([config.projectId,config.ownerId,config.origin,request.method,url.pathname,bodyHash]))};
+ return {id,path:url.pathname+url.search,body,requestHash:await digest(JSON.stringify([config.projectId,config.ownerId,config.origin,request.method,url.pathname+url.search,bodyHash]))};
 }
 export function cmsRequestAllowed(method:string,path:string,body:string){
+ if(method==='GET'&&body===''&&cmsMediaListPath.test(path))return true;
  if(method==='GET'&&[cmsCapabilitiesPath,'/_emdash/api/setup/status','/_emdash/api/auth/me','/_emdash/api/schema/collections'].includes(path)&&body==='')return true;
  const item=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)$/);
  if(method==='GET'&&item&&cmsItemId.test(item[2])&&body==='')return true;

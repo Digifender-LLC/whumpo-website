@@ -1,3 +1,4 @@
+import {listCMSMedia} from './cms-media';
 import {prepareCMSExport} from './cms-export';
 import {describeCMSContent} from './cms-content-description';
 export {describeCMSContent} from './cms-content-description';
@@ -48,8 +49,9 @@ export async function readCMSDraft(db:D1Database,user:string,project:string,id:s
 export async function cmsContentAction(db:D1Database,user:string,action:Record<string,unknown>,id:string,env:Environment){
  if(['editDraft','editStructuredDraft','listEdits','retryEdit'].includes(String(action.operation)))return cmsEditAction(db,user,action,id,env);
  const project=action.projectId;if(typeof project!=='string'||!uuid.test(project))throw new CMSProjectError(400,'Choose an owned CMS project ID');
- const allowed=['draft','structuredDraft'].includes(String(action.operation))?['kind','operation','projectId','collection','title',action.operation==='structuredDraft'?'content':'text']:['listDrafts','listPublications'].includes(String(action.operation))?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
+ const allowed=action.operation==='media'?['kind','operation','projectId','page']:['draft','structuredDraft'].includes(String(action.operation))?['kind','operation','projectId','collection','title',action.operation==='structuredDraft'?'content':'text']:['listDrafts','listPublications'].includes(String(action.operation))?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
  if(Object.keys(action).some(k=>!allowed.includes(k)))throw new CMSProjectError(400,'Unsupported CMS draft fields');
+ if(action.operation==='media')return listCMSMedia(db,user,project,action.page??1,env);
  if(action.operation==='structuredDraft')return createCMSDraft(db,user,project,id,String(action.collection),action.title,action.content,env,'structured');
  if(action.operation==='draft')return createCMSDraft(db,user,project,id,String(action.collection),action.title,action.text,env);
  if(action.operation==='listPublications')return listCMSPublications(db,user,project);
@@ -72,7 +74,7 @@ export async function cmsContentAction(db:D1Database,user:string,action:Record<s
 }
 export type CMSContent=(action:Record<string,unknown>,requestId:string)=>Promise<unknown>;
 export function cmsContentCommand(content:string,requestId:string,execute?:CMSContent){
- const match=content.match(/^\/(cms-draft|cms-drafts|cms-read|cms-retry|cms-edit|cms-edits|cms-retry-edit|cms-preview|cms-export)(?:\s+([\s\S]+))?$/i);if(!match)return;
+ const match=content.match(/^\/(cms-media|cms-draft|cms-drafts|cms-read|cms-retry|cms-edit|cms-edits|cms-retry-edit|cms-preview|cms-export)(?:\s+([\s\S]+))?$/i);if(!match)return;
  return async()=>{
   try{
    if(!execute)throw new CMSProjectError(503,'CMS content connection is not configured');
@@ -83,6 +85,7 @@ export function cmsContentCommand(content:string,requestId:string,execute?:CMSCo
    }else if(verb==='cms-draft'){
     const parts=rest.split('|').map(s=>s.trim()),head=parts.shift()?.split(/\s+/);if(parts.length!==2||head?.length!==2)throw new CMSProjectError(400,'Use /cms-draft PROJECT_ID posts|pages | title | body text');
     action={operation:'draft',projectId:head[0],collection:head[1],title:parts[0],text:parts[1]};
+   }else if(verb==='cms-media'){const parts=rest.split(/\s+/);if(parts.length>2||!parts[0]||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))throw new CMSProjectError(400,'Use /cms-media PROJECT_ID [PAGE]');action={operation:'media',projectId:parts[0],page:Number(parts[1]??1)};
    }else{const parts=rest.split(/\s+/);if(parts.length!==(verb==='cms-drafts'?1:2))throw new CMSProjectError(400,'Use /'+verb+' PROJECT_ID'+(verb==='cms-drafts'?'':' REQUEST_ID'));action={operation:verb==='cms-drafts'?'listDrafts':verb==='cms-export'?'exportDraft':verb==='cms-preview'?'previewDraft':verb==='cms-read'?'readDraft':verb==='cms-edits'?'listEdits':verb==='cms-retry-edit'?'retryEdit':'retryDraft',projectId:parts[0],...(parts[1]?{requestId:parts[1]}:{})};}
    return describeCMSContent(await execute(action,requestId));
   }catch(error){return error instanceof CMSProjectError?error.message:'CMS draft operation could not be confirmed. Inspect the saved request before creating another.';}

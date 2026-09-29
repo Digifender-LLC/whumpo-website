@@ -96,6 +96,7 @@
     "test:backend-checks": "node tests/backend-checks.mjs",
     "dev:frontend": "vite",
     "test:chat-delivery": "node tests/chat-delivery.mjs",
+    "test:cms-media": "node tests/cms-media.mjs",
     "test:cms-model-read": "node tests/cms-model-read.mjs",
     "test:cms-rich-editor": "node tests/cms-rich-editor.mjs",
     "test:cms-editor": "node tests/cms-editor-shape.mjs",
