@@ -38,7 +38,7 @@ try {
  await denied(begin(b,'signup',invite.code),403);
  let opt=await begin(a,'signup',invite.code);
  assert.equal(opt.options.authenticatorSelection.userVerification,'required');assert.equal(opt.options.authenticatorSelection.residentKey,'required');
- await denied(verify(a,'signup',opt,key.registration(opt.options,'https://digifender.com')),400);
+ await denied(verify(a,'signup',opt,key.registration(opt.options,'https://whumpo.com')),400);
  await denied(verify(a,'signup',opt,key.registration(opt.options)),400);
  opt=await begin(a,'signup',invite.code);
  await denied(auth.appPasskeyVerify(db,a.project,'signup','b'.repeat(64),key.registration(opt.options)),400);
@@ -123,16 +123,16 @@ try {
  for(const secret of [invite.code,registered.session,registered.recoveryCode,recovered.session,recovered.recoveryCode])assert.ok(!raw.includes(secret));
  // Exercise the HTTP adapter with the same real D1 and signed credentials.
  const c=await app(),pageId=id();await pages.prepareAppPage(db,c.user,c.project,pageId,{title:'Private journal',description:'Test',buttonLabel:'Save',fields:[{key:'hello',label:'Note',type:'text'}]});await pages.confirmAppPage(db,c.user,pageId);
- const host='https://apps.digifender.com',jar=new Map();let executions=0;
+ const host='https://app-'+c.project+'.whumpo.site',jar=new Map();let executions=0;
  const env={...proxy.env,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:async(_url,init)=>{executions++;const payload=JSON.parse(init.body).input;assert.deepEqual(Object.keys(payload),['state','input']);return Response.json({ok:true,value:{state:payload.input,result:'saved'}});}}};
  async function request(path,method='GET',payload,settings={}){
   const headers={'cf-connecting-ip':'192.0.2.9',...(!settings.noOrigin?{origin:settings.origin??host}:{}),'content-type':'application/json',cookie:settings.cookie??[...jar].map(([k,v])=>k+'='+v).join('; ')};
-  const response=await applicationGateway(new Request((settings.host??host)+'/apps/'+c.project+'/'+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload)}),settings.env??env);
+  const response=await applicationGateway(new Request((settings.host??host)+'/'+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload)}),settings.env??env);
   const cookies=response.headers.getSetCookie();if(!settings.noSave)for(const cookie of cookies){const pair=cookie.split(';')[0],i=pair.indexOf('=');jar.set(pair.slice(0,i),pair.slice(i+1));}
   const result=await response.json();assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(response.headers.get('access-control-allow-origin'),null);return {response,result,cookies};
  }
  assert.equal((await request('data')).response.status,401);
- assert.equal((await request('data','GET',undefined,{host:'https://digifender.com'})).response.status,404);
+ assert.equal((await request('data','GET',undefined,{host:'https://whumpo.com'})).response.status,404);
  assert.equal((await request('auth/login/options','POST',{}, {noOrigin:true})).response.status,403);
  assert.equal((await request('auth/login/options','POST',{}, {origin:'https://foreign.example'})).response.status,403);
  assert.equal((await request('auth/login/options','POST',{large:'x'.repeat(17000)})).response.status,413);
@@ -162,7 +162,7 @@ try {
  const ownerToken='1'.repeat(64),foreignToken='2'.repeat(64),staleToken='3'.repeat(64);
  for(const [token,user,created]of [[ownerToken,c.user,now()],[foreignToken,a.user,now()],[staleToken,c.user,new Date(Date.now()-700000).toISOString()]])await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)').bind(await hashToken(token),user,new Date(Date.now()+3600000).toISOString(),created).run();
  const accessPath='/api/projects/'+c.project+'/application-access';
- async function ownerRequest(suffix='',method='GET',token=ownerToken,origin='https://digifender.com',payload={}){return platform.fetch(new Request('https://digifender.com'+accessPath+suffix,{method,headers:{cookie:'tellumo_session='+token,origin,'content-type':'application/json'},body:method==='POST'?JSON.stringify(payload):undefined}),env,{waitUntil(){}});}
+ async function ownerRequest(suffix='',method='GET',token=ownerToken,origin='https://whumpo.com',payload={}){return platform.fetch(new Request('https://whumpo.com'+accessPath+suffix,{method,headers:{cookie:'tellumo_session='+token,origin,'content-type':'application/json'},body:method==='POST'?JSON.stringify(payload):undefined}),env,{waitUntil(){}});}
  assert.equal((await ownerRequest('','GET','')).status,401);
  assert.equal((await ownerRequest('','GET',foreignToken)).status,404);
  assert.equal((await ownerRequest('/invitations','POST',staleToken)).status,401);
@@ -173,9 +173,9 @@ try {
  const view=await(await ownerRequest()).json();assert.equal(view.publicAccessReady,true);assert.equal(view.visitors.length,2);
  assert.deepEqual(Object.keys(view.visitors[0]).sort(),['created_at','id','passkeys','revoked','sessions']);
  const serialized=JSON.stringify(view);for(const secret of [createdInvite.code,httpSignup.result.recoveryCode,foreign.session])assert.ok(!serialized.includes(secret));
- const chatHeaders={cookie:'tellumo_session='+ownerToken,origin:'https://digifender.com','content-type':'application/json'};
- const chatState=await(await platform.fetch(new Request('https://digifender.com/api/chat',{headers:chatHeaders}),env,{waitUntil(){}})).json();
- const chatReply=await platform.fetch(new Request('https://digifender.com/api/chat',{method:'POST',headers:chatHeaders,body:JSON.stringify({id:id(),revision:chatState.state.revision,content:'/visitor-access '+c.project})}),env,{waitUntil(){}});
+ const chatHeaders={cookie:'tellumo_session='+ownerToken,origin:'https://whumpo.com','content-type':'application/json'};
+ const chatState=await(await platform.fetch(new Request('https://whumpo.com/api/chat',{headers:chatHeaders}),env,{waitUntil(){}})).json();
+ const chatReply=await platform.fetch(new Request('https://whumpo.com/api/chat',{method:'POST',headers:chatHeaders,body:JSON.stringify({id:id(),revision:chatState.state.revision,content:'/visitor-access '+c.project})}),env,{waitUntil(){}});
  assert.equal(chatReply.status,200);const transcript=await chatReply.json();assert.ok(JSON.stringify(transcript).includes('active visitor(s)'));assert.ok(!JSON.stringify(transcript).includes(createdInvite.code));
  const invitationId=await hashToken('townhello-app-invite:'+createdInvite.code),cancel='/invitations/'+invitationId+'/cancel';
  assert.equal((await ownerRequest(cancel,'POST',foreignToken)).status,404);assert.equal((await ownerRequest(cancel,'POST')).status,200);
@@ -198,10 +198,10 @@ try {
  assert.equal((await pages.liveAppPage(db,d.project)).id,reviewOne);
  await denied(pages.prepareAppPage(db,d.user,d.project,id(),{...form,fields:[{key:'constructor',label:'Bad',type:'text'}]}),400);
  const assets={fetch:async request=>new Response(new URL(request.url).pathname==='/index.html'?'controlled application shell':'controlled asset')};
- const pageURL='https://apps.digifender.com/apps/'+d.project+'/';
+ const pageURL='https://app-'+d.project+'.whumpo.site/';
  const rendered=await appHost.fetch(new Request(pageURL),{...env,ASSETS:assets});assert.equal(rendered.status,200);assert.match(rendered.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.ok(!rendered.headers.get('content-security-policy').includes('unsafe-inline'));
- assert.equal((await appHost.fetch(new Request('https://digifender.com/apps/'+d.project+'/'),{...env,ASSETS:assets})).status,404);
- assert.equal((await appHost.fetch(new Request('https://apps.digifender.com/index.html'),{...env,ASSETS:assets})).status,404);
+ assert.equal((await appHost.fetch(new Request('https://whumpo.com/apps/'+d.project+'/'),{...env,ASSETS:assets})).status,404);
+ assert.equal((await appHost.fetch(new Request('https://whumpo.site/index.html'),{...env,ASSETS:assets})).status,404);
  // Hide the page after signature verification but before session issuance.
  const dInvite=await auth.createAppInvitation(db,d.user,d.project),dOptions=await auth.appPasskeyOptions(db,d.project,'signup',false,dInvite.code,reviewOne),dKey=authenticator(),hide=id();
  await pages.prepareAppPage(db,d.user,d.project,hide,null);

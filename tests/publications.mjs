@@ -11,7 +11,7 @@ const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBind
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
 async function chat(user,content,id=crypto.randomUUID(),revision){const state=await readChat(db,user);return {id,result:await sendChat(db,user,{content,id,revision:revision??state.state.revision})};}
 async function create(user,name){await chat(user,'/new');await chat(user,'A synthetic '+name+' website.');const p=await chat(user,name);const v=await chat(user,`/build ocean ${p.id}`);assert.equal(v.result.status,200);return {project:p.id,version:v.id};}
-const url=id=>'https://sites.digifender.com/s/'+id;
+const url=id=>'https://'+id+'.whumpo.site/';
 const served=id=>host.fetch(new Request(url(id)),{DB:db});
 try{
  const user=await account(),other=await account();const a=await create(user,'Alpha'),b=await create(user,'Beta');
@@ -30,8 +30,10 @@ try{
  const restore=await chat(user,'/restore '+a.version);assert.equal((await chat(user,'/confirm '+restore.id)).result.status,200);assert.equal(await(await served(a.project)).text(),original);
  const off=await chat(user,'/unpublish '+a.project);assert.equal((await served(a.project)).status,200);await chat(user,'/confirm '+off.id);assert.equal((await served(a.project)).status,404);
  assert.equal((await chat(user,'/confirm '+second.id)).result.status,200);assert.equal((await served(b.project)).status,200);
+ assert.equal((await host.fetch(new Request(url(a.project)+'s/'+b.project),{DB:db})).status,404);
+ assert.equal((await host.fetch(new Request('https://'+b.project+'.whumpo.site.evil.example/'),{DB:db})).status,404);
  // No control-plane routes or write methods on the public host.
- assert.equal((await host.fetch(new Request('https://sites.digifender.com/api/chat'),{DB:db})).status,404);
+ assert.equal((await host.fetch(new Request(url(b.project)+'api/chat'),{DB:db})).status,404);
  assert.equal((await host.fetch(new Request(url(b.project),{method:'POST'}),{DB:db})).status,405);
  assert.equal((await host.fetch(new Request(url(b.project),{method:'HEAD'}),{DB:db})).status,200);
  assert.equal((await(await host.fetch(new Request(url(b.project),{method:'HEAD'}),{DB:db})).text()),'');

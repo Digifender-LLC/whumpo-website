@@ -3,11 +3,11 @@ import {hashToken} from './security';
 export type HostingConfig={token:string;zone:string;target:string};
 // Activation also asserts the operator verified the fallback origin, route exclusions and included allowance.
 export function hostingConfig(env:{CLOUDFLARE_DOMAINS_TOKEN?:string;DOMAIN_HOSTING_READY?:string}):HostingConfig|undefined{
- return env.DOMAIN_HOSTING_READY==='verified'&&env.CLOUDFLARE_DOMAINS_TOKEN?{token:env.CLOUDFLARE_DOMAINS_TOKEN,zone:'fbf8bf845a46cadbb793ffeb8b5716f5',target:'hosting.digifender.com'}:undefined;
+ return env.DOMAIN_HOSTING_READY==='verified'&&env.CLOUDFLARE_DOMAINS_TOKEN?{token:env.CLOUDFLARE_DOMAINS_TOKEN,zone:'8d46ee4e394514402479acf16579f7b5',target:'hosting.whumpo.site'}:undefined;
 }
 type Connection={id:string;user_id:string;claim_id:string;project_id:string;hostname:string;zone_id:string;target:string;proof_hash:string;state:string;provider_id:string|null;provider_status:string;ssl_status:string;detail:string;created_at:string;expires_at:string;checked_at:string|null;serve_until:string|null};
 const idPattern=/^[a-f0-9-]{36}$/;
-function configured(config:HostingConfig|undefined){if(!config||!config.token||!/^[a-f0-9]{32}$/.test(config.zone)||config.target!=='hosting.digifender.com')throw new DomainError(503,'Domain hosting is awaiting platform configuration.');return config;}
+function configured(config:HostingConfig|undefined){if(!config||!config.token||!/^[a-f0-9]{32}$/.test(config.zone)||config.target!=='hosting.whumpo.site')throw new DomainError(503,'Domain hosting is awaiting platform configuration.');return config;}
 function view(c:Connection){return {id:c.id,claimId:c.claim_id,projectId:c.project_id,hostname:c.hostname,state:c.state==='review'&&c.expires_at<=new Date().toISOString()?'expired':c.state==='active'&&(!c.serve_until||c.serve_until<=new Date().toISOString())?'needs_check':c.state,connected:c.state==='active'&&!!c.serve_until&&c.serve_until>new Date().toISOString(),target:c.target,providerStatus:c.provider_status,certificateStatus:c.ssl_status,detail:c.detail,expiresAt:c.expires_at,checkedAt:c.checked_at};}
 async function owned(db:D1Database,user:string,id:string){const c=await db.prepare('SELECT c.* FROM domain_connections c JOIN projects p ON p.id=c.project_id WHERE c.id=? AND c.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Connection>();if(!c)throw new DomainError(404,'Domain connection not found.');return c;}
 export async function hostingConnections(db:D1Database,user:string){const {results}=await db.prepare('SELECT * FROM domain_connections WHERE user_id=? ORDER BY created_at DESC LIMIT 100').bind(user).all<Connection>();return results.map(view);}

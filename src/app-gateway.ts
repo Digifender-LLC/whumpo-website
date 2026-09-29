@@ -1,3 +1,4 @@
+import {visitorProject,visitorOrigin} from './hosts';
 import {deleteAppAccount,exportAppAccount} from './app-lifecycle';
 import {appPasskeyOptions,appPasskeyVerify,recoverAppVisitor} from './app-auth';
 import {readAppData,readAppReceipt,revokeAppSession,transitionAppData} from './app-data';
@@ -16,7 +17,7 @@ const headers={
  'content-security-policy':"default-src 'none'; frame-ancestors 'none'; sandbox"
 };
 function json(value:unknown,status=200,cookies:string[]=[]){const result=new Headers(headers);for(const cookie of cookies)result.append('set-cookie',cookie);return new Response(JSON.stringify(value),{status,headers:result});}
-function cookieName(project:string,kind:'session'|'challenge',local:boolean){return `${local?'local-':'__Host-'}townhello-app-${kind}-${project}`;}
+function cookieName(project:string,kind:'session'|'challenge',local:boolean){return `${local?'local-':'__Host-'}whumpo-app-${kind}-${project}`;}
 function cookie(project:string,kind:'session'|'challenge',value:string,local:boolean){return `${cookieName(project,kind,local)}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${value?(kind==='session'?86400:300):0}${local?'':'; Secure'}`;}
 function token(request:Request,project:string,kind:'session'|'challenge',local:boolean){
  const name=cookieName(project,kind,local),matches=(request.headers.get('cookie')??'').split(';').map(p=>p.trim()).filter(p=>p.startsWith(name+'='));
@@ -38,7 +39,8 @@ async function body(request:Request):Promise<Record<string,unknown>>{
 // must call this handler; it must never serve arbitrary generated scripts/HTML.
 export async function applicationGateway(request:Request,env:AppEnv):Promise<Response>{
  try{
-  const local=String(env.ENVIRONMENT)==='local',origin=local?'http://localhost:8787':'https://apps.digifender.com',url=new URL(request.url);
+  const local=String(env.ENVIRONMENT)==='local',url=new URL(request.url),hostProject=visitorProject(url.hostname),origin=local?'http://localhost:8787':hostProject?visitorOrigin(hostProject):'';
+  if(!local&&hostProject)url.pathname='/apps/'+hostProject+url.pathname;
   if(url.origin!==origin)return json({error:'Application host required'},404);
   const match=url.pathname.match(route);if(!match)return json({error:'Not found'},404);
   const project=match[1],path=match[2],method=request.method;

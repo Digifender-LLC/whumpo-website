@@ -15,7 +15,7 @@ const service={fetch:async(url,init)=>{calls++;assert.deepEqual(Object.keys(init
 async function account(user=id()){const project=id();await db.prepare("INSERT OR IGNORE INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now()).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Public function','','draft',?,?)").bind(project,user,now(),now()).run();return {user,project};}
 async function version(a){const v=id(),r=id();await saveBackend(db,a.user,a.project,v,'export default input=>input');await testBackend(db,service,a.user,a.project,v,r,42);return {v,r};}
 async function publish(a,v){const rid=id();await prepare(db,a.user,a.project,rid,'publish',v.v,v.r);await confirm(db,a.user,rid);return rid;}
-const request=(input={hello:'visitor'},extra={})=>new Request('https://sites.digifender.com/s/unused/backend',{method:'POST',headers:{'content-type':'application/json',cookie:'secret=session',authorization:'Bearer platform-secret'},body:JSON.stringify(input),...extra});
+const request=(input={hello:'visitor'},extra={})=>new Request('https://00000000-0000-0000-0000-000000000000.whumpo.site/backend',{method:'POST',headers:{'content-type':'application/json',cookie:'secret=session',authorization:'Bearer platform-secret'},body:JSON.stringify(input),...extra});
 const call=(a,input,env=db)=>publicBackend(request(input),env,service,a.project);
 try{
  const a=await account(),b=await account(),v=await version(a),vb=await version(b);calls=0;
@@ -32,7 +32,7 @@ try{
  const expired=id();await db.prepare("INSERT INTO backend_publication_reviews(id,user_id,project_id,operation,version_id,run_id,base_revision,expires_at) VALUES(?,?,?,'publish',?,?,1,'2000-01-01T00:00:00.000Z')").bind(expired,a.user,a.project,v.v,v.r).run();await assert.rejects(confirm(db,a.user,expired),e=>e.status===409);
  const failed=id();await testBackend(db,{fetch:()=>Response.json({ok:false,error:'execution_failed'},{status:422})},a.user,a.project,v.v,failed,{});await assert.rejects(prepare(db,a.user,a.project,id(),'publish',v.v,failed),e=>e.status===409);
  assert.deepEqual(await (await call(a,{hello:'visitor'})).json(),{ok:true,value:{hello:'visitor'}});assert.equal(calls,1);
- const routed=await host.fetch(new Request(`https://sites.digifender.com/s/${a.project}/backend`,{method:'POST',headers:{'content-type':'application/json'},body:'42'}),{DB:db,BACKEND_RUNTIME:service});assert.equal(routed.status,200);assert.deepEqual(await routed.json(),{ok:true,value:42});
+ const routed=await host.fetch(new Request(`https://${a.project}.whumpo.site/backend`,{method:'POST',headers:{'content-type':'application/json'},body:'42'}),{DB:db,BACKEND_RUNTIME:service});assert.equal(routed.status,200);assert.deepEqual(await routed.json(),{ok:true,value:42});
  const invalid=[request({}, {method:'GET',body:undefined}),request({}, {headers:{'content-type':'text/plain'}}),request({}, {body:'not JSON'}),request({}, {body:'"'+'x'.repeat(8192)+'"'})];
  for(const [i,req] of invalid.entries())assert.equal((await publicBackend(req,db,service,a.project)).status,[405,415,400,413][i]);
  const preflight=await publicBackend(request({}, {method:'OPTIONS',body:undefined}),db,service,a.project);assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-credentials'),null);

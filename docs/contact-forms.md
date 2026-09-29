@@ -7,7 +7,7 @@ The first reusable dynamic capability is a platform-authored contact form, share
 1. Publish a saved website version.
 2. Ask the agent to prepare a contact-form review, or use `/contact-on PROJECT_ID`. The Details → Contact inbox panel also prepares this command.
 3. Confirm the exact review with its button or `/confirm-contact REVIEW_ID` within ten minutes.
-4. The public host adds a Contact link to that live version. It opens a TellUmo-hosted form at `https://digifender.com/contact/PROJECT_ID`.
+4. The public host adds a Contact link to that live version. It opens a TellUmo-hosted form at `https://whumpo.com/contact/PROJECT_ID`.
 5. Open `/inbox` or Details → Contact inbox to read messages. This panel does not copy visitor content into chat history or model context.
 6. `/contact-off PROJECT_ID` prepares a disabling review. Confirmation stops new intake. Existing messages remain private until deletion or expiry.
 

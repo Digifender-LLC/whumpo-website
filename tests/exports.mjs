@@ -11,7 +11,7 @@ const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBind
 const env={...proxy.env,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
 async function account(){const id=crypto.randomUUID(),session=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,'private-email-'+id+'@example.com','00',new Date().toISOString()).run();await db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)').bind(await hashToken(session),id,new Date().toISOString(),new Date(Date.now()+600000).toISOString()).run();return {id,session};}
 async function send(user,content,id=crypto.randomUUID(),revision){const state=await readChat(db,user.id);const result=await sendChat(db,user.id,{id,revision:revision??state.state.revision,content},{baseURL:'https://never-called.test',apiKey:'never-export-this-key',model:'test'});return {result,id};}
-async function request(path,user){return worker.fetch(new Request('https://digifender.com/api'+path,{headers:user?{cookie:'tellumo_session='+user.session}:{}}),env);}
+async function request(path,user){return worker.fetch(new Request('https://whumpo.com/api'+path,{headers:user?{cookie:'tellumo_session='+user.session}:{}}),env);}
 try{
  const owner=await account(),other=await account();
  await send(owner,'A neighborhood bakery');await send(owner,'Bread & <Butter>');await send(other,'Other-owner-private-brief');await send(other,'Other owner');

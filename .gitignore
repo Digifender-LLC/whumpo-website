@@ -13,3 +13,5 @@ dist/
 # EmDash generated build/runtime files
 **/.astro/
 **/.emdash/
+
+/cloudflare.key

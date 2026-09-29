@@ -5,7 +5,7 @@ import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {hostname,verifyDNS,listDomains}=await module('src/domains.ts'),{sendChat,readChat}=await module('src/chat.ts');
-for(const invalid of ['digifender.com','a.digifender.com','https://foo.com','foo.com/path','127.0.0.1','localhost','foo.local','x..com','-x.com','x-.com','x.com:443','user@x.com','*.x.com','x'.repeat(64)+'.com'])assert.throws(()=>hostname(invalid));
+for(const invalid of ['whumpo.com','a.whumpo.com','whumpo.site','a.whumpo.site','https://foo.com','foo.com/path','127.0.0.1','localhost','foo.local','x..com','-x.com','x-.com','x.com:443','user@x.com','*.x.com','x'.repeat(64)+'.com'])assert.throws(()=>hostname(invalid));
 assert.equal(hostname(' WWW.EXAMPLE.COM '),'www.example.com');
 const dnsName='_tellumo.www.example.com',proof='tellumo-verification=abc';
 const response=(answer,status=0)=>async()=>new Response(JSON.stringify({Status:status,Answer:answer}));

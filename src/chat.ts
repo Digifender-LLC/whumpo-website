@@ -31,7 +31,7 @@ import { reconcileChat, sendAIChat } from './ai-chat';
 import type { AIConfig } from './ai';
 
 type State = { revision: number; step: 'idea' | 'name' | 'ready'; idea: string; brief_project_id: string | null; brief_stage: 'audience' | 'style' | null };
-export const greeting = "Hi, I’m your TownHello guide. What would you like to put online? Tell me about your business, project, or idea. I can save your brief and set up a project with you.";
+export const greeting = "Hi, I’m your Whumpo guide. What would you like to put online? Tell me about your business, project, or idea. I can save your brief and set up a project with you.";
 export async function chatState(db: D1Database, userId: string) {
   await db.prepare('INSERT OR IGNORE INTO workspace_state (user_id) VALUES (?)').bind(userId).run();
   const state = await db.prepare('SELECT revision, step, idea, brief_project_id, brief_stage FROM workspace_state WHERE user_id = ?').bind(userId).first<State>();
@@ -52,7 +52,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   const links=await cmsPreviewLinks(db,userId);
   for(const turn of result[1].results as Record<string,unknown>[]){const link=links.find(l=>l.turn_id===turn.id);if(link){turn.cms_preview_project_id=link.project_id;turn.cms_preview_request_id=link.draft_request_id;}}
   const cmsReviews=await cmsPublicationLinks(db,userId);
-  for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsReviews.find(r=>r.turn_id===turn.id);if(r){turn.cms_publication_review_id=r.id;if(r.status==='published'&&!r.withdrawn)turn.cms_publication_url=`https://sites.digifender.com/s/${r.project_id}/cms/${r.collection}/${r.item_id}`;if(r.status==='approved'||r.status==='pending'&&String(r.expires_at)>new Date().toISOString())turn.cms_publication_confirmation_id=r.id;}}
+  for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsReviews.find(r=>r.turn_id===turn.id);if(r){turn.cms_publication_review_id=r.id;if(r.status==='published'&&!r.withdrawn)turn.cms_publication_url=`https://${r.project_id}.whumpo.site/cms/${r.collection}/${r.item_id}`;if(r.status==='approved'||r.status==='pending'&&String(r.expires_at)>new Date().toISOString())turn.cms_publication_confirmation_id=r.id;}}
   const cmsDiscards=await cmsDiscardLinks(db,userId);
   for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsDiscards.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_discard_confirmation_id=r.id;turn.cms_discard_recovery=r.status==='approved';}}
   const cmsRemovals=await cmsUnpublishLinks(db,userId);
@@ -108,7 +108,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
-  if(navigation){const pages=(navigation.view==='pages'||navigation.view==='page')?(await readLayout(db,userId)).layout.tabs:[];reply=workspaceNavigationHelp+(navigation.view==='pages'||navigation.view==='page'?'\n'+(pages.length?'Your pages: '+pages.map(p=>p.label).join(', '):'No custom pages yet. Ask TownHello to create one for your workflow.'):'');}
+  if(navigation){const pages=(navigation.view==='pages'||navigation.view==='page')?(await readLayout(db,userId)).layout.tabs:[];reply=workspaceNavigationHelp+(navigation.view==='pages'||navigation.view==='page'?'\n'+(pages.length?'Your pages: '+pages.map(p=>p.label).join(', '):'No custom pages yet. Ask Whumpo to create one for your workflow.'):'');}
   else if(cms)reply='CMS command recorded. Inspect /cms or /cms-review '+input.id+' to recover its saved state.';
   else if(backend)reply='Backend command recorded. Its result is not saved yet. Use /backend-result '+input.id+' to inspect a test receipt. Replaying this message will not execute again.';
   else if(health)reply='Website check recorded; the result is not saved yet. Use /health for current status.';
@@ -170,7 +170,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     reply=saved?`Private brief for “${saved.name}”\nIdea: ${saved.purpose}\nAudience and goal: ${saved.audience||'Not specified'}\nStyle notes: ${saved.style_notes||'Not specified'}\nStarting theme: ${saved.preferred_theme}\n\nAudience and style notes are planning context for AI edits, not page content.`:'No project found. Use /new to start one.';
   } else if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
     const { results } = await db.prepare('SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ id: string; name: string; purpose: string; status: string;site_live:number;backend_live:number;cms_articles:number }>();
-    reply = results.length ? results.map(p => `${p.name} — ${p.site_live||p.cms_articles||p.backend_live?'live':p.status}\n${p.purpose}\nID: ${p.id}${p.site_live ? '\n' + siteURL(p.id) : ''}${p.backend_live?'\nPublic JSON backend · https://sites.digifender.com/s/'+p.id+'/backend':''}${p.cms_articles?'\n'+p.cms_articles+' public CMS article(s) · https://sites.digifender.com/s/'+p.id+'/cms':''}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
+    reply = results.length ? results.map(p => `${p.name} — ${p.site_live||p.cms_articles||p.backend_live?'live':p.status}\n${p.purpose}\nID: ${p.id}${p.site_live ? '\n' + siteURL(p.id) : ''}${p.backend_live?'\nPublic JSON backend · https://'+p.id+'.whumpo.site/backend':''}${p.cms_articles?'\n'+p.cms_articles+' public CMS article(s) · https://'+p.id+'.whumpo.site/cms':''}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
   } else if (['/usage', 'show usage', '/credits'].includes(command)) {
     const billing = await getBilling(db, userId);
     reply = `${billing.plan.name} · ${billing.period}\n${billing.quota.available} of ${billing.quota.allowance} monthly build units available. ${billing.quota.spent} used; ${billing.quota.reserved} held for pending work.\n${billing.credits.available} credits available; ${billing.credits.reserved} held.\nUsing existing credits after your monthly allowance is ${billing.credits.overageEnabled ? 'enabled' : 'disabled'}.\n\nGuided chat is free. Monthly units reset on the first day of each month (UTC); credits carry over. Use /credits on or /credits off to change overage use. Buying credits and paid upgrades are not enabled yet.`;

@@ -1,5 +1,7 @@
 # TellUmo test deployment
 
+Current domain/frontend configuration: see [Whumpo migration](whumpo-migration.md). Older entries below are historical release evidence and do not describe the current hostname.
+
 ## Confirmed decisions
 
 On September 28 2026, the user authorized digifender.com as the temporary test domain, invite-only registration, and the existing account's included Workers/D1 allowance without upgrades or paid-only services. GitHub is restricted to free features.

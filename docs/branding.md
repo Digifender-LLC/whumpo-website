@@ -1,15 +1,11 @@
-# TownHello branding
+# Whumpo branding
 
-TownHello replaces the placeholder TellUmo name in the customer interface. Tagline: “Whatever you need online, just ask.”
+Whumpo is the product name. Primary tagline: “Big ideas. Less work.” Conversation prompt: “Tell Whumpo what you need.”
 
-The landing page and illustrations were inherited from the final local template built in “Check Wrangler registrar search”, source `outputs/townhello/dist`, September 29, 2026. The template’s full-width street, conversation/doorway logo, serif wordmark, sample conversations and responsive layouts are retained.
+The September 2026 identity supplied by the owner is retained in `brand/whumpo-identity.md` and `brand/whumpo-brand-board.png`. The previous town/street template and its assets have been retired.
 
-Palette: cream #fff8e9, ink #243e34, green #2d503e, yellow #edc25c, terracotta #9a4c30. DM Sans, DM Serif Display and Caveat are self-hosted under public/brand; their OFL notices are in docs/licenses. No external font CSP permissions are needed.
+Palette: Deep Sky #0F2D5B, Sky Blue #60B5FF, Cloud White #F8FAFC, Mint #A7E3C1, Sunshine #FFD56B and Cloud Coral #FF7B7B. Inter is used for body/UI text and rounded Nunito for display. Fonts are bundled locally. The transparent cloud-elephant illustration was generated from the supplied brand direction.
 
-Sign-in, registration, chat, detail dialogs, contact and comparison pages use the new presentation. Existing customer website designs are preserved. Lowercase internal IDs, cookies, backup paths, database names, infrastructure names and DNS operation markers remain compatible. Existing saved content and history are not rewritten.
+The React landing page, owner workspace, auth screens, settings, profile and controlled visitor page follow this identity. Contact and source-comparison pages use the same navy/cloud palette. Saved customer designs and user content are preserved.
 
-The deployment stays on digifender.com and Cloudflare. The template’s future services are labeled as possibilities, not currently available capabilities. Invitation CTAs open the existing registration flow; paid services remain disabled.
-
-## Verification
-
-Deployed to digifender.com on September 29, 2026. Main Worker version: `9b8cdf4e-d510-4d28-b441-d3dcc40dd14c`. TypeScript, persisted chat, cryptographic passkey and version-comparison suites passed. Browser checks covered 1440px desktop and 390px mobile landing layouts, loaded imagery, future-example switching, authenticated local workspace/details/billing, and the live invitation form. Live passkey enrollment and human Turnstile completion were not attempted.
+See [Whumpo migration](whumpo-migration.md) for live addresses, deployment and verification. Lowercase persistent resource identifiers retain their original names to preserve existing data.

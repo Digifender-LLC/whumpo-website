@@ -539,7 +539,7 @@
   async function loadConfig() {
     config = await api("config");
     $("#title").textContent = config.form.title;
-    document.title = config.form.title + " \u2014 TownHello";
+    document.title = config.form.title + " \u2014 Whumpo";
     $("#description").textContent = config.form.description;
     $("#submit").textContent = config.form.buttonLabel;
     const fields = $("#fields");
@@ -601,7 +601,7 @@
     $("#workspace").hidden = true;
     $("#recovery").hidden = false;
     $("#saved-code").textContent = action ? "I\u2019ve saved this code. Recover my account" : "I\u2019ve saved my code";
-    $("#recovery-explanation").textContent = action ? "Save this replacement in your password manager before continuing. Keep your previous code until recovery succeeds. If the response is lost, retry here with the same request or recover using your saved replacement." : "Keep this code in your password manager. It restores access if you lose your passkeys. Do not share it with the application owner or TownHello Chat.";
+    $("#recovery-explanation").textContent = action ? "Save this replacement in your password manager before continuing. Keep your previous code until recovery succeeds. If the response is lost, retry here with the same request or recover using your saved replacement." : "Keep this code in your password manager. It restores access if you lose your passkeys. Do not share it with the application owner or Whumpo Chat.";
     $("#recovery-code").value = code;
     $("#recovery-code").focus();
   }

@@ -11,7 +11,7 @@ const {sendChat,readChat}=await module('src/chat.ts'),{sendAIChat}=await module(
 const dir=await mkdtemp('/tmp/tellumo-routing-');
 execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
-const config={clientId:'fixture',clientSecret:'fixture-secret',key:'a'.repeat(64)},zone='b'.repeat(32),target='hosting.digifender.com',now=()=>new Date().toISOString();
+const config={clientId:'fixture',clientSecret:'fixture-secret',key:'a'.repeat(64)},zone='b'.repeat(32),target='hosting.whumpo.site',now=()=>new Date().toISOString();
 async function account(apex=false){
  const user=crypto.randomUUID(),project=crypto.randomUUID(),claim=crypto.randomUUID(),tokenId=crypto.randomUUID(),connection=crypto.randomUUID(),proof=crypto.randomUUID(),hostname=apex?'example.com':'test-'+user+'.example.com';
  await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'fixture',?)").bind(user,user+'@example.com','00',now()).run();

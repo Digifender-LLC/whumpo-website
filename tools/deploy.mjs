@@ -5,8 +5,8 @@ for (const args of [
  [wrangler,'d1','migrations','apply','tellumo-control','--remote'],
  ['tools/build.mjs'],
  [wrangler,'deploy','--config','wrangler.runtime.jsonc'],
- [wrangler,'deploy','--config','wrangler.sites.jsonc'],
  [wrangler,'deploy','--config','wrangler.apps.jsonc'],
+ [wrangler,'deploy','--config','wrangler.sites.jsonc'],
  ['tools/deploy-platform.mjs']
 ]) {
  const run=spawnSync(process.execPath,args,{stdio:'inherit'});

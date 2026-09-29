@@ -20,7 +20,7 @@ Network calls go only to the fixed Stripe API origin, do not follow redirects, t
 
 ## Deferred connection
 
-When the owner chooses to connect Stripe, install `STRIPE_TEST_KEY` and `STRIPE_WEBHOOK_SECRET` as workspace Worker secrets using Wrangler. Only `sk_test_` credentials are accepted; live keys leave checkout disabled. The webhook endpoint will be `https://digifender.com/api/stripe/webhook`, listening for `checkout.session.completed` and `checkout.session.async_payment_succeeded` in test mode. Store operator files under ignored `.secrets/`. Do not put payment secrets on the public-site Worker.
+When the owner chooses to connect Stripe, install `STRIPE_TEST_KEY` and `STRIPE_WEBHOOK_SECRET` as workspace Worker secrets using Wrangler. Only `sk_test_` credentials are accepted; live keys leave checkout disabled. The webhook endpoint will be `https://whumpo.com/api/stripe/webhook`, listening for `checkout.session.completed` and `checkout.session.async_payment_succeeded` in test mode. Store operator files under ignored `.secrets/`. Do not put payment secrets on the public-site Worker.
 
 Run a real Stripe test checkout and webhook delivery before claiming this integration is connected. Current validation uses synthetic signed events and disposable D1, including failed signatures, stale/future timestamps, unpaid/live sessions, incorrect amounts, cross-owner IDs, concurrent requests, duplicate events, lost provider/database acknowledgements and API gates.
 

@@ -25,7 +25,7 @@ Infrastructure budgets, customer overage tariffs, normalization, tax treatment a
 
 ## Workspace
 
-Chat is the first and default navigation item. Chat, Dashboard, Settings, Profile and workflow pages occupy separate full-width views; Dashboard never includes a side chat. There is no global header. Brand sits top left; Settings icon and private profile-photo button share the bottom sidebar row. Email and sign-out appear only in Profile. No Tools menu or Add Workspace button exists. An empty workflow list invites the user to ask TownHello for a custom page. Existing pages remain customizable.
+Chat is the first and default navigation item. Chat, Dashboard, Settings, Profile and workflow pages occupy separate full-width views; Dashboard never includes a side chat. There is no global header. Brand sits top left; Settings icon and private profile-photo button share the bottom sidebar row. Email and sign-out appear only in Profile. No Tools menu or Add Workspace button exists. An empty workflow list invites the user to ask Whumpo for a custom page. Existing pages remain customizable.
 
 Default dashboard includes projects, AI test allowance and activity. Static account controls remain available independently of customization. Connections, domains, photos, billing and contact inbox render inside the workspace; sensitive passkey/recovery flows retain dialogs. CMS drafting/editing/review opens the Chat tab, rather than requiring the user to leave for a separate admin website.
 

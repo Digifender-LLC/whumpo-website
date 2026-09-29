@@ -2,7 +2,7 @@ import {BackendError,listBackends,callBackend} from './backend-versions';
 import {hashToken} from './security';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Review={id:string;user_id:string;project_id:string;operation:'publish'|'unpublish';version_id:string;run_id:string|null;base_revision:number;status:string;expires_at:string;source:string;digest:string};
-export const backendEndpoint=(project:string)=>`https://sites.digifender.com/s/${project}/backend`;
+export const backendEndpoint=(project:string)=>`https://${project}.whumpo.site/backend`;
 export async function readBackendPublication(db:D1Database,user:string,project:string){
  await listBackends(db,user,project);
  const row=await db.prepare('SELECT revision,review_id,version_id FROM backend_publications WHERE project_id=?').bind(project).first<{revision:number;review_id:string|null;version_id:string|null}>();

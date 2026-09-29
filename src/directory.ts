@@ -10,7 +10,7 @@ export function listing(value:unknown):Listing{
  return {id:v.id,title:v.title.trim(),description:v.description.trim(),url};
 }
 function entries(json:string){const data:unknown=JSON.parse(json);if(!Array.isArray(data)||data.length>25)throw new DirectoryError(400,'A directory supports up to 25 listings.');const list=data.map(listing);if(new Set(list.map(x=>x.id)).size!==list.length||new TextEncoder().encode(JSON.stringify(list)).length>24576)throw new DirectoryError(400,'Directory is too large or has duplicate listing IDs.');return list;}
-export const directoryURL=(id:string)=>'https://sites.digifender.com/s/'+id+'/directory';
+export const directoryURL=(id:string)=>'https://'+id+'.whumpo.site/directory';
 export async function readDirectory(db:D1Database,user:string,project:string){
  if(!uuid.test(project))throw new DirectoryError(400,'Choose a project from /projects.');
  const p=await db.prepare('SELECT p.id,p.name,COALESCE(d.revision,0) AS revision,COALESCE(d.draft_json,\'[]\') AS draft_json,d.live_json,d.publication_revision,d.published_at,s.revision AS current_publication,s.version_id FROM projects p LEFT JOIN directories d ON d.project_id=p.id LEFT JOIN publications s ON s.project_id=p.id WHERE p.id=? AND p.owner_user_id=?').bind(project,user).first<{id:string;name:string;revision:number;draft_json:string;live_json:string|null;publication_revision:number|null;published_at:string|null;current_publication:number|null;version_id:string|null}>();

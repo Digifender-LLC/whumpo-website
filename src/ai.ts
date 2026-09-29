@@ -57,7 +57,7 @@ export async function complete(config: AIConfig, messages: ChatMessage[], transp
   try {
     const response = await transport(url, {
       method: "POST", redirect: "manual", signal: AbortSignal.timeout(timeoutMs),
-      headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", "user-agent": "TownHello/0.3 (website-building-agent)", ...(url.hostname === "opencode.ai" && config.sessionId ? { "x-opencode-session": config.sessionId } : {}) },
+      headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", "user-agent": "Whumpo/0.3 (website-building-agent)", ...(url.hostname === "opencode.ai" && config.sessionId ? { "x-opencode-session": config.sessionId } : {}) },
       body: JSON.stringify(payload)
     });
     if (!response.ok) { await response.body?.cancel(); throw new ProviderError(response.status >= 400 && response.status < 500 ? "rejected" : "unavailable"); }

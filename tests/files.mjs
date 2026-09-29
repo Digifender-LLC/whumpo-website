@@ -10,7 +10,7 @@ execFileSync('python3',['-c',"from PIL import Image; import sys; im=Image.new('R
 const jpeg=new Uint8Array(await readFile(dir+'/fixture.jpg'));
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,env=proxy.env;
 async function account(){const id=crypto.randomUUID(),project=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Photos','Synthetic test','draft',?,?)").bind(project,id,new Date().toISOString(),new Date().toISOString()).run();return {id,project};}
-function request(bytes=jpeg,name='Garden photo'){return new Request('https://digifender.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(name)},body:bytes});}
+function request(bytes=jpeg,name='Garden photo'){return new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(name)},body:bytes});}
 try{
  const owner=await account(),other=await account(),id=crypto.randomUUID();
  const marker=Buffer.from('private GPS EXIF sentinel'),len=marker.length+2;const metadata=Buffer.concat([jpeg.subarray(0,2),Buffer.from([255,225,len>>8,len&255]),marker,jpeg.subarray(2)]);
@@ -31,8 +31,8 @@ try{
  const committed=crypto.randomUUID();await assert.rejects(uploadPhoto(request(),{...env,DB:lossyDB},owner.id,owner.project,committed),{status:503});await uploadPhoto(request(),env,owner.id,owner.project,committed);assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE id=?").bind('file:'+committed).first()).n,1);
  for(let n=3;n<20;n++)await uploadPhoto(request(),env,owner.id,owner.project,crypto.randomUUID());await assert.rejects(uploadPhoto(request(),env,owner.id,owner.project,crypto.randomUUID()),{status:409});assert.equal((await env.FILES.list()).objects.length,20);assert.equal((await getBilling(db,owner.id)).quota.spent,0);
  const apiEnv={...env,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
- assert.equal((await worker.fetch(new Request('https://digifender.com/api/files/'+id),apiEnv)).status,401);
- assert.equal((await worker.fetch(new Request('https://digifender.com/api/projects/'+owner.project+'/files/'+id,{method:'PUT'}),apiEnv)).status,403);
+ assert.equal((await worker.fetch(new Request('https://whumpo.com/api/files/'+id),apiEnv)).status,401);
+ assert.equal((await worker.fetch(new Request('https://whumpo.com/api/projects/'+owner.project+'/files/'+id,{method:'PUT'}),apiEnv)).status,403);
  const future=new Date(Date.now()+7200000);await cleanupPhotos(env,future);assert.equal((await env.FILES.list()).objects.length,20);
  await db.prepare('DELETE FROM projects WHERE id=?').bind(owner.project).run();assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM file_cleanup').first()).n,20);await cleanupPhotos(env,future);assert.equal((await env.FILES.list()).objects.length,0);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM file_cleanup').first()).n,0);
  // A late orphan write is removed by reconciliation even after the deletion queue was acknowledged.

@@ -4,7 +4,7 @@ type Deployment={project_id:string;account_id:string;source_digest:string;secret
 export type CMSDeploymentProvider={accountId:string;exists(name:string):Promise<boolean>;deploy(name:string,tag:string):Promise<void>;activeVersion(name:string,tag:string):Promise<string|null>;service:Fetcher};
 export async function deployCMS(db:D1Database,project:string,sourceDigest:string,config:CMSBridgeConfig,provider:CMSDeploymentProvider){
  const row=await db.prepare("SELECT c.*,r.title,r.tagline FROM cms_instances c JOIN cms_setup_reviews r ON r.id=c.review_id JOIN projects p ON p.id=c.project_id WHERE c.project_id=? AND c.user_id=? AND p.owner_user_id=c.user_id AND r.status='approved'").bind(project,config.ownerId).first<{worker_name:string;review_id:string;title:string;tagline:string}>();
- if(!row||config.projectId!==project||config.origin!=='https://'+row.worker_name+'.digifender.com'||!/^[0-9a-f]{64}$/.test(sourceDigest))throw new Error('Invalid approved CMS deployment');
+ if(!row||config.projectId!==project||config.origin!=='https://'+row.worker_name+'.whumpo.site'||!/^[0-9a-f]{64}$/.test(sourceDigest))throw new Error('Invalid approved CMS deployment');
  const secretDigest=await hashToken(config.secret),tag='cms-'+(await hashToken(JSON.stringify([project,sourceDigest,secretDigest,config.origin]))).slice(0,32);
  const read=()=>db.prepare('SELECT * FROM cms_deployments WHERE project_id=?').bind(project).first<Deployment>();
  let record=await read(),dispatch=false;

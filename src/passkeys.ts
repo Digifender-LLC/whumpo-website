@@ -11,7 +11,7 @@ const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replac
 const decode = (value: string) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 function rp(request: Request, env: Env) {
   // Wrangler rewrites route/origin headers locally; bind WebAuthn to the browser's explicit dev origin.
-  const origin = String(env.ENVIRONMENT) === 'local' ? 'http://localhost:8787' : 'https://digifender.com';
+  const origin = String(env.ENVIRONMENT) === 'local' ? 'http://localhost:8787' : 'https://whumpo.com';
   const url = new URL(origin);
   if (String(env.ENVIRONMENT) === 'local' && !['localhost', '127.0.0.1'].includes(url.hostname)) throw new AuthError(400, 'Use localhost for passkey development');
   return { origin, rpID: url.hostname };
@@ -47,7 +47,7 @@ async function invitation(env: Env, request: Request, data: Record<string, unkno
     if (typeof data.turnstileToken !== 'string') throw new AuthError(400, 'Verification required');
     const check = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secret: env.TURNSTILE_SECRET, response: data.turnstileToken, remoteip: request.headers.get('cf-connecting-ip') }), signal: AbortSignal.timeout(10000) });
     const result = await check.json<{ success: boolean; hostname?: string; action?: string }>();
-    if (!result.success || result.hostname !== 'digifender.com' || result.action !== 'register') throw new AuthError(400, 'Verification failed. Please try again.');
+    if (!result.success || result.hostname !== 'whumpo.com' || result.action !== 'register') throw new AuthError(400, 'Verification failed. Please try again.');
   }
   if (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first()) throw new AuthError(409, 'An account with this email already exists. Sign in to add a passkey.');
   return { user: { id: crypto.randomUUID(), email }, inviteHash };
@@ -63,7 +63,7 @@ export async function passkeyOptions(request: Request, env: Env, kind: Challenge
   const { user, inviteHash } = kind === 'signup' ? await invitation(env, request, data) : { user: signedIn!, inviteHash: '' };
   const { results } = await env.DB.prepare('SELECT id FROM passkeys WHERE user_id = ?').bind(user.id).all<{ id: string }>();
   if (results.length >= 10) throw new AuthError(409, 'You can save up to ten passkeys');
-  const options = await generateRegistrationOptions({ rpName: 'TownHello', rpID, userName: user.email, userID: new Uint8Array(new TextEncoder().encode(user.id)), attestationType: 'none', excludeCredentials: results.map(key => ({ id: key.id })), supportedAlgorithmIDs: [-7, -257], authenticatorSelection: { residentKey: 'required', userVerification: 'required' } });
+  const options = await generateRegistrationOptions({ rpName: 'Whumpo', rpID, userName: user.email, userID: new Uint8Array(new TextEncoder().encode(user.id)), attestationType: 'none', excludeCredentials: results.map(key => ({ id: key.id })), supportedAlgorithmIDs: [-7, -257], authenticatorSelection: { residentKey: 'required', userVerification: 'required' } });
   return { options, cookie: await remember(env, request, options.challenge, kind, user, inviteHash) };
 }
 

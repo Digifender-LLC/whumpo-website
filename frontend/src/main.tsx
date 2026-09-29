@@ -1,0 +1,15 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {QueryClientProvider} from '@tanstack/react-query';
+import {createRootRoute,createRoute,createRouter,RouterProvider,Outlet} from '@tanstack/react-router';
+import {queryClient} from './lib/api';
+import {Landing} from './landing';
+import {Workspace} from './workspace';
+import './styles.css';
+const rootRoute=createRootRoute({component:Outlet});
+const homeRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:Landing});
+const workspaceRoute=createRoute({getParentRoute:()=>rootRoute,path:'/workspace',validateSearch:(search:Record<string,unknown>)=>({signup:search.signup===true||search.signup==='true'||search.signup==='1'}),component:Workspace});
+const workspaceView=createRoute({getParentRoute:()=>rootRoute,path:'/workspace/$view',component:Workspace});
+const router=createRouter({routeTree:rootRoute.addChildren([homeRoute,workspaceRoute,workspaceView]),defaultNotFoundComponent:()=> <main className="page-pad"><h1 className="text-4xl font-bold">That page isn’t here.</h1><a href="/workspace" className="underline">Return to Whumpo</a></main>});
+declare module '@tanstack/react-router'{interface Register{router:typeof router}}
+createRoot(document.getElementById('root')!).render(<React.StrictMode><QueryClientProvider client={queryClient}><RouterProvider router={router}/></QueryClientProvider></React.StrictMode>);

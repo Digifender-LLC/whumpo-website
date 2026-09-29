@@ -23,25 +23,25 @@ export async function reviewTXT(db:D1Database,user:string,id:string,claimId:stri
  if(!uuid.test(id)||!uuid.test(claimId)||!zoneID.test(zoneId))throw new DomainError(400,'Choose a domain claim and Cloudflare zone.');
  const old=await db.prepare('SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=?').bind(id,user).first<Action>();if(old){if(old.record_type!=='TXT'||old.claim_id!==claimId||old.zone_id!==zoneId)throw new DomainError(409,'DNS review ID already used.');return view(old);}
  const p=await proof(db,user,claimId),access=await cloudflareAccess(db,user,config,transport),zoneName=await zone(access,zoneId,p.hostname),name='_tellumo.'+p.hostname,content='tellumo-verification='+p.token,found=await inventory(access,zoneId,name);
- if(found.records.some(r=>r.type==='CNAME'||r.type==='NS'))throw new DomainError(409,'A CNAME or delegation conflicts with this TXT proof. Resolve it in Cloudflare; TownHello will not overwrite it.');
+ if(found.records.some(r=>r.type==='CNAME'||r.type==='NS'))throw new DomainError(409,'A CNAME or delegation conflicts with this TXT proof. Resolve it in Cloudflare; Whumpo will not overwrite it.');
  const created=stamp(),expires=new Date(Date.now()+600000).toISOString();
  try{const r=await db.prepare(`INSERT INTO cloudflare_dns_actions(id,user_id,claim_id,project_id,token_id,zone_id,zone_name,record_name,content,inventory_hash,created_at,expires_at)
  SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE d.id=? AND p.owner_user_id=? AND d.token=? AND d.expires_at>?)`).bind(id,user,claimId,p.project_id,access.tokenId,zoneId,zoneName,name,content,found.hash,created,expires,claimId,user,p.token,created).run();if(!r.meta.changes)throw new DomainError(409,'Domain proof changed. Prepare a fresh review.');}
  catch(cause){const saved=await db.prepare("SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=? AND claim_id=? AND zone_id=? AND record_type='TXT'").bind(id,user,claimId,zoneId).first<Action>();if(saved)return view(saved);if(String(cause).includes('cloudflare_dns_quota'))throw new DomainError(409,'This account reached its 100 DNS-review test limit.');throw cause;}
  return view(await owned(db,user,id));
 }
-const routingTarget='hosting.digifender.com',hostingZone='fbf8bf845a46cadbb793ffeb8b5716f5';
+const routingTarget='hosting.whumpo.site',hostingZone='8d46ee4e394514402479acf16579f7b5';
 type RoutingConnection={id:string;claim_id:string;project_id:string;hostname:string;target:string;zone_id:string;state:string;provider_id:string|null;proof_hash:string};
 async function routingConnection(db:D1Database,user:string,id:string,ready:boolean){
  if(!ready)throw new DomainError(503,'Domain hosting is awaiting platform configuration.');
  const c=await db.prepare('SELECT c.* FROM domain_connections c JOIN projects p ON p.id=c.project_id WHERE c.id=? AND c.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<RoutingConnection>();
  if(!c)throw new DomainError(404,'Domain connection not found.');
- if(!['provisioning','active'].includes(c.state)||!c.provider_id||!uuid.test(c.provider_id)||c.target!==routingTarget||c.zone_id!==hostingZone)throw new DomainError(409,'Confirm a TownHello hosting connection before reviewing routing.');
+ if(!['provisioning','active'].includes(c.state)||!c.provider_id||!uuid.test(c.provider_id)||c.target!==routingTarget||c.zone_id!==hostingZone)throw new DomainError(409,'Confirm a Whumpo hosting connection before reviewing routing.');
  const p=await proof(db,user,c.claim_id);
  if(p.project_id!==c.project_id||p.hostname!==c.hostname||await hashToken(p.token)!==c.proof_hash)throw new DomainError(409,'Hosting ownership proof changed. Review the hosting connection again.');
  return {c,p};
 }
-function routingConflicts(records:RecordInfo[]){if(records.length>1||records.some(r=>r.type!=='CNAME'||r.content!==routingTarget||r.proxied!==false))throw new DomainError(409,'Existing DNS records conflict with TownHello routing. Resolve them in Cloudflare; TownHello will not replace them.');}
+function routingConflicts(records:RecordInfo[]){if(records.length>1||records.some(r=>r.type!=='CNAME'||r.content!==routingTarget||r.proxied!==false))throw new DomainError(409,'Existing DNS records conflict with Whumpo routing. Resolve them in Cloudflare; Whumpo will not replace them.');}
 export async function reviewCNAME(db:D1Database,user:string,id:string,connectionId:string,zoneId:string,config:CloudflareConfig|undefined,transport:typeof fetch=fetch,hostingReady=false){
  if(!uuid.test(id)||!uuid.test(connectionId)||!zoneID.test(zoneId))throw new DomainError(400,'Choose a hosting connection and Cloudflare zone.');
  const old=await db.prepare('SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=?').bind(id,user).first<Action>();
@@ -57,7 +57,7 @@ export async function reviewCNAME(db:D1Database,user:string,id:string,connection
 }
 export async function confirmDNS(db:D1Database,user:string,id:string,config:CloudflareConfig|undefined,transport:typeof fetch=fetch,hostingReady=false){
  const a=await owned(db,user,id);if(['applied','unchanged','observed'].includes(a.state))return view(a);
- const routing=a.record_type==='CNAME',marker=(routing?'TellUmo routing ':'TellUmo proof ')+a.id;
+ const routing=a.record_type==='CNAME',marker=(routing?'Whumpo routing ':'Whumpo proof ')+a.id;
  // Configuration gates new writes; observation of a prior uncertain dispatch stays read-only.
  if(routing&&a.state==='review')await routingConnection(db,user,a.connection_id!,hostingReady);
  const access=await cloudflareAccess(db,user,config,transport,a.state==='review'?a.token_id:undefined);

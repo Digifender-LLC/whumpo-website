@@ -9,7 +9,7 @@ const dir=await mkdtemp('/tmp/tellumo-photo-removal-');execFileSync(process.exec
 execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1]+'/fixture.jpg')",dir]);const jpeg=new Uint8Array(await readFile(dir+'/fixture.jpg'));
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,env=proxy.env;
 async function account(){const id=crypto.randomUUID(),project=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Photos','Synthetic test','draft',?,?)").bind(project,id,new Date().toISOString(),new Date().toISOString()).run();await readChat(db,id);return {id,project};}
-function request(){return new Request('https://digifender.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':'Garden'},body:jpeg});}
+function request(){return new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':'Garden'},body:jpeg});}
 async function upload(owner){const id=crypto.randomUUID();await uploadPhoto(request(),env,owner.id,owner.project,id);return id;}
 async function chat(owner,content,connection=db){const state=await readChat(db,owner.id),id=crypto.randomUUID(),input={id,content,revision:state.state.revision};const result=await sendChat(connection,owner.id,input);return {id,input,result};}
 async function review(owner,file){const r=await chat(owner,'/delete-photo '+file);assert.equal(r.result.status,200);return r;}

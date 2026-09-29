@@ -6,7 +6,7 @@ import {CMSProjectError} from './cms-projects';
 import {hashToken} from './security';
 import {previewHeaders} from './components';
 type Review={id:string;draft_request_id:string;user_id:string;project_id:string;collection:string;item_id:string;revision:string;snapshot:string;preview_html:string;public_html:string;digest:string;status:string;withdrawn:number;replaces_publication_id:string|null;expires_at:string};
-export const cmsPublicURL=(r:Pick<Review,'project_id'|'collection'|'item_id'>)=>`https://sites.digifender.com/s/${r.project_id}/cms/${r.collection}/${r.item_id}`;
+export const cmsPublicURL=(r:Pick<Review,'project_id'|'collection'|'item_id'>)=>`https://${r.project_id}.whumpo.site/cms/${r.collection}/${r.item_id}`;
 export async function readCMSPublication(db:D1Database,user:string,id:string){const row=await db.prepare('SELECT r.* FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Review>();if(!row)throw new CMSProjectError(404,'CMS publication review not found');return row;}
 export async function prepareCMSPublication(db:D1Database,user:string,project:string,draft:string,id:string,env:Record<string,unknown>){
  if(!/^[0-9a-f-]{36}$/.test(id))throw new CMSProjectError(400,'Invalid review ID');

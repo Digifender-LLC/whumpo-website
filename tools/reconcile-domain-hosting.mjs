@@ -15,7 +15,7 @@ try{
  if(!args.includes('--remote')||!['inspect','apply'].includes(command))throw Error(usage);
  const providerToken=(await readFile('.secrets/cloudflare-domains.key','utf8')).trim();if(!providerToken)throw Error('The zone-scoped domain key file is empty.');
  const wrangler=await readFile(resolve(homedir(),'.config/.wrangler/config/default.toml'),'utf8'),oauth=wrangler.match(/oauth_token\s*=\s*"([^"]+)"/)?.[1];if(!oauth)throw Error('An authenticated local Wrangler login is required.');
- const config={token:providerToken,zone:'fbf8bf845a46cadbb793ffeb8b5716f5',target:'hosting.digifender.com'};
+ const config={token:providerToken,zone:'8d46ee4e394514402479acf16579f7b5',target:'hosting.whumpo.site'};
  const db={prepare(sql){let params=[];const statement={bind(...values){params=values;return statement;},async first(){
   const response=await fetch('https://api.cloudflare.com/client/v4/accounts/f94d28e88a63fb6f34c3ecbc05aa3faf/d1/database/680f98b9-a769-467f-8b6f-06c10195c263/query',{method:'POST',headers:{authorization:'Bearer '+oauth,'content-type':'application/json'},body:JSON.stringify({sql,params}),redirect:'manual',signal:AbortSignal.timeout(30000)});
   if(!response.ok){await response.body?.cancel();throw Error('Database request failed.');}const data=await response.json();if(data.success!==true||data.result?.[0]?.success!==true)throw Error('Database statement failed. Inspect current state before retrying.');return data.result[0].results?.[0]??null;

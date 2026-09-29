@@ -32,7 +32,7 @@ try{
  const flight=await signup(b);await assert.rejects(data.transitionAppData(db,{fetch:async(...args)=>{await erase(b,flight,0);return service.fetch(...args);}},flight.session,b.project,id(),0,{secret:'must not return'}),e=>e.status===503);await erased(flight);assert.equal((await db.prepare('SELECT attempts FROM app_daily_usage WHERE project_id=?').bind(b.project).first()).attempts,1);
  // Confirming the exact deletion does not require the page to remain published.
  const env={DB:db,ENVIRONMENT:'production',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:service};
- const call=(path,method='GET',body,token=x.session,origin='https://apps.digifender.com')=>applicationGateway(new Request(`https://apps.digifender.com/apps/${a.project}/${path}`,{method,headers:{origin,'content-type':'application/json',cookie:`__Host-townhello-app-session-${a.project}=${token}`},body:body===undefined?undefined:JSON.stringify(body)}),env);
+ const call=(path,method='GET',body,token=x.session,origin=`https://app-${a.project}.whumpo.site`)=>applicationGateway(new Request(`https://app-${a.project}.whumpo.site/${path}`,{method,headers:{origin,'content-type':'application/json',cookie:`__Host-whumpo-app-session-${a.project}=${token}`},body:body===undefined?undefined:JSON.stringify(body)}),env);
  assert.equal((await call('account/delete','POST',{id:request,revision:1,confirmation:'DELETE'},x.session,'https://evil.example')).status,403);
  assert.equal((await call('account/delete','POST',{id:request,revision:1,confirmation:'DELETE'})).status,200);
  assert.equal((await call('account/delete','POST',{id:request,revision:1,confirmation:'DELETE'},y.session)).status,409);
