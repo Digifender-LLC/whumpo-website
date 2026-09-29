@@ -481,7 +481,7 @@
     container.replaceChildren();
     function bubble(role, content, mode = "guided") {
       const item = text("article", "", `chat-bubble ${role}`);
-      item.append(text("small", role === "user" ? "You" : mode === "ai" ? "TellUmo \xB7 AI" : "TellUmo \xB7 Guide"), text("p", content));
+      item.append(text("small", role === "user" ? "You" : mode === "ai" ? "TownHello \xB7 AI" : "TownHello \xB7 Guide"), text("p", content));
       container.append(item);
       return item;
     }
@@ -1158,7 +1158,7 @@
         const row = text("article", "", "panel");
         row.append(text("h3", "Cloudflare " + (action.record.type === "CNAME" ? "website routing" : "TXT proof") + " \xB7 " + action.state), text("p", "Zone: " + action.zoneName), text("p", "Name: " + action.record.name), text("p", "Value: " + action.record.value), text("p", action.detail));
         if (action.state === "review") {
-          row.append(text("p", action.record.type === "CNAME" ? "This adds a DNS-only CNAME with automatic TTL unless it already exists. Conflicting records are never replaced. Website traffic, including traffic previously using wildcard DNS, can move to TellUmo. Check hosting status afterward to verify DNS and TLS." : "This adds the exact TXT proof with automatic TTL, unless it already exists. It does not replace your existing website records or connect hosting."), text("p", "Review expires: " + action.expiresAt));
+          row.append(text("p", action.record.type === "CNAME" ? "This adds a DNS-only CNAME with automatic TTL unless it already exists. Conflicting records are never replaced. Website traffic, including traffic previously using wildcard DNS, can move to TownHello. Check hosting status afterward to verify DNS and TLS." : "This adds the exact TXT proof with automatic TTL, unless it already exists. It does not replace your existing website records or connect hosting."), text("p", "Review expires: " + action.expiresAt));
         }
         if (["review", "sending", "uncertain"].includes(action.state)) {
           const button = text("button", action.state === "review" ? action.record.type === "CNAME" ? "Confirm website routing" : "Confirm TXT proof" : "Check result without resending");
@@ -1202,7 +1202,7 @@
           action("Confirm hosting connection", "confirm");
         }
         if (["active", "provisioning", "needs_check"].includes(connection.state)) {
-          row.append(text("p", "At your DNS provider, point " + connection.hostname + " directly to " + connection.target + " using a DNS-only CNAME. Keep the TXT ownership proof current. Existing website traffic will move to TellUmo; only do this when ready."));
+          row.append(text("p", "At your DNS provider, point " + connection.hostname + " directly to " + connection.target + " using a DNS-only CNAME. Keep the TXT ownership proof current. Existing website traffic will move to TownHello; only do this when ready."));
           action("Check hosting status", "refresh");
           const routing = text("button", "Review CNAME in Cloudflare"), routingId = crypto.randomUUID();
           routing.disabled = !connections.cloudflare.connected || !hosting.enabled;

@@ -20,7 +20,7 @@ import { reconcileChat, sendAIChat } from './ai-chat';
 import type { AIConfig } from './ai';
 
 type State = { revision: number; step: 'idea' | 'name' | 'ready'; idea: string; brief_project_id: string | null; brief_stage: 'audience' | 'style' | null };
-export const greeting = "Hi, I’m your TellUmo guide. What would you like to put online? Tell me about your business, project, or idea. I can save your brief and set up a project with you.";
+export const greeting = "Hi, I’m your TownHello guide. What would you like to put online? Tell me about your business, project, or idea. I can save your brief and set up a project with you.";
 export async function chatState(db: D1Database, userId: string) {
   await db.prepare('INSERT OR IGNORE INTO workspace_state (user_id) VALUES (?)').bind(userId).run();
   const state = await db.prepare('SELECT revision, step, idea, brief_project_id, brief_stage FROM workspace_state WHERE user_id = ?').bind(userId).first<State>();

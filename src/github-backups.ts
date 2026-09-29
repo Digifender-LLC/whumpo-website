@@ -60,9 +60,9 @@ async function remoteCopy(access:Access,repo:Repo,b:Backup,head:string){
  const response=await readGitHubJSON(await access.send('/graphql',{method:'POST',body:JSON.stringify({query,variables:{owner:repo.owner,name:repo.name,p0:paths[0],p1:paths[1],p2:paths[2],p3:paths[3]}})}));
  const data=response.data as {repository?:Record<string,{__typename?:string;oid?:string}|null>}|undefined;
  if(response.errors||!data?.repository||[0,1,2,3].some(i=>!Object.hasOwn(data.repository!,'p'+i)))throw new ConnectionError(503,'GitHub could not inspect the backup destination.');
- for(let i=0;i<3;i++){const parent=data.repository['p'+i];if(parent&&parent.__typename!=='Tree')throw new ConnectionError(409,'A file occupies a parent backup path. TellUmo will not replace it.');}
+ for(let i=0;i<3;i++){const parent=data.repository['p'+i];if(parent&&parent.__typename!=='Tree')throw new ConnectionError(409,'A file occupies a parent backup path. TownHello will not replace it.');}
  const target=data.repository.p3;if(!target)return false;
- if(target.__typename!=='Tree'||target.oid!==b.tree_sha)throw new ConnectionError(409,'Different files already occupy the version folder. TellUmo will not overwrite them.');
+ if(target.__typename!=='Tree'||target.oid!==b.tree_sha)throw new ConnectionError(409,'Different files already occupy the version folder. TownHello will not overwrite them.');
  return true;
 }
 async function completeBackup(db:D1Database,userId:string,b:Backup,commit:string){
@@ -90,7 +90,7 @@ export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,user
  try{
   if(existing)return await completeBackup(db,userId,b,head);
   const query='mutation BackupCommit($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}';
-  const input={branch:{repositoryNameWithOwner:repo.owner+'/'+repo.name,branchName:b.branch},expectedHeadOid:b.base_head,clientMutationId:b.id,message:{headline:`[skip ci] TellUmo source backup ${b.version_id}`},fileChanges:{additions:Object.entries(tree.files).map(([path,bytes])=>({path:b.path+'/'+path,contents:encoded(bytes)}))}};
+  const input={branch:{repositoryNameWithOwner:repo.owner+'/'+repo.name,branchName:b.branch},expectedHeadOid:b.base_head,clientMutationId:b.id,message:{headline:`[skip ci] TownHello source backup ${b.version_id}`},fileChanges:{additions:Object.entries(tree.files).map(([path,bytes])=>({path:b.path+'/'+path,contents:encoded(bytes)}))}};
   const response=await access.send('/graphql',{method:'POST',body:JSON.stringify({query,variables:{input}})});
   const result=await readGitHubJSON(response),data=result.data as {createCommitOnBranch?:{commit?:{oid?:string}}}|undefined,commit=data?.createCommitOnBranch?.commit?.oid;
   if(result.errors||typeof commit!=='string'||!sha.test(commit))throw new ConnectionError(503,'The GitHub commit response could not be verified.');

@@ -63,7 +63,7 @@ export async function passkeyOptions(request: Request, env: Env, kind: Challenge
   const { user, inviteHash } = kind === 'signup' ? await invitation(env, request, data) : { user: signedIn!, inviteHash: '' };
   const { results } = await env.DB.prepare('SELECT id FROM passkeys WHERE user_id = ?').bind(user.id).all<{ id: string }>();
   if (results.length >= 10) throw new AuthError(409, 'You can save up to ten passkeys');
-  const options = await generateRegistrationOptions({ rpName: 'TellUmo', rpID, userName: user.email, userID: new Uint8Array(new TextEncoder().encode(user.id)), attestationType: 'none', excludeCredentials: results.map(key => ({ id: key.id })), supportedAlgorithmIDs: [-7, -257], authenticatorSelection: { residentKey: 'required', userVerification: 'required' } });
+  const options = await generateRegistrationOptions({ rpName: 'TownHello', rpID, userName: user.email, userID: new Uint8Array(new TextEncoder().encode(user.id)), attestationType: 'none', excludeCredentials: results.map(key => ({ id: key.id })), supportedAlgorithmIDs: [-7, -257], authenticatorSelection: { residentKey: 'required', userVerification: 'required' } });
   return { options, cookie: await remember(env, request, options.challenge, kind, user, inviteHash) };
 }
 

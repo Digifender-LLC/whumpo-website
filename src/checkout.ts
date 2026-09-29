@@ -37,7 +37,7 @@ export async function createCheckout(db: D1Database, env: StripeConfig, userId: 
  if(order.status==='fulfilled')return {fulfilled:true};
  // Never recreate an old ambiguous order after Stripe expires its idempotency record.
  if(order.created_at+3600 <= Date.now()/1000)throw new BillingError(409,'This checkout has expired. Start a new test purchase.');
- const form = new URLSearchParams({mode:'payment','payment_method_types[0]':'card',client_reference_id:id,'metadata[order_id]':id,'line_items[0][price_data][currency]':'usd','line_items[0][price_data][unit_amount]':String(order.amount_cents),'line_items[0][price_data][product_data][name]':'TellUmo — 100 test build credits','line_items[0][quantity]':'1',success_url:'https://digifender.com/workspace/?checkout=returned',cancel_url:'https://digifender.com/workspace/?checkout=canceled',expires_at:String(order.created_at+3600)});
+ const form = new URLSearchParams({mode:'payment','payment_method_types[0]':'card',client_reference_id:id,'metadata[order_id]':id,'line_items[0][price_data][currency]':'usd','line_items[0][price_data][unit_amount]':String(order.amount_cents),'line_items[0][price_data][product_data][name]':'TownHello — 100 test build credits','line_items[0][quantity]':'1',success_url:'https://digifender.com/workspace/?checkout=returned',cancel_url:'https://digifender.com/workspace/?checkout=canceled',expires_at:String(order.created_at+3600)});
  const session = order.session_id ? await stripe(env,'checkout/sessions/'+order.session_id,undefined,undefined,transport) : await stripe(env,'checkout/sessions',form,'tellumo-test-'+id,transport);
  checkSession(session,order);
  await db.prepare('UPDATE checkout_orders SET session_id=? WHERE id=? AND (session_id IS NULL OR session_id=?)').bind(session.id,id,session.id).run();
@@ -68,7 +68,7 @@ export async function stripeWebhook(request: Request, db: D1Database, env: Strip
  const orderId=session.metadata?.order_id;
  if(typeof orderId!=='string' || !uuid.test(orderId))return {received:true}; // Other applications on this Stripe account.
  const order=await db.prepare('SELECT * FROM checkout_orders WHERE id=?').bind(orderId).first<Order>();
- if(!order)return {received:true}; // Unrelated order or a deleted TellUmo account.
+ if(!order)return {received:true}; // Unrelated order or a deleted TownHello account.
  checkSession(session,order);
  if(session.status!=='complete' || session.payment_status!=='paid')return {received:true};
  const now=new Date().toISOString();

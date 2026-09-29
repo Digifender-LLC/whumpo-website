@@ -4,7 +4,7 @@ export class ConnectionError extends Error{constructor(public status:number,mess
 type GitHubConfig={clientId:string;clientSecret:string;appId:number;slug:string;key:string};
 const callback='https://digifender.com/api/connections/github/callback';
 const API='https://api.github.com';
-const apiHeaders={'accept':'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'TellUmo-test'};
+const apiHeaders={'accept':'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'TownHello-test'};
 export function githubConfig(env:Env):GitHubConfig|undefined{
  if(!env.GITHUB_CLIENT_ID||!env.GITHUB_CLIENT_SECRET||!env.GITHUB_APP_ID||!env.GITHUB_APP_SLUG||!env.CONNECTION_ENCRYPTION_KEY)return;
  if(!/^[A-Za-z0-9_.-]{1,100}$/.test(env.GITHUB_CLIENT_ID)||!/^[a-z0-9-]{1,100}$/.test(env.GITHUB_APP_SLUG)||!/^[0-9a-f]{64}$/.test(env.CONNECTION_ENCRYPTION_KEY)||!Number.isSafeInteger(Number(env.GITHUB_APP_ID))||Number(env.GITHUB_APP_ID)<1)return;
