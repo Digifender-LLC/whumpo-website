@@ -1,6 +1,8 @@
 import {appPasskeyOptions,appPasskeyVerify,recoverAppVisitor} from './app-auth';
 import {readAppData,readAppReceipt,revokeAppSession,transitionAppData} from './app-data';
 import {BackendError} from './backend-versions';
+import {liveAppPage} from './app-pages';
+import {backendFormConfig} from './backend-form-render';
 import type {AuthenticationResponseJSON,RegistrationResponseJSON} from '@simplewebauthn/server';
 
 type AppEnv = Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'>;
@@ -44,6 +46,8 @@ export async function applicationGateway(request:Request,env:AppEnv):Promise<Res
   if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);
   const ip=request.headers.get('cf-connecting-ip')??'unknown';
   if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);
+  const page=await liveAppPage(env.DB,project);if(!page)return json({error:'Application page unavailable'},404);
+  if(method==='GET'&&path==='config')return json({form:JSON.parse(page.config_json),pageId:page.id});
   const session=token(request,project,'session',local);
   if(method==='GET'&&path==='data')return json(await readAppData(env.DB,session,project));
   const receipt=path.match(new RegExp(`^receipts/(${uuid})$`));
@@ -52,24 +56,27 @@ export async function applicationGateway(request:Request,env:AppEnv):Promise<Res
   if(path.startsWith('auth/')&&!(await env.AUTH_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many sign-in attempts. Try again in a minute.'},429);
   const data=await body(request);
   if(path==='data'){
+   if(data.pageId!==page.id)throw new BackendError(409,'Application page changed. Reload before sending another change');
    if(typeof data.id!=='string'||typeof data.revision!=='number'||!Object.hasOwn(data,'input'))throw new BackendError(400,'Provide an operation ID, current revision and input');
+   const form=backendFormConfig(JSON.parse(page.config_json)),input=data.input;
+   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length!==form.fields.length||form.fields.some(f=>{const value=(input as Record<string,unknown>)[f.key];return f.type==='text'?typeof value!=='string'||value.length>300:f.type==='number'?typeof value!=='number'||!Number.isFinite(value):typeof value!=='boolean';}))throw new BackendError(400,'Provide the fields shown in the current application form');
    return json(await transitionAppData(env.DB,env.BACKEND_RUNTIME,session,project,data.id,data.revision,data.input));
   }
   const passkey=path.match(/^auth\/(signup|login|add)\/(options|verify)$/);
   if(passkey){
    const kind=passkey[1] as 'signup'|'login'|'add';
    if(passkey[2]==='options'){
-    const result=await appPasskeyOptions(env.DB,project,kind,local,kind==='signup'&&typeof data.inviteCode==='string'?data.inviteCode:kind==='add'?session:'');
+    const result=await appPasskeyOptions(env.DB,project,kind,local,kind==='signup'&&typeof data.inviteCode==='string'?data.inviteCode:kind==='add'?session:'',page.id);
     return json({options:result.options},200,[cookie(project,'challenge',result.challengeToken,local)]);
    }
    if(!data.credential||typeof data.credential!=='object'||Array.isArray(data.credential))throw new BackendError(400,'Provide a passkey response');
-   const result=await appPasskeyVerify(env.DB,project,kind,token(request,project,'challenge',local),data.credential as AuthenticationResponseJSON|RegistrationResponseJSON,local,session);
+   const result=await appPasskeyVerify(env.DB,project,kind,token(request,project,'challenge',local),data.credential as AuthenticationResponseJSON|RegistrationResponseJSON,local,session,page.id);
    const cookies=[cookie(project,'challenge','',local)];if(result.session)cookies.push(cookie(project,'session',result.session,local));
    return json({authenticated:true,...(result.recoveryCode?{recoveryCode:result.recoveryCode}:{})},200,cookies);
   }
   if(path==='auth/recover'){
-   if(typeof data.code!=='string')throw new BackendError(400,'Provide an application recovery code');
-   const result=await recoverAppVisitor(env.DB,project,data.code);
+   if(typeof data.code!=='string'||typeof data.nonce!=='string'||!/^[0-9a-f]{64}$/.test(data.nonce))throw new BackendError(400,'Provide an application recovery code and a fresh recovery nonce');
+   const result=await recoverAppVisitor(env.DB,project,data.code,page.id,data.nonce);
    return json({authenticated:true,recoveryCode:result.recoveryCode},200,[cookie(project,'session',result.session,local),cookie(project,'challenge','',local)]);
   }
   if(path==='auth/logout'){

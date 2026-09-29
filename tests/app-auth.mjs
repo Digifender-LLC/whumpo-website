@@ -8,7 +8,11 @@ async function module(path){const b=await build({entryPoints:[path],bundle:true,
 const auth=await module('src/app-auth.ts'),data=await module('src/app-data.ts'),{saveBackend,testBackend}=await module('src/backend-versions.ts'),{prepareApplication,confirmApplication}=await module('src/app-activation.ts');
 const {applicationGateway}=await module('src/app-gateway.ts');
 const platform=(await module('src/index.ts')).default;
+const pages=await module('src/app-pages.ts');
+const appHost=(await module('src/app-host.ts')).default;
+const {backendAction}=await module('src/backend-chat.ts');
 const {hashToken}=await module('src/security.ts');
+const {replacementAppRecoveryCode}=await module('src/app-recovery.ts');
 const dir=await mkdtemp('/tmp/townhello-app-auth-');
 execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
@@ -118,7 +122,8 @@ try {
  const raw=JSON.stringify((await db.prepare('SELECT * FROM app_invitations').all()).results)+JSON.stringify((await db.prepare('SELECT * FROM app_sessions').all()).results)+JSON.stringify((await db.prepare('SELECT * FROM app_recovery_codes').all()).results);
  for(const secret of [invite.code,registered.session,registered.recoveryCode,recovered.session,recovered.recoveryCode])assert.ok(!raw.includes(secret));
  // Exercise the HTTP adapter with the same real D1 and signed credentials.
- const c=await app(),host='https://apps.digifender.com',jar=new Map();let executions=0;
+ const c=await app(),pageId=id();await pages.prepareAppPage(db,c.user,c.project,pageId,{title:'Private journal',description:'Test',buttonLabel:'Save',fields:[{key:'hello',label:'Note',type:'text'}]});await pages.confirmAppPage(db,c.user,pageId);
+ const host='https://apps.digifender.com',jar=new Map();let executions=0;
  const env={...proxy.env,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:async(_url,init)=>{executions++;const payload=JSON.parse(init.body).input;assert.deepEqual(Object.keys(payload),['state','input']);return Response.json({ok:true,value:{state:payload.input,result:'saved'}});}}};
  async function request(path,method='GET',payload,settings={}){
   const headers={'cf-connecting-ip':'192.0.2.9',...(!settings.noOrigin?{origin:settings.origin??host}:{}),'content-type':'application/json',cookie:settings.cookie??[...jar].map(([k,v])=>k+'='+v).join('; ')};
@@ -141,13 +146,15 @@ try {
  const httpSignup=await request('auth/signup/verify','POST',{credential:httpCredential});assert.equal(httpSignup.response.status,200);assert.deepEqual(Object.keys(httpSignup.result).sort(),['authenticated','recoveryCode']);
  assert.equal((await request('data','GET',undefined,{cookie:'tellumo_session='+'a'.repeat(64)})).response.status,401);
  assert.deepEqual((await request('data')).result,{revision:0,state:{}});
- const operation=id();const saved=await request('data','POST',{id:operation,revision:0,input:{hello:'private'}});assert.equal(saved.response.status,200);assert.equal(saved.result.state,'complete');assert.equal(executions,1);
+ const operation=id();const saved=await request('data','POST',{id:operation,revision:0,input:{hello:'private'},pageId});assert.equal(saved.response.status,200);assert.equal(saved.result.state,'complete');assert.equal(executions,1);
  assert.deepEqual((await request('receipts/'+operation)).result,saved.result);
- assert.deepEqual((await request('data','POST',{id:operation,revision:0,input:{hello:'private'}})).result,saved.result);assert.equal(executions,1);
+ assert.deepEqual((await request('data','POST',{id:operation,revision:0,input:{hello:'private'},pageId})).result,saved.result);assert.equal(executions,1);
  assert.equal((await request('receipts/'+id())).response.status,404);
  const foreign=await signup(c),name=[...jar.keys()].find(k=>k.includes('-session-'));
  assert.equal((await request('receipts/'+operation,'GET',undefined,{cookie:name+'='+foreign.session})).response.status,404);
- const oldCookie=[...jar].map(([k,v])=>k+'='+v).join('; '),httpRecovered=await request('auth/recover','POST',{code:httpSignup.result.recoveryCode});assert.equal(httpRecovered.response.status,200);assert.equal('session' in httpRecovered.result,false);
+ const oldCookie=[...jar].map(([k,v])=>k+'='+v).join('; '),httpRecovered=await request('auth/recover','POST',{code:httpSignup.result.recoveryCode,nonce:'4'.repeat(64)});assert.equal(httpRecovered.response.status,200);assert.equal('session' in httpRecovered.result,false);
+ assert.equal(httpRecovered.result.recoveryCode,await replacementAppRecoveryCode(httpSignup.result.recoveryCode,'4'.repeat(64)));
+ const recoveredRetry=await request('auth/recover','POST',{code:httpSignup.result.recoveryCode,nonce:'4'.repeat(64)});assert.equal(recoveredRetry.response.status,200);assert.equal(recoveredRetry.result.recoveryCode,httpRecovered.result.recoveryCode);
  assert.equal((await request('data','GET',undefined,{cookie:oldCookie})).response.status,401);
  assert.deepEqual((await request('data')).result.state,{hello:'private'});
  await request('auth/logout','POST',{});assert.equal((await request('data')).response.status,401);
@@ -163,7 +170,7 @@ try {
  assert.equal((await ownerRequest('/invitations','POST',foreignToken)).status,404);
  const created=await ownerRequest('/invitations','POST');assert.equal(created.status,201);const createdInvite=await created.json();
  const pending=await begin(c,'signup',createdInvite.code),pendingKey=authenticator();
- const view=await(await ownerRequest()).json();assert.equal(view.publicAccessReady,false);assert.equal(view.visitors.length,2);
+ const view=await(await ownerRequest()).json();assert.equal(view.publicAccessReady,true);assert.equal(view.visitors.length,2);
  assert.deepEqual(Object.keys(view.visitors[0]).sort(),['created_at','id','passkeys','revoked','sessions']);
  const serialized=JSON.stringify(view);for(const secret of [createdInvite.code,httpSignup.result.recoveryCode,foreign.session])assert.ok(!serialized.includes(secret));
  const chatHeaders={cookie:'tellumo_session='+ownerToken,origin:'https://digifender.com','content-type':'application/json'};
@@ -181,7 +188,41 @@ try {
  await configure(c,'disable');assert.equal((await ownerRequest()).status,200);
  const remaining=(await(await ownerRequest()).json()).visitors.find(v=>!v.revoked);assert.ok(remaining);
  assert.equal((await ownerRequest('/visitors/'+remaining.id+'/revoke','POST')).status,200);
+ // Page publication requires exact, current owner approval and cannot be confirmed by AI.
+ const d=await app(),form={title:'Private notes',description:'Your own journal',buttonLabel:'Save note',fields:[{key:'note',label:'Note',type:'text'}]},reviewOne=id(),reviewTwo=id();
+ await pages.prepareAppPage(db,d.user,d.project,reviewOne,form);await pages.prepareAppPage(db,d.user,d.project,reviewTwo,form);
+ assert.equal(await pages.liveAppPage(db,d.project),null);
+ await denied(pages.confirmAppPage(db,a.user,reviewOne),404);
+ await denied(backendAction(db,d.user,id(),{kind:'backend',operation:'confirmAppPage',reviewId:reviewOne}));
+ await pages.confirmAppPage(db,d.user,reviewOne);await denied(pages.confirmAppPage(db,d.user,reviewTwo),409);
+ assert.equal((await pages.liveAppPage(db,d.project)).id,reviewOne);
+ await denied(pages.prepareAppPage(db,d.user,d.project,id(),{...form,fields:[{key:'constructor',label:'Bad',type:'text'}]}),400);
+ const assets={fetch:async request=>new Response(new URL(request.url).pathname==='/index.html'?'controlled application shell':'controlled asset')};
+ const pageURL='https://apps.digifender.com/apps/'+d.project+'/';
+ const rendered=await appHost.fetch(new Request(pageURL),{...env,ASSETS:assets});assert.equal(rendered.status,200);assert.match(rendered.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.ok(!rendered.headers.get('content-security-policy').includes('unsafe-inline'));
+ assert.equal((await appHost.fetch(new Request('https://digifender.com/apps/'+d.project+'/'),{...env,ASSETS:assets})).status,404);
+ assert.equal((await appHost.fetch(new Request('https://apps.digifender.com/index.html'),{...env,ASSETS:assets})).status,404);
+ // Hide the page after signature verification but before session issuance.
+ const dInvite=await auth.createAppInvitation(db,d.user,d.project),dOptions=await auth.appPasskeyOptions(db,d.project,'signup',false,dInvite.code,reviewOne),dKey=authenticator(),hide=id();
+ await pages.prepareAppPage(db,d.user,d.project,hide,null);
+ const hideDuringCommit=new Proxy(db,{get(target,name){if(name==='batch')return async statements=>{await pages.confirmAppPage(db,d.user,hide);return target.batch(statements);};const value=target[name];return typeof value==='function'?value.bind(target):value;}});
+ await denied(auth.appPasskeyVerify(hideDuringCommit,d.project,'signup',dOptions.challengeToken,dKey.registration(dOptions.options),false,'',reviewOne));
+ assert.equal((await db.prepare('SELECT count(*) n FROM app_visitors WHERE project_id=?').bind(d.project).first()).n,0);
+ assert.equal((await appHost.fetch(new Request(pageURL),{...env,ASSETS:assets})).status,404);
+ await pages.confirmAppPage(db,d.user,reviewOne);assert.equal(await pages.liveAppPage(db,d.project),null);
+ const publishAgain=id();await pages.prepareAppPage(db,d.user,d.project,publishAgain,form);await pages.confirmAppPage(db,d.user,publishAgain);
+ const liveVisitor=await signup(d),transitionId=id();
+ const revokePage=id();await pages.prepareAppPage(db,d.user,d.project,revokePage,null);
+ const interrupted=await data.transitionAppData(db,{fetch:async()=>{await pages.confirmAppPage(db,d.user,revokePage);return Response.json({ok:true,value:{state:{note:'must not commit'},result:'done'}});}},liveVisitor.session,d.project,transitionId,0,{note:'test'});
+ assert.equal(interrupted.state,'conflict');assert.equal((await db.prepare('SELECT revision FROM app_documents WHERE visitor_id=?').bind(liveVisitor.visitorId).first()).revision,0);
+ await denied(data.readAppData(db,liveVisitor.session,d.project),401);
+ // A lost recovery acknowledgment remains recoverable with the code saved first.
+ const recoveryVisitor=await signup(a),nonce='7'.repeat(64),savedFirst=await replacementAppRecoveryCode(recoveryVisitor.recoveryCode,nonce);
+ await denied(auth.recoverAppVisitor(lossy,a.project,recoveryVisitor.recoveryCode,null,nonce));
+ const rescued=await auth.recoverAppVisitor(db,a.project,savedFirst,null,'8'.repeat(64));assert.equal(rescued.visitorId,recoveryVisitor.visitorId);
+ await denied(auth.recoverAppVisitor(db,a.project,recoveryVisitor.recoveryCode,null,nonce),401);
  console.log('App visitor auth passed: real signed passkeys, origin/UV/project separation, single-use challenges/invites, concurrent enrollment, epoch guards, private data, recovery rotation, credential race, owner revocation, disabled-app denial and hashed secrets.');
  console.log('App gateway passed: host isolation, HttpOnly secure project cookies, browser challenge binding, bounded JSON, origin/rate checks, no CORS, private state/receipts, idempotent retry, recovery and logout. Gateway is not publicly mounted.');
  console.log('Owner access routes passed: authenticated metadata, foreign-owner/CSRF/recent-session denial, single-display invitations, cancellation during enrollment, irreversible revocation and disabled-app management.');
+ console.log('Application pages passed: strict form schema, owner-only approval, competing reviews, AI confirmation denial, controlled host/CSP, hidden-page denial, stale sign-in rollback, historical replay and in-flight transition revocation.');
 } finally {await proxy.dispose();await rm(dir,{recursive:true,force:true});}

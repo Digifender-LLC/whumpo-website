@@ -84,7 +84,9 @@
     "test:app-activation-http": "node tests/app-activation-http.mjs",
     "test:workspace-dashboard": "node tests/workspace-dashboard.mjs",
     "test:profile": "node tests/profile.mjs",
-    "test:app-auth": "node tests/app-auth.mjs"
+    "test:app-auth": "node tests/app-auth.mjs",
+    "deploy:apps": "wrangler deploy --config wrangler.apps.jsonc",
+    "test:app-pages-http": "node tests/app-pages-http.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

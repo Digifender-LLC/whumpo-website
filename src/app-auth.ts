@@ -1,12 +1,13 @@
 import {generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse, type AuthenticationResponseJSON, type RegistrationResponseJSON} from '@simplewebauthn/server';
 import {BackendError} from './backend-versions';
 import {hashToken, newSessionToken} from './security';
+import {replacementAppRecoveryCode} from './app-recovery';
 
 // Internal authentication service. The future controlled app host must supply
 // challengeToken/session from HttpOnly cookies, enforce same-origin writes and
 // request limits, and never expose these values to generated code or the agent.
 type Kind = 'signup' | 'login' | 'add';
-type Challenge = {project_id:string; program_revision:number; challenge:string; kind:Kind; visitor_id:string; invite_hash:string; session_hash:string};
+type Challenge = {project_id:string; program_revision:number; challenge:string; kind:Kind; visitor_id:string; invite_hash:string; session_hash:string;page_review_id:string|null};
 type Key = {id:string; visitor_id:string; public_key:string; counter:number; revision:number};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const tokenPattern = /^[0-9a-f]{64}$/;
@@ -44,7 +45,7 @@ export async function revokeAppVisitor(db:D1Database, user:string, project:strin
  if (result.meta.changes<1) throw new BackendError(404,'Visitor unavailable');
 }
 
-export async function appPasskeyOptions(db:D1Database, project:string, kind:Kind, local=false, secret='') {
+export async function appPasskeyOptions(db:D1Database, project:string, kind:Kind, local=false, secret='',pageReview:string|null=null) {
  const {revision} = await active(db,project), {rpID} = rp(local);
  let visitor='', invite='', session='';
  if (kind==='signup') {
@@ -68,15 +69,16 @@ export async function appPasskeyOptions(db:D1Database, project:string, kind:Kind
  const challengeToken=newSessionToken();
  await db.batch([
   db.prepare(`DELETE FROM app_auth_challenges WHERE expires_at<=${nowSQL}`),
-  db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,program_revision,challenge,kind,visitor_id,invite_hash,session_hash) VALUES(?,?,?,?,?,?,?,?)').bind(await digest('challenge',challengeToken),project,revision,options.challenge,kind,visitor,invite,session)
+  db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,program_revision,challenge,kind,visitor_id,invite_hash,session_hash,page_review_id) VALUES(?,?,?,?,?,?,?,?,?)').bind(await digest('challenge',challengeToken),project,revision,options.challenge,kind,visitor,invite,session,pageReview)
  ]);
  return {options,challengeToken};
 }
 
-export async function appPasskeyVerify(db:D1Database, project:string, kind:Kind, challengeToken:string, response:AuthenticationResponseJSON|RegistrationResponseJSON, local=false, currentSession='') {
+export async function appPasskeyVerify(db:D1Database, project:string, kind:Kind, challengeToken:string, response:AuthenticationResponseJSON|RegistrationResponseJSON, local=false, currentSession='',pageReview:string|null=null) {
  if (!tokenPattern.test(challengeToken)) throw new BackendError(400,'Start app sign-in again');
  const challenge=await db.prepare(`DELETE FROM app_auth_challenges WHERE token_hash=? AND project_id=? AND kind=? AND expires_at>${nowSQL} RETURNING *`).bind(await digest('challenge',challengeToken),project,kind).first<Challenge>();
  if (!challenge) throw new BackendError(400,'App sign-in expired or already used');
+ if(challenge.page_review_id!==pageReview)throw new BackendError(409,'Application page changed; start sign-in again');
  const state=await active(db,project);
  if (state.revision!==challenge.program_revision) throw new BackendError(409,'Application changed; sign in again');
  if (kind==='add'&&(!tokenPattern.test(currentSession)||await digest('session',currentSession)!==challenge.session_hash)) throw new BackendError(401,'App session changed; start passkey enrollment again');
@@ -92,7 +94,7 @@ export async function appPasskeyVerify(db:D1Database, project:string, kind:Kind,
   const results=await db.batch([
    db.prepare(`DELETE FROM app_sessions WHERE visitor_id=? AND expires_at<=${nowSQL}`).bind(key.visitor_id),
    db.prepare(`UPDATE app_passkeys SET counter=?,revision=revision+1 WHERE id=? AND revision=? AND EXISTS(${activeSQL} AND a.revision=?)`).bind(verified.authenticationInfo.newCounter,key.id,key.revision,project,challenge.program_revision),
-   db.prepare('INSERT INTO app_sessions(token_hash,visitor_id) SELECT ?,visitor_id FROM app_passkeys WHERE id=? AND revision=? AND changes()=1').bind(sessionHash,key.id,key.revision+1)
+   db.prepare('INSERT INTO app_sessions(token_hash,visitor_id,page_review_id) SELECT ?,visitor_id,? FROM app_passkeys WHERE id=? AND revision=? AND changes()=1').bind(sessionHash,pageReview,key.id,key.revision+1)
   ]);
   if (results[2].meta.changes!==1) throw new BackendError(409,'App credentials changed; sign in again');
   return {session,visitorId:key.visitor_id};
@@ -113,25 +115,26 @@ export async function appPasskeyVerify(db:D1Database, project:string, kind:Kind,
   db.prepare('INSERT INTO app_passkeys(id,visitor_id,public_key,counter) SELECT ?,id,?,? FROM app_visitors WHERE id=?').bind(key.id,b64(key.publicKey),key.counter,visitor),
   db.prepare('UPDATE app_invitations SET used_by=? WHERE code_hash=? AND EXISTS(SELECT 1 FROM app_visitors WHERE id=?)').bind(visitor,challenge.invite_hash,visitor),
   db.prepare('INSERT INTO app_recovery_codes(visitor_id,code_hash) SELECT id,? FROM app_visitors WHERE id=?').bind(await digest('recovery',recoveryCode),visitor),
-  db.prepare('INSERT INTO app_sessions(token_hash,visitor_id) SELECT ?,id FROM app_visitors WHERE id=?').bind(sessionHash,visitor)
+  db.prepare('INSERT INTO app_sessions(token_hash,visitor_id,page_review_id) SELECT ?,id,? FROM app_visitors WHERE id=?').bind(sessionHash,pageReview,visitor)
  ]);
  if (results[4].meta.changes!==1) throw new BackendError(403,'Application invitation changed or was already used');
  return {session,visitorId:visitor,recoveryCode};
 }
 
-export async function recoverAppVisitor(db:D1Database, project:string, code:string) {
+export async function recoverAppVisitor(db:D1Database, project:string, code:string,pageReview:string|null=null,nonce?:string) {
  const {revision}=await active(db,project);
  if (!tokenPattern.test(code)) throw new BackendError(401,'Invalid application recovery code');
- const hash=await digest('recovery',code), replacement=newSessionToken(), replacementHash=await digest('recovery',replacement), session=newSessionToken();
- const row=await db.prepare('SELECT r.visitor_id FROM app_recovery_codes r JOIN app_visitors v ON v.id=r.visitor_id WHERE r.code_hash=? AND v.project_id=? AND v.revoked=0').bind(hash,project).first<{visitor_id:string}>();
+ const hash=await digest('recovery',code), replacement=nonce?await replacementAppRecoveryCode(code,nonce):newSessionToken(), replacementHash=await digest('recovery',replacement), session=newSessionToken();
+ const retryHash=nonce?replacementHash:hash;
+ const row=await db.prepare('SELECT r.visitor_id FROM app_recovery_codes r JOIN app_visitors v ON v.id=r.visitor_id WHERE r.code_hash IN (?,?) AND v.project_id=? AND v.revoked=0').bind(hash,retryHash,project).first<{visitor_id:string}>();
  if (!row) throw new BackendError(401,'Invalid application recovery code');
  // Recovery invalidates all old credentials, including sign-ins being verified.
  // The fresh session may add a replacement passkey without changing identity/data.
  const results=await db.batch([
-  db.prepare(`UPDATE app_recovery_codes SET code_hash=? WHERE visitor_id=? AND code_hash=? AND EXISTS(${activeSQL} AND a.revision=?)`).bind(replacementHash,row.visitor_id,hash,project,revision),
+  db.prepare(`UPDATE app_recovery_codes SET code_hash=? WHERE visitor_id=? AND code_hash IN (?,?) AND EXISTS(${activeSQL} AND a.revision=?)`).bind(replacementHash,row.visitor_id,hash,retryHash,project,revision),
   db.prepare('DELETE FROM app_sessions WHERE visitor_id=? AND EXISTS(SELECT 1 FROM app_recovery_codes WHERE visitor_id=? AND code_hash=?)').bind(row.visitor_id,row.visitor_id,replacementHash),
   db.prepare('DELETE FROM app_passkeys WHERE visitor_id=? AND EXISTS(SELECT 1 FROM app_recovery_codes WHERE visitor_id=? AND code_hash=?)').bind(row.visitor_id,row.visitor_id,replacementHash),
-  db.prepare('INSERT INTO app_sessions(token_hash,visitor_id) SELECT ?,visitor_id FROM app_recovery_codes WHERE visitor_id=? AND code_hash=?').bind(await digest('session',session),row.visitor_id,replacementHash)
+  db.prepare('INSERT INTO app_sessions(token_hash,visitor_id,page_review_id) SELECT ?,visitor_id,? FROM app_recovery_codes WHERE visitor_id=? AND code_hash=?').bind(await digest('session',session),pageReview,row.visitor_id,replacementHash)
  ]);
  if (results[3].meta.changes!==1) throw new BackendError(401,'Application recovery code changed or was already used');
  return {session,visitorId:row.visitor_id,recoveryCode:replacement};
