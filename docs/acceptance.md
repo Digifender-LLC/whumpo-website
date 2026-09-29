@@ -198,3 +198,10 @@ Deployment verification: code `42375cd`, main Worker `1c2543f0-35d7-4d37-88c3-53
 Final refinement: switching pages resets the page scroll position; theme controls serialize saves. Added a credential-version check when issuing password sessions, so a login already verifying an old password cannot create a session after a concurrent password change. The regression test simulates that race and confirms 401/no cookie. Both direct D1 and real Worker HTTP password checks pass.
 
 Live release: code `ba928df`, main Worker `f6935cb6-0eb0-49e7-b694-24867a462097`, production migration 0055 applied. Served workspace HTML, app bundle, stylesheet and default avatar exactly match the tested files. Anonymous profile/photo reads return 401; foreign-origin password mutation returns 403. No production account credentials or profile content were changed by verification.
+# Visitor authentication and gateway — September 29, 2026
+
+Implemented internal invitation-only application passkeys, recovery, owner revocation and an unmounted HTTP gateway. Migration 0056 was verified on disposable local D1; it has not been applied remotely. Production remains on the prior release and does not expose visitor enrollment/data routes.
+
+Passed `npm run test:app-auth`, `npm run test:app-data`, `npm run check` and `git diff --check`. Authentication uses independently signed ES256 responses and actual D1 transactions. Tests cover competing invitations, credential rollback, lost acknowledgment, counterless sign-in races, changed application authority, recovery racing with sign-in, cross-project isolation, cookie-bound challenges, exact session binding when adding a passkey, request limits, private receipt recovery and logout. The gateway test calls the handler directly; it does not claim a deployed visitor origin, real-browser authenticator or actual QuickJS acceptance.
+
+Remaining: controlled visitor page/host, owner invitation and revocation UI, live cookie/passkey and runtime acceptance, visitor data export/deletion and retention. See `docs/app-data.md` for the implemented boundaries and next gates.
