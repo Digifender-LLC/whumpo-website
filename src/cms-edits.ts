@@ -1,0 +1,49 @@
+import {cmsConnection} from './cms-status';
+import {callCMS,CMSBridgeError} from './cms-bridge';
+import {cmsEditBody} from './cms-content-shape';
+import {readCMSDraft} from './cms-content';
+import {CMSProjectError} from './cms-projects';
+type Row={id:string;draft_request_id:string;body:string;result:string|null};
+export async function editCMSDraft(db:D1Database,user:string,project:string,id:string,draftId:string,title:unknown,text:unknown,revision:unknown,env:Record<string,unknown>){
+ const {service,config}=await cmsConnection(db,user,project,env);
+ if(!/^[0-9a-f-]{36}$/.test(id))throw new CMSProjectError(400,'Choose a valid edit request ID');
+ const draft=await db.prepare('SELECT collection,item_id FROM cms_draft_requests WHERE id=? AND user_id=? AND project_id=?').bind(draftId,user,project).first<{collection:string;item_id:string}>();
+ if(!draft?.item_id)throw new CMSProjectError(404,'CMS draft not found');
+ let body:string;try{body=JSON.stringify(cmsEditBody(title,text,revision));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
+ const read=()=>db.prepare('SELECT * FROM cms_edit_requests WHERE id=?').bind(id).first<Row>();let row=await read();
+ if(!row){
+  const current=await readCMSDraft(db,user,project,draftId,env);
+  if(current.item.status!=='draft'||current.revision!==revision)throw new CMSProjectError(409,'Draft changed or is no longer a private draft. Read it again before preparing an edit.');
+  try{await db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id,draftId,body).run();}catch{}row=await read();
+ }
+ if(!row)throw new CMSProjectError(409,'CMS edit request capacity is full or unavailable');
+ if(row.draft_request_id!==draftId||row.body!==body)throw new CMSProjectError(409,'CMS edit request ID already used');
+ if(!row.result){
+  try{const data=await callCMS(service,config,'/_emdash/api/content/'+draft.collection+'/'+draft.item_id,id,JSON.parse(body),'PUT');
+   if(data?.item?.id!==draft.item_id||data.item.status!=='draft'||typeof data._rev!=='string'||data._rev.length>256)throw Error('Invalid edit receipt');
+   const result=JSON.stringify({editRequestId:id,requestId:draftId,projectId:project,itemId:draft.item_id,status:'draft',revision:data._rev});
+   await db.prepare('UPDATE cms_edit_requests SET result=? WHERE id=? AND result IS NULL').bind(result,id).run();
+  }catch(error){if(error instanceof CMSBridgeError&&error.status===409)throw new CMSProjectError(409,error.message+' Edit request: '+id);}
+  row=await read();
+ }
+ if(!row?.result)throw new CMSProjectError(503,'CMS edit outcome is unresolved. Use /cms-retry-edit '+project+' '+id+' to recover this exact request.');
+ return JSON.parse(row.result);
+}
+export async function cmsEditAction(db:D1Database,user:string,action:Record<string,unknown>,id:string,env:Record<string,unknown>){
+ const project=action.projectId,draftId=action.requestId;
+ if(typeof project!=='string'||typeof draftId!=='string')throw new CMSProjectError(400,'Choose project and request IDs');
+ await cmsConnection(db,user,project,env);
+ const keys=action.operation==='editDraft'?['kind','operation','projectId','requestId','title','text','revision']:['kind','operation','projectId','requestId'];
+ if(Object.keys(action).some(k=>!keys.includes(k)))throw new CMSProjectError(400,'Unsupported CMS edit fields');
+ if(action.operation==='editDraft')return editCMSDraft(db,user,project,id,draftId,action.title,action.text,action.revision,env);
+ if(action.operation==='listEdits'){
+  if(!await db.prepare('SELECT id FROM cms_draft_requests WHERE id=? AND user_id=? AND project_id=?').bind(draftId,user,project).first())throw new CMSProjectError(404,'CMS draft not found');
+  return (await db.prepare('SELECT id,result,created_at FROM cms_edit_requests WHERE draft_request_id=? ORDER BY created_at DESC,id LIMIT 90').bind(draftId).all()).results;
+ }
+ if(action.operation==='retryEdit'){
+  const row=await db.prepare('SELECT e.* FROM cms_edit_requests e JOIN cms_draft_requests d ON d.id=e.draft_request_id WHERE e.id=? AND d.project_id=? AND d.user_id=?').bind(draftId,project,user).first<Row>();
+  if(!row)throw new CMSProjectError(404,'CMS edit request not found');const body=JSON.parse(row.body);
+  return editCMSDraft(db,user,project,row.id,row.draft_request_id,body.data.title,body.data.content[0].children[0].text,body._rev,env);
+ }
+ throw new CMSProjectError(400,'Unsupported CMS edit operation');
+}

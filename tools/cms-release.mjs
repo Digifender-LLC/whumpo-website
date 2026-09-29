@@ -49,6 +49,6 @@ export async function privateCMSProbe(account,worker,origin,directory){
  const close=async()=>{if(child.exitCode===null){child.kill('SIGTERM');await new Promise(resolve=>{const timer=setTimeout(()=>{child.kill('SIGKILL');resolve();},4000);child.once('exit',()=>{clearTimeout(timer);resolve();});});}await writeFile(join(directory,'probe.log'),log,{mode:0o600});};
  try{
   let ready=false;for(let i=0;i<120;i++){if(child.exitCode!==null)throw Error('Private CMS probe exited');try{await fetch('http://127.0.0.1:'+port+'/_emdash/api/setup/status',{signal:AbortSignal.timeout(1000)});ready=true;break;}catch{}await new Promise(r=>setTimeout(r,250));}if(!ready)throw Error('Private CMS probe did not start');
-  return {close,service:{async fetch(request){const url=new URL(request.url);return fetch('http://127.0.0.1:'+port+url.pathname,{method:request.method,headers:request.headers,...(request.method==='POST'?{body:await request.text()}:{}),signal:request.signal,redirect:'error'});}}};
+  return {close,service:{async fetch(request){const url=new URL(request.url);return fetch('http://127.0.0.1:'+port+url.pathname,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),signal:request.signal,redirect:'error'});}}};
  }catch(error){await close();throw error;}
 }

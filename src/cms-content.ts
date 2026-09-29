@@ -1,3 +1,4 @@
+import {cmsEditAction} from './cms-edits';
 import {cmsConnection} from './cms-status';
 import {callCMS} from './cms-bridge';
 import {cmsDraftBody,cmsItemId} from './cms-content-shape';
@@ -33,9 +34,10 @@ export async function readCMSDraft(db:D1Database,user:string,project:string,id:s
  const {service,config}=await cmsConnection(db,user,project,env);
  const row=await db.prepare('SELECT * FROM cms_draft_requests WHERE id=? AND project_id=? AND user_id=?').bind(id,project,user).first<Draft>();
  if(!row?.item_id)throw new CMSProjectError(404,'A saved CMS draft was not found for this request');
- try{const data=await callCMS(service,config,'/_emdash/api/content/'+row.collection+'/'+row.item_id,crypto.randomUUID());if(data?.item?.id!==row.item_id)throw Error('CMS item mismatch');return {requestId:id,projectId:project,collection:row.collection,item:data.item};}catch{throw new CMSProjectError(503,'CMS draft could not be read');}
+ try{const data=await callCMS(service,config,'/_emdash/api/content/'+row.collection+'/'+row.item_id,crypto.randomUUID());if(data?.item?.id!==row.item_id)throw Error('CMS item mismatch');return {requestId:id,projectId:project,collection:row.collection,revision:data._rev,item:data.item};}catch{throw new CMSProjectError(503,'CMS draft could not be read');}
 }
 export async function cmsContentAction(db:D1Database,user:string,action:Record<string,unknown>,id:string,env:Environment){
+ if(['editDraft','listEdits','retryEdit'].includes(String(action.operation)))return cmsEditAction(db,user,action,id,env);
  const project=action.projectId;if(typeof project!=='string'||!uuid.test(project))throw new CMSProjectError(400,'Choose an owned CMS project ID');
  const allowed=action.operation==='draft'?['kind','operation','projectId','collection','title','text']:action.operation==='listDrafts'?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
  if(Object.keys(action).some(k=>!allowed.includes(k)))throw new CMSProjectError(400,'Unsupported CMS draft fields');
@@ -53,15 +55,18 @@ export async function cmsContentAction(db:D1Database,user:string,action:Record<s
 }
 export type CMSContent=(action:Record<string,unknown>,requestId:string)=>Promise<unknown>;
 export function cmsContentCommand(content:string,requestId:string,execute?:CMSContent){
- const match=content.match(/^\/(cms-draft|cms-drafts|cms-read|cms-retry)(?:\s+([\s\S]+))?$/i);if(!match)return;
+ const match=content.match(/^\/(cms-draft|cms-drafts|cms-read|cms-retry|cms-edit|cms-edits|cms-retry-edit)(?:\s+([\s\S]+))?$/i);if(!match)return;
  return async()=>{
   try{
    if(!execute)throw new CMSProjectError(503,'CMS content connection is not configured');
    const rest=match[2]?.trim()??'',verb=match[1].toLowerCase();let action:Record<string,unknown>;
-   if(verb==='cms-draft'){
+   if(verb==='cms-edit'){
+    const parts=rest.split('|').map(s=>s.trim()),head=parts.shift()?.split(/\s+/);if(parts.length!==2||head?.length!==3)throw new CMSProjectError(400,'Use /cms-edit PROJECT_ID DRAFT_REQUEST_ID REVISION | title | full body text');
+    action={operation:'editDraft',projectId:head[0],requestId:head[1],revision:head[2],title:parts[0],text:parts[1]};
+   }else if(verb==='cms-draft'){
     const parts=rest.split('|').map(s=>s.trim()),head=parts.shift()?.split(/\s+/);if(parts.length!==2||head?.length!==2)throw new CMSProjectError(400,'Use /cms-draft PROJECT_ID posts|pages | title | body text');
     action={operation:'draft',projectId:head[0],collection:head[1],title:parts[0],text:parts[1]};
-   }else{const parts=rest.split(/\s+/);if(parts.length!==(verb==='cms-drafts'?1:2))throw new CMSProjectError(400,'Use /'+verb+' PROJECT_ID'+(verb==='cms-drafts'?'':' REQUEST_ID'));action={operation:verb==='cms-drafts'?'listDrafts':verb==='cms-read'?'readDraft':'retryDraft',projectId:parts[0],...(parts[1]?{requestId:parts[1]}:{})};}
+   }else{const parts=rest.split(/\s+/);if(parts.length!==(verb==='cms-drafts'?1:2))throw new CMSProjectError(400,'Use /'+verb+' PROJECT_ID'+(verb==='cms-drafts'?'':' REQUEST_ID'));action={operation:verb==='cms-drafts'?'listDrafts':verb==='cms-read'?'readDraft':verb==='cms-edits'?'listEdits':verb==='cms-retry-edit'?'retryEdit':'retryDraft',projectId:parts[0],...(parts[1]?{requestId:parts[1]}:{})};}
    return describeCMSContent(await execute(action,requestId));
   }catch(error){return error instanceof CMSProjectError?error.message:'CMS draft operation could not be confirmed. Inspect the saved request before creating another.';}
  };
