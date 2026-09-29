@@ -30,6 +30,7 @@ Write and preview
 /cms-read PROJECT_ID REQUEST_ID — read current content and its revision token.
 /cms-edit PROJECT_ID REQUEST_ID REVISION | title | full body text — stage an edit using the revision you just read. A live article stays online unchanged.
 /cms-preview PROJECT_ID REQUEST_ID — open your latest private preview.
+/cms-export PROJECT_ID REQUEST_ID — download saved article content as JSON.
 
 Publish and replace
 /publish-cms PROJECT_ID REQUEST_ID — freeze the article and destination for review, including the current public version when replacing a live article.
