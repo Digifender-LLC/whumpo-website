@@ -15,6 +15,7 @@
     "test:chat": "node tests/chat.mjs",
     "build": "node tools/build.mjs",
     "test:passkeys": "node tests/passkeys.mjs",
+    "test:usage-recovery": "node tests/usage-recovery.mjs",
     "test:billing": "node tests/billing.mjs",
     "test:runtime-ai": "node tests/runtime-ai.mjs",
     "test:previews": "node tests/previews.mjs",

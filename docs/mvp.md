@@ -235,3 +235,8 @@ The existing hosting review/confirm/status/disconnect operations are now availab
 ### GitHub source backups in chat (September 29)
 
 Installation/repository discovery, exact source reviews, explicit confirmation and read-only uncertain-result checks now work in chat. Reviews disclose public repository exposure and preserve existing expected-head commit/source verification behavior. The AI may discover and prepare; it cannot commit. This closes the panel-only source-backup gap. Real customer GitHub App consent/commit acceptance and automatic synchronization remain unfinished.
+
+
+### Audited recovery of unresolved AI holds (September 29)
+
+Operators can inspect and explicitly waive an aged uncertain AI hold without retrying the model or fabricating provider usage. Migration 0028 atomically restores held quota/credits, closes the original chat turn and saves an immutable audit receipt. Known token receipts, settled charges and active turns are excluded. Late model-result writes are fenced at the transaction boundary. This closes the indefinite-hold support gap; automatic provider-receipt reconciliation and the deferred payment/subscription lifecycle remain incomplete. See [usage recovery](usage-recovery.md).
