@@ -31,3 +31,11 @@ assert.equal((await post(confirm,{})).status,200);assert.equal((await readState(
 assert.equal((await fetch(base+'/api/backend-state-reviews/'+sr,{headers:{cookie:other}})).status,404);
 assert.equal((await (await post(statePath,{id:sr,versionId:sv,input:{add:5}})).json()).status,'applied');assert.equal((await readState()).revision,1);
 console.log('HTTP state checks passed with actual bound runtime: review leaves state unchanged, owner-only same-origin confirmation, persistent JSON and replay-safe revision.');
+const snapshots='/api/backend-state-snapshots/'+sr;
+const exported=await fetch(base+snapshots+'/export',{headers:{cookie}});assert.equal(exported.status,200);assert.match(exported.headers.get('content-disposition'),/attachment/);const archive=await exported.json();assert.deepEqual(archive.before.data,{});assert.deepEqual(archive.after.data,{count:5});
+assert.equal((await fetch(base+snapshots+'/export',{headers:{cookie:other}})).status,404);
+const resetId=crypto.randomUUID();assert.equal((await post(snapshots+'/restore',{id:resetId,side:'before'},other)).status,404);assert.equal((await post(snapshots+'/restore',{id:resetId,side:'before'},cookie,'https://evil.example')).status,403);
+const restoreResponse=await post(snapshots+'/restore',{id:resetId,side:'before'});assert.equal(restoreResponse.status,200);assert.equal((await restoreResponse.json()).status,'ready');assert.deepEqual((await readState()).state,{count:5});
+assert.equal((await post('/api/backend-state-reviews/'+resetId+'/confirm',{})).status,200);assert.deepEqual((await readState()).state,{});assert.equal((await readState()).revision,2);
+const history=await (await fetch(base+statePath+'/history',{headers:{cookie}})).json();assert.equal(history.snapshots.length,2);assert.equal(history.snapshots[0].restore_review_id,sr);
+console.log('HTTP state recovery passed: private JSON attachment, owned snapshot restore, CSRF, exact confirmation and revision history.');

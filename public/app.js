@@ -528,6 +528,17 @@
         link.rel = "noopener noreferrer";
         answer.append(link);
       }
+      if (typeof turn.backend_state_export_id === "string" && /^[0-9a-f-]{36}$/.test(turn.backend_state_export_id)) {
+        const link = text("a", "Download backend data");
+        link.href = `/api/backend-state-snapshots/${turn.backend_state_export_id}/export`;
+        link.download = `whumpo-backend-state-${turn.backend_state_export_id}.json`;
+        answer.append(link);
+      }
+      if (typeof turn.backend_state_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.backend_state_confirmation_id)) {
+        const button = text("button", "Confirm reviewed data change");
+        button.onclick = () => sendMessage(`/confirm-backend-state ${turn.backend_state_confirmation_id}`);
+        answer.append(button);
+      }
       if (typeof turn.directory_export_id === "string" && /^[0-9a-f-]{36}$/.test(turn.directory_export_id) && typeof turn.directory_export_project_id === "string" && /^[0-9a-f-]{36}$/.test(turn.directory_export_project_id)) {
         const link = text("a", "Download directory data");
         link.href = `/api/projects/${turn.directory_export_project_id}/directory/snapshots/${turn.directory_export_id}/export`;
