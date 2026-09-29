@@ -8,5 +8,6 @@
  "preview_urls":false,
  "routes":[{"pattern":"sites.digifender.com","custom_domain":true}],
  "d1_databases":[{"binding":"DB","database_name":"whumpo-control","database_id":"680f98b9-a769-467f-8b6f-06c10195c263","migrations_dir":"./migrations"}],
+ "r2_buckets":[{"binding":"FILES","bucket_name":"whumpo-files"}],
  "observability":{"enabled":true,"head_sampling_rate":0.1}
 }

@@ -24,7 +24,8 @@
     "test:site-agent": "node tests/site-agent.mjs",
     "test:checkout": "node tests/checkout.mjs",
     "test:exports": "node tests/exports.mjs",
-    "test:files": "node tests/files.mjs"
+    "test:files": "node tests/files.mjs",
+    "test:photo-versions": "node tests/photo-versions.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

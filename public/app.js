@@ -734,6 +734,13 @@
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         row.append(link);
+        const use = text("button", "Use in website");
+        use.type = "button";
+        use.onclick = () => {
+          $("#files-dialog").close();
+          sendMessage(`/photo ${file.id}`);
+        };
+        row.append(use);
       }
       list.append(row);
     }

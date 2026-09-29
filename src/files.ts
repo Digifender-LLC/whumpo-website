@@ -1,3 +1,4 @@
+import { reserveStorage, StorageLimitError } from './storage-budget';
 export class FileError extends Error { constructor(public status:number,message:string){super(message);} }
 export const maxPhotoBytes=1048576;
 /** Baseline JPEG envelope validation and metadata removal; not a pixel decoder. */
@@ -56,14 +57,15 @@ export async function uploadPhoto(request:Request,env:Pick<Env,'DB'|'FILES'>,use
  if(!row||row.digest!==digest||row.name!==name)throw new FileError(409,'This upload ID was already used for another photo');
  if(row.status==='ready')return {id:row.id,name:row.name,width:row.width,height:row.height,size:row.size,status:'ready'};
  try{
+  await reserveStorage(env.DB,'write');
   const stored=await env.FILES.put(key,photo.bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'image/jpeg'},customMetadata:{sha256:digest}});
-  if(!stored){const existing=await env.FILES.head(key);if(existing?.customMetadata?.sha256!==digest||existing.size!==photo.bytes.length)throw Error('Object mismatch');}
+  if(!stored){await reserveStorage(env.DB,'read');const existing=await env.FILES.head(key);if(existing?.customMetadata?.sha256!==digest||existing.size!==photo.bytes.length)throw Error('Object mismatch');}
   await env.DB.batch([
    env.DB.prepare("UPDATE project_files SET status='ready' WHERE id=? AND project_id=? AND status='pending'").bind(id,projectId),
    env.DB.prepare("INSERT OR IGNORE INTO activity_events(id,user_id,project_id,action,summary,created_at) SELECT ?,?,project_id,'file.uploaded','Uploaded a private project photo',? FROM project_files WHERE id=? AND status='ready'").bind('file:'+id,userId,new Date().toISOString(),id)
   ]);
   if(!(await env.DB.prepare("SELECT id FROM project_files WHERE id=? AND status='ready'").bind(id).first()))throw Error('File reservation removed');
- }catch{throw new FileError(503,'Photo upload is awaiting confirmation. Retry the same photo to finish it safely.');}
+ }catch(cause){if(cause instanceof StorageLimitError)throw cause;throw new FileError(503,'Photo upload is awaiting confirmation. Retry the same photo to finish it safely.');}
  return {id:row.id,name:row.name,width:row.width,height:row.height,size:row.size,status:'ready'};
 }
 export async function listPhotos(db:D1Database,userId:string,projectId:string){
@@ -72,7 +74,7 @@ export async function listPhotos(db:D1Database,userId:string,projectId:string){
 }
 export async function readPhoto(env:Pick<Env,'DB'|'FILES'>,userId:string,id:string){
  const row=await env.DB.prepare("SELECT f.object_key,f.digest FROM project_files f JOIN projects p ON p.id=f.project_id WHERE f.id=? AND p.owner_user_id=? AND f.status='ready'").bind(id,userId).first<{object_key:string;digest:string}>();
- if(!row)throw new FileError(404,'Photo not found');const object=await env.FILES.get(row.object_key);if(!object)throw new FileError(404,'Photo not found');
+ if(!row)throw new FileError(404,'Photo not found');await reserveStorage(env.DB,'read');const object=await env.FILES.get(row.object_key);if(!object)throw new FileError(404,'Photo not found');
  return new Response(object.body,{headers:{'content-type':'image/jpeg','content-length':String(object.size),'content-disposition':'inline; filename="photo.jpg"','cache-control':'private, no-store','content-security-policy':"sandbox; default-src 'none'",'x-content-type-options':'nosniff','referrer-policy':'no-referrer','cross-origin-resource-policy':'same-origin'}});
 }
 /** Account/project removal queues object keys; late writes are caught by a bounded orphan sweep. */

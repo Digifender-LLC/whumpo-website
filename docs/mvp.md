@@ -35,7 +35,7 @@ Reserve the maximum bounded cost before a model operation; settle actual usage a
 
 ## Provider interface
 
-`src/ai.ts` supports server-configured OpenAI Chat Completions and Responses text transports. Endpoint, key, model, and protocol are operator configuration, never prompt-controlled. HTTPS only, redirects disabled, 60-second timeout, bounded response size, bounded output, and sanitized errors. The adapter requires usage accounting and rejects truncated/unsupported responses. Billing integration is implemented; tool dispatch remains pending.
+`src/ai.ts` supports server-configured OpenAI Chat Completions and Responses text transports. Endpoint, key, model, and protocol are operator configuration, never prompt-controlled. HTTPS only, redirects disabled, 60-second timeout, bounded response size, bounded output, and sanitized errors. The adapter requires usage accounting and rejects truncated/unsupported responses. Billing integration and validated draft/edit/publication-review proposals are implemented. Model confirmation and arbitrary code execution are not allowed.
 
 The deployed OpenCode Go test uses base URL `https://opencode.ai/zen/go/v1`, the supplied Go API key stored as `AI_API_KEY`, and `muse-spark-1.3-contributor` via Responses. This uses the existing subscription explicitly authorized by the user. No upgrade or automatic fallback is enabled. Models using Anthropic Messages are outside this adapter's compatibility surface.
 
@@ -125,4 +125,12 @@ Migration 0011 pins export chat links to exact immutable versions. A database gu
 
 ## Private photo uploads
 
-The files view is accessible through `/files`, “show photos”, or Details → Project photos. It uploads, lists and previews photos owned by the selected project without AI usage. Browser preparation resizes supported images; server validation strips JPEG metadata and bounds size/dimensions. D1 reservations and create-only R2 writes make retries safe. A private Standard R2 bucket and bounded cleanup job run on the existing account. See [photos.md](photos.md) for the exact API, quota, privacy and recovery contract. Page composition with photos, public photo serving, photo-aware exports and user-facing deletion are still required for the full MVP.
+The files view is accessible through `/files`, “show photos”, or Details → Project photos. It uploads, lists and previews photos owned by the selected project without AI usage. Browser preparation resizes supported images; server validation strips JPEG metadata and bounds size/dimensions. D1 reservations and create-only R2 writes make retries safe. A private Standard R2 bucket and bounded cleanup job run on the existing account. See [photos.md](photos.md) for the exact API, quota, privacy and recovery contract. Versioned photo composition, private embedded previews, confirmed public photo serving and photo-aware exports are implemented. User-facing deletion remains outstanding.
+
+## Photo versions milestone
+
+Migration 0013 adds immutable version-photo references and atomic R2 operation budgets. `photo-page@1` accepts up to four ready photos owned by the same project. Use in website and `/photo FILE_ID` create private versions without inference; AI focused edits can change photo references while preserving omitted content. Photo bytes are not sent to the model or shared catalog.
+
+Private previews embed checksum-verified JPEGs under a sandbox. The public host checks current publication membership before serving image bytes; restore/unpublish updates access on the next request. ZIP exports include exact images and fail if dependencies cannot be verified. Tests cover cross-owner and same-owner cross-project rejection, replay, missing assets, version restoration, public visibility and operation-budget concurrency. Live signed-in checks and public browser rendering passed. Offline file opening was blocked by browser policy; independent ZIP/image checks passed.
+
+The revised Word design is v0.3. Original sections 1–25 retain product intent; sections 26–32 specify current implementation and remaining contracts. Payments remain disabled at the owner’s request.

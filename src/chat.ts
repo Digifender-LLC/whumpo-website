@@ -1,3 +1,4 @@
+import { attachPhoto } from './photo-versions';
 import { publicationCommand, siteURL } from './publications';
 import { renderLaunch, type LaunchConfig } from './components';
 import { hashToken } from './security';
@@ -53,8 +54,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const command = content.toLowerCase();
   const known = ['/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
+  const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
+  const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
-  if (publication) reply = publication.reply;
+  if (photoDraft) reply = photoDraft.reply;
+  else if (publication) reply = publication.reply;
   else if (/^\/export(?:\s|$)/.test(command) || ['export my website','download my website'].includes(command)) {
     const args=command.startsWith('/export')?command.split(/\s+/):['/export'];
     if(args.length>2 || (args[1]&&!/^[0-9a-f-]{36}$/.test(args[1])))return {status:400,error:'Use /export, optionally followed by a saved version ID from /versions.'};
@@ -98,7 +102,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = ai ? 'AI is connected for website planning and private draft edits. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /files to upload and manage private project photos. Use /export to download the latest saved website source, optionally followed by a version ID. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Custom backend code, domains, and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
+    reply = ai ? 'AI is connected for website planning and private draft edits. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /files for private project photos; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Custom backend code, domains, and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
@@ -123,6 +127,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, userId, state.revision, input.id, userId)
   ];
   if (publication) statements.push(...publication.statements);
+  if (photoDraft) statements.push(...photoDraft.statements);
   if (exportId) statements.push(db.prepare("INSERT OR IGNORE INTO chat_exports(turn_id,version_id) SELECT id,? FROM chat_turns WHERE id=? AND user_id=?").bind(exportId,input.id,userId));
   if (version) {
     statements.push(db.prepare("INSERT INTO site_versions (id,project_id,component_id,config_json,html,digest,created_at) SELECT ?,?,'launch-page@1',?,?,?,? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?) AND EXISTS (SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?)").bind(input.id,version.projectId,JSON.stringify(version.config),version.html,version.digest,now,input.id,userId,version.projectId,userId));
