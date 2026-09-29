@@ -18,14 +18,34 @@ export async function readDirectory(db:D1Database,user:string,project:string){
  return {...p,draft:entries(p.draft_json),published:!!p.version_id&&p.live_json!==null&&p.publication_revision===p.current_publication};
 }
 function summary(items:Listing[]){return items.length?items.map(x=>`${x.title}\nListing: ${x.id}\n${x.description}${x.url?'\n'+x.url:''}`).join('\n\n'):'No listings.';}
+/** Only applied snapshots are recovery sources; pending proposals are never backups. */
+export async function directorySnapshot(db:D1Database,user:string,project:string,review:string){
+ if(!uuid.test(project)||!uuid.test(review))throw new DirectoryError(400,'Choose a saved snapshot from /directory-history PROJECT_ID.');
+ const row=await db.prepare("SELECT r.id,r.snapshot_json,r.digest,r.kind,r.source_review_id,t.created_at AS applied_at,p.name FROM directory_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id JOIN chat_turns t ON t.id=r.confirmed_by AND t.user_id=r.user_id WHERE r.id=? AND r.project_id=? AND r.user_id=? AND r.status='applied' AND r.kind IN ('edit','publish')").bind(review,project,user).first<{id:string;snapshot_json:string;digest:string;kind:string;source_review_id:string|null;applied_at:string;name:string}>();
+ if(!row)throw new DirectoryError(404,'Saved directory snapshot not found.');
+ if(await hashToken(row.snapshot_json)!==row.digest)throw new DirectoryError(409,'The saved directory snapshot failed its integrity check.');
+ return {...row,listings:entries(row.snapshot_json)};
+}
+export async function directoryHistory(db:D1Database,user:string,project:string){
+ const p=await readDirectory(db,user,project);
+ const {results}=await db.prepare("SELECT r.id,r.kind,r.expected_revision+1 AS revision,r.digest,r.source_review_id AS restoredFrom,t.created_at AS appliedAt,json_array_length(r.snapshot_json) AS listingCount FROM directory_reviews r JOIN chat_turns t ON t.id=r.confirmed_by AND t.user_id=r.user_id WHERE r.project_id=? AND r.user_id=? AND r.status='applied' AND r.kind IN ('edit','publish') ORDER BY r.expected_revision DESC LIMIT 100").bind(project,user).all<{id:string;kind:string;revision:number;digest:string;restoredFrom:string|null;appliedAt:string;listingCount:number}>();
+ return {projectId:project,name:p.name,currentRevision:p.revision,snapshots:results};
+}
+export async function exportDirectory(db:D1Database,user:string,project:string,review:string){
+ const r=await directorySnapshot(db,user,project,review);
+ return {format:'tellumo-directory',schemaVersion:1,project:{id:project,name:r.name},snapshot:{id:r.id,appliedAt:r.applied_at,kind:r.kind,restoredFrom:r.source_review_id,listingsSha256:r.digest},listings:r.listings};
+}
 export async function directoryAction(db:D1Database,user:string,turn:string,action:Record<string,unknown>){
  const op=action.operation,project=action.projectId;
- if(!['list','add','edit','remove','publish','unpublish'].includes(String(op))||typeof project!=='string'||Object.keys(action).some(k=>!['operation','projectId','listingId','title','description','url'].includes(k)))throw new DirectoryError(400,'Unsupported directory operation.');
+ if(!['list','history','restore','export','add','edit','remove','publish','unpublish'].includes(String(op))||typeof project!=='string'||Object.keys(action).some(k=>!['operation','projectId','listingId','title','description','url','snapshotId'].includes(k)))throw new DirectoryError(400,'Unsupported directory operation.');
  const fields=['title','description','url'];
- if(!['add','edit'].includes(String(op))&&fields.some(k=>k in action)||!['edit','remove'].includes(String(op))&&'listingId'in action)throw new DirectoryError(400,'Unexpected directory fields.');
+ if(!['restore','export'].includes(String(op))&&'snapshotId'in action||['restore','export'].includes(String(op))&&(typeof action.snapshotId!=='string'||!uuid.test(action.snapshotId))||!['add','edit'].includes(String(op))&&fields.some(k=>k in action)||!['edit','remove'].includes(String(op))&&'listingId'in action)throw new DirectoryError(400,'Unexpected directory fields.');
  const p=await readDirectory(db,user,project),result=(reply:string,statements:D1PreparedStatement[]=[])=>({reply,statements});
+ if(op==='history'){const h=await directoryHistory(db,user,project);return result(`${h.name} · saved directory snapshots\nCurrent draft revision: ${h.currentRevision}\n\n`+(h.snapshots.map(r=>`Revision ${r.revision} · ${r.kind}${r.restoredFrom?' (restored from '+r.restoredFrom+')':''} · ${r.listingCount} listings\nSnapshot: ${r.id}\nApplied: ${r.appliedAt}\nListings SHA-256: ${r.digest}`).join('\n\n')||'No applied snapshots yet.')+'\n\nUse /directory-restore PROJECT_ID SNAPSHOT_ID to review replacing the private draft, or /directory-export PROJECT_ID SNAPSHOT_ID to download its data. Neither publishes it.');}
+ if(op==='export'){const r=await directorySnapshot(db,user,project,String(action.snapshotId));return result(`Download the saved directory data for ${p.name}.\nSnapshot: ${r.id}\nListings SHA-256: ${r.digest}\nThis private JSON export contains the saved listings and recovery metadata. It does not contain credentials or a deployable backend.`,[db.prepare('INSERT INTO directory_exports(turn_id,review_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,r.id,turn,user)]);}
  if(op==='list')return result(`${p.name} directory · ${p.published?'published':'private / offline'}\nDraft revision: ${p.revision}\n\n${summary(p.draft)}\n\n${p.published?'Published page: '+directoryURL(project)+'\nPublic JSON: '+directoryURL(project)+'.json\nDraft edits do not change this public snapshot.':'No directory is publicly served.'}\nUse /directory-publish PROJECT_ID to review publication, or /directory-off PROJECT_ID to review taking it offline.`);
- let draft=[...p.draft],change='';
+ let draft=[...p.draft],change='',source:string|null=null;
+ if(op==='restore'){const saved=await directorySnapshot(db,user,project,String(action.snapshotId));draft=saved.listings;source=saved.id;change='Replace the current private directory draft with this saved snapshot:\nSnapshot: '+saved.id+'\nApplied: '+saved.applied_at+'\n\nCurrent private draft:\n'+summary(p.draft)+'\n\nReplacement:\n'+summary(draft)+'\n\nListings missing from the replacement will be removed from the private draft. This does not restore website HTML or publish directory data.';}
  if(op==='add'||op==='edit'){
   const item=listing({id:op==='add'?turn:action.listingId,title:action.title,description:action.description,url:action.url??''});
   if(op==='add'){draft.push(item);change='Add this listing to the private draft:\n'+summary([item]);}
@@ -38,11 +58,11 @@ export async function directoryAction(db:D1Database,user:string,turn:string,acti
  const digest=await hashToken(snapshot);
  return result(`${p.name}\n\n${change}\n\n${kind==='edit'?'Your existing public snapshot will not change. ':''}Review ${turn}\nSnapshot SHA-256: ${digest}\nNothing changes until you send /confirm-directory ${turn} within 10 minutes.`,[
   db.prepare('INSERT OR IGNORE INTO directories(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(project,turn,user),
-  db.prepare('INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,user,project,kind,snapshot,digest,p.revision,p.current_publication??-1,new Date(Date.now()+600000).toISOString(),turn,user)
+  db.prepare('INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,source_review_id) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,user,project,kind,snapshot,digest,p.revision,p.current_publication??-1,new Date(Date.now()+600000).toISOString(),source,turn,user)
  ]);
 }
 export async function directoryCommand(db:D1Database,user:string,turn:string,command:string){
- const match=command.match(/^(\/directory(?:-add|-edit|-remove|-publish|-off)?|\/confirm-directory)(?:\s+(.*))?$/s);if(!match)return;
+ const match=command.match(/^(\/directory(?:-add|-edit|-remove|-publish|-off|-history|-restore|-export)?|\/confirm-directory)(?:\s+(.*))?$/s);if(!match)return;
  const [verb,rest]=[match[1],match[2]??''],result=(reply:string,statements:D1PreparedStatement[]=[])=>({reply,statements});
  try{
   if(verb==='/directory'&&!rest){const {results}=await db.prepare('SELECT p.id,p.name FROM projects p WHERE p.owner_user_id=? ORDER BY p.created_at DESC LIMIT 20').bind(user).all<{id:string;name:string}>();return result((results.map(p=>p.name+'\n/directory '+p.id).join('\n\n')||'No projects yet. Use /new.')+'\n\nDirectories support private editable listings and a separately reviewed public page/JSON API.');}
@@ -54,10 +74,10 @@ export async function directoryCommand(db:D1Database,user:string,turn:string,com
    if(r.expires_at<=new Date().toISOString())throw new DirectoryError(409,'This review expired. Prepare a fresh review.');
    return result(r.kind==='publish'?'Directory snapshot published at '+directoryURL(r.project_id)+'\nPublic JSON: '+directoryURL(r.project_id)+'.json':r.kind==='unpublish'?'Directory page and JSON API taken offline.':'Private directory draft updated. Its public snapshot has not changed. Use /directory '+r.project_id+' to inspect it.',[db.prepare("UPDATE directory_reviews SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(turn,rest,user,turn,user)]);
   }
-  const parts=rest.split('|').map(s=>s.trim()),ids=parts[0].split(/\s+/),op=({'/directory':'list','/directory-add':'add','/directory-edit':'edit','/directory-remove':'remove','/directory-publish':'publish','/directory-off':'unpublish'} as Record<string,string>)[verb];
-  const needsListing=op==='edit'||op==='remove',hasText=op==='add'||op==='edit';
-  if(ids.length!==(needsListing?2:1)||!uuid.test(ids[0])||needsListing&&!uuid.test(ids[1])||hasText&&(parts.length<3||parts.length>4)||!hasText&&parts.length!==1)throw new DirectoryError(400,'Use /directory PROJECT_ID; /directory-add PROJECT_ID | title | description | optional HTTPS link; /directory-edit PROJECT_ID LISTING_ID | title | description | optional HTTPS link; /directory-remove PROJECT_ID LISTING_ID; /directory-publish PROJECT_ID; or /directory-off PROJECT_ID.');
-  return await directoryAction(db,user,turn,{operation:op,projectId:ids[0],...(needsListing?{listingId:ids[1]}:{}),...(hasText?{title:parts[1],description:parts[2],url:parts[3]??''}:{})});
+  const parts=rest.split('|').map(s=>s.trim()),ids=parts[0].split(/\s+/),op=({'/directory':'list','/directory-add':'add','/directory-edit':'edit','/directory-remove':'remove','/directory-publish':'publish','/directory-off':'unpublish','/directory-history':'history','/directory-restore':'restore','/directory-export':'export'} as Record<string,string>)[verb];
+  const needsSnapshot=op==='restore'||op==='export',needsListing=op==='edit'||op==='remove',hasText=op==='add'||op==='edit';
+  if(ids.length!==(needsListing||needsSnapshot?2:1)||!uuid.test(ids[0])||(needsListing||needsSnapshot)&&!uuid.test(ids[1])||hasText&&(parts.length<3||parts.length>4)||!hasText&&parts.length!==1)throw new DirectoryError(400,'Use /directory PROJECT_ID; /directory-add PROJECT_ID | title | description | optional HTTPS link; /directory-edit PROJECT_ID LISTING_ID | title | description | optional HTTPS link; /directory-remove PROJECT_ID LISTING_ID; /directory-publish PROJECT_ID; or /directory-off PROJECT_ID. /directory-history PROJECT_ID lists applied snapshots; /directory-restore PROJECT_ID SNAPSHOT_ID prepares recovery; /directory-export PROJECT_ID SNAPSHOT_ID downloads saved data.');
+  return await directoryAction(db,user,turn,{operation:op,projectId:ids[0],...(needsListing?{listingId:ids[1]}:{}),...(needsSnapshot?{snapshotId:ids[1]}:{}),...(hasText?{title:parts[1],description:parts[2],url:parts[3]??''}:{})});
  }catch(cause){if(cause instanceof DirectoryError)return result(cause.message);throw cause;}
 }
 export async function publicDirectory(db:D1Database,project:string){

@@ -528,6 +528,12 @@
         link.rel = "noopener noreferrer";
         answer.append(link);
       }
+      if (typeof turn.directory_export_id === "string" && /^[0-9a-f-]{36}$/.test(turn.directory_export_id) && typeof turn.directory_export_project_id === "string" && /^[0-9a-f-]{36}$/.test(turn.directory_export_project_id)) {
+        const link = text("a", "Download directory data");
+        link.href = `/api/projects/${turn.directory_export_project_id}/directory/snapshots/${turn.directory_export_id}/export`;
+        link.download = `tellumo-directory-${turn.directory_export_id}.json`;
+        answer.append(link);
+      }
       if (typeof turn.directory_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.directory_confirmation_id)) {
         const button = text("button", "Confirm reviewed directory change");
         button.onclick = () => sendMessage(`/confirm-directory ${turn.directory_confirmation_id}`);
