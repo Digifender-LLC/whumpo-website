@@ -11,7 +11,7 @@ export async function ensureBilling(db: D1Database, userId: string, date = new D
   const period = date.toISOString().slice(0, 7);
   await db.prepare('INSERT OR IGNORE INTO billing_accounts (user_id) VALUES (?)').bind(userId).run();
   // Select receipts inside the INSERT so an overlapping grant cannot be missed by a stale JS read.
-  await db.prepare("INSERT OR IGNORE INTO usage_periods(user_id,period,allowance) SELECT ?,?,COALESCE(MAX(CASE plan_id WHEN 'studio' THEN 800 ELSE 250 END),25) FROM plan_grants WHERE user_id=? AND period=?").bind(userId,period,userId,period).run();
+  await db.prepare("INSERT OR IGNORE INTO usage_periods(user_id,period,allowance) SELECT ?,?,COALESCE(MAX(CASE plan_id WHEN 'studio' THEN 800 ELSE 250 END),?) FROM plan_grants WHERE user_id=? AND period=?").bind(userId,period,plans[0].monthlyUnits,userId,period).run();
   const entitlement=await db.prepare("SELECT COALESCE(MAX(CASE plan_id WHEN 'studio' THEN 2 ELSE 1 END),0) AS tier FROM plan_grants WHERE user_id=? AND period=?").bind(userId,period).first<{tier:number}>();
   const plan=plans[entitlement?.tier??0];
   // Only work never sent to a provider expires automatically. Uncertain calls retain their hold.

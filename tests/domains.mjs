@@ -34,6 +34,6 @@ try{
  await db.prepare("UPDATE domain_claims SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?").bind(claim.id).run();await assert.rejects(chat(owner,'/verify-domain '+claim.id),{status:409});
  await chat(owner,'/domain www.example.com '+p);const renewed=(await listDomains(db,owner)).domains[0];assert.notEqual(renewed.record.value,claim.record.value);assert.equal(renewed.id,claim.id);
  await chat(owner,'/domain two.example.com '+p);await chat(owner,'/domain three.example.com '+p);assert.equal((await chat(owner,'/domain four.example.com '+p)).result.status,409);assert.equal((await listDomains(db,owner)).domains.length,3);
- assert.equal((await db.prepare('SELECT COUNT(*) n FROM publications WHERE version_id IS NOT NULL').first()).n,0);assert.equal((await readChat(db,owner)).usage.available,25);
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM publications WHERE version_id IS NOT NULL').first()).n,0);assert.equal((await readChat(db,owner)).usage.available,50);
  console.log('Domain checks passed: strict hostname validation, fixed bounded DNS resolver, exact TXT proof, tenant isolation, retries without repeated checks, expiry/rotation, no global name squatting, quotas and no publication or AI charge.');
 }finally{globalThis.fetch=realFetch;await proxy.dispose();await rm(dir,{recursive:true,force:true});}

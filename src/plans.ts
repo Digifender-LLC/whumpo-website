@@ -1,6 +1,6 @@
 /** Draft catalogue. Paid entitlements are not enabled until checkout and metering ship. */
 export const plans = [
-  { id: "explore", name: "Explore", monthlyCents: 0, publishedSites: 1, monthlyUnits: 25 },
+  { id: "explore", name: "Explore", monthlyCents: 0, publishedSites: 1, monthlyUnits: 50 },
   { id: "launch", name: "Launch", monthlyCents: 1200, publishedSites: 3, monthlyUnits: 250 },
   { id: "studio", name: "Studio", monthlyCents: 2900, publishedSites: 10, monthlyUnits: 800 }
 ] as const;

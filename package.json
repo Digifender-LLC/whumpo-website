@@ -49,7 +49,9 @@
     "test:dns-agent": "node tests/dns-agent.mjs",
     "test:version-removal": "node tests/version-removal.mjs",
     "test:contacts": "node tests/contacts.mjs",
-    "test:version-diff": "node tests/version-diff.mjs"
+    "test:version-diff": "node tests/version-diff.mjs",
+    "test:first-ai-journey": "node tests/first-ai-journey.mjs",
+    "test:explore-allowance": "node tests/explore-allowance.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
