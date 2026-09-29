@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tellumo-runtime",
+  "account_id": "f94d28e88a63fb6f34c3ecbc05aa3faf",
+  "main": "src/runtime/worker.ts",
+  "compatibility_date": "2026-09-29",
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  }
+}
