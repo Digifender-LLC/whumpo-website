@@ -61,6 +61,10 @@ function renderChat(data) {
     if (typeof turn.version_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.version_id)) {
       const link = text('a', 'Open private preview ↗'); link.href = `/api/site-versions/${turn.version_id}/preview`; link.target = '_blank'; link.rel = 'noopener noreferrer'; answer.append(link);
     }
+    const exportVersion = turn.export_version_id || turn.version_id;
+    if (typeof exportVersion === 'string' && /^[0-9a-f-]{36}$/.test(exportVersion)) {
+      const download=text('a','Download website source');download.href=`/api/site-versions/${exportVersion}/export`;download.download=`whumpo-site-${exportVersion}.zip`;answer.append(download);
+    }
     if (typeof turn.confirmation_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.confirmation_id)) {
       const confirm = text('button', 'Confirm reviewed change'); confirm.onclick = () => sendMessage(`/confirm ${turn.confirmation_id}`); answer.append(confirm);
     }

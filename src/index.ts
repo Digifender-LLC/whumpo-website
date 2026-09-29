@@ -1,3 +1,4 @@
+import { ownedExport } from './exports';
 import { checkoutEnabled, createCheckout, stripeWebhook } from './checkout';
 import { componentCatalog, previewHeaders } from './components';
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
@@ -169,6 +170,11 @@ async function handle(request: Request, env: Env): Promise<Response> {
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
   if (method === "GET" && pathname === "/api/components") return json({components:componentCatalog});
+  const exportMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/export$/);
+  if (method === 'GET' && exportMatch) {
+    const archive = await ownedExport(env.DB, user.id, exportMatch[1]);
+    return archive ? new Response(archive, {headers:{'content-type':'application/zip','content-disposition':`attachment; filename="whumpo-site-${exportMatch[1]}.zip"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer'}}) : error(404,'Saved version not found');
+  }
   const previewMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/preview$/);
   if (method === 'GET' && previewMatch) {
     const version = await env.DB.prepare('SELECT v.html FROM site_versions v JOIN projects p ON p.id = v.project_id WHERE v.id = ? AND p.owner_user_id = ?').bind(previewMatch[1],user.id).first<{html:string}>();

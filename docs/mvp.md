@@ -114,3 +114,11 @@ The owner selected Stripe test mode, then deferred connection because no Stripe 
 ### Focused edits
 
 Existing versions can be changed through an `edit` proposal containing an exact owned base-version ID and a nonempty subset of allowed configuration fields. The server merges those fields with saved configuration, preserves omitted fields, validates the result and renders a new immutable private version. Theme/headline edits no longer require the model to repeat all site copy. Replacing the sections array remains an explicit whole-array operation. The initial launch-page component can be upgraded into the information-page contract using deterministic defaults. Unknown components, cross-owner base IDs and executable fields are rejected. Editing an older version creates a private branch; it never overwrites that version or changes publication.
+
+## Source export
+
+`/export [VERSION_ID]` and “download my website” prepare an owner-only source download in chat. Without an ID, the latest saved version is selected and named in the receipt. Preview messages also offer a source link. The route rechecks ownership on every download; authentication and cross-owner failures return 401 and 404 respectively. Exports do not publish, change versions or consume model units.
+
+Each ZIP includes exact saved `public/index.html`, a static-host `_headers` policy, `whumpo/site.json` with validated configuration and a checksum, and a README. Archive paths are constants, never customer-controlled strings. Only explicit site fields enter the archive; sessions, account IDs, chat, runtime bindings, billing data and platform code are excluded. The schema bounds archive size below 50 KiB. ZIP storage mode avoids compression CPU and a fixed timestamp makes repeated downloads deterministic. The owner can host or edit the HTML without Whumpo or a build tool. Archive import and exports of unsupported future backend components remain unimplemented.
+
+Migration 0011 pins export chat links to exact immutable versions. A database guard checks the conversation and version share an owner. Links are removed by cascading deletion; the API checks current ownership regardless of old conversation content.
