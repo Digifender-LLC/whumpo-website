@@ -70,7 +70,9 @@
     "test:cms-release": "node tests/cms-release.mjs",
     "cms:snapshot-db": "node tools/snapshot-cms-database.mjs",
     "test:cms-database-snapshot": "node tests/cms-database-snapshot.mjs",
-    "test:cms-media-snapshot": "node tests/cms-media-snapshot.mjs && node tests/cms-media-local.mjs"
+    "test:cms-media-snapshot": "node tests/cms-media-snapshot.mjs && node tests/cms-media-local.mjs",
+    "test:cms-d1-restore": "node tests/cms-d1-restore.mjs",
+    "cms:verify-recovery": "node tools/verify-cms-recovery.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

@@ -51,3 +51,21 @@ export function restoreCapturedCMSDatabase(database,snapshot){
   database.exec('COMMIT; PRAGMA foreign_keys=ON');
  }catch(error){database.exec('ROLLBACK');throw error;}
 }
+
+// Only for a fresh, isolated D1 binding. Callers must never supply a live target.
+export async function restoreCapturedCMSD1(database,snapshot){
+ if(snapshot?.format!=='townhello-cms-database-v1'||!Array.isArray(snapshot.schema)||!Array.isArray(snapshot.tables))throw Error('Unsupported CMS database snapshot');
+ const existing=await database.prepare("SELECT name FROM sqlite_schema WHERE sql IS NOT NULL AND substr(name,1,7)<>'sqlite_' AND substr(name,1,4)<>'_cf_' LIMIT 1").first();
+ if(existing)throw Error('CMS restore target must be empty');
+ const statements=['PRAGMA defer_foreign_keys=ON'];
+ for(const s of snapshot.schema.filter(s=>s.type==='table'))statements.push(s.sql);
+ for(const table of snapshot.tables){if(table.name==='sqlite_sequence')statements.push('DELETE FROM sqlite_sequence');for(const row of table.rows)statements.push(`INSERT INTO ${ident(table.name)} (${table.columns.map(ident).join(',')}) VALUES (${row.join(',')})`);}
+ for(const s of snapshot.schema.filter(s=>s.type!=='table'))statements.push(s.sql);
+ if(statements.length>1000||statements.some(s=>typeof s!=='string'||Buffer.byteLength(s)>90000)||statements.reduce((n,s)=>n+Buffer.byteLength(s),0)>8*1024*1024)throw Error('CMS restore exceeds the isolated D1 batch limit');
+ // One D1 batch: a failed statement rolls back earlier writes in this attempt.
+ const result=await database.batch(statements.map(sql=>database.prepare(sql)));if(result.some(r=>!r.success))throw Error('CMS D1 restore was not confirmed');
+ const foreign=await database.prepare('PRAGMA foreign_key_check').all();if(foreign.results.length)throw Error('CMS D1 restore failed foreign-key validation');
+ const integrity=await database.prepare('PRAGMA quick_check').all();if(integrity.results.length!==1||integrity.results[0].quick_check!=='ok')throw Error('CMS D1 restore failed integrity validation');
+ const roundtrip=await captureCMSDatabase(async sql=>(await database.prepare(sql).all()).results);
+ if(roundtrip.digest!==hash(snapshot))throw Error('CMS D1 restore differs from source');return roundtrip;
+}
