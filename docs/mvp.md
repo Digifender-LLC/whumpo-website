@@ -88,3 +88,13 @@ The first site should be assembled from approved generic components where possib
 Authenticated preview reads join the version to its project owner. Responses are private/no-store and use CSP sandbox with no scripts, forms, network resources or framing. All configuration enters escaped text positions; themes are allowlisted. The catalog itself contains only platform source metadata and has no customer entries. This does not yet authorize arbitrary generated HTML/JS, backend execution or public publishing.
 
 The browser opens a saved preview from its chat message. Existing previews remain unchanged when another theme is built. API reads expose the catalog and owner-scoped version metadata; publishing, selecting/restoring an active version and AI editing are the next steps.
+
+## Publication and restore milestone
+
+Migration 0008 records a current published-version pointer with a monotonically increasing revision and exact publication reviews. `/publish [VERSION_ID]` defaults to the latest saved version; `/restore VERSION_ID` selects a retained version; `/unpublish [PROJECT_ID]` defaults to the most recently updated live project. Reviews show the destination and exact saved version, explain public exposure, expire in ten minutes, and require a separate `/confirm` or button. `/versions [PROJECT_ID]` lists retained versions.
+
+Database triggers enforce the review's owner/project/version identity, unexpired status, expected publication revision and plan site quota. They update the pointer, project status and audit event atomically with the confirming chat turn. Stale reviews cannot overwrite a newer publication; duplicate confirmation requests return the committed result without a second change. Draft creation never changes the live pointer. Restore selects exact stored HTML without inference. Unpublishing leaves all previews intact.
+
+The separate `tellumo-sites` Worker serves only GET/HEAD `/s/PROJECT_ID` on `sites.digifender.com`; it has no AI/auth secrets and no workspace routes. Responses retain CSP sandbox, scripts/forms/network denial and no-store to make unpublication visible on the next request. It shares the existing D1 database via a binding; code limits reads to explicitly published versions, but the binding itself is not a database read-only role. Arbitrary customer scripts/backends are not supported by this serving boundary.
+
+The full MVP remains incomplete: natural-language tool selection, AI edits, uploads, custom domains, purchases, optional account connections and checkout are still required. These publication controls apply to the currently supported reusable static pages.

@@ -1,0 +1,12 @@
+import { spawnSync } from 'node:child_process';
+// A failed migration must never be followed by new runtime code.
+const wrangler = 'node_modules/wrangler/bin/wrangler.js';
+for (const args of [
+ [wrangler,'d1','migrations','apply','tellumo-control','--remote'],
+ ['tools/build.mjs'],
+ [wrangler,'deploy','--config','wrangler.sites.jsonc'],
+ [wrangler,'deploy']
+]) {
+ const run=spawnSync(process.execPath,args,{stdio:'inherit'});
+ if(run.error || run.status!==0) process.exit(run.status || 1);
+}
