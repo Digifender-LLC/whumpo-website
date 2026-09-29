@@ -248,3 +248,7 @@ Shared-address publishing now attempts a saved HTTP/content and photo-response c
 ## Small dynamic directory starter
 
 A reusable directory backend supports private listing create/read/update/delete through chat, exact reviewed public snapshots, a responsive public page and a public JSON read API. Tenant data stays separate from shared code; draft edits cannot silently change published data. Database revision and explicit-confirmation checks govern both model and guided proposals. See [directory service](directories.md). This advances the small dynamic apps/API requirement; arbitrary schemas, customer-site authentication, application data rollback and isolated generated backend execution remain incomplete.
+
+## Directory data recovery
+
+Applied directory snapshots can now be listed, exported privately as JSON, and restored to the private draft through an exact current-versus-replacement review. Restoration preserves listing IDs and records immutable source ancestry; public data requires a separate publication confirmation. This supplies data recovery for the supported directory schema. General application migrations/rollback, arbitrary schemas and portable backend export remain incomplete. See [directory recovery contract](directories.md).

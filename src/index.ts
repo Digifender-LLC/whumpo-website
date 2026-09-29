@@ -1,4 +1,4 @@
-import {readDirectory,DirectoryError} from './directory';
+import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage} from './version-diff';
 import {contactPage} from './contact-page';
@@ -255,6 +255,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return json({ recoveryCode });
   }
   if (method === "GET" && pathname === "/api/connections") return json({...await connectionStatus(env.DB,user.id,githubConfig(env)),cloudflare:await cloudflareStatus(env.DB,user.id,cloudflareConfig(env))});
+  const directoryHistoryRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory\/history$/);
+  if(method==='GET'&&directoryHistoryRoute)return json(await directoryHistory(env.DB,user.id,directoryHistoryRoute[1]));
+  const directoryExportRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory\/snapshots\/([0-9a-f-]{36})\/export$/);
+  if(method==='GET'&&directoryExportRoute)return json(await exportDirectory(env.DB,user.id,directoryExportRoute[1],directoryExportRoute[2]),200,{'content-disposition':'attachment; filename="whumpo-directory-'+directoryExportRoute[2]+'.json"'});
   const directoryProject=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory$/);
   if(method==='GET'&&directoryProject){const d=await readDirectory(env.DB,user.id,directoryProject[1]);return json({projectId:d.id,name:d.name,revision:d.revision,listings:d.draft,published:d.published,publishedAt:d.published?d.published_at:null});}
   if(method==='GET'&&pathname==='/api/site-health')return json(await listHealth(env.DB,user.id));
