@@ -541,6 +541,11 @@
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         answer.append(link);
+        const index = text("a", "Browse published articles \u2197");
+        index.href = turn.cms_publication_url.replace(/\/cms\/(posts|pages)\/[0-9A-HJKMNP-TV-Z]{26}$/, "/cms");
+        index.target = "_blank";
+        index.rel = "noopener noreferrer";
+        answer.append(index);
       }
       if (typeof turn.cms_unpublish_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_unpublish_confirmation_id)) {
         const button = text("button", turn.cms_unpublish_recovery ? "Recover CMS unpublish" : "Take reviewed CMS article offline");
@@ -626,7 +631,7 @@
         answer.append(link);
       }
     }
-    $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} \xB7 ${data.stats.live || 0} live`;
+    $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} \xB7 ${data.stats.live || 0} live${data.stats.cms_articles ? ` \xB7 ${data.stats.cms_articles} CMS article${data.stats.cms_articles === 1 ? "" : "s"}` : ""}`;
     $("#chat-input").placeholder = data.state.brief_stage === "audience" ? "Who is it for, and what should visitors do?" : data.state.brief_stage === "style" ? "Ocean, clay, forest, or describe your style\u2026" : "Tell me what you\u2019d like to build or change\u2026";
     $("#agent-mode").textContent = data.mode === "ai" ? "Muse Spark 1.3 \xB7 AI connected" : "Guided mode \xB7 No AI charges";
     $("#usage-stats").textContent = data.usage ? `${data.usage.available} units available \xB7 ${data.usage.reserved} held` : "";
