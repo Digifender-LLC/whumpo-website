@@ -517,6 +517,7 @@
       }
     }
     $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} \xB7 ${data.stats.live || 0} live`;
+    $("#chat-input").placeholder = data.state.brief_stage === "audience" ? "Who is it for, and what should visitors do?" : data.state.brief_stage === "style" ? "Ocean, clay, forest, or describe your style\u2026" : "Tell me what you\u2019d like to build or change\u2026";
     $("#agent-mode").textContent = data.mode === "ai" ? "Muse Spark 1.3 \xB7 AI connected" : "Guided mode \xB7 No AI charges";
     $("#usage-stats").textContent = data.usage ? `${data.usage.available} units available \xB7 ${data.usage.reserved} held` : "";
     $("#ai-note").textContent = data.mode === "ai" ? "Setup and commands are free. AI replies use build units. This Contributor model may use messages for training; avoid confidential information." : "Guided mode uses no AI units. You can create, preview, and publish a simple site. Please keep passwords and API keys out of chat.";

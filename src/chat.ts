@@ -8,11 +8,11 @@ import { ensureBilling, getBilling } from './billing';
 import { reconcileChat, sendAIChat } from './ai-chat';
 import type { AIConfig } from './ai';
 
-type State = { revision: number; step: 'idea' | 'name' | 'ready'; idea: string };
+type State = { revision: number; step: 'idea' | 'name' | 'ready'; idea: string; brief_project_id: string | null; brief_stage: 'audience' | 'style' | null };
 export const greeting = "Hi, I’m your Whumpo guide. What would you like to put online? Tell me about your business, project, or idea. I can save your brief and set up a project with you.";
 export async function chatState(db: D1Database, userId: string) {
   await db.prepare('INSERT OR IGNORE INTO workspace_state (user_id) VALUES (?)').bind(userId).run();
-  const state = await db.prepare('SELECT revision, step, idea FROM workspace_state WHERE user_id = ?').bind(userId).first<State>();
+  const state = await db.prepare('SELECT revision, step, idea, brief_project_id, brief_stage FROM workspace_state WHERE user_id = ?').bind(userId).first<State>();
   if (!state) throw new Error('Missing workspace state');
   return state;
 }
@@ -21,7 +21,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await chatState(db, userId);
   await reconcileChat(db, userId);
   const result = await db.batch([
-    db.prepare('SELECT revision, step FROM workspace_state WHERE user_id = ?').bind(userId),
+    db.prepare('SELECT revision, step, brief_stage FROM workspace_state WHERE user_id = ?').bind(userId),
     db.prepare("SELECT t.id, t.revision, t.user_text, t.assistant_text, t.created_at, t.mode, t.status, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind, e.version_id AS export_version_id FROM chat_turns t LEFT JOIN chat_exports e ON e.turn_id=t.id LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_actions a ON a.id = t.id AND a.user_id=t.user_id LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100").bind(userId),
     db.prepare("SELECT COUNT(*) AS projects, SUM(CASE WHEN status = 'live' THEN 1 ELSE 0 END) AS live FROM projects WHERE owner_user_id = ?").bind(userId)
   ]);
@@ -47,14 +47,17 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if (state.revision >= 2000) return { status: 409, error: 'This test workspace has reached its conversation limit.' };
   let step = state.step;
   let idea = state.idea;
+  let briefProject = state.brief_project_id;
+  let briefStage = state.brief_stage;
+  let preference: {projectId:string; audience?:string; style?:string; theme?:LaunchConfig['theme']} | undefined;
   let reply: string;
   let project: { id: string; name: string; purpose: string } | undefined;
   let overage: boolean | undefined;
   let exportId: string | undefined;
   let version: { projectId: string; config: LaunchConfig; html: string; digest: string } | undefined;
   const command = content.toLowerCase();
-  const known = ['/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
-  if (ai && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
+  const known = ['/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
+  if (ai && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
   const domain = await domainCommand(db,userId,input.id,command);
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
@@ -71,16 +74,22 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   else if (/^\/build(?:\s|$)/.test(command)) {
     const args = command.split(/\s+/);
-    const theme = args[1] || 'ocean';
+    let theme = args[1] || 'ocean';
     if (!['ocean','clay','forest'].includes(theme) || args.length > 3 || (args[2] && !/^[0-9a-f-]{36}$/.test(args[2]))) return {status:400,error:'Use /build ocean, /build clay, or /build forest, optionally followed by a project ID.'};
-    const target = await db.prepare('SELECT id,name,purpose FROM projects WHERE owner_user_id = ? AND (? IS NULL OR id = ?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[2] ?? null,args[2] ?? null).first<{id:string;name:string;purpose:string}>();
+    const target = await db.prepare('SELECT id,name,purpose,preferred_theme FROM projects WHERE owner_user_id = ? AND (? IS NULL OR id = ?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[2] ?? null,args[2] ?? null).first<{id:string;name:string;purpose:string;preferred_theme:LaunchConfig['theme']}>();
     if (!target) reply = 'Create a project with /new first, or check its ID with /projects.';
     else {
+      if (!args[1]) theme = target.preferred_theme;
       const config: LaunchConfig = {name:target.name,description:target.purpose,theme:theme as LaunchConfig['theme']};
       const html = renderLaunch(config);
       version = {projectId:target.id,config,html,digest:await hashToken(html)};
       reply = `I assembled a private first draft for “${target.name}” using the reusable launch-page layout (${theme}). Open the preview below. No AI units were used. This is a saved preview, not a published site. Try another theme with /build clay or /build forest.`;
     }
+  } else if (/^\/brief(?:\s|$)/.test(command) || command==='show brief') {
+    const args=command==='show brief'?['/brief']:command.split(/\s+/);
+    if(args.length>2 || (args[1]&&!/^[0-9a-f-]{36}$/.test(args[1]))) return {status:400,error:'Use /brief, optionally followed by a project ID.'};
+    const saved=await db.prepare('SELECT name,purpose,audience,style_notes,preferred_theme FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[1]??null,args[1]??null).first<{name:string;purpose:string;audience:string;style_notes:string;preferred_theme:string}>();
+    reply=saved?`Private brief for “${saved.name}”\nIdea: ${saved.purpose}\nAudience and goal: ${saved.audience||'Not specified'}\nStyle notes: ${saved.style_notes||'Not specified'}\nStarting theme: ${saved.preferred_theme}\n\nAudience and style notes are planning context for AI edits, not page content.`:'No project found. Use /new to start one.';
   } else if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
     const { results } = await db.prepare('SELECT id, name, purpose, status FROM projects WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ id: string; name: string; purpose: string; status: string }>();
     reply = results.length ? results.map(p => `${p.name} — ${p.status}\n${p.purpose}\nID: ${p.id}${p.status === 'live' ? '\n' + siteURL(p.id) : ''}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
@@ -104,11 +113,27 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = ai ? 'AI is connected for website planning and private draft edits. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /files for private project photos; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Use /domains to prepare or check domain ownership. Domain hosting connection, custom backend code and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
+    reply = ai ? 'AI is connected for website planning and private draft edits. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea, choose a project name, and share your audience and style preferences to get a private first draft. Use /skip for optional questions, /brief to view saved preferences, and /cancel to leave setup. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /files for private project photos; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Use /domains to prepare or check domain ownership. Domain hosting connection, custom backend code and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
   } else if (command === '/new') {
-    step = 'idea'; idea = ''; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
+    step = 'idea'; idea = ''; briefProject = null; briefStage = null; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
-    step = 'ready'; idea = ''; reply = 'I’ve cleared the unfinished brief. Your existing projects are unchanged. Type /new whenever you’re ready.';
+    step = 'ready'; idea = ''; briefProject = null; briefStage = null; reply = 'I’ve cleared the unfinished brief. Your existing projects are unchanged. Type /new whenever you’re ready.';
+  } else if (briefStage && (!content.startsWith('/') || command === '/skip')) {
+    const target = await db.prepare('SELECT id,name,purpose FROM projects WHERE id=? AND owner_user_id=?').bind(briefProject,userId).first<{id:string;name:string;purpose:string}>();
+    if (!target) { briefProject=null; briefStage=null; reply='That project is no longer available. Use /new to start another idea.'; }
+    else if (briefStage === 'audience') {
+      preference={projectId:target.id,audience:command==='/skip'?'':content}; briefStage='style';
+      reply='What should it feel like? Choose ocean (crisp blue), clay (warm terracotta), or forest (calm green), or describe your style. I’ll save your preferences and assemble a private first draft. Use /skip for ocean. This uses no AI units.';
+    } else {
+      const theme:LaunchConfig['theme'] = ['ocean','clay','forest'].includes(command)?command as LaunchConfig['theme']:'ocean';
+      preference={projectId:target.id,style:command==='/skip'?'':content,theme};
+      const config:LaunchConfig={name:target.name,description:target.purpose,theme};const html=renderLaunch(config);
+      version={projectId:target.id,config,html,digest:await hashToken(html)};
+      briefProject=null;briefStage=null;
+      reply=`Your first private draft for “${target.name}” is ready. I used the ${theme} theme${!['ocean','clay','forest','/skip'].includes(command)?' as a starting point and saved your style notes for AI edits':''}. Your audience and style notes stay in the project brief; they are not added to the page. No AI units were used. Open the preview below, then tell me what to change${ai?'': ' once AI is connected'}. Use /publish to review making it public; nothing is published automatically.`;
+    }
+  } else if (command === '/skip') {
+    reply='There is no audience or style question to skip. Use /new to start a project.';
   } else if (content.startsWith('/')) {
     reply = 'I don’t recognize that command yet. Type /help to see what I can do.';
   } else if (step === 'idea') {
@@ -117,8 +142,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if (content.length > 100) reply = 'Let’s use a shorter project name—100 characters or fewer.';
     else {
       project = { id: input.id, name: content, purpose: idea };
-      step = 'ready'; idea = '';
-      reply = `Your project “${content}” is saved with your brief. Use /build to assemble a private first draft from our reusable layout, without using AI units. You can also explore /plans or start another idea with /new.`;
+      step = 'ready'; idea = ''; briefProject=project.id; briefStage='audience';
+      reply = `Your project “${content}” is saved. Who should this website speak to, and what would you like visitors to do? I’ll keep this as private planning context. Use /skip if you’re not sure yet.`;
     }
   } else {
     reply = 'I’ve kept your message in our conversation. In guided mode, use /new to turn an idea into a project, or /help to see the available actions. AI-generated changes are unavailable in this environment.';
@@ -126,8 +151,9 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const now = new Date().toISOString();
   const statements = [
     db.prepare("INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at) SELECT ?, user_id, revision + 1, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending')").bind(input.id, content, reply, now, userId, state.revision, userId),
-    db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, userId, state.revision, input.id, userId)
+    db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ?, brief_project_id = ?, brief_stage = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, briefProject, briefStage, userId, state.revision, input.id, userId)
   ];
+  if (preference) statements.push(db.prepare('UPDATE projects SET audience=COALESCE(?,audience),style_notes=COALESCE(?,style_notes),preferred_theme=COALESCE(?,preferred_theme),updated_at=? WHERE id=? AND owner_user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(preference.audience??null,preference.style??null,preference.theme??null,now,preference.projectId,userId,input.id,userId));
   if (domain) statements.push(...domain.statements);
   if (publication) statements.push(...publication.statements);
   if (photoDraft) statements.push(...photoDraft.statements);
