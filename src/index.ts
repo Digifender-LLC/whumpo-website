@@ -1,3 +1,4 @@
+import {cmsExport} from './cms-export';
 import {readProjectDetails,saveProjectDetails} from './project-details';
 import {cleanupTraffic} from './site-traffic';
 import {compareBackends} from './backend-diff';
@@ -245,6 +246,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
   const cmsPublicationRoute=pathname.match(/^\/api\/cms-publication-reviews\/([0-9a-f-]{36})\/preview$/);
   if(method==='GET'&&cmsPublicationRoute)return cmsPublicationPage(env.DB,user.id,cmsPublicationRoute[1]);
+  const cmsExportRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content\/([0-9a-f-]{36})\/export$/);
+  if(method==='GET'&&cmsExportRoute)return cmsExport(env.DB,user.id,cmsExportRoute[1],cmsExportRoute[2],env as unknown as Record<string,unknown>);
   const cmsPreviewRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content\/([0-9a-f-]{36})\/preview$/);
   if(method==='GET'&&cmsPreviewRoute)return cmsPreview(env.DB,user.id,cmsPreviewRoute[1],cmsPreviewRoute[2],env as unknown as Record<string,unknown>);
   const cmsContentRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content(?:\/([0-9a-f-]{36}))?$/);
