@@ -230,3 +230,8 @@ Implemented fixed-target DNS-only CNAME reviews through Domains, `/review-routin
 ### Hosting lifecycle in chat (September 29)
 
 The existing hosting review/confirm/status/disconnect operations are now available through `/hosting`, `/review-hosting`, `/confirm-hosting`, `/check-hosting` and `/disconnect-hosting`. AI requests can list or prepare reviews; explicit user commands retain provider mutation authority. This closes the panel-only hosting-control gap. Real provider configuration, consent, DNS/TLS acceptance, general backend generation and domain purchases remain open; Stripe is still deferred.
+
+
+### GitHub source backups in chat (September 29)
+
+Installation/repository discovery, exact source reviews, explicit confirmation and read-only uncertain-result checks now work in chat. Reviews disclose public repository exposure and preserve existing expected-head commit/source verification behavior. The AI may discover and prepare; it cannot commit. This closes the panel-only source-backup gap. Real customer GitHub App consent/commit acceptance and automatic synchronization remain unfinished.

@@ -305,7 +305,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (method === "POST" && pathname === "/api/chat") {
     const data = await body(request);
     if (!data) return error(400, "A JSON message is required");
-    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env)});
+    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES});
     return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "POST" && pathname === "/api/auth/logout") {
