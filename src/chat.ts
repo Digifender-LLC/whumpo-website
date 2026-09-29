@@ -1,3 +1,5 @@
+import { renderLaunch, type LaunchConfig } from './components';
+import { hashToken } from './security';
 import { plans } from './plans';
 import { ensureBilling, getBilling } from './billing';
 import { reconcileChat, sendAIChat } from './ai-chat';
@@ -17,7 +19,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await reconcileChat(db, userId);
   const result = await db.batch([
     db.prepare('SELECT revision, step FROM workspace_state WHERE user_id = ?').bind(userId),
-    db.prepare('SELECT id, revision, user_text, assistant_text, created_at, mode, status FROM chat_turns WHERE user_id = ? ORDER BY revision DESC LIMIT 100').bind(userId),
+    db.prepare('SELECT t.id, t.revision, t.user_text, t.assistant_text, t.created_at, t.mode, t.status, v.id AS version_id FROM chat_turns t LEFT JOIN site_versions v ON v.id = t.id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100').bind(userId),
     db.prepare("SELECT COUNT(*) AS projects, SUM(CASE WHEN status = 'live' THEN 1 ELSE 0 END) AS live FROM projects WHERE owner_user_id = ?").bind(userId)
   ]);
   const billing = await getBilling(db, userId);
@@ -40,12 +42,25 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   let reply: string;
   let project: { id: string; name: string; purpose: string } | undefined;
   let overage: boolean | undefined;
+  let version: { projectId: string; config: LaunchConfig; html: string; digest: string } | undefined;
   const command = content.toLowerCase();
   const known = ['/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel'];
   if (ai && (command.startsWith('/ask ') || (state.step === 'ready' && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
-  if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
-    const { results } = await db.prepare('SELECT name, purpose, status FROM projects WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ name: string; purpose: string; status: string }>();
-    reply = results.length ? results.map(p => `${p.name} — ${p.status}\n${p.purpose}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
+  if (/^\/build(?:\s|$)/.test(command)) {
+    const args = command.split(/\s+/);
+    const theme = args[1] || 'ocean';
+    if (!['ocean','clay','forest'].includes(theme) || args.length > 3 || (args[2] && !/^[0-9a-f-]{36}$/.test(args[2]))) return {status:400,error:'Use /build ocean, /build clay, or /build forest, optionally followed by a project ID.'};
+    const target = await db.prepare('SELECT id,name,purpose FROM projects WHERE owner_user_id = ? AND (? IS NULL OR id = ?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[2] ?? null,args[2] ?? null).first<{id:string;name:string;purpose:string}>();
+    if (!target) reply = 'Create a project with /new first, or check its ID with /projects.';
+    else {
+      const config: LaunchConfig = {name:target.name,description:target.purpose,theme:theme as LaunchConfig['theme']};
+      const html = renderLaunch(config);
+      version = {projectId:target.id,config,html,digest:await hashToken(html)};
+      reply = `I assembled a private first draft for “${target.name}” using the reusable launch-page layout (${theme}). Open the preview below. No AI units were used. This is a saved preview, not a published site. Try another theme with /build clay or /build forest.`;
+    }
+  } else if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
+    const { results } = await db.prepare('SELECT id, name, purpose, status FROM projects WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ id: string; name: string; purpose: string; status: string }>();
+    reply = results.length ? results.map(p => `${p.name} — ${p.status}\n${p.purpose}\nID: ${p.id}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
   } else if (['/usage', 'show usage', '/credits'].includes(command)) {
     const billing = await getBilling(db, userId);
     reply = `${billing.plan.name} · ${billing.period}\n${billing.quota.available} of ${billing.quota.allowance} monthly build units available. ${billing.quota.spent} used; ${billing.quota.reserved} held for pending work.\n${billing.credits.available} credits available; ${billing.credits.reserved} held.\nUsing existing credits after your monthly allowance is ${billing.credits.overageEnabled ? 'enabled' : 'disabled'}.\n\nGuided chat is free. Monthly units reset on the first day of each month (UTC); credits carry over. Use /credits on or /credits off to change overage use. Buying credits and paid upgrades are not enabled yet.`;
@@ -65,7 +80,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = ai ? 'AI is connected for website planning and coding questions. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Generation, publishing, domains, and provider connections are still being built.' : 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Website generation and publishing are still being built.';
+    reply = ai ? 'AI is connected for website planning and coding questions. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Publishing, AI edits, domains, and provider connections are still being built.' : 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Publishing and AI edits are still being built.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
@@ -79,7 +94,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     else {
       project = { id: input.id, name: content, purpose: idea };
       step = 'ready'; idea = '';
-      reply = `Your project “${content}” is saved with your brief. Website generation and publishing are coming next. You can ask to show your projects, explore /plans, or start another idea with /new.`;
+      reply = `Your project “${content}” is saved with your brief. Use /build to assemble a private first draft from our reusable layout, without using AI units. You can also explore /plans or start another idea with /new.`;
     }
   } else {
     reply = 'I’ve kept your message in our conversation. In guided mode, use /new to turn an idea into a project, or /help to see the available actions. AI-generated changes are not enabled yet.';
@@ -89,6 +104,10 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     db.prepare("INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at) SELECT ?, user_id, revision + 1, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending')").bind(input.id, content, reply, now, userId, state.revision, userId),
     db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, userId, state.revision, input.id, userId)
   ];
+  if (version) {
+    statements.push(db.prepare("INSERT INTO site_versions (id,project_id,component_id,config_json,html,digest,created_at) SELECT ?,?,'launch-page@1',?,?,?,? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?) AND EXISTS (SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?)").bind(input.id,version.projectId,JSON.stringify(version.config),version.html,version.digest,now,input.id,userId,version.projectId,userId));
+    statements.push(db.prepare("INSERT INTO activity_events (id,user_id,project_id,action,summary,created_at) SELECT ?,?,?, 'site.preview.created','Created a private preview with launch-page@1',? WHERE EXISTS (SELECT 1 FROM site_versions WHERE id = ?)").bind(`preview:${input.id}`,userId,version.projectId,now,input.id));
+  }
   if (overage !== undefined) {
     statements.push(db.prepare('UPDATE billing_accounts SET overage_enabled = ? WHERE user_id = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(overage ? 1 : 0, userId, input.id, userId));
     statements.push(db.prepare("INSERT INTO activity_events (id,user_id,action,summary,created_at) SELECT ?,user_id,'billing.preference',?,? FROM chat_turns WHERE id = ? AND user_id = ?").bind(`billing:${input.id}`, overage ? 'Enabled existing credits for quota overage' : 'Disabled credits for new operations', now, input.id, userId));
@@ -101,6 +120,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     const results = await db.batch(statements);
     if (results[0].meta.changes !== 1) return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
   } catch (cause) {
+    if (String(cause).includes('site_version_quota')) return {status:409,error:'This test project has reached its 25 saved preview limit.'};
     if (String(cause).includes('project_quota')) return { status: 409, error: 'The test platform allows 20 projects per account. Your brief is still saved.' };
     // A simultaneous retry can lose the primary-key race; verify ownership and payload.
     const retry = await db.prepare('SELECT user_text FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string }>();

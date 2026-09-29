@@ -16,7 +16,8 @@
     "build": "node tools/build.mjs",
     "test:passkeys": "node tests/passkeys.mjs",
     "test:billing": "node tests/billing.mjs",
-    "test:runtime-ai": "node tests/runtime-ai.mjs"
+    "test:runtime-ai": "node tests/runtime-ai.mjs",
+    "test:previews": "node tests/previews.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

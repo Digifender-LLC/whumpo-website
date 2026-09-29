@@ -81,3 +81,11 @@ Jarvis modelgateway checks were adapted into the TypeScript response boundary; s
 Local checks passed for TypeScript, both protocol contracts, actual runtime request construction, atomic reservations/settlement, owner isolation, concurrent messages, replay and unknown-outcome handling. Earlier live probes failed before network dispatch due to redirect mode; their temporary users were removed.
 
 The corrected live check passed signed passkey login, a real Muse response, settlement of 3 build units with zero held units, identical-request replay without additional charge, authentication replay rejection, logout and session denial. Its exact temporary account and dependent data were removed afterward. This verifies text planning and metering, not site generation or publishing.
+
+## Reusable private previews — September 29, 2026
+
+Worker `c0fe62e4-d9d3-4ffa-b1e3-8859fb47ad0f` and remote migration 0007 deliver the first reusable component, `launch-page@1`. `/build` assembles a saved brief without inference; clay and forest variants are available. Private preview links appear in chat. Exact HTML, configuration, component ID and digest are retained per version in the existing D1 database, capped at 25 versions/project and 32 KiB HTML/version. No new service was provisioned.
+
+Preview reads require the project owner's session, use no-store caching and CSP sandbox, and disable scripts/forms/network resources. Configuration is plain escaped text and an allowlisted theme. The static catalog never receives tenant records. Version, turn and activity creation share a transaction and revision guard.
+
+TypeScript, chat regressions and preview integration checks passed, including concurrent duplicate requests, cross-owner denial, HTML escaping, zero billing usage and quota rollback. Browser inspection covered creation from chat and rendering. Live signed-in checks confirmed saved HTML, sandbox/no-store headers, unauthenticated denial, one version on replay and no usage debit. The temporary live account was removed with its dependent records. Public publishing, AI customization, backend site execution and active-version restore controls remain unfinished.

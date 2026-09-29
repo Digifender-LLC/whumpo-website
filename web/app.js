@@ -54,9 +54,13 @@ function renderChat(data) {
     const item = text("article", "", `chat-bubble ${role}`);
     item.append(text("small", role === "user" ? "You" : mode === "ai" ? "TellUmo · AI" : "TellUmo · Guide"), text("p", content));
     container.append(item);
+    return item;
   }
   bubble("assistant", data.greeting);
-  for (const turn of data.turns) { bubble("user", turn.user_text); bubble("assistant", turn.assistant_text, turn.mode); }
+  for (const turn of data.turns) { bubble("user", turn.user_text); const answer = bubble("assistant", turn.assistant_text, turn.mode);
+    if (typeof turn.version_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.version_id)) {
+      const link = text('a', 'Open private preview ↗'); link.href = `/api/site-versions/${turn.version_id}/preview`; link.target = '_blank'; link.rel = 'noopener noreferrer'; answer.append(link);
+    } }
   $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} · ${data.stats.live || 0} live`;
   $("#agent-mode").textContent = data.mode === "ai" ? "Muse Spark 1.3 · AI connected" : "Guided mode · No AI charges";
   $("#usage-stats").textContent = data.usage ? `${data.usage.available} units available · ${data.usage.reserved} held` : "";
