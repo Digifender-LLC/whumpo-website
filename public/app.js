@@ -516,6 +516,18 @@
         download.download = `whumpo-site-${exportVersion}.zip`;
         answer.append(download);
       }
+      if (typeof turn.backup_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.backup_confirmation_id)) {
+        const button = text("button", "Confirm reviewed GitHub backup");
+        button.onclick = () => sendMessage(`/confirm-backup ${turn.backup_confirmation_id}`);
+        answer.append(button);
+      }
+      if (typeof turn.backup_url === "string" && /^https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/[A-Za-z0-9_.-]{1,100}\/tree\/[0-9a-f]{40}\/whumpo\/[0-9a-f-]{36}\/versions\/[0-9a-f-]{36}$/.test(turn.backup_url)) {
+        const link = text("a", "Open verified GitHub backup \u2197");
+        link.href = turn.backup_url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        answer.append(link);
+      }
       if (typeof turn.contact_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.contact_confirmation_id)) {
         const button = text("button", "Confirm contact form settings");
         button.onclick = () => sendMessage(`/confirm-contact ${turn.contact_confirmation_id}`);
