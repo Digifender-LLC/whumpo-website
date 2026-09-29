@@ -22,3 +22,7 @@ References checked September 29, 2026:
 - https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/plans/
 - https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/
 - https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/common-api-calls/
+
+## Natural-language ownership actions
+
+Customers can ask the agent to prepare domain ownership instructions for a named project and hostname, or to check a prepared proof. The server executes the same validated `/domain` and `/verify-domain` operations and supplies their actual receipts. All ten permitted owned claims are discoverable in compact model context; proof tokens are excluded from that metadata. The secondary Domains panel and free commands remain available. See [workspace agent contract](workspace-agent.md#conversational-domain-ownership).
