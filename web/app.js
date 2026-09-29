@@ -322,9 +322,14 @@ async function start() {
 }
 start();
 
+let dnsZonePage=1;
+async function loadDNSZones(){const data=await api('/connections/cloudflare/zones?page='+dnsZonePage);for(const zone of data.zones){if(zone.status!=='active')continue;const option=text('option',zone.name);option.value=zone.id;$('#dns-zone').append(option);}$('#dns-zone-more').hidden=!data.hasMore||dnsZonePage>=100;}
+$('#dns-zone-more').onclick=async()=>{const button=$('#dns-zone-more');button.disabled=true;dnsZonePage++;try{await loadDNSZones();}catch(error){dnsZonePage--;$('#domains-status').textContent=error.message;}finally{button.disabled=false;}};
 async function openDomains() {
  try {
-  const [{projects},{domains},hosting]=await Promise.all([api('/projects'),api('/domains'),api('/domain-hosting')]);
+  const [{projects},{domains},hosting,dns,connections]=await Promise.all([api('/projects'),api('/domains'),api('/domain-hosting'),api('/cloudflare/dns'),api('/connections')]);
+  const previousZone=$('#dns-zone').value;$('#dns-zone').replaceChildren();dnsZonePage=1;$('#dns-zone-more').hidden=true;$('#dns-zone-controls').hidden=!connections.cloudflare.connected;
+  if(connections.cloudflare.connected){try{await loadDNSZones();if(Array.from($('#dns-zone').options).some(o=>o.value===previousZone))$('#dns-zone').value=previousZone;}catch(error){showMessage(error.message);}}
   const select=$('#domain-project');select.replaceChildren();
   for(const project of projects){const option=document.createElement('option');option.value=project.id;option.textContent=project.name;select.append(option);}
   $('#domain-add').disabled=!projects.length;$('#domains-status').textContent=projects.length?'':'Create a project in chat first.';
@@ -333,8 +338,10 @@ async function openDomains() {
    const row=text('article','', 'panel');row.append(text('h3',domain.hostname),text('p',domain.status.replaceAll('_',' ')+' · '+(hosting.connections.some(c=>c.claimId===domain.id&&c.connected)?'Connected':'Not connected')));
    row.append(text('p','TXT record name: '+domain.record.name),text('p','TXT record value: '+domain.record.value),text('p','Proof expires: '+domain.expiresAt));
    const check=text('button',domain.status==='expired'?'Renew ownership proof':'Check DNS proof');check.type='button';check.onclick=()=>{$('#domains-dialog').close();sendMessage(domain.status==='expired'?`/domain ${domain.hostname} ${domain.projectId}`:`/verify-domain ${domain.id}`);};row.append(check);
+   const dnsReview=text('button','Review TXT in Cloudflare'),reviewId=crypto.randomUUID();dnsReview.disabled=!connections.cloudflare.connected||domain.status==='expired';dnsReview.onclick=async()=>{const zoneId=$('#dns-zone').value;if(!zoneId){$('#domains-status').textContent='Choose an authorized Cloudflare zone first.';return;}dnsReview.disabled=true;try{await api('/cloudflare/dns/review',{method:'POST',body:JSON.stringify({id:reviewId,claimId:domain.id,zoneId})});await openDomains();}catch(error){$('#domains-status').textContent=error.message;}finally{dnsReview.disabled=false;}};row.append(dnsReview);
    const connect=text('button','Review hosting connection');connect.disabled=!hosting.enabled||domain.status==='expired';connect.onclick=async()=>{connect.disabled=true;try{await api('/domain-hosting/review',{method:'POST',body:JSON.stringify({id:crypto.randomUUID(),claimId:domain.id})});await openDomains();}catch(error){$('#domains-status').textContent=error.message;}finally{connect.disabled=!hosting.enabled;}};row.append(connect);list.append(row);
   }
+  for(const action of dns.actions){const row=text('article','', 'panel');row.append(text('h3','Cloudflare TXT proof · '+action.state),text('p','Zone: '+action.zoneName),text('p','Name: '+action.record.name),text('p','Value: '+action.record.value),text('p',action.detail));if(action.state==='review'){row.append(text('p','This adds the exact TXT proof with automatic TTL, unless it already exists. It does not replace your existing website records or connect hosting.'),text('p','Review expires: '+action.expiresAt));}if(['review','sending','uncertain'].includes(action.state)){const button=text('button',action.state==='review'?'Confirm TXT proof':'Check result without resending');button.onclick=async()=>{button.disabled=true;try{await api('/cloudflare/dns/'+action.id+'/confirm',{method:'POST',body:'{}'});await openDomains();}catch(error){$('#domains-status').textContent=error.message;}finally{button.disabled=false;}};row.append(button);}list.append(row);}
   if(!domains.length)list.append(text('p','No domains added yet.'));
   if(!hosting.enabled)list.append(text('p','Domain hosting is awaiting platform configuration. Ownership proofs remain available.'));
   for(const connection of hosting.connections){
