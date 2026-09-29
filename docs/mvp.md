@@ -153,3 +153,8 @@ The guided flow uses no inference even when AI is configured. Notes enter the ow
 ## Natural-language project and export actions — September 29, 2026
 
 The validated AI action vocabulary now includes atomic project-plus-private-website creation and source-download receipts for exact owned versions. Customers can request these in natural language after onboarding, or explicitly use `/ask` during setup. Server-selected ownership/IDs, schema validation, project quotas and persisted usage receipts govern execution. Neither action publishes a site or accesses external customer accounts. Model interpretation is metered; deterministic guided alternatives remain free. Full domain, provider-connection and purchase scope remains open. See [workspace AI actions](workspace-agent.md).
+
+
+## Workspace inspection milestone — September 29, 2026
+
+Natural-language inspection can now request owner-scoped projects, a specific project, saved versions, a specific version, activity, usage and domains. Server records replace model-written status claims for accepted inspection actions. Exact deterministic commands remain available without AI charges. The agent receives all project identities and can inspect versions outside its latest-draft context, then act on exact IDs in a subsequent turn. Automatic multi-step tool chaining is not implemented. See [workspace actions](workspace-agent.md).
