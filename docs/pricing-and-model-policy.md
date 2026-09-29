@@ -56,7 +56,7 @@ These are server policy helpers for the future runner. The runner must read coun
 
 ## Acknowledgment latency
 
-An optional Muse intent classification runs alongside the main request under the Worker's background lifetime hook, with a five-second timeout and separate cost receipt. Its input is exactly a fixed classification instruction and latest message. Main work never awaits it. The authenticated acknowledgment read is owner-scoped and hides results after the main turn leaves pending state.
+An optional Muse intent classification runs alongside the main request under the Worker's background lifetime hook, with a five-second timeout, 256-token output ceiling and separate cost receipt. Its input is exactly a fixed classification instruction and latest message. Main work never awaits it. The authenticated acknowledgment read is owner-scoped and hides results after the main turn leaves pending state.
 
 The browser may collect an acknowledgment while waiting. At 700 ms, if the main response is not ready, show one short acknowledgment, with a neutral fallback if classification is late/unavailable. Once shown, keep it visible at least 1,000 ms before presenting the main answer. Thus a result ready at 730 ms appears around 1,700 ms after an acknowledgment shown at 700 ms. Fast answers suppress acknowledgment. Slow answers incur no extra delay after that dwell window. Errors appear immediately. Late acknowledgment results never replace the final answer. Browser throttling can extend wall-clock timing.
 
@@ -71,4 +71,6 @@ The delay is presentation-only: backend commits and tool actions are never held 
 - `test:ack-timing`: deterministic 650 ms suppression, 700/730→1,700 ms example, slow responses, fallback and immediate error delivery.
 - Existing billing/provider regression suites; browser inspection of the pricing cards.
 
-Remaining: real paid checkout, annual grant/redemption lifecycle, external sales handoff, paid API routing, evaluator/task runner, durable subagent enforcement, real-provider acknowledgment performance measurement and full beta acceptance.
+Remaining: real paid checkout, annual grant/redemption lifecycle, external sales handoff, paid API routing, evaluator/task runner, durable subagent enforcement, broader real-provider acknowledgment performance measurement and full beta acceptance.
+
+A synthetic live Muse classification check hit the output limit at 64 tokens. At 256 it returned a valid intent in 2,087 ms (86 input / 168 output tokens). This is one sample, not a latency guarantee; the 700 ms generic acknowledgment remains essential with this testing model.
