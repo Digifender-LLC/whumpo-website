@@ -154,3 +154,7 @@ The recovery verifier checks trusted capture digests and project identity, resto
 ### Generated backend publication progress
 
 Added immutable, tested-version public endpoint reviews, owner-only confirmation, version replacement/withdrawal with stale-review protection, bounded anonymous JSON execution, and serialized daily project/account/platform invocation counters. Chat supports review/read/confirm/status/withdrawal; the model cannot confirm. Public guest execution receives caller JSON only. This advances generated backend delivery but does not complete generated app hosting: website controls, public app authentication, durable visitor data, migrations and whole-app recovery still need implementation and acceptance.
+
+### Interactive website form progress
+
+Reviewed website forms now send bounded numeric/text/boolean fields to the exact approved public function and show plain-text/JSON results. Website, backend and settings revisions guard activation; changing either published artifact hides the form. Browser acceptance used the real isolated runtime and verified result 30, literal returned markup and DOM method-name collision handling. Existing static previews/exports remain static; arbitrary frontend layouts, application authentication, persistent visitor data and full app recovery remain open.

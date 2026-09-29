@@ -1,3 +1,4 @@
+import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm,describeBackendForm} from './backend-forms';
 import {readBackendPublication,prepareBackendPublication,readBackendPublicationReview,confirmBackendPublication,describeBackendPublication} from './backend-publication';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,describeBackendReview,backendStateHistory,exportBackendState,restoreBackendState,linkBackendState} from './backend-state';
 import {BackendError,listBackends,testBackend} from './backend-versions';
@@ -10,13 +11,17 @@ export async function ownedBackend(db:D1Database,user:string,version:string){
 }
 function describeRun(run:{id:unknown;state:string;result?:unknown}){return `Private backend test: ${run.state}\nReceipt: ${run.id}\n`+(run.result?JSON.stringify(run.result).slice(0,1400)+(JSON.stringify(run.result).length>1400?'\nResult display truncated; full result remains in the private API receipt.':''):'Execution is pending or its outcome is unknown. This receipt will not be executed again.')+'\nNo application data or live website was changed. Test attempts use the separate backend allowance, not AI units.';}
 export function backendChatCommand(db:D1Database,user:string,turnId:string,content:string,service?:Fetcher){
- const match=content.match(/^\/(backend-publication|backend-publication-review|confirm-backend-publication|publish-backend|unpublish-backend|backends|backend|backend-result|test-backend|backend-state|backend-state-review|review-backend-state|confirm-backend-state|backend-state-history|export-backend-state|restore-backend-state|restore-backend-before)(?:\s+([0-9a-f-]+))?(?:\s+([\s\S]+))?$/i);
+ const match=content.match(/^\/(backend-form|backend-form-review|configure-backend-form|disable-backend-form|confirm-backend-form|backend-publication|backend-publication-review|confirm-backend-publication|publish-backend|unpublish-backend|backends|backend|backend-result|test-backend|backend-state|backend-state-review|review-backend-state|confirm-backend-state|backend-state-history|export-backend-state|restore-backend-state|restore-backend-before)(?:\s+([0-9a-f-]+))?(?:\s+([\s\S]+))?$/i);
  if(!match)return;
  const [,raw,id,rest]=match,verb=raw.toLowerCase();
- if(!id||!uuid.test(id)||!['test-backend','review-backend-state','publish-backend'].includes(verb)&&rest)throw new BackendError(400,'Use /backends PROJECT_ID, /backend VERSION_ID, /backend-result RECEIPT_ID or /test-backend VERSION_ID JSON.');
- let input:unknown;if(['test-backend','review-backend-state'].includes(verb)){try{input=JSON.parse(rest??'null');}catch{throw new BackendError(400,'Test input must be JSON.');}}
+ if(!id||!uuid.test(id)||!['test-backend','review-backend-state','configure-backend-form','publish-backend'].includes(verb)&&rest)throw new BackendError(400,'Use /backends PROJECT_ID, /backend VERSION_ID, /backend-result RECEIPT_ID or /test-backend VERSION_ID JSON.');
+ let input:unknown;if(['test-backend','review-backend-state','configure-backend-form'].includes(verb)){try{input=JSON.parse(rest??'null');}catch{throw new BackendError(400,'Test input must be JSON.');}}
  return async()=>{
   try{
+   if(verb==='backend-form')return 'Website tool: '+JSON.stringify(await readBackendForm(db,user,id));
+   if(verb==='backend-form-review')return describeBackendForm(await readBackendFormReview(db,user,id));
+   if(verb==='confirm-backend-form')return describeBackendForm(await confirmBackendForm(db,user,id));
+   if(verb==='configure-backend-form'||verb==='disable-backend-form'){if(verb==='configure-backend-form'&&input===null)throw new BackendError(400,'Provide form JSON; use /disable-backend-form to review hiding it.');return describeBackendForm(await prepareBackendForm(db,user,id,turnId,verb==='disable-backend-form'?null:input));}
    if(verb==='backend-publication')return 'Current public endpoint: '+JSON.stringify(await readBackendPublication(db,user,id));
    if(verb==='backend-publication-review')return describeBackendPublication(await readBackendPublicationReview(db,user,id));
    if(verb==='confirm-backend-publication')return describeBackendPublication(await confirmBackendPublication(db,user,id));
@@ -67,11 +72,15 @@ export async function backendAction(db:D1Database,user:string,turnId:string,acti
    db.prepare("INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) SELECT ?,?,project_id,'backend.draft.created','Saved an untested private backend draft',? FROM backend_versions WHERE id=?").bind('backend:'+turnId,user,now,turnId)
   ]};
  }
+ if(operation==='reviewForm'){
+  if(Object.keys(action).some(k=>!['kind','operation','projectId','form'].includes(k))||typeof action.projectId!=='string'||!uuid.test(action.projectId)||!action.form)throw new BackendError(400,'Provide a project and form configuration');
+  return {reply:describeBackendForm(await prepareBackendForm(db,user,action.projectId,turnId,action.form)),statements:[] as D1PreparedStatement[]};
+ }
  if(operation==='reviewPublication'){
   if(Object.keys(action).some(k=>!['kind','operation','versionId','runId'].includes(k))||typeof action.versionId!=='string'||!uuid.test(action.versionId)||typeof action.runId!=='string'||!uuid.test(action.runId))throw new BackendError(400,'Provide a version and successful test receipt');
   return {reply:await backendChatCommand(db,user,turnId,`/publish-backend ${action.versionId} ${action.runId}`,service)!(),statements:[] as D1PreparedStatement[]};
  }
- const definitions:Record<string,{field:string;verb:string}>= {publication:{field:'projectId',verb:'backend-publication'},publicationReview:{field:'reviewId',verb:'backend-publication-review'},reviewUnpublish:{field:'projectId',verb:'unpublish-backend'},list:{field:'projectId',verb:'backends'},inspect:{field:'versionId',verb:'backend'},test:{field:'versionId',verb:'test-backend'},result:{field:'receiptId',verb:'backend-result'},state:{field:'projectId',verb:'backend-state'},reviewState:{field:'versionId',verb:'review-backend-state'},stateReview:{field:'reviewId',verb:'backend-state-review'},stateHistory:{field:'projectId',verb:'backend-state-history'},exportState:{field:'snapshotId',verb:'export-backend-state'},restoreState:{field:'snapshotId',verb:'restore-backend-state'},restoreBefore:{field:'snapshotId',verb:'restore-backend-before'}};
+ const definitions:Record<string,{field:string;verb:string}>= {form:{field:'projectId',verb:'backend-form'},formReview:{field:'reviewId',verb:'backend-form-review'},reviewDisableForm:{field:'projectId',verb:'disable-backend-form'},publication:{field:'projectId',verb:'backend-publication'},publicationReview:{field:'reviewId',verb:'backend-publication-review'},reviewUnpublish:{field:'projectId',verb:'unpublish-backend'},list:{field:'projectId',verb:'backends'},inspect:{field:'versionId',verb:'backend'},test:{field:'versionId',verb:'test-backend'},result:{field:'receiptId',verb:'backend-result'},state:{field:'projectId',verb:'backend-state'},reviewState:{field:'versionId',verb:'review-backend-state'},stateReview:{field:'reviewId',verb:'backend-state-review'},stateHistory:{field:'projectId',verb:'backend-state-history'},exportState:{field:'snapshotId',verb:'export-backend-state'},restoreState:{field:'snapshotId',verb:'restore-backend-state'},restoreBefore:{field:'snapshotId',verb:'restore-backend-before'}};
  if(typeof operation!=='string'||!definitions[operation])throw new BackendError(400,'Unknown backend action');
  const {field,verb}=definitions[operation],target=action[field],allowed=['kind','operation',field,...(['test','reviewState'].includes(operation)?['input']:[])];
  if(Object.keys(action).some(k=>!allowed.includes(k))||typeof target!=='string'||!uuid.test(target)||['test','reviewState'].includes(operation)&&!('input'in action))throw new BackendError(400,'Invalid backend action');

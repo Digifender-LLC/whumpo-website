@@ -42,7 +42,7 @@ export function describeBackendPublication(row:Review){
  `\nSource (untrusted code):\n${row.source}\n`+(row.status==='pending'?`Only you can apply this exact review: /confirm-backend-publication ${row.id}`:'This review has been applied. Read /backend-publication '+row.project_id+' for the current endpoint state.');
 }
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin','content-security-policy':"default-src 'none'; frame-ancestors 'none'"};
-export async function publicBackend(request:Request,db:D1Database,service:Fetcher|undefined,project:string):Promise<Response>{
+export async function publicBackend(request:Request,db:D1Database,service:Fetcher|undefined,project:string,publication?:string):Promise<Response>{
  const reply=(data:unknown,status=200)=>Response.json(data,{status,headers});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'Content-Type',allow:'POST, OPTIONS'}});
  if(request.method!=='POST')return new Response(JSON.stringify({ok:false,error:'method_not_allowed'}),{status:405,headers:{...headers,allow:'POST, OPTIONS'}});
@@ -56,7 +56,7 @@ export async function publicBackend(request:Request,db:D1Database,service:Fetche
  }catch{return reply({ok:false,error:'invalid_input'},400);}
  try{
   const row=await db.prepare('SELECT b.review_id,v.source,v.digest FROM backend_publications b JOIN backend_versions v ON v.id=b.version_id AND v.project_id=b.project_id JOIN backend_publication_reviews r ON r.id=b.review_id AND r.status=\'applied\' JOIN projects p ON p.id=b.project_id AND p.owner_user_id=r.user_id WHERE b.project_id=?').bind(project).first<{review_id:string;source:string;digest:string}>();
-  if(!row)return reply({ok:false,error:'not_found'},404);
+  if(!row||publication&&row.review_id!==publication)return reply({ok:false,error:'not_found'},404);
   if(!service||await hashToken(row.source)!==row.digest)return reply({ok:false,error:'unavailable'},503);
   // The insert trigger runs before UPSERT and serializes all three quotas. An
   // uncertain reservation acknowledgment must not dispatch the function.

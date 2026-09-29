@@ -2,7 +2,7 @@
 
 The full MVP needs generated backend behavior, durable project data and recovery. Existing contact and directory components do not satisfy arbitrary backend execution. This work adds the execution boundary first; data capabilities, generated-app publication, migrations and recovery must build on it before claiming that broader requirement is delivered.
 
-Current status: private tests, reviewed private state transitions, and reviewed public stateless JSON endpoints are implemented. Generated website controls, public app authentication, durable visitor data and whole-app recovery remain open. The sections below record implementation milestones.
+Current status: private tests, reviewed private state transitions, and reviewed public stateless JSON endpoints are implemented. Reviewed number/text/checkbox website forms are implemented below. Richer generated interfaces, public app authentication, durable visitor data and whole-app recovery remain open. The sections below record implementation milestones.
 
 ## Service and cost boundary
 
@@ -128,3 +128,37 @@ This enables a public **stateless computation endpoint**. Attaching interactive 
 Verification: real local D1 tests cover successful-test admission, ownership, expired/competing reviews, exact replay, publication/withdrawal, lost reservation acknowledgments and concurrent project/account/platform quotas. The multi-Worker HTTP test covers session/origin enforcement and an anonymous public call through the actual bound QuickJS service (calculator result 31), followed by reviewed withdrawal returning 404. Existing private state and recovery HTTP tests still pass. Migration 0048 counts backend-only projects as live and exposes their endpoint in project chat reads; it does not imply a public static page exists.
 
 Deployment: migrations 0047–0048 applied remotely; public host `be4c9144-c4e0-467b-8dcd-c7d47eadd1ff` and platform `ee5770db-0a7e-4d0c-b49c-e58fad62cd12` verified. Production health returned 200, the anonymous owner API returned 401, an unpublished function endpoint returned fixed JSON 404 and its credential-free preflight returned 204. No customer function was published for this check. Actual successful function invocation was verified in the isolated local multi-Worker fixture, not a production customer account.
+
+## Website forms connected to published functions
+
+Migration 0049 adds reviewed form settings for an existing published website and backend. The platform supplies the renderer and browser script; the agent supplies bounded plain-text configuration. No user source, field value or function output becomes executable browser code. This reuses generic platform code across projects without sharing tenant data.
+
+Commands:
+
+- `/configure-backend-form PROJECT_ID JSON` prepares a form review.
+- `/backend-form PROJECT_ID` reads current settings and whether the form is active.
+- `/backend-form-review REVIEW_ID` reads the exact review.
+- `/confirm-backend-form REVIEW_ID` is the separate human confirmation.
+- `/disable-backend-form PROJECT_ID` reviews hiding the form; its backend remains publicly callable until separately unpublished.
+
+Configuration example:
+
+```json
+{"title":"Estimate your order","description":"Enter quantity and price.","buttonLabel":"Calculate","fields":[{"key":"quantity","label":"Quantity","type":"number"},{"key":"price","label":"Unit price","type":"number"}]}
+```
+
+A form has one to eight unique fields, using number, text or boolean input. Text inputs are required and limited to 300 characters; numbers are required and support decimals; booleans submit true/false. The function receives an object with these exact keys. Titles/labels are plain text. Configuration is capped at 4 KiB. The agent must match fields to its tested function input. Results render as text or formatted JSON, never HTML. This first component does not support arbitrary layouts, nested/repeating inputs, file uploads, application sign-in or persistent visitor records.
+
+An immutable ten-minute review pins the current static website revision, backend publication review and form settings revision. Confirmation rechecks ownership and all three identities. Replacing/restoring/unpublishing the website or backend hides the form until another review is confirmed. Old review replay cannot revive a removed/replaced form. Storage is bounded at 100 reviews/project and 1,000/platform. The live HTML includes the current approved form; stored static versions and their ZIP/GitHub exports retain only the static website artifact.
+
+The form calls `/s/PROJECT_ID/backend/PUBLICATION_REVIEW_ID`, which verifies the exact current publication before quota reservation or execution. The original unpinned endpoint remains available for direct integrations. A previously loaded form cannot silently invoke replacement code. Already admitted calls may finish. The existing public backend quotas and 8 KiB input/16 KiB result bounds apply; public calls consume no AI units. The gateway does not retain visitor inputs/results, and the form sends no credentials. It should not collect secrets or sensitive records.
+
+Only pages with an active form permit scripts in their sandbox, using the SHA-256 CSP allowlist for the exact platform script. They retain an opaque origin (no `allow-same-origin`), block native form navigation, and restrict connections to the canonical site host. Configuration is escaped; output uses textContent. Browser DOM methods are called through their prototypes so a legitimate field name such as `querySelector` cannot shadow the form's methods. Plain pages retain their script-disabled policy. Custom-domain pages use the same canonical backend URL.
+
+Owner HTTP: `GET /api/projects/:project/backend-form`, `POST` with `{id,config}` (null disables), `GET /api/backend-form-reviews/:id`, and `POST /api/backend-form-reviews/:id/confirm`. Authentication and same-origin write checks apply. The agent may prepare/read/disable-review via backend operations `reviewForm`, `form`, `formReview`, and `reviewDisableForm`; it has no confirmation operation.
+
+Health checks now snapshot the active form review and hash the fully served page. A changed/hidden form invalidates the previous result; checks still do not submit visitor inputs. Existing five-minute cooldown and platform budgets apply.
+
+Verification: local D1/chat tests cover owner denial, immutable reviews, stale website/backend targets, competing confirmations, removal/replay, rendering escapes, pinned endpoint rejection before invocation and health identity. The HTTP fixture verifies session/origin enforcement and real QuickJS computation. Browser acceptance verified numeric/boolean/text types, result 30, literal script-tag text, and a `querySelector` input name. The local browser proxy only substitutes the loopback origin in the data attribute and connect-src policy; the application script and hash remain unchanged. These are synthetic local fixtures, not published customer content. Run `test:backend-forms` standalone; `test:backend-form-http` requires the local platform/runtime/public-host proxy and writes an ignored browser fixture URL.
+
+Deployment: migration 0049 applied remotely; public host `fb0c3657-d9bc-42f2-b3e0-030e169446dc` and platform `ad1539e6-1dce-4f1f-a92e-531085a508ea` verified. Production checks returned health 200, anonymous form-management API 401 and unavailable pinned endpoint 404. An initial client connection timed out; a bounded retry with a longer connection-attempt window passed. No production customer form or function was created for acceptance.
