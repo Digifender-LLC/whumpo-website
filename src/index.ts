@@ -1,3 +1,4 @@
+import {listCMS,readCMSReview,prepareCMS,confirmCMS,CMSProjectError} from './cms-projects';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState} from './backend-state';
 import {BackendError,listBackends,saveBackend,testBackend} from './backend-versions';
 import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './directory';
@@ -185,6 +186,17 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  if(method==='GET'&&pathname==='/api/cms')return json({instances:await listCMS(env.DB,user.id)});
+  if(method==='POST'&&pathname==='/api/cms/setup-reviews'){
+    const data=await body(request);
+    if(typeof data?.id!=='string'||typeof data.projectId!=='string'||typeof data.title!=='string'||typeof data.tagline!=='string')return error(400,'Provide a request ID, project, title and tagline');
+    return json(await prepareCMS(env.DB,user.id,data.id,data.projectId,data.title,data.tagline));
+  }
+  const cmsReviewRoute=pathname.match(/^\/api\/cms\/setup-reviews\/([0-9a-f-]{36})(\/confirm)?$/);
+  if(cmsReviewRoute){
+    if(method==='GET'&&!cmsReviewRoute[2])return json(await readCMSReview(env.DB,user.id,cmsReviewRoute[1]));
+    if(method==='POST'&&cmsReviewRoute[2])return json(await confirmCMS(env.DB,user.id,cmsReviewRoute[1]));
+  }
   const historyRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backend-state\/history$/);
   if(method==='GET'&&historyRoute)return json(await backendStateHistory(env.DB,user.id,historyRoute[1]));
   const snapshotRoute=pathname.match(/^\/api\/backend-state-snapshots\/([0-9a-f-]{36})\/(export|restore)$/);
@@ -407,7 +419,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
+      if (cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

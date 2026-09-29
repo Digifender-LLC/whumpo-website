@@ -528,6 +528,11 @@
         link.rel = "noopener noreferrer";
         answer.append(link);
       }
+      if (typeof turn.cms_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_confirmation_id)) {
+        const button = text("button", "Approve CMS setup request");
+        button.onclick = () => sendMessage(`/confirm-cms ${turn.cms_confirmation_id}`);
+        answer.append(button);
+      }
       if (typeof turn.backend_state_export_id === "string" && /^[0-9a-f-]{36}$/.test(turn.backend_state_export_id)) {
         const link = text("a", "Download backend data");
         link.href = `/api/backend-state-snapshots/${turn.backend_state_export_id}/export`;
