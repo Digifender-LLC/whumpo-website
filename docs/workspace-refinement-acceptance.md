@@ -36,3 +36,11 @@ Nested controls now retain their parent destination in bottom navigation (billin
 Verified locally with a disposable account: 360px landing has no horizontal overflow; 360px Billing shows only Settings selected, its return link works, and Your pages opens/closes as a bottom sheet. Settings has no document overflow at 360px or 320px. Screenshot: `.secrets/mobile-refinement.png`. TypeScript and production build pass. Physical device keyboard and landscape safe-area behavior still require iOS/Android acceptance.
 
 Deployed platform version `d57956df-ae5a-45b3-9079-d7f44a8f1d90`; live frontend asset bytes match the tested production build.
+
+## Phone conversation polish — September 29, 2026
+
+Chat follows incoming content only while the reader is at the end. Reading older messages keeps the scroll position; a thumb-accessible “Latest messages” action returns to the end. Viewport/composer resizing follows the end only when already there. Sending a new message resumes following. The composer recalculates its height when a draft is cleared programmatically, and its phone bottom padding respects the safe area.
+
+Verified with a synthetic eight-turn conversation at 360×780: no horizontal document overflow; scrolling back showed the latest-message action; growing a four-line draft kept the same conversation scroll position (342.5px); clearing it shrank the composer from 112px to 64px; tapping Latest messages left a zero-pixel gap at the end. TypeScript, production build and `test:chat-delivery` passed. Screenshot: `.secrets/mobile-chat-polish.png`. Physical iOS/Android keyboard acceptance remains outstanding.
+
+Also checked 320×700 with no horizontal overflow and the Send control inside the viewport. Deployed platform version: `d98036d4-7e10-4a56-9299-c2086c719c73`; live JavaScript/CSS bytes match the tested build.
