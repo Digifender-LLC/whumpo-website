@@ -34,7 +34,7 @@ Disconnect clears local routing before any provider request. It checks the store
 
 ## Uncertain resource recovery remains operator work
 
-A request without a recorded provider ID cannot safely be retried, adopted or deleted automatically. Inspect Cloudflare's audit/history and exact resource data to establish whether this application created a resource. Preserve the database row and capacity reservation while investigating. A dedicated auditable operator reconciliation command is still needed; there is intentionally no public API accepting an arbitrary provider ID. Do not unblock by deleting rows without accounting for external resources.
+A request without a recorded provider ID cannot safely be retried, adopted or deleted automatically. Inspect Cloudflare's audit/history and exact resource data to establish whether this application created a resource. Preserve the database row and capacity reservation while investigating. The operator recovery command described below can attach an independently verified exact resource ID with an atomic audit receipt. There is intentionally no public API accepting an arbitrary provider ID. Do not unblock by deleting rows without accounting for external resources.
 
 ## Verification boundary
 
@@ -48,3 +48,36 @@ References checked September 29, 2026:
 - [Delete custom hostname](https://developers.cloudflare.com/api/resources/custom_hostnames/methods/delete/)
 
 Deployment evidence (September 29, 2026): migration 0018 applied locally and remotely. Main Worker `5e3ad349-dc69-43d1-a7a3-84b857275afe`, public Worker `fcbb0d6f-1cd8-4538-8412-2a74cbf7a903`. TypeScript, hosting, domain-agent and photo-version tests passed; the photo test now checks custom-host root/asset rendering, foreign assets and restore/unpublish revocation. Local browser fixtures passed review, pending-certificate display, reload and disconnect. Live signed-passkey checks passed disabled status, anonymous denial, cross-origin denial, disabled review (503), missing-resource disconnect and existing GitHub controls. No provider hostname call or AI inference was made; the temporary account was removed. The hourly cron is deployed but real configured provider maintenance remains unverified.
+
+
+## Operator recovery command
+
+`tools/reconcile-domain-hosting.mjs` handles an **existing** Cloudflare resource whose create response was lost. It requires the ignored zone token file and the operator's local Wrangler login. Wrangler's credential is used only locally for D1 queries, never copied to a Worker or sent to the model. The recovery module is not imported by the HTTP Worker.
+
+First inspect the exact resource from Cloudflare audit records:
+
+```sh
+node tools/reconcile-domain-hosting.mjs inspect CONNECTION_ID PROVIDER_ID resume --remote
+```
+
+Use `cleanup` instead of `resume` to preserve or request disconnect. The tool reads the connection and the exact provider ID, checks hostname/zone/creation time and saves a ten-minute review in `.secrets/hosting-recovery-UUID.json` with mode 0600. It prints a digest and the resource summary. This inspection makes no provider or database mutation. **Matching name and timestamp do not prove that TellUmo created the resource.** The operator must establish ownership from independent request/audit evidence; never adopt another application's hostname.
+
+After reviewing that evidence and the saved file:
+
+```sh
+node tools/reconcile-domain-hosting.mjs apply .secrets/hosting-recovery-UUID.json --confirm REVIEW_DIGEST --operator OPERATOR_LABEL --evidence 'Audit reference and reason the resource belongs to this request' --remote
+```
+
+Apply validates the review digest, expiry and current immutable connection snapshot, then re-reads the same provider resource. One conditional D1 update attaches the ID, keeps routing disabled and triggers an immutable audit row plus a fixed user activity event in the same transaction. Repeating the same review/evidence returns its receipt, including after a lost acknowledgement. Changed connection state, identity, evidence or review content is rejected. An already disconnecting record cannot resume service. Recovery sends only GET requests to the provider; it neither creates nor deletes resources. Normal refresh or cleanup must run afterward.
+
+Do not put secrets or personal information in evidence notes. The audit notes are operator records and are not supplied to the model; users see only a fixed recovery event. The audit rows prevent deletion of their referenced connection. Account/project deletion must account for retained operational records explicitly.
+
+Still unresolved automatically: a missing resource, ambiguous provider audit evidence, or a request stuck in `creating`. These keep their reservation; this tool does not infer nonexistence or release capacity from a name search. A separately reviewed absence/retry recovery flow remains follow-up work.
+
+## Concurrent verification
+
+Each hosting refresh stores a unique check ID while disabling the prior serving lease. Only that attempt may commit its status. A newer refresh or disconnect invalidates the older attempt; an old success cannot override a newer failed proof check. Final activation also requires the same proof token and expiry still in D1, so renewal during DNS IO cannot grant routing from the old result.
+
+`test:domain-recovery` covers exact identity/time checks, digest tampering, evidence validation, atomic audit rollback, immutable receipts, concurrent/replayed/lost-ack application, cleanup-only recovery after disconnect, changed-state rejection, overlapping refreshes, disconnect races and proof rotation during verification. It uses disposable local D1 and controlled read-only provider responses. Real operator recovery remains unverified until an eligible real resource exists; no production recovery record was manufactured for testing.
+
+Recovery deployment evidence (September 29, 2026): migration 0019 applied locally and remotely; main Worker `149b5bce-7a9e-4a34-88ad-55b26248f3c1`, public Worker `a3fc7072-624a-41b5-aa27-37a501fbe777`. TypeScript, hosting and recovery tests passed. The initial remote migration request failed with Cloudflare 7403, correctly preventing deployment. Wrangler subsequently confirmed the expected account/D1 permission and a remote read confirmed the migration was still pending; the gated retry succeeded without credential changes. Live signed-passkey/disabled-hosting/auth/origin checks passed with zero AI units and temporary-account cleanup. No production reconciliation or provider mutation was attempted; the operator CLI's real provider/D1 recovery flow remains unverified pending an eligible resource and zone token.

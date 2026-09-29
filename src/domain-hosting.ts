@@ -57,7 +57,7 @@ export async function confirmHosting(db:D1Database,user:string,id:string,configu
 export async function disconnectHosting(db:D1Database,user:string,id:string,configuration:HostingConfig|undefined,transport:typeof fetch=fetch){
  let c=await owned(db,user,id);if(c.state==='disconnected')return view(c);
  // Fail closed locally before any external call, including when configuration is absent.
- await db.prepare("UPDATE domain_connections SET state=CASE WHEN state='review' THEN 'disconnected' ELSE 'disconnecting' END,serve_until=NULL,detail=CASE WHEN state='review' THEN 'Hosting review cancelled; no hostname created' ELSE 'Local routing disabled; provider cleanup pending' END WHERE id=? AND user_id=? AND state!='disconnected'").bind(id,user).run();c=await owned(db,user,id);
+ await db.prepare("UPDATE domain_connections SET state=CASE WHEN state='review' THEN 'disconnected' ELSE 'disconnecting' END,serve_until=NULL,check_id=NULL,detail=CASE WHEN state='review' THEN 'Hosting review cancelled; no hostname created' ELSE 'Local routing disabled; provider cleanup pending' END WHERE id=? AND user_id=? AND state!='disconnected'").bind(id,user).run();c=await owned(db,user,id);
  if(c.state==='disconnected'||!c.provider_id||!configuration)return view(c);const config=configured(configuration);if(config.zone!==c.zone_id)throw new DomainError(409,'Original hosting zone configuration is required for cleanup.');
  try{
   // Recheck identity before deleting. Never delete a name-based search result.
@@ -75,7 +75,8 @@ export async function refreshHosting(db:D1Database,user:string,id:string,configu
  const c=await owned(db,user,id);if(c.state==='disconnecting')return disconnectHosting(db,user,id,configuration,transport);
  if(!['active','provisioning'].includes(c.state)||!c.provider_id)return view(c);
  // Expired checks and outages cannot keep old routing authorization alive.
- await db.prepare("UPDATE domain_connections SET state='provisioning',serve_until=NULL WHERE id=? AND user_id=? AND state IN ('active','provisioning')").bind(id,user).run();
+ const checkId=crypto.randomUUID();
+ const started=await db.prepare("UPDATE domain_connections SET state='provisioning',serve_until=NULL,check_id=? WHERE id=? AND user_id=? AND state IN ('active','provisioning') RETURNING id").bind(checkId,id,user).first();if(!started)return view(await owned(db,user,id));
  try{
   const config=configured(configuration);if(c.zone_id!==config.zone||c.target!==config.target)throw new DomainError(409,'Original hosting configuration is required.');
   const remote=providerRecord((await readJSON(await request(config,'/'+c.provider_id,'GET',undefined,transport))).result,c.hostname,c.provider_id);
@@ -83,8 +84,8 @@ export async function refreshHosting(db:D1Database,user:string,id:string,configu
   const proof=await verifyDNS('_tellumo.'+c.hostname,'tellumo-verification='+claim.token,transport);
   const routed=await verifyDNS(c.hostname,c.target,transport,'CNAME');
   const ready=remote.status==='active'&&remote.ssl==='active'&&proof&&routed,now=new Date().toISOString();
-  await db.prepare("UPDATE domain_connections SET state=?,provider_status=?,ssl_status=?,checked_at=?,serve_until=?,detail=? WHERE id=? AND user_id=? AND provider_id=? AND state IN ('active','provisioning')").bind(ready?'active':'provisioning',remote.status,remote.ssl,now,ready?new Date(Math.min(Date.now()+7200000,Date.parse(claim.expires_at))).toISOString():null,ready?'Certificate, hostname and DNS checks passed':'Awaiting active hostname, certificate, current TXT proof and direct CNAME',id,user,c.provider_id).run();
- }catch{await db.prepare("UPDATE domain_connections SET detail='Hosting could not be verified. Local routing is disabled until a successful check.' WHERE id=? AND user_id=? AND state='provisioning'").bind(id,user).run();}
+  await db.prepare("UPDATE domain_connections SET state=?,provider_status=?,ssl_status=?,checked_at=?,serve_until=?,detail=? WHERE id=? AND user_id=? AND provider_id=? AND check_id=? AND state IN ('active','provisioning') AND EXISTS(SELECT 1 FROM domain_claims d WHERE d.id=domain_connections.claim_id AND d.token=? AND d.expires_at=? AND d.expires_at>?)").bind(ready?'active':'provisioning',remote.status,remote.ssl,now,ready?new Date(Math.min(Date.now()+7200000,Date.parse(claim.expires_at))).toISOString():null,ready?'Certificate, hostname and DNS checks passed':'Awaiting active hostname, certificate, current TXT proof and direct CNAME',id,user,c.provider_id,checkId,claim.token,claim.expires_at,now).run();
+ }catch{await db.prepare("UPDATE domain_connections SET detail='Hosting could not be verified. Local routing is disabled until a successful check.' WHERE id=? AND user_id=? AND check_id=? AND state='provisioning'").bind(id,user,checkId).run();}
  return view(await owned(db,user,id));
 }
 export async function maintainHosting(db:D1Database,configuration:HostingConfig|undefined,transport:typeof fetch=fetch){
@@ -92,4 +93,13 @@ export async function maintainHosting(db:D1Database,configuration:HostingConfig|
  const {results}=await db.prepare("SELECT id,user_id FROM domain_connections WHERE state IN ('active','provisioning','disconnecting') ORDER BY checked_at ASC LIMIT 80").all<{id:string;user_id:string}>();
  // Process at most eighty records in batches of four; each job uses bounded provider/DNS calls.
  for(let offset=0;offset<results.length;offset+=4)await Promise.all(results.slice(offset,offset+4).map(c=>refreshHosting(db,c.user_id,c.id,configuration,transport)));
+}
+
+/** Operator recovery reads only; never accepts a provider URL or mutates Cloudflare. */
+export async function recoveryResource(configuration:HostingConfig,providerId:string,name:string,transport:typeof fetch=fetch){
+ const config=configured(configuration);if(!idPattern.test(providerId))throw new DomainError(400,'Invalid provider resource ID.');
+ const raw=(await readJSON(await request(config,'/'+providerId,'GET',undefined,transport))).result;
+ const record=providerRecord(raw,name,providerId),createdAt=(raw as {created_at?:unknown}).created_at;
+ if(typeof createdAt!=='string'||!Number.isFinite(Date.parse(createdAt)))throw new DomainError(503,'Cloudflare did not return a valid resource creation time.');
+ return {...record,createdAt};
 }
