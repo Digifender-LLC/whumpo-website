@@ -101,6 +101,7 @@
     "test:traffic": "node tests/site-traffic.mjs",
     "test:cms-descriptions": "node tests/cms-content-description.mjs",
     "test:project-details": "node tests/project-details.mjs",
+    "test:cms-chat-live": "node tests/cms-structured-lifecycle.mjs --live",
     "test:cms-structured-lifecycle": "node tests/cms-structured-lifecycle.mjs",
     "test:cms-capabilities": "node tests/cms-capabilities.mjs",
     "test:cms-rich-writes": "node tests/cms-rich-writes.mjs",
