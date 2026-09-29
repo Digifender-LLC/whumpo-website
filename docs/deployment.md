@@ -326,3 +326,9 @@ TypeScript, private profile checker, Wrangler dry-run, gateway D1 tests and the 
 Migration 0036 applied remotely. Main Worker `42c1bde7-2f75-4271-ac2d-1a5c52dcb78a` deployed with CMS setup reviews, user-only confirmation, deterministic isolated-resource registry and queued status in chat/HTTP. No CMS customer resources or credentials were created. The existing private CMS preview remains unassigned. Health returned 200.
 
 TypeScript, D1 ownership/immutability/race/expiry/capacity tests, guided chat controls, AI server-receipt replacement and local HTTP auth/origin checks passed. Provisioning is explicitly queued, not ready. The provider resource consumer and signed bootstrap verification remain next; public CMS content management and publication are not yet enabled.
+
+## CMS storage allocator — September 29, 2026
+
+Migration 0037 applied remotely. Main Worker `64d74b3e-a861-433f-bf00-e4e4daaeff75` deployed with resource-receipt progress in CMS chat status. The operator command `npm run cms:provision -- PROJECT_ID` now consumes an approved request and allocates/records dedicated D1/R2/KV resources with immutable creation intents. It does not yet deploy or initialize the CMS Worker and never sets ready merely because storage exists. No paid-only feature, upgrade or public route is enabled.
+
+TypeScript, real-D1 allocator/concurrency/recovery tests and CMS chat regression passed. Live read-only operator queue returned no unfinished requests; inventory lookup found the existing preview D1 and R2. No customer resource creation occurred. The deployed main health endpoint returned 200. Per-instance Worker deployment, credential installation, service binding and signed bootstrap verification remain next.
