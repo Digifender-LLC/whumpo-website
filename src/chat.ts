@@ -1,3 +1,4 @@
+import {cmsDiscardLinks} from './cms-discard';
 import {cmsUnpublishLinks} from './cms-unpublish';
 import {cmsPublicationLinks} from './cms-publication';
 import {cmsPreviewLinks} from './cms-preview';
@@ -48,6 +49,8 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   for(const turn of result[1].results as Record<string,unknown>[]){const link=links.find(l=>l.turn_id===turn.id);if(link){turn.cms_preview_project_id=link.project_id;turn.cms_preview_request_id=link.draft_request_id;}}
   const cmsReviews=await cmsPublicationLinks(db,userId);
   for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsReviews.find(r=>r.turn_id===turn.id);if(r){turn.cms_publication_review_id=r.id;if(r.status==='published'&&!r.withdrawn)turn.cms_publication_url=`https://sites.digifender.com/s/${r.project_id}/cms/${r.collection}/${r.item_id}`;if(r.status==='approved'||r.status==='pending'&&String(r.expires_at)>new Date().toISOString())turn.cms_publication_confirmation_id=r.id;}}
+  const cmsDiscards=await cmsDiscardLinks(db,userId);
+  for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsDiscards.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_discard_confirmation_id=r.id;turn.cms_discard_recovery=r.status==='approved';}}
   const cmsRemovals=await cmsUnpublishLinks(db,userId);
   for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsRemovals.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_unpublish_confirmation_id=r.id;turn.cms_unpublish_recovery=r.status==='approved';}}
   const billing = await getBilling(db, userId);

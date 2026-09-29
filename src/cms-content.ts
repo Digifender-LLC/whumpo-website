@@ -1,3 +1,4 @@
+import {prepareCMSDiscard,describeCMSDiscard} from './cms-discard';
 import {prepareCMSUnpublish,describeCMSUnpublish} from './cms-unpublish';
 import {prepareCMSPublication,describeCMSPublication,readCMSPublication,listCMSPublications} from './cms-publication';
 import {prepareCMSPreview} from './cms-preview';
@@ -48,6 +49,7 @@ export async function cmsContentAction(db:D1Database,user:string,action:Record<s
  if(action.operation==='listPublications')return listCMSPublications(db,user,project);
  if(action.operation==='listDrafts')return listCMSDrafts(db,user,project,env);
  if(typeof action.requestId!=='string'||!uuid.test(action.requestId))throw new CMSProjectError(400,'Choose a CMS draft request ID');
+ if(action.operation==='reviewDiscard'){const pub=await readCMSPublication(db,user,action.requestId);if(pub.project_id!==project)throw new CMSProjectError(404,'Publication not found for this project');return describeCMSDiscard(await prepareCMSDiscard(db,user,action.requestId,id,env));}
  if(action.operation==='reviewUnpublish'){const publication=await readCMSPublication(db,user,action.requestId);if(publication.project_id!==project)throw new CMSProjectError(404,'Publication not found for this project');return describeCMSUnpublish(db,user,await prepareCMSUnpublish(db,user,action.requestId,id,env));}
  if(action.operation==='reviewPublication')return describeCMSPublication(await prepareCMSPublication(db,user,project,action.requestId,id,env));
  if(action.operation==='previewDraft')return prepareCMSPreview(db,user,project,action.requestId,id,env);
