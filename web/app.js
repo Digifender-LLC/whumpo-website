@@ -1,3 +1,4 @@
+import { createDashboard } from './dashboard.js';
 import { presentWithAcknowledgment } from './ack-timing.js';
 import { startRegistration, startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 const $ = (selector) => document.querySelector(selector);
@@ -43,6 +44,7 @@ function text(tag, value, className) {
   if (className) node.className = className;
   return node;
 }
+const workspace = createDashboard({api,text,sendMessage,showMessage});
 let chatRevision = 0;
 let pendingMessage;
 let sending = false;
@@ -115,6 +117,7 @@ async function loadDashboard(user) {
   logout.onclick = async () => { try { await api("/auth/logout", { method: "POST" }); location.reload(); } catch (error) { showMessage(error.message); } };
   account.append(logout);
   renderChat(await api("/chat"));
+  await workspace.start();
 }
 async function sendMessage(content) {
   if (sending || !content.trim()) return;
@@ -123,6 +126,7 @@ async function sendMessage(content) {
   if (["/domains", "show domains", "connect my domain", "disconnect my domain", "check domain hosting"].includes(content.trim().toLowerCase())) { await openDomains(); return; }
   if (["/files", "show files", "show photos", "upload a photo", "delete a photo", "remove a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
   if (["/security", "/passkeys"].includes(content.trim().toLowerCase())) { await openSecurity(); return; }
+  workspace.focusChatMobile();
   sending = true;
   clearTimeout(chatPoll);
   $("#chat-form button").disabled = true;
@@ -143,6 +147,7 @@ async function sendMessage(content) {
       hideAck: ()=>transient.remove()
     });
     renderChat(response);
+    workspace.refresh().catch(error=>showMessage(error.message));
     pendingMessage = undefined;
     $("#chat-input").value = "";
   } catch (error) {
@@ -171,6 +176,8 @@ $("#chat-form").onsubmit = event => { event.preventDefault(); sendMessage($("#ch
 function showAuth() {
   $("#auth").hidden = false;
   $("#dashboard").hidden = true;
+  $("#primary-navigation").hidden = true;
+  $("#settings-open").hidden = true;
 }
 async function setAuthMode(createAccount) {
   registering = createAccount;

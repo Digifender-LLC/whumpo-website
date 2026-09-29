@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {build} from 'esbuild';
+import wrangler from 'wrangler';
+async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const {readLayout,saveLayout,saveCapacity,readCapacity,dashboardData,workspaceAction}=await module('src/workspace-dashboard.ts');
+const {prepareSiteAction,siteContext}=await module('src/site-agent.ts');
+const {planChangeQuote,capacityNotice,overageNotice,recommendPlan}=await module('src/capacity-policy.ts');
+assert.equal(planChangeQuote('personal','business','month',0,100,50).dueCents,2450);
+assert.equal(planChangeQuote('starter','personal','year',0,120,40).dueCents,8667);
+assert.equal(planChangeQuote('personal','starter','year',0,120,40).effectiveAt,120);
+assert.throws(()=>planChangeQuote('personal','business','month',0,100,101));
+for(const [n,s]of [[60,'comfortable'],[75,'monitor'],[85,'inform'],[90,'recommend-review'],[100,'capacity-review']])assert.equal(capacityNotice(n,true),s);
+for(const [n,s]of [[2500,'inform'],[4000,'warning'],[4700,'urgent'],[5000,'cap']])assert.equal(overageNotice(n,5000),s);
+const periods=[0,1].map(i=>({complete:true,currentTotalCents:15200,candidateTotalCents:13900,candidateCapacityPercent:60,periodStart:i,periodEnd:i+1}));
+assert.equal(recommendPlan(periods,'upgrade').recommend,true);
+assert.equal(recommendPlan(periods.map(p=>({...p,currentTotalCents:12700})),'upgrade').recommend,false);
+assert.equal(recommendPlan(periods,'downgrade').recommend,true);
+assert.equal(recommendPlan(periods.map(p=>({...p,candidateCapacityPercent:66})),'downgrade').recommend,false);
+assert.equal(recommendPlan(periods.slice(1),'upgrade').recommend,false);
+assert.equal(recommendPlan(periods.map(p=>({...p,complete:false})),'upgrade').recommend,false);
+const dir=await mkdtemp('/tmp/whumpo-dashboard-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
+try{
+ const a=crypto.randomUUID(),b=crypto.randomUUID(),p=crypto.randomUUID();
+ for(const user of [a,b])await db.prepare("INSERT INTO users VALUES(?,?,'00','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
+ await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Dashboard fixture','','draft',?,?)").bind(p,a,new Date().toISOString(),new Date().toISOString()).run();
+ const initial=await readLayout(db,a),layout={widgets:['projects','storage'],tabs:[{id:'tab-cms',label:'Publishing',projectId:p,widgets:['cms','traffic']}]};
+ assert.equal(initial.revision,0);await saveLayout(db,a,0,layout);
+ assert.equal((await readLayout(db,a)).revision,1);assert.deepEqual((await readLayout(db,b)).layout.tabs,[]);
+ await assert.rejects(()=>saveLayout(db,b,0,layout),/Project not found/);
+ await assert.rejects(()=>saveLayout(db,a,0,layout),/changed/);
+ for(const bad of [{...layout,script:'alert(1)'},{...layout,widgets:['sql']},{...layout,tabs:[{...layout.tabs[0],url:'https://example.com'}]},{...layout,tabs:[layout.tabs[0],layout.tabs[0]]}])await assert.rejects(()=>saveLayout(db,a,1,bad));
+ const race=await Promise.allSettled([saveLayout(db,a,1,layout),saveLayout(db,a,1,layout)]);assert.equal(race.filter(r=>r.status==='fulfilled').length,1);
+ const preference={revision:0,preferred_plan:'business',billing_interval:'year',draft_overage_cents:4000};
+ const saved=await saveCapacity(db,a,preference);assert.equal(saved.authorizationActive,false);assert.equal(saved.policy.automaticPlanChanges,false);assert.equal(saved.policy.overageChargingEnabled,false);
+ assert.equal((await readCapacity(db,b)).preferences.draft_overage_cents,0);
+ await assert.rejects(()=>saveCapacity(db,a,preference),/changed/);
+ await assert.rejects(()=>saveCapacity(db,a,{...preference,revision:1,authorized:true}));
+ await assert.rejects(()=>workspaceAction(db,a,{kind:'workspace',operation:'saveCapacity',...preference}));
+ const context=await siteContext(db,a);assert.equal(context.workspace.revision,2);
+ const action=await prepareSiteAction(db,a,crypto.randomUUID(),JSON.stringify({reply:'Arranging your dashboard.',action:{kind:'workspace',operation:'save',revision:2,layout:{...layout,widgets:['usage','projects','activity']}}}),context);assert.match(action.reply,/Workspace updated/);
+ const dashboard=await dashboardData(db,a);assert.equal(dashboard.projects.length,1);assert.equal(dashboard.billing.plan.id,'explore');assert.equal(dashboard.traffic,null);assert.equal(dashboard.capacity.capacityPercent,null);
+ assert.equal((await dashboardData(db,b)).projects.length,0);
+ console.log('Dashboard tests passed: isolation, strict card schema, CAS concurrency, draft-only preferences, model authority, honest measurements, proration, warnings and two-cycle recommendations.');
+}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
