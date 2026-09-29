@@ -1,3 +1,4 @@
+import {healthChatCommand,checkHealth,describeHealth} from './site-health';
 import {diffCommand} from './version-diff';
 import {contactCommand} from './contacts';
 import {versionRemovalCommand} from './version-removal';
@@ -72,7 +73,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
   const backup=backupChatCommand(db,userId,input.id,command,dnsOptions);
-  const external=hosting??dns??backup;
+  const health=healthChatCommand(db,userId,command,dnsOptions);
+  const external=hosting??dns??backup??health;
   const comparison=await diffCommand(db,userId,input.id,command);
   const contact=await contactCommand(db,userId,input.id,command);
   const versionRemoval=await versionRemovalCommand(db,userId,input.id,command);
@@ -81,7 +83,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
-  if(backup)reply='Backup command recorded; its result has not yet been saved. Use /backups to inspect reviews. Replaying this message will not dispatch it again.';
+  if(health)reply='Website check recorded; the result is not saved yet. Use /health for current status.';
+  else if(backup)reply='Backup command recorded; its result has not yet been saved. Use /backups to inspect reviews. Replaying this message will not dispatch it again.';
   else if(hosting)reply='Hosting command recorded; its result has not yet been saved. Use /hosting to inspect saved connections. Replaying this message will not dispatch it again.';
   else if (dns) reply = 'DNS command recorded; its result has not yet been saved. Use /dns to inspect saved reviews. Replaying this message will not dispatch it again.';
   else if(comparison)reply=comparison.reply;
@@ -153,7 +156,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
     reply = ai ? 'AI is connected for website planning, new projects and private draft edits. Ask for a new project with a name and purpose, or request the source for a saved version. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea, choose a project name, and share your audience and style preferences to get a private first draft. Use /skip for optional questions, /brief to view saved preferences, and /cancel to leave setup. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /photos to list photo IDs in chat, /files for private project photos and /delete-photo PHOTO_ID to review removal of an unused photo; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /project PROJECT_ID for current project details and /inspect VERSION_ID for saved content. Use /delete-version VERSION_ID to review permanent removal of an unused saved version, then /confirm-version-delete REVIEW_ID to confirm. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Use /domains to prepare or check domain ownership. /dns lists Cloudflare DNS reviews and hosting connection IDs, /dns-zones lists authorized zones, /review-dns CLAIM_ID ZONE_ID prepares a TXT review, /review-routing CONNECTION_ID ZONE_ID prepares a website-routing CNAME review, /confirm-dns REVIEW_ID authorizes it, and /check-dns REVIEW_ID checks its result without resending. Use /hosting for domain hosting connections, /review-hosting CLAIM_ID to prepare one, /confirm-hosting CONNECTION_ID to authorize it, /check-hosting CONNECTION_ID to verify DNS and TLS, and /disconnect-hosting CONNECTION_ID to stop routing and clean up the provider hostname. Hosting requires platform configuration. Custom backend code and provider setup remain in progress.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /hosting, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /photos to list photo IDs in chat, /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
-    reply += ' Use /backups for GitHub backups, /github-installations and /github-repos INSTALLATION_ID for authorized repositories, /review-backup VERSION_ID OWNER/REPO REPO_ID for an exact source review, /confirm-backup REVIEW_ID to authorize it, and /check-backup REVIEW_ID to inspect without resending. Use /diff VERSION_ID to compare a draft with the live version, or /diff VERSION_ID BASELINE_ID to compare two saved versions. Use /inbox for private visitor messages. /contact-on PROJECT_ID and /contact-off PROJECT_ID prepare a form settings review; /confirm-contact REVIEW_ID applies it. These commands use no AI units.';
+    reply += ' Use /health for saved website checks and /check-site PROJECT_ID to verify a published page and photo responses. These checks use no AI units. Use /backups for GitHub backups, /github-installations and /github-repos INSTALLATION_ID for authorized repositories, /review-backup VERSION_ID OWNER/REPO REPO_ID for an exact source review, /confirm-backup REVIEW_ID to authorize it, and /check-backup REVIEW_ID to inspect without resending. Use /diff VERSION_ID to compare a draft with the live version, or /diff VERSION_ID BASELINE_ID to compare two saved versions. Use /inbox for private visitor messages. /contact-on PROJECT_ID and /contact-off PROJECT_ID prepare a form settings review; /confirm-contact REVIEW_ID applies it. These commands use no AI units.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; briefProject = null; briefStage = null; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
@@ -243,6 +246,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if(external){
     const result=await external();
     await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=? AND user_id=?').bind(result,input.id,userId).run();
+  }
+  if(dnsOptions?.healthChecks&&publication&&command.startsWith('/confirm ')){
+    const applied=await db.prepare("SELECT project_id FROM publication_actions WHERE confirmed_by=? AND user_id=? AND status='applied' AND kind!='unpublish'").bind(input.id,userId).first<{project_id:string}>();
+    if(applied){let healthReply:string;try{healthReply=describeHealth(await checkHealth(db,userId,applied.project_id,dnsOptions.healthTransport,'publish'));}catch{healthReply='The publication is saved, but its availability check could not finish. Use /health to inspect saved checks or /check-site '+applied.project_id+' to try a new check.';}
+      await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=? AND user_id=?').bind(reply.replace('Availability has not been checked yet.','')+'\n\n'+healthReply,input.id,userId).run();}
   }
   return { status: 200 };
 }

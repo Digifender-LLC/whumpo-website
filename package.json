@@ -19,6 +19,7 @@
     "test:billing": "node tests/billing.mjs",
     "test:runtime-ai": "node tests/runtime-ai.mjs",
     "test:previews": "node tests/previews.mjs",
+    "test:site-health": "node tests/site-health.mjs",
     "test:publications": "node tests/publications.mjs",
     "deploy:sites": "wrangler deploy --config wrangler.sites.jsonc",
     "dev:sites": "wrangler dev --config wrangler.sites.jsonc --port 8788",

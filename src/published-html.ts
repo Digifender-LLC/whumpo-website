@@ -1,0 +1,2 @@
+/** Shared serving/probe transform; never accepts arbitrary markup from a model at runtime. */
+export function publishedHTML(html:string,contact:boolean,projectId:string){return contact?html.replace('</main>',`<section aria-label="Contact" style="margin:40px 0"><h2>Get in touch</h2><p><a href="https://digifender.com/contact/${projectId}" target="_blank" rel="noopener noreferrer">Contact us ↗</a></p></section></main>`):html;}

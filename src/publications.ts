@@ -18,7 +18,7 @@ export async function publicationCommand(db:D1Database,userId:string,turnId:stri
   if (!action) return result('Confirmation not found. Request a fresh publication review.');
   if(action.status==='applied')return result('That confirmation was already applied. Use /projects for current status.');
   if(action.expires_at<=new Date().toISOString())return result('That review expired. Request a fresh /publish, /restore or /unpublish review.');
-  return result(action.kind==='unpublish'?'The site is unpublished. Saved previews remain private and available.':`The reviewed version is now live at ${siteURL(action.project_id)}\nVersion: ${action.version_id}`,[db.prepare("UPDATE publication_actions SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(turnId,arg,userId,turnId,userId)]);
+  return result(action.kind==='unpublish'?'The site is unpublished. Saved previews remain private and available.':`The reviewed version is published at ${siteURL(action.project_id)}\nVersion: ${action.version_id}\nAvailability has not been checked yet.`,[db.prepare("UPDATE publication_actions SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(turnId,arg,userId,turnId,userId)]);
  }
  if(verb==='/restore'&&!arg)return result('Choose an exact version to restore: /restore VERSION_ID. Find it with /versions.');
  const target=verb==='/unpublish'
