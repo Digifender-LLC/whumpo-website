@@ -32,7 +32,8 @@
     "test:workspace-read": "node tests/workspace-read.mjs",
     "test:github-connection": "node tests/github-connection.mjs",
     "test:github-backups": "node tests/github-backups.mjs",
-    "test:domain-agent": "node tests/domain-agent.mjs"
+    "test:domain-agent": "node tests/domain-agent.mjs",
+    "test:domain-hosting": "node tests/domain-hosting.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

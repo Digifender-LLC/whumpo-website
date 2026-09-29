@@ -10,11 +10,11 @@ The fixed Cloudflare DNS-over-HTTPS resolver receives only the proof record name
 
 Limits are three claims per project, ten per account and eighty across this test platform, enforced atomically before insert. Claims currently remain until project/account deletion; a user-facing disconnect/removal flow is still needed. These claims do not create provider custom hostnames, reserve registrations, change DNS, issue certificates, publish sites or consume AI units.
 
-## Hosting connection remains pending
+## Hosting activation remains pending
 
 Cloudflare documents 100 included custom hostnames on Free, Pro and Business plans. The existing Wrangler OAuth login returns 403 for Custom Hostnames and fallback-origin APIs. A zone-scoped SSL and Certificates Edit token and enabled included Cloudflare for SaaS capability are required before provider provisioning can be verified. Do not deploy the interactive Wrangler OAuth credential into a Worker.
 
-Next steps: reconcile custom hostname creation after uncertain responses; store exact provider IDs; enforce a global active-hostname allowance below the included limit; configure the origin/Worker route without intercepting workspace traffic; require both hostname and certificate active states plus correct routing; map hostnames to the current published project version; revoke public access on disconnect; add repair/status checks and operator recovery. Verification alone must never display Connected.
+Provisioning, checks, disconnect, maintenance and public hostname mapping are now implemented in [hosting design](integrations/domain-hosting.md), with activation disabled. Remaining acceptance and operations work includes reconciling custom hostname creation after uncertain responses; store exact provider IDs; enforce a global active-hostname allowance below the included limit; configure the origin/Worker route without intercepting workspace traffic; require both hostname and certificate active states plus correct routing; map hostnames to the current published project version; revoke public access on disconnect; add repair/status checks and operator recovery. Verification alone must never display Connected.
 
 Domain purchases and optional customer Cloudflare/GitHub authorization remain separate unfinished integrations. No Stripe account is configured and no purchases are enabled.
 
