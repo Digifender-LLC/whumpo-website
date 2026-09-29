@@ -5,7 +5,7 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
  const $=s=>document.querySelector(s);let data,active='chat',editing='dashboard',loadSequence=0;
  const content=$('#workspace-content');
  function button(label,run){const b=text('button',label);b.type='button';b.onclick=()=>Promise.resolve().then(run).catch(e=>showMessage(e.message));return b;}
- function choose(view){active=view;render();}
+ function choose(view){active=view;render();$('#workspace-stage').scrollTop=0;}
  const profile=createProfile({api,text,showMessage,openSecurity:controls.security});
  function askForPage(){choose('chat');const input=$('#chat-input');if(!input.value.trim())input.value='Help me build a custom page for my workflow.';input.focus();}
  function card(title){const a=text('article','','dashboard-card');a.append(text('h2',title));return a;}
@@ -99,7 +99,7 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
  // Account and project panels retain their established controls in the full page.
  for(const [name,parent] of [['connections','settings'],['domains','dashboard'],['files','dashboard'],['billing','settings'],['inbox','dashboard']]){
   const d=$('#'+name+'-dialog');d.classList.add('embedded-dialog');$('#workspace-stage').append(d);
-  d.showModal=()=>{active=parent;render();content.hidden=true;$('#view-title').textContent=d.querySelector('h2').textContent;$('#view-description').textContent='';$('#customize-dashboard').hidden=true;d.show();};
+  d.showModal=()=>{active=parent;render();content.hidden=true;$('#view-title').textContent=d.querySelector('h2').textContent;$('#view-description').textContent='';$('#customize-dashboard').hidden=true;$('#workspace-stage').scrollTop=0;d.show();};
   d.addEventListener('close',()=>{if(!document.querySelector('.embedded-dialog[open]'))render();});
  }
  return {showChat(){choose('chat');},async start(){await profile.load();$('#primary-navigation').hidden=false;$('#sidebar-account').hidden=false;await refresh();},refresh};
