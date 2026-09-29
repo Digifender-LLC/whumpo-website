@@ -1,3 +1,4 @@
+import {publicBackend} from './backend-publication';
 import {cmsIndex} from './cms-index';
 import {hashToken} from './security';
 import {publicDirectory} from './directory';
@@ -7,8 +8,10 @@ import { previewHeaders } from './components';
 import {reserveStorage,StorageLimitError} from './storage-budget';
 /** Public serving boundary: only current published HTML and its exact photo dependencies. */
 export default {
- async fetch(request:Request,env:Pick<Env,'DB'|'FILES'>):Promise<Response>{
+ async fetch(request:Request,env:Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>):Promise<Response>{
   const url=new URL(request.url),headers={...previewHeaders,'cache-control':'no-store'};
+  const backend=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/backend$/);
+  if(backend&&['sites.digifender.com','localhost','127.0.0.1'].includes(url.hostname))return publicBackend(request,env.DB,env.BACKEND_RUNTIME,backend[1]);
   if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405,headers:{...headers,allow:'GET, HEAD'}});
   try{
    if(!['sites.digifender.com','localhost','127.0.0.1'].includes(url.hostname)){
@@ -41,4 +44,4 @@ export default {
    return new Response(request.method==='HEAD'?null:html,{headers:{...headers,'content-security-policy':headers['content-security-policy'].replace('sandbox;',contact?'sandbox allow-popups allow-popups-to-escape-sandbox;':'sandbox;')+"; img-src 'self'"}});
   }catch(cause){return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
  }
-} satisfies ExportedHandler<Pick<Env,'DB'|'FILES'>>;
+} satisfies ExportedHandler<Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>>;
