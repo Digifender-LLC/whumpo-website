@@ -26,7 +26,7 @@ QuickJS/Wasm is an additional containment layer, not a claim that an interpreter
 - Conversational generation, test results, preview and source export.
 - Full app recovery and operations acceptance.
 
-The first two gates are verified below. The deployed service has also been reached through a private service binding, but the customer-facing authenticated gateway remains to be built. All later application gates remain open; a standalone interpreter is not a complete generated application platform.
+The first two gates are verified below. The deployed service has also been reached through a private service binding, but the authenticated gateway now exists (see below), with live authenticated invocation still to verify. All later application gates remain open; a standalone interpreter is not a complete generated application platform.
 
 ## Execution evidence — September 29, 2026
 
@@ -39,4 +39,20 @@ The first two gates are verified below. The deployed service has also been reach
 
 To repeat the remote suite, run a Wrangler remote-preview proxy on a loopback URL and set `RUNTIME_PREVIEW_URL=http://localhost:PORT` when running the test. For deployed-service verification, the preview probe must use a service binding to `whumpo-runtime`. Never create a public arbitrary-code endpoint for this test.
 
-Next: immutable owned backend versions, a project-authorized invocation gateway with atomic quotas, bounded data transitions and review/publication contracts. Gateway failures must normalize non-JSON provider errors, timeouts and resource termination without exposing raw guest errors, retrying mutations or consuming unbounded resources.
+Next: integrate the owned backend versions and authorized test gateway below into chat, then add bounded data transitions and review/publication contracts. Gateway failures must normalize non-JSON provider errors, timeouts and resource termination without exposing raw guest errors, retrying mutations or consuming unbounded resources.
+
+## Owned backend drafts and test gateway
+
+Migration 0033 adds immutable owned backend versions and execution receipts. Authenticated same-origin routes:
+
+- `GET /api/projects/:project/backends`: owned version IDs, digests and dates.
+- `POST /api/projects/:project/backends`: `{id, source}` saves a private JavaScript module (8 KiB maximum). The version UUID is a caller-supplied idempotency key. Reusing it with different content is rejected.
+- `POST /api/projects/:project/backends/:version/test`: `{id, input}` tests exactly that saved version through the private service binding. Input is JSON up to 8 KiB, output up to 16 KiB; the whole HTTP JSON request remains limited to 16 KiB. Source hashes are checked before execution.
+
+This is private pure computation: no data mutation capability or public application endpoint. Saving code does not validate or publish it. The test result is data and must never be rendered as trusted HTML. Inputs are not retained; receipts retain an input fingerprint and bounded output, so test with non-sensitive examples. Outputs are not sent to AI by these routes.
+
+The database serializes admission: 25 versions/project, 1,000 versions/platform; 20 tests/project/day, 100/account/day, 1,000/platform/day (UTC), plus a hard ceiling of 5,000 retained receipts. These are explicit initial test limits, separate from AI units; failed and uncertain attempts count. The total ceiling bounds retained storage until lifecycle/retention work is implemented. This limit is not a scalable final retention policy.
+
+An invocation is reserved before service dispatch. A retry with the same ID and request returns its saved result, or a pending/unknown receipt. It never executes again automatically. Lost reservation acknowledgments deliberately leave an unknown receipt without dispatch. Provider errors, non-JSON bodies, invalid envelopes and oversized results become a fixed unavailable result. There is a five-second client deadline. No cookies or provider credentials reach the service.
+
+`test:backend-versions` exercises real local D1, quota races, ownership, immutability, replay and lost acknowledgments. `test:backend-http` runs against local multi-Worker development and checks the HTTP auth/origin boundary and actual bound QuickJS execution, including recovery after a runaway function. Chat generation, inspection/test controls, durable application state, publication and rollback remain next integration gates.
