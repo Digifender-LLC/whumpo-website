@@ -1,3 +1,5 @@
+import {listPhotos} from './files';
+import {photoRemovalCommand} from './photo-removal';
 import {inspectWorkspace} from './workspace-read';
 import {domainCommand} from './domains';
 import { attachPhoto } from './photo-versions';
@@ -23,7 +25,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await reconcileChat(db, userId);
   const result = await db.batch([
     db.prepare('SELECT revision, step, brief_stage FROM workspace_state WHERE user_id = ?').bind(userId),
-    db.prepare("SELECT t.id, t.revision, t.user_text, t.assistant_text, t.created_at, t.mode, t.status, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind, e.version_id AS export_version_id FROM chat_turns t LEFT JOIN chat_exports e ON e.turn_id=t.id LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_actions a ON a.id = t.id AND a.user_id=t.user_id LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100").bind(userId),
+    db.prepare("SELECT t.id, t.revision, t.user_text, t.assistant_text, t.created_at, t.mode, t.status, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind, e.version_id AS export_version_id, CASE WHEN r.status='pending' AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM project_files WHERE id=r.file_id) THEN r.id ELSE NULL END AS photo_confirmation_id FROM chat_turns t LEFT JOIN photo_removals r ON r.id=t.id AND r.user_id=t.user_id LEFT JOIN chat_exports e ON e.turn_id=t.id LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_actions a ON a.id = t.id AND a.user_id=t.user_id LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100").bind(userId),
     db.prepare("SELECT COUNT(*) AS projects, SUM(CASE WHEN status = 'live' THEN 1 ELSE 0 END) AS live FROM projects WHERE owner_user_id = ?").bind(userId)
   ]);
   const billing = await getBilling(db, userId);
@@ -59,13 +61,22 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
   const known = ['/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
+  const removal = await photoRemovalCommand(db,userId,input.id,command);
   const domain = await domainCommand(db,userId,input.id,command);
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
-  if (domain) reply = domain.reply;
+  if (removal) reply = removal.reply;
+  else if (domain) reply = domain.reply;
   else if (photoDraft) reply = photoDraft.reply;
   else if (publication) reply = publication.reply;
+  else if (/^\/photos(?:\s|$)/.test(command)) {
+    const [,id,...extra]=command.split(/\s+/);
+    if(extra.length||(id&&!/^[0-9a-f-]{36}$/.test(id)))return {status:400,error:'Use /photos, optionally followed by a project ID.'};
+    const target=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,id??null,id??null).first<{id:string;name:string}>();
+    if(!target)reply='No matching project found. Use /projects to choose a project.';
+    else {const {files}=await listPhotos(db,userId,target.id);reply=`Photos for “${target.name}”:\n\n`+(files.length?files.map(f=>`${f.name} · ${f.status} · ${f.saved_versions} saved version(s)\nPhoto: ${f.id}`).join('\n\n')+'\n\nUse /delete-photo PHOTO_ID to review removal of an unused photo.':'No photos yet. Open /files to upload one.');}
+  }
   else if (/^\/(?:inspect|project)(?:\s|$)/.test(command)) {
     const [verb,id,...extra]=command.split(/\s+/);
     if(!id||!/^[0-9a-f-]{36}$/.test(id)||extra.length)return {status:400,error:'Use /inspect VERSION_ID or /project PROJECT_ID.'};
@@ -119,7 +130,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = ai ? 'AI is connected for website planning, new projects and private draft edits. Ask for a new project with a name and purpose, or request the source for a saved version. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea, choose a project name, and share your audience and style preferences to get a private first draft. Use /skip for optional questions, /brief to view saved preferences, and /cancel to leave setup. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /files for private project photos; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /project PROJECT_ID for current project details and /inspect VERSION_ID for saved content. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Use /domains to prepare or check domain ownership. Domain hosting connection, custom backend code and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
+    reply = ai ? 'AI is connected for website planning, new projects and private draft edits. Ask for a new project with a name and purpose, or request the source for a saved version. Describe the page or change you want in ordinary language, or use /edit followed by your request. Describe your idea, choose a project name, and share your audience and style preferences to get a private first draft. Use /skip for optional questions, /brief to view saved preferences, and /cancel to leave setup. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Use /build to assemble a private preview from a reusable layout; /build clay and /build forest change its theme. Use /photos to list photo IDs in chat, /files for private project photos and /delete-photo PHOTO_ID to review removal of an unused photo; /photo PHOTO_ID adds a photo to a private website draft without AI units. Use /export to download the latest saved website source, optionally followed by a version ID. Use /project PROJECT_ID for current project details and /inspect VERSION_ID for saved content. Use /versions to select a saved version, /publish to review making it public, /restore VERSION_ID to restore one, and /unpublish to take a site offline. Every publication change needs /confirm. The agent can change text, sections and themes using our reusable site component. Use /domains to prepare or check domain ownership. Domain hosting connection, custom backend code and provider connections are still being built.' : 'AI is unavailable in this environment, so I’m running in guided mode. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Use /build to create a private preview from a reusable layout. Use /versions, /publish, /restore VERSION_ID, and /unpublish to review publication changes, then /confirm to apply them. Use /photos to list photo IDs in chat, /files for private project photos and /export to download saved website source. AI edits require a connected provider.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; briefProject = null; briefStage = null; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
@@ -160,6 +171,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ?, brief_project_id = ?, brief_stage = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, briefProject, briefStage, userId, state.revision, input.id, userId)
   ];
   if (preference) statements.push(db.prepare('UPDATE projects SET audience=COALESCE(?,audience),style_notes=COALESCE(?,style_notes),preferred_theme=COALESCE(?,preferred_theme),updated_at=? WHERE id=? AND owner_user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(preference.audience??null,preference.style??null,preference.theme??null,now,preference.projectId,userId,input.id,userId));
+  if (removal) statements.push(...removal.statements);
   if (domain) statements.push(...domain.statements);
   if (publication) statements.push(...publication.statements);
   if (photoDraft) statements.push(...photoDraft.statements);
@@ -184,6 +196,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
     }
   } catch (cause) {
+    if (String(cause).includes('photo_removal_referenced')) return {status:409,error:'That photo is now used by a saved website version. It cannot be removed while that version needs it.'};
+    if (/photo_removal_(changed|expired)/.test(String(cause))) return {status:409,error:'This photo removal review changed or expired. Request a fresh review.'};
     if (String(cause).includes('domain_claim_quota')) return {status:409,error:'Domain test limit reached: 3 per project, 10 per account and 80 platform-wide.'};
     if (String(cause).includes('published_site_quota')) return {status:409,error:'Your plan’s live-site limit is reached. Unpublish another site before confirming this one.'};
     if (/publication_(changed|expired|version)/.test(String(cause))) return {status:409,error:'The reviewed publication is stale or expired. Request a fresh review before confirming.'};

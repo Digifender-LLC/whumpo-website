@@ -1,6 +1,6 @@
 # Project photo storage
 
-Private uploads, versioned photo pages, authenticated previews, confirmed public serving, and portable image exports are implemented. User-facing deletion controls remain outstanding. Uploading a photo alone does not publish it or send its bytes to the AI provider.
+Private uploads, versioned photo pages, authenticated previews, confirmed public serving, and portable image exports are implemented. Reviewed removal of unused photos is available in chat and the photo panel. Photos referenced by any saved version are retained. Uploading a photo alone does not publish it or send its bytes to the AI provider.
 
 ## Upload contract
 
@@ -18,7 +18,7 @@ R2 writes use a create-only condition. Concurrent identical requests either crea
 
 ## Cleanup
 
-Deleting a project or account cascades D1 photo rows into a durable cleanup queue. The workspace Worker's daily 03:17 UTC handler retries up to 100 queued object deletions older than an hour. It also reads the at-most-500 retained object keys and scans up to 1,000 photo objects, batch-deleting old unreferenced objects. This catches a late object write after a deletion acknowledgement; the grace period avoids interfering with recent uploads. Large backlogs are drained over successive runs. Cleanup requires the scheduled handler to run successfully; it is not an immediate deletion guarantee. Individual file removal and customer account deletion flows are not exposed yet.
+Deleting a project or account cascades D1 photo rows into a durable cleanup queue. The workspace Worker's daily 03:17 UTC handler retries up to 100 queued object deletions older than an hour. It also reads the at-most-500 retained object keys and scans up to 1,000 photo objects, batch-deleting old unreferenced objects. This catches a late object write after a deletion acknowledgement; the grace period avoids interfering with recent uploads. Large backlogs are drained over successive runs. Cleanup requires the scheduled handler to run successfully; it is not an immediate deletion guarantee. Individual unused-photo removal is described below. Customer account deletion and removal of saved versions are not exposed yet.
 
 ## Budget
 
@@ -33,3 +33,18 @@ Use in website or `/photo FILE_ID` creates a private immutable page version with
 Private previews embed verified JPEG data URLs under a sandboxed CSP. Publication reviews disclose photo exposure; public assets are available only while referenced by the current published version. Restore switches the references with the saved HTML. Source ZIPs include exact JPEG dependencies under `public/assets`; unavailable or mismatched files fail the export. See [the version contract](photo-publication-plan.md).
 
 Atomic monthly counters cap application R2 reads at 100,000 and writes at 10,000. Reservations count attempted operations, including retries. A photo allowance error leaves text HTML available. The small daily cleanup workload is outside these counters. These caps do not cover other applications or constitute an account-wide billing limit.
+
+
+## Reviewed photo removal
+
+`/photos [PROJECT_ID]` lists owned photo IDs, pending/ready state and saved-version counts in chat (latest project by default). `/files`, “remove a photo”, or Details → Project photos opens the photo panel. “Review deletion” sends `/delete-photo PHOTO_ID`; the reply names the exact photo/project and warns that removal is irreversible. `/confirm-photo-delete REVIEW_ID` or its confirmation button applies the review within ten minutes. Both commands are free, explicit guided user actions; no model proposal can confirm a removal.
+
+Migration 0021 saves owner-scoped reviews. The confirmation, chat receipt, photo-row deletion, durable R2 cleanup key and activity event commit atomically. Expiry and ownership are checked again at mutation time. Confirmation replays recover the original chat result. Applied reviews prevent the original upload ID from resurrecting a removed photo; a deliberate new upload requires a new ID. These receipts remain while the project/account exists.
+
+A photo used by **any** saved version cannot be removed, including private drafts and old versions. A database guard protects against a version attaching the photo between review and confirmation. Removing a photo from a newer draft does not remove older references. Existing project/account cascades remain possible for operator cleanup. A future saved-version deletion policy is required before a customer can remove retained assets.
+
+Pending uploads can also be removed. Access stops when confirmation commits, but physical R2 deletion waits for the daily queue and orphan sweep. A late in-flight upload cannot restore its deleted metadata; the orphan sweep eventually removes its bytes. Cleanup failures retain the queue for retry. Active file rows **plus queued deletions** count toward the 500-object platform capacity, so deleting/uploading repeatedly does not evade that capacity while cleanup is pending. Project/account active-photo limits still apply separately.
+
+Verification: `test:photo-removal` covers approval before mutation, ownership, repeated and racing confirmations, upload-ID tombstones, delayed cleanup and late orphan writes, retained-version protection, post-review attachment, commit-time expiry, immutable review identity, lost acknowledgement recovery, storage capacity and account cascades. Existing upload and photo-version suites cover the surrounding storage and rendering contracts. Browser testing uses a local disposable API fixture and verifies review and confirmation controls; it does not prove provider cleanup.
+
+Deployment acceptance (September 29, 2026): migration 0021 applied locally and remotely. Main Worker `64484db2-3b51-47f5-81b4-008e55146605`; public Worker `efc431a2-0697-4265-abc5-4f9557dd920d`. A temporary passkey account uploaded a synthetic JPEG through the live API, listed it in chat, reviewed and confirmed its removal, verified authenticated reads then returned 404, retried the same confirmation without another effect, and verified re-upload under the removed ID returned 409. Build usage stayed at zero. The live durable cleanup row was verified; fixture bytes were subsequently removed with an operator cleanup and the temporary account deleted. Scheduled production cleanup timing was not exercised by this check. TypeScript, chat, upload, photo-version and photo-removal checks passed. The final CSS-only deployment did not change the verified server logic.

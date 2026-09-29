@@ -125,7 +125,7 @@ Migration 0011 pins export chat links to exact immutable versions. A database gu
 
 ## Private photo uploads
 
-The files view is accessible through `/files`, “show photos”, or Details → Project photos. It uploads, lists and previews photos owned by the selected project without AI usage. Browser preparation resizes supported images; server validation strips JPEG metadata and bounds size/dimensions. D1 reservations and create-only R2 writes make retries safe. A private Standard R2 bucket and bounded cleanup job run on the existing account. See [photos.md](photos.md) for the exact API, quota, privacy and recovery contract. Versioned photo composition, private embedded previews, confirmed public photo serving and photo-aware exports are implemented. User-facing deletion remains outstanding.
+The files view is accessible through `/files`, “show photos”, or Details → Project photos. It uploads, lists and previews photos owned by the selected project without AI usage. Browser preparation resizes supported images; server validation strips JPEG metadata and bounds size/dimensions. D1 reservations and create-only R2 writes make retries safe. A private Standard R2 bucket and bounded cleanup job run on the existing account. See [photos.md](photos.md) for the exact API, quota, privacy and recovery contract. Versioned photo composition, private embedded previews, confirmed public photo serving and photo-aware exports are implemented. Reviewed unused-photo removal is implemented; photos referenced by saved versions remain protected.
 
 ## Photo versions milestone
 
@@ -183,3 +183,8 @@ An operator-only inspect/apply tool can reconcile a known provider ID after an u
 ## Month-specific plan receipts — September 29, 2026
 
 An internal fulfillment boundary now grants a paid tier for one UTC month with unique immutable payment references, transactional allowance/ledger changes and replay recovery. Upgrades preserve usage and holds; new months require a renewal receipt. Credits persist separately. Publication checks use current-month receipts rather than a stale account plan cache; existing live sites remain available after downgrade, with new publication blocked over the lower limit. Subscription checkout, provider lifecycle events and final downgrade/refund/proration policy remain unfinished. See [plan lifecycle](plan-lifecycle.md).
+
+
+## Reviewed photo removal — September 29, 2026
+
+The photo panel and `/photos`, `/delete-photo` and `/confirm-photo-delete` commands support owner-scoped, expiring reviews for removing unused photos. Confirmation atomically records the chat receipt, deletes metadata and queues storage cleanup. Original upload IDs cannot resurrect removed photos. Saved-version references block removal, including a reference added after review. Pending physical deletions count toward platform capacity. Saved-version deletion, customer account deletion and full long-lived retention controls remain unfinished. See [photo lifecycle](photos.md).
