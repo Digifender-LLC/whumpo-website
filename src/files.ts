@@ -52,7 +52,7 @@ export async function uploadPhoto(request:Request,env:Pick<Env,'DB'|'FILES'>,use
  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',photo.bytes)),b=>b.toString(16).padStart(2,'0')).join('');
  const key=`photos/${projectId}/${id}.jpg`;
  try{await env.DB.prepare('INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,created_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,projectId,name,key,digest,photo.bytes.length,photo.width,photo.height,new Date().toISOString()).run();}
- catch(cause){if(/file_.*_quota/.test(String(cause)))throw new FileError(409,'Photo test limit reached: 20 per project, 50 per account, 500 across the platform');throw cause;}
+ catch(cause){if(String(cause).includes('photo_removal_replay'))throw new FileError(409,'This photo was removed. Choose a new upload to add it again.');if(String(cause).includes('file_cleanup_quota'))throw new FileError(409,'Photo storage is full or awaiting cleanup. Try again after the daily cleanup.');if(/file_.*_quota/.test(String(cause)))throw new FileError(409,'Photo test limit reached: 20 per project, 50 per account, 500 across the platform');throw cause;}
  const row=await env.DB.prepare('SELECT * FROM project_files WHERE id=? AND project_id=?').bind(id,projectId).first<FileRow>();
  if(!row||row.digest!==digest||row.name!==name)throw new FileError(409,'This upload ID was already used for another photo');
  if(row.status==='ready')return {id:row.id,name:row.name,width:row.width,height:row.height,size:row.size,status:'ready'};
@@ -70,7 +70,7 @@ export async function uploadPhoto(request:Request,env:Pick<Env,'DB'|'FILES'>,use
 }
 export async function listPhotos(db:D1Database,userId:string,projectId:string){
  if(!(await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(projectId,userId).first()))throw new FileError(404,'Project not found');
- const {results}=await db.prepare('SELECT id,name,size,width,height,status,created_at FROM project_files WHERE project_id=? ORDER BY created_at DESC,id DESC LIMIT 50').bind(projectId).all();return {files:results};
+ const {results}=await db.prepare('SELECT id,name,size,width,height,status,created_at,(SELECT COUNT(*) FROM version_photos WHERE file_id=project_files.id) AS saved_versions FROM project_files WHERE project_id=? ORDER BY created_at DESC,id DESC LIMIT 50').bind(projectId).all();return {files:results};
 }
 export async function readPhoto(env:Pick<Env,'DB'|'FILES'>,userId:string,id:string){
  const row=await env.DB.prepare("SELECT f.object_key,f.digest FROM project_files f JOIN projects p ON p.id=f.project_id WHERE f.id=? AND p.owner_user_id=? AND f.status='ready'").bind(id,userId).first<{object_key:string;digest:string}>();

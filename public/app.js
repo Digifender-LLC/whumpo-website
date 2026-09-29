@@ -503,6 +503,11 @@
         download.download = `tellumo-site-${exportVersion}.zip`;
         answer.append(download);
       }
+      if (typeof turn.photo_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.photo_confirmation_id)) {
+        const button = text("button", "Confirm photo deletion");
+        button.onclick = () => sendMessage(`/confirm-photo-delete ${turn.photo_confirmation_id}`);
+        answer.append(button);
+      }
       if (typeof turn.confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.confirmation_id)) {
         const confirm2 = text("button", "Confirm reviewed change");
         confirm2.onclick = () => sendMessage(`/confirm ${turn.confirmation_id}`);
@@ -559,7 +564,7 @@
       await openDomains();
       return;
     }
-    if (["/files", "show files", "show photos", "upload a photo"].includes(content.trim().toLowerCase())) {
+    if (["/files", "show files", "show photos", "upload a photo", "delete a photo", "remove a photo"].includes(content.trim().toLowerCase())) {
       await openFiles();
       return;
     }
@@ -732,6 +737,18 @@
     for (const file of data.files) {
       const row = text("article", "", "photo-row");
       row.append(text("p", `${file.name} \xB7 ${file.width} \xD7 ${file.height} \xB7 ${Math.ceil(file.size / 1024)} KiB${file.status === "pending" ? " \xB7 Upload awaiting confirmation" : ""}`));
+      if (file.saved_versions) row.append(text("p", `Kept for ${file.saved_versions} saved website version${file.saved_versions === 1 ? "" : "s"}.`));
+      else {
+        const remove = text("button", "Review deletion");
+        remove.type = "button";
+        remove.onclick = () => {
+          $("#files-dialog").close();
+          $("#workspace-menu").hidden = true;
+          $("#menu-toggle").setAttribute("aria-expanded", "false");
+          sendMessage(`/delete-photo ${file.id}`);
+        };
+        row.append(remove);
+      }
       if (file.status === "ready") {
         const img = document.createElement("img");
         img.src = `/api/files/${file.id}`;

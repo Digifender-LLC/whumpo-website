@@ -65,6 +65,9 @@ function renderChat(data) {
     if (typeof exportVersion === 'string' && /^[0-9a-f-]{36}$/.test(exportVersion)) {
       const download=text('a','Download website source');download.href=`/api/site-versions/${exportVersion}/export`;download.download=`tellumo-site-${exportVersion}.zip`;answer.append(download);
     }
+    if (typeof turn.photo_confirmation_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.photo_confirmation_id)) {
+      const button=text('button','Confirm photo deletion');button.onclick=()=>sendMessage(`/confirm-photo-delete ${turn.photo_confirmation_id}`);answer.append(button);
+    }
     if (typeof turn.confirmation_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.confirmation_id)) {
       const confirm = text('button', 'Confirm reviewed change'); confirm.onclick = () => sendMessage(`/confirm ${turn.confirmation_id}`); answer.append(confirm);
     }
@@ -97,7 +100,7 @@ async function sendMessage(content) {
   if (sending || !content.trim()) return;
   if (["/connections", "show connections", "connect github", "disconnect github", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) { await openConnections(); return; }
   if (["/domains", "show domains", "connect my domain", "disconnect my domain", "check domain hosting"].includes(content.trim().toLowerCase())) { await openDomains(); return; }
-  if (["/files", "show files", "show photos", "upload a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
+  if (["/files", "show files", "show photos", "upload a photo", "delete a photo", "remove a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
   if (["/security", "/passkeys"].includes(content.trim().toLowerCase())) { await openSecurity(); return; }
   sending = true;
   $("#chat-form button").disabled = true;
@@ -202,6 +205,8 @@ async function refreshPhotos() {
   const data=await api(`/projects/${project}/files`);
   for(const file of data.files) {
     const row=text('article','', 'photo-row');row.append(text('p',`${file.name} · ${file.width} × ${file.height} · ${Math.ceil(file.size/1024)} KiB${file.status==='pending'?' · Upload awaiting confirmation':''}`));
+    if(file.saved_versions)row.append(text('p',`Kept for ${file.saved_versions} saved website version${file.saved_versions===1?'':'s'}.`));
+    else {const remove=text('button','Review deletion');remove.type='button';remove.onclick=()=>{$('#files-dialog').close();$('#workspace-menu').hidden=true;$('#menu-toggle').setAttribute('aria-expanded','false');sendMessage(`/delete-photo ${file.id}`);};row.append(remove);}
     if(file.status==='ready'){const img=document.createElement('img');img.src=`/api/files/${file.id}`;img.alt=file.name;img.loading='lazy';row.append(img);const link=text('a','Open private photo');link.href=img.src;link.target='_blank';link.rel='noopener noreferrer';row.append(link);const use=text('button','Use in website');use.type='button';use.onclick=()=>{$('#files-dialog').close();sendMessage(`/photo ${file.id}`);};row.append(use);}
     list.append(row);
   }
