@@ -57,3 +57,7 @@ The AI draft milestone adds platform-authored `site-page@1`, with schema-validat
 Focused edits reference an owned immutable base and send only changed configuration fields. Trusted assembly preserves omitted fields and records base ancestry. This further reduces repeated model output and prevents unrelated copy changes when the agent uses the focused edit contract. Complete new-preview proposals still replace the full configuration in a new private version.
 
 The photo milestone adds platform-authored `photo-page@1`. Its schema accepts up to four owned project photo IDs and plain-text alt descriptions; the same-owner cross-project boundary is enforced. Exact references are saved with each immutable version. Photo bytes and filled configurations remain tenant data, never shared catalog content. The model receives owned metadata only, not pixels.
+
+## First dynamic shared implementation
+
+`src/contacts.ts` and `src/contact-page.ts` implement one trusted contact backend used across projects. Shared code contains no customer prompts, site content, messages or credentials. Tenant settings and messages live in project-scoped D1 tables, with server-derived ownership for private reads/deletion and publication checks for public intake. The agent may prepare a settings review, never authorize activation or read visitor messages. Runtime form settings are separate from immutable static artifacts and are not claimed as portable backend exports. See `docs/contact-forms.md` for the full contract and tests.

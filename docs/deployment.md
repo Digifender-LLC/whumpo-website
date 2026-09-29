@@ -196,3 +196,15 @@ Since the GitHub authorization foundation above, code for reviewed GitHub backup
 The latest version-removal deployment passed ownership, publication/backup race, expiry, replay, tombstone and photo-retention checks. Live signed-passkey testing removed one unpublished synthetic version, confirmed preview/export denial and replay safety, and preserved another live version. Its temporary account and site were cleaned up. No AI units were consumed.
 
 The revised Word design v0.4 records this snapshot and the unfinished MVP requirements. Its 30-page render was checked page by page for clipping, table layout and readability; the original reference document remains unchanged. This design refresh changes no deployed application code or infrastructure.
+
+## Reusable contact forms and private inbox — September 29, 2026
+
+Remote migration `0025_contact_forms.sql` applied successfully before runtime deployment. Final workspace Worker `647c07d6-40ea-42b0-a80a-0effd1880a91` and public host `d3ba9c8e-d73b-4d59-aa02-3f4f7476665b` are deployed. The existing D1, rate limiter and Turnstile configuration are reused. No new binding, secret, paid service or email provider was added. `/contact/*` now runs through the workspace Worker before static assets.
+
+TypeScript, contact integration tests, publication regressions and site-agent regressions passed. A synthetic browser fixture verified the private inbox opened with `/inbox`, displayed markup as literal text, and showed settings/status and deletion controls. The fixture server was stopped afterward.
+
+A live Muse request prepared an exact contact review without activating it. Subsequent guided live checks passed explicit activation, public CTA/form HTML, invalid Turnstile rejection, cross-origin rejection, anonymous inbox denial, owner read/delete of a seeded synthetic message, no visitor content in chat, disabling, unpublication and signed-passkey session handling. Guided checks used zero AI units. All ephemeral accounts and dependent records were removed after each run.
+
+The first live invalid-token check exposed a Workers `TypeError` during the verification request when using redirect error mode. Manual redirect handling with explicit non-OK rejection resolved it; the final deployment returned the expected validation failure. Redacted diagnostic logging records only a fixed event, processing stage and error class, never submitted fields, tokens or provider response bodies.
+
+Successful real Turnstile completion and the first scheduled production retention cleanup remain acceptance gates. Controlled valid Siteverify responses prove the application path; a seeded live D1 message proves the inbox authorization path, not real browser verification. See `docs/contact-forms.md`. Stripe and optional account/domain integrations remain in their previously documented deferred/unconfigured state.
