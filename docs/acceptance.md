@@ -74,3 +74,11 @@ Chat and authenticated HTTP now prepare exact owned EmDash setup reviews. Separa
 ## CMS resource allocation milestone
 
 The operator consumer now reads the approved queue and can allocate dedicated D1/R2/KV resources through the authenticated Cloudflare control plane, with durable creation intents and reconciliation. D1 tests verify concurrent allocation, uncertain outcomes, delayed results, immutable IDs and collision/account separation. Live read-only queue and preview-resource inventory calls succeeded; the queue was empty, so no customer allocation was performed. Worker deployment, per-instance secrets, service binding and signed CMS setup verification still separate provisioning from ready. No automatic scheduler or public CMS endpoint is enabled by this milestone.
+
+## CMS deployment and native bootstrap milestone
+
+The operator pipeline now freezes each approved project's compiled EmDash artifact, records a deployment intent, installs a derived project signing key, reconciles a tagged private Worker version, and initializes native EmDash using the original approval receipt. Readiness requires verified owner/posts/pages schemas and a recorded platform deployment with the private service binding. Ordinary releases preserve all verified CMS bindings. Owners can request a fresh private initialization check in chat or through the authenticated status endpoint.
+
+Local D1/provider tests cover lost upload acknowledgments without repeat upload, source/key/version mismatches, owner/schema failures, receipt replay and tenant isolation. The actual local EmDash app passes native initialization verification. Production has no approved customer CMS queue entries, so full live tenant provisioning remains unverified. Tenant scheduling, content tools, publication reviews, media, WordPress import and CMS backup/restore remain open MVP gates. This milestone supersedes the earlier storage-only implementation status; it does not declare the CMS or overall MVP complete.
+
+Deployment evidence: migration 0038 applied remotely; platform version `13de6d8c-6c00-486f-8387-c9817362335e` verified through the provider API. The TownHello landing page and health endpoint returned 200; the unauthenticated CMS status endpoint returned 401. No customer CMS instance was created by this release.

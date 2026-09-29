@@ -21,7 +21,7 @@ try{
  const winner=race.find(v=>v.status==='fulfilled').value.id;await Promise.all(Array.from({length:5},()=>confirmCMS(db,a.user,winner)));
  const instances=await listCMS(db,a.user);assert.equal(instances.length,1);assert.equal(instances[0].state,'queued');assert.equal((await listCMS(db,b.user)).length,0);
  const registry=await db.prepare('SELECT * FROM cms_instances WHERE project_id=?').bind(a.project).first();assert.equal(registry.worker_name,'townhello-cms-'+a.project.replaceAll('-',''));assert.equal(registry.database_id,null);
- await assert.rejects(db.prepare("UPDATE cms_instances SET state='ready' WHERE project_id=?").bind(a.project).run(),/CHECK/);
+ await assert.rejects(db.prepare("UPDATE cms_instances SET state='ready' WHERE project_id=?").bind(a.project).run(),/cms_readiness_not_verified/);
  await assert.rejects(db.prepare('UPDATE cms_instances SET user_id=? WHERE project_id=?').bind(b.user,a.project).run(),/immutable/);
  await assert.rejects(cmsAction(db,a.user,id(),{kind:'cms',operation:'confirm',reviewId:winner}),e=>e.status===400);
  const expired=id();await db.prepare("INSERT INTO cms_setup_reviews(id,project_id,user_id,title,tagline,expires_at) VALUES(?,?,?,'Expired','','2000-01-01T00:00:00.000Z')").bind(expired,b.project,b.user).run();await assert.rejects(confirmCMS(db,b.user,expired),e=>e.status===409);

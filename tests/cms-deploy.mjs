@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {build} from 'esbuild';
+import wrangler from 'wrangler';
+async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts'),{readCMSStatus}=await module('src/cms-status.ts');
+const dir=await mkdtemp('/tmp/townhello-cms-deploy-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
+async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Deploy fixture','','draft',?,?)").bind(project,user,now,now).run();const review=await prepareCMS(db,user,id(),project,'My CMS','Our updates');await confirmCMS(db,user,review.id);const resources=new Map();await allocateCMSResources(db,project,{accountId:account,find:async(k,n)=>resources.get(k+n)??null,create:async(k,n)=>resources.set(k+n,k==='database'?id():k==='session'?id().replaceAll('-',''):n)});const origin='https://townhello-cms-'+project.replaceAll('-','')+'.digifender.com',config={projectId:project,ownerId:user,origin,secret:await deriveCMSSecret(master,project,user,origin)};return {user,project,review,config};}
+function provider(a){let tag=null,version=null,initialized=false,setupId=null;const p={accountId:account,uploads:0,setups:0,owner:a.user,missingPages:false,unresolved:false,lostUpload:false,exists:async()=>version!==null,deploy:async(_name,t)=>{p.uploads++;if(p.unresolved)throw Error('unknown');tag=t;version=id();if(p.lostUpload)throw Error('lost upload acknowledgement');},activeVersion:async(_name,t)=>tag===t?version:null,replaceVersion:()=>{version=id();},service:{fetch:async request=>{const verified=await verifyCMSRequest(request,a.config);let data;
+ if(verified.path==='/_emdash/api/setup/status')data={needsSetup:!initialized};
+ else if(verified.path==='/_emdash/api/setup'){assert.deepEqual(JSON.parse(verified.body),{title:'My CMS',tagline:'Our updates',includeContent:false});if(setupId&&setupId!==verified.id)throw Error('unexpected setup ID');if(!initialized)p.setups++;initialized=true;setupId=verified.id;data={setupComplete:true,seedComplete:true};}
+ else if(verified.path==='/_emdash/api/auth/me')data={email:p.owner+'@owners.townhello.invalid',role:50};
+ else if(verified.path==='/_emdash/api/schema/collections')data={items:p.missingPages?[{slug:'posts'}]:[{slug:'posts'},{slug:'pages'}]};
+ else throw Error('unexpected path');return Response.json({success:true,data});}}};return p;}
+try{
+ const a=await fixture(),p=provider(a);p.lostUpload=true;const deployed=await deployCMS(db,a.project,digest,a.config,p);assert.equal(deployed.state,'verified');assert.equal(p.uploads,1);assert.equal(p.setups,1);assert.equal((await db.prepare('SELECT state FROM cms_instances WHERE project_id=?').bind(a.project).first()).state,'provisioning');
+ await deployCMS(db,a.project,digest,a.config,p);assert.equal(p.uploads,1);assert.equal(p.setups,1);
+ await assert.rejects(deployCMS(db,a.project,'c'.repeat(64),a.config,p),/inputs changed/);
+ await assert.rejects(deployCMS(db,a.project,digest,{...a.config,secret:'wrong'.repeat(12)},p),/inputs changed/);
+ await assert.rejects(db.prepare("UPDATE cms_instances SET state='ready',deployed_version_id=? WHERE project_id=?").bind(id(),a.project).run(),/readiness_not_verified/);
+ const platform=id();await connectCMS(db,a.project,platform);await connectCMS(db,a.project,platform);assert.equal((await db.prepare('SELECT state FROM cms_instances WHERE project_id=?').bind(a.project).first()).state,'ready');
+ const env={CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:p.service};assert.deepEqual((await readCMSStatus(db,a.user,a.project,env)).collections,['posts','pages']);await assert.rejects(readCMSStatus(db,id(),a.project,env),e=>e.status===404);
+ p.replaceVersion();await assert.rejects(deployCMS(db,a.project,digest,a.config,p),/version changed/);
+ const b=await fixture(),bad=provider(b);bad.owner=id();await assert.rejects(deployCMS(db,b.project,digest,b.config,bad),/owner could not/);await assert.rejects(connectCMS(db,b.project,id()),/not recorded/);bad.owner=b.user;bad.missingPages=true;await assert.rejects(deployCMS(db,b.project,digest,b.config,bad),/collections are missing/);bad.missingPages=false;await deployCMS(db,b.project,digest,b.config,bad);assert.equal(bad.uploads,1);assert.equal(bad.setups,1);
+ const c=await fixture(),uncertain=provider(c);uncertain.unresolved=true;await assert.rejects(deployCMS(db,c.project,digest,c.config,uncertain),/unresolved/);await assert.rejects(deployCMS(db,c.project,digest,c.config,uncertain),/unresolved/);assert.equal(uncertain.uploads,1);
+ const d=await fixture(),collision=provider(d);collision.exists=async()=>true;await assert.rejects(deployCMS(db,d.project,digest,d.config,collision),/already exists/);assert.equal(collision.uploads,0);
+ assert.notEqual(a.config.secret,b.config.secret);assert.equal(a.config.secret,await deriveCMSSecret(master,a.project,a.user,a.config.origin));
+ console.log('CMS deployment checks passed: immutable artifact/key receipts, lost upload acknowledgment, no blind redeploy, exact setup request, owner/schema verification, readiness gate, platform status isolation and derived project keys.');
+}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

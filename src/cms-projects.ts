@@ -30,10 +30,12 @@ export function describeCMSReview(row:Review){
  if(row.status==='approved')return `CMS setup request approved for project ${row.project_id}. It is queued for isolated resource provisioning; the CMS is not ready or public yet. Use /cms ${row.project_id} to check status.`;
  return `Review EmDash CMS setup\nProject: ${row.project_id}\nTitle: ${row.title}\nTagline: ${row.tagline||'(none)'}\nCreate a private CMS with a dedicated Worker, database, media bucket and session store using existing included Cloudflare allowances. Start with empty content. Only your TownHello identity can administer it. Plugins and public routing are disabled. This queues provisioning; it does not promise an immediately available CMS. Initial beta capacity is two CMS projects per account and five total.\nExpires: ${row.expires_at}\nSend /confirm-cms ${row.id} to approve this exact setup request.`;
 }
-export function cmsChatCommand(db:D1Database,user:string,turn:string,content:string){
- const match=content.match(/^\/(cms|cms-review|setup-cms|confirm-cms)(?:\s+([\s\S]+))?$/i);if(!match)return;
+export type CMSRead=(project:string)=>Promise<{projectId:string;ownerVerified:boolean;collections:string[]}>;
+export function cmsChatCommand(db:D1Database,user:string,turn:string,content:string,readStatus?:CMSRead){
+ const match=content.match(/^\/(cms|cms-review|setup-cms|confirm-cms|check-cms)(?:\s+([\s\S]+))?$/i);if(!match)return;
  return async()=>{try{
   const verb=match[1].toLowerCase(),rest=match[2]?.trim()??'';
+  if(verb==='check-cms'){if(!uuid.test(rest))throw new CMSProjectError(400,'Use /check-cms PROJECT_ID');if(!readStatus)throw new CMSProjectError(503,'CMS checks are not configured');const result=await readStatus(rest);return `Private EmDash initialized for project ${result.projectId}. Your owner identity is verified. Collections: ${result.collections.join(', ')}. Public CMS publishing and content tools are still being integrated.`;}
   if(verb==='cms'){
    if(rest&&!uuid.test(rest))throw new CMSProjectError(400,'Use /cms or /cms PROJECT_ID');
    const rows=await listCMS(db,user,rest||undefined);return rows.length?rows.map(r=>`${r.name}: ${r.state}\nProject: ${r.project_id}\nCMS title: ${r.title}\nStorage resource receipts: ${r.recorded_resources}/3\n${r.state==='ready'?'Private CMS; public publication requires a separate review.':r.state==='uncertain'?'Provisioning needs reconciliation. A creation request will not be repeated automatically.':'CMS deployment and initialization are not verified yet.'}`).join('\n\n'):'No CMS instance requested. Use /setup-cms PROJECT_ID | title | optional tagline to review creating one. EmDash setup and public CMS launch are still being integrated.';
@@ -46,7 +48,7 @@ export function cmsChatCommand(db:D1Database,user:string,turn:string,content:str
   return describeCMSReview(await (verb==='confirm-cms'?confirmCMS(db,user,rest):readCMSReview(db,user,rest)));
  }catch(error){return error instanceof CMSProjectError?error.message:'CMS status could not be saved. Inspect /cms before trying a new setup request.';}};
 }
-export async function cmsAction(db:D1Database,user:string,turn:string,action:Record<string,unknown>){
+export async function cmsAction(db:D1Database,user:string,turn:string,action:Record<string,unknown>,readStatus?:CMSRead){
  let command:string;
  if(action.operation==='setup'){
   if(Object.keys(action).some(k=>!['kind','operation','projectId','title','tagline'].includes(k))||typeof action.projectId!=='string'||typeof action.title!=='string'||typeof action.tagline!=='string')throw new CMSProjectError(400,'Invalid CMS setup proposal');
@@ -54,6 +56,7 @@ export async function cmsAction(db:D1Database,user:string,turn:string,action:Rec
  }
  if(action.operation==='list'&&Object.keys(action).every(k=>['kind','operation','projectId'].includes(k))&&(action.projectId===undefined||typeof action.projectId==='string'))command='/cms'+(action.projectId?' '+action.projectId:'');
  else if(action.operation==='review'&&Object.keys(action).every(k=>['kind','operation','reviewId'].includes(k))&&typeof action.reviewId==='string')command='/cms-review '+action.reviewId;
+ else if(action.operation==='check'&&Object.keys(action).every(k=>['kind','operation','projectId'].includes(k))&&typeof action.projectId==='string')command='/check-cms '+action.projectId;
  else throw new CMSProjectError(400,'Unsupported CMS action; only the user can confirm setup');
- return {reply:await cmsChatCommand(db,user,turn,command)!(),statements:[] as D1PreparedStatement[]};
+ return {reply:await cmsChatCommand(db,user,turn,command,readStatus)!(),statements:[] as D1PreparedStatement[]};
 }

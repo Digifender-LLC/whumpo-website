@@ -1,7 +1,7 @@
 // Local multi-Worker acceptance against the actual built EmDash application.
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-const b=await build({entryPoints:['src/cms-bridge.ts'],bundle:true,format:'esm',platform:'node',write:false});const {signCMSRequest}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+const b=await build({entryPoints:['src/cms-bridge.ts'],bundle:true,format:'esm',platform:'node',write:false});const {signCMSRequest,verifyCMSInitialization}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const config={projectId:'11111111-1111-4111-8111-111111111111',ownerId:'22222222-2222-4222-8222-222222222222',secret:'local-cms-bridge-fixture-'.repeat(3),origin:'https://cms.test'};
 const base='http://localhost:8799',id=()=>crypto.randomUUID();
 async function call(path,body,requestId=id(),identity=config){const request=await signCMSRequest(identity,path,requestId,body);return fetch(base+path,{method:request.method,headers:request.headers,...(body===undefined?{}:{body:await request.text()})});}
@@ -18,4 +18,5 @@ const after=await (await call('/_emdash/api/setup/status')).json();assert.equal(
 assert.equal((await call('/_emdash/api/setup/admin',{email:'attacker@example.test'})).status,403);
 assert.equal((await call('/_emdash/api/plugins')).status,403);
 assert.equal((await fetch(base+'/_emdash/admin/setup')).status,403);
+const service={fetch:async request=>{const u=new URL(request.url);return fetch(base+u.pathname,{method:request.method,headers:request.headers,...(request.method==='POST'?{body:await request.text()}:{}),signal:request.signal});}};assert.deepEqual((await verifyCMSInitialization(service,config)).collections.sort(),['pages','posts']);
 console.log('Actual EmDash bridge passed: unsigned/wrong-owner denial, empty-content setup, replay/conflict handling, pinned owner administration, schema reads, setup closed and other management routes denied.');

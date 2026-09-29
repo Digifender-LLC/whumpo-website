@@ -8,7 +8,7 @@ export function cloudflareClient(accountId,transport=fetch,credentials){
   if(!path.startsWith('/')||path.includes('..'))throw Error('Invalid Cloudflare API path');
   let response,data;
   try{response=await transport('https://api.cloudflare.com/client/v4/accounts/'+accountId+path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+credentials.token,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(20000),redirect:'error'});data=await response.json();}catch{throw Error('Cloudflare request outcome is unavailable');}
-  if(!response.ok||data.success!==true)throw Error('Cloudflare request was not confirmed (HTTP '+response.status+')');return data;
+  if(!response.ok||data.success!==true){const error=Error('Cloudflare request was not confirmed (HTTP '+response.status+')');error.status=response.status;throw error;}return data;
  };
 }
 export function cmsCloudflareProvider(accountId,api){

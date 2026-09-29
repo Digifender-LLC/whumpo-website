@@ -15,3 +15,8 @@ assert.equal((await post('/api/cms/setup-reviews/'+id+'/confirm',{})).status,200
 const result=await read();assert.equal(result.instances.length,1);assert.equal(result.instances[0].state,'queued');assert.equal(result.instances[0].title,body.title);
 assert.equal((await fetch(base+'/api/cms/setup-reviews/'+id,{headers:{cookie:other}})).status,404);
 console.log('CMS setup HTTP passed: authentication, ownership, CSRF, prepare-only review and replay-safe queued confirmation.');
+
+assert.equal((await fetch(base+'/api/cms/'+project+'/status')).status,401);
+assert.equal((await fetch(base+'/api/cms/'+project+'/status',{headers:{cookie:other}})).status,404);
+assert.equal((await fetch(base+'/api/cms/'+project+'/status',{headers:{cookie}})).status,404);
+console.log('CMS status HTTP passed: authentication, foreign-owner denial and uninitialized-instance denial.');
