@@ -121,3 +121,9 @@ A real Muse request changed a synthetic launch-page version from clay to forest 
 The landing page now describes the implemented private draft/edit/publication/restore capabilities, and explicitly leaves photos, forms and custom domains on the roadmap. Guided-mode help no longer describes deployed AI functionality as globally unavailable.
 
 Final focused-edit and landing release: workspace `5c5dca82-3414-461b-a15f-e7a87dec75ab`; public site host `725f683a-1b42-46a7-9550-d9af52ebd5c7`. Live landing readback confirms current capabilities and checkout remains disabled.
+
+## Source export — September 29, 2026
+
+Migration 0011 applied before deployment. Workspace Worker `5c33bf6e-3061-4a73-b487-4f6fe433d862` and public Worker `aceac50b-3542-46ef-b4d6-78cfda80bda3` are deployed. Exports use the pure JavaScript fflate 0.8.3 ZIP writer with no compression and bounded saved artifacts; no new Cloudflare service is required.
+
+TypeScript, source-export integration tests and AI-agent regressions passed. Export tests cover archive filenames/content/checksum, independent Python ZIP CRC validation, deterministic downloads, private-data exclusion, ownership, concurrent chat retry, old versions, deletion and zero model usage. A browser downloaded the ZIP from the chat link. A live signed-passkey test downloaded a valid 4,513-byte archive, verified the HTML checksum, rejected an unauthenticated request, confirmed zero build units and replayed the command without another turn. The temporary live account was removed.
