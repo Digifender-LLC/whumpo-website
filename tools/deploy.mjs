@@ -6,6 +6,7 @@ for (const args of [
  ['tools/build.mjs'],
  [wrangler,'deploy','--config','wrangler.runtime.jsonc'],
  [wrangler,'deploy','--config','wrangler.sites.jsonc'],
+ [wrangler,'deploy','--config','wrangler.apps.jsonc'],
  ['tools/deploy-platform.mjs']
 ]) {
  const run=spawnSync(process.execPath,args,{stdio:'inherit'});

@@ -28,8 +28,9 @@ export function createAppAccess({api,text,sendMessage}){
   function show(state,project){
    const base=`/projects/${project}/application-access`,enabled=state.configuration?.enabled===1;
    const setup=text('div','','dashboard-card');setup.append(text('h3',enabled?'Application authorized':'Application setup'));
-   if(!state.publicAccessReady)setup.append(text('p','Visitor sign-in is not live yet. You can prepare and cancel invitations here, but visitors cannot use them until the application page is connected.'));
+   if(!state.publicAccessReady)setup.append(text('p','No visitor page is published for this application. Ask Whumpo to prepare its page for your review. Invitations become usable after the page is published.'));
    if(!enabled)setup.append(text('p','Ask Whumpo to build and test your application, then review its access to visitor data before inviting anyone.'));
+   if(state.publicAccessReady&&state.url){const link=text('a','Open visitor page');link.href=state.url;link.target='_blank';link.rel='noopener noreferrer';setup.append(link);}setup.append(button('Page settings in Chat',()=>sendMessage(`/app-page ${project}`)));
    setup.append(button('Review application in Chat',()=>sendMessage(`/application ${project}`)));content.append(setup);
    const invites=text('div','','dashboard-card');invites.append(text('h3','Invitations'),text('p','Each invitation works once and expires after 24 hours. Share it privately with the intended visitor. Never paste invitation codes into Chat.'));
    const secret=text('div','','access-secret');secret.hidden=true;

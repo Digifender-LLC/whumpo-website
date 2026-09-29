@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import {readFile,writeFile} from 'node:fs/promises';
+import {authenticator} from './app-authenticator.mjs';
+const origin=process.env.WHUMPO_APP_TEST_URL??'http://localhost:8787';
+assert.equal(origin,'http://localhost:8787','Use the isolated local app host and synthetic fixtures');
+const fixture=JSON.parse(await readFile('.secrets/app-page-fixture.json','utf8')),base=origin+'/apps/'+fixture.project;
+let requestNumber=0;
+function client(){const jar=new Map();return {jar,async request(path,body,settings={}){const response=await fetch(base+path,{method:body===undefined?'GET':'POST',headers:{origin:settings.origin??origin,'content-type':'application/json','cf-connecting-ip':`192.0.2.${++requestNumber}`,cookie:settings.cookie??[...jar].map(([k,v])=>k+'='+v).join('; ')},body:body===undefined?undefined:JSON.stringify(body)});for(const cookie of response.headers.getSetCookie()){const pair=cookie.split(';')[0],i=pair.indexOf('=');jar.set(pair.slice(0,i),pair.slice(i+1));}return {status:response.status,headers:response.headers,data:await response.json()};}};}
+const first=client(),second=client(),key=authenticator(origin),otherKey=authenticator(origin);
+const page=await fetch(base+'/');assert.equal(page.status,200);assert.match(page.headers.get('content-security-policy'),/script-src 'self'/);assert.ok((await page.text()).includes('Sign in with a passkey'));
+assert.equal((await first.request('/data')).status,401);
+assert.equal((await first.request('/auth/login/options',{}, {origin:'https://wrong.example'})).status,403);
+async function register(client,key,inviteCode){const options=await client.request('/auth/signup/options',{inviteCode});assert.equal(options.status,200);const response=await client.request('/auth/signup/verify',{credential:key.registration(options.data.options)});assert.equal(response.status,200,JSON.stringify(response.data));assert.equal('session' in response.data,false);return response.data;}
+const registration=await register(first,key,fixture.invites[0]);await register(second,otherKey,fixture.invites[1]);
+assert.deepEqual((await first.request('/data')).data,{revision:0,state:{}});
+const operation=crypto.randomUUID(),input={id:operation,revision:0,pageId:fixture.pageId,input:{note:'A private local test note'}};
+const transition=await first.request('/data',input);assert.equal(transition.status,200,JSON.stringify(transition.data));assert.equal(transition.data.state,'complete');assert.equal(transition.data.result.ok,true);assert.equal(transition.data.result.value,'Saved');
+assert.deepEqual((await first.request('/data')).data,{revision:1,state:input.input});
+assert.deepEqual((await second.request('/data')).data,{revision:0,state:{}});
+assert.equal((await second.request('/receipts/'+operation)).status,404);
+assert.deepEqual((await first.request('/data',input)).data,transition.data);
+assert.equal((await first.request('/data',{...input,id:crypto.randomUUID(),pageId:crypto.randomUUID()})).status,409);
+assert.equal((await first.request('/data',{...input,id:crypto.randomUUID(),input:{wrong:'field'}})).status,400);
+assert.equal((await first.request('/auth/logout',{})).status,200);assert.equal((await first.request('/data')).status,401);
+let options=await first.request('/auth/login/options',{});const login=await first.request('/auth/login/verify',{credential:key.assertion(options.data.options,1)});assert.equal(login.status,200,JSON.stringify(login.data));
+const oldCookie=[...first.jar].map(([k,v])=>k+'='+v).join('; '),recovery=await first.request('/auth/recover',{code:registration.recoveryCode,nonce:'5'.repeat(64)});assert.equal(recovery.status,200);assert.notEqual(recovery.data.recoveryCode,registration.recoveryCode);
+assert.equal((await first.request('/data',undefined,{cookie:oldCookie})).status,401);
+const replacement=authenticator(origin);options=await first.request('/auth/add/options',{});assert.equal(options.status,200);assert.equal((await first.request('/auth/add/verify',{credential:replacement.registration(options.data.options)})).status,200);
+assert.deepEqual((await first.request('/data')).data.state,input.input);
+await writeFile('.secrets/app-page-browser-cookie', [...first.jar].map(([k,v])=>k+'='+v).join('; '),{mode:0o600});
+console.log('Application HTTP acceptance passed: real workerd and QuickJS, signed passkeys, invite enrollment, two isolated visitors, private receipts, exact retry, field/page guards, logout/login, recovery, replacement passkey and preserved data.');

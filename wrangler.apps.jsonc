@@ -1,0 +1,16 @@
+{
+ "$schema":"./node_modules/wrangler/config-schema.json",
+ "name":"whumpo-apps",
+ "account_id":"f94d28e88a63fb6f34c3ecbc05aa3faf",
+ "main":"src/app-host.ts",
+ "compatibility_date":"2026-09-29",
+ "workers_dev":false,
+ "preview_urls":false,
+ "routes":[{"pattern":"apps.digifender.com","custom_domain":true}],
+ "vars":{"ENVIRONMENT":"test"},
+ "assets":{"directory":"./public-app","binding":"ASSETS","run_worker_first":true},
+ "d1_databases":[{"binding":"DB","database_name":"whumpo-control","database_id":"680f98b9-a769-467f-8b6f-06c10195c263","migrations_dir":"./migrations"}],
+ "services":[{"binding":"BACKEND_RUNTIME","service":"whumpo-runtime"}],
+ "ratelimits":[{"name":"AUTH_LIMITER","namespace_id":"1001003","simple":{"limit":10,"period":60}},{"name":"API_LIMITER","namespace_id":"1001004","simple":{"limit":120,"period":60}}],
+ "observability":{"enabled":false}
+}

@@ -1,3 +1,4 @@
+import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage} from './app-pages';
 import {readProfile,updateProfile,profilePhoto,updateProfilePhoto} from './profile';
 import {readAppAccess,cancelAppInvitation} from './app-access';
 import {createAppInvitation,revokeAppVisitor} from './app-auth';
@@ -278,6 +279,13 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if(method==='GET'&&!stateReviewRoute[2])return json(await readBackendReview(env.DB,user.id,stateReviewRoute[1]));
     if(method==='POST'&&stateReviewRoute[2])return json(await confirmBackendState(env.DB,user.id,stateReviewRoute[1]));
   }
+  const appPageRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/application-page$/);
+  if(appPageRoute){
+    if(method==='GET')return json(await readAppPage(env.DB,user.id,appPageRoute[1]));
+    if(method==='POST'){const data=await body(request);if(typeof data?.id!=='string'||!Object.hasOwn(data,'form'))return error(400,'Provide a review ID and form, or null to take the page offline');return json(await prepareAppPage(env.DB,user.id,appPageRoute[1],data.id,data.form));}
+  }
+  const appPageReview=pathname.match(/^\/api\/application-page-reviews\/([0-9a-f-]{36})(\/confirm)?$/);
+  if(appPageReview){if(method==='GET'&&!appPageReview[2])return json(await readAppPageReview(env.DB,user.id,appPageReview[1]));if(method==='POST'&&appPageReview[2])return json(await confirmAppPage(env.DB,user.id,appPageReview[1]));}
   const accessRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/application-access(?:\/(invitations|visitors)(?:\/([0-9a-f-]{36}|[0-9a-f]{64})\/(cancel|revoke))?)?$/);
   if(accessRoute){
     const [,project,kind,id,action]=accessRoute;
