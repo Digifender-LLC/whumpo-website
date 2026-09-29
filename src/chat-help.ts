@@ -79,7 +79,7 @@ Ask the agent to create a pure JavaScript function for an existing project.
 /backends PROJECT_ID lists private drafts; /backend VERSION_ID reads source.
 /test-backend VERSION_ID JSON runs a non-sensitive example; /backend-result RECEIPT_ID reads its saved result.
 
-/application PROJECT_ID reads persistent app configuration. /enable-application VERSION_ID TRANSITION_TEST_ID prepares authority to use per-visitor data; /application-review REVIEW_ID reads it; /confirm-application REVIEW_ID applies it. /disable-application PROJECT_ID reviews disabling and revoking visitor sessions. Visitor sign-in/pages are not connected yet.
+/application PROJECT_ID reads persistent app configuration. /enable-application VERSION_ID TRANSITION_TEST_ID prepares authority to use per-visitor data; /application-review REVIEW_ID reads it; /confirm-application REVIEW_ID applies it. /disable-application PROJECT_ID reviews disabling and revoking visitor sessions. /visitor-access opens private invitations and visitor access controls in the workspace; optionally add PROJECT_ID. Invitation codes stay outside chat. Visitor sign-in/pages are not connected yet.
 /backend-publication PROJECT_ID reads public endpoint status.
 /publish-backend VERSION_ID SUCCESSFUL_TEST_RECEIPT_ID reviews publication; /unpublish-backend PROJECT_ID reviews taking it offline.
 /backend-publication-review REVIEW_ID reads the exact code/review; /confirm-backend-publication REVIEW_ID applies it.

@@ -252,6 +252,155 @@
     }, render, appearance };
   }
 
+  // web/app-access.js
+  function createAppAccess({ api: api2, text: text2, sendMessage: sendMessage2 }) {
+    let selected = "";
+    function button(label, run, style = "secondary") {
+      const b = text2("button", label, style);
+      b.type = "button";
+      b.onclick = run;
+      return b;
+    }
+    function render(container, projects, back, projectId) {
+      if (projectId) selected = projectId;
+      if (!projects.some((p) => p.id === selected)) selected = projects[0]?.id ?? "";
+      const root = text2("section", "", "settings-section"), heading = text2("div", "", "control-grid");
+      heading.append(button("Back to dashboard", back));
+      root.append(heading, text2("p", "Visitor accounts are separate from your Whumpo account."));
+      container.append(root);
+      if (!projects.length) {
+        root.append(text2("p", "Create a project in Chat to begin."));
+        return;
+      }
+      const label = text2("label", "Project"), select = document.createElement("select");
+      for (const project of projects) {
+        const option = text2("option", project.name);
+        option.value = project.id;
+        select.append(option);
+      }
+      select.value = selected;
+      label.append(select);
+      root.append(label);
+      const status = text2("p", "", "form-status");
+      status.setAttribute("role", "status");
+      const content = text2("div", "", "stack");
+      root.append(status, content);
+      let sequence = 0;
+      async function load() {
+        const request = ++sequence, project = select.value;
+        selected = project;
+        status.textContent = "Loading access\u2026";
+        content.replaceChildren();
+        try {
+          const state = await api2(`/projects/${project}/application-access`);
+          if (!root.isConnected || request !== sequence) return;
+          status.textContent = "";
+          show(state, project);
+        } catch (error) {
+          if (root.isConnected && request === sequence) status.textContent = error.message;
+        }
+      }
+      async function change(path, b, done) {
+        b.disabled = true;
+        select.disabled = true;
+        status.textContent = "";
+        try {
+          const result = await api2(path, { method: "POST", body: "{}" });
+          if (root.isConnected) await done(result);
+        } catch (error) {
+          if (root.isConnected) status.textContent = error.message;
+        } finally {
+          b.disabled = false;
+          select.disabled = false;
+        }
+      }
+      function confirmAction(parent, description, actionLabel, path) {
+        const review = text2("div", "", "access-review");
+        review.setAttribute("role", "group");
+        review.setAttribute("aria-label", "Confirm access change");
+        review.append(text2("p", description));
+        const actions = text2("div", "", "control-grid");
+        const confirm2 = button(actionLabel, () => change(path, confirm2, load));
+        actions.append(confirm2, button("Keep access", () => review.remove()));
+        review.append(actions);
+        parent.querySelector(".access-review")?.remove();
+        parent.append(review);
+        confirm2.focus();
+      }
+      function show(state, project) {
+        const base = `/projects/${project}/application-access`, enabled = state.configuration?.enabled === 1;
+        const setup = text2("div", "", "dashboard-card");
+        setup.append(text2("h3", enabled ? "Application authorized" : "Application setup"));
+        if (!state.publicAccessReady) setup.append(text2("p", "Visitor sign-in is not live yet. You can prepare and cancel invitations here, but visitors cannot use them until the application page is connected."));
+        if (!enabled) setup.append(text2("p", "Ask Whumpo to build and test your application, then review its access to visitor data before inviting anyone."));
+        setup.append(button("Review application in Chat", () => sendMessage2(`/application ${project}`)));
+        content.append(setup);
+        const invites = text2("div", "", "dashboard-card");
+        invites.append(text2("h3", "Invitations"), text2("p", "Each invitation works once and expires after 24 hours. Share it privately with the intended visitor. Never paste invitation codes into Chat."));
+        const secret = text2("div", "", "access-secret");
+        secret.hidden = true;
+        const create = button("Create invitation", () => change(base + "/invitations", create, async (result) => {
+          create.hidden = true;
+          secret.replaceChildren(text2("h4", "Save this invitation"), text2("p", "This code is shown only now. If you lose it, cancel the invitation and create another."));
+          const code = document.createElement("textarea");
+          code.readOnly = true;
+          code.rows = 3;
+          code.value = result.code;
+          code.autocomplete = "off";
+          code.spellcheck = false;
+          code.setAttribute("aria-label", "Private application invitation code");
+          secret.append(code);
+          const copied = text2("p", "", "form-status");
+          copied.setAttribute("role", "status");
+          const actions = text2("div", "", "control-grid");
+          actions.append(button("Copy invitation", async () => {
+            try {
+              await navigator.clipboard.writeText(code.value);
+              copied.textContent = "Invitation copied. Share it privately.";
+            } catch {
+              code.focus();
+              code.select();
+              copied.textContent = "Select and copy this code manually.";
+            }
+          }), button("I\u2019ve saved it", () => {
+            code.value = "";
+            secret.replaceChildren();
+            secret.hidden = true;
+            load();
+          }));
+          secret.append(actions, copied);
+          secret.hidden = false;
+          code.focus();
+        }), "primary");
+        create.disabled = !enabled;
+        invites.append(create, secret);
+        if (!state.invitations.length) invites.append(text2("p", "No invitations have been created.", "muted"));
+        for (const invite of state.invitations) {
+          const row = text2("div", "", "access-row");
+          row.append(text2("strong", `Invitation ${invite.id.slice(0, 8)}`), text2("p", `${invite.status} \xB7 Expires ${new Date(invite.expires_at).toLocaleString()}`));
+          if (["ready", "inactive"].includes(invite.status)) row.append(button("Cancel invitation", () => confirmAction(row, "Cancel this unused invitation? Its code will stop working.", "Cancel invitation", `${base}/invitations/${invite.id}/cancel`)));
+          invites.append(row);
+        }
+        content.append(invites);
+        const visitors = text2("div", "", "dashboard-card");
+        visitors.append(text2("h3", "Visitors"));
+        if (!state.visitors.length) visitors.append(text2("p", "No visitors have joined this application.", "muted"));
+        for (const visitor of state.visitors) {
+          const row = text2("div", "", "access-row");
+          row.append(text2("strong", `Visitor ${visitor.id.slice(0, 8)}`), text2("p", visitor.revoked ? "Access revoked" : `${visitor.passkeys} passkey${visitor.passkeys === 1 ? "" : "s"} \xB7 ${visitor.sessions} active session${visitor.sessions === 1 ? "" : "s"}`), text2("small", "Joined " + new Date(visitor.created_at).toLocaleString()));
+          if (!visitor.revoked) row.append(button("Revoke access", () => confirmAction(row, `Permanently revoke access for visitor ${visitor.id.slice(0, 8)}? Their passkeys, recovery code and sessions will stop working. Their saved data is retained. This cannot be undone.`, "Revoke this visitor", `${base}/visitors/${visitor.id}/revoke`)));
+          visitors.append(row);
+        }
+        visitors.append(text2("p", "Private visitor data and credentials are not shown here. Revocation does not delete retained data.", "muted"));
+        content.append(visitors);
+        content.append(button("Refresh access", load));
+      }
+      select.onchange = load;
+      load();
+    }
+    return { render };
+  }
+
   // src/plans.ts
   var plans = [
     { id: "explore", name: "Explore", monthlyCents: 0, annualCents: 0, publishedSites: 1, monthlyUnits: 50, targetProjects: 1, targetStorageGB: 0, targetDomains: 0, annualDomains: 0 },
@@ -285,6 +434,12 @@
       $2("#workspace-stage").scrollTop = 0;
     }
     const profile = createProfile({ api: api2, text: text2, showMessage: showMessage2, openSecurity: controls.security });
+    const access = createAppAccess({ api: api2, text: text2, sendMessage: sendMessage2 });
+    let accessProject = "";
+    function openAccess(project = "") {
+      accessProject = project;
+      choose("visitors");
+    }
     function askForPage() {
       choose("chat");
       const input = $2("#chat-input");
@@ -311,7 +466,7 @@
         if (!projects.length) a.append(text2("p", "Your next idea starts here. Tell Whumpo what you\u2019d like to make."));
         for (const p of projects) {
           const row = text2("div", "", "dashboard-project");
-          row.append(text2("strong", p.name), text2("small", p.status), command("Work on this", `/project ${p.id}`));
+          row.append(text2("strong", p.name), text2("small", p.status), command("Work on this", `/project ${p.id}`), button("Visitor access", () => openAccess(p.id)));
           a.append(row);
         }
         a.append(command("Start an idea", "/new"));
@@ -361,19 +516,19 @@
       content.hidden = false;
       content.replaceChildren();
       const tab = data.layout.tabs.find((t) => t.id === active);
-      if (!["dashboard", "chat", "settings", "profile"].includes(active) && !tab) active = "chat";
+      if (!["dashboard", "chat", "settings", "profile", "visitors"].includes(active) && !tab) active = "chat";
       document.querySelectorAll("[data-view]").forEach((b) => {
-        if (b.dataset.view === active) b.setAttribute("aria-current", "page");
+        if (b.dataset.view === active || active === "visitors" && b.dataset.view === "dashboard") b.setAttribute("aria-current", "page");
         else b.removeAttribute("aria-current");
       });
       $2("#workspace-stage").hidden = active === "chat";
       $2(".chat-sidebar").hidden = active !== "chat";
-      content.className = ["settings", "profile"].includes(active) ? "settings-content" : "";
-      $2("#view-title").textContent = tab?.label || ({ settings: "Settings", profile: "Your profile", dashboard: "Dashboard" }[active] ?? "");
+      content.className = ["settings", "profile", "visitors"].includes(active) ? "settings-content" : "";
+      $2("#view-title").textContent = tab?.label || ({ settings: "Settings", profile: "Your profile", dashboard: "Dashboard", visitors: "Visitor access" }[active] ?? "");
       $2("#workspace-stage").setAttribute("aria-label", $2("#view-title").textContent || "Workspace");
-      $2("#view-eyebrow").textContent = tab ? "YOUR CUSTOM PAGE" : active === "dashboard" ? "YOUR WORKSPACE" : "MAKE YOURSELF AT HOME";
-      $2("#view-description").textContent = tab ? "The details that matter to your work." : { settings: "Make Whumpo work the way you do.", profile: "A little about you. A better way to work together.", dashboard: "A clear view of what you\u2019re building." }[active] ?? "";
-      $2("#customize-dashboard").hidden = ["settings", "profile", "chat"].includes(active);
+      $2("#view-eyebrow").textContent = tab ? "YOUR CUSTOM PAGE" : active === "dashboard" ? "YOUR WORKSPACE" : active === "visitors" ? "PROJECT ACCESS" : "MAKE YOURSELF AT HOME";
+      $2("#view-description").textContent = tab ? "The details that matter to your work." : { settings: "Make Whumpo work the way you do.", profile: "A little about you. A better way to work together.", dashboard: "A clear view of what you\u2019re building.", visitors: "Invite people and manage their access." }[active] ?? "";
+      $2("#customize-dashboard").hidden = ["settings", "profile", "chat", "visitors"].includes(active);
       if (active === "chat") return;
       if (active === "profile") {
         profile.render(content);
@@ -383,12 +538,17 @@
         renderSettings();
         return;
       }
+      if (active === "visitors") {
+        access.render(content, data.projects, () => choose("dashboard"), accessProject);
+        return;
+      }
       const grid = text2("div", "", "dashboard-grid");
       for (const kind of tab?.widgets ?? data.layout.widgets) grid.append(renderCard(kind, tab?.projectId));
       content.append(grid);
       if (!tab) {
         const tools = card("Project controls"), primary = text2("div", "", "control-grid");
         for (const [id, label] of [["files-open", "Photos"], ["inbox-open", "Contact inbox"], ["domains-open", "Domains"]]) primary.append(actionControl(id, label));
+        primary.append(button("Visitor access", () => openAccess()));
         tools.append(primary);
         const detail = document.createElement("details");
         detail.append(text2("summary", "Publishing & maintenance"));
@@ -502,7 +662,7 @@
       const sequence = ++loadSequence;
       const next = await api2("/workspace/dashboard");
       if (sequence !== loadSequence) return;
-      if ($2("#layout-dialog").open || ["settings", "profile"].includes(active) || document.querySelector(".embedded-dialog[open]")) return;
+      if ($2("#layout-dialog").open || ["settings", "profile", "visitors"].includes(active) || document.querySelector(".embedded-dialog[open]")) return;
       data = next;
       navigation();
       render();
@@ -593,7 +753,7 @@
         if (!document.querySelector(".embedded-dialog[open]")) render();
       });
     }
-    return { showChat() {
+    return { openAccess, showChat() {
       choose("chat");
     }, async start() {
       await profile.load();
@@ -1310,6 +1470,11 @@
   }
   async function sendMessage(content) {
     if (sending || !content.trim()) return;
+    const visitorAccess = content.trim().toLowerCase().match(/^\/visitor-access(?:\s+([0-9a-f-]{36}))?$/);
+    if (visitorAccess || ["visitor access", "manage visitor access"].includes(content.trim().toLowerCase())) {
+      workspace.openAccess(visitorAccess?.[1] ?? "");
+      return;
+    }
     if (["/inbox", "show inbox", "my inbox"].includes(content.trim().toLowerCase())) {
       await openInbox();
       return;

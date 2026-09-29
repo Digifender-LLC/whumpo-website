@@ -1,4 +1,5 @@
 import { createProfile } from './profile.js';
+import { createAppAccess } from './app-access.js';
 import { publicPlans } from '../src/plans.ts';
 const labels={projects:'Projects',usage:'AI assistance',storage:'File storage',activity:'Recent activity',traffic:'Visitor traffic',cms:'Publishing desk',performance:'Processing performance'};
 export function createDashboard({api,text,sendMessage,showMessage,controls}){
@@ -7,6 +8,8 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
  function button(label,run){const b=text('button',label);b.type='button';b.onclick=()=>Promise.resolve().then(run).catch(e=>showMessage(e.message));return b;}
  function choose(view){active=view;render();$('#workspace-stage').scrollTop=0;}
  const profile=createProfile({api,text,showMessage,openSecurity:controls.security});
+ const access=createAppAccess({api,text,sendMessage});let accessProject='';
+ function openAccess(project=''){accessProject=project;choose('visitors');}
  function askForPage(){choose('chat');const input=$('#chat-input');if(!input.value.trim())input.value='Help me build a custom page for my workflow.';input.focus();}
  function card(title){const a=text('article','','dashboard-card');a.append(text('h2',title));return a;}
  function command(label,message){return button(label,()=>sendMessage(message));}
@@ -16,7 +19,7 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
   const a=card(labels[kind]),projects=data.projects.filter(p=>!projectId||p.id===projectId);
   if(kind==='projects'){
    if(!projects.length)a.append(text('p','Your next idea starts here. Tell Whumpo what you’d like to make.'));
-   for(const p of projects){const row=text('div','','dashboard-project');row.append(text('strong',p.name),text('small',p.status),command('Work on this',`/project ${p.id}`));a.append(row);}
+   for(const p of projects){const row=text('div','','dashboard-project');row.append(text('strong',p.name),text('small',p.status),command('Work on this',`/project ${p.id}`),button('Visitor access',()=>openAccess(p.id)));a.append(row);}
    a.append(command('Start an idea','/new'));
   }
   if(kind==='usage'){
@@ -42,22 +45,24 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
  function closePanels(){document.querySelectorAll('.embedded-dialog[open]').forEach(d=>d.close());}
  function render(){
   if(!data)return;closePanels();content.hidden=false;content.replaceChildren();
-  const tab=data.layout.tabs.find(t=>t.id===active);if(!['dashboard','chat','settings','profile'].includes(active)&&!tab)active='chat';
-  document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+  const tab=data.layout.tabs.find(t=>t.id===active);if(!['dashboard','chat','settings','profile','visitors'].includes(active)&&!tab)active='chat';
+  document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===active||active==='visitors'&&b.dataset.view==='dashboard')b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   $('#workspace-stage').hidden=active==='chat';$('.chat-sidebar').hidden=active!=='chat';
-  content.className=['settings','profile'].includes(active)?'settings-content':'';
-  $('#view-title').textContent=tab?.label||({settings:'Settings',profile:'Your profile',dashboard:'Dashboard'}[active]??'');
+  content.className=['settings','profile','visitors'].includes(active)?'settings-content':'';
+  $('#view-title').textContent=tab?.label||({settings:'Settings',profile:'Your profile',dashboard:'Dashboard',visitors:'Visitor access'}[active]??'');
   $('#workspace-stage').setAttribute('aria-label',$('#view-title').textContent||'Workspace');
-  $('#view-eyebrow').textContent=tab?'YOUR CUSTOM PAGE':active==='dashboard'?'YOUR WORKSPACE':'MAKE YOURSELF AT HOME';
-  $('#view-description').textContent=tab?'The details that matter to your work.':({settings:'Make Whumpo work the way you do.',profile:'A little about you. A better way to work together.',dashboard:'A clear view of what you’re building.'}[active]??'');
-  $('#customize-dashboard').hidden=['settings','profile','chat'].includes(active);
+  $('#view-eyebrow').textContent=tab?'YOUR CUSTOM PAGE':active==='dashboard'?'YOUR WORKSPACE':active==='visitors'?'PROJECT ACCESS':'MAKE YOURSELF AT HOME';
+  $('#view-description').textContent=tab?'The details that matter to your work.':({settings:'Make Whumpo work the way you do.',profile:'A little about you. A better way to work together.',dashboard:'A clear view of what you’re building.',visitors:'Invite people and manage their access.'}[active]??'');
+  $('#customize-dashboard').hidden=['settings','profile','chat','visitors'].includes(active);
   if(active==='chat')return;
   if(active==='profile'){profile.render(content);return;}
   if(active==='settings'){renderSettings();return;}
+  if(active==='visitors'){access.render(content,data.projects,()=>choose('dashboard'),accessProject);return;}
   const grid=text('div','','dashboard-grid');for(const kind of tab?.widgets??data.layout.widgets)grid.append(renderCard(kind,tab?.projectId));content.append(grid);
   if(!tab){
    const tools=card('Project controls'),primary=text('div','','control-grid');
    for(const [id,label]of [['files-open','Photos'],['inbox-open','Contact inbox'],['domains-open','Domains']])primary.append(actionControl(id,label));
+   primary.append(button('Visitor access',()=>openAccess()));
    tools.append(primary);const detail=document.createElement('details');detail.append(text('summary','Publishing & maintenance'));const group=text('div','','control-grid');
    for(const [label,message]of [['Website health','/health'],['Directories','/directory'],['Saved versions','/versions'],['Export website','/export'],['Publish a version','/publish'],['Unpublish a site','/unpublish']])group.append(command(label,message));detail.append(group);tools.append(detail);content.append(tools);
   }
@@ -84,7 +89,7 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
  function navigation(){
   const nav=$('#workflow-navigation');nav.replaceChildren();if(!data.layout.tabs.length){const cta=text('div','','workflow-empty');cta.append(text('p','A page made for your work.'),text('span','Ask Whumpo to build a custom page around your workflow.'),button('Ask Whumpo',askForPage));nav.append(cta);}for(const tab of data.layout.tabs){const b=button(tab.label,()=>choose(tab.id));b.dataset.view=tab.id;nav.append(b);}
  }
- async function refresh(){const sequence=++loadSequence;const next=await api('/workspace/dashboard');if(sequence!==loadSequence)return;if($('#layout-dialog').open||['settings','profile'].includes(active)||document.querySelector('.embedded-dialog[open]'))return;data=next;navigation();render();}
+ async function refresh(){const sequence=++loadSequence;const next=await api('/workspace/dashboard');if(sequence!==loadSequence)return;if($('#layout-dialog').open||['settings','profile','visitors'].includes(active)||document.querySelector('.embedded-dialog[open]'))return;data=next;navigation();render();}
  function edit(id){
   if(!data)return;editing=id;const tab=data.layout.tabs.find(t=>t.id===id);$('#layout-label').value=tab?.label??'';$('#layout-label').parentElement.hidden=id==='dashboard';$('#layout-project').parentElement.hidden=id==='dashboard';$('#layout-label').required=id!=='dashboard';
   const select=$('#layout-project');select.replaceChildren();const all=text('option','All projects');all.value='';select.append(all);for(const p of data.projects){const o=text('option',p.name);o.value=p.id;select.append(o);}select.value=tab?.projectId??'';
@@ -102,5 +107,5 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
   d.showModal=()=>{active=parent;render();content.hidden=true;$('#view-title').textContent=d.querySelector('h2').textContent;$('#view-description').textContent='';$('#customize-dashboard').hidden=true;$('#workspace-stage').scrollTop=0;d.show();};
   d.addEventListener('close',()=>{if(!document.querySelector('.embedded-dialog[open]'))render();});
  }
- return {showChat(){choose('chat');},async start(){await profile.load();$('#primary-navigation').hidden=false;$('#sidebar-account').hidden=false;await refresh();},refresh};
+ return {openAccess,showChat(){choose('chat');},async start(){await profile.load();$('#primary-navigation').hidden=false;$('#sidebar-account').hidden=false;await refresh();},refresh};
 }
