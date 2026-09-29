@@ -65,6 +65,7 @@ function renderChat(data) {
     if (typeof exportVersion === 'string' && /^[0-9a-f-]{36}$/.test(exportVersion)) {
       const download=text('a','Download website source');download.href=`/api/site-versions/${exportVersion}/export`;download.download=`whumpo-site-${exportVersion}.zip`;answer.append(download);
     }
+    if(typeof turn.contact_confirmation_id==='string'&&/^[0-9a-f-]{36}$/.test(turn.contact_confirmation_id)){const button=text('button','Confirm contact form settings');button.onclick=()=>sendMessage(`/confirm-contact ${turn.contact_confirmation_id}`);answer.append(button);}
     if(typeof turn.version_confirmation_id==='string'&&/^[0-9a-f-]{36}$/.test(turn.version_confirmation_id)){const button=text('button','Confirm version deletion');button.onclick=()=>sendMessage(`/confirm-version-delete ${turn.version_confirmation_id}`);answer.append(button);}
     if (typeof turn.photo_confirmation_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.photo_confirmation_id)) {
       const button=text('button','Confirm photo deletion');button.onclick=()=>sendMessage(`/confirm-photo-delete ${turn.photo_confirmation_id}`);answer.append(button);
@@ -99,6 +100,7 @@ async function loadDashboard(user) {
 }
 async function sendMessage(content) {
   if (sending || !content.trim()) return;
+  if (["/inbox", "show inbox", "my inbox"].includes(content.trim().toLowerCase())) { await openInbox(); return; }
   if (["/connections", "show connections", "connect github", "disconnect github", "connect cloudflare", "disconnect cloudflare", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) { await openConnections(); return; }
   if (["/domains", "show domains", "connect my domain", "disconnect my domain", "check domain hosting"].includes(content.trim().toLowerCase())) { await openDomains(); return; }
   if (["/files", "show files", "show photos", "upload a photo", "delete a photo", "remove a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
@@ -430,3 +432,29 @@ $('#backup-review').onclick=async()=>{
 $('#cloudflare-connect').onclick=async()=>{const button=$('#cloudflare-connect');button.disabled=true;try{const result=await api('/connections/cloudflare/start',{method:'POST',body:'{}'}),url=new URL(result.url);if(url.origin!=='https://dash.cloudflare.com'||url.pathname!=='/oauth2/auth')throw Error('Unexpected authorization destination');location.assign(url.href);}catch(error){$('#connections-status').textContent=error.message;button.disabled=false;}};
 $('#cloudflare-disconnect').onclick=async()=>{const button=$('#cloudflare-disconnect');button.disabled=true;try{await api('/connections/cloudflare/disconnect',{method:'POST',body:'{}'});await openConnections();}catch(error){$('#connections-status').textContent=error.message;}finally{button.disabled=false;}};
 $('#cloudflare-more').onclick=async()=>{const button=$('#cloudflare-more');button.disabled=true;cloudflarePage++;try{await loadCloudflareZones();}catch(error){cloudflarePage--;$('#connections-status').textContent=error.message;}finally{button.disabled=false;}};
+
+// Visitor content is rendered with textContent and never persisted in the agent transcript.
+let inboxEnabled=false;
+let inboxRead=0;
+async function refreshInbox(){
+ const read=++inboxRead,id=$('#inbox-project').value,list=$('#inbox-list');list.replaceChildren();
+ $('#contact-review').disabled=!id;if(!id){$('#inbox-status').textContent='Create a project first.';return;}
+ const result=await api(`/projects/${id}/inbox`);
+ if($('#inbox-project').value!==id||read!==inboxRead)return;
+ inboxEnabled=result.enabled;
+ $('#inbox-status').textContent=(result.enabled?'Contact form is enabled for the current live version.':'Contact form is disabled. Publish a version, then review enabling it.')+` ${result.messages.length} message(s).`;
+ $('#contact-review').textContent=result.enabled?'Review disabling form':'Review enabling form';
+ for(const m of result.messages){
+  const card=text('article','');card.className='chat-bubble assistant';
+  card.append(text('h3',m.name),text('p',m.email),text('small',new Date(m.created_at).toLocaleString()),text('p',m.message));
+  const remove=text('button','Delete message');remove.type='button';remove.onclick=async()=>{if(!window.confirm('Permanently delete this message from your inbox?'))return;remove.disabled=true;try{await api(`/contact-messages/${m.id}`,{method:'DELETE'});await refreshInbox();}catch(error){showMessage(error.message);remove.disabled=false;}};card.append(remove);list.append(card);
+ }
+ if(!result.messages.length)list.append(text('p','No messages yet.'));
+}
+async function openInbox(){try{const {projects}=await api('/projects'),select=$('#inbox-project'),previous=select.value;select.replaceChildren();for(const p of projects){const option=text('option',p.name);option.value=p.id;select.append(option);}if(projects.some(p=>p.id===previous))select.value=previous;await refreshInbox();$('#inbox-dialog').showModal();}catch(error){showMessage(error.message);}}
+$('#inbox-open').onclick=openInbox;$('#inbox-close').onclick=()=>{$('#inbox-list').replaceChildren();$('#inbox-dialog').close();};
+$('#inbox-project').onchange=()=>refreshInbox().catch(error=>showMessage(error.message));
+$('#inbox-refresh').onclick=()=>refreshInbox().catch(error=>showMessage(error.message));
+$('#contact-review').onclick=()=>{const id=$('#inbox-project').value;if(!id)return;$('#inbox-dialog').close();sendMessage(`${inboxEnabled?'/contact-off':'/contact-on'} ${id}`);};
+
+$('#inbox-dialog').addEventListener('close',()=>{inboxRead++;$('#inbox-list').replaceChildren();});

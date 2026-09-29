@@ -22,10 +22,12 @@ export default {
     return new Response(request.method==='HEAD'?null:object.body,{headers:{...headers,'content-type':'image/jpeg','content-length':String(photo.size),'content-disposition':'inline; filename="photo.jpg"','cross-origin-resource-policy':'cross-origin'}});
    }
    const match=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/?$/);if(!match)return new Response('Site not found',{status:404,headers});
-   const site=await env.DB.prepare('SELECT v.html,v.component_id FROM publications s JOIN site_versions v ON v.id=s.version_id AND v.project_id=s.project_id WHERE s.project_id=?').bind(match[1]).first<{html:string;component_id:string}>();
+   const site=await env.DB.prepare('SELECT v.html,v.component_id,EXISTS(SELECT 1 FROM contact_settings c WHERE c.project_id=s.project_id AND c.enabled=1 AND c.publication_revision=s.revision) AS contact_enabled FROM publications s JOIN site_versions v ON v.id=s.version_id AND v.project_id=s.project_id WHERE s.project_id=?').bind(match[1]).first<{html:string;component_id:string;contact_enabled:number}>();
    if(!site)return new Response('Site not found',{status:404,headers});
    if(site.component_id==='photo-page@1'&&!url.pathname.endsWith('/'))return new Response(null,{status:308,headers:{...headers,location:url.pathname+'/'}});
-   return new Response(request.method==='HEAD'?null:site.html,{headers:{...headers,'content-security-policy':headers['content-security-policy']+"; img-src 'self'"}});
+   const contact=site.contact_enabled===1;
+   const html=contact?site.html.replace('</main>',`<section aria-label="Contact" style="margin:40px 0"><h2>Get in touch</h2><p><a href="https://digifender.com/contact/${match[1]}" target="_blank" rel="noopener noreferrer">Contact us ↗</a></p></section></main>`):site.html;
+   return new Response(request.method==='HEAD'?null:html,{headers:{...headers,'content-security-policy':headers['content-security-policy'].replace('sandbox;',contact?'sandbox allow-popups allow-popups-to-escape-sandbox;':'sandbox;')+"; img-src 'self'"}});
   }catch(cause){return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
  }
 } satisfies ExportedHandler<Pick<Env,'DB'|'FILES'>>;

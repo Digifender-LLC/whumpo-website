@@ -41,7 +41,8 @@
     "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": [
-      "/api/*"
+      "/api/*",
+      "/contact/*"
     ]
   },
   "d1_databases": [

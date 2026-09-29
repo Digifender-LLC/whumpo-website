@@ -40,7 +40,8 @@
     "test:cloudflare-connection": "node tests/cloudflare-connection.mjs",
     "test:cloudflare-dns": "node tests/cloudflare-dns.mjs",
     "test:dns-agent": "node tests/dns-agent.mjs",
-    "test:version-removal": "node tests/version-removal.mjs"
+    "test:version-removal": "node tests/version-removal.mjs",
+    "test:contacts": "node tests/contacts.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
