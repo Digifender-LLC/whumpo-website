@@ -167,3 +167,7 @@ The secondary Connected accounts panel can initiate GitHub App authorization and
 ## Reviewed GitHub backups — September 29, 2026
 
 Repository selection and explicit source-backup reviews are implemented. Readable version folders use atomic expected-head commits, exact source-tree verification and read-only recovery after uncertain writes. Controlled provider tests cover isolation and concurrency; Git independently verifies source-tree hashes. No real GitHub commit has been tested because App configuration is absent. Empty repository initialization, automatic synchronization, live consent/commit acceptance and customer Cloudflare authorization remain outstanding. See [backup design](integrations/github-backups.md).
+
+## Conversational domain ownership — September 29, 2026
+
+AI proposals can prepare domain TXT ownership instructions and check DNS using the existing owner-scoped domain operations. Replies are server-generated, errors release reservations and retries reuse the saved result. Controlled tests cover cross-user IDs, DNS failures, expiry, quota refunds and lost acknowledgements. Hosting, certificates, purchase/renewal and customer Cloudflare authorization remain unfinished; the full domain checklist stays open.

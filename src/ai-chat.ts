@@ -1,3 +1,4 @@
+import {DomainError} from './domains';
 import { siteContext, agentPrompt, prepareSiteAction, ProposalError } from './site-agent';
 import { complete, ProviderError, type AIConfig, type ChatMessage } from './ai';
 import { dispatchUsage, finishUsage, getBilling, getOperation, reserveUsage, uncertainUsage } from './billing';
@@ -84,6 +85,12 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     // Recover a committed answer/draft after an acknowledgement was lost. Never regenerate.
     const persisted = await db.prepare("SELECT input_tokens FROM chat_turns WHERE id=? AND user_id=?").bind(id,userId).first<{input_tokens:number|null}>();
     if(persisted?.input_tokens != null){await reconcileChat(db,userId);return {status:200};}
+    if(cause instanceof DomainError || String(cause).includes('domain_claim_quota')) {
+      await finishUsage(db,userId,id,0);
+      const detail=cause instanceof DomainError?cause.message:'Domain test limit reached: 3 per project, 10 per account and 80 platform-wide.';
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind(detail+' No domain change was applied and no build units were charged.',id,userId).run();
+      return {status:200};
+    }
     if(cause instanceof ProposalError || String(cause).includes('site_version_quota') || String(cause).includes('project_quota') || String(cause).includes('version_photo_owner')) {
       await finishUsage(db,userId,id,0);
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind((cause instanceof ProposalError || String(cause).includes('version_photo_owner')) ? 'The proposed change did not pass validation, so nothing was applied and no build units were charged. Try describing a smaller change.' : String(cause).includes('project_quota') ? 'Your account has reached its 20-project test limit. No project or draft was created and no build units were charged.' : 'This project has reached its 25 saved-version limit. No change was applied and no build units were charged.',id,userId).run();
