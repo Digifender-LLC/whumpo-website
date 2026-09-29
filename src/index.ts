@@ -1,3 +1,4 @@
+import { componentCatalog, previewHeaders } from './components';
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { plans, creditPack } from "./plans";
 import { readChat, sendChat } from "./chat";
@@ -165,6 +166,18 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  if (method === "GET" && pathname === "/api/components") return json({components:componentCatalog});
+  const previewMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/preview$/);
+  if (method === 'GET' && previewMatch) {
+    const version = await env.DB.prepare('SELECT v.html FROM site_versions v JOIN projects p ON p.id = v.project_id WHERE v.id = ? AND p.owner_user_id = ?').bind(previewMatch[1],user.id).first<{html:string}>();
+    return version ? new Response(version.html,{headers:previewHeaders}) : error(404,'Preview not found');
+  }
+  const versionsMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/versions$/);
+  if (method === 'GET' && versionsMatch) {
+    if (!(await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND owner_user_id = ?').bind(versionsMatch[1],user.id).first())) return error(404,'Project not found');
+    const {results} = await env.DB.prepare('SELECT id,component_id,digest,created_at FROM site_versions WHERE project_id = ? ORDER BY created_at DESC,id DESC LIMIT 25').bind(versionsMatch[1]).all();
+    return json({versions:results});
+  }
   if (method === "GET" && pathname === "/api/billing") return json(await getBilling(env.DB, user.id));
   if (method === "POST" && pathname === "/api/billing/preferences") {
     const data = await body(request);

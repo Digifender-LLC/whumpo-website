@@ -50,4 +50,4 @@ Acceptance tests must verify: two customers using the same component cannot read
 
 Track component hit rate, model calls avoided, tokens used per first preview, customization rate and defects. Compare equivalent requests against generation from scratch. Do not promise a percentage reduction until measured. Maintenance and security updates are a shared cost; user-specific model work remains metered normally.
 
-This is an accepted design direction, not an implemented shared-code marketplace. The current platform has no site assembler or customer-site runtime yet.
+The initial assembler is implemented for the platform-authored `launch-page@1` component, with ocean/clay/forest themes and validated name/description fields. It generates private immutable previews from a project brief without inference. The broader library, authentication components, promotion pipeline, AI customizations and customer-site runtime remain unfinished.

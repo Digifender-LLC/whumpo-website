@@ -483,11 +483,19 @@
       const item = text("article", "", `chat-bubble ${role}`);
       item.append(text("small", role === "user" ? "You" : mode === "ai" ? "Whumpo \xB7 AI" : "Whumpo \xB7 Guide"), text("p", content));
       container.append(item);
+      return item;
     }
     bubble("assistant", data.greeting);
     for (const turn of data.turns) {
       bubble("user", turn.user_text);
-      bubble("assistant", turn.assistant_text, turn.mode);
+      const answer = bubble("assistant", turn.assistant_text, turn.mode);
+      if (typeof turn.version_id === "string" && /^[0-9a-f-]{36}$/.test(turn.version_id)) {
+        const link = text("a", "Open private preview \u2197");
+        link.href = `/api/site-versions/${turn.version_id}/preview`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        answer.append(link);
+      }
     }
     $("#service-stats").textContent = `${data.stats.projects} project${data.stats.projects === 1 ? "" : "s"} \xB7 ${data.stats.live || 0} live`;
     $("#agent-mode").textContent = data.mode === "ai" ? "Muse Spark 1.3 \xB7 AI connected" : "Guided mode \xB7 No AI charges";

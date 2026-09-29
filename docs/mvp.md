@@ -79,4 +79,12 @@ The usage dialog shows allowance, spending, holds, credit balance and recent led
 
 ## Reusable components
 
-The first site should be assembled from approved generic components where possible, with AI reserved for missing features and private customization. Shared source must contain no customer data. The component provenance, tenant isolation, promotion review, versioning and cache rules are specified in [shared-components.md](shared-components.md). This adds a delivery requirement for the site assembler; the library is not yet implemented.
+The first site should be assembled from approved generic components where possible, with AI reserved for missing features and private customization. Shared source must contain no customer data. The component provenance, tenant isolation, promotion review, versioning and cache rules are specified in [shared-components.md](shared-components.md). This adds a delivery requirement for the site assembler; the first platform-authored launch-page component and private preview assembler are implemented; the broader library remains incomplete.
+
+## Reusable preview milestone
+
+`/build [ocean|clay|forest] [project UUID]` assembles the most recently created project by default. It saves `launch-page@1`, its tenant-owned configuration, exact HTML and SHA-256 digest in migration 0007. The preview, chat turn and audit commit together under the conversation revision; identical retries do not create another version. D1 limits each project to 25 versions and each HTML artifact to 32 KiB.
+
+Authenticated preview reads join the version to its project owner. Responses are private/no-store and use CSP sandbox with no scripts, forms, network resources or framing. All configuration enters escaped text positions; themes are allowlisted. The catalog itself contains only platform source metadata and has no customer entries. This does not yet authorize arbitrary generated HTML/JS, backend execution or public publishing.
+
+The browser opens a saved preview from its chat message. Existing previews remain unchanged when another theme is built. API reads expose the catalog and owner-scoped version metadata; publishing, selecting/restoring an active version and AI editing are the next steps.

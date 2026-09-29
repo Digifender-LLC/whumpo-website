@@ -4,7 +4,7 @@ The test platform is at **https://digifender.com**, with source in the private *
 
 The public homepage introduces the product. Sign in at `/workspace/`; invitation links open `/workspace/?signup=1`. The landing page is static and makes no API calls.
 
-Implemented: invitation-only signup with Turnstile, passkeys by default, optional password sign-in, recovery codes, revocable cookie sessions, persistent guided chat, conversational project onboarding, projects, activity, tenant isolation, authentication throttling, and test data quotas. Muse Spark 1.3 Contributor planning chat, monthly build-unit reservations, an immutable usage ledger, and opt-in credit spending are implemented. Paid entitlements and checkout are not enabled. Site generation, previews, customer-site publishing, and customer domain management remain unfinished.
+Implemented: invitation-only signup with Turnstile, passkeys by default, optional password sign-in, recovery codes, revocable cookie sessions, persistent guided chat, conversational project onboarding, projects, activity, tenant isolation, authentication throttling, and test data quotas. Muse Spark 1.3 Contributor planning chat, monthly build-unit reservations, an immutable usage ledger, and opt-in credit spending are implemented. Paid entitlements and checkout are not enabled. Chat can assemble private, versioned previews from a reusable launch-page component without model usage. AI-generated edits, customer-site publishing, and customer domain management remain unfinished.
 
 ## Local development
 
@@ -49,3 +49,5 @@ The deployed test uses OpenCode Go at `https://opencode.ai/zen/go/v1`, model `mu
 Guided onboarding and account commands are free. After creating a draft project, ordinary messages use the model; `/ask question` invokes it at any onboarding step. The model currently helps plan and explain code; it has no site execution tools. Usage reserves a bounded amount before dispatch, settles reported input/output (including reasoning) tokens, and never automatically retries uncertain inference. Use `/usage` or Details → Usage for balances; `/credits on` opts into spending existing credits only. Credit purchases are disabled.
 
 Billing endpoints: `GET /api/billing`, `POST /api/billing/preferences`. Browser input cannot grant credits or select a paid entitlement. Jarvis ports and remaining reusable components are documented in [docs/jarvis-reuse.md](docs/jarvis-reuse.md).
+
+Use `/build`, `/build clay`, or `/build forest` after creating a project to save a private first preview. An optional project UUID selects another project; otherwise the most recently created project is used. Each project retains up to 25 immutable previews. `pnpm test:previews` verifies the local preview flow, tenant boundaries, escaping and quotas.
