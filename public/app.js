@@ -528,6 +528,18 @@
         link.rel = "noopener noreferrer";
         answer.append(link);
       }
+      if (typeof turn.directory_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.directory_confirmation_id)) {
+        const button = text("button", "Confirm reviewed directory change");
+        button.onclick = () => sendMessage(`/confirm-directory ${turn.directory_confirmation_id}`);
+        answer.append(button);
+      }
+      if (typeof turn.directory_project_id === "string" && /^[0-9a-f-]{36}$/.test(turn.directory_project_id)) {
+        const link = text("a", "Open published directory \u2197");
+        link.href = `https://sites.digifender.com/s/${turn.directory_project_id}/directory`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        answer.append(link);
+      }
       if (typeof turn.contact_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.contact_confirmation_id)) {
         const button = text("button", "Confirm contact form settings");
         button.onclick = () => sendMessage(`/confirm-contact ${turn.contact_confirmation_id}`);
