@@ -56,3 +56,7 @@ HTTP equivalents: owned `GET/POST /api/projects/:project/application`, `GET /api
 `test:app-activation` covers ownership, malformed/oversized test outcomes, review immutability, competing/stale confirmation, expiry, lost acknowledgments, version replacement before enrollment, the migration gate afterwards, session revocation, owner transfer and rejection of model confirmation. `test:app-data` now builds all active fixtures through reviewed activation and proves an approved revision change invalidates in-flight writes.
 
 `test:app-activation-http` additionally verifies these HTTP boundaries against local workerd and the actual QuickJS Worker: successful transition receipt, anonymous and foreign-owner denial, same-origin confirmation, guided enable/disable, and historical-confirmation replay without reactivation. Local testing pins `ENVIRONMENT=local` in an ignored config; a CLI-only override was lost during hot reload. No visitor enrollment is exercised by this test.
+
+## Configuration deployment
+
+Owner-configuration release `1fd15da` deployed to `whumpo-platform`, version `fc99af51-bf11-4d7e-99ce-8b191f04ad78`. Remote migration 0051 applied after the independent pricing migrations. Live checks returned health 200, anonymous configuration/review 401, and cross-origin confirmation 403. No production customer app was activated and no visitor data route was exposed. Visitor authentication and application-page acceptance remain required before public access.
