@@ -166,3 +166,7 @@ Added an internal visitor/session/document engine with separate application iden
 ## Launch pricing, inference economics and acknowledgment timing
 
 See [pricing-and-model-policy.md](pricing-and-model-policy.md) for implemented catalogue, new/legacy monthly receipts, Muse-only testing, shared shadow-cost reservations and the 700 ms acknowledgment / 1,000 ms minimum display rule. Subagent execution, real API-cost enforcement, paid annual fulfillment and domain redemption remain open gates.
+
+## Persistent application authority review
+
+Owner review now pins program/test/source, data access and revision. Concurrent/stale approval and session revocation are covered by `test:app-activation` and `test:app-data`. Visitor passkey enrollment, authenticated app UI, lifecycle/export/deletion and production browser acceptance remain open. Saved activation does not claim public readiness.
