@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {build} from 'esbuild';
+import wrangler from 'wrangler';
+async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const {sendAIChat,reconcileChat}=await module('src/ai-chat.ts');const {readChat}=await module('src/chat.ts');const {getBilling}=await module('src/billing.ts');
+const dir=await mkdtemp('/tmp/whumpo-agent-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
+const cfg={baseURL:'https://provider.test/v1',apiKey:'fake-key',model:'fake-model',protocol:'responses'};
+async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();await db.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(id).run();const project=crypto.randomUUID();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Bakery','Fresh bread','draft',?,?)").bind(project,id,new Date().toISOString(),new Date().toISOString()).run();return {id,project};}
+const config={name:'Bakery',headline:'Fresh bread, every morning',description:'Bread for the neighborhood.',theme:'clay',aboutTitle:'Our story',aboutText:'A neighborhood bakery.',sections:[{heading:'Visit us',text:'Ask us about today’s bread.'}]};
+let calls=0;
+const provider=action=>async()=>{calls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:typeof action==='string'?action:JSON.stringify({reply:'Proposed change',action})}]}],usage:{input_tokens:100,output_tokens:200}});};
+async function send(dbx,user,action){const state=await readChat(db,user.id);const id=crypto.randomUUID();await sendAIChat(dbx,user.id,id,state.state.revision,'Make a warm bakery site',cfg,provider(action));return id;}
+try{
+ const owner=await account(),other=await account();
+ const created=await send(db,owner,{kind:'project',purpose:'A bakery website',config});
+ const project=await db.prepare('SELECT * FROM projects WHERE id=?').bind(created).first();assert.equal(project.owner_user_id,owner.id);assert.equal(project.status,'draft');assert.equal(project.name,'Bakery');assert.equal(project.preferred_theme,'clay');
+ const version=await db.prepare('SELECT * FROM site_versions WHERE id=?').bind(created).first();assert.equal(version.project_id,created);assert.equal(version.source,'ai');assert.equal(JSON.parse(version.config_json).headline,config.headline);assert.equal((await readChat(db,owner.id)).turns.at(-1).version_id,created);
+ assert.equal(await db.prepare('SELECT version_id FROM publications WHERE project_id=?').bind(created).first(),null);
+ const callsBefore=calls;const state=await db.prepare('SELECT revision FROM chat_turns WHERE id=?').bind(created).first();await sendAIChat(db,owner.id,created,state.revision-1,'Make a warm bakery site',cfg,provider(null));assert.equal(calls,callsBefore);assert.equal((await getBilling(db,owner.id)).quota.spent,1);
+ const exported=await send(db,owner,{kind:'export',versionId:created});assert.equal((await readChat(db,owner.id)).turns.at(-1).export_version_id,created);assert.equal((await db.prepare('SELECT version_id FROM chat_exports WHERE turn_id=?').bind(exported).first()).version_id,created);
+ for(const [user,action] of [[other,{kind:'export',versionId:created}],[owner,{kind:'export',versionId:crypto.randomUUID()}],[owner,{kind:'export',versionId:created,url:'https://evil.test'}],[owner,{kind:'project',purpose:'No',config,ownerId:other.id}],[owner,{kind:'project',purpose:'',config}],[owner,{kind:'project',purpose:'x'.repeat(1001),config}],[owner,{kind:'project',purpose:'Bad',config:{...config,script:'alert(1)'}}]]){
+  const before=await getBilling(db,user.id);const id=await send(db,user,action);assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(id).first()).status,'failed');assert.equal(await db.prepare('SELECT id FROM projects WHERE id=?').bind(id).first(),null);assert.equal(await db.prepare('SELECT turn_id FROM chat_exports WHERE turn_id=?').bind(id).first(),null);assert.equal((await getBilling(db,user.id)).quota.spent,before.quota.spent);assert.equal((await getBilling(db,user.id)).quota.reserved,0);
+ }
+ // A lost transaction acknowledgement must recover the same project and draft without more inference.
+ let lost=false;const lossy=new Proxy(db,{get(target,key){if(key==='batch')return async statements=>{const result=await target.batch(statements);if(!lost&&await target.prepare("SELECT id FROM projects WHERE name='Recovered project'").first()){lost=true;throw Error('Lost acknowledgement');}return result;};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
+ const recovered=await send(lossy,owner,{kind:'project',purpose:'Recovery test',config:{...config,name:'Recovered project'}});assert.equal(lost,true);assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(recovered).first()).status,'completed');assert.equal((await db.prepare("SELECT COUNT(*) n FROM projects WHERE name='Recovered project'").first()).n,1);
+ const quotaUser=await account();for(let i=1;i<20;i++)await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Quota','Fixture','draft',?,?)").bind(crypto.randomUUID(),quotaUser.id,new Date().toISOString(),new Date().toISOString()).run();
+ const blocked=await send(db,quotaUser,{kind:'project',purpose:'One too many',config});assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(blocked).first()).status,'failed');assert.equal(await db.prepare('SELECT id FROM site_versions WHERE id=?').bind(blocked).first(),null);assert.equal((await getBilling(db,quotaUser.id)).quota.spent,0);assert.equal((await getBilling(db,quotaUser.id)).quota.reserved,0);
+ console.log('Workspace AI actions passed: atomic project and draft, publication isolation, export ownership and receipt, replay without inference, schema rejection, lost-commit recovery and project quota refund.');
+}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

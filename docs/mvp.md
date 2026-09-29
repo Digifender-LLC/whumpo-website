@@ -148,3 +148,8 @@ Custom-hostname provisioning, certificates, domain routing, disconnect/removal, 
 Guided setup now collects idea → name → audience/visitor goal → style, saves progress between requests, and finishes with a private launch-page preview. Audience and style can be skipped. Free-form style notes are retained for later AI edits; the initial renderer uses ocean unless an exact supported theme is chosen. `/brief [PROJECT_ID]` reads the private brief and `/build` uses the saved starting theme. `/new` and `/cancel` leave already created projects intact.
 
 The guided flow uses no inference even when AI is configured. Notes enter the owner's bounded AI context on later model requests; they are never automatically copied into the deterministic preview or exported as project metadata. AI drafts still require human review before publication. See [onboarding design](onboarding.md).
+
+
+## Natural-language project and export actions — September 29, 2026
+
+The validated AI action vocabulary now includes atomic project-plus-private-website creation and source-download receipts for exact owned versions. Customers can request these in natural language after onboarding, or explicitly use `/ask` during setup. Server-selected ownership/IDs, schema validation, project quotas and persisted usage receipts govern execution. Neither action publishes a site or accesses external customer accounts. Model interpretation is metered; deterministic guided alternatives remain free. Full domain, provider-connection and purchase scope remains open. See [workspace AI actions](workspace-agent.md).
