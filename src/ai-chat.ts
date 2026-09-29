@@ -1,3 +1,6 @@
+import { startAcknowledgment } from './acknowledgment';
+import { ensureInferenceBudget, inferenceReservation, dispatchInference, observeInference, uncertainInference } from './model-costs';
+import { museTestRoute } from './model-policy';
 import {cloudflareStatus} from './cloudflare-connection';
 import type {DNSChatOptions} from './dns-chat';
 import {DomainError} from './domains';
@@ -9,7 +12,7 @@ import { hashToken } from './security';
 
 export function configuredAI(env: Env): AIConfig | undefined {
   if (!env.AI_API_KEY || !env.AI_BASE_URL || !env.AI_MODEL || String(env.ENVIRONMENT) === 'local') return;
-  return { baseURL: env.AI_BASE_URL, apiKey: env.AI_API_KEY.trim(), model: env.AI_MODEL, protocol: env.AI_PROTOCOL === 'responses' ? 'responses' : 'chat' };
+  try { return museTestRoute({ baseURL: env.AI_BASE_URL, apiKey: env.AI_API_KEY.trim(), model: env.AI_MODEL, protocol: env.AI_PROTOCOL === 'responses' ? 'responses' : 'chat' }).config; } catch { return; }
 }
 
 /** Finish persisted results after a disconnect, without ever calling the provider again. */
@@ -22,6 +25,7 @@ export async function reconcileChat(db: D1Database, userId: string) {
         await db.prepare("UPDATE chat_turns SET status = 'completed' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(turn.id, userId).run();
       } catch {
         await uncertainUsage(db, userId, turn.id);
+        await uncertainInference(db,userId,turn.id);
         await db.prepare("UPDATE chat_turns SET status = 'uncertain', assistant_text = 'The AI response needs a usage review. Its units remain held; retrying this message will not make another model call.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(turn.id, userId).run();
       }
     } else if (Date.parse(turn.created_at) < Date.now() - 120000) {
@@ -31,6 +35,7 @@ export async function reconcileChat(db: D1Database, userId: string) {
         await db.prepare("UPDATE chat_turns SET status = 'failed', assistant_text = 'The request stopped before reaching the AI. No units were charged. Send a new message to try again.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(turn.id, userId).run();
       } else {
         await uncertainUsage(db, userId, turn.id);
+        await uncertainInference(db,userId,turn.id);
         await db.prepare("UPDATE chat_turns SET status = 'uncertain', assistant_text = 'The AI request was interrupted. Its units remain held while usage is checked. This message will not be sent twice.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(turn.id, userId).run();
       }
     }
@@ -50,6 +55,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   messages.push({ role: 'user', content: content.startsWith('/ask ') ? content.slice(5) : content.startsWith('/edit ') ? content.slice(6) : content });
   const budgetDate=new Date();
   const billing = await getBilling(db, userId,budgetDate);
+  await ensureInferenceBudget(db,userId,billing.period,billing.plan.id);
   const available = billing.quota.available + (billing.credits.overageEnabled ? billing.credits.available : 0);
   // UTF-8 bytes bound normal text tokenization conservatively; include per-message framing headroom.
   // Trim old context before reducing the output budget, so small remaining balances stay usable.
@@ -72,18 +78,23 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     inserted = await db.batch([
       usageReservationStatement(db,userId,id,requestHash,units,billing.period,budgetDate,revision),
       db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Working on your request…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM usage_operations WHERE id=? AND user_id=? AND request_hash=? AND quoted_units=? AND status='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId,id,userId,requestHash,units),
+      inferenceReservation(db,userId,id,billing.period,config,boundInput(),outputLimit),
       db.prepare('UPDATE workspace_state SET revision = revision + 1 WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(userId, revision, id, userId)
     ]);
   } catch (cause) {
     // A failed batch rolls back the reservation together with the chat claim.
     // A lost acknowledgement is handled by the same message's persisted receipt on retry.
+    if(String(cause).includes('inference_budget')) return {status:402,error:'The monthly AI testing allowance is reached. Guided commands remain available.'};
     throw cause;
   }
   if (inserted[1].meta.changes !== 1) return noReservation();
   if (!(await dispatchUsage(db, userId, id))) return { status: 200 };
+  if (!(await dispatchInference(db,userId,id))) return {status:200};
+  if(dnsOptions?.background)dnsOptions.background(startAcknowledgment(db,userId,id,billing.period,content,config,transport));
   const started = Date.now();
   try {
     const result = await complete({ ...config, maxOutputTokens: outputLimit, sessionId: `whumpo-${userId}` }, messages, transport);
+    await observeInference(db,userId,id,result);
     // Timeout reconciliation or an operator waiver may have closed this turn while the provider ran.
     const open=await db.prepare("SELECT t.id FROM chat_turns t JOIN usage_operations o ON o.id=t.id AND o.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='pending' AND o.status IN ('dispatched','uncertain')").bind(id,userId).first();
     if(!open)return {status:200};
@@ -94,6 +105,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     ]);
     await reconcileChat(db, userId);
   } catch (cause) {
+    await uncertainInference(db,userId,id);
     if(String(cause).includes('chat_result_closed'))return {status:200};
     // Recover a committed answer/draft after an acknowledgement was lost. Never regenerate.
     const persisted = await db.prepare("SELECT input_tokens FROM chat_turns WHERE id=? AND user_id=?").bind(id,userId).first<{input_tokens:number|null}>();

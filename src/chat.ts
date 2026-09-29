@@ -22,7 +22,7 @@ import { attachPhoto } from './photo-versions';
 import { publicationCommand, siteURL } from './publications';
 import { renderLaunch, type LaunchConfig } from './components';
 import { hashToken } from './security';
-import { plans } from './plans';
+import { describePlans } from './plans';
 import { ensureBilling, getBilling } from './billing';
 import { reconcileChat, sendAIChat } from './ai-chat';
 import type { AIConfig } from './ai';
@@ -167,7 +167,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     overage = command === '/credits on';
     reply = overage ? 'Existing credits may now cover build usage after your monthly allowance runs out. This does not buy credits or charge a payment method. You can turn this off with /credits off.' : 'Credit overage is off for new operations. Already reserved work can still settle against its existing hold.';
   } else if (['/plans', 'show plans', 'pricing'].includes(command)) {
-    reply = 'Proposed plans (USD/month):\n' + plans.map(p => `${p.name}: $${p.monthlyCents / 100}, ${p.publishedSites} published site${p.publishedSites === 1 ? '' : 's'}, ${p.monthlyUnits} build units/month.`).join('\n') + '\n\nProposed extra credits: $5 for 100 units after your monthly allowance. Guided chat is free. Billing and paid upgrades are not enabled; no purchases or charges can be made here yet.';
+    reply = describePlans();
   } else if (['/activity', 'show activity'].includes(command)) {
     const { results } = await db.prepare('SELECT summary, created_at FROM activity_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<{ summary: string; created_at: string }>();
     reply = results.map(event => `${event.created_at.slice(0, 10)}: ${event.summary}`).join('\n') || 'No activity yet.';

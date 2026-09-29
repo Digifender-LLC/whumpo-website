@@ -76,7 +76,10 @@
     "test:backend-publication": "node tests/backend-publication.mjs",
     "test:backend-forms": "node tests/backend-forms.mjs",
     "test:backend-form-http": "node tests/backend-form-http.mjs",
-    "test:app-data": "node tests/app-data.mjs"
+    "test:app-data": "node tests/app-data.mjs",
+    "test:model-policy": "node tests/model-policy.mjs",
+    "test:model-costs": "node tests/model-costs.mjs",
+    "test:ack-timing": "node tests/ack-timing.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

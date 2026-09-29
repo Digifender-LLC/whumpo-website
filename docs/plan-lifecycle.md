@@ -1,5 +1,7 @@
 # Monthly plan entitlements
 
+Current launch catalogue and model-cost policy: [pricing-and-model-policy.md](pricing-and-model-policy.md). Launch/Studio references below describe legacy test entitlements.
+
 ## Implemented fulfillment boundary; checkout still disabled
 
 `grantPlan` is an internal fulfillment function, not an HTTP endpoint or model action. It accepts only Launch or Studio and a specific UTC calendar month. A future payment adapter must establish the paid invoice, customer ownership, calendar period and product before calling it. The platform has no Stripe account configured, does not sell subscriptions, and has made no real subscription charge. This implementation alone is not a subscription system.

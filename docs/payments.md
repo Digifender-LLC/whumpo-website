@@ -1,5 +1,7 @@
 # Stripe test checkout
 
+Current launch catalogue and model-cost policy: [pricing-and-model-policy.md](pricing-and-model-policy.md). Launch/Studio references below describe legacy test entitlements.
+
 Status: implemented credit-pack checkout foundation, disabled on the deployment. The owner has no Stripe account and chose to defer connecting one. No account was created and no real payment or Stripe API request was made. Paid subscriptions remain unavailable.
 
 ## Credit orders

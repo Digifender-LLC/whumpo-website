@@ -162,3 +162,7 @@ Reviewed website forms now send bounded numeric/text/boolean fields to the exact
 ### Persistent application data foundation
 
 Added an internal visitor/session/document engine with separate application identities, hashed one-day sessions, per-visitor documents, immutable execution receipts and atomic revision-checked writes. D1 fixtures verify tenant isolation, retry/lost-acknowledgment behavior, concurrent writes and revocation/program changes. No public route or model tool exposes this engine; stateless endpoint approval does not authorize visitor storage. Owner activation reviews, visitor passkeys, authenticated frontend/data routes, lifecycle/retention and recovery remain necessary. See `docs/app-data.md`; migration 0050 is local-only at this milestone.
+
+## Launch pricing, inference economics and acknowledgment timing
+
+See [pricing-and-model-policy.md](pricing-and-model-policy.md) for implemented catalogue, new/legacy monthly receipts, Muse-only testing, shared shadow-cost reservations and the 700 ms acknowledgment / 1,000 ms minimum display rule. Subagent execution, real API-cost enforcement, paid annual fulfillment and domain redemption remain open gates.

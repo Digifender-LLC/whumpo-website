@@ -2,7 +2,7 @@ import { answerRejection, responseRejection, type RejectionReason } from './prov
 
 /** Server-only OpenAI-compatible transport. Never accepts endpoint/key from a user prompt. */
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
-export type AIConfig = { baseURL: string; apiKey: string; model: string; protocol?: "chat" | "responses"; sessionId?: string; maxOutputTokens?: number };
+export type AIConfig = { baseURL: string; apiKey: string; model: string; protocol?: "chat" | "responses"; sessionId?: string; maxOutputTokens?: number; timeoutMs?: number };
 export type Completion = { text: string; inputTokens: number; outputTokens: number };
 
 export class ProviderError extends Error {
@@ -48,13 +48,15 @@ export async function complete(config: AIConfig, messages: ChatMessage[], transp
   if (!messages.length || messages.length > 50 || messages.some(message => message.content.length > 16000)) throw new ProviderError("configuration");
   const outputLimit = config.maxOutputTokens ?? 2048;
   if (!Number.isSafeInteger(outputLimit) || outputLimit < 64 || outputLimit > 4096) throw new ProviderError("configuration");
+  const timeoutMs=config.timeoutMs??60000;
+  if(!Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>60000)throw new ProviderError('configuration');
   const payload = config.protocol === "responses"
     ? { model: config.model, input: messages, max_output_tokens: outputLimit, store: false, stream: false }
     : { model: config.model, messages, max_tokens: outputLimit, stream: false };
   let result: Record<string, unknown>;
   try {
     const response = await transport(url, {
-      method: "POST", redirect: "manual", signal: AbortSignal.timeout(60000),
+      method: "POST", redirect: "manual", signal: AbortSignal.timeout(timeoutMs),
       headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", "user-agent": "Whumpo/0.3 (website-building-agent)", ...(url.hostname === "opencode.ai" && config.sessionId ? { "x-opencode-session": config.sessionId } : {}) },
       body: JSON.stringify(payload)
     });
