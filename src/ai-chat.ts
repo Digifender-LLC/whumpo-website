@@ -1,3 +1,4 @@
+import {inspectionRequest,inspectionMessages,inspectionAllowance} from './agent-inspection';
 import { startAcknowledgment } from './acknowledgment';
 import { ensureInferenceBudget, inferenceReservation, dispatchInference, observeInference, uncertainInference } from './model-costs';
 import { museTestRoute } from './model-policy';
@@ -78,7 +79,11 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     return {status:402,error:'Not enough available units to reserve this AI reply. Guided commands are still free; use /usage to see your balance.'};
   }
   if (outputLimit < 1024) return noReservation();
-  const units = buildUnits(boundInput(), outputLimit);
+  // Reserve both calls before dispatch. Low balances retain the single-call path.
+  const followupInputBound=boundInput()+inspectionAllowance;
+  const canFollow=messages.length<=48&&buildUnits(boundInput()+followupInputBound,outputLimit*2)<=available;
+  const reservedInput=boundInput()+(canFollow?followupInputBound:0);
+  const units = buildUnits(reservedInput, outputLimit*(canFollow?2:1));
   const requestHash=await hashToken(JSON.stringify({content,revision}));
   const now = new Date().toISOString();
   let inserted;
@@ -86,7 +91,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     inserted = await db.batch([
       usageReservationStatement(db,userId,id,requestHash,units,billing.period,budgetDate,revision),
       db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Working on your request…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM usage_operations WHERE id=? AND user_id=? AND request_hash=? AND quoted_units=? AND status='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId,id,userId,requestHash,units),
-      inferenceReservation(db,userId,id,billing.period,config,boundInput(),outputLimit),
+      inferenceReservation(db,userId,id,billing.period,config,reservedInput,outputLimit*(canFollow?2:1)),
       db.prepare('UPDATE workspace_state SET revision = revision + 1 WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(userId, revision, id, userId)
     ]);
   } catch (cause) {
@@ -101,12 +106,25 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   if(dnsOptions?.background)dnsOptions.background(startAcknowledgment(db,userId,id,billing.period,content,config,transport));
   const started = Date.now();
   try {
-    const result = await complete({ ...config, maxOutputTokens: outputLimit, sessionId: `tellumo-${userId}` }, messages, transport);
+    let result = await complete({ ...config, maxOutputTokens: outputLimit, timeoutMs:canFollow?45000:config.timeoutMs, sessionId: `tellumo-${userId}` }, messages, transport);
+    if(result.inputTokens>boundInput()||result.outputTokens>outputLimit)throw new ProviderError('invalid_response');
+    let proposal;
+    if(canFollow&&inspectionRequest(result.text)){
+      const lookup=await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
+      const next=inspectionMessages(messages,lookup.reply);
+      if(next&&new TextEncoder().encode(JSON.stringify(next)).length+512<=followupInputBound){
+        // Persist the lookup before dispatch; lost acknowledgments never retry it.
+        await db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,lookup.reply,result.inputTokens,result.outputTokens).run();
+        const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`tellumo-${userId}`},next,transport);
+        if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
+        result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
+      }else proposal=lookup;
+    }
     await observeInference(db,userId,id,result);
     // Timeout reconciliation or an operator waiver may have closed this turn while the provider ran.
     const open=await db.prepare("SELECT t.id FROM chat_turns t JOIN usage_operations o ON o.id=t.id AND o.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='pending' AND o.status IN ('dispatched','uncertain')").bind(id,userId).first();
     if(!open)return {status:200};
-    const proposal = await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
+    proposal ??= await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
     await db.batch([
       ...proposal.statements,
       db.prepare("UPDATE chat_turns SET assistant_text = ?, input_tokens = ?, output_tokens = ? WHERE id = ? AND user_id = ?").bind(proposal.reply,result.inputTokens,result.outputTokens,id,userId)
