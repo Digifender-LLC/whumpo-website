@@ -1,3 +1,4 @@
+import {compareBackends} from './backend-diff';
 import {cleanupAppLifecycle} from './app-lifecycle';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage} from './app-pages';
 import {readProfile,updateProfile,profilePhoto,updateProfilePhoto} from './profile';
@@ -335,6 +336,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if(method==='GET'&&!backendPublicationReview[2])return json(await readBackendPublicationReview(env.DB,user.id,backendPublicationReview[1]));
     if(method==='POST'&&backendPublicationReview[2])return json(await confirmBackendPublication(env.DB,user.id,backendPublicationReview[1]));
   }
+  const backendDiffRoute=pathname.match(/^\/api\/backend-versions\/([0-9a-f-]{36})\/compare\/([0-9a-f-]{36})$/);
+  if(method==='GET'&&backendDiffRoute)return json(await compareBackends(env.DB,user.id,backendDiffRoute[1],backendDiffRoute[2]));
   const backendRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backends(?:\/([0-9a-f-]{36})\/test)?$/);
   if(backendRoute){
     if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1])});

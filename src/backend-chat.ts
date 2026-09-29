@@ -1,3 +1,4 @@
+import {compareBackends,describeBackendComparison} from './backend-diff';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage,describeAppPage} from './app-pages';
 import {readApplication,readApplicationReview,prepareApplication,confirmApplication,describeApplicationReview} from './app-activation';
 import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm,describeBackendForm} from './backend-forms';
@@ -13,6 +14,10 @@ export async function ownedBackend(db:D1Database,user:string,version:string){
 }
 function describeRun(run:{id:unknown;state:string;result?:unknown}){return `Private backend test: ${run.state}\nReceipt: ${run.id}\n`+(run.result?JSON.stringify(run.result).slice(0,1400)+(JSON.stringify(run.result).length>1400?'\nResult display truncated; full result remains in the private API receipt.':''):'Execution is pending or its outcome is unknown. This receipt will not be executed again.')+'\nNo application data or live website was changed. Test attempts use the separate backend allowance, not AI units.';}
 export function backendChatCommand(db:D1Database,user:string,turnId:string,content:string,service?:Fetcher){
+ if(/^\/backend-diff(?:\s|$)/i.test(content)){
+  const parts=content.trim().split(/\s+/);if(parts.length!==3||!uuid.test(parts[1])||!uuid.test(parts[2]))throw new BackendError(400,'Use /backend-diff NEW_VERSION_ID ORIGINAL_VERSION_ID');
+  return async()=>{try{return describeBackendComparison(await compareBackends(db,user,parts[1],parts[2]));}catch(error){return error instanceof BackendError?error.message:'Comparison unavailable. Run /backend-diff again to read the saved versions.';}};
+ }
  const match=content.match(/^\/(app-page|app-page-review|configure-app-page|disable-app-page|confirm-app-page|application|application-review|enable-application|disable-application|confirm-application|backend-form|backend-form-review|configure-backend-form|disable-backend-form|confirm-backend-form|backend-publication|backend-publication-review|confirm-backend-publication|publish-backend|unpublish-backend|backends|backend|backend-result|test-backend|backend-state|backend-state-review|review-backend-state|confirm-backend-state|backend-state-history|export-backend-state|restore-backend-state|restore-backend-before)(?:\s+([0-9a-f-]+))?(?:\s+([\s\S]+))?$/i);
  if(!match)return;
  const [,raw,id,rest]=match,verb=raw.toLowerCase();
@@ -78,6 +83,10 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
 }
 export async function backendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher){
  const operation=action.operation;
+ if(operation==='compare'){
+  if(Object.keys(action).some(k=>!['kind','operation','versionId','baselineId'].includes(k))||typeof action.versionId!=='string'||typeof action.baselineId!=='string')throw new BackendError(400,'Choose a new version and its original version');
+  return {reply:describeBackendComparison(await compareBackends(db,user,action.versionId,action.baselineId)),statements:[] as D1PreparedStatement[]};
+ }
  if(operation==='create'){
   if(Object.keys(action).some(k=>!['kind','operation','projectId','source'].includes(k))||typeof action.projectId!=='string'||!uuid.test(action.projectId)||typeof action.source!=='string'||!action.source.trim()||bytes(action.source)>8192)throw new BackendError(400,'Invalid backend draft proposal');
   await listBackends(db,user,action.projectId);const digest=await hashToken(action.source),now=new Date().toISOString();
