@@ -5,6 +5,9 @@ export function inspectionRequest(raw:string){
  let data;try{data=JSON.parse(raw);}catch{return false;}
  if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).some(k=>!['reply','action'].includes(k))||typeof data.reply!=='string'||!data.reply.trim()||data.reply.length>2000)return false;
  const a=data.action;
+ if(a&&typeof a==='object'&&!Array.isArray(a)&&a.kind==='cms'){
+  return a.operation==='readDraft'&&Object.keys(a).every(k=>['kind','operation','projectId','requestId'].includes(k))&&[a.projectId,a.requestId].every(v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v));
+ }
  if(a&&typeof a==='object'&&!Array.isArray(a)&&a.kind==='backend'){
   const fields:Record<string,string>={list:'projectId',inspect:'versionId',result:'receiptId'};
   const field=typeof a.operation==='string'&&Object.hasOwn(fields,a.operation)?fields[a.operation]:undefined;

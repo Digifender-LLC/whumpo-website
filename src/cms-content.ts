@@ -6,7 +6,7 @@ import {prepareCMSUnpublish,describeCMSUnpublish} from './cms-unpublish';
 import {prepareCMSPublication,describeCMSPublication,readCMSPublication,listCMSPublications} from './cms-publication';
 import {prepareCMSPreview} from './cms-preview';
 import {cmsEditAction} from './cms-edits';
-import {cmsConnection,requireStructuredCMS} from './cms-status';
+import {cmsConnection,requireStructuredCMS,readCMSCapabilities} from './cms-status';
 import {callCMS} from './cms-bridge';
 import {cmsDraftBody,cmsRichDraftBody,cmsItemId} from './cms-content-shape';
 import {CMSProjectError} from './cms-projects';
@@ -60,6 +60,7 @@ export async function cmsContentAction(db:D1Database,user:string,action:Record<s
  if(action.operation==='reviewPublication')return describeCMSPublication(await prepareCMSPublication(db,user,project,action.requestId,id,env));
  if(action.operation==='previewDraft')return prepareCMSPreview(db,user,project,action.requestId,id,env);
  if(action.operation==='exportDraft')return prepareCMSExport(db,user,project,action.requestId,id,env);
+ if(action.operation==='inspectDraft')return {...await readCMSDraft(db,user,project,action.requestId,env),capabilities:await readCMSCapabilities(db,user,project,env)};
  if(action.operation==='readDraft')return readCMSDraft(db,user,project,action.requestId,env);
  if(action.operation==='retryDraft'){
   await cmsConnection(db,user,project,env);

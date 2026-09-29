@@ -62,5 +62,18 @@ try{
  assert.equal((await http('','POST',{...payload,text:'Mixed modes'})).status,400);
  assert.equal((await http('','POST',payload)).status,200);assert.deepEqual(item.data.content,content);assert.equal(writes,4);
  assert.equal((await http('/'+httpId,'PATCH',{id:id(),title:'HTTP edit',content:edited,revision})).status,200);assert.deepEqual(item.data.content,edited);assert.equal(writes,5);
+ // Agent read-follow-up-edit uses the full structured body, never native metadata.
+ const {sendAIChat}=await module('src/ai-chat.ts'),{readChat}=await module('src/chat.ts'),{getBilling}=await module('src/billing.ts');
+ await readChat(db,a.user);await db.prepare("UPDATE workspace_state SET step='ready' WHERE user_id=?").bind(a.user).run();await getBilling(db,a.user);await db.prepare('UPDATE usage_periods SET allowance=1000 WHERE user_id=?').bind(a.user).run();
+ item.privateCanary='native-private-metadata';item.data.privateCanary='native-data-metadata';
+ const agentContent=structuredClone(item.data.content);agentContent[0].children[0].text='Agent revised heading';const originalTitle=item.data.title,baseRevision=revision;let modelCalls=0;
+ const model=async(_url,init)=>{modelCalls++;const action=modelCalls===1?{kind:'cms',operation:'readDraft',projectId:a.project,requestId:httpId}:{kind:'cms',operation:'editStructuredDraft',projectId:a.project,requestId:httpId,revision:baseRevision,title:originalTitle,content:agentContent};if(modelCalls===2){const input=JSON.stringify(JSON.parse(init.body));assert.ok(input.includes('cms_content_lookup'));assert.ok(input.includes('structuredEditing'));assert.ok(input.includes('Updated details'));assert.ok(input.includes('https://example.com'));assert.ok(!input.includes('native-private-metadata'));assert.ok(!input.includes('native-data-metadata'));}return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Reading before editing.',action})}]}],usage:{input_tokens:100,output_tokens:200}});};
+ const state=(await readChat(db,a.user)).state,turn=id(),ai={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic',protocol:'responses'},options={cmsContent:(action,request)=>cmsContentAction(db,a.user,action,request,env)};
+ const message='Change the first heading in my CMS article to Agent revised heading, keeping the other formatting and copy.';
+ assert.equal((await sendAIChat(db,a.user,turn,state.revision,message,ai,model,options)).status,200);assert.equal(modelCalls,2);assert.equal(writes,6);assert.deepEqual(item.data.content,agentContent);assert.equal(item.data.title,originalTitle);
+ const turnRow=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(turn).first();assert.equal(turnRow.status,'completed');assert.match(turnRow.assistant_text,/saved privately/);
+ const lookup=await db.prepare('SELECT result_text FROM agent_inspections WHERE turn_id=?').bind(turn).first();assert.equal(JSON.parse(lookup.result_text).revision,baseRevision);assert.ok(!lookup.result_text.includes('native-data-metadata'));
+ await sendAIChat(db,a.user,turn,state.revision,message,ai,model,options);assert.equal(modelCalls,2);assert.equal(writes,6);
+ assert.equal((await db.prepare('SELECT count(*) n FROM cms_publication_reviews WHERE project_id=?').bind(a.project).first()).n,0);
  console.log('Structured CMS lifecycle passed: capability refusal before reservation, lossless create/edit recovery, completed receipts, mode immutability, plain guard, revision conflicts and unsupported native content.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
