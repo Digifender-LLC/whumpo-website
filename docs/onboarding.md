@@ -19,3 +19,15 @@ Audience and style notes are private project planning data. They are included in
 ## Verification
 
 `test:onboarding` uses disposable local D1 and an unusable provider endpoint, proving ordinary setup does not invoke AI. It covers saved stages, command interruption, simultaneous replay, automatic preview, no automatic publication, note exclusion, owner isolation, malformed pending ownership, skip, free-form style notes, cancellation, remembered themes and atomic version-quota rollback. Existing chat and site-agent regression suites also pass. Browser verification covers reload at the style question and the resulting preview link.
+
+## Editing existing project details
+
+Migration 0062 adds a dedicated details revision. Dashboard project cards now link to a phone-friendly Details editor for the project name and description. The editor keeps input on save errors, offers an explicit reload, and warns before leaving unsaved edits. The authenticated `GET/PATCH /api/projects/:id/details` endpoints check ownership and require the last-read revision for writes. Concurrent or stale changes return 409. A name/description change increments its revision and writes an activity event atomically; an unchanged save does neither.
+
+`/project-details PROJECT_ID` reads the owned project's details without inference. The agent's project inspection includes the current details revision; the `projectDetails` action can change the name/description on request, preserving unrelated fields. The response uses the server result rather than an unsupported model success claim.
+
+The project name is also used by existing public contact forms and directory headings; the editor and agent instructions disclose this. Saved website versions and CMS articles are not rewritten. Changing their copy still requires the existing draft/review/publication flow. The description is model context, and the editor tells users to keep secrets out. Audience/style-note editing is not added by this change.
+
+Local D1 and HTTP checks cover strict fields/limits, anonymous and foreign-owner denial, cross-origin denial, stale/no-op/concurrent writes, revision reads, atomic activity and model response authority. Browser checks on a synthetic 390px phone workspace verify the unsaved-change prompt, save/readback, updated dashboard name and Details link. No real customer project has been renamed for testing.
+
+Deployed September 29, 2026: migration 0062 and platform version `da6c7981-2e45-4edc-8704-4e886d871126`. TypeScript and production build passed. Live checks verified platform health, exact tested frontend assets, anonymous denial and cross-origin write denial. Agent mutation was verified locally; a live model-driven rename was not performed.
