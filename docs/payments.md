@@ -27,3 +27,7 @@ Run a real Stripe test checkout and webhook delivery before claiming this integr
 Plans require a server-owned customer/subscription mapping, a unique active subscription per account, invoice-paid fulfillment, renewal failure/cancellation handling, authenticated management links and reconciliation after missed/out-of-order events. Month-based model allowances currently reset on the first UTC day; define proration and billing-period alignment before enabling paid plan changes. Never grant a plan merely because Checkout returned successfully. Refund/reversal policy and a tested transition from test balances to any future real-money environment also remain required. This foundation intentionally cannot switch to live payments through a key change.
 
 References: [Checkout session creation](https://docs.stripe.com/api/checkout/sessions/create), [webhook signature verification](https://docs.stripe.com/webhooks/signature), [test credentials](https://docs.stripe.com/api/authentication).
+
+## Monthly entitlement implementation
+
+The internal [plan lifecycle](plan-lifecycle.md) now records immutable, month-specific paid entitlement receipts. Upgrades preserve spent/reserved units and credits; unconfirmed renewals do not perpetuate paid limits. Current-month receipts also authorize new publication slots. There is no public plan-grant endpoint and no paid subscription checkout. The Stripe subscription adapter and lifecycle tasks above remain unfinished.

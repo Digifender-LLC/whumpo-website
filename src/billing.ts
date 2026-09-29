@@ -10,10 +10,10 @@ type Account = { plan_id: string; overage_enabled: number; credits_available: nu
 export async function ensureBilling(db: D1Database, userId: string, date = new Date()) {
   const period = date.toISOString().slice(0, 7);
   await db.prepare('INSERT OR IGNORE INTO billing_accounts (user_id) VALUES (?)').bind(userId).run();
-  const account = await db.prepare('SELECT plan_id FROM billing_accounts WHERE user_id = ?').bind(userId).first<{ plan_id: string }>();
-  const plan = plans.find(p => p.id === account?.plan_id);
-  if (!plan) throw new BillingError(500, 'Account plan is not configured');
-  await db.prepare('INSERT OR IGNORE INTO usage_periods (user_id, period, allowance) VALUES (?, ?, ?)').bind(userId, period, plan.monthlyUnits).run();
+  // Select receipts inside the INSERT so an overlapping grant cannot be missed by a stale JS read.
+  await db.prepare("INSERT OR IGNORE INTO usage_periods(user_id,period,allowance) SELECT ?,?,COALESCE(MAX(CASE plan_id WHEN 'studio' THEN 800 ELSE 250 END),25) FROM plan_grants WHERE user_id=? AND period=?").bind(userId,period,userId,period).run();
+  const entitlement=await db.prepare("SELECT COALESCE(MAX(CASE plan_id WHEN 'studio' THEN 2 ELSE 1 END),0) AS tier FROM plan_grants WHERE user_id=? AND period=?").bind(userId,period).first<{tier:number}>();
+  const plan=plans[entitlement?.tier??0];
   // Only work never sent to a provider expires automatically. Uncertain calls retain their hold.
   await db.prepare("UPDATE usage_operations SET status = 'released', actual_units = 0, quota_charged = 0, credits_charged = 0, updated_at = ? WHERE user_id = ? AND status = 'reserved' AND expires_at <= ?").bind(date.toISOString(), userId, date.toISOString()).run();
   return { period, plan };
@@ -38,15 +38,20 @@ export async function setOverage(db: D1Database, userId: string, enabled: boolea
 export async function getOperation(db: D1Database, userId: string, id: string) {
   return db.prepare('SELECT * FROM usage_operations WHERE id = ? AND user_id = ?').bind(id, userId).first<Operation>();
 }
-export async function reserveUsage(db: D1Database, userId: string, id: string, requestHash: string, units: number, date = new Date()) {
+export function usageReservationStatement(db:D1Database,userId:string,id:string,requestHash:string,units:number,period:string,date:Date,revision?:number){
   if (!/^[0-9a-f-]{36}$/.test(id) || !/^[0-9a-f]{64}$/.test(requestHash) || !Number.isSafeInteger(units) || units < 1 || units > 10000) throw new BillingError(400, 'Invalid usage reservation');
-  const { period } = await ensureBilling(db, userId, date);
-  const result = await db.prepare(`INSERT INTO usage_operations
+  return db.prepare(`INSERT INTO usage_operations
     (id,user_id,period,request_hash,quoted_units,quota_reserved,credits_reserved,created_at,updated_at,expires_at)
     SELECT ?, a.user_id, p.period, ?, ?, MIN(?, p.allowance-p.spent-p.reserved), MAX(0, ?-(p.allowance-p.spent-p.reserved)), ?, ?, ?
     FROM billing_accounts a JOIN usage_periods p ON p.user_id = a.user_id
     WHERE a.user_id = ? AND p.period = ? AND p.allowance-p.spent-p.reserved + CASE WHEN a.overage_enabled = 1 THEN a.credits_available ELSE 0 END >= ?
-    ON CONFLICT(id) DO NOTHING RETURNING id`).bind(id, requestHash, units, units, units, date.toISOString(), date.toISOString(), new Date(date.getTime() + 300000).toISOString(), userId, period, units).first<{ id: string }>();
+    AND (? IS NULL OR (EXISTS(SELECT 1 FROM workspace_state w WHERE w.user_id=a.user_id AND w.revision=?) AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.user_id=a.user_id AND t.status='pending')))
+    ON CONFLICT(id) DO NOTHING RETURNING id`).bind(id, requestHash, units, units, units, date.toISOString(), date.toISOString(), new Date(date.getTime() + 300000).toISOString(), userId, period, units, revision??null, revision??null);
+}
+export async function reserveUsage(db: D1Database, userId: string, id: string, requestHash: string, units: number, date = new Date()) {
+  if (!/^[0-9a-f-]{36}$/.test(id) || !/^[0-9a-f]{64}$/.test(requestHash) || !Number.isSafeInteger(units) || units < 1 || units > 10000) throw new BillingError(400, 'Invalid usage reservation');
+  const { period } = await ensureBilling(db, userId, date);
+  const result=await usageReservationStatement(db,userId,id,requestHash,units,period,date).first<{id:string}>();
   const operation = await getOperation(db, userId, id);
   if (!operation) throw new BillingError(402, 'Not enough available build units. Wait for a reset or enable existing credits.');
   if (operation.request_hash !== requestHash || operation.quoted_units !== units) throw new BillingError(409, 'This operation ID was already used for a different request');
@@ -78,4 +83,16 @@ export async function grantCredits(db: D1Database, userId: string, grantId: stri
   await db.prepare('INSERT INTO credit_grants (id,user_id,units,reason,created_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(grantId, userId, units, reason, new Date().toISOString()).run();
   const grant = await db.prepare('SELECT user_id, units, reason FROM credit_grants WHERE id = ?').bind(grantId).first<{ user_id: string; units: number; reason: string }>();
   if (grant?.user_id !== userId || grant.units !== units || grant.reason !== reason) throw new BillingError(409, 'Credit grant ID already used');
+}
+
+/** Fulfillment boundary only. A provider adapter must verify payment, owner and calendar period first.
+ * Never expose this function with caller-selected plans or periods in an HTTP/model tool. */
+export async function grantPlan(db:D1Database,userId:string,id:string,period:string,planId:string,reference:string){
+ if(!/^[0-9a-z:_-]{1,120}$/i.test(id)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)||!['launch','studio'].includes(planId)||!reference||reference.length>200||/[\x00-\x1f\x7f]/.test(reference))throw new BillingError(400,'Invalid plan entitlement');
+ await db.prepare('INSERT OR IGNORE INTO billing_accounts(user_id) VALUES(?)').bind(userId).run();
+ try{await db.prepare('INSERT INTO plan_grants(id,user_id,period,plan_id,reference,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,userId,period,planId,reference,new Date().toISOString()).run();}
+ catch(cause){const saved=await db.prepare('SELECT id FROM plan_grants WHERE id=? AND user_id=? AND period=? AND plan_id=? AND reference=?').bind(id,userId,period,planId,reference).first();if(!saved){if(String(cause).includes('UNIQUE constraint'))throw new BillingError(409,'Payment reference already fulfilled');throw cause;}}
+ const receipt=await db.prepare('SELECT user_id,period,plan_id,reference FROM plan_grants WHERE id=?').bind(id).first<{user_id:string;period:string;plan_id:string;reference:string}>();
+ if(receipt?.user_id!==userId||receipt.period!==period||receipt.plan_id!==planId||receipt.reference!==reference)throw new BillingError(409,'Plan grant ID already used');
+ return receipt;
 }

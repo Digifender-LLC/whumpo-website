@@ -1,7 +1,7 @@
 import {DomainError} from './domains';
 import { siteContext, agentPrompt, prepareSiteAction, ProposalError } from './site-agent';
 import { complete, ProviderError, type AIConfig, type ChatMessage } from './ai';
-import { dispatchUsage, finishUsage, getBilling, getOperation, reserveUsage, uncertainUsage } from './billing';
+import { dispatchUsage, finishUsage, getBilling, getOperation, usageReservationStatement, uncertainUsage } from './billing';
 import { buildUnits } from './plans';
 import { hashToken } from './security';
 
@@ -44,33 +44,38 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const messages: ChatMessage[] = [{ role: 'system', content: system }];
   for (const turn of history.reverse()) messages.push({ role: 'user', content: turn.user_text.slice(0, 600) }, { role: 'assistant', content: turn.assistant_text.slice(0, 900) });
   messages.push({ role: 'user', content: content.startsWith('/ask ') ? content.slice(5) : content.startsWith('/edit ') ? content.slice(6) : content });
-  const billing = await getBilling(db, userId);
+  const budgetDate=new Date();
+  const billing = await getBilling(db, userId,budgetDate);
   const available = billing.quota.available + (billing.credits.overageEnabled ? billing.credits.available : 0);
   // UTF-8 bytes bound normal text tokenization conservatively; include per-message framing headroom.
   // Trim old context before reducing the output budget, so small remaining balances stay usable.
   const boundInput = () => new TextEncoder().encode(JSON.stringify(messages)).length + 512;
   while (messages.length > 2 && buildUnits(boundInput(), 2048) > available) messages.splice(1, 2);
   const outputLimit = Math.min(2048, Math.floor((available * 1000 - boundInput()) / 4));
-  if (outputLimit < 1024) return { status: 402, error: 'Not enough available units to reserve this AI reply. Guided commands are still free; use /usage to see your balance.' };
+  async function noReservation(){
+    const prior=await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id=? AND user_id=?').bind(id,userId).first<{user_text:string;revision:number}>();
+    if(prior)return prior.user_text===content&&prior.revision===revision+1?{status:200}:{status:409,error:'This message ID was already used for another request'};
+    const state=await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(userId).first<{revision:number}>();
+    if(state?.revision!==revision)return {status:409,error:'Another message changed the conversation. Refresh and try again.'};
+    return {status:402,error:'Not enough available units to reserve this AI reply. Guided commands are still free; use /usage to see your balance.'};
+  }
+  if (outputLimit < 1024) return noReservation();
   const units = buildUnits(boundInput(), outputLimit);
-  const reserved = await reserveUsage(db, userId, id, await hashToken(JSON.stringify({ content, revision })), units);
+  const requestHash=await hashToken(JSON.stringify({content,revision}));
   const now = new Date().toISOString();
   let inserted;
   try {
     inserted = await db.batch([
-      db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Thinking about your website…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId),
+      usageReservationStatement(db,userId,id,requestHash,units,billing.period,budgetDate,revision),
+      db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Thinking about your website…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM usage_operations WHERE id=? AND user_id=? AND request_hash=? AND quoted_units=? AND status='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId,id,userId,requestHash,units),
       db.prepare('UPDATE workspace_state SET revision = revision + 1 WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(userId, revision, id, userId)
     ]);
   } catch (cause) {
-    if (reserved.created) await finishUsage(db, userId, id, 0);
+    // A failed batch rolls back the reservation together with the chat claim.
+    // A lost acknowledgement is handled by the same message's persisted receipt on retry.
     throw cause;
   }
-  if (inserted[0].meta.changes !== 1) {
-    const previous = await db.prepare('SELECT id FROM chat_turns WHERE id = ? AND user_id = ?').bind(id, userId).first();
-    if (previous) return { status: 200 };
-    if (reserved.created) await finishUsage(db, userId, id, 0);
-    return { status: 409, error: 'Another message is already being handled. Review the conversation and try again.' };
-  }
+  if (inserted[1].meta.changes !== 1) return noReservation();
   if (!(await dispatchUsage(db, userId, id))) return { status: 200 };
   const started = Date.now();
   try {

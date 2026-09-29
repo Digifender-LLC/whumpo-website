@@ -69,6 +69,11 @@ try {
   const racer=await chatAccount();calls=0;
   const race=await Promise.all([sendAIChat(db,racer,crypto.randomUUID(),0,'First question',config,provider),sendAIChat(db,racer,crypto.randomUUID(),0,'Second question',config,provider)]);
   assert.equal(calls,1);assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);assert.equal((await getBilling(db,racer)).quota.reserved,0);
+  const duplicate=await chatAccount(), duplicateId=crypto.randomUUID();calls=0;
+  const conflict=await Promise.all([sendAIChat(db,duplicate,duplicateId,0,'First content',config,provider),sendAIChat(db,duplicate,duplicateId,0,'Different content',config,provider)]);
+  assert.deepEqual(conflict.map(r=>r.status).sort(),[200,409]);assert.equal(calls,1);
+  assert.equal((await getBilling(db,duplicate)).quota.reserved,0);assert.equal((await getBilling(db,duplicate)).quota.spent,1);
+  assert.equal((await db.prepare('SELECT COUNT(*) n FROM usage_operations WHERE user_id=?').bind(duplicate).first()).n,1);
   const uncertain=await chatAccount(), uncertainId=crypto.randomUUID();let failures=0;
   const timeout=async()=>{failures++;throw new Error('Simulated disconnect');};
   await sendAIChat(db,uncertain,uncertainId,0,'Plan a site',config,timeout);

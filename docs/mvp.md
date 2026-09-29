@@ -179,3 +179,7 @@ Reviewed provisioning, bounded provider access, exact-resource cleanup, direct-C
 ## Hostname recovery and status ordering — September 29, 2026
 
 An operator-only inspect/apply tool can reconcile a known provider ID after an uncertain create, with a reviewed digest, independent evidence note and atomic immutable audit receipt. Routing remains disabled until normal checks pass. Status updates now use attempt IDs and current-proof checks to reject stale verification results. Missing-resource and stuck-creating recovery, provider setup and live acceptance remain outstanding.
+
+## Month-specific plan receipts — September 29, 2026
+
+An internal fulfillment boundary now grants a paid tier for one UTC month with unique immutable payment references, transactional allowance/ledger changes and replay recovery. Upgrades preserve usage and holds; new months require a renewal receipt. Credits persist separately. Publication checks use current-month receipts rather than a stale account plan cache; existing live sites remain available after downgrade, with new publication blocked over the lower limit. Subscription checkout, provider lifecycle events and final downgrade/refund/proration policy remain unfinished. See [plan lifecycle](plan-lifecycle.md).
