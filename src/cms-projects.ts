@@ -4,7 +4,7 @@ type Review={id:string;project_id:string;user_id:string;title:string;tagline:str
 async function own(db:D1Database,user:string,project:string){if(!uuid.test(project)||!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new CMSProjectError(404,'Project not found');}
 export async function listCMS(db:D1Database,user:string,project?:string){
  if(project)await own(db,user,project);
- const {results}=await db.prepare('SELECT c.project_id,p.name,c.state,r.title,r.tagline,c.created_at FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_setup_reviews r ON r.id=c.review_id WHERE c.user_id=? AND p.owner_user_id=? AND (? IS NULL OR c.project_id=?) ORDER BY c.created_at DESC LIMIT 5').bind(user,user,project??null,project??null).all();return results;
+ const {results}=await db.prepare('SELECT c.project_id,p.name,c.state,r.title,r.tagline,c.created_at,(SELECT count(*) FROM cms_resource_jobs j WHERE j.project_id=c.project_id AND j.state=\'complete\') AS recorded_resources FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_setup_reviews r ON r.id=c.review_id WHERE c.user_id=? AND p.owner_user_id=? AND (? IS NULL OR c.project_id=?) ORDER BY c.created_at DESC LIMIT 5').bind(user,user,project??null,project??null).all();return results;
 }
 export async function readCMSReview(db:D1Database,user:string,id:string){
  const review=await db.prepare('SELECT r.* FROM cms_setup_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Review>();if(!review)throw new CMSProjectError(404,'CMS setup review not found');return review;
@@ -36,7 +36,7 @@ export function cmsChatCommand(db:D1Database,user:string,turn:string,content:str
   const verb=match[1].toLowerCase(),rest=match[2]?.trim()??'';
   if(verb==='cms'){
    if(rest&&!uuid.test(rest))throw new CMSProjectError(400,'Use /cms or /cms PROJECT_ID');
-   const rows=await listCMS(db,user,rest||undefined);return rows.length?rows.map(r=>`${r.name}: ${r.state}\nProject: ${r.project_id}\nCMS title: ${r.title}`).join('\n\n'):'No CMS instance requested. Use /setup-cms PROJECT_ID | title | optional tagline to review creating one. EmDash setup and public CMS launch are still being integrated.';
+   const rows=await listCMS(db,user,rest||undefined);return rows.length?rows.map(r=>`${r.name}: ${r.state}\nProject: ${r.project_id}\nCMS title: ${r.title}\nStorage resource receipts: ${r.recorded_resources}/3\n${r.state==='ready'?'Private CMS; public publication requires a separate review.':r.state==='uncertain'?'Provisioning needs reconciliation. A creation request will not be repeated automatically.':'CMS deployment and initialization are not verified yet.'}`).join('\n\n'):'No CMS instance requested. Use /setup-cms PROJECT_ID | title | optional tagline to review creating one. EmDash setup and public CMS launch are still being integrated.';
   }
   if(verb==='setup-cms'){
    const parts=rest.split('|').map(x=>x.trim());if(parts.length<2||parts.length>3)throw new CMSProjectError(400,'Use /setup-cms PROJECT_ID | title | optional tagline');

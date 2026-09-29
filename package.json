@@ -63,7 +63,9 @@
     "test:emdash-bridge-live": "node tests/emdash-bridge-live.mjs",
     "test:emdash-bridge": "node tools/test-emdash-bridge.mjs",
     "test:cms-projects": "node tests/cms-projects.mjs",
-    "test:cms-projects-http": "node tests/cms-projects-http.mjs"
+    "test:cms-projects-http": "node tests/cms-projects-http.mjs",
+    "test:cms-provision": "node tests/cms-provision.mjs",
+    "cms:provision": "node tools/provision-cms.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

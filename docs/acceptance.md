@@ -70,3 +70,7 @@ The deployed private CMS now requires signed owner/project-bound requests and re
 ## CMS setup request milestone
 
 Chat and authenticated HTTP now prepare exact owned EmDash setup reviews. Separate user confirmation atomically creates an isolated-resource registry entry in queued state. Model proposals cannot confirm themselves or claim provisioning has completed. D1/chat/HTTP tests cover ownership, concurrent review approval, expiry, replay and cost-cap rollback. Provisioning, credential installation, signed bridge binding and native bootstrap are still the next implementation gate; confirming a request currently queues it without allocating provider resources.
+
+## CMS resource allocation milestone
+
+The operator consumer now reads the approved queue and can allocate dedicated D1/R2/KV resources through the authenticated Cloudflare control plane, with durable creation intents and reconciliation. D1 tests verify concurrent allocation, uncertain outcomes, delayed results, immutable IDs and collision/account separation. Live read-only queue and preview-resource inventory calls succeeded; the queue was empty, so no customer allocation was performed. Worker deployment, per-instance secrets, service binding and signed CMS setup verification still separate provisioning from ready. No automatic scheduler or public CMS endpoint is enabled by this milestone.
