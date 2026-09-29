@@ -23,7 +23,7 @@ export async function checkHealth(db:D1Database,user:string,project:string,trans
  let state='healthy',detail='The published page content and its listed photo responses passed this check.';
  try{
   if(await hashToken(s.html)!==s.digest)throw Error('The saved website artifact failed its integrity check.');
-  const url='https://sites.digifender.com/s/'+project+'/';
+  const url='https://'+project+'.whumpo.site/';
   const response=await transport(url,{method:'GET',headers:{accept:'text/html','cache-control':'no-cache'},redirect:'manual',signal:AbortSignal.timeout(10000)});
   const html=await pageText(response);if(await hashToken(html)!==await hashToken(publishedHTML(s.html,s.contact_enabled===1,project,form)))throw Error('The served page did not match the current saved version.');
   const {results:photos}=await db.prepare("SELECT v.file_id AS id,f.size,f.status FROM version_photos v LEFT JOIN project_files f ON f.id=v.file_id AND f.project_id=? WHERE v.version_id=? LIMIT 5").bind(project,s.version_id).all<{id:string;size:number|null;status:string|null}>();

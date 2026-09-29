@@ -10,15 +10,16 @@ function cbor(value) {
   if (value instanceof Map) return Buffer.concat([head(5,value.size),...Array.from(value).flatMap(([k,v])=>[cbor(k),cbor(v)])]);
   throw new Error('Unsupported fixture value');
 }
-export function authenticator(base = 'https://apps.digifender.com') {
+export function authenticator(base) {
   const {privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
   const jwk=publicKey.export({format:'jwk'}), id=randomBytes(32);
   const cose=cbor(new Map([[1,2],[3,-7],[-1,1],[-2,Buffer.from(jwk.x,'base64url')],[-3,Buffer.from(jwk.y,'base64url')]]));
-  const rpHash=sha(new URL(base).hostname);
+  let rpHash;
   let userHandle;
   return {
     id:b64(id),
-    registration(options, origin=base) {
+    registration(options, origin) {
+      base ??= `https://${options.rp.id}`; origin ??= base; rpHash=sha(new URL(base).hostname);
       userHandle=options.user.id;
       const client=Buffer.from(JSON.stringify({type:'webauthn.create',challenge:options.challenge,origin}));
       const auth=Buffer.concat([rpHash,Buffer.from([0x45]),Buffer.alloc(4),Buffer.alloc(16),Buffer.from([0,id.length]),id,cose]);

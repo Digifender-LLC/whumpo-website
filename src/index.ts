@@ -109,9 +109,9 @@ async function issueSession(request: Request, env: Env, user: User, recoveryCode
   const token = newSessionToken();
   const now = new Date();
   const expiry = new Date(now.getTime() + sessionDays * 86400_000).toISOString();
-  const inserted=await env.DB.prepare("INSERT INTO sessions (token_hash,user_id,expires_at,created_at) SELECT ?,id,?,? FROM users WHERE id=? AND (? IS NULL OR password_hash=?)")
+  await env.DB.prepare("INSERT INTO sessions (token_hash,user_id,expires_at,created_at) SELECT ?,id,?,? FROM users WHERE id=? AND (? IS NULL OR password_hash=?)")
     .bind(await hashToken(token),expiry,now.toISOString(),user.id,expectedPasswordHash??null,expectedPasswordHash??null).run();
-  if(inserted.meta.changes!==1)return error(401,'Credentials changed. Sign in again.');
+  if(!await env.DB.prepare('SELECT token_hash FROM sessions WHERE token_hash=? AND user_id=?').bind(await hashToken(token),user.id).first())return error(401,'Credentials changed. Sign in again.');
   return json({ user, ...(recoveryCode ? { recoveryCode } : {}) }, 200, { "set-cookie": cookie(token, request) });
 }
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -532,6 +532,7 @@ export default {
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestId = crypto.randomUUID();
+    if(String(env.ENVIRONMENT)!=='local'&&new URL(request.url).origin!=='https://whumpo.com')return error(404,'Not found');
     try {
       const contactMatch=new URL(request.url).pathname.match(/^\/contact\/([0-9a-f-]{36})$/);
       if(contactMatch)return contactPage(request,env,contactMatch[1]);

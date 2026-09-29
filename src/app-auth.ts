@@ -1,3 +1,4 @@
+import {visitorOrigin} from './hosts';
 import {generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse, type AuthenticationResponseJSON, type RegistrationResponseJSON} from '@simplewebauthn/server';
 import {BackendError} from './backend-versions';
 import {hashToken, newSessionToken} from './security';
@@ -16,8 +17,8 @@ const decode = (value:string) => Uint8Array.from(atob(value.replace(/-/g,'+').re
 const digest = (kind:string, token:string) => hashToken(`whumpo-app-${kind}:`+token);
 const nowSQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 const activeSQL = 'SELECT a.revision FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=? AND a.enabled=1';
-function rp(local:boolean) {
- const origin = local ? 'http://localhost:8787' : 'https://apps.digifender.com';
+function rp(local:boolean,project:string) {
+ const origin = local ? 'http://localhost:8787' : visitorOrigin(project);
  return {origin,rpID:new URL(origin).hostname};
 }
 async function active(db:D1Database, project:string) {
@@ -46,7 +47,7 @@ export async function revokeAppVisitor(db:D1Database, user:string, project:strin
 }
 
 export async function appPasskeyOptions(db:D1Database, project:string, kind:Kind, local=false, secret='',pageReview:string|null=null) {
- const {revision} = await active(db,project), {rpID} = rp(local);
+ const {revision} = await active(db,project), {rpID} = rp(local,project);
  let visitor='', invite='', session='';
  if (kind==='signup') {
   if (!tokenPattern.test(secret)) throw new BackendError(403,'An unused application invitation is required');
@@ -82,7 +83,7 @@ export async function appPasskeyVerify(db:D1Database, project:string, kind:Kind,
  const state=await active(db,project);
  if (state.revision!==challenge.program_revision) throw new BackendError(409,'Application changed; sign in again');
  if (kind==='add'&&(!tokenPattern.test(currentSession)||await digest('session',currentSession)!==challenge.session_hash)) throw new BackendError(401,'App session changed; start passkey enrollment again');
- const {origin,rpID}=rp(local), session=newSessionToken(), sessionHash=await digest('session',session);
+ const {origin,rpID}=rp(local,project), session=newSessionToken(), sessionHash=await digest('session',session);
  if (kind==='login') {
   const assertion=response as AuthenticationResponseJSON;
   const key=typeof assertion?.id==='string' ? await db.prepare('SELECT k.* FROM app_passkeys k JOIN app_visitors v ON v.id=k.visitor_id WHERE k.id=? AND v.project_id=? AND v.revoked=0').bind(assertion.id,project).first<Key>() : null;

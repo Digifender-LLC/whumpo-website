@@ -63,7 +63,7 @@ try{
  await db.prepare('UPDATE github_connections SET active_token_id=? WHERE user_id=?').bind(token,user).run();
  const session=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');await db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)').bind(await hashToken(session),other,now,new Date(Date.now()+600000).toISOString()).run();
  const env={...proxy.env,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
- const request=(path,method='GET',authenticated=true,origin='https://digifender.com')=>worker.fetch(new Request('https://digifender.com/api'+path,{method,headers:{...(authenticated?{cookie:'whumpo_session='+session}:{}),origin,'content-type':'application/json'},...(method==='POST'?{body:'{}'}:{})}),env);
+ const request=(path,method='GET',authenticated=true,origin='https://whumpo.com')=>worker.fetch(new Request('https://whumpo.com/api'+path,{method,headers:{...(authenticated?{cookie:'whumpo_session='+session}:{}),origin,'content-type':'application/json'},...(method==='POST'?{body:'{}'}:{})}),env);
  assert.equal((await request('/github/backups','GET',false)).status,401);assert.deepEqual(await(await request('/github/backups')).json(),{backups:[]});
  assert.equal((await request('/github/backups/'+r.id+'/confirm','POST')).status,404);assert.equal((await request('/github/backups/review','POST',true,'https://evil.test')).status,403);assert.equal((await request('/github/backups/review','POST')).status,400);
  reset();const expiry=await review();await db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE id=?").bind(token).run();await assert.rejects(()=>confirm(expiry.id));assert.equal(writes,5);

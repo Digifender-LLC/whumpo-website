@@ -6,7 +6,7 @@ import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {inspectRecovery,applyRecovery}=await module('src/domain-recovery.ts'),{reviewHosting,refreshHosting,disconnectHosting}=await module('src/domain-hosting.ts');
 const dir=await mkdtemp('/tmp/whumpo-recovery-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
-const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,config={token:'synthetic-token',zone:'a'.repeat(32),target:'hosting.digifender.com'};
+const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,config={token:'synthetic-token',zone:'a'.repeat(32),target:'hosting.whumpo.site'};
 const operator='test-operator',evidence='Controlled provider audit fixture establishes the request identity.';
 async function fixture(){const user=crypto.randomUUID(),project=crypto.randomUUID(),claim=crypto.randomUUID(),id=crypto.randomUUID(),now=new Date().toISOString(),name='host-'+id+'.example.com';
  await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(user,user+'@example.com','00',now).run();

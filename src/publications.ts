@@ -1,4 +1,4 @@
-export const siteURL = (projectId: string) => `https://sites.digifender.com/s/${projectId}`;
+export const siteURL = (projectId: string) => `https://${projectId}.whumpo.site`;
 export type PublicationCommand = {reply:string; statements:D1PreparedStatement[]};
 const uuid = /^[0-9a-f-]{36}$/;
 

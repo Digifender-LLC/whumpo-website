@@ -17,8 +17,8 @@ Natural-language requests use the same read/review operations. The model cannot 
 ## Publication and APIs
 
 - `GET /api/projects/PROJECT_ID/directory` returns the authenticated owner's private draft, revision and publication status.
-- `GET https://sites.digifender.com/s/PROJECT_ID/directory` renders the current approved snapshot as a responsive page.
-- `GET https://sites.digifender.com/s/PROJECT_ID/directory.json` exposes that same snapshot as JSON (`name`, `publishedAt`, `listings`). Each listing has stable `id`, `title`, `description` and `url` fields.
+- `GET https://PROJECT_ID.whumpo.site/directory` renders the current approved snapshot as a responsive page.
+- `GET https://PROJECT_ID.whumpo.site/directory.json` exposes that same snapshot as JSON (`name`, `publishedAt`, `listings`). Each listing has stable `id`, `title`, `description` and `url` fields.
 - Public endpoints accept GET/HEAD only, use no-store, and never return the private draft or review history. Public JSON allows cross-origin reads without credentials. There is no unauthenticated write API.
 
 Draft create/update/delete operations do not change the public snapshot. Publication binds the collection to the current parent website publication revision. Publishing or restoring the parent website disables the directory until another explicit review. Unpublishing the parent removes public access. A directory update does not mutate the immutable website artifact. Directory runtime data and backend code are not included in static source ZIPs or GitHub static backups. Custom-domain directory paths and directory-specific health checks are not implemented yet.

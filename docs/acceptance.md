@@ -1,5 +1,7 @@
 # Controlled visitor applications — September 29, 2026
 
+Current domain/frontend configuration: see [Whumpo migration](whumpo-migration.md). Older entries below are historical release evidence and do not describe the current hostname.
+
 Release `21227d1` is active on `whumpo-apps` (`9511d3eb-a750-45cf-b9d1-c7ddaf151843`) and `whumpo-platform` (`d9f619ab-6f88-4856-b9c0-93eaaeba57e4`). Migration 0057 is applied remotely. The controlled host uses `apps.digifender.com`; no customer page is published automatically. A remote read confirmed zero rows in `app_live_pages` after deployment.
 
 Implemented owner-reviewed page publication/withdrawal, a fixed passkey-first visitor UI, exact form/page checks, scoped private data/receipt routes, session revocation on page changes and public-session admission pinned to the page review. Public recovery now has the visitor save a derived replacement code before committing; exact retries and recovery after acknowledgment loss were verified.

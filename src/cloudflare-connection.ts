@@ -2,7 +2,7 @@ import {hashToken,newSessionToken} from './security';
 import {seal,unseal} from './connection-vault';
 import {ConnectionError} from './github-connection';
 type CloudflareConfig={clientId:string;clientSecret:string;key:string};
-const callback='https://digifender.com/api/connections/cloudflare/callback';
+const callback='https://whumpo.com/api/connections/cloudflare/callback';
 const scopes=['zone.read','dns.read','dns.write'];
 const now=()=>new Date().toISOString();
 const aad=(user:string,id:string,purpose:string)=>`whumpo:cloudflare:${purpose}:${user}:${id}`;

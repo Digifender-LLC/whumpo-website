@@ -11,9 +11,9 @@ const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBind
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
 async function chat(user,content,id=crypto.randomUUID(),revision){const state=await readChat(db,user);return {id,result:await sendChat(db,user,{id,content,revision:revision??state.state.revision})};}
 async function project(user,name){await chat(user,'/new');await chat(user,'A neighborhood website');const p=await chat(user,name);const v=await chat(user,'/build clay '+p.id);return {project:p.id,version:v.id};}
-async function photo(user,project,name){const id=crypto.randomUUID();await uploadPhoto(new Request('https://digifender.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(name)},body:jpeg}),env,user,project,id);return id;}
-const url=id=>'https://sites.digifender.com/s/'+id;
-const get=(path,method='GET')=>host.fetch(new Request('https://sites.digifender.com'+path,{method}),env);
+async function photo(user,project,name){const id=crypto.randomUUID();await uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(name)},body:jpeg}),env,user,project,id);return id;}
+const url=id=>'https://'+id+'.whumpo.site';
+const get=(path,method='GET')=>host.fetch(new Request('https://'+path.split('/')[2]+'.whumpo.site/'+path.split('/').slice(3).join('/'),{method}),env);
 async function publish(user,version){const review=await chat(user,'/publish '+version);assert.ok((await readChat(db,user)).turns.at(-1).assistant_text.includes('attached photos'));await chat(user,'/confirm '+review.id);}
 try{
  const owner=await account(),other=await account();const a=await project(owner,'Alpha'),b=await project(owner,'Beta'),c=await project(other,'Other');
@@ -23,10 +23,10 @@ try{
  await assert.rejects(chat(owner,'/photo '+foreign),{status:404});await assert.rejects(pageDraft(db,owner,crypto.randomUUID(),a.project,{...JSON.parse(version.config_json),photos:[{id:wrongProject,alt:'wrong'}]},action.id,'guided'),{status:400});
  const preview=await ownedPreview(env,owner,action.id);assert.equal(preview.status,200);const privateHTML=await preview.text();assert.ok(privateHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!privateHTML.includes('src="assets/'));assert.ok(preview.headers.get('content-security-policy').includes('img-src data:'));assert.equal(await ownedPreview(env,other,action.id),null);
  assert.equal((await get('/s/'+a.project+'/assets/'+first+'.jpg')).status,404);
- await publish(owner,action.id);assert.equal((await get('/s/'+a.project)).status,308);const page=await get('/s/'+a.project+'/');assert.equal(page.status,200);assert.equal(await page.text(),version.html);
+ await publish(owner,action.id);assert.equal((await get('/s/'+a.project)).status,200);const page=await get('/s/'+a.project+'/');assert.equal(page.status,200);assert.equal(await page.text(),version.html);
  const publicPhoto=await get('/s/'+a.project+'/assets/'+first+'.jpg');assert.equal(publicPhoto.status,200);const photoBytes=new Uint8Array(await publicPhoto.arrayBuffer());assert.equal(publicPhoto.headers.get('cache-control'),'no-store');const head=await get('/s/'+a.project+'/assets/'+first+'.jpg','HEAD');assert.equal(head.status,200);assert.equal(await head.text(),'');assert.equal((await get('/s/'+a.project+'/assets/'+second+'.jpg')).status,404);assert.equal((await get('/s/'+b.project+'/assets/'+first+'.jpg')).status,404);
  const domainClaim=await chat(owner,'/domain photos.example.com '+a.project),hostingID=crypto.randomUUID(),hostingNow=new Date().toISOString(),hostingExpiry=new Date(Date.now()+600000).toISOString();
- await db.prepare("INSERT INTO domain_connections(id,user_id,claim_id,project_id,hostname,zone_id,target,proof_hash,state,created_at,expires_at) VALUES(?,?,?,?,'photos.example.com',?,'hosting.digifender.com','fixture','review',?,?)").bind(hostingID,owner,domainClaim.id,a.project,'a'.repeat(32),hostingNow,hostingExpiry).run();
+ await db.prepare("INSERT INTO domain_connections(id,user_id,claim_id,project_id,hostname,zone_id,target,proof_hash,state,created_at,expires_at) VALUES(?,?,?,?,'photos.example.com',?,'hosting.whumpo.site','fixture','review',?,?)").bind(hostingID,owner,domainClaim.id,a.project,'a'.repeat(32),hostingNow,hostingExpiry).run();
  await db.prepare("UPDATE domain_connections SET state='active',provider_id=?,serve_until=? WHERE id=?").bind(crypto.randomUUID(),hostingExpiry,hostingID).run();
  const custom=path=>host.fetch(new Request('https://photos.example.com'+path),env);
  assert.equal(await(await custom('/')).text(),version.html);assert.deepEqual(new Uint8Array(await(await custom('/assets/'+first+'.jpg')).arrayBuffer()),photoBytes);assert.equal((await custom('/assets/'+wrongProject+'.jpg')).status,404);assert.equal((await custom('/s/'+b.project)).status,404);

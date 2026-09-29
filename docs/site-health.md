@@ -12,7 +12,7 @@ Publishing and restoring a version now attempt an HTTP check after the durable p
 
 ## What passes
 
-A check reads only the fixed shared address `https://sites.digifender.com/s/PROJECT_ID/`. Redirects are refused, requests carry no customer cookies or secrets, and each request has a ten-second timeout. The HTML response must succeed, be HTML, fit 48 KiB, and match the exact saved version plus the current platform contact link. The saved artifact digest is checked too.
+A check reads only the fixed shared address `https://PROJECT_ID.whumpo.site/`. Redirects are refused, requests carry no customer cookies or secrets, and each request has a ten-second timeout. The HTML response must succeed, be HTML, fit 48 KiB, and match the exact saved version plus the current platform contact link. The saved artifact digest is checked too.
 
 Up to four referenced photos receive HEAD requests against the same fixed address. They must return HTTP 200, JPEG content type and their recorded byte length. This confirms response availability and metadata, not image decoding or an independent full-body digest. The public host separately enforces object metadata and size.
 

@@ -8,7 +8,7 @@ const {reviewHosting,confirmHosting,disconnectHosting,refreshHosting}=await modu
 const {sendAIChat}=await module('src/ai-chat.ts'),{getBilling}=await module('src/billing.ts');
 const dir=await mkdtemp('/tmp/whumpo-hosting-chat-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
-const config={token:'synthetic-token',zone:'a'.repeat(32),target:'hosting.digifender.com'};
+const config={token:'synthetic-token',zone:'a'.repeat(32),target:'hosting.whumpo.site'};
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
 async function chat(user,content){const id=crypto.randomUUID(),state=await readChat(db,user);assert.equal((await sendChat(db,user,{id,content,revision:state.state.revision})).status,200);return id;}
 let writes=0,deletes=0,mode='ok',proof=true,cname=true,remoteStatus='active',sslStatus='active',existing=0,total=0;

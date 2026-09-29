@@ -3,7 +3,7 @@ export class DomainError extends Error {constructor(public status:number,message
 type Claim={id:string;project_id:string;hostname:string;token:string;expires_at:string;verified_at:string|null;created_at:string};
 export function hostname(value:string){
  const name=value.trim().toLowerCase();
- if(name.length>243||!name.includes('.')||!name.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))||/^\d+(?:\.\d+){3}$/.test(name)||/\.(?:localhost|local|test|invalid|example|internal)$/.test(name)||name==='digifender.com'||name.endsWith('.digifender.com'))throw new DomainError(400,'Enter a public hostname such as www.yourdomain.com, without a URL or path. The platform domain cannot be claimed.');
+ if(name.length>243||!name.includes('.')||!name.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))||/^\d+(?:\.\d+){3}$/.test(name)||/\.(?:localhost|local|test|invalid|example|internal)$/.test(name)||['whumpo.com','whumpo.site'].some(domain=>name===domain||name.endsWith('.'+domain)))throw new DomainError(400,'Enter a public hostname such as www.yourdomain.com, without a URL or path. The platform domain cannot be claimed.');
  return name;
 }
 export function domainView(c:Claim){return {id:c.id,projectId:c.project_id,hostname:c.hostname,status:c.expires_at<=new Date().toISOString()?'expired':c.verified_at?'ownership_verified':'awaiting_dns',record:{type:'TXT',name:'_whumpo.'+c.hostname,value:'whumpo-verification='+c.token},expiresAt:c.expires_at,verifiedAt:c.verified_at,connected:false};}

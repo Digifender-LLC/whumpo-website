@@ -5,7 +5,7 @@ const dir=await mkdtemp('/tmp/whumpo-directory-history-');execFileSync(process.e
 const stamp=()=>new Date().toISOString();
 async function chat(user,content,id=crypto.randomUUID()){const state=await readChat(db,user);const r=await sendChat(db,user,{id,content,revision:state.state.revision});assert.equal(r.status,200,JSON.stringify(r));return id;}
 async function fixture(){const user=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'fixture',?)").bind(user,user+'@example.com','00',stamp()).run();await chat(user,'A community directory');const project=await chat(user,'Community');const version=await chat(user,'/build'),review=await chat(user,'/publish '+version);await chat(user,'/confirm '+review);return {user,project,version};}
-const draft=f=>readDirectory(db,f.user,f.project),history=f=>directoryHistory(db,f.user,f.project),pub=f=>host.fetch(new Request('https://sites.digifender.com/s/'+f.project+'/directory.json'),proxy.env);
+const draft=f=>readDirectory(db,f.user,f.project),history=f=>directoryHistory(db,f.user,f.project),pub=f=>host.fetch(new Request('https://'+f.project+'.whumpo.site'+'/directory.json'),proxy.env);
 try{
  const a=await fixture(),b=await fixture();assert.equal((await history(a)).snapshots.length,0);
  const first=await chat(a.user,`/directory-add ${a.project} | Garden Club | Original case-sensitive details | https://example.com/ABC`);assert.equal((await history(a)).snapshots.length,0);await assert.rejects(directorySnapshot(db,a.user,a.project,first),{status:404});await chat(a.user,'/confirm-directory '+first);

@@ -2,7 +2,7 @@ import {hashToken,newSessionToken} from './security';
 import {seal,unseal} from './connection-vault';
 export class ConnectionError extends Error{constructor(public status:number,message:string){super(message);}}
 type GitHubConfig={clientId:string;clientSecret:string;appId:number;slug:string;key:string};
-const callback='https://digifender.com/api/connections/github/callback';
+const callback='https://whumpo.com/api/connections/github/callback';
 const API='https://api.github.com';
 const apiHeaders={'accept':'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'Whumpo-test'};
 export function githubConfig(env:Env):GitHubConfig|undefined{

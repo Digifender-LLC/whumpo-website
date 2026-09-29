@@ -2,7 +2,7 @@ import {BackendError,listBackends} from './backend-versions';
 import {backendFormConfig} from './backend-form-render';
 type Review={id:string;user_id:string;project_id:string;program_revision:number;base_revision:number;config_json:string|null;status:string;expires_at:string};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export const applicationURL=(project:string)=>`https://apps.digifender.com/apps/${project}/`;
+export const applicationURL=(project:string)=>`https://app-${project}.whumpo.site/`;
 export async function liveAppPage(db:D1Database,project:string){return db.prepare('SELECT * FROM app_live_pages WHERE project_id=?').bind(project).first<{id:string;project_id:string;config_json:string;program_revision:number;revision:number}>();}
 export async function readAppPage(db:D1Database,user:string,project:string){
  await listBackends(db,user,project);

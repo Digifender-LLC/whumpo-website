@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-`src/app-data.ts` implements per-visitor state and immutable execution receipts. The controlled application host at `apps.digifender.com` connects invitation-only passkeys to this engine only after a separate owner-approved application-page review. Program authorization alone does not publish a visitor page. Existing public backend endpoints and website forms remain stateless.
+`src/app-data.ts` implements per-visitor state and immutable execution receipts. The controlled application host at `app-PROJECT_ID.whumpo.site` connects invitation-only passkeys to this engine only after a separate owner-approved application-page review. Program authorization alone does not publish a visitor page. Existing public backend endpoints and website forms remain stateless.
 
 This is an initial application workflow, not completion of all application hosting. Automatic retention, deletion for revoked/disabled accounts, schema migrations, whole-app recovery and physical-device passkey acceptance remain unfinished. Synthetic fixtures are used for automated and browser tests; no customer application is automatically published by a platform deployment.
 
@@ -63,7 +63,7 @@ Owner-configuration release `1fd15da` deployed to `whumpo-platform`, version `fc
 
 ## Visitor authentication service
 
-`src/app-auth.ts` and migration 0056 implement invitation-only visitor passkeys independently of platform users. Visitor authentication is reachable only through an owner-published controlled application page. Owner invitation and revocation controls are connected through the workspace API (see below). `publicAccessReady` reflects the current published page. Production WebAuthn verification is pinned to `https://apps.digifender.com` and RP `apps.digifender.com`. The host is deployed separately from the platform owner workspace. Local verification is explicitly pinned to `http://localhost:8787`. Request-supplied origins must never configure either value.
+`src/app-auth.ts` and migration 0056 implement invitation-only visitor passkeys independently of platform users. Visitor authentication is reachable only through an owner-published controlled application page. Owner invitation and revocation controls are connected through the workspace API (see below). `publicAccessReady` reflects the current published page. Production WebAuthn verification is pinned to `https://app-PROJECT_ID.whumpo.site` and RP `app-PROJECT_ID.whumpo.site`. The host is deployed separately from the platform owner workspace. Local verification is explicitly pinned to `http://localhost:8787`. Request-supplied origins must never configure either value.
 
 The owner can issue a 24-hour, single-use invitation for the current application revision. Only a domain-separated hash is saved. Invitations are limited to 100 per project and 1,000 overall; expired rows are reclaimed on issuance. A changed program revision invalidates outstanding invitations. Issuance rechecks current ownership and enabled state at commit. Raw invitation codes must be displayed privately once, outside chat, with no URL, logging, AI-context or reusable-component exposure.
 
@@ -103,7 +103,7 @@ The `whumpo-apps` Worker uses `wrangler.apps.jsonc`, the same control D1 and the
 
 `/configure-app-page PROJECT_ID FORM_JSON` prepares a ten-minute immutable page review; `/app-page-review REVIEW_ID` reads it and only `/confirm-app-page REVIEW_ID` applies it. `/disable-app-page PROJECT_ID` prepares withdrawal. `/app-page PROJECT_ID` reads availability. Equivalent owned routes are `GET/POST /api/projects/:project/application-page` and `GET /api/application-page-reviews/:id`, with POST `/confirm`. The model may read/prepare through `appPage`, `reviewAppPage`, `appPageReview` and `reviewDisableAppPage`; it cannot confirm.
 
-Form schema reuses the strict title, description, buttonLabel and 1–8 text/number/boolean fields. Metadata becomes public at `https://apps.digifender.com/apps/PROJECT_ID/`. No arbitrary HTML, JS, CSS, URL or SQL is accepted. The owner must match fields to the tested `{state,input} → {state,result}` program. Gateway transitions require the current page ID and exact bounded field types/keys. Input is still limited to 4 KiB by the engine.
+Form schema reuses the strict title, description, buttonLabel and 1–8 text/number/boolean fields. Metadata becomes public at `https://app-PROJECT_ID.whumpo.site/`. No arbitrary HTML, JS, CSS, URL or SQL is accepted. The owner must match fields to the tested `{state,input} → {state,result}` program. Gateway transitions require the current page ID and exact bounded field types/keys. Input is still limited to 4 KiB by the engine.
 
 Reviews pin owner, program revision and current page revision. Competing reviews have one winner. An applied historical receipt never republishes a withdrawn page. Changing application authority hides the page until reviewed again. Page changes delete visitor sessions and pending sign-in challenges; in-flight state commits lose their original session and fail. New public sessions and challenges pin the page review in D1. A page withdrawn after signature verification cannot create a new visitor/session: the session admission trigger aborts the complete authentication batch.
 

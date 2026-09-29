@@ -30,7 +30,7 @@ export async function reviewTXT(db:D1Database,user:string,id:string,claimId:stri
  catch(cause){const saved=await db.prepare("SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=? AND claim_id=? AND zone_id=? AND record_type='TXT'").bind(id,user,claimId,zoneId).first<Action>();if(saved)return view(saved);if(String(cause).includes('cloudflare_dns_quota'))throw new DomainError(409,'This account reached its 100 DNS-review test limit.');throw cause;}
  return view(await owned(db,user,id));
 }
-const routingTarget='hosting.digifender.com',hostingZone='fbf8bf845a46cadbb793ffeb8b5716f5';
+const routingTarget='hosting.whumpo.site',hostingZone='8d46ee4e394514402479acf16579f7b5';
 type RoutingConnection={id:string;claim_id:string;project_id:string;hostname:string;target:string;zone_id:string;state:string;provider_id:string|null;proof_hash:string};
 async function routingConnection(db:D1Database,user:string,id:string,ready:boolean){
  if(!ready)throw new DomainError(503,'Domain hosting is awaiting platform configuration.');

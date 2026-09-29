@@ -6,7 +6,7 @@ Current requirement-by-requirement evidence and remaining gates are in [the acce
 
 ## Acceptance checklist
 
-- [x] Public landing page and separate invitation-only workspace deployed at digifender.com.
+- [x] Public landing page and separate invitation-only workspace deployed at whumpo.com.
 - [x] Owner-scoped project records, session authentication, activity history, and account/project limits.
 - [x] Passkeys are the default signup/login method, with single-use browser-bound challenges, user verification, credential management, and recovery.
 - [x] Conversational onboarding collects the customer's idea and preferences, resumes after interruption, and clearly identifies guided mode until a model is configured.
@@ -63,7 +63,7 @@ Passkeys are now the default signup and sign-in method. The optional password fl
 
 Challenge tokens are random, hashed in D1, bound to a five-minute HttpOnly SameSite cookie, and atomically consumed before verification. Signup consumes the invitation and creates the user, passkey, and hashed recovery code in one transaction. Pending signup does not create a user. Recovery codes rotate on use and revoke prior sessions. Removing a passkey also revokes sessions atomically; a passkey-only account cannot remove its last credential. Security changes require a sign-in within ten minutes. `/security` or `/passkeys` opens the account security controls from chat.
 
-Production RP ID is `digifender.com`; development uses `localhost` at port 8787. Passkeys are scoped to the RP domain. When choosing the final brand/domain, retain access to the old account origin and implement an authenticated migration/re-enrollment flow before retiring it. Do not assume existing passkeys will work on the new domain.
+Production RP ID is `whumpo.com`; development uses `localhost` at port 8787. Passkeys are scoped to the RP domain. When choosing the final brand/domain, retain access to the old account origin and implement an authenticated migration/re-enrollment flow before retiring it. Do not assume existing passkeys will work on the new domain.
 
 Verification includes independently generated ES256 registration and signed authentication fixtures, rejected wrong origins and missing user verification, cookie binding, replay/counter rejection, recovery rotation, session revocation, and backup credential removal. A signed assertion also passed against the live Cloudflare Worker, followed by authenticated chat and logout. Its temporary account was deleted. Browser UI checks covered the default passkey button, signup fields, and security menu. Native device prompts and actual synced passkeys still need a user-device acceptance check; no user credential was created by the agent.
 
@@ -97,7 +97,7 @@ Migration 0008 records a current published-version pointer with a monotonically 
 
 Database triggers enforce the review's owner/project/version identity, unexpired status, expected publication revision and plan site quota. They update the pointer, project status and audit event atomically with the confirming chat turn. Stale reviews cannot overwrite a newer publication; duplicate confirmation requests return the committed result without a second change. Draft creation never changes the live pointer. Restore selects exact stored HTML without inference. Unpublishing leaves all previews intact.
 
-The separate `whumpo-sites` Worker serves only GET/HEAD `/s/PROJECT_ID` on `sites.digifender.com`; it has no AI/auth secrets and no workspace routes. Responses retain CSP sandbox, scripts/forms/network denial and no-store to make unpublication visible on the next request. It shares the existing D1 database via a binding; code limits reads to explicitly published versions, but the binding itself is not a database read-only role. Arbitrary customer scripts/backends are not supported by this serving boundary.
+The separate `whumpo-sites` Worker serves only GET/HEAD `/s/PROJECT_ID` on `PROJECT_ID.whumpo.site`; it has no AI/auth secrets and no workspace routes. Responses retain CSP sandbox, scripts/forms/network denial and no-store to make unpublication visible on the next request. It shares the existing D1 database via a binding; code limits reads to explicitly published versions, but the binding itself is not a database read-only role. Arbitrary customer scripts/backends are not supported by this serving boundary.
 
 The full MVP remains incomplete: natural-language tool selection, AI edits, uploads, custom domains, purchases, optional account connections and checkout are still required. These publication controls apply to the currently supported reusable static pages.
 

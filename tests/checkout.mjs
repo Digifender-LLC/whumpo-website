@@ -13,7 +13,7 @@ let calls=0;const sessions=new Map(),keys=new Map();
 const transport=async(url,init)=>{
  calls++;assert.equal(init.redirect,'manual');assert.equal(init.headers.authorization,'Bearer '+config.STRIPE_TEST_KEY);new Request(url,init);
  if(init.method==='POST'){
-  const p=init.body;assert.equal(p.get('line_items[0][price_data][unit_amount]'),'500');assert.equal(p.get('line_items[0][quantity]'),'1');assert.equal(p.get('success_url'),'https://digifender.com/workspace/?checkout=returned');
+  const p=init.body;assert.equal(p.get('line_items[0][price_data][unit_amount]'),'500');assert.equal(p.get('line_items[0][quantity]'),'1');assert.equal(p.get('success_url'),'https://whumpo.com/workspace/?checkout=returned');
   const key=init.headers['Idempotency-Key'];if(keys.has(key))return Response.json(keys.get(key));
   const id='cs_test_'+crypto.randomUUID().replaceAll('-','');const order=p.get('metadata[order_id]');const session={id,livemode:false,mode:'payment',status:'open',payment_status:'unpaid',amount_total:500,currency:'usd',metadata:{order_id:order},client_reference_id:order,url:'https://checkout.stripe.com/c/pay/'+id};sessions.set(id,session);keys.set(key,session);return Response.json(session);
  }
@@ -21,7 +21,7 @@ const transport=async(url,init)=>{
 };
 async function signed(sessionId,options={}){
  const raw=JSON.stringify({id:'evt_synthetic',type:options.type??'checkout.session.completed',livemode:options.live??false,data:{object:{id:sessionId}}});const timestamp=options.timestamp??Math.floor(Date.now()/1000);
- const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(config.STRIPE_WEBHOOK_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=Buffer.from(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(timestamp+'.'+raw))).toString('hex');return new Request('https://digifender.com/api/stripe/webhook',{method:'POST',headers:{'stripe-signature':`t=${timestamp},v1=${options.bad?'0'.repeat(64):sig}`},body:raw});
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(config.STRIPE_WEBHOOK_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']);const sig=Buffer.from(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(timestamp+'.'+raw))).toString('hex');return new Request('https://whumpo.com/api/stripe/webhook',{method:'POST',headers:{'stripe-signature':`t=${timestamp},v1=${options.bad?'0'.repeat(64):sig}`},body:raw});
 }
 try{
  const owner=await account(),other=await account();const id=crypto.randomUUID();
@@ -47,10 +47,10 @@ try{
  await assert.rejects(stripeWebhook(await signed(session2.id),lossyDB,config,transport));await stripeWebhook(await signed(session2.id),db,config,transport);assert.equal((await getBilling(db,owner)).credits.available,300);
  // Local API keeps browser endpoints session/origin gated; webhook uses its own signature gate.
  const env={...proxy.env,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
- assert.equal((await worker.fetch(new Request('https://digifender.com/api/billing/checkout',{method:'POST'}),env)).status,403);
- assert.equal((await worker.fetch(new Request('https://digifender.com/api/billing/checkout',{method:'POST',headers:{origin:'https://digifender.com'}}),env)).status,401);
- assert.equal((await worker.fetch(new Request('https://digifender.com/api/stripe/webhook',{method:'POST'}),env)).status,503);
- assert.equal((await worker.fetch(new Request('https://digifender.com/api/stripe/webhook',{method:'POST'}),{...env,...config})).status,400);
+ assert.equal((await worker.fetch(new Request('https://whumpo.com/api/billing/checkout',{method:'POST'}),env)).status,403);
+ assert.equal((await worker.fetch(new Request('https://whumpo.com/api/billing/checkout',{method:'POST',headers:{origin:'https://whumpo.com'}}),env)).status,401);
+ assert.equal((await worker.fetch(new Request('https://whumpo.com/api/stripe/webhook',{method:'POST'}),env)).status,503);
+ assert.equal((await worker.fetch(new Request('https://whumpo.com/api/stripe/webhook',{method:'POST'}),{...env,...config})).status,400);
  for(let n=0;n<2;n++)await createCheckout(db,config,owner,crypto.randomUUID(),'credits-100',transport);await assert.rejects(createCheckout(db,config,owner,crypto.randomUUID(),'credits-100',transport),{status:429});
  await db.prepare('DELETE FROM users WHERE id=?').bind(owner).run();await stripeWebhook(await signed(session.id),db,config,transport);
  console.log('Checkout passed: test-only configuration, server prices, ownership, concurrency, signature/age checks, paid-state validation, duplicate/out-of-order events, lost acknowledgements, quotas, deleted users and API gates.');

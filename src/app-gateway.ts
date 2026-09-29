@@ -1,3 +1,4 @@
+import {visitorProject,visitorOrigin} from './hosts';
 import {deleteAppAccount,exportAppAccount} from './app-lifecycle';
 import {appPasskeyOptions,appPasskeyVerify,recoverAppVisitor} from './app-auth';
 import {readAppData,readAppReceipt,revokeAppSession,transitionAppData} from './app-data';
@@ -38,7 +39,8 @@ async function body(request:Request):Promise<Record<string,unknown>>{
 // must call this handler; it must never serve arbitrary generated scripts/HTML.
 export async function applicationGateway(request:Request,env:AppEnv):Promise<Response>{
  try{
-  const local=String(env.ENVIRONMENT)==='local',origin=local?'http://localhost:8787':'https://apps.digifender.com',url=new URL(request.url);
+  const local=String(env.ENVIRONMENT)==='local',url=new URL(request.url),hostProject=visitorProject(url.hostname),origin=local?'http://localhost:8787':hostProject?visitorOrigin(hostProject):'';
+  if(!local&&hostProject)url.pathname='/apps/'+hostProject+url.pathname;
   if(url.origin!==origin)return json({error:'Application host required'},404);
   const match=url.pathname.match(route);if(!match)return json({error:'Not found'},404);
   const project=match[1],path=match[2],method=request.method;

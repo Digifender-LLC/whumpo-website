@@ -5,7 +5,7 @@ const dir=await mkdtemp('/tmp/whumpo-directory-');execFileSync(process.execPath,
 const stamp=()=>new Date().toISOString();
 async function chat(user,content,id=crypto.randomUUID()){const state=await readChat(db,user);const r=await sendChat(db,user,{id,content,revision:state.state.revision});assert.equal(r.status,200,JSON.stringify(r));return id;}
 async function fixture(){const user=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'fixture',?)").bind(user,user+'@example.com','00',stamp()).run();await chat(user,'A community directory');const project=await chat(user,'Community');const version=await chat(user,'/build'),review=await chat(user,'/publish '+version);await chat(user,'/confirm '+review);return {user,project,version};}
-const get=(project,suffix='')=>host.fetch(new Request('https://sites.digifender.com/s/'+project+'/directory'+suffix),proxy.env);
+const get=(project,suffix='')=>host.fetch(new Request('https://'+project+'.whumpo.site'+'/directory'+suffix),proxy.env);
 const current=(f)=>readDirectory(db,f.user,f.project);
 async function add(f,title='Garden club',description='Saturday mornings'){const r=await chat(f.user,`/directory-add ${f.project} | ${title} | ${description} | https://example.com/`);await chat(f.user,'/confirm-directory '+r);return r;}
 try{
@@ -23,7 +23,7 @@ try{
  for(const url of ['javascript:alert(1)','data:text/html,hi','https://user:secret@example.com/','http://example.com/'])assert.throws(()=>listing({id:review,title:'Safe',description:'',url}),{status:400});
  const hostile=await chat(a.user,`/directory-edit ${a.project} ${review} | <script>alert(1)</script> | <img src=x onerror=alert(1)> | https://example.com/?a=%22`);await chat(a.user,'/confirm-directory '+hostile);const hp=await chat(a.user,'/directory-publish '+a.project);await chat(a.user,'/confirm-directory '+hp);const html=await (await get(a.project)).text();assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));assert.match((await get(a.project)).headers.get('content-security-policy'),/sandbox/);
  // Public endpoint is read-only and emits no private drafts or review history.
- assert.equal((await host.fetch(new Request('https://sites.digifender.com/s/'+a.project+'/directory.json',{method:'POST',body:'{}'}),proxy.env)).status,405);
+ assert.equal((await host.fetch(new Request('https://'+a.project+'.whumpo.site'+'/directory.json',{method:'POST',body:'{}'}),proxy.env)).status,405);
  // Remove changes only the private collection until another explicit publication.
  const del=await chat(a.user,`/directory-remove ${a.project} ${review}`);await chat(a.user,'/confirm-directory '+del);assert.equal((await current(a)).draft.length,0);assert.equal((await (await get(a.project,'.json')).json()).listings.length,1);
  const off=await chat(a.user,'/directory-off '+a.project);await chat(a.user,'/confirm-directory '+off);assert.equal((await get(a.project)).status,404);
