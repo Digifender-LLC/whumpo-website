@@ -193,3 +193,10 @@ The photo panel and `/photos`, `/delete-photo` and `/confirm-photo-delete` comma
 ## Customer Cloudflare OAuth foundation — September 29, 2026
 
 The optional Connected accounts panel now includes a Cloudflare Authorization Code flow with session-bound S256 PKCE, encrypted expiring credentials, cancellation/disconnect fencing, leased provider revocation and authorized-zone discovery. Chat can open the same controls. It stays disabled until a registered OAuth client and vault key are installed; the existing Wrangler login cannot manage OAuth clients (403). No live customer consent, DNS mutation or domain purchase has been performed. Reviewed DNS changes and their live acceptance remain unfinished. See [Cloudflare authorization](integrations/cloudflare-connection.md).
+
+
+## Reviewed customer DNS proofs — September 29, 2026
+
+The Domains panel can review and explicitly confirm additive TXT proof creation using a customer's own authorized Cloudflare zone. Reviews pin ownership, proof, credential, inventory and expiry. Existing records are preserved, identical proofs need no write, and uncertain requests are observed without retrying POST. Customer OAuth setup and real DNS acceptance remain pending. Website-routing CNAMEs, record update/removal and purchases remain unfinished. See [DNS proof workflow](integrations/cloudflare-dns.md).
+
+Deployment verification: migration 0023 and the TXT-review controls are deployed. Disposable provider tests, local browser review/confirmation, and live disabled-access/tenant/Origin checks passed. Customer OAuth setup and real DNS-write acceptance remain pending; see `integrations/cloudflare-dns.md`. Stripe remains disconnected at the owner’s request.

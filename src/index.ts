@@ -1,3 +1,4 @@
+import {listDNSActions,reviewTXT,confirmTXT} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
@@ -241,6 +242,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return json({ recoveryCode });
   }
   if (method === "GET" && pathname === "/api/connections") return json({...await connectionStatus(env.DB,user.id,githubConfig(env)),cloudflare:await cloudflareStatus(env.DB,user.id,cloudflareConfig(env))});
+  if(method==='GET'&&pathname==='/api/cloudflare/dns')return json({enabled:!!cloudflareConfig(env),...await listDNSActions(env.DB,user.id)});
+  if(method==='POST'&&pathname==='/api/cloudflare/dns/review'){
+    const data=await body(request);if(typeof data?.id!=='string'||typeof data.claimId!=='string'||typeof data.zoneId!=='string')return error(400,'Choose a claim and Cloudflare zone.');
+    return json(await reviewTXT(env.DB,user.id,data.id,data.claimId,data.zoneId,cloudflareConfig(env)));
+  }
+  const dnsConfirmation=pathname.match(/^\/api\/cloudflare\/dns\/([0-9a-f-]{36})\/confirm$/);
+  if(method==='POST'&&dnsConfirmation)return json(await confirmTXT(env.DB,user.id,dnsConfirmation[1],cloudflareConfig(env)));
   if(method==='POST'&&pathname==='/api/connections/cloudflare/start'){
     if(!(await recentSession(request,env)))return error(401,'Sign in again before connecting Cloudflare.');
     return json(await startCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),cloudflareConfig(env)));
