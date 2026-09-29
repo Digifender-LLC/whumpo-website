@@ -1,4 +1,5 @@
-import {prepareCMSPublication,describeCMSPublication} from './cms-publication';
+import {prepareCMSUnpublish,describeCMSUnpublish} from './cms-unpublish';
+import {prepareCMSPublication,describeCMSPublication,readCMSPublication,listCMSPublications} from './cms-publication';
 import {prepareCMSPreview} from './cms-preview';
 import {cmsEditAction} from './cms-edits';
 import {cmsConnection} from './cms-status';
@@ -41,11 +42,13 @@ export async function readCMSDraft(db:D1Database,user:string,project:string,id:s
 export async function cmsContentAction(db:D1Database,user:string,action:Record<string,unknown>,id:string,env:Environment){
  if(['editDraft','listEdits','retryEdit'].includes(String(action.operation)))return cmsEditAction(db,user,action,id,env);
  const project=action.projectId;if(typeof project!=='string'||!uuid.test(project))throw new CMSProjectError(400,'Choose an owned CMS project ID');
- const allowed=action.operation==='draft'?['kind','operation','projectId','collection','title','text']:action.operation==='listDrafts'?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
+ const allowed=action.operation==='draft'?['kind','operation','projectId','collection','title','text']:['listDrafts','listPublications'].includes(String(action.operation))?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
  if(Object.keys(action).some(k=>!allowed.includes(k)))throw new CMSProjectError(400,'Unsupported CMS draft fields');
  if(action.operation==='draft')return createCMSDraft(db,user,project,id,String(action.collection),action.title,action.text,env);
+ if(action.operation==='listPublications')return listCMSPublications(db,user,project);
  if(action.operation==='listDrafts')return listCMSDrafts(db,user,project,env);
  if(typeof action.requestId!=='string'||!uuid.test(action.requestId))throw new CMSProjectError(400,'Choose a CMS draft request ID');
+ if(action.operation==='reviewUnpublish'){const publication=await readCMSPublication(db,user,action.requestId);if(publication.project_id!==project)throw new CMSProjectError(404,'Publication not found for this project');return describeCMSUnpublish(db,user,await prepareCMSUnpublish(db,user,action.requestId,id,env));}
  if(action.operation==='reviewPublication')return describeCMSPublication(await prepareCMSPublication(db,user,project,action.requestId,id,env));
  if(action.operation==='previewDraft')return prepareCMSPreview(db,user,project,action.requestId,id,env);
  if(action.operation==='readDraft')return readCMSDraft(db,user,project,action.requestId,env);
