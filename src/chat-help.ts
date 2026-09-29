@@ -61,10 +61,10 @@ With a connected Cloudflare account:
 
 Provider configuration and consent are required. Domain purchasing is not enabled. /help accounts explains optional connections.`,
  accounts:`Connected accounts and sign-in
-/connections shows connection guidance. “connect github” or “connect cloudflare” starts the supported connection flow when configured. Manage consent and disconnection in Details → Connected accounts.
+/connections shows connection guidance. “connect github” or “connect cloudflare” starts the supported connection flow when configured. Manage consent and disconnection in Settings → External connections.
 GitHub can store reviewed source backups; Cloudflare can manage reviewed DNS changes in authorized zones. These accounts are optional for starting a Whumpo project.
 
-/security or /passkeys opens sign-in guidance. Details → Passkeys & recovery manages passkeys and recovery using recent sign-in and device confirmation.
+/security or /passkeys opens sign-in guidance. Profile → Passkeys & recovery manages passkeys and recovery using recent sign-in and device confirmation.
 Never paste passwords, API keys or recovery codes into chat.
 
 GitHub backups: /help backups`,

@@ -25,9 +25,9 @@ Infrastructure budgets, customer overage tariffs, normalization, tax treatment a
 
 ## Workspace
 
-Desktop: no global header. Brand at top left, Dashboard and Chat navigation, workflow tabs underneath; Settings and account/sign-out at the bottom. Center contains the current dashboard or account control. Chat remains on the right. Chat navigation offers a larger conversation view. Narrow screens switch between workspace and conversation to avoid a squeezed layout.
+Chat is the first and default navigation item. Chat, Dashboard, Settings, Profile and workflow pages occupy separate full-width views; Dashboard never includes a side chat. There is no global header. Brand sits top left; Settings icon and private profile-photo button share the bottom sidebar row. Email and sign-out appear only in Profile. No Tools menu or Add Workspace button exists. An empty workflow list invites the user to ask Whumpo for a custom page. Existing pages remain customizable.
 
-Default dashboard includes projects, AI test allowance and activity. Static account controls remain available independently of customization. Connections, domains, photos, billing and contact inbox render inside the workspace; sensitive passkey/recovery flows retain dialogs. CMS drafting/editing/review remains in the adjacent chat, rather than requiring the user to leave for a separate admin website.
+Default dashboard includes projects, AI test allowance and activity. Static account controls remain available independently of customization. Connections, domains, photos, billing and contact inbox render inside the workspace; sensitive passkey/recovery flows retain dialogs. CMS drafting/editing/review opens the Chat tab, rather than requiring the user to leave for a separate admin website.
 
 Customers and the agent can arrange cards and add/rename/remove up to eight tabs. Each tab may filter to an owned project. Supported card types:
 
@@ -47,3 +47,12 @@ Migration 0054 adds per-owner layout and draft capacity preferences. Revisions p
 `tests/workspace-dashboard.mjs`: real local D1, account isolation, invalid/foreign layouts, revision races, strict model authority, draft preferences without entitlements, honest missing metrics, monthly/annual proration, overage thresholds, break-even and complete consecutive-period requirements. Browser and HTTP checks are recorded in the acceptance log.
 
 Remaining beyond this increment: production traffic/processing instrumentation; provider cost ingestion and complete-cycle history; calibrated budgets and tariffs; actual subscription/overage consent and settlement; notification delivery and scheduling; arbitrary customer-specific dashboard integrations through reviewed connectors. This document does not advertise those services as live.
+
+
+## Profile and appearance refinement
+
+Migration 0055 stores per-owner name, About me, explicit AI-sharing preference, day/night/device appearance, and one private avatar (prepared JPEG ≤256px and 32KiB, metadata stripped). Revision checks prevent stale writes. Profile email is displayed read-only: changing it awaits a verified-email flow. No avatar URL or email enters agent context. Name/About me enter only after opt-in and remain untrusted personalization data, never tool authority. Turning sharing off removes them from future context; it does not retract data already sent to a provider.
+
+Profile groups personal details, private photo, password/passkeys/recovery, and sign-out. Settings groups appearance, billing, usage, external connections, plans and draft spending preferences. Project photos/inbox/domains and publishing/maintenance controls live in Dashboard. Password changes require a recent session; password-enabled accounts also prove the existing password. The credential replacement and old-session revocation are atomic, with a fresh session issued afterward. Losing the response can leave the customer signed out with the new password, which is recoverable by signing in again. Email changes, account deletion and avatar public sharing are not enabled.
+
+The workspace stylesheet now uses shared day/night semantic colors, one typography/spacing scale, consistent form controls, aligned footer icons, and responsive independent views. No email address appears in navigation. Profile text/photo and theme changes are saved independently from paid-plan preferences.

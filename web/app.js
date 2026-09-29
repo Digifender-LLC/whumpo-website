@@ -44,7 +44,7 @@ function text(tag, value, className) {
   if (className) node.className = className;
   return node;
 }
-const workspace = createDashboard({api,text,sendMessage,showMessage});
+const workspace = createDashboard({api,text,sendMessage,showMessage,controls:{files:openFiles,inbox:openInbox,domains:openDomains,connections:openConnections,billing:openBilling,security:openSecurity}});
 let chatRevision = 0;
 let pendingMessage;
 let sending = false;
@@ -111,11 +111,6 @@ async function loadDashboard(user) {
   history.replaceState(null, "", "/workspace/");
   $("#auth").hidden = true;
   $("#dashboard").hidden = false;
-  const account = $("#account");
-  account.replaceChildren(text("span", user.email));
-  const logout = text("button", "Sign out");
-  logout.onclick = async () => { try { await api("/auth/logout", { method: "POST" }); location.reload(); } catch (error) { showMessage(error.message); } };
-  account.append(logout);
   renderChat(await api("/chat"));
   await workspace.start();
 }
@@ -126,7 +121,7 @@ async function sendMessage(content) {
   if (["/domains", "show domains", "connect my domain", "disconnect my domain", "check domain hosting"].includes(content.trim().toLowerCase())) { await openDomains(); return; }
   if (["/files", "show files", "show photos", "upload a photo", "delete a photo", "remove a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
   if (["/security", "/passkeys"].includes(content.trim().toLowerCase())) { await openSecurity(); return; }
-  workspace.focusChatMobile();
+  workspace.showChat();
   sending = true;
   clearTimeout(chatPoll);
   $("#chat-form button").disabled = true;
@@ -163,21 +158,13 @@ async function sendMessage(content) {
     document.querySelectorAll("[data-command]").forEach(button => button.disabled = false);
   }
 }
-$("#menu-toggle").onclick = () => {
-  $("#workspace-menu").hidden = !$("#workspace-menu").hidden;
-  $("#menu-toggle").setAttribute("aria-expanded", String(!$("#workspace-menu").hidden));
-};
-document.querySelectorAll("[data-command]").forEach(button => button.onclick = () => {
-  $("#workspace-menu").hidden = true;
-  $("#menu-toggle").setAttribute("aria-expanded", "false");
-  sendMessage(button.dataset.command);
-});
+document.querySelectorAll("[data-command]").forEach(button => button.onclick = () => sendMessage(button.dataset.command));
 $("#chat-form").onsubmit = event => { event.preventDefault(); sendMessage($("#chat-input").value.trim()); };
 function showAuth() {
   $("#auth").hidden = false;
   $("#dashboard").hidden = true;
   $("#primary-navigation").hidden = true;
-  $("#settings-open").hidden = true;
+  $("#sidebar-account").hidden = true;
 }
 async function setAuthMode(createAccount) {
   registering = createAccount;
@@ -246,7 +233,7 @@ async function refreshPhotos() {
   for(const file of data.files) {
     const row=text('article','', 'photo-row');row.append(text('p',`${file.name} · ${file.width} × ${file.height} · ${Math.ceil(file.size/1024)} KiB${file.status==='pending'?' · Upload awaiting confirmation':''}`));
     if(file.saved_versions)row.append(text('p',`Kept for ${file.saved_versions} saved website version${file.saved_versions===1?'':'s'}.`));
-    else {const remove=text('button','Review deletion');remove.type='button';remove.onclick=()=>{$('#files-dialog').close();$('#workspace-menu').hidden=true;$('#menu-toggle').setAttribute('aria-expanded','false');sendMessage(`/delete-photo ${file.id}`);};row.append(remove);}
+    else {const remove=text('button','Review deletion');remove.type='button';remove.onclick=()=>{$('#files-dialog').close();sendMessage(`/delete-photo ${file.id}`);};row.append(remove);}
     if(file.status==='ready'){const img=document.createElement('img');img.src=`/api/files/${file.id}`;img.alt=file.name;img.loading='lazy';row.append(img);const link=text('a','Open private photo');link.href=img.src;link.target='_blank';link.rel='noopener noreferrer';row.append(link);const use=text('button','Use in website');use.type='button';use.onclick=()=>{$('#files-dialog').close();sendMessage(`/photo ${file.id}`);};row.append(use);}
     list.append(row);
   }
@@ -260,7 +247,7 @@ async function openFiles() {
     $("#photo-upload").disabled=photoUploading||!projects.length;$("#files-status").textContent='';await refreshPhotos();$("#files-dialog").showModal();
   }catch(error){showMessage(error.message);}
 }
-$("#files-open").onclick=openFiles;$("#files-close").onclick=()=>$("#files-dialog").close();
+$("#files-close").onclick=()=>$("#files-dialog").close();
 $("#files-project").onchange=async()=>{pendingPhoto=undefined;try{await refreshPhotos();}catch(error){$("#files-status").textContent=error.message;}};
 $("#photo-input").onchange=()=>{pendingPhoto=undefined;$("#photo-name").value=($("#photo-input").files[0]?.name??'').replace(/\.[^.]+$/,'').slice(0,100);};
 $("#photo-name").oninput=()=>{pendingPhoto=undefined;};
@@ -294,7 +281,7 @@ function renderBilling(data) {
   const history = $("#billing-history"); history.replaceChildren();
   for (const entry of data.ledger.slice(0, 10)) history.append(text("p", `${entry.event.replaceAll("_", " ")} · ${entry.quota_delta > 0 ? "+" : ""}${entry.quota_delta} monthly units · ${entry.credits_delta > 0 ? "+" : ""}${entry.credits_delta} credits`, "ledger-entry"));
 }
-$("#billing-open").onclick = async () => { try { renderBilling(await api("/billing")); $("#billing-dialog").showModal(); } catch(error) { showMessage(error.message); } };
+async function openBilling(){ try { renderBilling(await api("/billing")); $("#billing-dialog").showModal(); } catch(error) { showMessage(error.message); } }
 let checkoutRequestId;
 $("#checkout-start").onclick = async () => {
   const button = $("#checkout-start"); button.disabled = true;
@@ -317,7 +304,7 @@ $("#overage-enabled").onchange = async event => {
   finally { toggle.disabled = false; }
 };
 async function openSecurity() { try { await loadPasskeys(); $("#security-dialog").showModal(); } catch (error) { showMessage(error.message); } }
-$("#security-open").onclick = openSecurity;
+
 $("#security-close").onclick = () => $("#security-dialog").close();
 $("#passkey-add").onclick = async () => {
   const button = $("#passkey-add"); button.disabled = true;
@@ -397,7 +384,7 @@ async function openDomains() {
   $('#domains-dialog').showModal();
  }catch(error){showMessage(error.message);}
 }
-$('#domains-open').onclick=openDomains;$('#domains-close').onclick=()=>$('#domains-dialog').close();
+$('#domains-close').onclick=()=>$('#domains-dialog').close();
 $('#domain-form').onsubmit=event=>{event.preventDefault();const name=$('#domain-hostname').value.trim(), project=$('#domain-project').value;if(!project)return;$('#domains-dialog').close();sendMessage(`/domain ${name} ${project}`);};
 
 let cloudflarePage=1;
@@ -420,7 +407,7 @@ async function openConnections(){
   if(github.connected){const data=await api('/connections/github/installations');await setupBackups(data.installations);for(const item of data.installations)list.append(text('p',`Installed for ${item.account} · ${item.repositorySelection==='selected'?'Selected repositories':'All repositories'}`));if(!data.installations.length)list.append(text('p','No active installation found. Use Choose repositories on GitHub, then refresh.'));if(data.truncated)list.append(text('p','Only the first 100 installations were checked.'));}
  }catch(error){$('#connections-status').textContent=error.message;if(!$('#connections-dialog').open)showMessage(error.message);}
 }
-$('#connections-open').onclick=openConnections;$('#connections-refresh').onclick=openConnections;$('#connections-close').onclick=()=>$('#connections-dialog').close();
+$('#connections-refresh').onclick=openConnections;$('#connections-close').onclick=()=>$('#connections-dialog').close();
 $('#github-connect').onclick=async()=>{const button=$('#github-connect');button.disabled=true;try{const result=await api('/connections/github/start',{method:'POST',body:'{}'}),url=new URL(result.url);if(url.origin!=='https://github.com'||url.pathname!=='/login/oauth/authorize')throw new Error('Unexpected authorization destination');location.assign(url.href);}catch(error){$('#connections-status').textContent=error.message;button.disabled=false;}};
 $('#github-disconnect').onclick=async()=>{const button=$('#github-disconnect');button.disabled=true;try{await api('/connections/github/disconnect',{method:'POST',body:'{}'});await openConnections();}catch(error){$('#connections-status').textContent=error.message;}finally{button.disabled=false;}};
 
@@ -490,7 +477,7 @@ async function refreshInbox(){
  if(!result.messages.length)list.append(text('p','No messages yet.'));
 }
 async function openInbox(){try{const {projects}=await api('/projects'),select=$('#inbox-project'),previous=select.value;select.replaceChildren();for(const p of projects){const option=text('option',p.name);option.value=p.id;select.append(option);}if(projects.some(p=>p.id===previous))select.value=previous;await refreshInbox();$('#inbox-dialog').showModal();}catch(error){showMessage(error.message);}}
-$('#inbox-open').onclick=openInbox;$('#inbox-close').onclick=()=>{$('#inbox-list').replaceChildren();$('#inbox-dialog').close();};
+$('#inbox-close').onclick=()=>{$('#inbox-list').replaceChildren();$('#inbox-dialog').close();};
 $('#inbox-project').onchange=()=>refreshInbox().catch(error=>showMessage(error.message));
 $('#inbox-refresh').onclick=()=>refreshInbox().catch(error=>showMessage(error.message));
 $('#contact-review').onclick=()=>{const id=$('#inbox-project').value;if(!id)return;$('#inbox-dialog').close();sendMessage(`${inboxEnabled?'/contact-off':'/contact-on'} ${id}`);};

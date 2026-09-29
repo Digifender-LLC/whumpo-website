@@ -118,7 +118,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if (domain) reply = domain.reply;
   else if (photoDraft) reply = photoDraft.reply;
   else if (publication) reply = publication.reply;
-  else if (['/inbox','show inbox','my inbox'].includes(command)) reply='Open your private inbox from the Details menu or type /inbox in the workspace. Visitor messages are not copied into chat history or AI prompts. Use /contact-on PROJECT_ID or /contact-off PROJECT_ID to review form settings.';
+  else if (['/inbox','show inbox','my inbox'].includes(command)) reply='Open your private inbox from Dashboard → Contact inbox or type /inbox in the workspace. Visitor messages are not copied into chat history or AI prompts. Use /contact-on PROJECT_ID or /contact-off PROJECT_ID to review form settings.';
   else if (/^\/photos(?:\s|$)/.test(command)) {
     const [,id,...extra]=command.split(/\s+/);
     if(extra.length||(id&&!/^[0-9a-f-]{36}$/.test(id)))return {status:400,error:'Use /photos, optionally followed by a project ID.'};
@@ -172,12 +172,12 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     const { results } = await db.prepare('SELECT summary, created_at FROM activity_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<{ summary: string; created_at: string }>();
     reply = results.map(event => `${event.created_at.slice(0, 10)}: ${event.summary}`).join('\n') || 'No activity yet.';
   } else if (['/files','show files','show photos','upload a photo'].includes(command)) {
-    reply='Open Details → Project photos to upload a private photo or view existing files. Uploads use no AI units. Photos are not published automatically.';
+    reply='Open Dashboard → Photos to upload a private photo or view existing files. Uploads use no AI units. Photos are not published automatically.';
 
   } else if (['/connections', 'show connections'].includes(command)) {
-    reply = 'Open Details → Connected accounts, or type connect github or connect cloudflare, to manage optional provider authorization. The panel shows whether each integration is configured. GitHub supports reviewed source backups; Cloudflare supports authorized zone selection and reviewed domain TXT proofs once configured. Website-routing changes are still being built. Do not paste API keys or passwords into chat.';
+    reply = 'Open Settings → External connections, or type connect github or connect cloudflare, to manage optional provider authorization. The panel shows whether each integration is configured. GitHub supports reviewed source backups; Cloudflare supports authorized zone selection and reviewed domain TXT proofs once configured. Website-routing changes are still being built. Do not paste API keys or passwords into chat.';
   } else if (['/security', '/passkeys'].includes(command)) {
-    reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
+    reply = 'Open Profile → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (help) {
     reply = help;
   } else if (command === '/new') {

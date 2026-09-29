@@ -1,14 +1,17 @@
+import { createProfile } from './profile.js';
 import { publicPlans } from '../src/plans.ts';
 const labels={projects:'Projects',usage:'AI assistance',storage:'File storage',activity:'Recent activity',traffic:'Visitor traffic',cms:'Publishing desk',performance:'Processing performance'};
-export function createDashboard({api,text,sendMessage,showMessage}){
- const $=s=>document.querySelector(s);let data,active='dashboard',editing='dashboard',loadSequence=0;
+export function createDashboard({api,text,sendMessage,showMessage,controls}){
+ const $=s=>document.querySelector(s);let data,active='chat',editing='dashboard',loadSequence=0;
  const content=$('#workspace-content');
  function button(label,run){const b=text('button',label);b.type='button';b.onclick=()=>Promise.resolve().then(run).catch(e=>showMessage(e.message));return b;}
  function choose(view){active=view;render();}
+ const profile=createProfile({api,text,showMessage,openSecurity:controls.security});
+ function askForPage(){choose('chat');const input=$('#chat-input');if(!input.value.trim())input.value='Help me build a custom page for my workflow.';input.focus();}
  function card(title){const a=text('article','','dashboard-card');a.append(text('h2',title));return a;}
  function command(label,message){return button(label,()=>sendMessage(message));}
  function metric(a,value,caption){a.append(text('strong',value,'metric-value'),text('p',caption,'muted'));}
- function actionControl(id,label){return button(label,()=>$('#'+id).click());}
+ function actionControl(id,label){return button(label,controls[id.replace('-open','')]);}
  function renderCard(kind,projectId){
   const a=card(labels[kind]),projects=data.projects.filter(p=>!projectId||p.id===projectId);
   if(kind==='projects'){
@@ -31,7 +34,7 @@ export function createDashboard({api,text,sendMessage,showMessage}){
   if(kind==='cms'){
    if(!projects.length)a.append(text('p','Choose or create a project to begin publishing.'));
    for(const p of projects){const row=text('div','','dashboard-project');row.append(text('strong',p.name),text('p',`${p.cms_articles} published article${p.cms_articles===1?'':'s'}`),command('Content & drafts',`/cms-drafts ${p.id}`),command('CMS status',`/cms ${p.id}`),command('Write with Whumpo',`I want to write a new CMS article for project ${p.id}. Help me plan it.`));a.append(row);}
-   a.append(text('p','Drafting, editing and publication reviews stay in this workspace’s chat.'));
+   a.append(text('p','Open Chat to draft, edit, and review publications.'));
   }
   if(kind==='traffic'||kind==='performance')metric(a,'Not connected',kind==='traffic'?'Visitor analytics have not been collected. No traffic estimate is shown.':'No processing telemetry is connected. A dashboard tab does not provision a video server or other compute.');
   return a;
@@ -39,20 +42,31 @@ export function createDashboard({api,text,sendMessage,showMessage}){
  function closePanels(){document.querySelectorAll('.embedded-dialog[open]').forEach(d=>d.close());}
  function render(){
   if(!data)return;closePanels();content.hidden=false;content.replaceChildren();
-  const tab=data.layout.tabs.find(t=>t.id===active);if(!['dashboard','chat','settings'].includes(active)&&!tab)active='dashboard';
+  const tab=data.layout.tabs.find(t=>t.id===active);if(!['dashboard','chat','settings','profile'].includes(active)&&!tab)active='chat';
   document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-  $('#dashboard').classList.toggle('chat-focused',active==='chat');$('#dashboard').classList.toggle('mobile-chat',active==='chat');
-  $('#view-title').textContent=tab?.label||(active==='settings'?'Settings & profile':'Welcome home.');
-  $('#view-description').textContent=tab?'A workspace shaped around what you do.':active==='settings'?'Your account, your connections, your decisions.':'Your projects, your progress, a little room to grow.';
-  $('#customize-dashboard').hidden=active==='settings'||active==='chat';
+  $('#workspace-stage').hidden=active==='chat';$('.chat-sidebar').hidden=active!=='chat';
+  content.className=['settings','profile'].includes(active)?'settings-content':'';
+  $('#view-title').textContent=tab?.label||({settings:'Settings',profile:'Your profile',dashboard:'Dashboard'}[active]??'');
+  $('#workspace-stage').setAttribute('aria-label',$('#view-title').textContent||'Workspace');
+  $('#view-eyebrow').textContent=tab?'YOUR CUSTOM PAGE':active==='dashboard'?'YOUR WORKSPACE':'MAKE YOURSELF AT HOME';
+  $('#view-description').textContent=tab?'The details that matter to your work.':({settings:'Make Whumpo work the way you do.',profile:'A little about you. A better way to work together.',dashboard:'A clear view of what you’re building.'}[active]??'');
+  $('#customize-dashboard').hidden=['settings','profile','chat'].includes(active);
+  if(active==='chat')return;
+  if(active==='profile'){profile.render(content);return;}
   if(active==='settings'){renderSettings();return;}
   const grid=text('div','','dashboard-grid');for(const kind of tab?.widgets??data.layout.widgets)grid.append(renderCard(kind,tab?.projectId));content.append(grid);
-  if(!tab){const note=card('Room to grow');note.classList.add('capacity-card');note.append(text('p','Start with Starter when paid plans launch. Your resources will share flexible capacity, and Whumpo will help you choose when to grow.'),text('p','Overall resource capacity: not yet metered. Your preview safety limits still apply.'),button('Plan & spending preferences',()=>choose('settings')));content.append(note);}
-  content.append(text('small','Updated '+new Date(data.measuredAt).toLocaleTimeString()+'. Refresh to check for changes.','updated-label'),button('Refresh',refresh));
+  if(!tab){
+   const tools=card('Project controls'),primary=text('div','','control-grid');
+   for(const [id,label]of [['files-open','Photos'],['inbox-open','Contact inbox'],['domains-open','Domains']])primary.append(actionControl(id,label));
+   tools.append(primary);const detail=document.createElement('details');detail.append(text('summary','Publishing & maintenance'));const group=text('div','','control-grid');
+   for(const [label,message]of [['Website health','/health'],['Directories','/directory'],['Saved versions','/versions'],['Export website','/export'],['Publish a version','/publish'],['Unpublish a site','/unpublish']])group.append(command(label,message));detail.append(group);tools.append(detail);content.append(tools);
+  }
+  const footer=text('div','','dashboard-footer');footer.append(text('small','Updated '+new Date(data.measuredAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})),button('Refresh',refresh));content.append(footer);
  }
  function renderSettings(){
-  const controls=card('Always within reach');for(const [id,label] of [['security-open','Passkeys & recovery'],['billing-open','Usage & credits'],['files-open','Photos'],['inbox-open','Contact inbox'],['domains-open','Domains'],['connections-open','Connected accounts']])controls.append(actionControl(id,label));content.append(controls);
-  const prefs=data.capacity.preferences,a=card('Plan & spending preferences');a.append(text('p','Draft preferences only. Your current plan is '+data.billing.plan.name+'. Saving here cannot upgrade, purchase capacity, or authorize charges.'));
+  profile.appearance(content);
+  const services=card('Account services');services.classList.add('settings-section');const links=text('div','','settings-links');for(const [id,label] of [['billing-open','Billing & usage'],['connections-open','External connections']])links.append(actionControl(id,label));links.append(command('Plans & pricing','/plans'));services.append(links);content.append(services);
+  const prefs=data.capacity.preferences,a=card('Plan & spending preferences');a.classList.add('settings-section');a.append(text('p','Draft preferences only. Your current plan is '+data.billing.plan.name+'. Saving here cannot upgrade, purchase capacity, or authorize charges.'));
   const form=document.createElement('form');
   function field(label,element){const l=text('label',label);l.append(element);form.append(l);return element;}
   function select(options,value){const s=document.createElement('select');for(const [v,label]of options){const o=text('option',label);o.value=v;s.append(o);}s.value=value;return s;}
@@ -68,9 +82,9 @@ export function createDashboard({api,text,sendMessage,showMessage}){
   a.append(form,text('p','Plan changes always require approval. Temporary spikes can use an explicitly authorized allowance after billing launches. Dedicated services need a separate cost review.'),text('p','Upgrades keep the renewal date and credit unused subscription value. Downgrades start at renewal after your approval; recommendations need two complete lower-use periods with headroom.'));content.append(a);
  }
  function navigation(){
-  const nav=$('#workflow-navigation');nav.replaceChildren();for(const tab of data.layout.tabs){const b=button(tab.label,()=>choose(tab.id));b.dataset.view=tab.id;nav.append(b);}
+  const nav=$('#workflow-navigation');nav.replaceChildren();if(!data.layout.tabs.length){const cta=text('div','','workflow-empty');cta.append(text('p','A page made for your work.'),text('span','Ask Whumpo to build a custom page around your workflow.'),button('Ask Whumpo',askForPage));nav.append(cta);}for(const tab of data.layout.tabs){const b=button(tab.label,()=>choose(tab.id));b.dataset.view=tab.id;nav.append(b);}
  }
- async function refresh(){const sequence=++loadSequence;const next=await api('/workspace/dashboard');if(sequence!==loadSequence)return;if($('#layout-dialog').open||active==='settings'||document.querySelector('.embedded-dialog[open]'))return;data=next;navigation();render();}
+ async function refresh(){const sequence=++loadSequence;const next=await api('/workspace/dashboard');if(sequence!==loadSequence)return;if($('#layout-dialog').open||['settings','profile'].includes(active)||document.querySelector('.embedded-dialog[open]'))return;data=next;navigation();render();}
  function edit(id){
   if(!data)return;editing=id;const tab=data.layout.tabs.find(t=>t.id===id);$('#layout-label').value=tab?.label??'';$('#layout-label').parentElement.hidden=id==='dashboard';$('#layout-project').parentElement.hidden=id==='dashboard';$('#layout-label').required=id!=='dashboard';
   const select=$('#layout-project');select.replaceChildren();const all=text('option','All projects');all.value='';select.append(all);for(const p of data.projects){const o=text('option',p.name);o.value=p.id;select.append(o);}select.value=tab?.projectId??'';
@@ -78,15 +92,15 @@ export function createDashboard({api,text,sendMessage,showMessage}){
   $('#layout-remove').hidden=!tab;$('#layout-error').textContent='';$('#layout-dialog').showModal();
  }
  async function persist(layout){const saved=await api('/workspace/layout',{method:'PUT',body:JSON.stringify({revision:data.revision,layout})});data={...data,...saved};navigation();render();$('#layout-dialog').close();}
- $('#layout-form').onsubmit=async e=>{e.preventDefault();const submit=e.currentTarget.querySelector('[type=submit]');submit.disabled=true;try{const widgets=[...$('#layout-widgets').querySelectorAll('input:checked')].map(i=>i.value),layout=structuredClone(data.layout);if(editing==='dashboard')layout.widgets=widgets;else{const tab={id:editing==='new'?'tab-'+crypto.randomUUID():editing,label:$('#layout-label').value.trim(),projectId:$('#layout-project').value||null,widgets};const index=layout.tabs.findIndex(t=>t.id===editing);if(index<0)layout.tabs.push(tab);else layout.tabs[index]=tab;active=tab.id;}await persist(layout);}catch(e){$('#layout-error').textContent=e.message;}finally{submit.disabled=false;}};
+ $('#layout-form').onsubmit=async e=>{e.preventDefault();const submit=e.currentTarget.querySelector('[type=submit]');submit.disabled=true;try{const widgets=[...$('#layout-widgets').querySelectorAll('input:checked')].map(i=>i.value),layout=structuredClone(data.layout);if(editing==='dashboard')layout.widgets=widgets;else{const tab={id:editing,label:$('#layout-label').value.trim(),projectId:$('#layout-project').value||null,widgets};const index=layout.tabs.findIndex(t=>t.id===editing);if(index<0)throw Error('Choose an existing page to customize. Ask Whumpo to create a new one.');layout.tabs[index]=tab;active=tab.id;}await persist(layout);}catch(e){$('#layout-error').textContent=e.message;}finally{submit.disabled=false;}};
  $('#layout-remove').onclick=()=>persist({...data.layout,tabs:data.layout.tabs.filter(t=>t.id!==editing)}).catch(e=>{$('#layout-error').textContent=e.message;});
- $('#layout-close').onclick=()=>$('#layout-dialog').close();$('#add-workflow').onclick=()=>edit('new');$('#customize-dashboard').onclick=()=>edit(active);
+ $('#layout-close').onclick=()=>$('#layout-dialog').close();$('#customize-dashboard').onclick=()=>edit(active);
  $('#settings-open').onclick=()=>choose('settings');document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>choose(b.dataset.view));
- // Existing account panels keep their handlers and open inside the unified workspace.
- for(const name of ['connections','domains','files','billing','inbox']){
+ // Account and project panels retain their established controls in the full page.
+ for(const [name,parent] of [['connections','settings'],['domains','dashboard'],['files','dashboard'],['billing','settings'],['inbox','dashboard']]){
   const d=$('#'+name+'-dialog');d.classList.add('embedded-dialog');$('#workspace-stage').append(d);
-  d.showModal=()=>{closePanels();active='settings';$('#dashboard').classList.remove('chat-focused','mobile-chat');content.hidden=true;$('#view-title').textContent=d.querySelector('h2').textContent;$('#view-description').textContent='Manage this here. Whumpo is beside you if you need help.';$('#customize-dashboard').hidden=true;d.show();};
+  d.showModal=()=>{active=parent;render();content.hidden=true;$('#view-title').textContent=d.querySelector('h2').textContent;$('#view-description').textContent='';$('#customize-dashboard').hidden=true;d.show();};
   d.addEventListener('close',()=>{if(!document.querySelector('.embedded-dialog[open]'))render();});
  }
- return {focusChatMobile(){if(window.matchMedia('(max-width:1100px)').matches)choose('chat');},async start(){ $('#primary-navigation').hidden=false;$('#settings-open').hidden=false;await refresh(); },refresh};
+ return {showChat(){choose('chat');},async start(){await profile.load();$('#primary-navigation').hidden=false;$('#sidebar-account').hidden=false;await refresh();},refresh};
 }

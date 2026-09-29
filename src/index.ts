@@ -1,3 +1,4 @@
+import {readProfile,updateProfile,profilePhoto,updateProfilePhoto} from './profile';
 import {dashboardData,readLayout,saveLayout,readCapacity,saveCapacity} from './workspace-dashboard';
 import { readAcknowledgment } from './acknowledgment';
 import {readApplication,readApplicationReview,prepareApplication,confirmApplication} from './app-activation';
@@ -197,6 +198,32 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  if(pathname==='/api/profile'){
+    if(method==='GET')return json(await readProfile(env.DB,user.id));
+    if(method==='PATCH')return json(await updateProfile(env.DB,user.id,await body(request)));
+  }
+  if(pathname==='/api/profile/photo'){
+    if(method==='GET')return profilePhoto(env.DB,user.id);
+    if(method==='PUT'||method==='DELETE')return json(await updateProfilePhoto(env.DB,user.id,request));
+  }
+  if(pathname==='/api/profile/password'&&method==='POST'){
+    if(!await recentSession(request,env))return error(401,'Sign in again before changing your password');
+    if(!(await env.AUTH_LIMITER.limit({key:'password:'+user.id})).success)return error(429,'Too many attempts. Try again in a minute.');
+    const data=await body(request);
+    if(typeof data?.newPassword!=='string'||data.newPassword.length<12||data.newPassword.length>128)return error(400,'Use a password of 12 to 128 characters');
+    const row=await env.DB.prepare('SELECT password_hash,password_salt FROM users WHERE id=?').bind(user.id).first<{password_hash:string;password_salt:string}>();
+    if(!row)return error(404,'Account not found');
+    if(row.password_hash!=='passkey-only'&&(typeof data.currentPassword!=='string'||data.currentPassword.length>128||!await verifyPassword(data.currentPassword,row.password_salt,row.password_hash,passwordPepper(request,env))))return error(400,'Current password is incorrect');
+    const next=await hashPassword(data.newPassword,passwordPepper(request,env));
+    const now=new Date(),tokenHash=await hashToken(sessionToken(request)!);
+    const updated=await env.DB.batch([
+      env.DB.prepare('UPDATE users SET password_hash=?,password_salt=? WHERE id=? AND password_hash=? AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND user_id=users.id AND expires_at>? AND created_at>?)').bind(next.hash,next.salt,user.id,row.password_hash,tokenHash,now.toISOString(),new Date(now.getTime()-600000).toISOString()),
+      env.DB.prepare('DELETE FROM sessions WHERE user_id=? AND EXISTS(SELECT 1 FROM users WHERE id=? AND password_hash=?)').bind(user.id,user.id,next.hash)
+    ]);
+    if(updated[0].meta.changes!==1)return error(409,'Your sign-in or password changed. Sign in again.');
+    return issueSession(request,env,user);
+  }
+
   if(method==='GET'&&pathname==='/api/workspace/dashboard')return json(await dashboardData(env.DB,user.id));
   if(pathname==='/api/workspace/layout'){
     if(method==='GET')return json(await readLayout(env.DB,user.id));
