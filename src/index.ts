@@ -1,3 +1,4 @@
+import {readProjectDetails,saveProjectDetails} from './project-details';
 import {cleanupTraffic} from './site-traffic';
 import {compareBackends} from './backend-diff';
 import {cleanupAppLifecycle} from './app-lifecycle';
@@ -523,6 +524,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     }
     return json({ project }, 201);
   }
+  const detailsMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/details$/);
+  if(detailsMatch&&method==='GET')return json(await readProjectDetails(env.DB,user.id,detailsMatch[1]));
+  if(detailsMatch&&method==='PATCH')return json(await saveProjectDetails(env.DB,user.id,detailsMatch[1],await body(request)));
   const projectMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})$/);
   if (method === "GET" && projectMatch) {
     const project = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles,created_at,updated_at FROM project_service_status WHERE id = ? AND owner_user_id = ?")

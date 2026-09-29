@@ -116,7 +116,7 @@ A website source export is not a whole-account or CMS backup. CMS backup/restore
 const menu=`What would you like to do?
 
 Start a site: describe your idea, or use /new.
-See your services: /projects. Check usage: /usage. Read page traffic: /traffic.
+See your services: /projects. Read project details: /project-details PROJECT_ID. Check usage: /usage. Read page traffic: /traffic.
 
 Choose a guide:
 /help workspace — navigate your workspace and custom pages

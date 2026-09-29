@@ -130,6 +130,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(!target)reply='No matching project found. Create one with /new first.';
     else {const access=await readAppAccess(db,userId,target.id);reply=`Visitor access for “${target.name}”: ${access.visitors.filter(v=>!v.revoked).length} active visitor(s). Open Dashboard → Visitor access, or use /visitor-access ${target.id} in the workspace. Create invitations, cancel unused invitations and review revoking a visitor there. Access changes require a recent sign-in. Keep all invitation and recovery codes out of chat. ${access.publicAccessReady?'The reviewed visitor page is published.':'A visitor page still needs to be reviewed and published.'}`;}
   }
+  else if (/^\/project-details(?:\s|$)/.test(command)) {const parts=command.split(/\s+/);if(parts.length!==2||! /^[0-9a-f-]{36}$/.test(parts[1]))return {status:400,error:'Use /project-details PROJECT_ID'};reply=await inspectWorkspace(db,userId,'project',parts[1]);}
   else if (['/traffic','show traffic','my traffic'].includes(command)) reply=await inspectWorkspace(db,userId,'traffic');
   else if (['/inbox','show inbox','my inbox'].includes(command)) reply='Open your private inbox from Dashboard → Contact inbox or type /inbox in the workspace. Visitor messages are not copied into chat history or AI prompts. Use /contact-on PROJECT_ID or /contact-off PROJECT_ID to review form settings.';
   else if (/^\/photos(?:\s|$)/.test(command)) {
