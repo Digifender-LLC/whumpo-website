@@ -343,7 +343,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1])});
     if(method==='POST'){
       const data=await body(request);if(!data)return error(400,'A bounded JSON request is required');
-      return backendRoute[2]?json(await testBackend(env.DB,env.BACKEND_RUNTIME,user.id,backendRoute[1],backendRoute[2],data.id,data.input)):json(await saveBackend(env.DB,user.id,backendRoute[1],data.id,data.source),201);
+      return backendRoute[2]?json(await testBackend(env.DB,env.BACKEND_RUNTIME,user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await saveBackend(env.DB,user.id,backendRoute[1],data.id,data.source),201);
     }
   }
   const inboxMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/inbox$/);

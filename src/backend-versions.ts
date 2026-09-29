@@ -16,6 +16,19 @@ export async function saveBackend(db:D1Database,user:string,project:string,id:un
  catch{const found=await db.prepare('SELECT id,project_id,digest FROM backend_versions WHERE id=?').bind(id).first<{id:string;project_id:string;digest:string}>();if(found?.project_id===project&&found.digest===digest)return found;throw new BackendError(409,'Version was not saved; check the version list and storage allowance');}
  const saved=await db.prepare('SELECT id,project_id,digest FROM backend_versions WHERE id=? AND project_id=?').bind(id,project).first();if(!saved)throw new BackendError(404,'Project not found');return saved;
 }
+// Compare parsed JSON iteratively so deeply nested, bounded data cannot exhaust
+// the host call stack. Object member order is irrelevant; array order is exact.
+export function equalBackendJSON(left:unknown,right:unknown):boolean{
+ const pending:[unknown,unknown][]=[[left,right]];
+ while(pending.length){
+  const [a,b]=pending.pop()!;if(a===b)continue;
+  if(a===null||b===null||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;
+  const x=a as Record<string,unknown>,y=b as Record<string,unknown>,keys=Object.keys(x);
+  if(keys.length!==Object.keys(y).length)return false;
+  for(const key of keys){if(!Object.hasOwn(y,key))return false;pending.push([x[key],y[key]]);}
+ }
+ return true;
+}
 // Pure execution only. This client never passes cookies, credentials or host capabilities.
 export async function callBackend(service:Fetcher,source:string,input:unknown):Promise<Outcome>{
  const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
@@ -35,20 +48,28 @@ export async function callBackend(service:Fetcher,source:string,input:unknown):P
  };
  try{return await Promise.race([work(),new Promise<Outcome>(resolve=>{timer=setTimeout(()=>{controller.abort();resolve({ok:false,error:'unavailable'});},5000);})]);}catch{return {ok:false,error:'unavailable'};}finally{if(timer!==undefined)clearTimeout(timer);}
 }
-export async function testBackend(db:D1Database,service:Fetcher,user:string,project:string,version:string,id:unknown,input:unknown){
+export async function testBackend(db:D1Database,service:Fetcher,user:string,project:string,version:string,id:unknown,input:unknown,expectation?:{expected:unknown}){
  await owner(db,user,project);
  if(!uuid.test(version)||typeof id!=='string'||!uuid.test(id)||input===undefined)throw new BackendError(400,'Provide an invocation UUID and JSON input');
  let serialized:string;try{serialized=JSON.stringify(input);}catch{throw new BackendError(400,'Input must be JSON');}
  if(size(serialized)>8192)throw new BackendError(400,'Input exceeds 8192 bytes');
+ let expectedJSON:string|undefined;
+ if(expectation!==undefined){try{expectedJSON=JSON.stringify(expectation.expected);}catch{throw new BackendError(400,'Expected output must be JSON');}if(expectedJSON===undefined||size(expectedJSON)>16384)throw new BackendError(400,'Expected output must be JSON up to 16384 bytes');}
  const saved=await db.prepare('SELECT source,digest FROM backend_versions WHERE id=? AND project_id=?').bind(version,project).first<{source:string;digest:string}>();if(!saved)throw new BackendError(404,'Backend version not found');
  if(await hashToken(saved.source)!==saved.digest)throw new BackendError(409,'Backend integrity check failed');
- const requestHash=await hashToken(JSON.stringify([project,version,saved.digest,serialized]));
+ const requestHash=await hashToken(JSON.stringify([project,version,saved.digest,serialized,...(expectedJSON===undefined?[]:['expected-output-v1',expectedJSON])]));
  const read=()=>db.prepare('SELECT * FROM backend_runs WHERE id=?').bind(id).first<Run>();
  const receipt=(run:Run)=>{if(run.user_id!==user||run.project_id!==project||run.version_id!==version||run.request_hash!==requestHash)throw new BackendError(409,'Invocation ID already used');return {id,state:run.state,...(run.result_json?{result:JSON.parse(run.result_json)}:{message:'Execution is pending or its outcome is unknown. This ID will not be run again.'})};};
  const old=await read();if(old)return receipt(old);
  try{await db.prepare('INSERT INTO backend_runs(id,user_id,project_id,version_id,request_hash) VALUES(?,?,?,?,?)').bind(id,user,project,version,requestHash).run();}
  catch{const found=await read();if(found)return receipt(found);throw new BackendError(429,'Backend test allowance reached or reservation unavailable');}
- const result=await callBackend(service,saved.source,input);
+ const outcome=await callBackend(service,saved.source,input);
+ // Store only the expected-output fingerprint, not a second private payload.
+ // A mismatch must have ok:false so it cannot authorize publication/activation.
+ const result=expectedJSON===undefined?outcome:await (async()=>{
+  const check={status:outcome.ok?(equalBackendJSON(outcome.value,JSON.parse(expectedJSON))?'passed':'failed'):'not_run',expectedSHA256:await hashToken(expectedJSON)};
+  return outcome.ok&&check.status==='failed'?{ok:false,error:'expectation_failed',value:outcome.value,check}:{...outcome,check};
+ })();
  try{await db.prepare("UPDATE backend_runs SET state='complete',result_json=? WHERE id=? AND user_id=? AND state='running'").bind(JSON.stringify(result),id,user).run();}catch{/* Read back a possibly committed receipt; never execute again. */}
  const final=await read();if(!final)throw new BackendError(503,'Execution receipt unavailable');return receipt(final);
 }
