@@ -10,7 +10,7 @@ export async function publicationCommand(db:D1Database,userId:string,turnId:stri
  if (rest.length || (arg && !uuid.test(arg))) return result('Use the command with a single version, project, or confirmation ID. /versions lists your saved versions.');
  if (verb === '/versions') {
   const {results}=await db.prepare('SELECT v.id,v.project_id,v.component_id,v.created_at,p.name,s.version_id AS live_id FROM site_versions v JOIN projects p ON p.id=v.project_id LEFT JOIN publications s ON s.project_id=p.id WHERE p.owner_user_id=? AND (? IS NULL OR p.id=?) ORDER BY v.created_at DESC,v.id DESC LIMIT 25').bind(userId,arg??null,arg??null).all<{id:string;project_id:string;component_id:string;created_at:string;name:string;live_id:string|null}>();
-  return result(results.length ? results.map(v=>`${v.name} · ${v.created_at.slice(0,19)}${v.id===v.live_id?' · LIVE':''}\nVersion: ${v.id}\n${v.component_id}`).join('\n\n')+'\n\nUse /publish VERSION_ID to review a publication, or /restore VERSION_ID to review switching the live site back.' : 'No saved versions found. Create one with /build.');
+  return result(results.length ? results.map(v=>`${v.name} · ${v.created_at.slice(0,19)}${v.id===v.live_id?' · LIVE':''}\nVersion: ${v.id}\n${v.component_id}`).join('\n\n')+'\n\nUse /publish VERSION_ID to review a publication, or /restore VERSION_ID to review switching the live site back. Use /delete-version VERSION_ID to review permanent removal of an unused version.' : 'No saved versions found. Create one with /build.');
  }
  if (verb === '/confirm') {
   if (!arg) return result('Include the confirmation ID from the publication review.');

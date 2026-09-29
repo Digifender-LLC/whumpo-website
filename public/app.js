@@ -503,6 +503,11 @@
         download.download = `tellumo-site-${exportVersion}.zip`;
         answer.append(download);
       }
+      if (typeof turn.version_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.version_confirmation_id)) {
+        const button = text("button", "Confirm version deletion");
+        button.onclick = () => sendMessage(`/confirm-version-delete ${turn.version_confirmation_id}`);
+        answer.append(button);
+      }
       if (typeof turn.photo_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.photo_confirmation_id)) {
         const button = text("button", "Confirm photo deletion");
         button.onclick = () => sendMessage(`/confirm-photo-delete ${turn.photo_confirmation_id}`);

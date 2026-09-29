@@ -208,3 +208,7 @@ Customers can list authorized zones and owned reviews, prepare an exact TXT proo
 ## Natural-language DNS reviews — September 29, 2026
 
 The agent can now discover authorized zones, inspect saved reviews and prepare an exact TXT-proof review from a natural-language request. Strict action validation excludes confirmation and all record mutations. Authoritative server receipts replace model claims; users confirm separately through existing chat/panel controls. Zone discovery is paginated, and the agent asks for ambiguous targets. Website routing, general record management and domain purchases remain unfinished; customer OAuth and real DNS acceptance remain pending.
+
+## Reviewed saved-version removal — September 29, 2026
+
+Unused saved versions can now be removed through an exact ten-minute review and separate chat/button confirmation, freeing space under the 25-version limit. Live versions, active publication reviews and GitHub backup records remain protected at the database deletion boundary. Original photos remain until separately removed, while deleted preview/export/restore targets become unavailable. Applied reviews retain identity/digest tombstones and retries cannot recreate removed versions. The AI may prepare a review but cannot confirm. Backed-up version removal, automatic retention and customer project/account deletion remain unfinished. See [version retention](version-retention.md).
