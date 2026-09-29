@@ -36,6 +36,14 @@ try{
  const beforeCalls=calls;const recovered=await send(lossy,owner,{kind:'preview',projectId:owner.project,config:{...config,theme:'forest'}});assert.equal(lost,true);assert.equal(calls,beforeCalls+1);assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(recovered).first()).status,'completed');assert.ok(await db.prepare('SELECT id FROM site_versions WHERE id=?').bind(recovered).first());assert.equal((await getBilling(db,owner.id)).quota.reserved,0);
  await reconcileChat(db,owner.id);assert.equal(calls,beforeCalls+1);
  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM site_versions WHERE project_id=?').bind(other.project).first()).n,0);
+ // A narrow edit preserves every omitted field and retains exact base ancestry.
+ const edited=await send(db,owner,{kind:'edit',baseVersionId:recovered,changes:{headline:'A new headline'}});
+ const editedRow=await db.prepare('SELECT config_json,base_version_id FROM site_versions WHERE id=?').bind(edited).first();
+ assert.deepEqual(JSON.parse(editedRow.config_json),{...config,theme:'forest',headline:'A new headline'});assert.equal(editedRow.base_version_id,recovered);
+ const foreignEdit=await send(db,other,{kind:'edit',baseVersionId:edited,changes:{theme:'clay'}});assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(foreignEdit).first()).status,'failed');
+ for(const changes of [{},{script:'alert(1)'},{theme:'invalid'},{sections:null}]){
+  const invalid=await send(db,owner,{kind:'edit',baseVersionId:edited,changes});assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(invalid).first()).status,'failed');
+ }
  const count=(await db.prepare('SELECT COUNT(*) AS n FROM site_versions WHERE project_id=?').bind(owner.project).first()).n;
  for(let n=count;n<25;n++)await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at) VALUES(?,?,'launch-page@1','{}','synthetic quota fixture','fixture',?)").bind(crypto.randomUUID(),owner.project,new Date().toISOString()).run();
  const beforeQuota=await getBilling(db,owner.id);const limited=await send(db,owner,{kind:'preview',projectId:owner.project,config});assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(limited).first()).status,'failed');assert.equal((await getBilling(db,owner.id)).quota.spent,beforeQuota.quota.spent);assert.equal((await getBilling(db,owner.id)).quota.reserved,0);

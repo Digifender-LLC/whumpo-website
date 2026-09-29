@@ -113,3 +113,11 @@ Isolated D1 checks cover owner isolation, schema/action rejection, escaped hosti
 Migration 0010 applied remotely before deployment. Workspace Worker `c77e6d3a-dc07-475a-8861-4be5b261287d` and public Worker `c07e15e7-88ce-4417-90bb-b98c4c36273e` are deployed. No Stripe account or credentials were configured, following the owner's decision to defer. Live readback confirms checkout and subscriptions disabled, unconfigured webhook 503, and healthy API. The usage dialog hides purchase controls and explains that test checkout is not connected.
 
 `pnpm test:checkout`, billing regressions and TypeScript passed. Browser inspection verified the disabled state and refresh control. No Stripe API or real-money transaction was attempted; subscriptions and real Stripe end-to-end verification remain outstanding.
+
+## Focused AI edits — September 29, 2026
+
+A real Muse request changed a synthetic launch-page version from clay to forest while preserving its name, description, headline, introduction and empty section list exactly. Five units settled with zero held. The immutable base ID was retained; replay created no additional version or charge, and the public URL remained 404. The ephemeral account was removed. Focused-edit schema, cross-owner rejection, unchanged-field preservation and billing regressions pass locally.
+
+The landing page now describes the implemented private draft/edit/publication/restore capabilities, and explicitly leaves photos, forms and custom domains on the roadmap. Guided-mode help no longer describes deployed AI functionality as globally unavailable.
+
+Final focused-edit and landing release: workspace `5c5dca82-3414-461b-a15f-e7a87dec75ab`; public site host `725f683a-1b42-46a7-9550-d9af52ebd5c7`. Live landing readback confirms current capabilities and checkout remains disabled.

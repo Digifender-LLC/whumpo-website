@@ -110,3 +110,7 @@ The current context includes five owned projects and the latest owned version. U
 ## Test payment foundation
 
 The owner selected Stripe test mode, then deferred connection because no Stripe account exists. Credit-pack checkout and signed webhook fulfillment are implemented behind test-only secret configuration; the deployed UI keeps checkout hidden while unconfigured. Fixed server orders, Stripe idempotency and atomic D1 credit grants protect retries and event reordering. See [payments.md](payments.md) for the contract and validation. Subscriptions, real Stripe verification and live payments are not enabled.
+
+### Focused edits
+
+Existing versions can be changed through an `edit` proposal containing an exact owned base-version ID and a nonempty subset of allowed configuration fields. The server merges those fields with saved configuration, preserves omitted fields, validates the result and renders a new immutable private version. Theme/headline edits no longer require the model to repeat all site copy. Replacing the sections array remains an explicit whole-array operation. The initial launch-page component can be upgraded into the information-page contract using deterministic defaults. Unknown components, cross-owner base IDs and executable fields are rejected. Editing an older version creates a private branch; it never overwrites that version or changes publication.
