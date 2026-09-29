@@ -1,3 +1,11 @@
+# Owner visitor access controls — September 29, 2026
+
+Release `147da57` deployed to `whumpo-platform`, version `e2bda454-676e-447c-af86-f223fefbcb61`. Migration 0056 is now applied remotely. Owner access metadata, invitation creation/cancellation and visitor revocation are available from Dashboard → Visitor access and the `/visitor-access` chat shortcut. The visitor gateway remains unmounted; no public visitor enrollment/data endpoint was enabled.
+
+Passed `test:app-auth`, `test:site-agent`, type checking, build and diff checks. The auth suite includes platform HTTP handler tests with real local D1: anonymous/foreign-owner denial, fresh-session requirement, CSRF, metadata fields, cancellation after enrollment challenge issuance, revocation while disabled, and credential-free guided chat. Browser inspection on synthetic local fixtures verified separate full-width navigation, Chat shortcut, confirmation dismissal, and a 390px layout without horizontal overflow. Saved local preview: `.secrets/verification/visitor-access.png`. Tests do not claim real-device visitor passkey or actual hosted application-page acceptance.
+
+Live deployment verification: exact matching `app.js` and `styles.css`; anonymous access reads and invitation creation return 401; foreign-origin invitation creation returns 403. No production visitor invitations were created and no real visitor was revoked during verification.
+
 # MVP acceptance evidence
 
 Audit date: September 29, 2026. Design-audit source snapshot: `771facf`, migrations 0001–0031. Updated after migration 0032 for the first-use AI allowance and response contract. This audit maps the original Word design and later user requirements to the current implementation. It is not a completion declaration or a new reduction in scope. Source inspection and recorded checks are distinguished from fresh end-to-end acceptance. See deployment.md for immutable Worker versions and test milestones.
