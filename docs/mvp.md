@@ -204,3 +204,7 @@ Deployment verification: migration 0023 and the TXT-review controls are deployed
 ## DNS controls in the conversation — September 29, 2026
 
 Customers can list authorized zones and owned reviews, prepare an exact TXT proof review, explicitly confirm it, and inspect uncertain results using `/dns-zones`, `/dns`, `/review-dns`, `/confirm-dns` and `/check-dns`. The commands consume no AI units and preserve onboarding state. A committed chat turn is required before provider dispatch; stale messages, conflicting IDs and replays cannot dispatch twice. The model can explain these commands but cannot confirm DNS actions. Provider configuration and real DNS acceptance remain pending; general DNS routing and model-proposed reviews remain unfinished.
+
+## Natural-language DNS reviews — September 29, 2026
+
+The agent can now discover authorized zones, inspect saved reviews and prepare an exact TXT-proof review from a natural-language request. Strict action validation excludes confirmation and all record mutations. Authoritative server receipts replace model claims; users confirm separately through existing chat/panel controls. Zone discovery is paginated, and the agent asks for ambiguous targets. Website routing, general record management and domain purchases remain unfinished; customer OAuth and real DNS acceptance remain pending.

@@ -1,3 +1,5 @@
+import {cloudflareStatus} from './cloudflare-connection';
+import type {DNSChatOptions} from './dns-chat';
 import {DomainError} from './domains';
 import { siteContext, agentPrompt, prepareSiteAction, ProposalError } from './site-agent';
 import { complete, ProviderError, type AIConfig, type ChatMessage } from './ai';
@@ -35,10 +37,12 @@ export async function reconcileChat(db: D1Database, userId: string) {
   }
 }
 
-export async function sendAIChat(db: D1Database, userId: string, id: string, revision: number, content: string, config: AIConfig, transport: typeof fetch = globalThis.fetch.bind(globalThis)) {
+export async function sendAIChat(db: D1Database, userId: string, id: string, revision: number, content: string, config: AIConfig, transport: typeof fetch = globalThis.fetch.bind(globalThis), dnsOptions?:DNSChatOptions) {
   const previous = await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id = ? AND user_id = ?').bind(id, userId).first<{ user_text: string; revision: number }>();
   if (previous) return previous.user_text === content && previous.revision === revision + 1 ? { status: 200 } : { status: 409, error: 'This message ID was already used for another request' };
   const context = await siteContext(db,userId);
+  const dnsStatus=await cloudflareStatus(db,userId,dnsOptions?.config);
+  context.dnsConnection={enabled:dnsStatus.enabled,connected:dnsStatus.connected,expiresAt:dnsStatus.expiresAt};
   const { results: history } = await db.prepare("SELECT user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' ORDER BY revision DESC LIMIT 4").bind(userId).all<{ user_text: string; assistant_text: string }>();
   const system = agentPrompt(context);
   const messages: ChatMessage[] = [{ role: 'system', content: system }];
@@ -80,7 +84,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const started = Date.now();
   try {
     const result = await complete({ ...config, maxOutputTokens: outputLimit, sessionId: `whumpo-${userId}` }, messages, transport);
-    const proposal = await prepareSiteAction(db,userId,id,result.text,context);
+    const proposal = await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
     await db.batch([
       ...proposal.statements,
       db.prepare("UPDATE chat_turns SET assistant_text = ?, input_tokens = ?, output_tokens = ? WHERE id = ? AND user_id = ? AND status = 'pending'").bind(proposal.reply,result.inputTokens,result.outputTokens,id,userId)
