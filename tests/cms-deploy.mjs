@@ -111,14 +111,15 @@ try{
  await assert.rejects(cmsContentAction(db,id(),{operation:'previewDraft',projectId:a.project,requestId:draftId},id(),env),e=>e.status===404);
  const snapshot=await readCMSDraft(db,a.user,a.project,draftId,env);snapshot.item.data.title='A quieter corner of the web';snapshot.item.data.content[0].children[0].text='Good things take shape one idea at a time.\n\nThis private draft is ready for a thoughtful review. <script>alert(1)</script>';
  const html=renderCMSDraft(snapshot);assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;'));await writeFile('.secrets/cms-preview.html',html);
- snapshot.item.data.content[0].children[0].marks=['strong'];assert.throws(()=>renderCMSDraft(snapshot),/richer preview/);
+ snapshot.item.data.content[0].children[0].marks=['strong'];assert.match(renderCMSDraft(snapshot),/<strong>/);snapshot.item.data.content[0].children[0].marks=['unknown'];assert.throws(()=>renderCMSDraft(snapshot),/richer preview/);
+ current.item.data.content[0].children[0].marks=['strong'];
  const publicationProposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE PUBLICATION SUCCESS',action:{kind:'cms',operation:'reviewPublication',projectId:a.project,requestId:draftId}}),{},{cmsContent:execute});assert.match(publicationProposal.reply,/Review CMS publication/);assert.ok(!publicationProposal.reply.includes('FAKE'));
  const staleReview=await prepareCMSPublication(db,a.user,a.project,draftId,id(),env);current._rev='cmV2LTM=';
  await assert.rejects(confirmCMSPublication(db,a.user,staleReview.id,env),e=>e.status===409);
  const pubTurn=id(),pubOptions={cmsPublication:(turn,content)=>cmsPublicationCommand(db,a.user,turn,content,env)},pubState=await readChat(db,a.user);
  assert.equal((await sendChat(db,a.user,{id:pubTurn,revision:pubState.state.revision,content:'/publish-cms '+a.project+' '+draftId},undefined,pubOptions)).status,200);
  const pubReview=await readCMSPublication(db,a.user,pubTurn),pubChat=(await readChat(db,a.user)).turns.at(-1);assert.equal(pubChat.cms_publication_confirmation_id,pubTurn);
- const frozen=await (await cmsPublicationPage(db,a.user,pubTurn)).text();assert.ok(frozen.includes('Edited'));assert.ok(frozen.includes('href="/cms"'));assert.ok(!frozen.includes('Private draft preview'));
+ const frozen=await (await cmsPublicationPage(db,a.user,pubTurn)).text();assert.ok(frozen.includes('Edited'));assert.ok(frozen.includes('<strong>Changed</strong>'));assert.ok(frozen.includes('href="/cms"'));assert.ok(!frozen.includes('Private draft preview'));
  await assert.rejects(readCMSPublication(db,id(),pubTurn),e=>e.status===404);await assert.rejects(confirmCMSPublication(db,id(),pubTurn,env),e=>e.status===404);
  await assert.rejects(db.prepare('UPDATE cms_publication_reviews SET public_html=? WHERE id=?').bind('forged',pubTurn).run(),/immutable/);
  const expired=id();await db.prepare("INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,expires_at) SELECT ?,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,'2000-01-01T00:00:00.000Z' FROM cms_publication_reviews WHERE id=?").bind(expired,pubTurn).run();await assert.rejects(confirmCMSPublication(db,a.user,expired,env),e=>e.status===409);
