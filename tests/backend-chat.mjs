@@ -8,7 +8,7 @@ const {sendChat,readChat}=await module('src/chat.ts'),{sendAIChat}=await module(
 const dir=await mkdtemp('/tmp/whumpo-backend-chat-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID();
 async function account(){const user=id(),project=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.com',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Calculator','Quote estimates','draft',?,?)").bind(project,user,now,now).run();await readChat(db,user);return {user,project};}
-let executions=0;const backendRuntime={fetch:async(_url,init)=>{executions++;const data=JSON.parse(init.body);return Response.json({ok:true,value:{total:data.input.quantity*data.input.price}});}};
+let executions=0;const backendRuntime={fetch:async(_url,init)=>{executions++;const data=JSON.parse(init.body);return Response.json({ok:true,value:data.input?.state?{state:{count:(data.input.state.count??0)+(data.input.input.add??1)},result:'prepared'}:{total:data.input.quantity*data.input.price}});}};
 async function guided(a,content){const revision=(await readChat(db,a.user)).state.revision,request={id:id(),revision,content};const result=await sendChat(db,a.user,request,undefined,{backendRuntime});assert.equal(result.status,200,JSON.stringify(result));return {request,turn:(await readChat(db,a.user)).turns.at(-1)};}
 async function ai(a,action){const request={id:id(),revision:(await readChat(db,a.user)).state.revision,content:'Prepare my requested private backend operation'};let calls=0;const transport=async()=>{calls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Already deployed',action})}]}],usage:{input_tokens:800,output_tokens:300}});};const config={baseURL:'https://provider.test/v1',apiKey:'synthetic',model:'fixture',protocol:'responses'};assert.equal((await sendAIChat(db,a.user,request.id,request.revision,request.content,config,transport,{backendRuntime})).status,200);await sendAIChat(db,a.user,request.id,request.revision,request.content,config,transport,{backendRuntime});assert.equal(calls,1);return {request,turn:(await readChat(db,a.user)).turns.at(-1)};}
 try{
@@ -33,5 +33,11 @@ try{
  const request={id:id(),revision:(await readChat(db,a.user)).state.revision,content:'/test-backend '+version+' {"quantity":2,"price":8}'};
  await Promise.all(Array.from({length:5},()=>sendChat(db,a.user,request,undefined,{backendRuntime})));assert.equal(executions,3);
  assert.equal((await db.prepare('SELECT count(*) n FROM backend_runs WHERE id=?').bind(request.id).first()).n,1);
+ const stateReview=await ai(b,{kind:'backend',operation:'create',projectId:b.project,source:'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:null})'});
+ const prepared=await guided(b,'/review-backend-state '+stateReview.request.id+' {"add":5}');assert.match(prepared.turn.assistant_text,/Nothing has been applied/);
+ assert.match((await guided(b,'/backend-state '+b.project)).turn.assistant_text,/"revision":0/);
+ assert.match((await guided(b,'/backend-state-review '+prepared.request.id)).turn.assistant_text,/Before: {}/);
+ assert.match((await guided(b,'/confirm-backend-state '+prepared.request.id)).turn.assistant_text,/Applied data review/);
+ assert.match((await guided(b,'/backend-state '+b.project)).turn.assistant_text,/"count":5/);
  console.log('Backend chat checks passed: AI immutable drafts, exact server receipts, guided inspect/test/result, free guided usage, owner isolation, rejected publication/extra fields and replay-safe execution.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
