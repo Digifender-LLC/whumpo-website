@@ -231,8 +231,13 @@
       group.setAttribute("aria-label", "Color theme");
       for (const [value, label] of [["light", "Day"], ["dark", "Night"], ["system", "Use device setting"]]) {
         const b = button(label, async () => {
-          await save({ theme: value });
-          group.querySelectorAll("button").forEach((el) => el.setAttribute("aria-pressed", String(el === b)));
+          group.querySelectorAll("button").forEach((el) => el.disabled = true);
+          try {
+            await save({ theme: value });
+            group.querySelectorAll("button").forEach((el) => el.setAttribute("aria-pressed", String(el === b)));
+          } finally {
+            group.querySelectorAll("button").forEach((el) => el.disabled = false);
+          }
         });
         b.setAttribute("aria-pressed", String(profile.theme === value));
         group.append(b);
@@ -277,6 +282,7 @@
     function choose(view) {
       active = view;
       render();
+      $2("#workspace-stage").scrollTop = 0;
     }
     const profile = createProfile({ api: api2, text: text2, showMessage: showMessage2, openSecurity: controls.security });
     function askForPage() {
@@ -580,6 +586,7 @@
         $2("#view-title").textContent = d.querySelector("h2").textContent;
         $2("#view-description").textContent = "";
         $2("#customize-dashboard").hidden = true;
+        $2("#workspace-stage").scrollTop = 0;
         d.show();
       };
       d.addEventListener("close", () => {

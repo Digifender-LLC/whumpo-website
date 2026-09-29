@@ -40,5 +40,10 @@ try{
  const changed=await api('/profile/password','POST',{newPassword:nextPassword,currentPassword:password},second);assert.equal(changed.status,200);assert.ok(changed.headers.get('set-cookie'));
  assert.equal((await api('/profile','GET',null,second)).status,401);assert.equal((await api('/profile','GET',null,token)).status,401);
  const saved=await db.prepare('SELECT password_salt,password_hash FROM users WHERE id=?').bind(user).first();assert.equal(await verifyPassword(nextPassword,saved.password_salt,saved.password_hash,pepper),true);
+ // A password login already verifying the old credential cannot mint a session
+ // after a concurrent password replacement commits.
+ const raced=await hashPassword('Concurrent-replacement-password',pepper);
+ const racingDB=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const stmt=target.prepare(sql);if(!sql.startsWith('SELECT id, email, password_salt, password_hash FROM users'))return stmt;return {bind(...args){const bound=stmt.bind(...args);return {async first(){const snapshot=await bound.first();await target.prepare('UPDATE users SET password_hash=?,password_salt=? WHERE id=?').bind(raced.hash,raced.salt,user).run();return snapshot;}};}};};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
+ const raceResponse=await worker.fetch(new Request('https://digifender.com/api/auth/login',{method:'POST',headers:{origin:'https://digifender.com','content-type':'application/json'},body:JSON.stringify({email:user+'@example.test',password:nextPassword})}),{...env,DB:racingDB},{waitUntil(){}});assert.equal(raceResponse.status,401);assert.equal(raceResponse.headers.get('set-cookie'),null);
  console.log('Profile checks passed: private photo/metadata isolation, opt-in AI context, CAS edits, strict fields, owner/session/CSRF boundaries, fresh password proof, atomic credential update and old-session revocation.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

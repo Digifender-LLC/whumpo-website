@@ -100,12 +100,13 @@ async function recentSession(request: Request, env: Env): Promise<boolean> {
   const session = await env.DB.prepare("SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ? AND created_at > ?").bind(await hashToken(token), new Date().toISOString(), new Date(Date.now() - 600000).toISOString()).first();
   return !!session;
 }
-async function issueSession(request: Request, env: Env, user: User, recoveryCode?: string): Promise<Response> {
+async function issueSession(request: Request, env: Env, user: User, recoveryCode?: string, expectedPasswordHash?: string): Promise<Response> {
   const token = newSessionToken();
   const now = new Date();
   const expiry = new Date(now.getTime() + sessionDays * 86400_000).toISOString();
-  await env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
-    .bind(await hashToken(token), user.id, expiry, now.toISOString()).run();
+  const inserted=await env.DB.prepare("INSERT INTO sessions (token_hash,user_id,expires_at,created_at) SELECT ?,id,?,? FROM users WHERE id=? AND (? IS NULL OR password_hash=?)")
+    .bind(await hashToken(token),expiry,now.toISOString(),user.id,expectedPasswordHash??null,expectedPasswordHash??null).run();
+  if(inserted.meta.changes!==1)return error(401,'Credentials changed. Sign in again.');
   return json({ user, ...(recoveryCode ? { recoveryCode } : {}) }, 200, { "set-cookie": cookie(token, request) });
 }
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -182,7 +183,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       if (String(cause).includes("UNIQUE constraint failed: users.email")) return error(409, "An account with this email already exists");
       throw cause;
     }
-    return issueSession(request, env, user);
+    return issueSession(request, env, user,undefined,passwordInfo.hash);
   }
   if (method === "POST" && pathname === "/api/auth/login") {
     const data = await body(request);
@@ -193,7 +194,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       .bind(email).first<User & { password_salt: string; password_hash: string }>();
     const valid = await verifyPassword(password, row?.password_salt ?? "00".repeat(16), row?.password_hash ?? "", passwordPepper(request, env));
     if (!row || !valid) return error(401, "Invalid email or password");
-    return issueSession(request, env, { id: row.id, email: row.email });
+    return issueSession(request, env, { id: row.id, email: row.email },undefined,row.password_hash);
   }
 
   const user = await currentUser(request, env);
@@ -221,7 +222,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       env.DB.prepare('DELETE FROM sessions WHERE user_id=? AND EXISTS(SELECT 1 FROM users WHERE id=? AND password_hash=?)').bind(user.id,user.id,next.hash)
     ]);
     if(updated[0].meta.changes!==1)return error(409,'Your sign-in or password changed. Sign in again.');
-    return issueSession(request,env,user);
+    return issueSession(request,env,user,undefined,next.hash);
   }
 
   if(method==='GET'&&pathname==='/api/workspace/dashboard')return json(await dashboardData(env.DB,user.id));
