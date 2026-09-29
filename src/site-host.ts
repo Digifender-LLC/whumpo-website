@@ -1,3 +1,4 @@
+import {cmsIndex} from './cms-index';
 import {hashToken} from './security';
 import {publicDirectory} from './directory';
 import {directoryPage} from './directory-page';
@@ -15,8 +16,10 @@ export default {
     if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
     url.pathname='/s/'+mapping.project_id+url.pathname;
    }
+   const cmsListing=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/?$/);
+   if(cmsListing){const html=await cmsIndex(env.DB,cmsListing[1]);return new Response(request.method==='HEAD'?null:html??'Articles not found',{status:html?200:404,headers});}
    const cms=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/(posts|pages)\/([0-9A-HJKMNP-TV-Z]{26})$/);
-   if(cms){const row=await env.DB.prepare("SELECT r.public_html,r.digest FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id JOIN cms_instances c ON c.project_id=r.project_id WHERE r.project_id=? AND r.collection=? AND r.item_id=? AND r.status='published' AND r.withdrawn=0 AND p.owner_user_id=r.user_id AND c.state='ready'").bind(cms[1],cms[2],cms[3]).first<{public_html:string;digest:string}>();if(!row)return new Response('Article not found',{status:404,headers});if(await hashToken(row.public_html)!==row.digest)return new Response('Article unavailable',{status:503,headers});return new Response(request.method==='HEAD'?null:row.public_html,{headers});}
+   if(cms){const row=await env.DB.prepare("SELECT public_html,digest FROM cms_live_articles WHERE project_id=? AND collection=? AND item_id=?").bind(cms[1],cms[2],cms[3]).first<{public_html:string;digest:string}>();if(!row)return new Response('Article not found',{status:404,headers});if(await hashToken(row.public_html)!==row.digest)return new Response('Article unavailable',{status:503,headers});return new Response(request.method==='HEAD'?null:row.public_html,{headers});}
    const directory=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/directory(\.json)?$/);
    if(directory){const data=await publicDirectory(env.DB,directory[1]);if(!data)return new Response('Directory not found',{status:404,headers});const json=!!directory[2];return new Response(request.method==='HEAD'?null:json?JSON.stringify(data):directoryPage(data),{headers:{...headers,...(json?{'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin'}:{})}});}
    const asset=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/assets\/([0-9a-f-]{36})\.jpg$/);

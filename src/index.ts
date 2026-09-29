@@ -382,7 +382,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return json({ ok: true }, 200, { "set-cookie": clearCookie(request) });
   }
   if (method === "GET" && pathname === "/api/projects") {
-    const { results } = await env.DB.prepare("SELECT id, name, purpose, status, created_at, updated_at FROM projects WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 100")
+    const { results } = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,cms_articles,created_at,updated_at FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 100")
       .bind(user.id).all<Project>();
     return json({ projects: results });
   }
@@ -404,7 +404,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   }
   const projectMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})$/);
   if (method === "GET" && projectMatch) {
-    const project = await env.DB.prepare("SELECT id, name, purpose, status, created_at, updated_at FROM projects WHERE id = ? AND owner_user_id = ?")
+    const project = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,cms_articles,created_at,updated_at FROM project_service_status WHERE id = ? AND owner_user_id = ?")
       .bind(projectMatch[1], user.id).first<Project>();
     return project ? json({ project }) : error(404, "Project not found");
   }
