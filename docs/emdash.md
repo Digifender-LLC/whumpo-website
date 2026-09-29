@@ -211,3 +211,19 @@ Objects are saved under SHA-256-derived filenames inside a newly created private
 After media capture, the native database is captured again and must match the earlier verified database digest; resource identity is also rechecked. This detects observed database/media drift but is still not a transactional cross-store snapshot. A coordinated maintenance barrier remains necessary for authoritative whole-CMS backup, followed by protected key/artifact capture, control-state capture and verified isolated provider restoration. No production restore command or traffic switch is added here.
 
 Verification: mocked provider tests cover pagination, inventory/object drift, encrypted/paid-storage refusal, limits, path handling, permissions, compressed bytes, saved-file tampering and source identity. An actual disposable workerd R2 test captured paginated compressed and empty objects, then restored bytes plus HTTP/custom metadata into a second local bucket. A read-only production preview-bucket inventory returned zero objects and confirmed the empty-response shape. No production media download/restore or customer paired capture was claimed; the ready-customer registry remains empty.
+
+## Isolated local recovery verification
+
+After creating a trusted operator capture, run:
+
+```sh
+npm run cms:verify-recovery -- PROJECT_ID SNAPSHOT_ID
+```
+
+The command resolves only the ignored capture directory for those IDs, rejects symlinked path components, checks the manifest's project identity, verifies database/media manifest digests and rechecks each media file. It creates new disposable **local** D1 and R2 stores using `remoteBindings: false`, with no account, routes, secrets or production bindings. It restores the capture, verifies logical database equality and reads back object bytes plus HTTP/custom metadata. The temporary stores are removed afterwards. A private `local-restore-UUID.json` evidence record is written only on success; the original capture is retained unchanged. This command is for internally generated trusted operator artifacts, not arbitrary uploaded SQL.
+
+`restoreCapturedCMSD1` refuses a nonempty target. It restores schema/data/indexes/triggers/views in one D1 batch with deferred foreign keys, checks foreign-key validity and D1's supported `quick_check`, then recaptures and compares the full logical digest. The current isolated-restore bounds are 1,000 statements, 90,000 bytes per statement and 8 MiB total SQL. Larger captures fail explicitly and require a broader restore strategy; they are not partially accepted. D1 rejects `integrity_check`, so the local SQLite preflight retains its full integrity check while the D1 phase uses [supported D1 checks](https://developers.cloudflare.com/d1/sql-api/sql-statements/).
+
+Acceptance now starts a second native EmDash instance over the restored local D1 database with fresh local session/media bindings. It verifies closed setup, the pinned owner, collection schemas, both post/page IDs/status/title/body, and a successful new native edit/revision after restoration. The database digest matched before boot (73 tables / 180 rows). Separate paired-artifact tests verify local D1/R2 restore with media metadata including cache expiry, artifact corruption/identity rejection, occupied-target refusal, forward foreign keys, FTS and atomic rollback after an injected failure. Expected workerd SQL errors in that failure test are part of the rollback fixture.
+
+This proves local restore and native application compatibility for the supported fixture. It does not prove a consistent production capture or a production recovery operation. The source snapshot still needs coordinated write quiescence; original keys, compiled artifacts, Whumpo control/publication state and verified isolated Cloudflare resource restoration/traffic switching remain required. No live resource was created or replaced by these tests.
