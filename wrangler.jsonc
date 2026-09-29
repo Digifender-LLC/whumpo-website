@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tellumo-platform",
+  "account_id": "f94d28e88a63fb6f34c3ecbc05aa3faf",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-28",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{"pattern": "digifender.com", "custom_domain": true}],
+  "vars": {"ENVIRONMENT": "test", "TURNSTILE_SITE_KEY": "0x4AAAAAAFIoE2toIv5N36J5"},
+  "ratelimits": [
+    {"name": "AUTH_LIMITER", "namespace_id": "1001001", "simple": {"limit": 10, "period": 60}},
+    {"name": "API_LIMITER", "namespace_id": "1001002", "simple": {"limit": 120, "period": 60}}
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "tellumo-control",
+    "database_id": "680f98b9-a769-467f-8b6f-06c10195c263",
+    "migrations_dir": "./migrations"
+  }],
+  "observability": {"enabled": true, "head_sampling_rate": 0.1}
+}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TellUmo</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar"><div class="brand"><span class="mark">T</span><span>TellUmo <small>working name</small></span></div><div id="account"></div></header>
+    <section id="auth" class="auth-card" hidden>
+      <p class="eyebrow">Your space to make things</p>
+      <h1 id="auth-title">Sign in</h1>
+      <p>Welcome to the TellUmo test platform. Create and organize your projects. New accounts require an invitation.</p>
+      <form id="auth-form">
+        <label>Email<input name="email" type="email" autocomplete="email" required></label>
+        <label>Password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="current-password" required></label>
+        <label id="invite-field" hidden>Invitation code<input name="inviteCode" autocomplete="off" maxlength="64" disabled></label>
+        <div id="turnstile-slot" hidden></div>
+        <button class="primary" type="submit">Continue</button>
+      </form>
+      <button id="auth-toggle" class="text-button" type="button">Create an account</button>
+    </section>
+    <section id="dashboard" hidden>
+      <div class="hero"><p class="eyebrow">Your workspace</p><h1>What would you like to create?</h1><p>Start a project with a name and a short description. The assistant and publishing flow are coming next.</p></div>
+      <div class="grid">
+        <section class="panel"><div class="panel-heading"><h2>My projects</h2><span id="project-count" class="pill">0</span></div><div id="projects" class="stack"></div></section>
+        <section class="panel"><h2>Start a project</h2><form id="project-form"><label>Project name<input name="name" maxlength="100" placeholder="My business website" required></label><label>What is it for?<textarea name="purpose" maxlength="1000" placeholder="Tell us what you want people to do here"></textarea></label><button class="primary" type="submit">Create project</button></form></section>
+      </div>
+      <section class="panel activity-panel"><h2>Activity</h2><div id="activity" class="stack"></div></section>
+    </section>
+    <p id="message" role="status" aria-live="polite"></p>
+  </main>
+</body>
+</html>
