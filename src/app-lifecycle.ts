@@ -1,0 +1,52 @@
+import {appIdentity} from './app-data';
+import {BackendError} from './backend-versions';
+import {hashToken} from './security';
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const nowSQL="strftime('%Y-%m-%dT%H:%M:%fZ','now')";
+export async function deleteAppAccount(db:D1Database,token:string,project:string,id:string,revision:number,confirmation:unknown){
+ if(!/^[0-9a-f]{64}$/.test(token))throw new BackendError(401,'Application sign-in required');
+ if(!uuid.test(project)||!uuid.test(id)||!Number.isSafeInteger(revision)||revision<0||confirmation!=='DELETE')throw new BackendError(400,'Review the current information and confirm account deletion');
+ const proof=await hashToken(JSON.stringify(['townhello-app-deletion',token,project,id,revision]));
+ const receipt=()=>db.prepare(`SELECT id FROM app_deletion_receipts WHERE id=? AND project_id=? AND proof_hash=? AND expires_at>${nowSQL}`).bind(id,project,proof).first();
+ if(await receipt())return {deleted:true,id};
+ if(await db.prepare('SELECT id FROM app_deletion_receipts WHERE id=?').bind(id).first()){if(await receipt())return {deleted:true,id};throw new BackendError(409,'Deletion request ID already used. Review your account again');}
+ let actor;try{actor=await appIdentity(db,token,project);}catch(error){if(await receipt())return {deleted:true,id};throw error;}
+ await db.prepare(`DELETE FROM app_deletion_receipts WHERE expires_at<=${nowSQL}`).run();
+ try{
+  const results=await db.batch([
+   db.prepare(`INSERT INTO app_deletion_receipts(id,project_id,proof_hash) SELECT ?,v.project_id,? FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=? AND v.project_id=? AND v.revoked=0 AND a.enabled=1 AND d.revision=? AND s.token_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+23 hours','+50 minutes')`).bind(id,proof,actor.visitor_id,project,revision,actor.token_hash),
+   db.prepare('DELETE FROM app_visitors WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM app_deletion_receipts WHERE id=? AND project_id=? AND proof_hash=?)').bind(actor.visitor_id,project,id,project,proof)
+  ]);
+  if(results[0].meta.changes!==1)throw new BackendError(409,'Your information changed or your sign-in is too old. Sign in again and review the latest information');
+ }catch(error){if(await receipt())return {deleted:true,id};if(error instanceof BackendError)throw error;throw new BackendError(503,'Deletion could not be confirmed. Retry this same request before taking another action');}
+ return {deleted:true,id};
+}
+
+// Stream bounded batches; never assemble the complete retained history in a
+// Worker. Each batch rechecks the same authenticated visitor/project identity.
+export async function exportAppAccount(db:D1Database,token:string,project:string){
+ const actor=await appIdentity(db,token,project);
+ const account=await db.prepare('SELECT v.id,v.created_at,d.revision,d.state_json FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id WHERE v.id=?').bind(actor.visitor_id).first<{id:string;created_at:string;revision:number;state_json:string}>();
+ if(!account)throw new BackendError(404,'Application account unavailable');
+ let cursor='',started=false,hasRows=false,finished=false;
+ const encoder=new TextEncoder();
+ const stream=new ReadableStream<Uint8Array>({async pull(controller){
+  try{
+   if(finished)return;
+   const current=await appIdentity(db,token,project);if(current.visitor_id!==actor.visitor_id)throw new BackendError(401,'Application account changed');
+   if(!started){started=true;controller.enqueue(encoder.encode(JSON.stringify({format:'townhello-visitor-export-v1',exportedAt:new Date().toISOString(),projectId:project,account:{id:account.id,createdAt:account.created_at},document:{revision:account.revision,value:JSON.parse(account.state_json)},historyNote:'History is read in batches and may include activity completed during export. This is not a restore snapshot.'}).slice(0,-1)+',"operations":['));return;}
+   const {results}=await db.prepare('SELECT id,version_id,base_revision,program_revision,state,result_json,next_json,day FROM app_runs WHERE visitor_id=? AND project_id=? AND id>? ORDER BY id LIMIT 50').bind(actor.visitor_id,project,cursor).all<{id:string;version_id:string;base_revision:number;program_revision:number;state:string;result_json:string|null;next_json:string|null;day:string}>();
+   if(!results.length){finished=true;controller.enqueue(encoder.encode(']}'));controller.close();return;}
+   const output=results.map(row=>({id:row.id,versionId:row.version_id,baseRevision:row.base_revision,programRevision:row.program_revision,status:row.state,day:row.day,result:row.result_json?JSON.parse(row.result_json):null,savedState:row.next_json?JSON.parse(row.next_json):null}));
+   controller.enqueue(encoder.encode((hasRows?',':'')+output.map(value=>JSON.stringify(value)).join(',')));hasRows=true;cursor=results[results.length-1].id;
+  }catch(error){finished=true;controller.error(error);}
+ },cancel(){finished=true;}});
+ return new Response(stream,{headers:{'content-type':'application/json; charset=utf-8','content-disposition':`attachment; filename="townhello-app-${project.slice(0,8)}.json"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer','cross-origin-resource-policy':'same-origin'}});
+}
+
+export async function cleanupAppLifecycle(db:D1Database){
+ await db.batch([
+  db.prepare(`DELETE FROM app_deletion_receipts WHERE expires_at<=${nowSQL}`),
+  db.prepare("DELETE FROM app_daily_usage WHERE day<strftime('%Y-%m-%d','now','-35 days')")
+ ]);
+}

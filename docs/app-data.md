@@ -4,7 +4,7 @@
 
 `src/app-data.ts` implements per-visitor state and immutable execution receipts. The controlled application host at `apps.digifender.com` connects invitation-only passkeys to this engine only after a separate owner-approved application-page review. Program authorization alone does not publish a visitor page. Existing public backend endpoints and website forms remain stateless.
 
-This is an initial application workflow, not completion of all application hosting. Visitor deletion/export/retention, schema migrations, whole-app recovery and physical-device passkey acceptance remain unfinished. Synthetic fixtures are used for automated and browser tests; no customer application is automatically published by a platform deployment.
+This is an initial application workflow, not completion of all application hosting. Automatic retention, deletion for revoked/disabled accounts, schema migrations, whole-app recovery and physical-device passkey acceptance remain unfinished. Synthetic fixtures are used for automated and browser tests; no customer application is automatically published by a platform deployment.
 
 ## Identity and code authority
 
@@ -28,14 +28,14 @@ A successful receipt update and document change occur in one D1 trigger transact
 
 Lost reservation acknowledgments never dispatch the guest. Lost commit acknowledgments read back the receipt. Unresolved storage failures retain a running/unknown receipt; retries do not blindly re-execute it. A retry that races with an already committed operation rechecks its receipt before reporting a stale document. Old completed receipts remain historical results; callers read the document separately for current data.
 
-Completed receipts retain bounded next-state snapshots and results. They are private application data and must be included in future retention, deletion and recovery policy. Current ceilings are 100 visitors/project, 1,000/platform, 20 attempts/visitor/day, 100/project/day, 1,000/platform/day (UTC), and 10,000 retained receipts. Failed/conflicting/unknown attempts count. These are beta guards, not a scalable lifecycle policy or AI credit charges.
+Completed receipts retain bounded next-state snapshots and results. They are private application data and are included in visitor exports and account deletion; automated retention and whole-app recovery remain unfinished. Current ceilings are 100 visitors/project, 1,000/platform, 20 attempts/visitor/day, 100/project/day, 1,000/platform/day (UTC), and 10,000 retained receipts. Failed/conflicting/unknown attempts count. These are beta guards, not a scalable lifecycle policy or AI credit charges.
 
 ## Required next gates
 
 1. Owner-reviewed configuration is implemented and tested. The visitor UI must distinguish saved authority from public availability. Never reinterpret stateless publication as permission to use visitor data.
 2. Visitor passkeys, cookie binding, recovery and revocation are connected through the controlled host. Physical-device/browser passkey acceptance remains required; generated code never handles credentials.
 3. Controlled application forms and authenticated data/receipt routes are implemented with bounded bodies, origin checks and request limits. The existing credential-free public forms remain stateless. Expand reviewed form capabilities as real workloads require.
-4. Read/export/delete controls, retention, schema/data migration, snapshot restoration and whole-app backup. Handle program upgrades against existing visitor documents explicitly.
+4. Retention, revoked-account erasure, schema/data migration, snapshot restoration and whole-app backup. Handle program upgrades against existing visitor documents explicitly.
 5. Real runtime and browser acceptance for authenticated applications, concurrent visitors/projects, expired/revoked credentials, uncertain provider outcomes and privacy boundaries. Add abuse controls and operational recovery before public enrollment.
 
 ## Evidence
@@ -81,7 +81,7 @@ The HTTP gateway accepts only the controlled application origin and a currently 
 
 Gateway tests exercise signed enrollment through cookie-bound requests, missing/wrong origins, wrong host, body limits, rate denial, platform-session separation, authenticated data and private receipts, exact transition retry without redispatch, recovery and logout against local D1. The runtime service is controlled in this suite; this is not deployed/browser/QuickJS acceptance.
 
-Next: visitor export/deletion, bounded retention, whole-app recovery and physical-device passkey acceptance. Do not serve arbitrary generated scripts on the credential-bearing application origin. Existing stateless public forms remain separate.
+Next: bounded retention, revoked-account erasure, whole-app recovery and physical-device passkey acceptance. Do not serve arbitrary generated scripts on the credential-bearing application origin. Existing stateless public forms remain separate.
 
 
 ## Owner visitor controls
@@ -120,3 +120,24 @@ Consequently, loss of the recovery response leaves the visitor with either the p
 `test:app-auth` now includes publication races, strict form schema, model confirmation denial, page host/CSP, stale sign-in rollback after withdrawal, historical replay, in-flight transition revocation and recovery acknowledgment loss. `test:app-pages-http` exercises real local workerd and QuickJS with signed ES256 fixtures: two isolated visitors, enrollment, login/logout, private receipts, exact retry, page/field rejection, recovery, replacement keys and saved data. It requires fresh synthetic fixtures in `.secrets/app-page-fixture.json`; test credentials never enter tracked files.
 
 Browser inspection verified the actual signed-in form against local QuickJS, saved-information rendering, stale-revision rejection followed by safe resubmission, and no horizontal overflow at 390px. The browser used a synthetic authenticated fixture; this does not claim physical-device passkey enrollment was exercised. The current form UI is deliberately bounded; richer app frontends and complete data lifecycle controls remain MVP work.
+
+
+## Visitor data controls (0058)
+
+Authenticated visitors can download `/apps/:project/export`. It streams their current document and retained operation results/snapshots in batches of at most 50 rows, rechecking authorization before each batch. It excludes credentials, session hashes, request fingerprints, and other visitors. Concurrent changes can affect the export; it is not a transactionally consistent restore snapshot. The browser receives an attachment with private/no-store and restrictive response headers. Interrupted exports are incomplete JSON and must not be reported as complete.
+
+`POST /apps/:project/account/delete` accepts an operation UUID, reviewed document revision and exact `DELETE` confirmation. It requires a session younger than ten minutes and atomically removes the visitor, document, retained operation snapshots, passkeys, recovery code, sessions, associated challenges and used invitation. An in-flight backend cannot recreate these records. Other visitors and the platform owner account are unaffected. The browser requires typed confirmation and saves only the request ID/revision in session storage before dispatch.
+
+A 24-hour receipt contains project, request UUID and a hash binding the former session token and reviewed revision. The original cookie remains as retry proof; it no longer authorizes account access. An exact retry can confirm deletion even after the visitor page is withdrawn. Different sessions cannot claim that receipt. Returning to sign-in explicitly abandons automatic checking and does not undo deletion. Receipt capacity is bounded; daily maintenance removes expired receipts.
+
+Project/global daily admission now uses aggregate counters backfilled from existing runs. Erasing individual history cannot reset those limits. Counters older than 35 days are removed; today's counts are retained. Visitor limits still apply per extant account. Invitation-only enrollment remains required.
+
+Deletion removes active storage. D1 Time Travel may retain prior copies for up to 30 days on Workers Paid ([Cloudflare documentation](https://developers.cloudflare.com/d1/reference/time-travel/)). This is not a compliance certification. Before any whole-control-database restore, deletion reconciliation must be implemented and tested; the 24-hour retry receipt is not a durable backup deletion ledger. Revoked/disabled visitor erasure and owner/project deletion are also still outstanding.
+
+Acceptance: `test:app-lifecycle`, existing `test:app-data` and `test:app-auth`, and `test:app-pages-http` cover real D1 and HTTP boundaries, lost acknowledgments, concurrency, authorization, stale revisions, in-flight deletion and quotas. Browser review uses synthetic data and verifies the export link and deletion review UI; no physical passkey or real visitor deletion is implied.
+
+### Hosting authorization update
+
+On 29 September 2026 the user confirmed Workers Paid at $5/month and authorized using its resources as needed. Keep per-application admission and spending protections; this does not authorize unrelated paid services or plan upgrades. GitHub remains free-tier-only. The platform continues using the existing account and domain.
+
+Release verification: migration 0058 applied remotely; visitor Worker `7a12cf38-7fae-4ae9-94d0-d0ea21d9d727`; platform Worker `6ae85a92-75a6-4491-9bd4-e54bbdb49d82`. Live visitor assets match the build. An unauthenticated deletion request returns 401 and a foreign-origin request returns 403. No production visitor was created or deleted for acceptance.

@@ -1,3 +1,4 @@
+import {deleteAppAccount,exportAppAccount} from './app-lifecycle';
 import {appPasskeyOptions,appPasskeyVerify,recoverAppVisitor} from './app-auth';
 import {readAppData,readAppReceipt,revokeAppSession,transitionAppData} from './app-data';
 import {BackendError} from './backend-versions';
@@ -46,9 +47,17 @@ export async function applicationGateway(request:Request,env:AppEnv):Promise<Res
   if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);
   const ip=request.headers.get('cf-connecting-ip')??'unknown';
   if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);
+  const session=token(request,project,'session',local);
+  // Exact deletion receipts remain checkable after withdrawal or sign-out.
+  // They prove only this request's completion, never restore authorization.
+  if(method==='POST'&&path==='account/delete'){
+   const data=await body(request);
+   if(typeof data.id!=='string'||typeof data.revision!=='number')throw new BackendError(400,'Provide the deletion request and reviewed revision');
+   return json(await deleteAppAccount(env.DB,session,project,data.id,data.revision,data.confirmation));
+  }
   const page=await liveAppPage(env.DB,project);if(!page)return json({error:'Application page unavailable'},404);
   if(method==='GET'&&path==='config')return json({form:JSON.parse(page.config_json),pageId:page.id});
-  const session=token(request,project,'session',local);
+  if(method==='GET'&&path==='export')return await exportAppAccount(env.DB,session,project);
   if(method==='GET'&&path==='data')return json(await readAppData(env.DB,session,project));
   const receipt=path.match(new RegExp(`^receipts/(${uuid})$`));
   if(method==='GET'&&receipt)return json(await readAppReceipt(env.DB,session,project,receipt[1]));

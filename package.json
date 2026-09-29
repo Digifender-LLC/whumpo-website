@@ -87,7 +87,8 @@
     "test:app-auth": "node tests/app-auth.mjs",
     "deploy:apps": "wrangler deploy --config wrangler.apps.jsonc",
     "test:app-pages-http": "node tests/app-pages-http.mjs",
-    "test:cloudflare-token-refresh": "node tests/cloudflare-token-refresh.mjs"
+    "test:cloudflare-token-refresh": "node tests/cloudflare-token-refresh.mjs",
+    "test:app-lifecycle": "node tests/app-lifecycle.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

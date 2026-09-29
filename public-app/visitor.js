@@ -442,6 +442,14 @@
   var $ = (s) => document.querySelector(s);
   var base = location.pathname.replace(/\/$/, "");
   var pendingKey = "townhello-request:" + base;
+  var deletionKey = "townhello-deletion:" + base;
+  var deletion;
+  var reviewedRevision;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(deletionKey) || "null");
+    if (saved && /^[0-9a-f-]{36}$/.test(saved.id) && Number.isSafeInteger(saved.revision) && saved.revision >= 0) deletion = saved;
+  } catch {
+  }
   var config;
   var revision = 0;
   var busy = false;
@@ -493,7 +501,7 @@
       await run();
     } catch (error) {
       status(message(error));
-      if (error.status === 401) {
+      if (error.status === 401 && !deletion) {
         $("#workspace").hidden = true;
         $("#signin").hidden = false;
       }
@@ -656,6 +664,84 @@
     HTMLFormElement.prototype.reset.call($("#application-form"));
     status("You\u2019re signed out.");
   });
+  $("#export-data").href = base + "/export";
+  function deletionView() {
+    for (const id of ["workspace", "signin", "recovery"]) $("#" + id).hidden = true;
+    $("#deletion-pending").hidden = false;
+  }
+  async function finishDeletion() {
+    let result;
+    try {
+      result = await api("account/delete", { ...deletion, confirmation: "DELETE" });
+    } catch (error) {
+      if (error.status === 409) {
+        deletion = void 0;
+        try {
+          sessionStorage.removeItem(deletionKey);
+        } catch {
+        }
+        $("#deletion-pending").hidden = true;
+        $("#delete-account").hidden = true;
+        reviewedRevision = void 0;
+        await enter();
+      }
+      throw error;
+    }
+    if (!result.deleted || result.id !== deletion.id) throw Error("Deletion could not be confirmed. Check this same request again.");
+    deletion = void 0;
+    try {
+      sessionStorage.removeItem(deletionKey);
+    } catch {
+    }
+    remember(null);
+    $("#deletion-pending").hidden = true;
+    $("#deleted").hidden = false;
+    $("#saved-data").replaceChildren();
+    $("#result").textContent = "";
+    $("#recovery-code").value = "";
+    HTMLFormElement.prototype.reset.call($("#application-form"));
+    HTMLFormElement.prototype.reset.call($("#delete-account"));
+    status("Account deletion confirmed.");
+  }
+  $("#review-deletion").onclick = () => act(async () => {
+    await refresh();
+    reviewedRevision = revision;
+    $("#saved-data").closest("details").open = true;
+    $("#delete-account").hidden = false;
+    $("#delete-account input").focus();
+  });
+  $("#cancel-deletion").onclick = () => {
+    $("#delete-account").hidden = true;
+    $("#delete-account").reset();
+    reviewedRevision = void 0;
+  };
+  $("#delete-account").onsubmit = (event) => {
+    event.preventDefault();
+    act(async () => {
+      if (new FormData(event.target).get("confirmation") !== "DELETE" || reviewedRevision === void 0) throw Error("Review the latest information and type DELETE.");
+      deletion = { id: crypto.randomUUID(), revision: reviewedRevision };
+      try {
+        sessionStorage.setItem(deletionKey, JSON.stringify(deletion));
+      } catch {
+        deletion = void 0;
+        throw Error("Enable session storage before deleting so this request can be checked after a lost response.");
+      }
+      deletionView();
+      await finishDeletion();
+    });
+  };
+  $("#check-deletion").onclick = () => act(finishDeletion);
+  $("#leave-deletion").onclick = () => act(async () => {
+    deletion = void 0;
+    try {
+      sessionStorage.removeItem(deletionKey);
+    } catch {
+    }
+    $("#deletion-pending").hidden = true;
+    $("#signin").hidden = false;
+    await loadConfig();
+    status("Sign in to check whether your account still exists. Returning here does not undo deletion.");
+  });
   $("#refresh-data").onclick = () => act(refresh);
   $("#check-request").onclick = () => act(receipt);
   $("#application-form").onsubmit = (event) => {
@@ -686,6 +772,11 @@
     });
   };
   act(async () => {
+    if (deletion) {
+      deletionView();
+      await finishDeletion();
+      return;
+    }
     await loadConfig();
     try {
       await enter();
