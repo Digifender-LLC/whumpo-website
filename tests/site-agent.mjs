@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
-const {sendAIChat,reconcileChat}=await module('src/ai-chat.ts');const {readChat}=await module('src/chat.ts');const {getBilling}=await module('src/billing.ts');
+const {sendAIChat,reconcileChat}=await module('src/ai-chat.ts');const {readChat}=await module('src/chat.ts');const {getBilling,grantCredits,setOverage}=await module('src/billing.ts');
 const dir=await mkdtemp('/tmp/whumpo-agent-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
 const cfg={baseURL:'https://provider.test/v1',apiKey:'fake-key',model:'fake-model',protocol:'responses'};
@@ -12,9 +12,12 @@ async function account(){const id=crypto.randomUUID();await db.prepare("INSERT I
 const config={name:'Bakery',headline:'Fresh bread, every morning',description:'Bread for the neighborhood.',theme:'clay',aboutTitle:'Our story',aboutText:'A neighborhood bakery.',sections:[{heading:'Visit us',text:'Ask us about today’s bread.'}]};
 let calls=0;
 const provider=action=>async()=>{calls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:typeof action==='string'?action:JSON.stringify({reply:'Proposed change',action})}]}],usage:{input_tokens:100,output_tokens:200}});};
-async function send(dbx,user,action){const state=await readChat(db,user.id);const id=crypto.randomUUID();await sendAIChat(dbx,user.id,id,state.state.revision,'Make a warm bakery site',cfg,provider(action));return id;}
+async function send(dbx,user,action){const state=await readChat(db,user.id);const id=crypto.randomUUID();const result=await sendAIChat(dbx,user.id,id,state.state.revision,'Make a warm bakery site',cfg,provider(action));assert.equal(result.status,200,JSON.stringify(result));return id;}
 try{
  const owner=await account(),other=await account();
+ // Keep this long action suite funded so its final version-limit check reaches that gate.
+ // Free-tier reservation exhaustion is independently exercised in billing.mjs.
+ await grantCredits(db,owner.id,'agent-suite:'+owner.id,100,'Synthetic action-suite budget');await setOverage(db,owner.id,true);
  const id=await send(db,owner,{kind:'preview',projectId:owner.project,config});
  let row=await db.prepare('SELECT * FROM site_versions WHERE id=?').bind(id).first();assert.equal(row.source,'ai');assert.equal(row.component_id,'site-page@1');assert.ok(row.html.includes('Fresh bread, every morning'));assert.ok(row.html.includes('Visit us'));
  assert.equal((await getBilling(db,owner.id)).quota.spent,1);assert.equal((await readChat(db,owner.id)).turns.at(-1).version_id,id);

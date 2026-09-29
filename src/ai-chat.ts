@@ -84,13 +84,17 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const started = Date.now();
   try {
     const result = await complete({ ...config, maxOutputTokens: outputLimit, sessionId: `whumpo-${userId}` }, messages, transport);
+    // Timeout reconciliation or an operator waiver may have closed this turn while the provider ran.
+    const open=await db.prepare("SELECT t.id FROM chat_turns t JOIN usage_operations o ON o.id=t.id AND o.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='pending' AND o.status IN ('dispatched','uncertain')").bind(id,userId).first();
+    if(!open)return {status:200};
     const proposal = await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
     await db.batch([
       ...proposal.statements,
-      db.prepare("UPDATE chat_turns SET assistant_text = ?, input_tokens = ?, output_tokens = ? WHERE id = ? AND user_id = ? AND status = 'pending'").bind(proposal.reply,result.inputTokens,result.outputTokens,id,userId)
+      db.prepare("UPDATE chat_turns SET assistant_text = ?, input_tokens = ?, output_tokens = ? WHERE id = ? AND user_id = ?").bind(proposal.reply,result.inputTokens,result.outputTokens,id,userId)
     ]);
     await reconcileChat(db, userId);
   } catch (cause) {
+    if(String(cause).includes('chat_result_closed'))return {status:200};
     // Recover a committed answer/draft after an acknowledgement was lost. Never regenerate.
     const persisted = await db.prepare("SELECT input_tokens FROM chat_turns WHERE id=? AND user_id=?").bind(id,userId).first<{input_tokens:number|null}>();
     if(persisted?.input_tokens != null){await reconcileChat(db,userId);return {status:200};}
