@@ -1,3 +1,4 @@
+import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
@@ -253,6 +254,9 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return json({ recoveryCode });
   }
   if (method === "GET" && pathname === "/api/connections") return json({...await connectionStatus(env.DB,user.id,githubConfig(env)),cloudflare:await cloudflareStatus(env.DB,user.id,cloudflareConfig(env))});
+  if(method==='GET'&&pathname==='/api/site-health')return json(await listHealth(env.DB,user.id));
+  const healthProject=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/health$/);
+  if(method==='POST'&&healthProject){if(String(env.ENVIRONMENT)==='local')return error(503,'Website checks are unavailable in this environment.');return json(await checkHealth(env.DB,user.id,healthProject[1]));}
   if(method==='GET'&&pathname==='/api/cloudflare/dns')return json({enabled:!!cloudflareConfig(env),...await listDNSActions(env.DB,user.id)});
   if(method==='POST'&&pathname==='/api/cloudflare/dns/review'){
     const data=await body(request);if(typeof data?.id!=='string'||typeof data.claimId!=='string'||typeof data.zoneId!=='string')return error(400,'Choose a claim and Cloudflare zone.');
@@ -305,7 +309,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (method === "POST" && pathname === "/api/chat") {
     const data = await body(request);
     if (!data) return error(400, "A JSON message is required");
-    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES});
+    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
     return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "POST" && pathname === "/api/auth/logout") {
@@ -350,7 +354,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
-    if(_event.cron==='47 * * * *'){await maintainHosting(env.DB,hostingConfig(env));return;}
+    if(_event.cron==='47 * * * *'){const checks=await Promise.allSettled([maintainHosting(env.DB,hostingConfig(env)),maintainHealth(env.DB)]);if(checks.some(r=>r.status==='rejected'))throw Error('Scheduled website checks failed');return;}
     const results=await Promise.allSettled([cleanupContacts(env.DB),cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env)),cleanupCloudflare(env.DB,cloudflareConfig(env))]);
     if(results.some(result=>result.status==='rejected'))throw Error('Scheduled maintenance failed');
   },
@@ -362,7 +366,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
+      if (cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

@@ -1,3 +1,4 @@
+import {publishedHTML} from './published-html';
 import { previewHeaders } from './components';
 import {reserveStorage,StorageLimitError} from './storage-budget';
 /** Public serving boundary: only current published HTML and its exact photo dependencies. */
@@ -26,7 +27,7 @@ export default {
    if(!site)return new Response('Site not found',{status:404,headers});
    if(site.component_id==='photo-page@1'&&!url.pathname.endsWith('/'))return new Response(null,{status:308,headers:{...headers,location:url.pathname+'/'}});
    const contact=site.contact_enabled===1;
-   const html=contact?site.html.replace('</main>',`<section aria-label="Contact" style="margin:40px 0"><h2>Get in touch</h2><p><a href="https://digifender.com/contact/${match[1]}" target="_blank" rel="noopener noreferrer">Contact us ↗</a></p></section></main>`):site.html;
+   const html=publishedHTML(site.html,contact,match[1]);
    return new Response(request.method==='HEAD'?null:html,{headers:{...headers,'content-security-policy':headers['content-security-policy'].replace('sandbox;',contact?'sandbox allow-popups allow-popups-to-escape-sandbox;':'sandbox;')+"; img-src 'self'"}});
   }catch(cause){return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
  }

@@ -240,3 +240,7 @@ Installation/repository discovery, exact source reviews, explicit confirmation a
 ### Audited recovery of unresolved AI holds (September 29)
 
 Operators can inspect and explicitly waive an aged uncertain AI hold without retrying the model or fabricating provider usage. Migration 0028 atomically restores held quota/credits, closes the original chat turn and saves an immutable audit receipt. Known token receipts, settled charges and active turns are excluded. Late model-result writes are fenced at the transaction boundary. This closes the indefinite-hold support gap; automatic provider-receipt reconciliation and the deferred payment/subscription lifecycle remain incomplete. See [usage recovery](usage-recovery.md).
+
+## Published website verification
+
+Shared-address publishing now attempts a saved HTTP/content and photo-response check. Chat supports `/health` and `/check-site PROJECT_ID`; bounded hourly maintenance refreshes due results. See [health scope and limits](site-health.md). This is synthetic endpoint verification, not automatic repair, custom-domain verification or a full uptime service.
