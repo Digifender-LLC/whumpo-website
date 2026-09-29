@@ -28,3 +28,11 @@ Browser verification: 390px workspace, 360px landing/settings/navigation and 320
 The tests use browser viewport emulation and synthetic local account data. Physical iOS/Android keyboards, autofill, safe-area hardware, native passkey prompts and human Turnstile remain device acceptance work; this is not a claim of native application installation or OS integration.
 
 Deployed platform version `c0fc3f0c-fafa-487c-98a3-cbdc398a77c2`. Live verification confirmed the viewport metadata, exact tested JavaScript/CSS assets and platform health.
+
+## Mobile navigation refinement — September 29, 2026
+
+Nested controls now retain their parent destination in bottom navigation (billing/connections under Settings; security under Profile; project controls under Dashboard), with an explicit return link. Chat uses exact route matching so it no longer appears selected on every workspace screen. Changing workspace pages or selected projects resets the main scroll position. Phone form controls have 48px minimum height, icon actions have 44px minimum width, wrapped action groups avoid crowding, and tab strips scroll horizontally. Sheets account for the keyboard inset; landscape safe areas protect page content. Landing headings and cards have tighter phone proportions.
+
+Verified locally with a disposable account: 360px landing has no horizontal overflow; 360px Billing shows only Settings selected, its return link works, and Your pages opens/closes as a bottom sheet. Settings has no document overflow at 360px or 320px. Screenshot: `.secrets/mobile-refinement.png`. TypeScript and production build pass. Physical device keyboard and landscape safe-area behavior still require iOS/Android acceptance.
+
+Deployed platform version `d57956df-ae5a-45b3-9079-d7f44a8f1d90`; live frontend asset bytes match the tested production build.
