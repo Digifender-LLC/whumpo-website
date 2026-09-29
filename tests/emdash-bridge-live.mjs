@@ -21,7 +21,7 @@ assert.equal((await call('/_emdash/api/plugins')).status,403);
 assert.equal((await fetch(base+'/_emdash/admin/setup')).status,403);
 const service={fetch:async request=>{const u=new URL(request.url);return fetch(base+u.pathname,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),signal:request.signal});}};assert.deepEqual((await verifyCMSInitialization(service,config)).collections.sort(),['pages','posts']);
 console.log('Actual EmDash bridge passed: unsigned/wrong-owner denial, empty-content setup, replay/conflict handling, pinned owner administration, schema reads, setup closed and other management routes denied.');
-const shapeBuild=await build({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsDraftBody,cmsEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeBuild.outputFiles[0].text).toString('base64'));
+const shapeBuild=await build({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsDraftBody,cmsEditBody,cmsStagedEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeBuild.outputFiles[0].text).toString('base64'));
 for(const collection of ['posts','pages']){
  const rid=id(),draftBody=cmsDraftBody('Native '+collection,'A private paragraph. <script>plain text only</script>');
  const created=await call('/_emdash/api/content/'+collection,draftBody,rid),data=await created.json();assert.equal(created.status,201,JSON.stringify(data));assert.equal(data.data.item.status,'draft');
@@ -41,6 +41,17 @@ for(const collection of ['posts','pages']){
  assert.equal((await call(publishPath,{_rev:snapshot._rev})).status,409);
  const published=await call(publishPath,{_rev:latest._rev},publishId),publishedData=await published.json();assert.equal(published.status,200,JSON.stringify(publishedData));assert.equal(publishedData.data.item.status,'published');assert.equal(JSON.stringify(publishedData.data.item.data),JSON.stringify(latest.item.data));
  assert.deepEqual(await (await call(publishPath,{_rev:latest._rev},publishId)).json(),publishedData);
+ const stagedId=id(),stagedBody=cmsStagedEditBody('Private replacement '+collection,'Unpublished replacement text',publishedData.data._rev);
+ assert.equal(Object.hasOwn(stagedBody,'status'),false);
+ const staged=await call(path,stagedBody,stagedId,config,'PUT'),stagedData=await staged.json();assert.equal(staged.status,200,JSON.stringify(stagedData));
+ assert.equal(stagedData.data.item.status,'published');assert.ok(stagedData.data.item.draftRevisionId);assert.deepEqual(stagedData.data.item.liveData,publishedData.data.item.data);assert.equal(stagedData.data.item.data.title,'Private replacement '+collection);
+ assert.deepEqual(await (await call(path,stagedBody,stagedId,config,'PUT')).json(),stagedData);
+ assert.equal((await call(path,stagedBody,id(),config,'PUT')).status,409);
+ const stagedRead=(await (await call(path)).json()).data;assert.deepEqual(stagedRead.item.liveData,publishedData.data.item.data);assert.equal(stagedRead.item.data.title,'Private replacement '+collection);
+ assert.ok(renderCMSDraft({collection,revision:stagedRead._rev,item:stagedRead.item}).includes('Private replacement'));assert.ok(renderCMSDraft({collection,item:stagedRead.item},true).includes('Private replacement'));
+ // Native promotion is separately verified here; platform replacement still needs its own review ledger.
+ const replaced=await call(publishPath,{_rev:stagedRead._rev}),replacement=await replaced.json();assert.equal(replaced.status,200,JSON.stringify(replacement));assert.equal(replacement.data.item.data.title,'Private replacement '+collection);assert.equal(replacement.data.item.status,'published');
+ publishedData.data=replacement.data;
  const unpublishPath=path+'/unpublish',unpublishId=id();assert.equal((await call(unpublishPath,{_rev:latest._rev})).status,409);
  const unpublished=await call(unpublishPath,{_rev:publishedData.data._rev},unpublishId),unpublishedData=await unpublished.json();assert.equal(unpublished.status,200,JSON.stringify(unpublishedData));assert.equal(unpublishedData.data.item.status,'draft');assert.deepEqual(unpublishedData.data.item.data,publishedData.data.item.data);
  assert.deepEqual(await (await call(unpublishPath,{_rev:publishedData.data._rev},unpublishId)).json(),unpublishedData);

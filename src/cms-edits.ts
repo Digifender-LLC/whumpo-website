@@ -1,6 +1,6 @@
 import {cmsConnection} from './cms-status';
 import {callCMS,CMSBridgeError} from './cms-bridge';
-import {cmsEditBody} from './cms-content-shape';
+import {cmsEditBody,cmsStagedEditBody} from './cms-content-shape';
 import {readCMSDraft} from './cms-content';
 import {CMSProjectError} from './cms-projects';
 type Row={id:string;draft_request_id:string;body:string;result:string|null};
@@ -9,19 +9,20 @@ export async function editCMSDraft(db:D1Database,user:string,project:string,id:s
  if(!/^[0-9a-f-]{36}$/.test(id))throw new CMSProjectError(400,'Choose a valid edit request ID');
  const draft=await db.prepare('SELECT collection,item_id FROM cms_draft_requests WHERE id=? AND user_id=? AND project_id=?').bind(draftId,user,project).first<{collection:string;item_id:string}>();
  if(!draft?.item_id)throw new CMSProjectError(404,'CMS draft not found');
- let body:string;try{body=JSON.stringify(cmsEditBody(title,text,revision));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
  const read=()=>db.prepare('SELECT * FROM cms_edit_requests WHERE id=?').bind(id).first<Row>();let row=await read();
+ // Preserve pre-staging operation bodies exactly when recovering historical receipts.
+ let body:string;try{body=JSON.stringify((row&&JSON.parse(row.body).status==='draft'?cmsEditBody:cmsStagedEditBody)(title,text,revision));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
  if(!row){
   const current=await readCMSDraft(db,user,project,draftId,env);
-  if(current.item.status!=='draft'||current.revision!==revision)throw new CMSProjectError(409,'Draft changed or is no longer a private draft. Read it again before preparing an edit.');
+  if(!['draft','published'].includes(current.item.status)||current.revision!==revision)throw new CMSProjectError(409,'Content changed or cannot be edited. Read it again before preparing an edit.');
   try{await db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body) VALUES(?,?,?)').bind(id,draftId,body).run();}catch{}row=await read();
  }
  if(!row)throw new CMSProjectError(409,'CMS edit request capacity is full or unavailable');
  if(row.draft_request_id!==draftId||row.body!==body)throw new CMSProjectError(409,'CMS edit request ID already used');
  if(!row.result){
   try{const data=await callCMS(service,config,'/_emdash/api/content/'+draft.collection+'/'+draft.item_id,id,JSON.parse(body),'PUT');
-   if(data?.item?.id!==draft.item_id||data.item.status!=='draft'||typeof data._rev!=='string'||data._rev.length>256)throw Error('Invalid edit receipt');
-   const result=JSON.stringify({editRequestId:id,requestId:draftId,projectId:project,itemId:draft.item_id,status:'draft',revision:data._rev});
+   if(data?.item?.id!==draft.item_id||!['draft','published'].includes(data.item.status)||(data.item.status==='published'&&(!data.item.draftRevisionId||!data.item.liveData))||typeof data._rev!=='string'||data._rev.length>256)throw Error('Invalid edit receipt');
+   const result=JSON.stringify({editRequestId:id,requestId:draftId,projectId:project,itemId:draft.item_id,status:data.item.status,staged:true,publicationChanged:false,revision:data._rev});
    await db.prepare('UPDATE cms_edit_requests SET result=? WHERE id=? AND result IS NULL').bind(result,id).run();
   }catch(error){if(error instanceof CMSBridgeError&&error.status===409)throw new CMSProjectError(409,error.message+' Edit request: '+id);}
   row=await read();

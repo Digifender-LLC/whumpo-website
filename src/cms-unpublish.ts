@@ -18,7 +18,7 @@ export async function confirmCMSUnpublish(db:D1Database,user:string,id:string,en
  const published=await readCMSPublication(db,user,row.publication_id);
  if(row.status==='pending'){
   try{await db.prepare("UPDATE cms_unpublish_reviews SET status='approved' WHERE id=? AND status='pending'").bind(id).run();}catch{}
-  row=await readCMSUnpublish(db,user,id);if(row.status==='pending')throw new CMSProjectError(409,'Unpublish review expired or another review already withdrew this publication');
+  row=await readCMSUnpublish(db,user,id);if(row.status==='pending')throw new CMSProjectError(409,'Unpublish review expired, this publication is no longer current, or an approved replacement needs recovery');
  }
  // Approval atomically hides the exact public snapshot before external work. No uncertain reply re-exposes it.
  if(row.status==='approved'){

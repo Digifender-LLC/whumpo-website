@@ -13,4 +13,8 @@ export function cmsEditBody(title:unknown,text:unknown,revision:unknown){
  if(new TextEncoder().encode(JSON.stringify(body)).length>4096)throw new Error('Encoded CMS edit exceeds 4096 bytes');
  return body;
 }
-export function validCMSEdit(body:string){try{const v=JSON.parse(body);return JSON.stringify(v)===JSON.stringify(cmsEditBody(v?.data?.title,v?.data?.content?.[0]?.children?.[0]?.text,v?._rev));}catch{return false;}}
+// Omitting status is essential: EmDash stages revision data without changing live metadata.
+export function cmsStagedEditBody(title:unknown,text:unknown,revision:unknown){
+ const {status,...body}=cmsEditBody(title,text,revision);return body;
+}
+export function validCMSEdit(body:string){try{const v=JSON.parse(body);return [cmsEditBody,cmsStagedEditBody].some(shape=>JSON.stringify(v)===JSON.stringify(shape(v?.data?.title,v?.data?.content?.[0]?.children?.[0]?.text,v?._rev)));}catch{return false;}}
