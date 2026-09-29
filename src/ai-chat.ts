@@ -94,6 +94,11 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     // Recover a committed answer/draft after an acknowledgement was lost. Never regenerate.
     const persisted = await db.prepare("SELECT input_tokens FROM chat_turns WHERE id=? AND user_id=?").bind(id,userId).first<{input_tokens:number|null}>();
     if(persisted?.input_tokens != null){await reconcileChat(db,userId);return {status:200};}
+    if(String(cause).includes('comparison_changed')){
+      await finishUsage(db,userId,id,0);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='A compared version was removed before the comparison could be saved. Request a fresh comparison. No build units were charged.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      return {status:200};
+    }
     if(cause instanceof DomainError || String(cause).includes('domain_claim_quota')) {
       await finishUsage(db,userId,id,0);
       const detail=cause instanceof DomainError?cause.message:'Domain test limit reached: 3 per project, 10 per account and 80 platform-wide.';

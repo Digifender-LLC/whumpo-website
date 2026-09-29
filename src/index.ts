@@ -1,3 +1,4 @@
+import {DiffError,compareVersions,compareReview,diffPage} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
 import {listDNSActions,reviewTXT,confirmTXT} from './cloudflare-dns';
@@ -198,6 +199,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (filesMatch && method === 'PUT' && filesMatch[2]) return json(await uploadPhoto(request,env,user.id,filesMatch[1],filesMatch[2]));
   const photoMatch=pathname.match(/^\/api\/files\/([0-9a-f-]{36})$/);
   if (photoMatch && method === 'GET') return readPhoto(env,user.id,photoMatch[1]);
+  const diffMatch=pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/diff$/);
+  if(method==='GET'&&diffMatch){const params=new URL(request.url).searchParams;if([...params.keys()].some(k=>k!=='base')||params.getAll('base').length>1)return error(400,'Choose a single baseline.');return diffPage(await compareVersions(env.DB,user.id,diffMatch[1],params.get('base')??undefined));}
+  const reviewDiff=pathname.match(/^\/api\/publication-reviews\/([0-9a-f-]{36})\/diff$/);
+  if(method==='GET'&&reviewDiff)return diffPage(await compareReview(env.DB,user.id,reviewDiff[1]));
   const exportMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/export$/);
   if (method === 'GET' && exportMatch) {
     const archive = await ownedExport(env.DB, user.id, exportMatch[1], env.FILES);
@@ -353,7 +358,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
+      if (cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

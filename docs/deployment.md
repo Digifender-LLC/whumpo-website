@@ -208,3 +208,13 @@ A live Muse request prepared an exact contact review without activating it. Subs
 The first live invalid-token check exposed a Workers `TypeError` during the verification request when using redirect error mode. Manual redirect handling with explicit non-OK rejection resolved it; the final deployment returned the expected validation failure. Redacted diagnostic logging records only a fixed event, processing stage and error class, never submitted fields, tokens or provider response bodies.
 
 Successful real Turnstile completion and the first scheduled production retention cleanup remain acceptance gates. Controlled valid Siteverify responses prove the application path; a seeded live D1 message proves the inbox authorization path, not real browser verification. See `docs/contact-forms.md`. Stripe and optional account/domain integrations remain in their previously documented deferred/unconfigured state.
+
+## Private version comparisons — September 29, 2026
+
+Migration `0026_version_comparisons.sql` applied remotely before deployment and locally afterward. Workspace Worker `4b9de4d2-8099-4ca0-acec-b2c8a87c2c76` and public host `b73ce9cd-db3b-4124-9fdc-5e84e74213db` are deployed. No new service, provider credential or paid feature was required.
+
+TypeScript, the new disposable comparison suite, publication regressions and version-removal regressions passed. Comparisons cover supported configuration fields, sections and photo references, not code-line or pixel diffs. Browser inspection verified desktop layout and stacked before/after fields at 390-pixel width. The temporary viewport was reset and fixture server stopped.
+
+Live signed-passkey acceptance created ocean and clay drafts, published the first, and verified a free guided comparison with an exact saved baseline. Authenticated comparison HTML was private/no-store, contained the exact theme change and no scripts; anonymous access returned 401. Missing and repeated baselines were rejected. Pending publish/restore/unpublish review pages worked, and a review became 409 after its publication was applied. A pinned comparison continued to show the old baseline after publication, while a new live comparison correctly showed no changes.
+
+A live Muse request selected the comparison action and received the server-derived result with its pinned private link. Seven build units settled with zero held; replay added no charge. The test site was unpublished and its temporary account and dependent records were removed. This completes comparison acceptance for the currently supported static/photo components; broader application-data rollback, isolated execution, external-provider setup and the existing user-device/Turnstile gates remain separate requirements.
