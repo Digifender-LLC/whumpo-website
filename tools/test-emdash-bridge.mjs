@@ -1,3 +1,6 @@
+import wrangler from 'wrangler';
+import {DatabaseSync} from 'node:sqlite';
+import {stableCMSDatabase,captureCMSDatabase,restoreCapturedCMSDatabase} from './cms-database-snapshot.mjs';
 // Reproducible disposable local EmDash + private service-binding acceptance.
 import {spawn,spawnSync} from 'node:child_process';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
@@ -26,6 +29,9 @@ try{
  if(!ready)throw Error('Local CMS did not start: '+logs);
  const result=await new Promise((resolve,reject)=>{const child=spawn(process.execPath,['tests/emdash-bridge-live.mjs'],{stdio:'inherit'});child.once('error',reject);child.once('exit',resolve);});
  if(result!==0)throw Error('EmDash acceptance failed: '+logs);
+ const proxy=await wrangler.getPlatformProxy({configPath:join(dir,'cms.json'),persist:{path:join(dir,'state','v3')},remoteBindings:false});
+ const restored=new DatabaseSync(':memory:');
+ try{const captured=await stableCMSDatabase(async sql=>(await proxy.env.DB.prepare(sql).all()).results);restoreCapturedCMSDatabase(restored,captured.snapshot);const roundtrip=await captureCMSDatabase(async sql=>restored.prepare(sql).all());if(roundtrip.digest!==captured.digest)throw Error('Native CMS restore differs from source');console.log('Actual EmDash database snapshot restored with identical logical digest ('+captured.snapshot.tables.length+' tables, '+captured.rows+' rows).');}finally{restored.close();await proxy.dispose();}
 }finally{
  if(server&&server.exitCode===null){server.kill('SIGTERM');await new Promise(resolve=>{server.once('exit',resolve);setTimeout(()=>{if(server.exitCode===null)server.kill('SIGKILL');resolve();},4000);});}
  await rm(dir,{recursive:true,force:true});
