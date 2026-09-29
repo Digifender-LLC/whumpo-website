@@ -106,3 +106,7 @@ Muse Spark 1.3 Contributor can select the approved `site-page@1` component and p
 AI can prepare publish, restore and unpublish reviews through the existing gateway. It cannot confirm them. Action receipts come from the server, not model claims. Draft/action statements and the chat answer/token receipt commit in one D1 batch before billing settlement; a lost acknowledgement recovers the saved result without another inference. Invalid proposals and version-quota failures apply nothing and release the reservation; the platform absorbs those provider calls. Migration 0009 records AI provenance and the prior version when available.
 
 The current context includes five owned projects and the latest owned version. Unsupported scripts, backend execution, uploads, external integrations and arbitrary styles are rejected. The full MVP still requires broader layouts, uploads, domain management, account connections and payment integration. Stripe test mode is selected for checkout; real charges are not authorized.
+
+## Test payment foundation
+
+The owner selected Stripe test mode, then deferred connection because no Stripe account exists. Credit-pack checkout and signed webhook fulfillment are implemented behind test-only secret configuration; the deployed UI keeps checkout hidden while unconfigured. Fixed server orders, Stripe idempotency and atomic D1 credit grants protect retries and event reordering. See [payments.md](payments.md) for the contract and validation. Subscriptions, real Stripe verification and live payments are not enabled.

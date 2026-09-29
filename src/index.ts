@@ -1,3 +1,4 @@
+import { checkoutEnabled, createCheckout, stripeWebhook } from './checkout';
 import { componentCatalog, previewHeaders } from './components';
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { plans, creditPack } from "./plans";
@@ -82,10 +83,11 @@ async function handle(request: Request, env: Env): Promise<Response> {
   const method = request.method;
   if (method === "GET" && pathname === "/api/health") return json({ status: "ok" });
   if (method === "GET" && pathname === "/api/config") return json({ inviteRequired: !localMode(request, env), turnstileSiteKey: localMode(request, env) ? null : env.TURNSTILE_SITE_KEY });
+  if (method === "POST" && pathname === "/api/stripe/webhook") return json(await stripeWebhook(request, env.DB, env));
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && !sameOrigin(request)) return error(403, "Origin check failed");
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
-  if (method === "GET" && pathname === "/api/plans") return json({ plans, creditPack, currency: "USD", draft: true, checkoutEnabled: false });
+  if (method === "GET" && pathname === "/api/plans") return json({ plans, creditPack, currency: "USD", draft: true, checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", subscriptionsEnabled: false });
   if (method === "POST" && pathname.startsWith("/api/auth/") && pathname !== "/api/auth/logout") {
     if (!(await env.AUTH_LIMITER.limit({ key: ip })).success) return error(429, "Too many sign-in attempts. Try again in a minute.");
   }
@@ -178,12 +180,16 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const {results} = await env.DB.prepare('SELECT id,component_id,digest,created_at FROM site_versions WHERE project_id = ? ORDER BY created_at DESC,id DESC LIMIT 25').bind(versionsMatch[1]).all();
     return json({versions:results});
   }
-  if (method === "GET" && pathname === "/api/billing") return json(await getBilling(env.DB, user.id));
+  if (method === "GET" && pathname === "/api/billing") return json({ ...await getBilling(env.DB, user.id), checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", creditPack });
+  if (method === "POST" && pathname === "/api/billing/checkout") {
+    const data = await body(request);
+    return json(await createCheckout(env.DB, env, user.id, data?.id, data?.product));
+  }
   if (method === "POST" && pathname === "/api/billing/preferences") {
     const data = await body(request);
     if (typeof data?.overageEnabled !== "boolean") return error(400, "Choose whether existing credits may cover overage");
     await setOverage(env.DB, user.id, data.overageEnabled);
-    return json(await getBilling(env.DB, user.id));
+    return json({ ...await getBilling(env.DB, user.id), checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", creditPack });
   }
   if (method === "GET" && pathname === "/api/passkeys") {
     const { results } = await env.DB.prepare("SELECT id, name, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY created_at").bind(user.id).all();

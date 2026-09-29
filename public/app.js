@@ -702,6 +702,9 @@
   function renderBilling(data) {
     $("#billing-summary").textContent = `${data.plan.name} \xB7 ${data.period}: ${data.quota.available} of ${data.quota.allowance} monthly units available, ${data.quota.spent} used, ${data.quota.reserved} held. ${data.credits.available} credits available; ${data.credits.reserved} held. Monthly units reset on the first day (UTC). Credits carry over.`;
     $("#overage-enabled").checked = data.credits.overageEnabled;
+    $("#checkout-controls").hidden = !data.checkoutEnabled;
+    $("#checkout-status").textContent = data.checkoutEnabled ? "Credits appear only after Stripe confirms the test payment. Returning from checkout alone does not add credits." : "Test checkout is not connected yet.";
+    if (data.creditPack) $("#checkout-start").textContent = `Test purchase: ${data.creditPack.credits} credits \xB7 $${(data.creditPack.cents / 100).toFixed(2)}`;
     const history2 = $("#billing-history");
     history2.replaceChildren();
     for (const entry of data.ledger.slice(0, 10)) history2.append(text("p", `${entry.event.replaceAll("_", " ")} \xB7 ${entry.quota_delta > 0 ? "+" : ""}${entry.quota_delta} monthly units \xB7 ${entry.credits_delta > 0 ? "+" : ""}${entry.credits_delta} credits`, "ledger-entry"));
@@ -712,6 +715,35 @@
       $("#billing-dialog").showModal();
     } catch (error) {
       showMessage(error.message);
+    }
+  };
+  var checkoutRequestId;
+  $("#checkout-start").onclick = async () => {
+    const button = $("#checkout-start");
+    button.disabled = true;
+    checkoutRequestId ||= crypto.randomUUID();
+    try {
+      const result = await api("/billing/checkout", { method: "POST", body: JSON.stringify({ id: checkoutRequestId, product: "credits-100" }) });
+      if (result.fulfilled) {
+        checkoutRequestId = void 0;
+        renderBilling(await api("/billing"));
+        return;
+      }
+      const destination = new URL(result.url);
+      if (destination.protocol !== "https:" || destination.hostname !== "checkout.stripe.com") throw new Error("Unexpected checkout destination");
+      location.assign(destination.href);
+    } catch (error) {
+      $("#checkout-status").textContent = error.message;
+      if (error.status === 409) checkoutRequestId = void 0;
+    } finally {
+      button.disabled = false;
+    }
+  };
+  $("#billing-refresh").onclick = async () => {
+    try {
+      renderBilling(await api("/billing"));
+    } catch (error) {
+      $("#checkout-status").textContent = error.message;
     }
   };
   $("#billing-close").onclick = () => $("#billing-dialog").close();
