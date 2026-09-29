@@ -49,6 +49,11 @@ for(const collection of ['posts','pages']){
  assert.equal((await call(path,stagedBody,id(),config,'PUT')).status,409);
  const stagedRead=(await (await call(path)).json()).data;assert.deepEqual(stagedRead.item.liveData,publishedData.data.item.data);assert.equal(stagedRead.item.data.title,'Private replacement '+collection);
  assert.ok(renderCMSDraft({collection,revision:stagedRead._rev,item:stagedRead.item}).includes('Private replacement'));assert.ok(renderCMSDraft({collection,item:stagedRead.item},true).includes('Private replacement'));
+ const discardPath=path+'/discard-draft',discardId=id();assert.equal((await call(discardPath,{})).status,403);assert.equal((await call(discardPath,{_rev:publishedData.data._rev})).status,409);
+ const discarded=await call(discardPath,{_rev:stagedRead._rev},discardId),discardedData=await discarded.json();assert.equal(discarded.status,200,JSON.stringify(discardedData));assert.equal(discardedData.data.item.status,'published');assert.ok(!discardedData.data.item.draftRevisionId);assert.deepEqual(discardedData.data.item.data,publishedData.data.item.data);
+ assert.deepEqual(await (await call(discardPath,{_rev:stagedRead._rev},discardId)).json(),discardedData);
+ const restaged=await call(path,cmsStagedEditBody('Private replacement '+collection,'Unpublished replacement text',discardedData.data._rev),id(),config,'PUT');assert.equal(restaged.status,200);stagedRead._rev=(await restaged.json()).data._rev;
+ assert.equal((await call(discardPath,{_rev:discardedData.data._rev},discardId)).status,409);
  // Native promotion is separately verified here; platform replacement still needs its own review ledger.
  const replaced=await call(publishPath,{_rev:stagedRead._rev}),replacement=await replaced.json();assert.equal(replaced.status,200,JSON.stringify(replacement));assert.equal(replacement.data.item.data.title,'Private replacement '+collection);assert.equal(replacement.data.item.status,'published');
  publishedData.data=replacement.data;
@@ -59,4 +64,4 @@ for(const collection of ['posts','pages']){
 
  assert.equal((await fetch(base+'/posts/'+item.slug)).status,403);
 }
-console.log('Actual native EmDash drafts passed: posts/pages create, read, exact replay, changed-request conflict, forced draft state, revision-bound editing, stale/concurrent edit conflicts and revision-bound native publication/unpublication with exact replay and retained content.');
+console.log('Actual native EmDash drafts passed: posts/pages create, read, exact replay, changed-request conflict, forced draft state, revision-bound editing, stale/concurrent edit conflicts and revision-bound native publication/unpublication, reviewed-revision discard, retained live content and exact receipt replay.');

@@ -547,6 +547,11 @@
         index.rel = "noopener noreferrer";
         answer.append(index);
       }
+      if (typeof turn.cms_discard_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_discard_confirmation_id)) {
+        const button = text("button", turn.cms_discard_recovery ? "Check CMS discard result" : "Discard reviewed CMS changes");
+        button.onclick = () => sendMessage(`/confirm-cms-discard ${turn.cms_discard_confirmation_id}`);
+        answer.append(button);
+      }
       if (typeof turn.cms_unpublish_confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.cms_unpublish_confirmation_id)) {
         const button = text("button", turn.cms_unpublish_recovery ? "Recover CMS unpublish" : "Take reviewed CMS article offline");
         button.onclick = () => sendMessage(`/confirm-cms-unpublish ${turn.cms_unpublish_confirmation_id}`);
