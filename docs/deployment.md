@@ -162,3 +162,11 @@ Remote migration 0015 applied before deployment. Workspace Worker `24450413-cdf4
 TypeScript, onboarding integration, chat and site-agent regression tests passed. Onboarding checks cover concurrent replay, owner boundaries, saved preferences, interruption, skip/cancel, free-form style notes and rollback when the preview quota is exhausted. Browser testing resumed setup after reload and produced the private-preview link.
 
 Live signed-passkey HTTPS testing verified all four setup answers, a command interrupting setup, one first preview on replay, brief readback, private-note exclusion from HTML, anonymous denial, public HTTP 404 and zero AI units spent. The temporary account and dependent project/version records were removed. No real model call was needed for this guided workflow. Stripe remains disabled; custom-domain hosting still awaits provider access.
+
+## Natural-language project creation and source export — September 29, 2026
+
+Workspace Worker `26882229-3d31-49bb-8f34-0151400802cf` and public host `d8a33ab3-536f-4cb8-a572-cc9712cf730d` are deployed. No migration or new infrastructure was required. The action vocabulary now permits a validated new project plus private first website and an export receipt for an exact owned version.
+
+TypeScript, workspace-agent action tests and existing site-agent regressions passed. Checks cover atomic artifacts, quota refunds, rejected fields, foreign/missing export versions, replay and recovery after a lost transaction acknowledgement.
+
+A live Muse Spark 1.3 Contributor request created a synthetic Cedar Garden Demo project with its first private website. Replaying the same message created no duplicate or additional charge. A second natural-language request produced an authenticated source-download link. The ZIP was extracted and its HTML SHA-256 matched the manifest; anonymous export returned 401 and the public site returned 404. The two AI requests settled 16 units with zero held. The ephemeral account, project, draft and receipts were removed afterward. Existing deterministic `/new` and `/export` remain free of model charges.

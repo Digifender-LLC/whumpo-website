@@ -61,3 +61,5 @@ Use `/files` or Details → Project photos for private uploads. JPEG, PNG and We
 Use `/domains` or Details → Domains to prepare and check a project-specific DNS TXT proof. Proofs expire after seven days and cost no AI units. Verification does not connect a hostname, provision a certificate or purchase a domain. `pnpm test:domains` verifies ownership boundaries, exact DNS proofs, retries, expiry and quotas.
 
 Onboarding collects your idea, project name, intended audience and style, then creates a private first preview without AI units. Use `/skip` for optional questions, `/brief` to inspect the saved planning notes, and `/cancel` to leave setup. Free-form style notes guide later AI edits; the first preview supports ocean, clay and forest themes. `pnpm test:onboarding` covers persistence, retries, owner isolation and quota rollback.
+
+The AI can create a new project and its private website from a request with a name and purpose, and prepare an authenticated source download in ordinary language. These interpreted requests use AI units; `/new` and `/export` stay available without model charges. See [workspace AI actions](docs/workspace-agent.md).
