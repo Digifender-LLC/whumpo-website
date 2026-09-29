@@ -133,7 +133,7 @@ Migration 0013 adds immutable version-photo references and atomic R2 operation b
 
 Private previews embed checksum-verified JPEGs under a sandbox. The public host checks current publication membership before serving image bytes; restore/unpublish updates access on the next request. ZIP exports include exact images and fail if dependencies cannot be verified. Tests cover cross-owner and same-owner cross-project rejection, replay, missing assets, version restoration, public visibility and operation-budget concurrency. Live signed-in checks and public browser rendering passed. Offline file opening was blocked by browser policy; independent ZIP/image checks passed.
 
-The revised Word design is v0.3. Original sections 1–25 retain product intent; sections 26–32 specify current implementation and remaining contracts. Payments remain disabled at the owner’s request.
+The revised Word design is v0.4. Original sections 1–25 retain product intent; sections 26–32 specify current implementation and remaining contracts through application commit `3827e65` and migration 0024. It covers monthly plan receipts, reviewed photo/version removal, optional provider connections, reviewed DNS, and safe shared backend components. All 30 rendered pages were visually checked. Payments remain disabled at the owner’s request.
 
 
 ## Domain ownership milestone — September 29, 2026
