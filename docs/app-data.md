@@ -63,7 +63,7 @@ Owner-configuration release `1fd15da` deployed to `tellumo-platform`, version `f
 
 ## Visitor authentication service
 
-`src/app-auth.ts` and migration 0056 implement invitation-only visitor passkeys independently of platform users. This service is not yet reachable through HTTP or the agent. `publicAccessReady` remains false. Production WebAuthn verification is pinned to `https://apps.digifender.com` and RP `apps.digifender.com`; this origin still needs the controlled host deployment. Local verification is explicitly pinned to `http://localhost:8787`. Request-supplied origins must never configure either value.
+`src/app-auth.ts` and migration 0056 implement invitation-only visitor passkeys independently of platform users. Visitor authentication is not yet reachable through HTTP or the agent. Owner invitation and revocation controls are connected through the workspace API (see below). `publicAccessReady` remains false. Production WebAuthn verification is pinned to `https://apps.digifender.com` and RP `apps.digifender.com`; this origin still needs the controlled host deployment. Local verification is explicitly pinned to `http://localhost:8787`. Request-supplied origins must never configure either value.
 
 The owner can issue a 24-hour, single-use invitation for the current application revision. Only a domain-separated hash is saved. Invitations are limited to 100 per project and 1,000 overall; expired rows are reclaimed on issuance. A changed program revision invalidates outstanding invitations. Issuance rechecks current ownership and enabled state at commit. Raw invitation codes must be displayed privately once, outside chat, with no URL, logging, AI-context or reusable-component exposure.
 
@@ -81,4 +81,17 @@ The unmounted HTTP gateway accepts only the controlled application origin. Route
 
 Gateway tests exercise signed enrollment through cookie-bound requests, missing/wrong origins, wrong host, body limits, rate denial, platform-session separation, authenticated data and private receipts, exact transition retry without redispatch, recovery and logout against local D1. The runtime service is controlled in this suite; this is not deployed/browser/QuickJS acceptance.
 
-Next: mount the gateway on a controlled application host with its UI, owner invitation/revocation controls, visitor export/deletion and real browser/runtime acceptance. Do not serve arbitrary generated scripts on the credential-bearing application origin. Existing stateless public forms remain separate.
+Next: mount the gateway on a controlled application host with its UI, then implement visitor export/deletion and real browser/runtime acceptance. Do not serve arbitrary generated scripts on the credential-bearing application origin. Existing stateless public forms remain separate.
+
+
+## Owner visitor controls
+
+Dashboard → Visitor access opens a full-width project panel; `/visitor-access` (optionally with a project UUID), “visitor access” and “manage visitor access” also open it directly from Chat. Guided/API chat requests return an owned visitor count and directions without invitation codes. Agent guidance directs credential handling to this private panel. Chat, Dashboard and custom workflow views remain separate.
+
+Owned `GET /api/projects/:project/application-access` returns configuration, visitor IDs/join dates/revocation flags, passkey and active-session counts, and invitation status/expiry. It never returns visitor documents, passkey public keys, recovery codes, session hashes or raw invitation codes. Invitation identifiers are the hashes of random 256-bit codes, not bearer credentials. List queries recheck current project ownership. Projects without app configuration return an empty setup view.
+
+Owner-only POST routes: `/application-access/invitations` creates one invitation, `/application-access/invitations/:id/cancel` cancels an unused invitation, and `/application-access/visitors/:id/revoke` irreversibly revokes a visitor. All require a same-origin request, a session less than ten minutes old, an account rate-limit allowance and an empty JSON object. Cancellation is rechecked by enrollment's atomic commit, including when options were issued before cancellation. Used invitations cannot be cancelled; use visitor revocation instead. Revocation remains available for disabled applications and retains private data.
+
+The UI shows new codes once in a private, read-only field with an explicit Copy action. It does not place them in chat, URLs, local storage or analytics. Navigation discards the code. Creating another is hidden until the first is dismissed. Cancellation and revocation have an inline confirmation naming the target and explaining consequences. All panels clearly say visitor sign-in is not live while the gateway is unmounted; preparing an invitation does not make a public app available.
+
+Verification includes owner/foreign/anonymous routes, CSRF and recent-session denial, cancellation after challenge issuance, disabled-app revocation, metadata field allowlisting and guided chat without credential disclosure. Local browser inspection confirmed dashboard and Chat navigation, confirmation dismissal and a 390px layout without horizontal overflow. Browser fixtures are synthetic; no production visitor access was granted or revoked during testing.

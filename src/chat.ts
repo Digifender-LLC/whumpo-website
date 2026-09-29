@@ -1,3 +1,4 @@
+import {readAppAccess} from './app-access';
 import {chatHelp} from './chat-help';
 import {cmsDiscardLinks} from './cms-discard';
 import {cmsUnpublishLinks} from './cms-unpublish';
@@ -86,7 +87,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   let version: { projectId: string; config: LaunchConfig; html: string; digest: string } | undefined;
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
   const help=chatHelp(command,!!ai);
-  const known = ['/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
+  const known = ['visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && !help && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
@@ -118,6 +119,13 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if (domain) reply = domain.reply;
   else if (photoDraft) reply = photoDraft.reply;
   else if (publication) reply = publication.reply;
+  else if (/^\/visitor-access(?:\s|$)/.test(command)||['visitor access','manage visitor access'].includes(command)) {
+    const args=command.startsWith('/')?command.split(/\s+/):['/visitor-access'];
+    if(args.length>2||(args[1]&&!/^[0-9a-f-]{36}$/.test(args[1])))return {status:400,error:'Use /visitor-access, optionally followed by a project ID.'};
+    const target=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[1]??null,args[1]??null).first<{id:string;name:string}>();
+    if(!target)reply='No matching project found. Create one with /new first.';
+    else {const access=await readAppAccess(db,userId,target.id);reply=`Visitor access for “${target.name}”: ${access.visitors.filter(v=>!v.revoked).length} active visitor(s). Open Dashboard → Visitor access, or use /visitor-access ${target.id} in the workspace. Create invitations, cancel unused invitations and review revoking a visitor there. Access changes require a recent sign-in. Keep all invitation and recovery codes out of chat. Visitor sign-in pages are not live yet.`;}
+  }
   else if (['/inbox','show inbox','my inbox'].includes(command)) reply='Open your private inbox from Dashboard → Contact inbox or type /inbox in the workspace. Visitor messages are not copied into chat history or AI prompts. Use /contact-on PROJECT_ID or /contact-off PROJECT_ID to review form settings.';
   else if (/^\/photos(?:\s|$)/.test(command)) {
     const [,id,...extra]=command.split(/\s+/);

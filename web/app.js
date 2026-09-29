@@ -116,6 +116,8 @@ async function loadDashboard(user) {
 }
 async function sendMessage(content) {
   if (sending || !content.trim()) return;
+  const visitorAccess=content.trim().toLowerCase().match(/^\/visitor-access(?:\s+([0-9a-f-]{36}))?$/);
+  if(visitorAccess||['visitor access','manage visitor access'].includes(content.trim().toLowerCase())){workspace.openAccess(visitorAccess?.[1]??'');return;}
   if (["/inbox", "show inbox", "my inbox"].includes(content.trim().toLowerCase())) { await openInbox(); return; }
   if (["/connections", "show connections", "connect github", "disconnect github", "connect cloudflare", "disconnect cloudflare", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) { await openConnections(); return; }
   if (["/domains", "show domains", "connect my domain", "disconnect my domain", "check domain hosting"].includes(content.trim().toLowerCase())) { await openDomains(); return; }

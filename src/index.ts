@@ -1,4 +1,6 @@
 import {readProfile,updateProfile,profilePhoto,updateProfilePhoto} from './profile';
+import {readAppAccess,cancelAppInvitation} from './app-access';
+import {createAppInvitation,revokeAppVisitor} from './app-auth';
 import {dashboardData,readLayout,saveLayout,readCapacity,saveCapacity} from './workspace-dashboard';
 import { readAcknowledgment } from './acknowledgment';
 import {readApplication,readApplicationReview,prepareApplication,confirmApplication} from './app-activation';
@@ -275,6 +277,20 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(stateReviewRoute){
     if(method==='GET'&&!stateReviewRoute[2])return json(await readBackendReview(env.DB,user.id,stateReviewRoute[1]));
     if(method==='POST'&&stateReviewRoute[2])return json(await confirmBackendState(env.DB,user.id,stateReviewRoute[1]));
+  }
+  const accessRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/application-access(?:\/(invitations|visitors)(?:\/([0-9a-f-]{36}|[0-9a-f]{64})\/(cancel|revoke))?)?$/);
+  if(accessRoute){
+    const [,project,kind,id,action]=accessRoute;
+    if(method==='GET'&&!kind)return json(await readAppAccess(env.DB,user.id,project));
+    if(method==='POST'){
+      if(!await recentSession(request,env))return error(401,'Sign in again before changing visitor access');
+      if(!(await env.AUTH_LIMITER.limit({key:'app-access:'+user.id})).success)return error(429,'Too many access changes. Try again in a minute.');
+      const data=await body(request);if(!data||Object.keys(data).length)return error(400,'This action expects an empty JSON object');
+      if(kind==='invitations'&&!id)return json(await createAppInvitation(env.DB,user.id,project),201);
+      if(kind==='invitations'&&id&&action==='cancel')return json(await cancelAppInvitation(env.DB,user.id,project,id));
+      if(kind==='visitors'&&id&&action==='revoke'){await revokeAppVisitor(env.DB,user.id,project,id);return json({revoked:true});}
+    }
+    return error(405,'Unsupported visitor access operation');
   }
   const applicationRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/application$/);
   if(applicationRoute){

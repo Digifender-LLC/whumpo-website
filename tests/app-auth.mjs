@@ -7,6 +7,8 @@ import {authenticator} from './app-authenticator.mjs';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const auth=await module('src/app-auth.ts'),data=await module('src/app-data.ts'),{saveBackend,testBackend}=await module('src/backend-versions.ts'),{prepareApplication,confirmApplication}=await module('src/app-activation.ts');
 const {applicationGateway}=await module('src/app-gateway.ts');
+const platform=(await module('src/index.ts')).default;
+const {hashToken}=await module('src/security.ts');
 const dir=await mkdtemp('/tmp/townhello-app-auth-');
 execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
@@ -149,6 +151,37 @@ try {
  assert.equal((await request('data','GET',undefined,{cookie:oldCookie})).response.status,401);
  assert.deepEqual((await request('data')).result.state,{hello:'private'});
  await request('auth/logout','POST',{});assert.equal((await request('data')).response.status,401);
+ // Owner workspace routes never return visitor documents, session tokens or keys.
+ const ownerToken='1'.repeat(64),foreignToken='2'.repeat(64),staleToken='3'.repeat(64);
+ for(const [token,user,created]of [[ownerToken,c.user,now()],[foreignToken,a.user,now()],[staleToken,c.user,new Date(Date.now()-700000).toISOString()]])await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)').bind(await hashToken(token),user,new Date(Date.now()+3600000).toISOString(),created).run();
+ const accessPath='/api/projects/'+c.project+'/application-access';
+ async function ownerRequest(suffix='',method='GET',token=ownerToken,origin='https://digifender.com',payload={}){return platform.fetch(new Request('https://digifender.com'+accessPath+suffix,{method,headers:{cookie:'tellumo_session='+token,origin,'content-type':'application/json'},body:method==='POST'?JSON.stringify(payload):undefined}),env,{waitUntil(){}});}
+ assert.equal((await ownerRequest('','GET','')).status,401);
+ assert.equal((await ownerRequest('','GET',foreignToken)).status,404);
+ assert.equal((await ownerRequest('/invitations','POST',staleToken)).status,401);
+ assert.equal((await ownerRequest('/invitations','POST',ownerToken,'https://foreign.example')).status,403);
+ assert.equal((await ownerRequest('/invitations','POST',foreignToken)).status,404);
+ const created=await ownerRequest('/invitations','POST');assert.equal(created.status,201);const createdInvite=await created.json();
+ const pending=await begin(c,'signup',createdInvite.code),pendingKey=authenticator();
+ const view=await(await ownerRequest()).json();assert.equal(view.publicAccessReady,false);assert.equal(view.visitors.length,2);
+ assert.deepEqual(Object.keys(view.visitors[0]).sort(),['created_at','id','passkeys','revoked','sessions']);
+ const serialized=JSON.stringify(view);for(const secret of [createdInvite.code,httpSignup.result.recoveryCode,foreign.session])assert.ok(!serialized.includes(secret));
+ const chatHeaders={cookie:'tellumo_session='+ownerToken,origin:'https://digifender.com','content-type':'application/json'};
+ const chatState=await(await platform.fetch(new Request('https://digifender.com/api/chat',{headers:chatHeaders}),env,{waitUntil(){}})).json();
+ const chatReply=await platform.fetch(new Request('https://digifender.com/api/chat',{method:'POST',headers:chatHeaders,body:JSON.stringify({id:id(),revision:chatState.state.revision,content:'/visitor-access '+c.project})}),env,{waitUntil(){}});
+ assert.equal(chatReply.status,200);const transcript=await chatReply.json();assert.ok(JSON.stringify(transcript).includes('active visitor(s)'));assert.ok(!JSON.stringify(transcript).includes(createdInvite.code));
+ const invitationId=await hashToken('townhello-app-invite:'+createdInvite.code),cancel='/invitations/'+invitationId+'/cancel';
+ assert.equal((await ownerRequest(cancel,'POST',foreignToken)).status,404);assert.equal((await ownerRequest(cancel,'POST')).status,200);
+ await denied(begin(c,'signup',createdInvite.code),403);
+ await denied(verify(c,'signup',pending,pendingKey.registration(pending.options)),403);
+ const revoke='/visitors/'+foreign.visitorId+'/revoke';
+ assert.equal((await ownerRequest(revoke,'POST',foreignToken)).status,404);
+ assert.equal((await ownerRequest(revoke,'POST',ownerToken,'https://foreign.example')).status,403);
+ assert.equal((await ownerRequest(revoke,'POST')).status,200);await denied(data.readAppData(db,foreign.session,c.project),401);
+ await configure(c,'disable');assert.equal((await ownerRequest()).status,200);
+ const remaining=(await(await ownerRequest()).json()).visitors.find(v=>!v.revoked);assert.ok(remaining);
+ assert.equal((await ownerRequest('/visitors/'+remaining.id+'/revoke','POST')).status,200);
  console.log('App visitor auth passed: real signed passkeys, origin/UV/project separation, single-use challenges/invites, concurrent enrollment, epoch guards, private data, recovery rotation, credential race, owner revocation, disabled-app denial and hashed secrets.');
  console.log('App gateway passed: host isolation, HttpOnly secure project cookies, browser challenge binding, bounded JSON, origin/rate checks, no CORS, private state/receipts, idempotent retry, recovery and logout. Gateway is not publicly mounted.');
+ console.log('Owner access routes passed: authenticated metadata, foreign-owner/CSRF/recent-session denial, single-display invitations, cancellation during enrollment, irreversible revocation and disabled-app management.');
 } finally {await proxy.dispose();await rm(dir,{recursive:true,force:true});}
