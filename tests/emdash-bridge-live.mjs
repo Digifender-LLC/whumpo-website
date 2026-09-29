@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const b=await build({entryPoints:['src/cms-bridge.ts'],bundle:true,format:'esm',platform:'node',write:false});const {signCMSRequest,verifyCMSInitialization}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const config={projectId:'11111111-1111-4111-8111-111111111111',ownerId:'22222222-2222-4222-8222-222222222222',secret:'local-cms-bridge-fixture-'.repeat(3),origin:'https://cms.test'};
+const renderBuild=await build({entryPoints:['src/cms-preview.ts'],bundle:true,format:'esm',platform:'node',write:false});const {renderCMSDraft}=await import('data:text/javascript;base64,'+Buffer.from(renderBuild.outputFiles[0].text).toString('base64'));
 const base='http://localhost:8799',id=()=>crypto.randomUUID();
 async function call(path,body,requestId=id(),identity=config,verb){const request=await signCMSRequest(identity,path,requestId,body,Date.now(),verb);return fetch(base+path,{method:request.method,headers:request.headers,...(body===undefined?{}:{body:await request.text()})});}
 assert.equal((await fetch(base+'/_emdash/api/setup/status')).status,403);
@@ -26,7 +27,7 @@ for(const collection of ['posts','pages']){
  const created=await call('/_emdash/api/content/'+collection,draftBody,rid),data=await created.json();assert.equal(created.status,201,JSON.stringify(data));assert.equal(data.data.item.status,'draft');
  assert.deepEqual(await (await call('/_emdash/api/content/'+collection,draftBody,rid)).json(),data);
  assert.equal((await call('/_emdash/api/content/'+collection,cmsDraftBody('Changed','Different'),rid)).status,409);
- const item=data.data.item,read=await call('/_emdash/api/content/'+collection+'/'+item.id);assert.equal(read.status,200);const snapshot=(await read.json()).data;assert.equal(snapshot.item.data.title,'Native '+collection);
+ const item=data.data.item,read=await call('/_emdash/api/content/'+collection+'/'+item.id);assert.equal(read.status,200);const snapshot=(await read.json()).data;assert.equal(snapshot.item.data.title,'Native '+collection);assert.ok(renderCMSDraft({collection,revision:snapshot._rev,item:snapshot.item}).includes('&lt;script&gt;plain text only&lt;/script&gt;'));
  const editId=id(),editBody=cmsEditBody('Edited '+collection,'Changed paragraph',snapshot._rev),path='/_emdash/api/content/'+collection+'/'+item.id;
  const edited=await call(path,editBody,editId,config,'PUT'),editData=await edited.json();assert.equal(edited.status,200,JSON.stringify(editData));assert.equal(editData.data.item.data.title,'Edited '+collection);assert.notEqual(editData.data._rev,snapshot._rev);
  assert.deepEqual(await (await call(path,editBody,editId,config,'PUT')).json(),editData);
