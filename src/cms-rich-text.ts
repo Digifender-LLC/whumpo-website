@@ -1,4 +1,4 @@
-import {CMSProjectError} from './cms-projects';
+import {CMSProjectError} from './cms-error';
 const record=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
 export const escapeCMS=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const unsupported=()=>new CMSProjectError(409,'This draft needs a richer preview renderer');
