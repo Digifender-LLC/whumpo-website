@@ -71,7 +71,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   try {
     inserted = await db.batch([
       usageReservationStatement(db,userId,id,requestHash,units,billing.period,budgetDate,revision),
-      db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Thinking about your website…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM usage_operations WHERE id=? AND user_id=? AND request_hash=? AND quoted_units=? AND status='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId,id,userId,requestHash,units),
+      db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Working on your request…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM usage_operations WHERE id=? AND user_id=? AND request_hash=? AND quoted_units=? AND status='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId,id,userId,requestHash,units),
       db.prepare('UPDATE workspace_state SET revision = revision + 1 WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(userId, revision, id, userId)
     ]);
   } catch (cause) {

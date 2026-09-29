@@ -55,7 +55,9 @@
     "test:backend-runtime": "node tests/backend-runtime.mjs",
     "test:backend-versions": "node tests/backend-versions.mjs",
     "test:backend-http": "node tests/backend-http.mjs",
-    "build:emdash": "pnpm --filter @whumpo/emdash build && node tools/check-emdash-profile.mjs"
+    "build:emdash": "pnpm --filter @whumpo/emdash build && node tools/check-emdash-profile.mjs",
+    "test:backend-chat": "node tests/backend-chat.mjs",
+    "test:backend-chat-live": "node tests/backend-chat-live.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

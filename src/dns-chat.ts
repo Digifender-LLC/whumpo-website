@@ -6,7 +6,7 @@ import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns'
 import {DomainError} from './domains';
 import {hostingConnections} from './domain-hosting';
 import {ConnectionError} from './github-connection';
-export type DNSChatOptions=HostingChatOptions & BackupChatOptions & HealthOptions & {config?:CloudflareConfig;transport?:typeof fetch;hostingReady?:boolean};
+export type DNSChatOptions=HostingChatOptions & BackupChatOptions & HealthOptions & {backendRuntime?:Fetcher;config?:CloudflareConfig;transport?:typeof fetch;hostingReady?:boolean};
 const uuid=/^[0-9a-f-]{36}$/;
 type Receipt=Awaited<ReturnType<typeof reviewTXT>>;
 function describe(a:Receipt){
