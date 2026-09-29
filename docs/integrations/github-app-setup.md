@@ -10,10 +10,10 @@ Register at https://github.com/settings/apps/new with:
 - User access tokens: expiration enabled (the default eight-hour lifetime).
 - Request user authorization during installation: optional; the workspace's Connect button starts authorization.
 - Webhook: inactive for this initial connection release.
-- Repository permissions: Metadata read (required by GitHub), Contents read/write for the upcoming source-backup feature. No Actions, Workflows, Administration, organization or email permissions.
+- Repository permissions: Metadata read (required by GitHub), Contents read/write for the reviewed source-backup feature. No Actions, Workflows, Administration, organization or email permissions.
 - Installation audience: any account if inviting external testers; users should select only intended backup repositories during installation.
 
-Connection does not currently write repositories. Source backup, selected repository binding and commit reviews are the next integration stage. Do not enable Actions or any paid GitHub feature.
+Connecting alone does not write repositories. The separate source-backup flow lets users select an initialized repository, review an exact saved version and explicitly confirm a commit. See [backup design](github-backups.md). Live consent and commit acceptance remain pending configuration. Do not enable Actions or any paid GitHub feature.
 
 Save the following JSON to ignored `.secrets/github-app.json`, replacing placeholders:
 

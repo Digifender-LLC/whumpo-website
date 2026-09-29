@@ -163,3 +163,7 @@ Natural-language inspection can now request owner-scoped projects, a specific pr
 ## GitHub authorization foundation — September 29, 2026
 
 The secondary Connected accounts panel can initiate GitHub App authorization and disconnect; chat opens the same controls. One-time session-bound PKCE, encrypted expiring user tokens, installation filtering, local revocation and queued provider deletion are implemented and tested with controlled responses. Configuration is absent, so deployment stays disabled. Real GitHub consent/revocation, repository selection and source backup remain unverified or unfinished. Customer Cloudflare authorization remains unfinished. See [GitHub connection design](integrations/github-connection.md).
+
+## Reviewed GitHub backups — September 29, 2026
+
+Repository selection and explicit source-backup reviews are implemented. Readable version folders use atomic expected-head commits, exact source-tree verification and read-only recovery after uncertain writes. Controlled provider tests cover isolation and concurrency; Git independently verifies source-tree hashes. No real GitHub commit has been tested because App configuration is absent. Empty repository initialization, automatic synchronization, live consent/commit acceptance and customer Cloudflare authorization remain outstanding. See [backup design](integrations/github-backups.md).

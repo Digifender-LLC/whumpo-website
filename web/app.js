@@ -95,7 +95,7 @@ async function loadDashboard(user) {
 }
 async function sendMessage(content) {
   if (sending || !content.trim()) return;
-  if (["/connections", "show connections", "connect github", "disconnect github"].includes(content.trim().toLowerCase())) { await openConnections(); return; }
+  if (["/connections", "show connections", "connect github", "disconnect github", "/backup", "backup my website", "back up my website"].includes(content.trim().toLowerCase())) { await openConnections(); return; }
   if (["/domains", "show domains"].includes(content.trim().toLowerCase())) { await openDomains(); return; }
   if (["/files", "show files", "show photos", "upload a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
   if (["/security", "/passkeys"].includes(content.trim().toLowerCase())) { await openSecurity(); return; }
@@ -303,11 +303,12 @@ $("#auth-form").onsubmit = async (event) => {
   finally { button.disabled = false; }
 };
 async function start() {
+  const callbackParams=new URLSearchParams(location.search);
   try {
     authConfig = await api("/config");
     const { user } = await api("/me");
     await loadDashboard(user);
-    if(new URLSearchParams(location.search).get('connection')==='github'){const failed=new URLSearchParams(location.search).has('connection_error');history.replaceState(null,'',location.pathname);await openConnections();if(failed)$('#connections-status').textContent='GitHub authorization was cancelled, expired or could not be completed. You can start again.';}
+    if(callbackParams.get('connection')==='github'){const failed=callbackParams.has('connection_error');history.replaceState(null,'',location.pathname);await openConnections();if(failed)$('#connections-status').textContent='GitHub authorization was cancelled, expired or could not be completed. You can start again.';}
   } catch (error) {
     showAuth();
     if (authConfig) await setAuthMode(new URLSearchParams(location.search).get("signup") === "1");
@@ -342,10 +343,55 @@ async function openConnections(){
   if(github.revocationPending)$('#github-status').textContent+=' Local access is disabled for disconnected tokens; provider revocation is pending. You can also revoke access in GitHub settings.';
   $('#github-connect').disabled=!github.enabled;$('#github-connect').textContent=github.connected?'Reconnect GitHub':'Connect GitHub';$('#github-disconnect').hidden=!github.connected&&!github.revocationPending;
   const install=$('#github-install');install.hidden=!github.connected;install.removeAttribute('href');if(github.connected&&github.installURL){const url=new URL(github.installURL);if(url.origin==='https://github.com'&&url.pathname.startsWith('/apps/'))install.href=url.href;}
+  $('#github-backup-controls').hidden=!github.backupEnabled;
   const list=$('#github-installations');list.replaceChildren();$('#connections-status').textContent='';$('#connections-dialog').showModal();
-  if(github.connected){const data=await api('/connections/github/installations');for(const item of data.installations)list.append(text('p',`Installed for ${item.account} · ${item.repositorySelection==='selected'?'Selected repositories':'All repositories'}`));if(!data.installations.length)list.append(text('p','No active installation found. Use Choose repositories on GitHub, then refresh.'));if(data.truncated)list.append(text('p','Only the first 100 installations were checked.'));}
+  await renderBackups();
+  if(github.connected){const data=await api('/connections/github/installations');await setupBackups(data.installations);for(const item of data.installations)list.append(text('p',`Installed for ${item.account} · ${item.repositorySelection==='selected'?'Selected repositories':'All repositories'}`));if(!data.installations.length)list.append(text('p','No active installation found. Use Choose repositories on GitHub, then refresh.'));if(data.truncated)list.append(text('p','Only the first 100 installations were checked.'));}
  }catch(error){$('#connections-status').textContent=error.message;if(!$('#connections-dialog').open)showMessage(error.message);}
 }
 $('#connections-open').onclick=openConnections;$('#connections-refresh').onclick=openConnections;$('#connections-close').onclick=()=>$('#connections-dialog').close();
 $('#github-connect').onclick=async()=>{const button=$('#github-connect');button.disabled=true;try{const result=await api('/connections/github/start',{method:'POST',body:'{}'}),url=new URL(result.url);if(url.origin!=='https://github.com'||url.pathname!=='/login/oauth/authorize')throw new Error('Unexpected authorization destination');location.assign(url.href);}catch(error){$('#connections-status').textContent=error.message;button.disabled=false;}};
 $('#github-disconnect').onclick=async()=>{const button=$('#github-disconnect');button.disabled=true;try{await api('/connections/github/disconnect',{method:'POST',body:'{}'});await openConnections();}catch(error){$('#connections-status').textContent=error.message;}finally{button.disabled=false;}};
+
+let backupRepositories=[],backupPage=1,backupReviewRequest=null;
+function options(select,items,label,value){select.replaceChildren();for(const item of items){const option=text('option',label(item));option.value=value(item);select.append(option);}}
+async function setupBackups(installations){
+ options($('#backup-installation'),installations,i=>i.account,i=>i.id);
+ const {projects}=await api('/projects');options($('#backup-project'),projects,p=>p.name,p=>p.id);
+ await loadBackupVersions();await loadBackupRepositories();
+}
+async function loadBackupVersions(){
+ const project=$('#backup-project').value;
+ const {versions}=project?await api('/projects/'+project+'/versions'):{versions:[]};
+ options($('#backup-version'),versions,v=>`${v.created_at} · ${v.component_id} · ${v.id}`,v=>v.id);backupReviewRequest=null;updateBackupButton();
+}
+function updateBackupButton(){$('#backup-review').disabled=!$('#backup-version').value||!$('#backup-repo').value;}
+async function loadBackupRepositories(more=false){
+ if(!more){backupRepositories=[];backupPage=1;}else backupPage++;
+ const installation=$('#backup-installation').value;
+ const result=installation?await api(`/connections/github/repositories?installation=${installation}&page=${backupPage}`):{repositories:[],hasMore:false};
+ backupRepositories.push(...result.repositories);options($('#backup-repo'),backupRepositories,r=>`${r.owner}/${r.name} · ${r.private?'Private':'PUBLIC'}`,r=>r.id);
+ $('#backup-more').hidden=!result.hasMore;backupReviewRequest=null;updateBackupButton();
+}
+async function renderBackups(){
+ const {backups}=await api('/github/backups'),list=$('#github-backups');list.replaceChildren();if(backups.length)list.append(text('h3','Backup reviews and receipts'));
+ for(const backup of backups){
+  const row=text('article','', 'panel');row.append(text('h4',backup.repository+' · '+(backup.private?'Private repository':'PUBLIC repository')),text('p',`State: ${backup.state}. Branch: ${backup.branch}`),text('p','Version: '+backup.versionId),text('p','Folder: '+backup.path),text('p','Files: '+backup.files.join(', ')),text('p','Source bundle SHA-256: '+backup.sha256),text('p','Review expires: '+backup.expiresAt));
+  if(backup.state==='pending')row.append(text('p',backup.private?'The selected repository’s collaborators can read the site text, photos and configuration.':'Anyone can read the site text, photos and configuration in this public repository.'));
+  if(backup.detail)row.append(text('p',backup.detail));
+  if(['pending','dispatching','uncertain'].includes(backup.state)){
+   const confirm=text('button',backup.state==='pending'?'Confirm GitHub backup':'Check outcome');confirm.onclick=async()=>{confirm.disabled=true;try{const result=await api('/github/backups/'+backup.id+'/confirm',{method:'POST',body:'{}'});await renderBackups();$('#connections-status').textContent=result.state==='complete'?'Backup verified.':result.detail||('Backup state: '+result.state);}catch(error){$('#connections-status').textContent=error.message;}finally{confirm.disabled=false;}};row.append(confirm);
+  }
+  if(backup.url){const link=text('a','View verified source on GitHub'),url=new URL(backup.url);if(url.origin==='https://github.com'){link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';row.append(link);}}
+  list.append(row);
+ }
+}
+const backupError=error=>{$('#connections-status').textContent=error.message;};
+$('#backup-installation').onchange=()=>loadBackupRepositories().catch(backupError);
+$('#backup-project').onchange=()=>loadBackupVersions().catch(backupError);
+$('#backup-version').onchange=$('#backup-repo').onchange=()=>{backupReviewRequest=null;updateBackupButton();};
+$('#backup-more').onclick=()=>loadBackupRepositories(true).catch(backupError);
+$('#backup-review').onclick=async()=>{
+ const button=$('#backup-review');button.disabled=true;
+ try{const repo=backupRepositories.find(r=>String(r.id)===$('#backup-repo').value);if(!repo)throw Error('Select a repository first.');backupReviewRequest??={id:crypto.randomUUID(),versionId:$('#backup-version').value,owner:repo.owner,repo:repo.name,repoId:repo.id};await api('/github/backups/review',{method:'POST',body:JSON.stringify(backupReviewRequest)});backupReviewRequest=null;await renderBackups();$('#connections-status').textContent='Review the destination and files, then confirm when ready.';}catch(error){backupError(error);}finally{updateBackupButton();}
+};

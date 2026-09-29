@@ -1,3 +1,4 @@
+import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
 import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubInstallations} from './github-connection';
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
@@ -244,6 +245,17 @@ async function handle(request: Request, env: Env): Promise<Response> {
   }
   if (method === "POST" && pathname === "/api/connections/github/disconnect") return json(await disconnectGitHub(env.DB,user.id,githubConfig(env)));
   if (method === "GET" && pathname === "/api/connections/github/installations") return json(await githubInstallations(env.DB,user.id,githubConfig(env)));
+  if (method === "GET" && pathname === "/api/connections/github/repositories") {
+    const params=new URL(request.url).searchParams;
+    return json(await githubRepositories(env.DB,user.id,githubConfig(env),Number(params.get('installation')),Number(params.get('page')??1)));
+  }
+  if (method === "GET" && pathname === "/api/github/backups") return json(await listBackups(env.DB,user.id));
+  if (method === "POST" && pathname === "/api/github/backups/review") {
+    const data=await body(request);if(!data)return error(400,'A backup review is required.');
+    return json(await reviewBackup(env.DB,env.FILES,user.id,data,githubConfig(env)));
+  }
+  const backupConfirm=pathname.match(/^\/api\/github\/backups\/([0-9a-f-]{36})\/confirm$/);
+  if(method==='POST'&&backupConfirm)return json(await confirmBackup(env.DB,env.FILES,user.id,backupConfirm[1],githubConfig(env)));
   if (method === "GET" && pathname === "/api/me") return json({ user });
   if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id, !!configuredAI(env)));
   if (method === "POST" && pathname === "/api/chat") {
