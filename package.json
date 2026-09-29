@@ -34,7 +34,8 @@
     "test:github-backups": "node tests/github-backups.mjs",
     "test:domain-agent": "node tests/domain-agent.mjs",
     "test:domain-hosting": "node tests/domain-hosting.mjs",
-    "test:domain-recovery": "node tests/domain-recovery.mjs"
+    "test:domain-recovery": "node tests/domain-recovery.mjs",
+    "test:plan-periods": "node tests/plan-periods.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
