@@ -16,6 +16,8 @@ On September 28 2026, the user authorized digifender.com as the temporary test d
 
 The workers.dev endpoint and preview URLs are disabled. Wrangler manages the apex custom domain and its certificate. www is not attached.
 
+The root URL serves the public landing page. The account and project dashboard lives at `/workspace/`, with direct invitation signup at `/workspace/?signup=1`. The landing page distinguishes the product vision from currently available test features.
+
 ## Cost boundary
 
 The domain has a Free Website plan. The existing account reports Workers Standard enabled; the user approved its included allowance after that distinction was explained. This deployment does not change the subscription. Included usage is shared with other apps, so application quotas cannot guarantee an account-wide zero bill.
