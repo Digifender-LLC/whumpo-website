@@ -42,6 +42,6 @@ try{
  assert.match((await agentPatch(6)).reply,/Project details saved/);
  const final=await readProjectDetails(db,user,project);assert.equal(final.revision,7);assert.equal(final.audience,'Changed during onboarding');assert.equal(final.style_notes,'Accessible and calm');assert.equal(final.preferred_theme,'clay');
  assert.match(await inspectWorkspace(db,user,'project',project),/Accessible and calm/);
- const context=await (await module('src/site-agent.ts')).siteContext(db,user);assert.equal(context.projects[0].style_notes,'Accessible and calm');assert.equal(context.projects[0].preferred_theme,'clay');
+ const context=await (await module('src/site-agent.ts')).siteContext(db,user);assert.equal(context.projects[0].style_notes,'Accessible and calm');assert.equal(context.projects[0].preferred_theme,'clay');assert.equal(context.projects[0].details_revision,7);assert.equal(context.projectIndex[0].details_revision,7);
  console.log('Project details passed: validation, owner/HTTP/CSRF gates, atomic revision conflicts, no-op audit behavior, concurrency, model receipt and inspect revision.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
