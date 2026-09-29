@@ -23,7 +23,7 @@ function provider(a){let tag=null,version=null,initialized=false,setupId=null;co
  else if(verified.path==='/_emdash/api/schema/collections')data={items:p.missingPages?[{slug:'posts'}]:[{slug:'posts'},{slug:'pages'}]};
  else throw Error('unexpected path');return Response.json({success:true,data});}}};return p;}
 try{
- const a=await fixture(),p=provider(a);p.lostUpload=true;const deployed=await deployCMS(db,a.project,digest,a.config,p);assert.equal(deployed.state,'verified');assert.equal(p.uploads,1);assert.equal(p.setups,1);assert.equal((await db.prepare('SELECT state FROM cms_instances WHERE project_id=?').bind(a.project).first()).state,'provisioning');
+ const a=await fixture(),p=provider(a);await assert.rejects(db.prepare('INSERT INTO cms_deployments(project_id,account_id,source_digest,secret_digest,origin,tag) VALUES(?,?,?,?,?,?)').bind(a.project,account,digest,digest,'https://whumpo-cms-'+a.project.replaceAll('-','')+'.digifender.com','retired-origin-test').run(),/cms_deployment_not_approved/);p.lostUpload=true;const deployed=await deployCMS(db,a.project,digest,a.config,p);assert.equal(deployed.state,'verified');assert.equal(p.uploads,1);assert.equal(p.setups,1);assert.equal((await db.prepare('SELECT state FROM cms_instances WHERE project_id=?').bind(a.project).first()).state,'provisioning');
  await deployCMS(db,a.project,digest,a.config,p);assert.equal(p.uploads,1);assert.equal(p.setups,1);
  await assert.rejects(deployCMS(db,a.project,'c'.repeat(64),a.config,p),/inputs changed/);
  await assert.rejects(deployCMS(db,a.project,digest,{...a.config,secret:'wrong'.repeat(12)},p),/inputs changed/);
@@ -50,6 +50,22 @@ try{
  const chat=await readChat(db,a.user);assert.equal((await sendChat(db,a.user,{id:id(),revision:chat.state.revision,content:'/cms-read '+a.project+' '+draftId},undefined,{cmsContent:execute})).status,200);assert.match((await readChat(db,a.user)).turns.at(-1).assistant_text,/Draft title/);
  const proposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE PUBLISHED CLAIM',action:{kind:'cms',operation:'retryDraft',projectId:a.project,requestId:draftId}}),{},{cmsContent:execute});assert.match(proposal.reply,/Private EmDash content result/);assert.ok(!proposal.reply.includes('FAKE'));assert.equal(creates,1);
  await assert.rejects(db.prepare('UPDATE cms_draft_requests SET body=? WHERE id=?').bind('{}',draftId).run(),/immutable/);
+ const worker=(await module('src/index.ts')).default,{hashToken}=await module('src/security.ts');
+ const session='c'.repeat(64),sessionStamp=new Date().toISOString();
+ await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(session),a.user,new Date(Date.now()+3600000).toISOString(),sessionStamp).run();
+ const httpEnv={...env,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
+ const http=(suffix='',method='GET',body,token=session,origin='https://whumpo.com')=>worker.fetch(new Request('https://whumpo.com/api/cms/'+a.project+'/content'+suffix,{method,headers:{origin,cookie:'whumpo_session='+token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}),httpEnv,{waitUntil(){}});
+ assert.equal((await http('','GET',undefined,'')).status,401);
+ assert.equal((await http('','POST',{id:draftId,collection:'posts',title:'Draft title',text:'Private text'},session,'https://evil.example')).status,403);
+ assert.equal((await http('','POST',{id:draftId,collection:'posts',title:'Draft title',text:'Private text'})).status,200);assert.equal(creates,1);
+ assert.equal((await http('','POST',{id:id(),collection:'posts',title:'No',text:'No',status:'published'})).status,400);
+ assert.equal((await http('','POST',null)).status,400);
+ assert.equal((await http('','DELETE')).status,405);
+ const inventory=await (await http()).json();assert.equal(inventory.drafts.length,1);assert.equal(inventory.publications.length,0);
+ assert.equal((await (await http('/'+draftId)).json()).item.data.title,'Draft title');
+ const foreignUser=id(),foreignSession='d'.repeat(64);await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(foreignUser,foreignUser+'@example.test',sessionStamp).run();await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(foreignSession),foreignUser,new Date(Date.now()+3600000).toISOString(),sessionStamp).run();
+ for(const suffix of ['', '/'+draftId])assert.equal((await http(suffix,'GET',undefined,foreignSession)).status,404);
+ assert.equal((await http('','POST',{id:id(),collection:'posts',title:'No',text:'No'},foreignSession)).status,404);
  const contentFetch=p.service.fetch,editReceipts=new Map();let updates=0,loseEdit=true,current={...(await readCMSDraft(db,a.user,a.project,draftId,env)),_rev:'cmV2LTE='};
  p.service.fetch=async request=>{const v=await verifyCMSRequest(request,a.config);assert.ok(cmsRequestAllowed(request.method,v.path,v.body));
   if(v.path==='/_emdash/api/content/posts/'+nativeId){
@@ -67,6 +83,12 @@ try{
  await assert.rejects(cmsContentAction(db,id(),{operation:'retryEdit',projectId:a.project,requestId:editId},id(),env),e=>e.status===404);
  await assert.rejects(cmsContentAction(db,a.user,{...editAction,status:'published'},id(),env),e=>e.status===400);
  assert.equal((await cmsContentAction(db,a.user,{operation:'listEdits',projectId:a.project,requestId:draftId},id(),env)).length,1);
+ const editBody={id:editId,title:'Edited',text:'Changed',revision:'cmV2LTE='};
+ const repeats=await Promise.all(Array.from({length:3},()=>http('/'+draftId,'PATCH',editBody)));assert.ok(repeats.every(r=>r.status===200));assert.equal(updates,1);
+ assert.equal((await http('/'+draftId,'PATCH',{...editBody,id:id()})).status,409);
+ assert.equal((await http('/'+draftId,'PATCH',editBody,foreignSession)).status,404);
+ assert.equal((await http('/'+draftId,'PATCH',{...editBody,status:'published'})).status,400);
+ console.log('CMS workspace HTTP passed: authenticated owner reads, foreign-owner/CSRF denial, exact draft/edit replay, stale revision rejection and publication-field rejection.');
  assert.match(await cmsContentCommand('/cms-retry-edit '+a.project+' '+editId,id(),execute)(),/cmV2LTI=/);
  await assert.rejects(db.prepare('UPDATE cms_edit_requests SET body=? WHERE id=?').bind('{}',editId).run(),/immutable/);
  const editProposal=await prepareSiteAction(db,a.user,id(),JSON.stringify({reply:'FAKE',action:{kind:'cms',operation:'retryEdit',projectId:a.project,requestId:editId}}),{},{cmsContent:execute});assert.match(editProposal.reply,/Private EmDash content result/);assert.ok(!editProposal.reply.includes('FAKE'));
@@ -84,7 +106,7 @@ try{
  const pubTurn=id(),pubOptions={cmsPublication:(turn,content)=>cmsPublicationCommand(db,a.user,turn,content,env)},pubState=await readChat(db,a.user);
  assert.equal((await sendChat(db,a.user,{id:pubTurn,revision:pubState.state.revision,content:'/publish-cms '+a.project+' '+draftId},undefined,pubOptions)).status,200);
  const pubReview=await readCMSPublication(db,a.user,pubTurn),pubChat=(await readChat(db,a.user)).turns.at(-1);assert.equal(pubChat.cms_publication_confirmation_id,pubTurn);
- const frozen=await (await cmsPublicationPage(db,a.user,pubTurn)).text();assert.ok(frozen.includes('Edited'));assert.ok(frozen.includes('href="/s/'+a.project+'/cms"'));assert.ok(!frozen.includes('Private draft preview'));
+ const frozen=await (await cmsPublicationPage(db,a.user,pubTurn)).text();assert.ok(frozen.includes('Edited'));assert.ok(frozen.includes('href="/cms"'));assert.ok(!frozen.includes('Private draft preview'));
  await assert.rejects(readCMSPublication(db,id(),pubTurn),e=>e.status===404);await assert.rejects(confirmCMSPublication(db,id(),pubTurn,env),e=>e.status===404);
  await assert.rejects(db.prepare('UPDATE cms_publication_reviews SET public_html=? WHERE id=?').bind('forged',pubTurn).run(),/immutable/);
  const expired=id();await db.prepare("INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,expires_at) SELECT ?,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,'2000-01-01T00:00:00.000Z' FROM cms_publication_reviews WHERE id=?").bind(expired,pubTurn).run();await assert.rejects(confirmCMSPublication(db,a.user,expired,env),e=>e.status===409);

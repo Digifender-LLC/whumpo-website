@@ -18,7 +18,7 @@ async function account(apex=false){
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Routing fixture','Testing','draft',?,?)").bind(project,user,now(),now()).run();
  await db.prepare('INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at) VALUES(?,?,?,?,?,?)').bind(claim,project,hostname,proof,new Date(Date.now()+86400000).toISOString(),now()).run();
  await db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,?,'active')").bind(tokenId,user,await seal(config.key,`whumpo:cloudflare:token:${user}:${tokenId}`,JSON.stringify({access:'fixture-access'})),new Date(Date.now()+3600000).toISOString(),now()).run();
- await reviewHosting(db,user,connection,claim,{token:'synthetic',zone:'fbf8bf845a46cadbb793ffeb8b5716f5',target});
+ await reviewHosting(db,user,connection,claim,{token:'synthetic',zone:'8d46ee4e394514402479acf16579f7b5',target});
  await db.prepare("UPDATE domain_connections SET state='provisioning',provider_id=? WHERE id=?").bind(crypto.randomUUID(),connection).run();
  return {user,project,claim,tokenId,connection,proof,hostname};
 }
