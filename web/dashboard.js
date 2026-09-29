@@ -3,7 +3,7 @@ import { createAppAccess } from './app-access.js';
 import { publicPlans } from '../src/plans.ts';
 const labels={projects:'Projects',usage:'AI assistance',storage:'File storage',activity:'Recent activity',traffic:'Visitor traffic',cms:'Publishing desk',performance:'Processing performance'};
 export function createDashboard({api,text,sendMessage,showMessage,controls}){
- const $=s=>document.querySelector(s);let data,active='chat',editing='dashboard',loadSequence=0;
+ const $=s=>document.querySelector(s);let data,active='chat',editing='dashboard',loadSequence=0,activePanel=null;
  const content=$('#workspace-content');
  function button(label,run){const b=text('button',label);b.type='button';b.onclick=()=>Promise.resolve().then(run).catch(e=>showMessage(e.message));return b;}
  function choose(view){active=view;render();$('#workspace-stage').scrollTop=0;}
@@ -42,18 +42,20 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
   if(kind==='traffic'||kind==='performance')metric(a,'Not connected',kind==='traffic'?'Visitor analytics have not been collected. No traffic estimate is shown.':'No processing telemetry is connected. A dashboard tab does not provision a video server or other compute.');
   return a;
  }
- function closePanels(){document.querySelectorAll('.embedded-dialog[open]').forEach(d=>d.close());}
+ function closePanels(){activePanel=null;document.querySelectorAll('.embedded-dialog[open]').forEach(d=>d.close());}
  function render(){
-  if(!data)return;closePanels();content.hidden=false;content.replaceChildren();
+  if(!data)return;closePanels();$('#workspace-back').hidden=true;content.hidden=false;content.replaceChildren();
   const tab=data.layout.tabs.find(t=>t.id===active);if(!['dashboard','chat','settings','profile','visitors'].includes(active)&&!tab)active='chat';
   document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===active||active==='visitors'&&b.dataset.view==='dashboard')b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-  $('#workspace-stage').hidden=active==='chat';$('.chat-sidebar').hidden=active!=='chat';
+  $('#workspace-stage').hidden=active==='chat';$('.chat-view').hidden=active!=='chat';
   content.className=['settings','profile','visitors'].includes(active)?'settings-content':'';
   $('#view-title').textContent=tab?.label||({settings:'Settings',profile:'Your profile',dashboard:'Dashboard',visitors:'Visitor access'}[active]??'');
   $('#workspace-stage').setAttribute('aria-label',$('#view-title').textContent||'Workspace');
   $('#view-eyebrow').textContent=tab?'YOUR CUSTOM PAGE':active==='dashboard'?'YOUR WORKSPACE':active==='visitors'?'PROJECT ACCESS':'MAKE YOURSELF AT HOME';
   $('#view-description').textContent=tab?'The details that matter to your work.':({settings:'Make TownHello work the way you do.',profile:'A little about you. A better way to work together.',dashboard:'A clear view of what you’re building.',visitors:'Invite people and manage their access.'}[active]??'');
   $('#customize-dashboard').hidden=['settings','profile','chat','visitors'].includes(active);
+  document.title=(active==='chat'?'Chat':$('#view-title').textContent)+' — TownHello';
+  $('#workspace-stage').classList.toggle('settings-stage',['settings','profile','visitors'].includes(active));
   if(active==='chat')return;
   if(active==='profile'){profile.render(content);return;}
   if(active==='settings'){renderSettings();return;}
@@ -87,7 +89,7 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
   a.append(form,text('p','Plan changes always require approval. Temporary spikes can use an explicitly authorized allowance after billing launches. Dedicated services need a separate cost review.'),text('p','Upgrades keep the renewal date and credit unused subscription value. Downgrades start at renewal after your approval; recommendations need two complete lower-use periods with headroom.'));content.append(a);
  }
  function navigation(){
-  const nav=$('#workflow-navigation');nav.replaceChildren();if(!data.layout.tabs.length){const cta=text('div','','workflow-empty');cta.append(text('p','A page made for your work.'),text('span','Ask TownHello to build a custom page around your workflow.'),button('Ask TownHello',askForPage));nav.append(cta);}for(const tab of data.layout.tabs){const b=button(tab.label,()=>choose(tab.id));b.dataset.view=tab.id;nav.append(b);}
+  const nav=$('#workflow-navigation');nav.replaceChildren();if(!data.layout.tabs.length){const cta=text('div','','workflow-empty');cta.append(text('p','A page made for your work.'),text('span','Ask TownHello to build a custom page around your workflow.'),button('Ask TownHello',askForPage));nav.append(cta);}for(const tab of data.layout.tabs){const b=button('',()=>choose(tab.id));const icon=text('span','▦','workflow-icon');icon.setAttribute('aria-hidden','true');b.append(icon,text('span',tab.label));b.dataset.view=tab.id;nav.append(b);}
  }
  async function refresh(){const sequence=++loadSequence;const next=await api('/workspace/dashboard');if(sequence!==loadSequence)return;if($('#layout-dialog').open||['settings','profile','visitors'].includes(active)||document.querySelector('.embedded-dialog[open]'))return;data=next;navigation();render();}
  function edit(id){
@@ -104,8 +106,8 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
  // Account and project panels retain their established controls in the full page.
  for(const [name,parent] of [['connections','settings'],['domains','dashboard'],['files','dashboard'],['billing','settings'],['inbox','dashboard']]){
   const d=$('#'+name+'-dialog');d.classList.add('embedded-dialog');$('#workspace-stage').append(d);
-  d.showModal=()=>{active=parent;render();content.hidden=true;$('#view-title').textContent=d.querySelector('h2').textContent;$('#view-description').textContent='';$('#customize-dashboard').hidden=true;$('#workspace-stage').scrollTop=0;d.show();};
-  d.addEventListener('close',()=>{if(!document.querySelector('.embedded-dialog[open]'))render();});
+  d.showModal=()=>{active=parent;render();activePanel=d;content.hidden=true;$('#view-title').textContent=d.querySelector('h2').textContent;document.title=$('#view-title').textContent+' — TownHello';$('#workspace-stage').setAttribute('aria-label',$('#view-title').textContent);$('#view-description').textContent='';$('#customize-dashboard').hidden=true;const back=$('#workspace-back');back.textContent='← '+(parent==='settings'?'Settings':'Dashboard');back.hidden=false;back.onclick=()=>choose(parent);$('#workspace-stage').scrollTop=0;d.show();};
+  d.addEventListener('close',()=>{if(activePanel===d){activePanel=null;render();}});
  }
  return {openAccess,showChat(){choose('chat');},async start(){await profile.load();$('#primary-navigation').hidden=false;$('#sidebar-account').hidden=false;await refresh();},refresh};
 }
