@@ -1126,12 +1126,12 @@
       }
       for (const action of dns.actions) {
         const row = text("article", "", "panel");
-        row.append(text("h3", "Cloudflare TXT proof \xB7 " + action.state), text("p", "Zone: " + action.zoneName), text("p", "Name: " + action.record.name), text("p", "Value: " + action.record.value), text("p", action.detail));
+        row.append(text("h3", "Cloudflare " + (action.record.type === "CNAME" ? "website routing" : "TXT proof") + " \xB7 " + action.state), text("p", "Zone: " + action.zoneName), text("p", "Name: " + action.record.name), text("p", "Value: " + action.record.value), text("p", action.detail));
         if (action.state === "review") {
-          row.append(text("p", "This adds the exact TXT proof with automatic TTL, unless it already exists. It does not replace your existing website records or connect hosting."), text("p", "Review expires: " + action.expiresAt));
+          row.append(text("p", action.record.type === "CNAME" ? "This adds a DNS-only CNAME with automatic TTL unless it already exists. Conflicting records are never replaced. Website traffic, including traffic previously using wildcard DNS, can move to TellUmo. Check hosting status afterward to verify DNS and TLS." : "This adds the exact TXT proof with automatic TTL, unless it already exists. It does not replace your existing website records or connect hosting."), text("p", "Review expires: " + action.expiresAt));
         }
         if (["review", "sending", "uncertain"].includes(action.state)) {
-          const button = text("button", action.state === "review" ? "Confirm TXT proof" : "Check result without resending");
+          const button = text("button", action.state === "review" ? action.record.type === "CNAME" ? "Confirm website routing" : "Confirm TXT proof" : "Check result without resending");
           button.onclick = async () => {
             button.disabled = true;
             try {
@@ -1151,7 +1151,7 @@
       if (!hosting.enabled) list.append(text("p", "Domain hosting is awaiting platform configuration. Ownership proofs remain available."));
       for (const connection of hosting.connections) {
         const row = text("article", "", "panel");
-        row.append(text("h3", connection.hostname + " \xB7 Hosting"), text("p", connection.connected ? "Connected" : connection.state.replaceAll("_", " ")), text("p", "Project: " + connection.projectId), text("p", "Certificate: " + (connection.certificateStatus || "Not requested")), text("p", connection.detail));
+        row.append(text("h3", connection.hostname + " \xB7 Hosting"), text("p", connection.connected ? "Connected" : connection.state.replaceAll("_", " ")), text("p", "Project: " + connection.projectId), text("p", "Connection: " + connection.id), text("p", "Certificate: " + (connection.certificateStatus || "Not requested")), text("p", connection.detail));
         const action = (label, operation) => {
           const button = text("button", label);
           button.onclick = async () => {
@@ -1174,6 +1174,25 @@
         if (["active", "provisioning", "needs_check"].includes(connection.state)) {
           row.append(text("p", "At your DNS provider, point " + connection.hostname + " directly to " + connection.target + " using a DNS-only CNAME. Keep the TXT ownership proof current. Existing website traffic will move to TellUmo; only do this when ready."));
           action("Check hosting status", "refresh");
+          const routing = text("button", "Review CNAME in Cloudflare"), routingId = crypto.randomUUID();
+          routing.disabled = !connections.cloudflare.connected || !hosting.enabled;
+          routing.onclick = async () => {
+            const zoneId = $("#dns-zone").value;
+            if (!zoneId) {
+              $("#domains-status").textContent = "Choose an authorized Cloudflare zone first.";
+              return;
+            }
+            routing.disabled = true;
+            try {
+              await api("/cloudflare/dns/routing-review", { method: "POST", body: JSON.stringify({ id: routingId, connectionId: connection.id, zoneId }) });
+              await openDomains();
+            } catch (error) {
+              $("#domains-status").textContent = error.message;
+            } finally {
+              routing.disabled = false;
+            }
+          };
+          row.append(routing);
         }
         if (connection.state === "disconnecting") action("Retry provider cleanup", "disconnect");
         else if (!["disconnected", "expired"].includes(connection.state)) action(connection.state === "review" ? "Cancel review" : "Disconnect hosting", "disconnect");

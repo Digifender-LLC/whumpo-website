@@ -38,6 +38,7 @@
     "test:plan-periods": "node tests/plan-periods.mjs",
     "test:photo-removal": "node tests/photo-removal.mjs",
     "test:cloudflare-connection": "node tests/cloudflare-connection.mjs",
+    "test:cloudflare-routing": "node tests/cloudflare-routing.mjs",
     "test:cloudflare-dns": "node tests/cloudflare-dns.mjs",
     "test:dns-agent": "node tests/dns-agent.mjs",
     "test:version-removal": "node tests/version-removal.mjs",
