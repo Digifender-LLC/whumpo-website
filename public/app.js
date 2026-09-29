@@ -61,6 +61,7 @@ function renderActivity(events) {
   }
 }
 async function loadDashboard(user) {
+  history.replaceState(null, "", "/workspace/");
   $("#auth").hidden = true;
   $("#dashboard").hidden = false;
   const account = $("#account");
@@ -76,8 +77,8 @@ function showAuth() {
   $("#auth").hidden = false;
   $("#dashboard").hidden = true;
 }
-$("#auth-toggle").onclick = async () => {
-  registering = !registering;
+async function setAuthMode(createAccount) {
+  registering = createAccount;
   $("#auth-title").textContent = registering ? "Create an account" : "Sign in";
   $("#auth-toggle").textContent = registering ? "Already have an account? Sign in" : "Create an account";
   $("#invite-field").hidden = !registering || !authConfig?.inviteRequired;
@@ -87,7 +88,8 @@ $("#auth-toggle").onclick = async () => {
   $("[name=password]").autocomplete = registering ? "new-password" : "current-password";
   $("#turnstile-slot").hidden = !registering;
   try { if (registering) await prepareWidget(); } catch (error) { showMessage(error.message); }
-};
+}
+$("#auth-toggle").onclick = () => setAuthMode(!registering);
 $("#auth-form").onsubmit = async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
@@ -121,6 +123,10 @@ async function start() {
     authConfig = await api("/config");
     const { user } = await api("/me");
     await loadDashboard(user);
-  } catch (error) { showAuth(); if (error.status !== 401) showMessage(error.message); }
+  } catch (error) {
+    showAuth();
+    if (authConfig && new URLSearchParams(location.search).get("signup") === "1") await setAuthMode(true);
+    if (error.status !== 401) showMessage(error.message);
+  }
 }
 start();

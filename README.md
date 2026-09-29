@@ -2,6 +2,8 @@
 
 The test platform is at **https://digifender.com**, with source in the private **Digifender-LLC/whumpo-website** GitHub repository. Whumpo is a working name.
 
+The public homepage introduces the product. Sign in at `/workspace/`; invitation links open `/workspace/?signup=1`. The landing page is static and makes no API calls.
+
 Implemented: invitation-only signup with Turnstile, password sign in, revocable cookie sessions, projects, activity, tenant isolation, authentication throttling, and test data quotas. AI planning, site generation, previews, customer-site publishing, and customer domain management are not implemented yet.
 
 ## Local development

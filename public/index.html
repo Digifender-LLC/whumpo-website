@@ -3,35 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Whumpo</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script defer src="/app.js"></script>
+  <meta name="description" content="Whumpo is building a simpler way to create and manage your website. Start with an idea, keep everything in one place, and join the invitation-only test platform.">
+  <meta name="theme-color" content="#174d3b">
+  <title>Whumpo — Your idea deserves a place online</title>
+  <link rel="stylesheet" href="/landing.css">
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar"><div class="brand"><span class="mark">T</span><span>Whumpo <small>working name</small></span></div><div id="account"></div></header>
-    <section id="auth" class="auth-card" hidden>
-      <p class="eyebrow">Your space to make things</p>
-      <h1 id="auth-title">Sign in</h1>
-      <p>Welcome to the Whumpo test platform. Create and organize your projects. New accounts require an invitation.</p>
-      <form id="auth-form">
-        <label>Email<input name="email" type="email" autocomplete="email" required></label>
-        <label>Password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="current-password" required></label>
-        <label id="invite-field" hidden>Invitation code<input name="inviteCode" autocomplete="off" maxlength="64" disabled></label>
-        <div id="turnstile-slot" hidden></div>
-        <button class="primary" type="submit">Continue</button>
-      </form>
-      <button id="auth-toggle" class="text-button" type="button">Create an account</button>
-    </section>
-    <section id="dashboard" hidden>
-      <div class="hero"><p class="eyebrow">Your workspace</p><h1>What would you like to create?</h1><p>Start a project with a name and a short description. The assistant and publishing flow are coming next.</p></div>
-      <div class="grid">
-        <section class="panel"><div class="panel-heading"><h2>My projects</h2><span id="project-count" class="pill">0</span></div><div id="projects" class="stack"></div></section>
-        <section class="panel"><h2>Start a project</h2><form id="project-form"><label>Project name<input name="name" maxlength="100" placeholder="My business website" required></label><label>What is it for?<textarea name="purpose" maxlength="1000" placeholder="Tell us what you want people to do here"></textarea></label><button class="primary" type="submit">Create project</button></form></section>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="navigation wrap">
+    <a class="brand" href="/" aria-label="Whumpo home"><span class="mark">T</span>Whumpo</a>
+    <nav aria-label="Main navigation"><a class="section-link" href="#how-it-works">The idea</a><a class="section-link" href="#early-access">Early access</a><a class="sign-in" href="/workspace/">Sign in <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot"></span> A simpler web starts here</p>
+        <h1>Your idea deserves<br>a place <em>online.</em></h1>
+        <p class="lead">You know what you want to create. We’re building a way to turn that idea into a website—and take care of the technical work that comes with it.</p>
+        <div class="actions"><a class="button" href="/workspace/?signup=1">Use your invitation <span aria-hidden="true">↗</span></a><a class="plain-link" href="#how-it-works">See what we’re building <span aria-hidden="true">↓</span></a></div>
+        <p class="fine-print">An early look at Whumpo. Invitation-only testing is open.</p>
       </div>
-      <section class="panel activity-panel"><h2>Activity</h2><div id="activity" class="stack"></div></section>
+      <div class="idea-board" aria-label="Illustration of an idea becoming a website">
+        <div class="board-grid"></div>
+        <div class="note"><span class="note-label">IT STARTS WITH YOUR IDEA</span><p>“A little home online<br>for my next big thing.”</p><span class="note-spark" aria-hidden="true">✳</span></div>
+        <div class="site-card"><div class="site-bar"><span class="site-logo">studio / fern</span><span class="site-menu" aria-hidden="true">☰</span></div><div class="site-body"><span class="site-kicker">SMALL STUDIO. BIG IDEAS.</span><h2>Made with care.<br>Built to grow.</h2><div class="abstract-art" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="site-button">Explore our work <span aria-hidden="true">↗</span></span></div></div>
+        <div class="board-caption"><span aria-hidden="true">↳</span> Your vision. A place to grow.</div>
+        <span class="concept-label">Illustration of the experience we’re building</span>
+      </div>
     </section>
-    <p id="message" role="status" aria-live="polite"></p>
+    <section class="audience"><div class="wrap"><p>For the things you care about.</p><div><span>Your small business</span><span>Your next project</span><span>Your community</span><span>Your big idea</span></div></div></section>
+    <section class="story wrap" id="how-it-works">
+      <div class="section-intro"><p class="eyebrow">Less setup. More possibility.</p><h2>Start with what you want.<br>We’ll work on the how.</h2><p>The vision for Whumpo is simple: one place to describe, shape, and look after what you put online.</p></div>
+      <div class="steps"><article><span class="step-number">01 / DESCRIBE</span><h3>Tell us your idea.</h3><p>A website for your business. A home for your community. Start with what matters to you, in your own words.</p></article><article><span class="step-number">02 / SHAPE</span><h3>Make it feel like you.</h3><p>Our next step is an assistant that helps bring your idea to life, with previews you can review and refine.</p></article><article><span class="step-number">03 / GROW</span><h3>Keep moving forward.</h3><p>Publishing, updates, and ongoing care are on our roadmap. The goal is to make owning a website feel simple.</p></article></div>
+    </section>
+    <section class="early wrap" id="early-access"><div class="early-panel"><div><p class="eyebrow">Come in early</p><h2>A small beginning.<br>Room for big things.</h2><p>The first version is here. Invited testers can create an account, organize projects, and follow their activity. Your experience will help shape what comes next.</p><a class="button light" href="/workspace/?signup=1">I have an invitation <span aria-hidden="true">↗</span></a></div><aside><span class="release-label">WHERE WE ARE TODAY</span><ul><li><span class="available">Available</span> Your account and workspace</li><li><span class="available">Available</span> Projects and activity</li><li><span>Coming next</span> AI website creation</li><li><span>On the roadmap</span> Publishing and website care</li></ul><p>No invitation yet? We’re keeping this first test small. Check back as we open up access.</p></aside></div></section>
+    <section class="faq wrap"><h2>A few things to know.</h2><div><details><summary>Can I build and publish a website today?</summary><p>Not yet. The current test lets you create an account, organize projects, and see your activity. We’re building the assistant and website creation experience next.</p></details><details><summary>How do I join the test?</summary><p>You’ll need an invitation code from the Whumpo team. Choose “Use your invitation” and enter your code when creating your account. Already joined? Sign in to return to your workspace.</p></details><details><summary>Is Whumpo the final name?</summary><p>It’s our working name while we build. For now, digifender.com is the home of the test platform.</p></details></div></section>
   </main>
+  <footer class="wrap"><a class="brand" href="/"><span class="mark">T</span>Whumpo</a><p>A little less technical. A lot more possible.</p><a href="/workspace/">Open your workspace <span aria-hidden="true">↗</span></a></footer>
 </body>
 </html>
