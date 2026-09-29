@@ -178,3 +178,24 @@ Operator release command for the shared private preview: run `npm run build:emda
 Migration 0046 stores immutable, owner-scoped reviews with ten-minute approval expiry and 100/user, 500/global review caps. Preparation requires native staged changes and live content matching the current public publication snapshot. Confirmation rechecks the revision and current publication, then calls native `discard-draft` with the exact revision and stable receipt ID. Completion requires the same published item, a cleared draft pointer and the exact retained live data. No publication flags, public HTML or traffic routing change. Competing approved replacement, discard and withdrawal operations cannot overlap. Uncertain native acknowledgment retains the approved review for exact recovery; replaying a completed review never discards a newer draft.
 
 Native tests verify posts/pages discard, retained published data/status, cleared staged pointer, missing/stale revision denial, exact replay, changed-request conflict and subsequent edits. Local D1/chat tests cover review/confirmation controls, owner denial, model prepare-only authority, immutable/expired/stale reviews, loss/recovery, conflicting publication/withdrawal, unchanged public HTML and harmless old-review replay after a later edit. This does not implement deletion of an unpublished article, revision-browser restoration, whole-CMS backup or general uncertain-outcome reconciliation.
+
+## Native database recovery snapshots
+
+Operator commands:
+
+```sh
+npm run cms:snapshot-db -- --list
+npm run cms:snapshot-db -- PROJECT_ID
+```
+
+The command resolves only a ready, currently owned CMS with connected deployment and matching completed resource registration in the configured Cloudflare account. It reads the dedicated native D1 database; it does not query a caller-supplied database ID. It records the registered owner/resource/deployment/source-digest provenance and checks that identity again after capture. No live data, routing, schemas or resources are modified.
+
+Cloudflare's [D1 export limitations](https://developers.cloudflare.com/d1/best-practices/import-export-data/#known-limitations) exclude databases containing virtual tables. Native EmDash uses FTS5. `tools/cms-database-snapshot.mjs` instead captures schema and logical rows, including virtual search tables while omitting their derived shadow tables and provider-internal tables. SQLite-generated literals preserve full integer precision, blobs and text containing embedded NULs. Hidden row identities, ordinary indexes, triggers, views and autoincrement sequences survive the isolated restore. Generated columns are reconstructed by their schema rather than written as ordinary columns.
+
+Two complete logical reads must have the same digest. A mismatch stops the operation. The accepted capture is restored into a fresh in-memory SQLite database, checked for foreign-key/integrity failures, recaptured and compared by digest before saving. This is conservative change detection, **not a transactional cross-store snapshot or a substitute for a future maintenance barrier**. Default limits are 64 MiB of measured logical content, 100,000 rows and 500 tables; exceeding a limit fails instead of truncating data. It performs paginated reads and should be run deliberately rather than on a frequent schedule.
+
+Artifacts are private local files under ignored `.secrets/cms-database-snapshots/PROJECT_ID/SNAPSHOT_ID/`, with 0700 directories and 0600 files. `database.json` contains native customer data and must stay private. `manifest.json` is written last as the completion marker; it includes digest, counts, provenance, local restore evidence and explicit exclusions. Partial folders without a manifest are not accepted snapshots. The local restore helper is for newly captured trusted snapshots, not an untrusted uploaded-SQL import endpoint.
+
+This is **database recovery groundwork, not a complete CMS backup**. R2 media bytes, KV sessions, Worker secrets, the frozen compiled artifact and TownHello control/publication state are not included. Full recovery still requires a coordinated capture with write quiescence, media checksums/metadata, separately protected original keys, isolated D1/R2 restore, actual native app verification and a reviewed traffic switch. Do not replace a production instance with this file or advertise full backup support yet.
+
+Verification: the actual EmDash posts/pages lifecycle fixture captured 73 native tables / 180 rows and restored to an identical logical digest. Dedicated fixtures cover FTS queries, triggers/views, preserved row identities, binary values, embedded NULs, 64-bit integer precision, sequence counters, size/row rejection and changed-database rejection. Resource identity fixtures reject missing, cross-account and mismatched registrations. The production ready-instance inventory was empty, so no customer database snapshot or live recovery was performed.
