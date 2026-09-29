@@ -75,7 +75,8 @@
     "cms:verify-recovery": "node tools/verify-cms-recovery.mjs",
     "test:backend-publication": "node tests/backend-publication.mjs",
     "test:backend-forms": "node tests/backend-forms.mjs",
-    "test:backend-form-http": "node tests/backend-form-http.mjs"
+    "test:backend-form-http": "node tests/backend-form-http.mjs",
+    "test:app-data": "node tests/app-data.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
