@@ -47,3 +47,13 @@ Migration 0060 updates the active database admission triggers for private CMS or
 Verification: backend/frontend type checks, production build, CMS editor shape checks, navigation checks, complete CMS deployment/publication suite and Cloudflare routing suite passed. A synthetic local browser session using the real platform HTTP handler and a mock native CMS service verified saved multiline text readback and a publication review containing the edited title. This is not a live native EmDash acceptance test.
 
 Migration 0060 applied successfully in production. Platform version `3fbc6c8c-0850-4f85-93c5-66b316c49b26` serves the publishing desk. Post-deployment checks confirmed HTTP 200 health and the exact built frontend asset, HTTP 401 for anonymous content reads, HTTP 403 for foreign-origin writes, and all three active database triggers using Whumpo origins without retired-domain targets.
+
+## Unsaved publishing work
+
+The publishing desk guards router navigation, draft/project switching, reload-saved-version controls and CMS-to-Chat actions while local edits exist. One shared dialog lets the owner stay or explicitly discard local changes. A save in progress holds workspace navigation; an uncertain save explains that the request may already exist and preserves exact-request retry while the editor stays open. Browser reload/close uses the router's native before-unload protection (browser support varies; this is not crash recovery or automatic draft backup).
+
+Successful saves establish a new clean baseline, including when a provider returns an unchanged revision. Cancelling navigation retains title and body. No unsaved CMS content is copied to local storage or shared between accounts.
+
+Browser verification used the real local platform handler with a synthetic CMS service: cancelling sidebar navigation retained a new draft; switching to existing content required explicit discard; a delayed PATCH held navigation; a proxy then discarded the successful save response and returned 502; the dialog changed to uncertain-save guidance; exact-request retry recovered successfully; subsequent dashboard navigation proceeded without an unsaved-change prompt. Backend/frontend type checks and the production build passed. The native browser close/reload prompt was not separately exercised.
+
+Deployed as platform version `20d5a951-416d-4c52-8dea-2866d3a433fa`. Live checks confirmed the CMS route, byte-for-byte frontend bundle match and healthy platform response.
