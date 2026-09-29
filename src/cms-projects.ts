@@ -1,4 +1,5 @@
-export class CMSProjectError extends Error {constructor(readonly status:number,message:string){super(message);}}
+import {CMSProjectError} from './cms-error';
+export {CMSProjectError} from './cms-error';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Review={id:string;project_id:string;user_id:string;title:string;tagline:string;status:string;expires_at:string};
 async function own(db:D1Database,user:string,project:string){if(!uuid.test(project)||!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new CMSProjectError(404,'Project not found');}

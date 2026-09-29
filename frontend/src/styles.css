@@ -100,3 +100,8 @@
  .landing #how article h3{margin-top:16px}
  .landing #pricing article{padding:24px}
 }
+@media(max-width:760px){
+ .cms-writing-tools>label{flex-basis:100%}
+ .cms-writing-block{padding:14px}
+ .cms-writing-block textarea{resize:vertical}
+}
