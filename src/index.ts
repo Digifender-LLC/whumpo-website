@@ -1,3 +1,4 @@
+import {dashboardData,readLayout,saveLayout,readCapacity,saveCapacity} from './workspace-dashboard';
 import { readAcknowledgment } from './acknowledgment';
 import {readApplication,readApplicationReview,prepareApplication,confirmApplication} from './app-activation';
 import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm} from './backend-forms';
@@ -196,6 +197,16 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  if(method==='GET'&&pathname==='/api/workspace/dashboard')return json(await dashboardData(env.DB,user.id));
+  if(pathname==='/api/workspace/layout'){
+    if(method==='GET')return json(await readLayout(env.DB,user.id));
+    if(method==='PUT'){const data=await body(request);return json(await saveLayout(env.DB,user.id,data?.revision,data?.layout));}
+  }
+  if(pathname==='/api/workspace/capacity'){
+    if(method==='GET')return json(await readCapacity(env.DB,user.id));
+    if(method==='PUT')return json(await saveCapacity(env.DB,user.id,await body(request)));
+  }
+
   const cmsPublicationRoute=pathname.match(/^\/api\/cms-publication-reviews\/([0-9a-f-]{36})\/preview$/);
   if(method==='GET'&&cmsPublicationRoute)return cmsPublicationPage(env.DB,user.id,cmsPublicationRoute[1]);
   const cmsPreviewRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content\/([0-9a-f-]{36})\/preview$/);

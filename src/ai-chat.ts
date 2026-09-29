@@ -50,7 +50,15 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   context.dnsConnection={enabled:dnsStatus.enabled,connected:dnsStatus.connected,expiresAt:dnsStatus.expiresAt};
   const { results: history } = await db.prepare("SELECT user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' ORDER BY revision DESC LIMIT 4").bind(userId).all<{ user_text: string; assistant_text: string }>();
   const system = agentPrompt(context);
-  const messages: ChatMessage[] = [{ role: 'system', content: system }];
+  // Keep each transport message within its limit without dropping system policy.
+  // Budget reservations still include every byte across all chunks.
+  const messages: ChatMessage[] = [];
+  for(let offset=0;offset<system.length;){
+    let end=Math.min(offset+16000,system.length);
+    if(end<system.length){const newline=system.lastIndexOf('\n',end-1);if(newline>=offset)end=newline+1;else if(/[\uD800-\uDBFF]/.test(system[end-1]))end--;}
+    messages.push({role:'system',content:system.slice(offset,end)});offset=end;
+  }
+  const systemMessages=messages.length;
   for (const turn of history.reverse()) messages.push({ role: 'user', content: turn.user_text.slice(0, 600) }, { role: 'assistant', content: turn.assistant_text.slice(0, 900) });
   messages.push({ role: 'user', content: content.startsWith('/ask ') ? content.slice(5) : content.startsWith('/edit ') ? content.slice(6) : content });
   const budgetDate=new Date();
@@ -60,7 +68,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   // UTF-8 bytes bound normal text tokenization conservatively; include per-message framing headroom.
   // Trim old context before reducing the output budget, so small remaining balances stay usable.
   const boundInput = () => new TextEncoder().encode(JSON.stringify(messages)).length + 512;
-  while (messages.length > 2 && buildUnits(boundInput(), 2048) > available) messages.splice(1, 2);
+  while (messages.length > systemMessages + 1 && buildUnits(boundInput(), 2048) > available) messages.splice(systemMessages, 2);
   const outputLimit = Math.min(2048, Math.floor((available * 1000 - boundInput()) / 4));
   async function noReservation(){
     const prior=await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id=? AND user_id=?').bind(id,userId).first<{user_text:string;revision:number}>();

@@ -170,3 +170,14 @@ See [pricing-and-model-policy.md](pricing-and-model-policy.md) for implemented c
 ## Persistent application authority review
 
 Owner review now pins program/test/source, data access and revision. Concurrent/stale approval and session revocation are covered by `test:app-activation` and `test:app-data`. Visitor passkey enrollment, authenticated app UI, lifecycle/export/deletion and production browser acceptance remain open. Saved activation does not claim public readiness.
+
+## Unified workspace and capacity policy — September 29, 2026
+
+- Added a header-free workspace: fixed left brand/navigation/account controls, central dashboard and persistent desktop chat on the right. Narrow screens switch to Chat explicitly. Account panels render centrally; security/recovery remain modal.
+- Saved owner/project-scoped workflow tabs and supported metric cards in D1 (0054). Model proposals use the same strict layout parser and revision checks; system controls and spending authority are excluded. Current layout is provided in model context.
+- Pricing now describes flexible capacity instead of headline fixed storage inclusions. Existing preview limits remain enforced. Starter is the recommended paid launch default; free Explore accounts and receipts are unchanged.
+- Added draft plan/interval/overage preferences and clear monthly/annual estimates. Draft preference writes cannot change entitlements or enable charges. Implemented tested quote, warning and two-consecutive-period recommendation helpers; operational retail metering and paid consent/settlement remain pending.
+- Local D1 tests: owner isolation, foreign-project rejection, strict schema, stale/concurrent revisions, model action integration, draft-only spending settings, missing telemetry, proration, cap notices, and economic/headroom thresholds.
+- Real Worker HTTP checks: anonymous 401, foreign Origin 403, saved layout readback, stale revision 409. Browser verified dashboard, custom Video workspace creation, draft $25 preference save, embedded usage panel, desktop chat and mobile navigation. Mobile DOM width matched a 390px viewport without horizontal overflow. Synthetic fixtures only.
+- A regression run caught an oversized model system message. Transport now chunks system text at safe boundaries without discarding instructions; history trimming preserves every system chunk, and reservation accounting covers all bytes. Existing site-agent and plan-period regression suites pass.
+- Screenshot: `.secrets/verification/unified-workspace.png` (synthetic account). Product decisions and remaining gates: `docs/unified-workspace-and-capacity.md`.

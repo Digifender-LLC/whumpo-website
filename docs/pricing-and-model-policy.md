@@ -1,3 +1,5 @@
+> September 29 update: flexible capacity, approval-only plan changes, draft overage controls and the unified dashboard are specified in [unified-workspace-and-capacity.md](unified-workspace-and-capacity.md). Its decisions supersede the fixed storage targets below.
+
 # Pricing and model policy — September 29, 2026
 
 Supersedes the old Launch/Studio public proposal. Source: the owner's “AI VPS Hosting Comparison” conversation, latest price revision, and the supplied model-routing and acknowledgment notes. Their provider prices are **planning assumptions**, not verified API tariffs. This document does not enable billing or authorize purchases.
