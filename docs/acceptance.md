@@ -196,3 +196,5 @@ Deployment verification: code `42375cd`, main Worker `1c2543f0-35d7-4d37-88c3-53
 - Synthetic screenshots: `.secrets/verification/refined-chat-day.png` and `refined-dashboard-night.png`. No real user's profile or password was changed during testing.
 
 Final refinement: switching pages resets the page scroll position; theme controls serialize saves. Added a credential-version check when issuing password sessions, so a login already verifying an old password cannot create a session after a concurrent password change. The regression test simulates that race and confirms 401/no cookie. Both direct D1 and real Worker HTTP password checks pass.
+
+Live release: code `ba928df`, main Worker `f6935cb6-0eb0-49e7-b694-24867a462097`, production migration 0055 applied. Served workspace HTML, app bundle, stylesheet and default avatar exactly match the tested files. Anonymous profile/photo reads return 401; foreign-origin password mutation returns 403. No production account credentials or profile content were changed by verification.
