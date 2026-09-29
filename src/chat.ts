@@ -1,4 +1,7 @@
 import { plans } from './plans';
+import { ensureBilling, getBilling } from './billing';
+import { reconcileChat, sendAIChat } from './ai-chat';
+import type { AIConfig } from './ai';
 
 type State = { revision: number; step: 'idea' | 'name' | 'ready'; idea: string };
 export const greeting = "Hi, I’m your Whumpo guide. What would you like to put online? Tell me about your business, project, or idea. I can save your brief and set up a project with you.";
@@ -8,35 +11,49 @@ export async function chatState(db: D1Database, userId: string) {
   if (!state) throw new Error('Missing workspace state');
   return state;
 }
-export async function readChat(db: D1Database, userId: string) {
+export async function readChat(db: D1Database, userId: string, aiEnabled = false) {
   // Read revision and history together to avoid returning an old revision with newer turns.
   await chatState(db, userId);
+  await reconcileChat(db, userId);
   const result = await db.batch([
     db.prepare('SELECT revision, step FROM workspace_state WHERE user_id = ?').bind(userId),
-    db.prepare('SELECT id, revision, user_text, assistant_text, created_at FROM chat_turns WHERE user_id = ? ORDER BY revision DESC LIMIT 100').bind(userId),
+    db.prepare('SELECT id, revision, user_text, assistant_text, created_at, mode, status FROM chat_turns WHERE user_id = ? ORDER BY revision DESC LIMIT 100').bind(userId),
     db.prepare("SELECT COUNT(*) AS projects, SUM(CASE WHEN status = 'live' THEN 1 ELSE 0 END) AS live FROM projects WHERE owner_user_id = ?").bind(userId)
   ]);
-  return { mode: 'guided', greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0] };
+  const billing = await getBilling(db, userId);
+  return { mode: aiEnabled ? 'ai' : 'guided', greeting: aiEnabled ? greeting + ' After we save your brief, we can discuss your website with AI. Use /ask followed by a question at any time.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };
 }
 
-export async function sendChat(db: D1Database, userId: string, input: Record<string, unknown>) {
+export async function sendChat(db: D1Database, userId: string, input: Record<string, unknown>, ai?: AIConfig) {
   const content = typeof input.content === 'string' ? input.content.trim() : '';
   if (!content || content.length > 1000 || !Number.isSafeInteger(input.revision) || typeof input.id !== 'string' || !/^[0-9a-f-]{36}$/.test(input.id))
     return { status: 400, error: 'Send a message of 1 to 1,000 characters with a valid request ID.' };
   const previous = await db.prepare('SELECT user_text FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string }>();
   if (previous) return previous.user_text === content ? { status: 200 } : { status: 409, error: 'This request ID was already used for another message.' };
   const state = await chatState(db, userId);
+  await reconcileChat(db, userId);
+  if (await db.prepare("SELECT id FROM chat_turns WHERE user_id = ? AND status = 'pending' LIMIT 1").bind(userId).first()) return { status: 409, error: 'Your previous AI reply is still being prepared. Please wait a moment.' };
   if (state.revision !== input.revision) return { status: 409, error: 'Your conversation changed in another tab. Review the latest messages and send again.' };
   if (state.revision >= 2000) return { status: 409, error: 'This test workspace has reached its conversation limit.' };
   let step = state.step;
   let idea = state.idea;
   let reply: string;
   let project: { id: string; name: string; purpose: string } | undefined;
+  let overage: boolean | undefined;
   const command = content.toLowerCase();
+  const known = ['/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel'];
+  if (ai && (command.startsWith('/ask ') || (state.step === 'ready' && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai);
   if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
     const { results } = await db.prepare('SELECT name, purpose, status FROM projects WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ name: string; purpose: string; status: string }>();
     reply = results.length ? results.map(p => `${p.name} — ${p.status}\n${p.purpose}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
-  } else if (['/plans', 'show plans', 'pricing', '/usage', 'show usage'].includes(command)) {
+  } else if (['/usage', 'show usage', '/credits'].includes(command)) {
+    const billing = await getBilling(db, userId);
+    reply = `${billing.plan.name} · ${billing.period}\n${billing.quota.available} of ${billing.quota.allowance} monthly build units available. ${billing.quota.spent} used; ${billing.quota.reserved} held for pending work.\n${billing.credits.available} credits available; ${billing.credits.reserved} held.\nUsing existing credits after your monthly allowance is ${billing.credits.overageEnabled ? 'enabled' : 'disabled'}.\n\nGuided chat is free. Monthly units reset on the first day of each month (UTC); credits carry over. Use /credits on or /credits off to change overage use. Buying credits and paid upgrades are not enabled yet.`;
+  } else if (['/credits on', '/credits off'].includes(command)) {
+    await ensureBilling(db, userId);
+    overage = command === '/credits on';
+    reply = overage ? 'Existing credits may now cover build usage after your monthly allowance runs out. This does not buy credits or charge a payment method. You can turn this off with /credits off.' : 'Credit overage is off for new operations. Already reserved work can still settle against its existing hold.';
+  } else if (['/plans', 'show plans', 'pricing'].includes(command)) {
     reply = 'Proposed plans (USD/month):\n' + plans.map(p => `${p.name}: $${p.monthlyCents / 100}, ${p.publishedSites} published site${p.publishedSites === 1 ? '' : 's'}, ${p.monthlyUnits} build units/month.`).join('\n') + '\n\nProposed extra credits: $5 for 100 units after your monthly allowance. Guided chat is free. Billing and paid upgrades are not enabled; no purchases or charges can be made here yet.';
   } else if (['/activity', 'show activity'].includes(command)) {
     const { results } = await db.prepare('SELECT summary, created_at FROM activity_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<{ summary: string; created_at: string }>();
@@ -48,7 +65,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Details → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (['/help', 'help'].includes(command)) {
-    reply = 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Website generation and publishing are still being built.';
+    reply = ai ? 'AI is connected for website planning and coding questions. Describe your idea and choose a project name to save a brief. After that, we can discuss the website naturally, or use /ask followed by a question at any time. /new, /projects, /activity, /usage, /plans, /credits on, /credits off, and /security work without model charges. Generation, publishing, domains, and provider connections are still being built.' : 'I’m running in guided mode while the AI provider is being connected. I can collect your idea, create a project, and show your workspace.\n\nTry /new, /projects, /activity, /plans, /usage, /domains, /connections, or /security. Use /cancel to stop an unfinished brief. Website generation and publishing are still being built.';
   } else if (command === '/new') {
     step = 'idea'; idea = ''; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
@@ -69,9 +86,13 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   const now = new Date().toISOString();
   const statements = [
-    db.prepare('INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at) SELECT ?, user_id, revision + 1, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ?').bind(input.id, content, reply, now, userId, state.revision),
+    db.prepare("INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at) SELECT ?, user_id, revision + 1, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending')").bind(input.id, content, reply, now, userId, state.revision, userId),
     db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, userId, state.revision, input.id, userId)
   ];
+  if (overage !== undefined) {
+    statements.push(db.prepare('UPDATE billing_accounts SET overage_enabled = ? WHERE user_id = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(overage ? 1 : 0, userId, input.id, userId));
+    statements.push(db.prepare("INSERT INTO activity_events (id,user_id,action,summary,created_at) SELECT ?,user_id,'billing.preference',?,? FROM chat_turns WHERE id = ? AND user_id = ?").bind(`billing:${input.id}`, overage ? 'Enabled existing credits for quota overage' : 'Disabled credits for new operations', now, input.id, userId));
+  }
   if (project) {
     statements.push(db.prepare("INSERT INTO projects (id, owner_user_id, name, purpose, status, created_at, updated_at) SELECT ?, ?, ?, ?, 'draft', ?, ? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)").bind(project.id, userId, project.name, project.purpose, now, now, input.id, userId));
     statements.push(db.prepare("INSERT INTO activity_events (id, user_id, project_id, action, summary, created_at) SELECT ?, ?, ?, 'project.created', ?, ? WHERE EXISTS (SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?)").bind(crypto.randomUUID(), userId, project.id, `Created project ${project.name} through chat`, now, project.id, userId));

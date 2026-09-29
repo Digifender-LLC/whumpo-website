@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import wrangler from 'wrangler';
+const { getPlatformProxy } = wrangler;
+import { build } from 'esbuild';
+const bundle=await build({entryPoints:['src/billing.ts'],bundle:true,platform:'node',format:'esm',write:false});
+const {getBilling,reserveUsage,dispatchUsage,finishUsage,grantCredits,setOverage,uncertainUsage,getOperation}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const directory = await mkdtemp('/tmp/whumpo-billing-');
+execFileSync(process.execPath, ['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',directory], {stdio:'pipe'});
+const proxy=await getPlatformProxy({persist:{path:directory+'/v3'},remoteBindings:false});
+const db=proxy.env.DB;
+const hash='a'.repeat(64), uid=crypto.randomUUID();
+async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
+try {
+  const user=await account(), other=await account();
+  let state=await getBilling(db,user);assert.equal(state.quota.available,25);assert.equal(state.credits.overageEnabled,false);
+  const requests=await Promise.allSettled(Array.from({length:10},()=>reserveUsage(db,user,crypto.randomUUID(),hash,5)));
+  const held=requests.filter(r=>r.status==='fulfilled').map(r=>r.value.operation);
+  assert.equal(held.length,5);assert.equal(requests.filter(r=>r.status==='rejected'&&r.reason.status===402).length,5);
+  state=await getBilling(db,user);assert.equal(state.quota.available,0);assert.equal(state.quota.reserved,25);
+  assert.equal((await getBilling(db,other)).quota.available,25);
+  assert.equal(await getOperation(db,other,held[0].id),null);
+  const replay=await reserveUsage(db,user,held[0].id,hash,5);assert.equal(replay.created,false);
+  await assert.rejects(reserveUsage(db,user,held[0].id,'b'.repeat(64),5),{status:409});
+  assert.equal(await dispatchUsage(db,user,held[0].id),true);assert.equal(await dispatchUsage(db,user,held[0].id),false);
+  await Promise.all([finishUsage(db,user,held[0].id,2),finishUsage(db,user,held[0].id,2)]);
+  state=await getBilling(db,user);assert.equal(state.quota.spent,2);assert.equal(state.quota.available,3);
+  await assert.rejects(finishUsage(db,user,held[0].id,3),{status:409});
+  for(const op of held.slice(1))await finishUsage(db,user,op.id,0);
+  await Promise.all([grantCredits(db,user,'test-grant',50,'test'),grantCredits(db,user,'test-grant',50,'test')]);
+  assert.equal((await getBilling(db,user)).credits.available,50);
+  await assert.rejects(reserveUsage(db,user,crypto.randomUUID(),hash,30),{status:402});
+  await setOverage(db,user,true);
+  const op=(await reserveUsage(db,user,crypto.randomUUID(),hash,30)).operation;assert.equal(op.quota_reserved,23);assert.equal(op.credits_reserved,7);
+  await dispatchUsage(db,user,op.id);await finishUsage(db,user,op.id,26);
+  state=await getBilling(db,user);assert.equal(state.quota.spent,25);assert.equal(state.credits.available,47);assert.equal(state.credits.reserved,0);
+  // Available allowance released by one operation must be used before another spends credits.
+  const user2=await account();await grantCredits(db,user2,'test-grant-2',100,'test');await setOverage(db,user2,true);
+  const a=(await reserveUsage(db,user2,crypto.randomUUID(),hash,25)).operation;
+  const b=(await reserveUsage(db,user2,crypto.randomUUID(),hash,20)).operation;
+  await dispatchUsage(db,user2,a.id);await dispatchUsage(db,user2,b.id);await finishUsage(db,user2,a.id,1);await finishUsage(db,user2,b.id,10);
+  state=await getBilling(db,user2);assert.equal(state.quota.spent,11);assert.equal(state.credits.available,100);
+  // An uncertain dispatched call retains its hold; only undispatched holds expire.
+  const start=new Date('2027-01-31T23:59:00.000Z'), later=new Date('2027-02-01T00:10:00.000Z');
+  const x=(await reserveUsage(db,user2,crypto.randomUUID(),hash,10,start)).operation;
+  const y=(await reserveUsage(db,user2,crypto.randomUUID(),hash,10,start)).operation;
+  await dispatchUsage(db,user2,x.id,start);await uncertainUsage(db,user2,x.id);
+  state=await getBilling(db,user2,later);assert.equal(state.quota.available,25);
+  assert.equal((await getOperation(db,user2,y.id)).status,'released');assert.equal((await getOperation(db,user2,x.id)).status,'uncertain');
+  await finishUsage(db,user2,x.id,4,later);assert.equal((await getBilling(db,user2,later)).quota.spent,0);
+  const old=await db.prepare('SELECT spent,reserved FROM usage_periods WHERE user_id=? AND period=?').bind(user2,'2027-01').first();assert.deepEqual(old,{spent:4,reserved:0});
+  await assert.rejects(db.prepare("UPDATE billing_ledger SET credits_delta=999 WHERE user_id=?").bind(user2).run(),/ledger_immutable/);
+  await assert.rejects(db.prepare("DELETE FROM billing_ledger WHERE user_id=?").bind(user2).run(),/ledger_immutable/);
+  // Account deletion can still cascade through its own financial test data.
+  await db.prepare('DELETE FROM users WHERE id=?').bind(user2).run();
+  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM billing_ledger WHERE user_id=?').bind(user2).first()).n,0);
+  const aiBundle=await build({entryPoints:['src/ai-chat.ts'],bundle:true,platform:'node',format:'esm',write:false});
+  const {sendAIChat,reconcileChat}=await import('data:text/javascript;base64,'+Buffer.from(aiBundle.outputFiles[0].text).toString('base64'));
+  async function chatAccount(){const id=await account();await db.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(id).run();return id;}
+  const config={baseURL:'https://example.test/v1',apiKey:'fake-key',model:'fake-model',protocol:'responses'};
+  let calls=0;
+  const provider=async (url,init)=>{calls++;assert.equal(url.pathname,'/v1/responses');assert.ok(JSON.parse(init.body).max_output_tokens<=2048);return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'What should visitors do on your website?'}]}],usage:{input_tokens:80,output_tokens:200}});};
+  const chatter=await chatAccount(), messageId=crypto.randomUUID();
+  assert.equal((await sendAIChat(db,chatter,messageId,0,'Help plan my website',config,provider)).status,200);
+  assert.equal((await sendAIChat(db,chatter,messageId,0,'Help plan my website',config,provider)).status,200);
+  assert.equal(calls,1);assert.equal((await getBilling(db,chatter)).quota.spent,1);
+  const turn=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(messageId).first();assert.equal(turn.status,'completed');assert.match(turn.assistant_text,/visitors/);
+  const racer=await chatAccount();calls=0;
+  const race=await Promise.all([sendAIChat(db,racer,crypto.randomUUID(),0,'First question',config,provider),sendAIChat(db,racer,crypto.randomUUID(),0,'Second question',config,provider)]);
+  assert.equal(calls,1);assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);assert.equal((await getBilling(db,racer)).quota.reserved,0);
+  const uncertain=await chatAccount(), uncertainId=crypto.randomUUID();let failures=0;
+  const timeout=async()=>{failures++;throw new Error('Simulated disconnect');};
+  await sendAIChat(db,uncertain,uncertainId,0,'Plan a site',config,timeout);
+  await sendAIChat(db,uncertain,uncertainId,0,'Plan a site',config,timeout);
+  assert.equal(failures,1);assert.equal((await getOperation(db,uncertain,uncertainId)).status,'uncertain');assert.ok((await getBilling(db,uncertain)).quota.reserved>0);
+  const rejected=await chatAccount(), rejectedId=crypto.randomUUID();
+  await sendAIChat(db,rejected,rejectedId,0,'Plan a site',config,async()=>new Response('rate limited',{status:429}));
+  assert.equal((await getBilling(db,rejected)).quota.reserved,0);assert.equal((await getBilling(db,rejected)).quota.spent,0);
+  assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(rejectedId).first()).status,'failed');
+  console.log('AI integration checks passed: saved answers, replay without duplicate calls, racing messages, settlement, uncertain disconnects, and rejected-request refunds.');
+  console.log('Billing checks passed: concurrent reservations, replay, exact-once settlement/grants, overage opt-in, quota-first settlement, expiry, month rollover, immutable ledger, and owner isolation.');
+} finally {await proxy.dispose(); await rm(directory,{recursive:true,force:true});}

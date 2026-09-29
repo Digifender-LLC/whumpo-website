@@ -2,6 +2,8 @@ import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./secu
 import { plans, creditPack } from "./plans";
 import { readChat, sendChat } from "./chat";
 import { AuthError, passkeyOptions, passkeyVerify, recoverAccount } from "./passkeys";
+import { BillingError, getBilling, setOverage } from "./billing";
+import { configuredAI } from "./ai-chat";
 
 type User = { id: string; email: string };
 type Project = { id: string; name: string; purpose: string; status: string; created_at: string; updated_at: string };
@@ -163,6 +165,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  if (method === "GET" && pathname === "/api/billing") return json(await getBilling(env.DB, user.id));
+  if (method === "POST" && pathname === "/api/billing/preferences") {
+    const data = await body(request);
+    if (typeof data?.overageEnabled !== "boolean") return error(400, "Choose whether existing credits may cover overage");
+    await setOverage(env.DB, user.id, data.overageEnabled);
+    return json(await getBilling(env.DB, user.id));
+  }
   if (method === "GET" && pathname === "/api/passkeys") {
     const { results } = await env.DB.prepare("SELECT id, name, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY created_at").bind(user.id).all();
     return json({ passkeys: results });
@@ -187,12 +196,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return json({ recoveryCode });
   }
   if (method === "GET" && pathname === "/api/me") return json({ user });
-  if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id));
+  if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id, !!configuredAI(env)));
   if (method === "POST" && pathname === "/api/chat") {
     const data = await body(request);
     if (!data) return error(400, "A JSON message is required");
-    const result = await sendChat(env.DB, user.id, data);
-    return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id));
+    const result = await sendChat(env.DB, user.id, data, configuredAI(env));
+    return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "POST" && pathname === "/api/auth/logout") {
     const token = sessionToken(request);
@@ -241,7 +250,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof AuthError) return error(cause.status, cause.message);
+      if (cause instanceof AuthError || cause instanceof BillingError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

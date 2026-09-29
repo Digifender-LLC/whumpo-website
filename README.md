@@ -4,7 +4,7 @@ The test platform is at **https://digifender.com**, with source in the private *
 
 The public homepage introduces the product. Sign in at `/workspace/`; invitation links open `/workspace/?signup=1`. The landing page is static and makes no API calls.
 
-Implemented: invitation-only signup with Turnstile, passkeys by default, optional password sign-in, recovery codes, revocable cookie sessions, persistent guided chat, conversational project onboarding, projects, activity, tenant isolation, authentication throttling, and test data quotas. Draft plans and credit calculations are available; paid entitlements and checkout are not enabled. AI planning, site generation, previews, customer-site publishing, and customer domain management are not implemented yet.
+Implemented: invitation-only signup with Turnstile, passkeys by default, optional password sign-in, recovery codes, revocable cookie sessions, persistent guided chat, conversational project onboarding, projects, activity, tenant isolation, authentication throttling, and test data quotas. Muse Spark 1.3 Contributor planning chat, monthly build-unit reservations, an immutable usage ledger, and opt-in credit spending are implemented. Paid entitlements and checkout are not enabled. Site generation, previews, customer-site publishing, and customer domain management remain unfinished.
 
 ## Local development
 
@@ -12,7 +12,7 @@ Use Node.js 24 and pnpm 11. Run `pnpm install --frozen-lockfile`, `pnpm db:local
 
 The dev command explicitly sets `ENVIRONMENT=local`, using local D1 and bypassing invite/Turnstile checks. Deployment defaults to `test` and never bypasses them. Do not expose the local dev server publicly.
 
-Use `http://localhost:8787` for passkey development: its relying-party origin is intentionally fixed, because Wrangler rewrites route headers internally. With the server running, run `pnpm test:smoke`, `pnpm test:chat`, and `pnpm test:passkeys` in another terminal. `pnpm test:ai` runs provider contract tests without API credentials. Tests check login/logout, tenant boundaries, Origin enforcement, activity, and the project quota under concurrent requests. `pnpm check` checks TypeScript.
+Use `http://localhost:8787` for passkey development: its relying-party origin is intentionally fixed, because Wrangler rewrites route headers internally. With the server running, run `pnpm test:smoke`, `pnpm test:chat`, and `pnpm test:passkeys` in another terminal. `pnpm test:ai` runs provider contract tests without API credentials. `pnpm test:billing` uses a disposable local D1 database to verify concurrency, settlement and AI recovery. Local development never calls the configured real model. Tests check login/logout, tenant boundaries, Origin enforcement, activity, and the project quota under concurrent requests. `pnpm check` checks TypeScript.
 
 ## Test deployment
 
@@ -41,3 +41,11 @@ Frontend source lives in `web/app.js`; `pnpm build` bundles it into `public/app.
 Passkey routes are `POST /api/auth/passkeys/{signup,login,add}/{options,verify}`, `GET /api/passkeys`, `POST /api/auth/passkeys/remove`, `POST /api/auth/recover`, and `POST /api/auth/recovery-code`. Chat lives at `GET/POST /api/chat`; draft plans at `GET /api/plans`.
 
 The current delivery checklist and commercial model are in [docs/mvp.md](docs/mvp.md). The expanded design is in `docs/ai_managed_cloud_mvp_design_revised.docx`. The deployment notes supersede its paid-service assumptions for this test platform.
+
+## AI testing
+
+The deployed test uses OpenCode Go at `https://opencode.ai/zen/go/v1`, model `muse-spark-1.3-contributor`, Responses protocol. `AI_API_KEY` is stored as a Worker secret; the supplied `opencode.key` is ignored by Git and never included in assets. There is no automatic provider/model fallback. Contributor prompts and replies may be used for training; the workspace displays this notice.
+
+Guided onboarding and account commands are free. After creating a draft project, ordinary messages use the model; `/ask question` invokes it at any onboarding step. The model currently helps plan and explain code; it has no site execution tools. Usage reserves a bounded amount before dispatch, settles reported input/output (including reasoning) tokens, and never automatically retries uncertain inference. Use `/usage` or Details → Usage for balances; `/credits on` opts into spending existing credits only. Credit purchases are disabled.
+
+Billing endpoints: `GET /api/billing`, `POST /api/billing/preferences`. Browser input cannot grant credits or select a paid entitlement. Jarvis ports and remaining reusable components are documented in [docs/jarvis-reuse.md](docs/jarvis-reuse.md).
