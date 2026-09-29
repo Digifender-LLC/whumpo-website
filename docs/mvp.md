@@ -98,3 +98,11 @@ Database triggers enforce the review's owner/project/version identity, unexpired
 The separate `whumpo-sites` Worker serves only GET/HEAD `/s/PROJECT_ID` on `sites.digifender.com`; it has no AI/auth secrets and no workspace routes. Responses retain CSP sandbox, scripts/forms/network denial and no-store to make unpublication visible on the next request. It shares the existing D1 database via a binding; code limits reads to explicitly published versions, but the binding itself is not a database read-only role. Arbitrary customer scripts/backends are not supported by this serving boundary.
 
 The full MVP remains incomplete: natural-language tool selection, AI edits, uploads, custom domains, purchases, optional account connections and checkout are still required. These publication controls apply to the currently supported reusable static pages.
+
+## AI website drafts milestone
+
+Muse Spark 1.3 Contributor can select the approved `site-page@1` component and propose validated text, three themes and up to six sections. `/edit` explicitly requests AI work; ordinary conversation after onboarding also uses this path. The server parses strict JSON proposals, validates owner/project and configuration, escapes all content, and saves exact HTML as a private immutable version. This is constrained component composition, not arbitrary code execution.
+
+AI can prepare publish, restore and unpublish reviews through the existing gateway. It cannot confirm them. Action receipts come from the server, not model claims. Draft/action statements and the chat answer/token receipt commit in one D1 batch before billing settlement; a lost acknowledgement recovers the saved result without another inference. Invalid proposals and version-quota failures apply nothing and release the reservation; the platform absorbs those provider calls. Migration 0009 records AI provenance and the prior version when available.
+
+The current context includes five owned projects and the latest owned version. Unsupported scripts, backend execution, uploads, external integrations and arbitrary styles are rejected. The full MVP still requires broader layouts, uploads, domain management, account connections and payment integration. Stripe test mode is selected for checkout; real charges are not authorized.
