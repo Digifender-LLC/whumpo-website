@@ -60,7 +60,7 @@ try {
   async function chatAccount(){const id=await account();await db.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(id).run();return id;}
   const config={baseURL:'https://example.test/v1',apiKey:'fake-key',model:'fake-model',protocol:'responses'};
   let calls=0;
-  const provider=async (url,init)=>{calls++;assert.equal(url.pathname,'/v1/responses');assert.ok(JSON.parse(init.body).max_output_tokens<=2048);return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'What should visitors do on your website?'}]}],usage:{input_tokens:80,output_tokens:200}});};
+  const provider=async (url,init)=>{calls++;assert.equal(url.pathname,'/v1/responses');assert.ok(JSON.parse(init.body).max_output_tokens<=2048);return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'What should visitors do on your website?',action:null})}]}],usage:{input_tokens:80,output_tokens:200}});};
   const chatter=await chatAccount(), messageId=crypto.randomUUID();
   assert.equal((await sendAIChat(db,chatter,messageId,0,'Help plan my website',config,provider)).status,200);
   assert.equal((await sendAIChat(db,chatter,messageId,0,'Help plan my website',config,provider)).status,200);

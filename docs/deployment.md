@@ -101,3 +101,9 @@ The initial remote migration rejected a trigger written with `SELECT CASE ... EN
 Disposable D1 tests passed confirmation ownership, same-request concurrency, site quotas, stale/expired reviews, exact restoration, unpublish, public route/method boundaries and account deletion. Chat regressions passed after correcting a duplicate-request race. Browser checks exercised the review preview link and confirmation button, verified the button disappears after use, and observed the live-site counter update. Local development stores publication state locally; use the separate site-host dev server on port 8788 when inspecting that state rather than following the production hostname displayed by the current UI.
 
 Live HTTPS validation passed signed passkey login, private preview, a review with no premature publication, exact confirmation, public serving, confirmation replay, publication of a second version, byte-for-byte restoration of the first version, and unpublish returning HTTP 404. Build-unit spending remained zero. The temporary user and its projects/versions/publication records were deleted after the check.
+
+## AI website drafts — September 29, 2026
+
+Migration 0009 is applied. Workspace Worker `ec09d701-3a77-43b1-8263-f2b802663d9f` and public-site Worker `bd0adaed-de49-44d8-b6e8-9ce5008bbb96` are deployed. Real Muse Spark 1.3 Contributor generated a synthetic bakery draft through signed passkey login: 7 units settled, zero held, one saved version, no duplicate inference/charge on replay and no public page before confirmation. The temporary account and dependent records were removed.
+
+Isolated D1 checks cover owner isolation, schema/action rejection, escaped hostile text, version ancestry, version quota refund, review without publication and recovery after a lost commit acknowledgement. Billing regressions passed with structured model replies. `pnpm test:site-agent` runs these checks without provider credentials.
