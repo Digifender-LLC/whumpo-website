@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';import {mkdtemp,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';import wrangler from 'wrangler';
+async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const {prepareBackendForm:prepare,confirmBackendForm:confirm,readBackendForm:read,activeBackendForm:active}=await module('src/backend-forms.ts');
+const {backendFormConfig,backendFormScript,backendFormScriptPolicy}=await module('src/backend-form-render.ts');
+const {sendChat,readChat}=await module('src/chat.ts'),{backendAction,backendChatCommand}=await module('src/backend-chat.ts'),{saveBackend,testBackend}=await module('src/backend-versions.ts'),{prepareBackendPublication,confirmBackendPublication}=await module('src/backend-publication.ts');
+const {checkHealth,listHealth}=await module('src/site-health.ts'),host=(await module('src/site-host.ts')).default;
+const dir=await mkdtemp('/tmp/townhello-forms-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
+const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();let calls=0;
+const service={fetch:async(_url,init)=>{calls++;const data=JSON.parse(init.body);return Response.json({ok:true,value:data.input});}};
+const config={title:'Estimate your order',description:'Try a quantity and price.',buttonLabel:'Calculate',fields:[{key:'quantity',label:'Quantity',type:'number'},{key:'price',label:'Unit price',type:'number'}]};
+async function chat(user,content){const state=await readChat(db,user),turn=id();const result=await sendChat(db,user,{id:turn,revision:state.state.revision,content},undefined,{backendRuntime:service});assert.equal(result.status,200,JSON.stringify(result));return turn;}
+async function fixture(){const user=id();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now()).run();await chat(user,'A calculator website');const project=await chat(user,'Order calculator'),version=await chat(user,'/build'),siteReview=await chat(user,'/publish '+version);await chat(user,'/confirm '+siteReview);const backend=id(),run=id(),publication=id();await saveBackend(db,user,project,backend,'export default x=>x');await testBackend(db,service,user,project,backend,run,{});await prepareBackendPublication(db,user,project,publication,'publish',backend,run);await confirmBackendPublication(db,user,publication);return {user,project,version,backend,run,publication};}
+const page=a=>host.fetch(new Request('https://sites.digifender.com/s/'+a.project),{...proxy.env,BACKEND_RUNTIME:service});
+try{
+ const a=await fixture(),b=await fixture();
+ for(const tail of ['', ' null'])assert.match(await backendChatCommand(db,a.user,id(),'/configure-backend-form '+a.project+tail)(),/^Provide form JSON/);
+ for(const bad of [{...config,url:'https://evil.test'},{...config,fields:[{key:'constructor',label:'Bad',type:'text'}]},{...config,fields:[config.fields[0],config.fields[0]]},{...config,fields:[{key:'code',label:'Code',type:'script'}]},{...config,fields:Array(9).fill(config.fields[0])}])assert.throws(()=>backendFormConfig(bad));
+ const first=id(),competing=id();await prepare(db,a.user,a.project,first,config);await prepare(db,a.user,a.project,competing,config);
+ assert.equal(await active(db,a.project),null);await assert.rejects(confirm(db,b.user,first),e=>e.status===404);
+ await confirm(db,a.user,first);await assert.rejects(confirm(db,a.user,competing),e=>e.status===409);
+ assert.equal((await active(db,a.project)).id,first);
+ await assert.rejects(db.prepare('UPDATE backend_form_reviews SET config_json=? WHERE id=?').bind('{}',first).run(),/backend_form_immutable/);
+ const response=await page(a),html=await response.text(),csp=response.headers.get('content-security-policy');assert.ok(html.includes('id="townhello-backend-form"'));assert.ok(html.includes('/backend/'+a.publication));assert.ok(html.includes('<script>'+backendFormScript+'</script>'));assert.ok(csp.includes(await backendFormScriptPolicy()));assert.ok(csp.includes('sandbox allow-scripts allow-forms;'));assert.ok(!csp.includes('allow-same-origin'));assert.ok(csp.includes("form-action 'none'"));assert.ok(!csp.includes("script-src 'unsafe-inline'"));
+ const health=await checkHealth(db,a.user,a.project,(url,init)=>host.fetch(new Request(url,init),proxy.env));assert.equal(health.projects[0].status,'healthy');
+ const replacement=id();await prepareBackendPublication(db,a.user,a.project,replacement,'publish',a.backend,a.run);await confirmBackendPublication(db,a.user,replacement);
+ assert.equal(await active(db,a.project),null);assert.equal((await listHealth(db,a.user,a.project)).projects[0].status,'changed');assert.ok(!(await (await page(a)).text()).includes('townhello-backend-form'));
+ const before=calls;const stale=await host.fetch(new Request(`https://sites.digifender.com/s/${a.project}/backend/${a.publication}`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'}),{...proxy.env,BACKEND_RUNTIME:service});assert.equal(stale.status,404);assert.equal(calls,before);
+ const next=id();await prepare(db,a.user,a.project,next,{...config,title:'<script>not executable</script>'});await confirm(db,a.user,next);assert.ok((await (await page(a)).text()).includes('&lt;script&gt;not executable&lt;/script&gt;'));
+ const off=id();await prepare(db,a.user,a.project,off,null);await confirm(db,a.user,off);assert.equal(await active(db,a.project),null);await confirm(db,a.user,first);assert.equal(await active(db,a.project),null);
+ const fresh=id();await prepare(db,a.user,a.project,fresh,config);await db.prepare('UPDATE publications SET revision=revision+1 WHERE project_id=?').bind(a.project).run();await assert.rejects(confirm(db,a.user,fresh),e=>e.status===409);
+ const guided=await chat(a.user,'/configure-backend-form '+a.project+' '+JSON.stringify(config));assert.equal(await active(db,a.project),null);await chat(a.user,'/confirm-backend-form '+guided);assert.equal((await active(db,a.project)).id,guided);
+ assert.ok((await read(db,a.user,a.project)).active);await assert.rejects(backendAction(db,a.user,id(),{kind:'backend',operation:'confirmForm',reviewId:guided}),e=>e.status===400);
+ const proposal=await backendAction(db,a.user,id(),{kind:'backend',operation:'reviewForm',projectId:a.project,form:config});assert.ok(proposal.reply.includes('/confirm-backend-form'));assert.equal((await active(db,a.project)).id,guided);
+ console.log('Website backend forms passed: configuration bounds, ownership, immutable reviewed activation, stale targets, source-only CSP hash, escaped content, pinned endpoint rejection, health identity, chat proposal/confirmation and replay-safe removal.');
+}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

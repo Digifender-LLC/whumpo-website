@@ -87,7 +87,7 @@ Ask the agent to create a pure JavaScript function for an existing project.
 /backend-state-history PROJECT_ID lists applied snapshots; /export-backend-state SNAPSHOT_ID downloads one.
 /restore-backend-state SNAPSHOT_ID reviews restoring its after state; /restore-backend-before SNAPSHOT_ID reviews its before state. Restoration requires confirmation.
 
-Functions start private. Reviewed publication exposes a stateless JSON endpoint with no network or private data access. Website UI integration is not automatic. Guided tests use no AI units but have a separate execution allowance.`,
+Functions start private. Reviewed publication exposes a stateless JSON endpoint with no network or private data access. /configure-backend-form PROJECT_ID JSON reviews an input form; ask the agent to match its fields to your tested function. /backend-form PROJECT_ID reads status; /backend-form-review REVIEW_ID reads a review; /confirm-backend-form REVIEW_ID applies it. /disable-backend-form PROJECT_ID reviews hiding the form. Changing the website or backend requires reviewing the form again. Guided tests use no AI units but have a separate execution allowance.`,
  directories:`Directories and visitor messages
 /directory PROJECT_ID shows private listings.
 /directory-add PROJECT_ID | title | description | optional HTTPS link prepares an addition.

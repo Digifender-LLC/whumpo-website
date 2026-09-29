@@ -1,3 +1,4 @@
+import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm} from './backend-forms';
 import {readBackendPublication,prepareBackendPublication,readBackendPublicationReview,confirmBackendPublication} from './backend-publication';
 import {cmsDiscardCommand} from './cms-discard';
 import {cmsUnpublishCommand} from './cms-unpublish';
@@ -233,6 +234,16 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if(stateReviewRoute){
     if(method==='GET'&&!stateReviewRoute[2])return json(await readBackendReview(env.DB,user.id,stateReviewRoute[1]));
     if(method==='POST'&&stateReviewRoute[2])return json(await confirmBackendState(env.DB,user.id,stateReviewRoute[1]));
+  }
+  const backendFormRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backend-form$/);
+  if(backendFormRoute){
+    if(method==='GET')return json(await readBackendForm(env.DB,user.id,backendFormRoute[1]));
+    if(method==='POST'){const data=await body(request);if(typeof data?.id!=='string'||!('config' in data))return error(400,'Provide a review ID and config (null to disable)');return json(await prepareBackendForm(env.DB,user.id,backendFormRoute[1],data.id,data.config));}
+  }
+  const backendFormReview=pathname.match(/^\/api\/backend-form-reviews\/([0-9a-f-]{36})(\/confirm)?$/);
+  if(backendFormReview){
+    if(method==='GET'&&!backendFormReview[2])return json(await readBackendFormReview(env.DB,user.id,backendFormReview[1]));
+    if(method==='POST'&&backendFormReview[2])return json(await confirmBackendForm(env.DB,user.id,backendFormReview[1]));
   }
   const backendPublicationRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backend-publication$/);
   if(backendPublicationRoute){
