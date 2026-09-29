@@ -244,3 +244,7 @@ Operators can inspect and explicitly waive an aged uncertain AI hold without ret
 ## Published website verification
 
 Shared-address publishing now attempts a saved HTTP/content and photo-response check. Chat supports `/health` and `/check-site PROJECT_ID`; bounded hourly maintenance refreshes due results. See [health scope and limits](site-health.md). This is synthetic endpoint verification, not automatic repair, custom-domain verification or a full uptime service.
+
+## Small dynamic directory starter
+
+A reusable directory backend supports private listing create/read/update/delete through chat, exact reviewed public snapshots, a responsive public page and a public JSON read API. Tenant data stays separate from shared code; draft edits cannot silently change published data. Database revision and explicit-confirmation checks govern both model and guided proposals. See [directory service](directories.md). This advances the small dynamic apps/API requirement; arbitrary schemas, customer-site authentication, application data rollback and isolated generated backend execution remain incomplete.

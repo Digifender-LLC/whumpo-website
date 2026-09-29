@@ -1,3 +1,4 @@
+import {readDirectory,DirectoryError} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage} from './version-diff';
 import {contactPage} from './contact-page';
@@ -254,6 +255,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return json({ recoveryCode });
   }
   if (method === "GET" && pathname === "/api/connections") return json({...await connectionStatus(env.DB,user.id,githubConfig(env)),cloudflare:await cloudflareStatus(env.DB,user.id,cloudflareConfig(env))});
+  const directoryProject=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory$/);
+  if(method==='GET'&&directoryProject){const d=await readDirectory(env.DB,user.id,directoryProject[1]);return json({projectId:d.id,name:d.name,revision:d.revision,listings:d.draft,published:d.published,publishedAt:d.published?d.published_at:null});}
   if(method==='GET'&&pathname==='/api/site-health')return json(await listHealth(env.DB,user.id));
   const healthProject=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/health$/);
   if(method==='POST'&&healthProject){if(String(env.ENVIRONMENT)==='local')return error(503,'Website checks are unavailable in this environment.');return json(await checkHealth(env.DB,user.id,healthProject[1]));}
@@ -366,7 +369,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
+      if (cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

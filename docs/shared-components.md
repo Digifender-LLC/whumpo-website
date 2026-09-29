@@ -61,3 +61,7 @@ The photo milestone adds platform-authored `photo-page@1`. Its schema accepts up
 ## First dynamic shared implementation
 
 `src/contacts.ts` and `src/contact-page.ts` implement one trusted contact backend used across projects. Shared code contains no customer prompts, site content, messages or credentials. Tenant settings and messages live in project-scoped D1 tables, with server-derived ownership for private reads/deletion and publication checks for public intake. The agent may prepare a settings review, never authorize activation or read visitor messages. Runtime form settings are separate from immutable static artifacts and are not claimed as portable backend exports. See `docs/contact-forms.md` for the full contract and tests.
+
+## Directory CRUD backend
+
+`src/directory.ts` and `src/directory-page.ts` add a second platform-authored dynamic implementation: private listing CRUD with separately reviewed public HTML/JSON snapshots. The shared implementation has no customer data; filled drafts, reviews and public snapshots are project-scoped D1 records. The AI can propose changes but cannot confirm them. This demonstrates reusable backend behavior without generating a new backend for every customer. See [directory service](directories.md) for limits and remaining portability/rollback work.
