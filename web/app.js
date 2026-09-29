@@ -60,7 +60,9 @@ function renderChat(data) {
   for (const turn of data.turns) { bubble("user", turn.user_text); const answer = bubble("assistant", turn.assistant_text, turn.mode);
     if (typeof turn.version_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.version_id)) {
       const link = text('a', 'Open private preview ↗'); link.href = `/api/site-versions/${turn.version_id}/preview`; link.target = '_blank'; link.rel = 'noopener noreferrer'; answer.append(link);
+      const compare=text('a','Compare with live site');compare.href=`/api/site-versions/${turn.version_id}/diff`;compare.target='_blank';compare.rel='noopener noreferrer';answer.append(compare);
     }
+    if(typeof turn.comparison_version_id==='string'&&/^[0-9a-f-]{36}$/.test(turn.comparison_version_id)){const compare=text('a','Open private comparison ↗');const base=typeof turn.comparison_baseline_id==='string'&&/^[0-9a-f-]{36}$/.test(turn.comparison_baseline_id)?turn.comparison_baseline_id:'none';compare.href=`/api/site-versions/${turn.comparison_version_id}/diff?base=${base}`;compare.target='_blank';compare.rel='noopener noreferrer';answer.append(compare);}
     const exportVersion = turn.export_version_id || turn.version_id;
     if (typeof exportVersion === 'string' && /^[0-9a-f-]{36}$/.test(exportVersion)) {
       const download=text('a','Download website source');download.href=`/api/site-versions/${exportVersion}/export`;download.download=`whumpo-site-${exportVersion}.zip`;answer.append(download);
@@ -71,6 +73,7 @@ function renderChat(data) {
       const button=text('button','Confirm photo deletion');button.onclick=()=>sendMessage(`/confirm-photo-delete ${turn.photo_confirmation_id}`);answer.append(button);
     }
     if (typeof turn.confirmation_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.confirmation_id)) {
+      const compare=text('a','Review website changes ↗');compare.href=`/api/publication-reviews/${turn.confirmation_id}/diff`;compare.target='_blank';compare.rel='noopener noreferrer';answer.append(compare);
       const confirm = text('button', 'Confirm reviewed change'); confirm.onclick = () => sendMessage(`/confirm ${turn.confirmation_id}`); answer.append(confirm);
     }
     if (turn.publication_kind !== 'unpublish' && typeof turn.published_project_id === 'string' && /^[0-9a-f-]{36}$/.test(turn.published_project_id)) {

@@ -28,3 +28,7 @@ Parent project/account cascading deletion remains possible for explicit operator
 Migration 0024 was applied locally and remotely. Platform version: `33b737b3-b224-477b-ab6d-226d17192395`; public-site Worker version: `80b6e5f1-ef3d-4da2-bbd7-f97ff0783f5e`. TypeScript, build, disposable version-removal tests and photo-removal regression tests passed. Local browser inspection verified the exact review text and confirmation button using a synthetic fixture; no deletion was performed in that browser fixture.
 
 Live signed-passkey acceptance created two temporary drafts, published one, reviewed and removed the other, and verified deleted preview/export routes returned 404. Replaying removal and original creation did not recreate the version. The unrelated live page stayed available and a removal request for that live version was refused. Guided commands used zero AI units. The temporary publication was explicitly unpublished, then the temporary account and project were removed. Real-device passkey acceptance and the broader MVP gates remain separate.
+
+## Comparison links
+
+Migration 0026 adds exact target/baseline links for chat comparisons. Removing either referenced version clears that link receipt. An explicit missing baseline is rejected by the comparison route rather than substituted with another version. Historical chat summaries remain under chat retention. See `docs/version-comparisons.md`.

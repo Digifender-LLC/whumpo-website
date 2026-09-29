@@ -495,6 +495,19 @@
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         answer.append(link);
+        const compare = text("a", "Compare with live site");
+        compare.href = `/api/site-versions/${turn.version_id}/diff`;
+        compare.target = "_blank";
+        compare.rel = "noopener noreferrer";
+        answer.append(compare);
+      }
+      if (typeof turn.comparison_version_id === "string" && /^[0-9a-f-]{36}$/.test(turn.comparison_version_id)) {
+        const compare = text("a", "Open private comparison \u2197");
+        const base = typeof turn.comparison_baseline_id === "string" && /^[0-9a-f-]{36}$/.test(turn.comparison_baseline_id) ? turn.comparison_baseline_id : "none";
+        compare.href = `/api/site-versions/${turn.comparison_version_id}/diff?base=${base}`;
+        compare.target = "_blank";
+        compare.rel = "noopener noreferrer";
+        answer.append(compare);
       }
       const exportVersion = turn.export_version_id || turn.version_id;
       if (typeof exportVersion === "string" && /^[0-9a-f-]{36}$/.test(exportVersion)) {
@@ -519,6 +532,11 @@
         answer.append(button);
       }
       if (typeof turn.confirmation_id === "string" && /^[0-9a-f-]{36}$/.test(turn.confirmation_id)) {
+        const compare = text("a", "Review website changes \u2197");
+        compare.href = `/api/publication-reviews/${turn.confirmation_id}/diff`;
+        compare.target = "_blank";
+        compare.rel = "noopener noreferrer";
+        answer.append(compare);
         const confirm2 = text("button", "Confirm reviewed change");
         confirm2.onclick = () => sendMessage(`/confirm ${turn.confirmation_id}`);
         answer.append(confirm2);

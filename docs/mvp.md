@@ -216,3 +216,7 @@ Unused saved versions can now be removed through an exact ten-minute review and 
 ## Reusable contact forms and private inbox
 
 The first shared dynamic backend now supports reviewed contact-form activation for an exact live publication, a platform-hosted visitor form, and an owner-only inbox accessible with `/inbox`. Name/email/message submissions use server-side Turnstile checks, atomic quotas and 30-day visibility retention. Visitor content never enters the AI context or saved chat automatically. Publishing/restoring disables intake until a fresh review. Static exports remain independent of hosted form settings. See `docs/contact-forms.md` for the runtime contract, retention and acceptance limits. This advances the contact-form requirement described as future work in the v0.4 Word snapshot; broader CRUD apps, isolated execution, email delivery and provider acceptance remain unfinished.
+
+## Private version comparisons
+
+Customers can inspect exact saved changes through `/diff`, natural-language comparison requests, private draft links and publication-review links. Text, positional sections and photo references are compared with a selected or live baseline; chat links retain their exact baseline across later publications. Foreign/project-mismatched versions and stale review pages are rejected. This implements the saved-version comparison requirement for the existing components, with no model use for guided reads. It does not compare arbitrary backend code or application database state. See `docs/version-comparisons.md`.
