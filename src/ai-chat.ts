@@ -111,10 +111,11 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     let proposal;
     if(canFollow&&inspectionRequest(result.text)){
       const lookup=await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
-      const next=inspectionMessages(messages,lookup.reply);
+      const inspection='inspection' in lookup&&typeof lookup.inspection==='string'?lookup.inspection:lookup.reply;
+      const next=inspectionMessages(messages,inspection);
       if(next&&new TextEncoder().encode(JSON.stringify(next)).length+512<=followupInputBound){
         // Persist the lookup before dispatch; lost acknowledgments never retry it.
-        await db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,lookup.reply,result.inputTokens,result.outputTokens).run();
+        await db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,inspection,result.inputTokens,result.outputTokens).run();
         const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`whumpo-${userId}`},next,transport);
         if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
         result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
