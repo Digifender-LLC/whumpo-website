@@ -26,7 +26,7 @@ GitHub is source storage only. There are no Actions workflows, paid marketplace 
 
 ## Budget and scope
 
-The user authorized the existing account's included Workers/D1 allowance. No plan upgrade or paid-only service is enabled. Workers Static Assets, a workspace Worker, a separate public-site Worker, one D1 database, and a free Turnstile widget form the deployed stack. Allowances are shared with existing apps; this is not a separate free account or an account-wide spending cap. See [deployment notes](docs/deployment.md).
+The user authorized the existing account's included Workers/D1 allowance. No plan upgrade or paid-only service is enabled. Workers Static Assets, a workspace Worker, a separate public-site Worker, one D1 database, a private R2 photo bucket, and a free Turnstile widget form the deployed stack. Allowances are shared with existing apps; this is not a separate free account or an account-wide spending cap. See [deployment notes](docs/deployment.md).
 
 Test limits: 50 accounts, 20 projects per account, 10 retained sessions per user, 10 auth requests per minute per IP and location, and 120 API requests per minute per IP and location. Each account can save ten passkeys. New passkey accounts receive a one-use recovery code; using it rotates the code and revokes previous sessions. Adding/removing passkeys or replacing recovery codes requires authentication within ten minutes. Keep a backup passkey and store the recovery code safely. Email-based password reset is not implemented.
 
@@ -46,7 +46,7 @@ The current delivery checklist and commercial model are in [docs/mvp.md](docs/mv
 
 The deployed test uses OpenCode Go at `https://opencode.ai/zen/go/v1`, model `muse-spark-1.3-contributor`, Responses protocol. `AI_API_KEY` is stored as a Worker secret; the supplied `opencode.key` is ignored by Git and never included in assets. There is no automatic provider/model fallback. Contributor prompts and replies may be used for training; the workspace displays this notice.
 
-Guided onboarding and account commands are free. After creating a draft project, ordinary messages use the model; `/ask question` invokes it at any onboarding step. The model currently helps plan and explain code; it has no site execution tools. Usage reserves a bounded amount before dispatch, settles reported input/output (including reasoning) tokens, and never automatically retries uncertain inference. Use `/usage` or Details → Usage for balances; `/credits on` opts into spending existing credits only. Credit purchases are disabled.
+Guided onboarding and account commands are free. After creating a draft project, ordinary messages use the model; `/ask question` invokes it at any onboarding step. The model can propose private website drafts, focused edits and publication reviews through validated component contracts; it cannot confirm publication or execute arbitrary backend code. Usage reserves a bounded amount before dispatch, settles reported input/output (including reasoning) tokens, and never automatically retries uncertain inference. Use `/usage` or Details → Usage for balances; `/credits on` opts into spending existing credits only. Credit purchases are disabled.
 
 Billing endpoints: `GET /api/billing`, `POST /api/billing/preferences`. Browser input cannot grant credits or select a paid entitlement. Jarvis ports and remaining reusable components are documented in [docs/jarvis-reuse.md](docs/jarvis-reuse.md).
 
@@ -55,3 +55,5 @@ Use `/build`, `/build clay`, or `/build forest` after creating a project to save
 Publication commands: `/versions` lists saved versions; `/publish VERSION_ID` reviews a release; `/restore VERSION_ID` reviews restoring an earlier release; `/unpublish PROJECT_ID` reviews taking a site offline. Confirm the exact review within ten minutes using `/confirm REVIEW_ID` or its chat button. Explore allows one live site; the database enforces this at confirmation. Public pages are served by the separate `tellumo-sites` Worker at `sites.digifender.com/s/PROJECT_ID`.
 
 Deploy the public host with `pnpm deploy:sites` after applying remote migrations. It has only the D1 binding and exposes only read-only published-site routes. `pnpm test:publications` uses disposable local D1 state to verify confirmation, concurrency, ownership, quotas, restore and unpublish.
+
+Use `/files` or Details → Project photos for private uploads. JPEG, PNG and WebP inputs are resized in your browser and stored as metadata-stripped JPEGs. Photos are not yet attached to site versions. See [photo storage](docs/photos.md).

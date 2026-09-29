@@ -1,3 +1,4 @@
+import { FileError, uploadPhoto, listPhotos, readPhoto, cleanupPhotos } from './files';
 import { ownedExport } from './exports';
 import { checkoutEnabled, createCheckout, stripeWebhook } from './checkout';
 import { componentCatalog, previewHeaders } from './components';
@@ -170,6 +171,11 @@ async function handle(request: Request, env: Env): Promise<Response> {
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
   if (method === "GET" && pathname === "/api/components") return json({components:componentCatalog});
+  const filesMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/files(?:\/([0-9a-f-]{36}))?$/);
+  if (filesMatch && method === 'GET' && !filesMatch[2]) return json(await listPhotos(env.DB,user.id,filesMatch[1]));
+  if (filesMatch && method === 'PUT' && filesMatch[2]) return json(await uploadPhoto(request,env,user.id,filesMatch[1],filesMatch[2]));
+  const photoMatch=pathname.match(/^\/api\/files\/([0-9a-f-]{36})$/);
+  if (photoMatch && method === 'GET') return readPhoto(env,user.id,photoMatch[1]);
   const exportMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/export$/);
   if (method === 'GET' && exportMatch) {
     const archive = await ownedExport(env.DB, user.id, exportMatch[1]);
@@ -269,13 +275,14 @@ async function handle(request: Request, env: Env): Promise<Response> {
 }
 
 export default {
+  async scheduled(_event: ScheduledController, env: Env) { await cleanupPhotos(env); },
   async fetch(request: Request, env: Env): Promise<Response> {
     const requestId = crypto.randomUUID();
     try {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof AuthError || cause instanceof BillingError) return error(cause.status, cause.message);
+      if (cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

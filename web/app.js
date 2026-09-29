@@ -94,6 +94,7 @@ async function loadDashboard(user) {
 }
 async function sendMessage(content) {
   if (sending || !content.trim()) return;
+  if (["/files", "show files", "show photos", "upload a photo"].includes(content.trim().toLowerCase())) { await openFiles(); return; }
   if (["/security", "/passkeys"].includes(content.trim().toLowerCase())) { await openSecurity(); return; }
   sending = true;
   $("#chat-form button").disabled = true;
@@ -190,6 +191,52 @@ async function loadPasskeys() {
     }; row.append(remove); list.append(row);
   }
 }
+let pendingPhoto;
+let photoUploading=false;
+async function refreshPhotos() {
+  const project=$("#files-project").value, list=$("#files-list"); list.replaceChildren();
+  if(!project) { $("#files-status").textContent="Create a project in chat before uploading photos."; return; }
+  const data=await api(`/projects/${project}/files`);
+  for(const file of data.files) {
+    const row=text('article','', 'photo-row');row.append(text('p',`${file.name} · ${file.width} × ${file.height} · ${Math.ceil(file.size/1024)} KiB${file.status==='pending'?' · Upload awaiting confirmation':''}`));
+    if(file.status==='ready'){const img=document.createElement('img');img.src=`/api/files/${file.id}`;img.alt=file.name;img.loading='lazy';row.append(img);const link=text('a','Open private photo');link.href=img.src;link.target='_blank';link.rel='noopener noreferrer';row.append(link);}
+    list.append(row);
+  }
+  if(!data.files.length)list.append(text('p','No photos uploaded to this project yet.'));
+}
+async function openFiles() {
+  try {
+    const {projects}=await api('/projects'), select=$("#files-project"), previous=select.value;select.replaceChildren();
+    for(const project of projects){const option=document.createElement('option');option.value=project.id;option.textContent=project.name;select.append(option);}
+    if(projects.some(p=>p.id===previous))select.value=previous;
+    $("#photo-upload").disabled=photoUploading||!projects.length;$("#files-status").textContent='';await refreshPhotos();$("#files-dialog").showModal();
+  }catch(error){showMessage(error.message);}
+}
+$("#files-open").onclick=openFiles;$("#files-close").onclick=()=>$("#files-dialog").close();
+$("#files-project").onchange=async()=>{pendingPhoto=undefined;try{await refreshPhotos();}catch(error){$("#files-status").textContent=error.message;}};
+$("#photo-input").onchange=()=>{pendingPhoto=undefined;$("#photo-name").value=($("#photo-input").files[0]?.name??'').replace(/\.[^.]+$/,'').slice(0,100);};
+$("#photo-name").oninput=()=>{pendingPhoto=undefined;};
+async function preparePhoto(file){
+ if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error('Choose a JPEG, PNG or WebP photo up to 10 MiB.');
+ const bitmap=await createImageBitmap(file);
+ try {
+  const scale=Math.min(1,1600/Math.max(bitmap.width,bitmap.height)), canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+  const context=canvas.getContext('2d');if(!context)throw new Error('Your browser could not prepare this photo');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(bitmap,0,0,canvas.width,canvas.height);
+  let blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.85));
+  if(blob?.size>1048576)blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.65));
+  if(!blob||blob.size>1048576)throw new Error('This photo is too detailed for the test upload limit. Choose a smaller image.');return blob;
+ }finally{bitmap.close();}
+}
+$("#photo-form").onsubmit=async event=>{
+ event.preventDefault();if(photoUploading)return;photoUploading=true;const button=$("#photo-upload");button.disabled=true;$("#files-project").disabled=true;$("#photo-input").disabled=true;$("#photo-name").disabled=true;
+ try {
+  $("#files-status").textContent='Preparing and uploading your private photo…';
+  if(!pendingPhoto)pendingPhoto={id:crypto.randomUUID(),project:$("#files-project").value,name:$("#photo-name").value.trim(),blob:await preparePhoto($("#photo-input").files[0])};
+  const response=await fetch(`/api/projects/${pendingPhoto.project}/files/${pendingPhoto.id}`,{method:'PUT',credentials:'same-origin',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(pendingPhoto.name)},body:pendingPhoto.blob});const data=await response.json();if(!response.ok)throw new Error(data.error||'Photo upload could not be confirmed');
+  pendingPhoto=undefined;$("#photo-form").reset();await refreshPhotos();$("#files-status").textContent='Photo saved privately. It has not been published or sent to the AI.';
+ }catch(error){$("#files-status").textContent=error.message;}
+ finally{photoUploading=false;button.disabled=false;$("#files-project").disabled=false;$("#photo-input").disabled=false;$("#photo-name").disabled=false;}
+};
 function renderBilling(data) {
   $("#billing-summary").textContent = `${data.plan.name} · ${data.period}: ${data.quota.available} of ${data.quota.allowance} monthly units available, ${data.quota.spent} used, ${data.quota.reserved} held. ${data.credits.available} credits available; ${data.credits.reserved} held. Monthly units reset on the first day (UTC). Credits carry over.`;
   $("#overage-enabled").checked = data.credits.overageEnabled;
