@@ -1,5 +1,7 @@
+import {workspaceNavigationHelp} from './workspace-navigation';
 // Server-authored help is available without model requests or usage reservations.
 const guides:Record<string,string>={
+ workspace:workspaceNavigationHelp,
  websites:`Websites
 Tell me what you want to put online, or describe a change to an existing site. /ask YOUR_QUESTION asks the agent a question.
 
@@ -115,6 +117,7 @@ Start a site: describe your idea, or use /new.
 See your services: /projects. Check usage: /usage.
 
 Choose a guide:
+/help workspace — navigate your workspace and custom pages
 /help websites — drafts, previews, publishing and restoration
 /help photos — uploads and website photos
 /help cms — articles, live edits, publishing and discarding changes

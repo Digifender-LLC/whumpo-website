@@ -1,3 +1,4 @@
+import { findWorkspacePage } from '../src/workspace-navigation.ts';
 import { createProfile } from './profile.js';
 import { createAppAccess } from './app-access.js';
 import { publicPlans } from '../src/plans.ts';
@@ -109,5 +110,8 @@ export function createDashboard({api,text,sendMessage,showMessage,controls}){
   d.showModal=()=>{active=parent;render();activePanel=d;content.hidden=true;$('#view-title').textContent=d.querySelector('h2').textContent;document.title=$('#view-title').textContent+' — TownHello';$('#workspace-stage').setAttribute('aria-label',$('#view-title').textContent);$('#view-description').textContent='';$('#customize-dashboard').hidden=true;const back=$('#workspace-back');back.textContent='← '+(parent==='settings'?'Settings':'Dashboard');back.hidden=false;back.onclick=()=>choose(parent);$('#workspace-stage').scrollTop=0;d.show();};
   d.addEventListener('close',()=>{if(activePanel===d){activePanel=null;render();}});
  }
- return {openAccess,showChat(){choose('chat');},async start(){await profile.load();$('#primary-navigation').hidden=false;$('#sidebar-account').hidden=false;await refresh();},refresh};
+ return {async navigate(destination){
+  if(destination.view==='page'||destination.view==='pages'){const latest=await api('/workspace/dashboard');data=latest;navigation();if(destination.view==='pages'){choose('chat');showMessage(data.layout.tabs.length?'Your pages: '+data.layout.tabs.map(t=>t.label).join(', ')+'. Use /page followed by its name.':'No custom pages yet. Ask TownHello to build a page for your workflow.');return;}const tab=findWorkspacePage(data.layout.tabs,destination.label);if(!tab){render();showMessage('Choose one unique page name from Your pages, or use /pages to see the list.');return;}choose(tab.id);return;}
+  choose(destination.view==='appearance'?'settings':destination.view);
+ },openAccess,showChat(){choose('chat');},async start(){await profile.load();$('#primary-navigation').hidden=false;$('#sidebar-account').hidden=false;await refresh();},refresh};
 }
