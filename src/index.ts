@@ -1,3 +1,4 @@
+import {BackendError,listBackends,saveBackend,testBackend} from './backend-versions';
 import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage} from './version-diff';
@@ -183,6 +184,14 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  const backendRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backends(?:\/([0-9a-f-]{36})\/test)?$/);
+  if(backendRoute){
+    if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1])});
+    if(method==='POST'){
+      const data=await body(request);if(!data)return error(400,'A bounded JSON request is required');
+      return backendRoute[2]?json(await testBackend(env.DB,env.BACKEND_RUNTIME,user.id,backendRoute[1],backendRoute[2],data.id,data.input)):json(await saveBackend(env.DB,user.id,backendRoute[1],data.id,data.source),201);
+    }
+  }
   const inboxMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/inbox$/);
   if(method==='GET'&&inboxMatch)return json(await contactInbox(env.DB,user.id,inboxMatch[1]));
   const messageMatch=pathname.match(/^\/api\/contact-messages\/([0-9a-f-]{36})$/);
@@ -373,7 +382,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env);
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
+      if (cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return json({ error: "Internal error", requestId }, 500);
     }

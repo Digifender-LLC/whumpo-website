@@ -68,5 +68,11 @@
       "17 3 * * *",
       "47 * * * *"
     ]
-  }
+  },
+  "services": [
+    {
+      "binding": "BACKEND_RUNTIME",
+      "service": "tellumo-runtime"
+    }
+  ]
 }

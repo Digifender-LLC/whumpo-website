@@ -52,7 +52,9 @@
     "test:version-diff": "node tests/version-diff.mjs",
     "test:first-ai-journey": "node tests/first-ai-journey.mjs",
     "test:explore-allowance": "node tests/explore-allowance.mjs",
-    "test:backend-runtime": "node tests/backend-runtime.mjs"
+    "test:backend-runtime": "node tests/backend-runtime.mjs",
+    "test:backend-versions": "node tests/backend-versions.mjs",
+    "test:backend-http": "node tests/backend-http.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
