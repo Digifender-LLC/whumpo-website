@@ -158,3 +158,7 @@ Added immutable, tested-version public endpoint reviews, owner-only confirmation
 ### Interactive website form progress
 
 Reviewed website forms now send bounded numeric/text/boolean fields to the exact approved public function and show plain-text/JSON results. Website, backend and settings revisions guard activation; changing either published artifact hides the form. Browser acceptance used the real isolated runtime and verified result 30, literal returned markup and DOM method-name collision handling. Existing static previews/exports remain static; arbitrary frontend layouts, application authentication, persistent visitor data and full app recovery remain open.
+
+### Persistent application data foundation
+
+Added an internal visitor/session/document engine with separate application identities, hashed one-day sessions, per-visitor documents, immutable execution receipts and atomic revision-checked writes. D1 fixtures verify tenant isolation, retry/lost-acknowledgment behavior, concurrent writes and revocation/program changes. No public route or model tool exposes this engine; stateless endpoint approval does not authorize visitor storage. Owner activation reviews, visitor passkeys, authenticated frontend/data routes, lifecycle/retention and recovery remain necessary. See `docs/app-data.md`; migration 0050 is local-only at this milestone.
