@@ -22,4 +22,17 @@ Both actions share the existing usage reservation and persisted AI-response tran
 
 `test:workspace-agent` covers atomic project/first-version creation, no publication, source receipts, foreign/missing exports, invalid properties, replay, lost commit acknowledgement and project-limit refunds. `test:site-agent` retains edit, photo, publication-review and validation coverage.
 
-The action vocabulary is intentionally explicit and validated, but model intent classification remains probabilistic. The prompt asks for clarification when the project target or required details are missing. Read-only workspace inspection, domain provisioning, provider authorization and arbitrary backend execution are not implemented by these two actions. Source export still depends on an exact version known in the bounded context; `/versions` exposes older choices.
+The action vocabulary is intentionally explicit and validated, but model intent classification remains probabilistic. The prompt asks for clarification when the project target or required details are missing. Domain provisioning, provider authorization and arbitrary backend execution remain unfinished. Read-only inspection is described below. Source export still depends on an exact version known in the bounded context; `/versions` exposes older choices.
+
+
+## Read-only workspace inspection
+
+The `inspect` action accepts an allowlisted scope: projects, project, versions, version, activity, usage or domains. Single project/version scopes require an exact ID; versions can be filtered by project. Other scopes reject target IDs. Extra fields, arbitrary queries, URLs and unsupported scopes are rejected. Every database read is scoped to the authenticated owner. Foreign and missing IDs return the same not-found result.
+
+The server replaces the proposed model reply with the actual record summary. Inspecting a version shows saved text, theme and publication state without modifying it. These tools execute no publication, purchase, DNS or provider mutation. Usage reads can initialize normal billing metadata; they do not grant units or credits. An AI usage snapshot explicitly identifies the current request's pending hold, and directs the user to `/usage` for the settled balance.
+
+A compact index includes all twenty permitted project IDs, names and statuses; rich context remains bounded to five projects and the latest saved version. This lets the model find older projects, inspect their versions and use an exact ID on a subsequent request. Preview permission is checked against the database owner rather than membership in the rich-context subset. The index and all detailed context remain private to the current account.
+
+The current inspection returns its result directly to the user in one AI turn. It does not run an automatic second inference or chain an inspection into a mutation. A follow-up can reference the returned version; the existing bounded conversation history supplies recent results. Large results or older versions may require the user to specify the exact displayed ID. `/project PROJECT_ID`, `/inspect VERSION_ID` and `show my saved versions` are deterministic alternatives requiring no model units. Natural-language interpretation consumes ordinary AI units.
+
+`test:workspace-read` verifies read-only statements, server-generated receipts, tenant boundaries, exact records, missing targets, rejected arbitrary query/URL fields, replay, free guided inspection and discovery of projects outside the five-project detailed context. Version, site-agent and workspace-agent contracts continue to govern subsequent changes.

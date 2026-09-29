@@ -170,3 +170,11 @@ Workspace Worker `26882229-3d31-49bb-8f34-0151400802cf` and public host `d8a33ab
 TypeScript, workspace-agent action tests and existing site-agent regressions passed. Checks cover atomic artifacts, quota refunds, rejected fields, foreign/missing export versions, replay and recovery after a lost transaction acknowledgement.
 
 A live Muse Spark 1.3 Contributor request created a synthetic Cedar Garden Demo project with its first private website. Replaying the same message created no duplicate or additional charge. A second natural-language request produced an authenticated source-download link. The ZIP was extracted and its HTML SHA-256 matched the manifest; anonymous export returned 401 and the public site returned 404. The two AI requests settled 16 units with zero held. The ephemeral account, project, draft and receipts were removed afterward. Existing deterministic `/new` and `/export` remain free of model charges.
+
+## Authoritative workspace inspection — September 29, 2026
+
+Workspace Worker `2d7ecf99-2ad1-4283-82ee-5f11ea90ba44` and public host `c809f0f8-3630-465b-8890-9458e1a66ef3` are deployed. No new migration or service was required. The AI can select validated read-only inspection scopes; deterministic project/version inspection and saved-version aliases remain free.
+
+TypeScript, workspace-read tests and workspace-agent regressions passed. Coverage includes server-derived output, foreign/missing targets, rejected query/URL fields, replay, guided zero-unit access, all twenty project identities and preview ownership beyond the five-project detailed context.
+
+A live Muse request listed both exact database versions for a synthetic project, including the earlier version absent from its initial detailed context. The result was the server inspection receipt. Replay made no extra charge; `/inspect` returned the earlier forest version at no additional cost. The project remained unpublished (public HTTP 404). Six units settled with zero held. The temporary account and dependent project/version records were removed.
