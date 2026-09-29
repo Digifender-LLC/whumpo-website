@@ -43,7 +43,7 @@ export function cmsRequestAllowed(method:string,path:string,body:string){
  if(method==='GET'&&['/_emdash/api/setup/status','/_emdash/api/auth/me','/_emdash/api/schema/collections'].includes(path)&&body==='')return true;
  const item=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)$/);
  if(method==='GET'&&item&&cmsItemId.test(item[2])&&body==='')return true;
- const publish=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)\/publish$/);
+ const publish=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)\/(?:publish|unpublish)$/);
  if(method==='POST'&&publish&&cmsItemId.test(publish[2])){try{const v=JSON.parse(body);return Object.keys(v).length===1&&typeof v._rev==='string'&&/^[A-Za-z0-9+/=_-]{4,256}$/.test(v._rev);}catch{return false;}}
  if(method==='PUT'&&item&&cmsItemId.test(item[2]))return validCMSEdit(body);
  if(method==='POST'&&/^\/_emdash\/api\/content\/(posts|pages)$/.test(path))return validCMSDraft(body);
