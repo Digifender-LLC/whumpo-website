@@ -6,6 +6,11 @@ export default {
   const url=new URL(request.url),headers={...previewHeaders,'cache-control':'no-store'};
   if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405,headers:{...headers,allow:'GET, HEAD'}});
   try{
+   if(!['sites.digifender.com','localhost','127.0.0.1'].includes(url.hostname)){
+    const mapping=await env.DB.prepare("SELECT c.project_id FROM domain_connections c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();
+    if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
+    url.pathname='/s/'+mapping.project_id+url.pathname;
+   }
    const asset=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/assets\/([0-9a-f-]{36})\.jpg$/);
    if(asset){
     const photo=await env.DB.prepare("SELECT f.object_key,f.size,f.digest FROM publications s JOIN version_photos v ON v.version_id=s.version_id JOIN project_files f ON f.id=v.file_id AND f.project_id=s.project_id WHERE s.project_id=? AND f.id=? AND f.status='ready'").bind(asset[1],asset[2]).first<{object_key:string;size:number;digest:string}>();

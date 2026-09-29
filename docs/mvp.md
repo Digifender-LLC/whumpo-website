@@ -171,3 +171,7 @@ Repository selection and explicit source-backup reviews are implemented. Readabl
 ## Conversational domain ownership — September 29, 2026
 
 AI proposals can prepare domain TXT ownership instructions and check DNS using the existing owner-scoped domain operations. Replies are server-generated, errors release reservations and retries reuse the saved result. Controlled tests cover cross-user IDs, DNS failures, expiry, quota refunds and lost acknowledgements. Hosting, certificates, purchase/renewal and customer Cloudflare authorization remain unfinished; the full domain checklist stays open.
+
+## Custom hostname provisioning implementation — September 29, 2026
+
+Reviewed provisioning, bounded provider access, exact-resource cleanup, direct-CNAME/TXT/certificate checks and expiring public-routing authorization are implemented. The Domains panel includes review/confirm/status/disconnect controls. Activation remains disabled pending the zone token, fallback origin, safe route exclusions and real TLS/routing acceptance. Unknown provider IDs after uncertain requests require operator reconciliation. Apex/proxied-DNS support and the long-lived ownership lifecycle remain unfinished. See [hosting design](integrations/domain-hosting.md). The full domain requirement remains open.

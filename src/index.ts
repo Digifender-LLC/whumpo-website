@@ -1,3 +1,4 @@
+import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
 import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubInstallations} from './github-connection';
 import {DomainError,listDomains} from './domains';
@@ -175,7 +176,14 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
-  if (method === "GET" && pathname === "/api/domains") return json(await listDomains(env.DB,user.id));
+  if(method==='GET'&&pathname==='/api/domain-hosting')return json({enabled:!!hostingConfig(env),connections:await hostingConnections(env.DB,user.id)});
+  if(method==='POST'&&pathname==='/api/domain-hosting/review'){
+    const data=await body(request);if(typeof data?.id!=='string'||typeof data.claimId!=='string')return error(400,'Choose a domain ownership claim.');
+    return json(await reviewHosting(env.DB,user.id,data.id,data.claimId,hostingConfig(env)));
+  }
+  const hostingAction=pathname.match(/^\/api\/domain-hosting\/([0-9a-f-]{36})\/(confirm|refresh|disconnect)$/);
+  if(method==='POST'&&hostingAction){const fn=hostingAction[2]==='confirm'?confirmHosting:hostingAction[2]==='refresh'?refreshHosting:disconnectHosting;return json(await fn(env.DB,user.id,hostingAction[1],hostingConfig(env)));}
+  if (method === "GET" && pathname === "/api/domains") return json({...await listDomains(env.DB,user.id),connectionEnabled:!!hostingConfig(env)});
   if (method === "GET" && pathname === "/api/components") return json({components:componentCatalog});
   const filesMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/files(?:\/([0-9a-f-]{36}))?$/);
   if (filesMatch && method === 'GET' && !filesMatch[2]) return json(await listPhotos(env.DB,user.id,filesMatch[1]));
@@ -306,6 +314,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
+    if(_event.cron==='47 * * * *'){await maintainHosting(env.DB,hostingConfig(env));return;}
     const results=await Promise.allSettled([cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env))]);
     if(results.some(result=>result.status==='rejected'))throw Error('Scheduled maintenance failed');
   },

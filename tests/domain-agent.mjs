@@ -22,7 +22,7 @@ async function send(user,action,database=db){const state=await readChat(db,user.
 try{
  const owner=await account(),other=await account();
  const prepare={kind:'domain',operation:'prepare',projectId:owner.project,hostname:'WWW.EXAMPLE.COM'};
- const created=await send(owner,prepare);assert.equal(created.turn.status,'completed');assert.match(created.turn.assistant_text,/TXT record/);assert.ok(!created.turn.assistant_text.includes('bought'));assert.match(created.turn.assistant_text,/Not connected/);
+ const created=await send(owner,prepare);assert.equal(created.turn.status,'completed');assert.match(created.turn.assistant_text,/TXT record/);assert.ok(!created.turn.assistant_text.includes('bought'));assert.match(created.turn.assistant_text,/does not change hosting/);
  let row=await db.prepare('SELECT * FROM domain_claims WHERE id=?').bind(created.id).first();assert.equal(row.project_id,owner.project);assert.equal(row.hostname,'www.example.com');
  const context=await siteContext(db,owner.id);assert.equal(context.domains[0].id,created.id);assert.ok(!JSON.stringify(context).includes(row.token));assert.equal((await siteContext(db,other.id)).domains.length,0);
  const priorCalls=calls;await sendAIChat(db,owner.id,created.id,created.revision,'Help with my domain',cfg,provider(prepare));assert.equal(calls,priorCalls);

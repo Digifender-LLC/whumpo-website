@@ -555,7 +555,7 @@
       await openConnections();
       return;
     }
-    if (["/domains", "show domains"].includes(content.trim().toLowerCase())) {
+    if (["/domains", "show domains", "connect my domain", "disconnect my domain", "check domain hosting"].includes(content.trim().toLowerCase())) {
       await openDomains();
       return;
     }
@@ -979,7 +979,7 @@
   start();
   async function openDomains() {
     try {
-      const [{ projects }, { domains }] = await Promise.all([api("/projects"), api("/domains")]);
+      const [{ projects }, { domains }, hosting] = await Promise.all([api("/projects"), api("/domains"), api("/domain-hosting")]);
       const select = $("#domain-project");
       select.replaceChildren();
       for (const project of projects) {
@@ -994,7 +994,7 @@
       list.replaceChildren();
       for (const domain of domains) {
         const row = text("article", "", "panel");
-        row.append(text("h3", domain.hostname), text("p", domain.status.replaceAll("_", " ") + " \xB7 Not connected"));
+        row.append(text("h3", domain.hostname), text("p", domain.status.replaceAll("_", " ") + " \xB7 " + (hosting.connections.some((c) => c.claimId === domain.id && c.connected) ? "Connected" : "Not connected")));
         row.append(text("p", "TXT record name: " + domain.record.name), text("p", "TXT record value: " + domain.record.value), text("p", "Proof expires: " + domain.expiresAt));
         const check = text("button", domain.status === "expired" ? "Renew ownership proof" : "Check DNS proof");
         check.type = "button";
@@ -1003,9 +1003,54 @@
           sendMessage(domain.status === "expired" ? `/domain ${domain.hostname} ${domain.projectId}` : `/verify-domain ${domain.id}`);
         };
         row.append(check);
+        const connect = text("button", "Review hosting connection");
+        connect.disabled = !hosting.enabled || domain.status === "expired";
+        connect.onclick = async () => {
+          connect.disabled = true;
+          try {
+            await api("/domain-hosting/review", { method: "POST", body: JSON.stringify({ id: crypto.randomUUID(), claimId: domain.id }) });
+            await openDomains();
+          } catch (error) {
+            $("#domains-status").textContent = error.message;
+          } finally {
+            connect.disabled = !hosting.enabled;
+          }
+        };
+        row.append(connect);
         list.append(row);
       }
       if (!domains.length) list.append(text("p", "No domains added yet."));
+      if (!hosting.enabled) list.append(text("p", "Domain hosting is awaiting platform configuration. Ownership proofs remain available."));
+      for (const connection of hosting.connections) {
+        const row = text("article", "", "panel");
+        row.append(text("h3", connection.hostname + " \xB7 Hosting"), text("p", connection.connected ? "Connected" : connection.state.replaceAll("_", " ")), text("p", "Project: " + connection.projectId), text("p", "Certificate: " + (connection.certificateStatus || "Not requested")), text("p", connection.detail));
+        const action = (label, operation) => {
+          const button = text("button", label);
+          button.onclick = async () => {
+            button.disabled = true;
+            try {
+              await api("/domain-hosting/" + connection.id + "/" + operation, { method: "POST", body: "{}" });
+              await openDomains();
+            } catch (error) {
+              $("#domains-status").textContent = error.message;
+            } finally {
+              button.disabled = false;
+            }
+          };
+          row.append(button);
+        };
+        if (connection.state === "review") {
+          row.append(text("p", "Confirming requests a hostname and TLS certificate. Once checks pass, this hostname serves the project\u2019s current published version. Future publish/restore changes also appear here."), text("p", "Review expires: " + connection.expiresAt));
+          action("Confirm hosting connection", "confirm");
+        }
+        if (["active", "provisioning", "needs_check"].includes(connection.state)) {
+          row.append(text("p", "At your DNS provider, point " + connection.hostname + " directly to " + connection.target + " using a DNS-only CNAME. Keep the TXT ownership proof current. Existing website traffic will move to TellUmo; only do this when ready."));
+          action("Check hosting status", "refresh");
+        }
+        if (connection.state === "disconnecting") action("Retry provider cleanup", "disconnect");
+        else if (!["disconnected", "expired"].includes(connection.state)) action(connection.state === "review" ? "Cancel review" : "Disconnect hosting", "disconnect");
+        list.append(row);
+      }
       $("#domains-dialog").showModal();
     } catch (error) {
       showMessage(error.message);
