@@ -93,7 +93,8 @@
     "test:agent-inspection": "node tests/agent-inspection.mjs",
     "test:backend-diff": "node tests/backend-diff.mjs",
     "test:backend-checks": "node tests/backend-checks.mjs",
-    "dev:frontend": "vite"
+    "dev:frontend": "vite",
+    "test:chat-delivery": "node tests/chat-delivery.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
