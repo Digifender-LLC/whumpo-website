@@ -439,3 +439,7 @@ Platform `bb54e8fa-2f96-48fa-89b5-1f7492cb7be7` adds US self-declaration to pass
 ## Backend import quarantine — September 30, 2026
 
 Platform `aab040f8-7c60-46ec-8344-3133f4af8214` and migration 0098 are deployed. The direct source-upload API returns 202 for an immutable private quarantine receipt rather than an executable version. Scheduled bounded triage can block or require further review, never approve. [Safety scope and evidence](content-safety.md) documents remaining scanner integration and broader ingress gaps. Type checks, quarantine HTTP/D1 tests and the actual QuickJS customer-app journey passed locally. Live readback at 16:31 UTC confirmed all 98 migrations and four new guards, Monitor mode, 16 unchanged frontend assets and health/auth/signup boundaries. No customer content was published.
+
+## Profile photo safety gate — September 30, 2026
+
+Platform `2aa7f348-b078-4a73-885a-03cbff9d1510` and migration 0099 are deployed. Uploaded profile images remain hidden pending separate clear CSAM/sexual-content checks bound to their exact digest and current policy; existing unscanned pictures also stay hidden. Built-in artwork remains usable. No detection provider or approval endpoint is configured. Profile safety/authentication tests, both type checks, build and frontend loading passed. Independent readback at 16:40 UTC verified 99 migrations, three safety guards, 16 matching assets and health/auth/signup boundaries. See [scope and remaining detection work](content-safety.md).

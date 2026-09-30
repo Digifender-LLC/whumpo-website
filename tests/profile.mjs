@@ -1,3 +1,4 @@
+Error.stackTraceLimit=0;
 import {timingSafeEqual} from 'node:crypto';
 // Workers exposes this Web Crypto extension; Node's test runtime needs the equivalent.
 crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
@@ -27,10 +28,20 @@ try{
  const results=await Promise.allSettled([updateProfile(db,user,{revision:2,name:'A'}),updateProfile(db,user,{revision:2,name:'B'})]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
  function photo(body,revision=3){return new Request('https://whumpo.com/api/profile/photo',{method:'PUT',headers:{'content-type':'image/jpeg','if-match':String(revision)},body});}
  const marker=Buffer.from('private-metadata'),len=marker.length+2,withMetadata=Buffer.concat([jpeg.subarray(0,2),Buffer.from([255,225,len>>8,len&255]),marker,jpeg.subarray(2)]);
- await updateProfilePhoto(db,user,photo(withMetadata));const response=await profilePhoto(db,user);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.ok(!Buffer.from(await response.arrayBuffer()).includes(marker));assert.equal((await readProfile(db,user)).hasPhoto,1);await assert.rejects(()=>profilePhoto(db,other));
+ await updateProfilePhoto(db,user,photo(withMetadata));
+ assert.equal((await readProfile(db,user)).hasPhoto,0);assert.equal((await readProfile(db,user)).photoSafety,'pending');
+ await assert.rejects(()=>profilePhoto(db,user),e=>e.status===423);
+ await assert.rejects(()=>updateProfile(db,user,{revision:4,photoSafety:'approved'}));
+ await assert.rejects(()=>db.prepare("UPDATE profile_photo_safety SET state='approved',csam_check='clear',scanner_reference='synthetic-only',expires_at=? WHERE user_id=?").bind(new Date(Date.now()+60000).toISOString(),user).run());
+ // Synthetic trusted receipt tests serving gates; no real scanner is configured.
+ await db.prepare("UPDATE profile_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic-only',expires_at=? WHERE user_id=?").bind(new Date(Date.now()+60000).toISOString(),user).run();
+ const response=await profilePhoto(db,user);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.ok(!Buffer.from(await response.arrayBuffer()).includes(marker));assert.equal((await readProfile(db,user)).hasPhoto,1);await assert.rejects(()=>profilePhoto(db,other));
  const large=await readFile(dir+'/large.jpg');await assert.rejects(()=>updateProfilePhoto(db,user,photo(large,4)));await assert.rejects(()=>updateProfilePhoto(db,user,photo(Buffer.alloc(40000),4)));await assert.rejects(()=>updateProfilePhoto(db,user,photo(Buffer.from('<svg/>'),4)));
+ await db.prepare("UPDATE profile_photo_safety SET state='blocked' WHERE user_id=?").bind(user).run();
+ assert.equal((await readProfile(db,user)).photoSafety,'blocked');await assert.rejects(()=>profilePhoto(db,user),e=>e.status===423);
+ await assert.rejects(()=>db.prepare("UPDATE profile_photo_safety SET state='approved' WHERE user_id=?").bind(user).run());
  await updateProfile(db,user,{revision:4,share_context:false});assert.equal(await agentProfile(db,user),null);
- await updateProfilePhoto(db,user,new Request('https://whumpo.com/api/profile/photo',{method:'DELETE',headers:{'if-match':'5'}}));assert.equal((await readProfile(db,user)).hasPhoto,0);await assert.rejects(()=>profilePhoto(db,user));
+ await updateProfilePhoto(db,user,new Request('https://whumpo.com/api/profile/photo',{method:'DELETE',headers:{'if-match':'5'}}));assert.equal((await readProfile(db,user)).hasPhoto,0);assert.equal((await db.prepare('SELECT count(*) n FROM profile_photo_safety WHERE user_id=?').bind(user).first()).n,0);await assert.rejects(()=>profilePhoto(db,user));
  const token='a'.repeat(64),second='b'.repeat(64),stamp=new Date().toISOString();for(const t of [token,second])await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(t),user,new Date(Date.now()+3600000).toISOString(),stamp).run();
  async function api(path,method='GET',body,session=token,origin='https://whumpo.com'){return worker.fetch(new Request('https://whumpo.com/api'+path,{method,headers:{origin,'content-type':'application/json',cookie:'whumpo_session='+session},body:body?JSON.stringify(body):undefined}),env,{waitUntil(){}});}
  assert.equal((await api('/profile','GET',null,'')).status,401);assert.equal((await api('/profile','PATCH',{revision:5,name:'No'},token,'https://evil.example')).status,403);
@@ -48,5 +59,14 @@ try{
  const raced=await hashPassword('Concurrent-replacement-password',pepper);
  const racingDB=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const stmt=target.prepare(sql);if(!sql.startsWith('SELECT id, email, password_salt, password_hash FROM users'))return stmt;return {bind(...args){const bound=stmt.bind(...args);return {async first(){const snapshot=await bound.first();await target.prepare('UPDATE users SET password_hash=?,password_salt=? WHERE id=?').bind(raced.hash,raced.salt,user).run();return snapshot;}};}};};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
  const raceResponse=await worker.fetch(new Request('https://whumpo.com/api/auth/login',{method:'POST',headers:{origin:'https://whumpo.com','content-type':'application/json'},body:JSON.stringify({email:user+'@example.test',password:nextPassword})}),{...env,DB:racingDB},{waitUntil(){}});assert.equal(raceResponse.status,401);assert.equal(raceResponse.headers.get('set-cookie'),null);
+ // Legacy bytes and expired/malformed approvals must never become visible.
+ await db.prepare('INSERT INTO user_profiles(user_id,photo) VALUES(?,?)').bind(other,jpeg.toString('base64')).run();
+ assert.equal((await readProfile(db,other)).photoSafety,'pending');await assert.rejects(()=>profilePhoto(db,other),e=>e.status===423);
+ for(const expiry of ['invalid-date','2000-01-01T00:00:00.000Z']){
+  let p=await readProfile(db,other);await updateProfile(db,other,{revision:p.revision,avatar_id:'star'});p=await readProfile(db,other);await updateProfilePhoto(db,other,photo(jpeg,p.revision));
+  await db.prepare("UPDATE profile_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic-only',expires_at=? WHERE user_id=?").bind(expiry,other).run();
+  assert.equal((await readProfile(db,other)).hasPhoto,0);await assert.rejects(()=>profilePhoto(db,other),e=>e.status===423);
+ }
+ assert.ok(!JSON.stringify(await readProfile(db,other)).includes('scanner_reference'));
  console.log('Profile checks passed: private photo/metadata isolation, opt-in AI context, CAS edits, strict fields, owner/session/CSRF boundaries, fresh password proof, atomic credential update and old-session revocation.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
