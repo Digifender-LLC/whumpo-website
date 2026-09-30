@@ -8,7 +8,7 @@ For future work, use the [product and delivery roadmap](docs/roadmap/README.md),
 
 ## Current product
 
-- React workspace with Chat first, a separate dashboard, workflow pages, mobile navigation, and separate Profile and Settings screens. Exact navigation requests use no AI units.
+- React workspace with Chat first, a separate dashboard, workflow pages, mobile navigation, and separate Profile and Settings screens. Chat accepts natural-language messages; critical actions use explicit review controls.
 - Passkeys by default, invite/Turnstile signup, optional password sign-in, recovery codes and revocable sessions. Guided conversational onboarding persists without requiring AI or an external account.
 - Muse-assisted private drafts and edits, saved versions, source export, and explicit publication/restore reviews. Supported static/photo sites publish to customer subdomains.
 - Bounded customer backend execution in a separate QuickJS Worker, reviewed application activation, controlled visitor pages and scoped visitor accounts/data. This is not a general-purpose VPS or unrestricted deployment environment.
@@ -51,13 +51,14 @@ Run `pnpm build` to generate assets. Never hand-edit bundles. The older owner UI
 
 The owner authorized Workers Paid ($5/month) resources, with GitHub restricted to free-tier use. New paid services, purchases and customer deployments still require the applicable review. R2 `FILES` remains private; customer credentials never enter generated source or model context. Scope resource access by owner and preserve publication/activation confirmations.
 
-For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.json`, inspect the private archive, and use `pnpm deploy apply RELEASE_ID`. Preparation pins compiled bundles/assets, SQL, four previous versions and CMS registrations before mutation; application journals migrations and each Worker step for recovery. See the [release and recovery protocol](docs/releases.md), including the required compatibility review and uncertain-operation holds. The owner authorizes all pending migrations in this private test environment; all through 0107 are applied. Provider activation remains separate. The standalone `node tools/deploy-platform.mjs` retains its build guard and registered CMS bindings but does not create a four-Worker journal. Verify live behavior after deployment. See [deployment evidence](docs/deployment.md) and [domain boundaries](docs/whumpo-migration.md).
+For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.json`, inspect the private archive, and use `pnpm deploy apply RELEASE_ID`. Preparation pins compiled bundles/assets, SQL, four previous versions and CMS registrations before mutation; application journals migrations and each Worker step for recovery. See the [release and recovery protocol](docs/releases.md), including the required compatibility review and uncertain-operation holds. The owner authorizes all pending migrations in this private test environment; all through 0108 are applied. Provider activation remains separate. The standalone `node tools/deploy-platform.mjs` retains its build guard and registered CMS bindings but does not create a four-Worker journal. Verify live behavior after deployment. See [deployment evidence](docs/deployment.md) and [domain boundaries](docs/whumpo-migration.md).
 
 `pnpm invite` creates a one-use invitation in ignored `.secrets/`. Share it privately. Never commit keys, session cookies, recovery codes or provider credentials. The supplied key files and `.secrets/` remain ignored.
 
 ## Feature references
 
 - [Private maintenance diagnostics](docs/maintenance.md) — scheduled run status and read-only backlog inspection
+- [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
 - [Data lifecycle proposal](docs/data-lifecycle.md) and [background-job decision](docs/background-jobs.md) — retention/export/closure boundaries and durable recovery design
 - [Customer benchmarks and inference privacy](docs/customer-benchmarks.md) — synthetic outcome checks, cost evidence and real-model evaluation gates
 - [Content safety and US customer eligibility](docs/content-safety.md) — policy foundations; scanning and enforcement remain launch gates
