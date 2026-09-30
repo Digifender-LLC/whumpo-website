@@ -59,6 +59,7 @@ For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.js
 
 - [Private maintenance diagnostics](docs/maintenance.md) — scheduled run status and read-only backlog inspection
 - [Data lifecycle proposal](docs/data-lifecycle.md) and [background-job decision](docs/background-jobs.md) — retention/export/closure boundaries and durable recovery design
+- [Customer benchmarks and inference privacy](docs/customer-benchmarks.md) — synthetic outcome checks, cost evidence and real-model evaluation gates
 - [Content safety and US customer eligibility](docs/content-safety.md) — policy foundations; scanning and enforcement remain launch gates
 - [Chat tools and navigation](docs/workspace-agent.md)
 - [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)

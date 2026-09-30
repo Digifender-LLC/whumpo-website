@@ -1135,6 +1135,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/customer-site-journey.mjs](../../tests/customer-site-journey.mjs)
 - [tests/customer-app-journey.mjs](../../tests/customer-app-journey.mjs)
 - [src/ai.ts](../../src/ai.ts)
+- [docs/customer-benchmarks.md](../../docs/customer-benchmarks.md)
+- [tools/benchmark.mjs](../../tools/benchmark.mjs)
+- [tests/fixtures/customer-benchmark.json](../../tests/fixtures/customer-benchmark.json)
 
 ### Execution coordination
 
@@ -1142,7 +1145,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/9. Planning owner: Unassigned.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-09-30: offline benchmark foundation passed seven scripted fixture families with unchanged source manifest; all-call inference receipt accounting and unknown total expense preserved. Provider privacy comparison recorded. No real-provider quality/cost or confidential beta acceptance; see docs/customer-benchmarks.md.
 
 ## WH-048 — Review and admit a bounded real-customer beta
 

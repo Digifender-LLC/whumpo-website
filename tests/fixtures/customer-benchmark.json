@@ -1,0 +1,13 @@
+{
+  "version": "whumpo-customer-benchmark-v1",
+  "mode": "synthetic",
+  "cases": [
+    {"id":"site","script":"tests/customer-site-journey.mjs","brief":"Copper Oven neighborhood bakery: fresh bread and pastries; private clay-theme draft, then owner-reviewed publication, edit, restore and withdrawal.","checks":["welcome-brief-and-context","validated-private-draft","exact-publication-review","lost-response-replay","byte-exact-restore","withdrawal"],"profile":"site"},
+    {"id":"edits","script":"tests/first-ai-journey.mjs","brief":"Keep Copper Oven content intact while changing theme, then headline, then adding Tuesday–Sunday 7am–2pm opening hours.","checks":["preserved-unrequested-fields","immutable-ancestry","replay-without-inference","invalid-envelope-no-draft"],"profile":"fast"},
+    {"id":"application","script":"tests/customer-app-journey.mjs","brief":"An invited member's private notebook, using input.note, separate program and visitor-page reviews, isolated saved data and recovery.","checks":["actual-quickjs","program-page-separate-reviews","form-backend-input-compatibility","visitor-isolation","recovery-export-deletion","withdrawal"],"profile":"app"},
+    {"id":"application-build","script":"tests/application-build.mjs","brief":"Generate a private note-saving backend, test synthetic input against an expected state/result, and prepare approval while leaving it unpublished.","checks":["expected-result-validation","mismatch-no-approval","hallucinated-action-assurance-replaced","unknown-test-not-redispatched","concurrent-replay"],"profile":"app"},
+    {"id":"page-design","script":"tests/app-page-design.mjs","brief":"Design a notebook form for the exact approved input.note backend without copying private visitor receipts or changing program authority.","checks":["approved-source-context","exact-program-page-revisions","private-context-exclusion","stale-and-foreign-review-denial"],"profile":"app"},
+    {"id":"conversation","script":"tests/benchmark-conversation.mjs","brief":"Ask one necessary question for an underspecified business tool; explain an unsupported always-on FFmpeg workload without inventing a deployment.","checks":["essential-clarification-no-artifact","unsupported-work-no-artifact","saved-reply-replay"],"profile":"fast"},
+    {"id":"failures","script":"tests/standard-ai-chat.mjs","brief":"Preserve successful and failed work receipts, unknown provider outcomes and zero standard customer charges during retries and contention.","checks":["failed-proposal-cost-retained","unknown-provider-held","replay-no-extra-dispatch","concurrent-admission","lost-admission-recovery","zero-standard-customer-charges"],"profile":"fast"}
+  ]
+}
