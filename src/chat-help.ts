@@ -1,7 +1,7 @@
 import {workspaceNavigationHelp} from './workspace-navigation';
 // Server-authored help is available without model requests or usage reservations.
 const guides:Record<string,string>={
- workspace:workspaceNavigationHelp,
+ workspace:workspaceNavigationHelp+'\nDownload your saved messages and replies: /export-chat, or say download my chat history. The private JSON download uses no AI or credits.',
  websites:`Websites
 Tell me what you want to put online, or describe a change to an existing site. /ask YOUR_QUESTION asks the agent a question.
 
