@@ -7,6 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
 import {authenticator} from './app-authenticator.mjs';
+import {taskListAppJourney} from './task-list-app-journey.mjs';
 const id=()=>crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-app-journey-');let proxy,runtime;
 try{
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
@@ -102,4 +103,5 @@ try{
  console.log('Owner erasure passed: explicit typed confirmation, recent session, revoked-only target, owner/origin bounds, disabled app, concurrent/lost-response retry, full credential/document/history erasure and retained aggregate usage.');
  assert.equal(executions,2);assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
  console.log('Customer app journey passed: welcome, actual QuickJS test, separate program/page reviews, public host, signed passkeys, isolated visitors, exact transition replay, recovery/export/deletion, withdrawal and historical approval safety. No live deployment or AI call.');
+ await taskListAppJourney({db,account,call,host,env,executions:()=>executions});
 }finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
