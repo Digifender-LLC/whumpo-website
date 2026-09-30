@@ -1,4 +1,5 @@
 import {linkChatReviewReply} from './chat-review-receipts';
+import {requireExtensionPlan} from './composition-plans';
 import {listBackendImports} from './backend-imports';
 import {backendNominationCommand} from './backend-nominations';
 import {listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
@@ -143,11 +144,12 @@ async function prepareBackendAction(db:D1Database,user:string,turnId:string,acti
   return {reply:describeBackendComparison(await compareBackends(db,user,action.versionId,action.baselineId)),statements:[] as D1PreparedStatement[]};
  }
  if(operation==='create'){
-  if(Object.keys(action).some(k=>!['kind','operation','projectId','source'].includes(k))||typeof action.projectId!=='string'||!uuid.test(action.projectId)||typeof action.source!=='string'||!action.source.trim()||bytes(action.source)>8192)throw new BackendError(400,'Invalid backend draft proposal');
+  if(Object.keys(action).some(k=>!['kind','operation','projectId','source','planId'].includes(k))||typeof action.projectId!=='string'||!uuid.test(action.projectId)||typeof action.source!=='string'||!action.source.trim()||bytes(action.source)>8192)throw new BackendError(400,'Invalid backend draft proposal');
   await listBackends(db,user,action.projectId);const digest=await hashToken(action.source),now=new Date().toISOString();
+  const planned=await requireExtensionPlan(db,user,action.projectId,action.planId,'pure-function');
   return {reply:`Saved an untested private backend draft.\nVersion: ${turnId}\nProject: ${action.projectId}\nSHA-256: ${digest}\nUse /backend ${turnId} to inspect the source and /test-backend ${turnId} JSON to test a non-sensitive example. It has no networking, secrets or application storage, and is not published.`,statements:[
    db.prepare("INSERT INTO backend_versions(id,project_id,source,digest,created_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND status='pending') AND EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)").bind(turnId,action.projectId,action.source,digest,now,turnId,user,action.projectId,user),
-   db.prepare("INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) SELECT ?,?,project_id,'backend.draft.created','Saved an untested private backend draft',? FROM backend_versions WHERE id=?").bind('backend:'+turnId,user,now,turnId)
+   db.prepare("INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) SELECT ?,?,project_id,'backend.draft.created','Saved an untested private backend draft',? FROM backend_versions WHERE id=?").bind('backend:'+turnId,user,now,turnId),planned(turnId)
   ]};
  }
  if(operation==='reviewAppPage'){

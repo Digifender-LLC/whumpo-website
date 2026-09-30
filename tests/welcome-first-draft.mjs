@@ -85,14 +85,14 @@ try{
  const appOwner=await account(),appTurn=crypto.randomUUID(),appCommand='/first-app '+appOwner.project,appState=(await readChat(db,appOwner.user,true)).state;
  let executions=0,appCalls=0;const backendRuntime={fetch:async(_url,init)=>{executions++;const request=JSON.parse(init.body);assert.deepEqual(request.input,{state:{},input:{note:'Synthetic note'}});return Response.json({ok:true,value:{state:{note:'Synthetic note'},result:'Saved'}});}};
  const appAction=projectId=>({kind:'backend',operation:'buildApplication',projectId,source:'export default ({input})=>({state:{note:input.note},result:"Saved"})',input:{state:{},input:{note:'Synthetic note'}},expected:{state:{note:'Synthetic note'},result:'Saved'}});
- const appTransport=async(_url,init)=>{appCalls++;assert.ok(init.body.includes('Opening hours Tuesday through Sunday'),'Full saved brief included');assert.ok(!init.body.includes('lavender telescope'));assert.ok(init.body.includes('only allowed action is backend buildApplication'));return response(appAction(appOwner.project));};
+ const appTransport=async(_url,init)=>{appCalls++;assert.ok(init.body.includes('Opening hours Tuesday through Sunday'),'Full saved brief included');assert.ok(!init.body.includes('lavender telescope'));assert.ok(init.body.includes('only allowed actions are capabilities plan and backend buildApplication'));return appCalls===1?response({kind:'capabilities',operation:'plan',projectId:appOwner.project,needs:['custom.visitor-transition'],extension:{missing:'A private notebook replaces one note; the shared task list does not match this behavior.'}}):response({...appAction(appOwner.project),planId:appTurn});};
  assert.equal(displayChatRequest(appCommand),'Build and test my first private app using my saved brief.');
  assert.equal((await sendAIChat(db,appOwner.user,appTurn,appState.revision,appCommand,config,appTransport,{backendRuntime})).status,200);
- const appHistory=await readChat(db,appOwner.user,true);assert.equal(appHistory.firstDraft,null);assert.equal(appHistory.turns.at(-1).application_confirmation_id,appTurn);assert.equal(executions,1);assert.equal(appCalls,1);
+ const appHistory=await readChat(db,appOwner.user,true);assert.equal(appHistory.firstDraft,null);assert.equal(appHistory.turns.at(-1).application_confirmation_id,appTurn);assert.equal(executions,1);assert.equal(appCalls,2);
  assert.equal((await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE project_id=?').bind(appOwner.project).first()).turn_id,appTurn);
  assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(appOwner.project).first()).enabled,0);
  assert.equal((await db.prepare('SELECT count(*) n FROM site_versions WHERE project_id=?').bind(appOwner.project).first()).n,0);
- await sendAIChat(db,appOwner.user,appTurn,appState.revision,appCommand,config,appTransport,{backendRuntime});assert.equal(appCalls,1);assert.equal(executions,1);
+ await sendAIChat(db,appOwner.user,appTurn,appState.revision,appCommand,config,appTransport,{backendRuntime});assert.equal(appCalls,2);assert.equal(executions,1);
  assert.equal((await run(appOwner,()=>assert.fail('App already started'))).result.status,409);
  const scoped=await account();for(const action of [{kind:'preview',projectId:scoped.project,config:page},appAction(appOwner.project),{...appAction(scoped.project),operation:'create'},{kind:'inspect',scope:'usage'}]){
   const turn=crypto.randomUUID(),state=(await readChat(db,scoped.user)).state;
@@ -104,7 +104,7 @@ try{
  // A website saved while the app inference runs wins without partial app artifacts.
  const racingApp=await account(),raceTurn=crypto.randomUUID(),raceState=(await readChat(db,racingApp.user)).state;
  await sendAIChat(db,racingApp.user,raceTurn,raceState.revision,'/first-app '+racingApp.project,config,async()=>{
-  await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source) VALUES(?,?,'site-page@1',?,'<h1>Saved elsewhere</h1>',?,?,'guided')").bind(crypto.randomUUID(),racingApp.project,JSON.stringify(page),'a'.repeat(64),new Date().toISOString()).run();return response(appAction(racingApp.project));
+  await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source) VALUES(?,?,'site-page@1',?,'<h1>Saved elsewhere</h1>',?,?,'guided')").bind(crypto.randomUUID(),racingApp.project,JSON.stringify(page),'a'.repeat(64),new Date().toISOString()).run();return response({kind:'backend',operation:'buildApplication',projectId:racingApp.project,reference:'private-task-list@1'});
  },{backendRuntime});
  assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(raceTurn).first()).status,'failed');assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(raceTurn).first(),null);assert.equal(await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE turn_id=?').bind(raceTurn).first(),null);assert.equal((await getBilling(db,racingApp.user)).quota.spent,0);assert.equal(executions,1);
  // Ordinary backend drafts also remove the start card; no assumption that only websites count.

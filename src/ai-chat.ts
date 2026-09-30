@@ -65,7 +65,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const { results: history } = await db.prepare("SELECT id,user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' AND ai_context_allowed=1 ORDER BY revision DESC LIMIT 4").bind(userId).all<{id:string;user_text:string;assistant_text:string}>();
   const websiteFollowup=!!context.latest&&history[0]?.id===context.latest.id;
   const focus=firstProject?(firstApp?'all':'website'):agentPromptFocus(content,websiteFollowup);
-  const system = pageDesign?appPageDesignPrompt(pageDesign):agentPrompt(context,focus)+(firstProject&&firstApp?`\nThis request is specifically the first private application build for existing project ${firstProject.id}. Use its complete saved purpose and audience. The only allowed action is backend buildApplication for that exact projectId, including a non-sensitive synthetic example and its expected state/result derived from the brief, or action:null to ask one essential question or explain an unsupported requirement. Never substitute a website or CMS, create another project, inspect another service, publish, activate, connect or purchase anything. A successful synthetic check prepares an owner approval only. If the brief needs unavailable capabilities or is too vague to derive a meaningful check, ask before building. No inspection call is needed; the complete brief is in context.`:firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is preview for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
+  const system = pageDesign?appPageDesignPrompt(pageDesign):agentPrompt(context,focus)+(firstProject&&firstApp?`\nThis request is specifically the first private application build for existing project ${firstProject.id}. Use its complete saved purpose and audience. The only allowed actions are capabilities plan and backend buildApplication for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Prefer reference:"private-task-list@1" when it fully fits. Otherwise first request a capability plan recording the missing visitor-transition behavior, then use its planId with source and a non-sensitive synthetic expected-output check derived from the brief. Never substitute a website or CMS, create another project, inspect another service, publish, activate, connect or purchase anything. A successful synthetic check prepares an owner approval only. If the brief needs unavailable capabilities or is too vague to derive a meaningful check, ask before building. One capability planning lookup is available; the complete brief is in context.`:firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is preview for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
   // Keep each transport message within its limit without dropping system policy.
   // Budget reservations still include every byte across all chunks.
   const messages: ChatMessage[] = [];
@@ -95,7 +95,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   }
   // Reserve internal costs for both bounded calls before dispatch.
   const followupInputBound=boundInput()+inspectionAllowance;
-  const canFollow=!firstProject&&!pageDesign&&messages.length<=48;
+  const canFollow=(!firstProject||firstApp)&&!pageDesign&&messages.length<=48;
   const reservedInput=boundInput()+(canFollow?followupInputBound:0);
   const requestHash=await hashToken(JSON.stringify({content,revision}));
   const now = budgetDate.toISOString();
@@ -123,6 +123,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(result.inputTokens>boundInput()||result.outputTokens>outputLimit)throw new ProviderError('invalid_response');
     let proposal;
     if(canFollow&&inspectionRequest(result.text)){
+      if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id,'app'))throw new ProposalError();
       const lookup=await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
       const inspection='inspection' in lookup&&typeof lookup.inspection==='string'?lookup.inspection:lookup.reply;
       const next=inspectionMessages(messages,inspection);
@@ -159,6 +160,11 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(String(cause).includes('welcome_first_draft_changed')){
       await closeStandardAIAttempt(db,userId,id);
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='Your first project changed while I was drafting. No additional draft was saved and your credits were not used. Open your saved versions to continue.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      return {status:200};
+    }
+    if(String(cause).includes('composition_plan_changed')){
+      await closeStandardAIAttempt(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='The project changed while I was preparing the custom draft. No draft was saved. Ask me to inspect it and prepare a fresh plan.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
     }
     if(String(cause).includes('comparison_changed')){

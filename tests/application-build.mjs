@@ -1,3 +1,4 @@
+import {fixtureExtensionPlan} from './helpers/composition.mjs';
 import {recordFixtureBenchmark} from '../tools/benchmark-evidence.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
@@ -14,7 +15,15 @@ try{
  runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
  proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
  const bundle=await build({stdin:{contents:"export * from './src/backend-chat';export * from './src/app-chat-actions';export * from './src/app-activation';export {prepareSiteAction} from './src/site-agent';export {sendAIChat} from './src/ai-chat';export {readChat,sendChat} from './src/chat';export {getBilling} from './src/billing';export * from './src/onboarding';export {updateProfile} from './src/profile';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
- const {backendAction,backendChatCommand,applicationChatActions,confirmApplication,prepareApplication,sendAIChat,readChat,sendChat,getBilling,readOnboarding,saveOnboarding,completeOnboarding,updateProfile}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+ const {backendAction:rawBackendAction,backendChatCommand,applicationChatActions,confirmApplication,prepareApplication,sendAIChat,readChat,sendChat,getBilling,readOnboarding,saveOnboarding,completeOnboarding,updateProfile}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+
+ async function backendAction(database,owner,turn,action,service){
+  if(action.operation==='buildApplication'&&typeof action.source==='string'&&Object.keys(action).every(k=>['kind','operation','projectId','source','input','expected'].includes(k))){
+   const planId=await fixtureExtensionPlan(database,owner,action.projectId,turn,'custom.visitor-transition');
+   action={...action,planId};
+  }
+  return rawBackendAction(database,owner,turn,action,service);
+ }
  const id=()=>crypto.randomUUID(),user=id(),foreign=id(),now=new Date().toISOString();let revision=0,calls=0;
  for(const u of [user,foreign])await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(u,u+'@example.test',now).run();
  const service={fetch:async(url,init)=>{calls++;assert.deepEqual(Object.keys(JSON.parse(init.body)),['version','source','input']);assert.equal(new Headers(init.headers).has('cookie'),false);return runtime.dispatchFetch(url,init);}};
@@ -54,7 +63,7 @@ try{
   const chatUser=id(),chatProject=id(),chatTurn=id();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(chatUser,chatUser+'@example.test',now).run();
   await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Notebook','Private notes','draft',?,?)").bind(chatProject,chatUser,now,now).run();
   const state=(await readChat(db,chatUser)).state,config={baseURL:'https://provider.example/v1',apiKey:'synthetic',model:'fixture'},before=calls;let modelCalls=0;
-  const transport=async()=>{modelCalls++;return Response.json({choices:[{message:{content:JSON.stringify({reply:'Untrusted model assurance',action:action(chatProject)})},finish_reason:'stop'}],usage:{prompt_tokens:1000,completion_tokens:200}});};
+  const transport=async()=>{modelCalls++;const planId=await fixtureExtensionPlan(db,chatUser,chatProject,chatTurn,'custom.visitor-transition');return Response.json({choices:[{message:{content:JSON.stringify({reply:'Untrusted model assurance',action:{...action(chatProject),planId}})},finish_reason:'stop'}],usage:{prompt_tokens:1000,completion_tokens:200}});};
   const content='Build a private notebook app and test a synthetic note, then prepare my approval.';
   assert.equal((await sendAIChat(db,chatUser,chatTurn,state.revision,content,config,transport,{backendRuntime:service})).status,200);
   const history=await readChat(db,chatUser);assert.equal(history.turns.at(-1).application_confirmation_id,chatTurn);assert.doesNotMatch(history.turns.at(-1).assistant_text,/Untrusted model assurance/);assert.equal(modelCalls,1);assert.equal(calls-before,1);assert.equal((await getBilling(db,chatUser)).quota.reserved,0);
@@ -75,15 +84,25 @@ try{
   const state=(await readChat(db,liveUser)).state,config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:(await readFile('opencode.key','utf8')).trim(),protocol:'responses'};
   let providerCalls=0;const transport=(url,init)=>{providerCalls++;if(process.env.WELCOME_APP==='1'){assert.ok(!init.body.includes('lavender telescope'));assert.ok(init.body.includes('return the result string'));}return fetch(url,init)},before=calls;
   const content=process.env.WELCOME_APP==='1'?'/first-app '+liveProject:'Build a small private notebook app for my existing Private notebook project. Each visitor starts with an empty document. When they submit a note, replace their document with {note: the submitted text} and return "Saved". Generate the backend and check it with the synthetic note "Hello notebook", then show me the approval review. Keep it disabled and unpublished.';
-  const response=await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});
+  const response=await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service},process.env.WELCOME_APP==='1');
   const history=await readChat(db,liveUser),last=history.turns.at(-1),billing=await getBilling(db,liveUser);
   console.log(JSON.stringify({live:true,status:response.status,turnStatus:last?.status,providerCalls,runtimeCalls:calls-before,spent:billing.quota.spent,reserved:billing.quota.reserved,hasApproval:!!last?.application_confirmation_id}));
-  assert.equal(response.status,200);assert.equal(last?.status,'completed');assert.equal(last?.application_confirmation_id,liveTurn,'Natural app request should finish with exact owner review');assert.equal(providerCalls,1);assert.equal(calls-before,1);assert.equal(billing.quota.spent,0);assert.equal(billing.quota.reserved,0);
+  assert.equal(response.status,200);assert.equal(last?.status,'completed');assert.equal(last?.application_confirmation_id,liveTurn,'Natural app request should finish with exact owner review');assert.equal(providerCalls,2);assert.equal(calls-before,1);assert.equal(billing.quota.spent,0);assert.equal(billing.quota.reserved,0);
   assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(liveProject).first()).enabled,0);
   if(process.env.WELCOME_APP==='1'){assert.equal(history.firstDraft,null);assert.equal((await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE project_id=?').bind(liveProject).first()).turn_id,liveTurn);}
-  await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});assert.equal(providerCalls,1);assert.equal(calls-before,1);
+  await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});assert.equal(providerCalls,2);assert.equal(calls-before,1);
   const recovered=await sendChat(db,liveUser,{id:id(),revision:history.state.revision,content:'/application-build '+liveTurn});assert.equal(recovered.status,200);assert.equal((await readChat(db,liveUser)).turns.at(-1).application_confirmation_id,liveTurn);assert.equal((await getBilling(db,liveUser)).quota.spent,billing.quota.spent);
  }
+ // A supported starter uses pinned platform source and the existing build/review lifecycle.
+ const libraryProject=await project(),libraryTurn=await turn(),beforeLibrary=calls;
+ const libraryAction={kind:'backend',operation:'buildApplication',projectId:libraryProject,reference:'private-task-list@1'};
+ const library=await rawBackendAction(db,user,libraryTurn,libraryAction,service);assert.match(library.reply,/Application review/);assert.equal(calls,beforeLibrary+1);
+ assert.equal((await db.prepare('SELECT component_id FROM backend_component_instances WHERE version_id=?').bind(libraryTurn).first()).component_id,'private-task-list');
+ assert.equal(await db.prepare('SELECT plan_id FROM backend_extension_uses WHERE version_id=?').bind(libraryTurn).first(),null);
+ assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(libraryProject).first()).enabled,0);
+ await rawBackendAction(db,user,libraryTurn,libraryAction,service);assert.equal(calls,beforeLibrary+1);
+ await assert.rejects(rawBackendAction(db,user,await turn(),{...libraryAction,source:'export default x=>x'},service),e=>e.status===400);
+ await assert.rejects(rawBackendAction(db,user,await turn(),{...libraryAction,reference:'line-total@1'},service),e=>e.status===400);
  await recordFixtureBenchmark(db,'application-build',{runtimeCalls:calls});
  console.log('Application build passed: actual QuickJS, expected-output checks, immutable intent, pending-turn/owner/field gates, approval buttons and recovery, no automatic activation/page, concurrent replay, lost draft/reservation acknowledgments and enrolled-project migration gate.');
 }finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

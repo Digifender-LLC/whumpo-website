@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import {authenticator} from './app-authenticator.mjs';
 // Invoked by the connected app harness with its actual platform, visitor host,
 // isolated QuickJS runtime and disposable database. No guest reply is stubbed.
-export async function taskListAppJourney({db,account,call,host,env,executions}){
+export async function taskListAppJourney({db,account,call,host,env,setupChat,executions}){
  const id=()=>crypto.randomUUID(),owner=await account(),startExecutions=executions();
  async function json(path,body,status=200,method){const response=await call(owner,path,body,method);assert.equal(response.status,status,await response.clone().text());return response.json();}
- async function chat(content){const current=await json('/chat');return (await json('/chat',{id:id(),revision:current.state.revision,content})).turns.at(-1);}
+ async function chat(content){return (await setupChat(owner,content)).turns.at(-1);}
  await json('/profile',{revision:0,name:'Task owner',avatar_id:'leaf'},200,'PATCH');await json('/onboarding');
  await json('/onboarding',{revision:0,stage:'review',project_name:'Private tasks',idea:'A separate task list for each invited visitor',audience:'Our group',preferred_theme:'forest'},200,'PUT');await json('/onboarding/complete',{revision:1});
  const project=(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(owner.user).first()).id,path='/projects/'+project,origin='https://app-'+project+'.whumpo.site';
