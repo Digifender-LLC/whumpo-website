@@ -17,15 +17,18 @@ function provider(a){let tag=null,version=null,initialized=false,setupId=null;co
 const {prepareCMSImport,confirmCMSImport,readCMSImport,cmsImportPage}=await module('src/cms-imports.ts'),{cmsGateway}=await module('src/cms-gateway.ts');
 try{
  const a=await fixture(),p=provider(a);await deployCMS(db,a.project,digest,a.config,p);await connectCMS(db,a.project,id());
- let writes=0,drop=false,capable=true;
+ let writes=0,drop=false,capable=true,excerptCapable=true;
  const nativeEnv={DB:db,WHUMPO_CMS_PROJECT_ID:a.project,WHUMPO_CMS_OWNER_ID:a.user,WHUMPO_CMS_ORIGIN:a.config.origin,WHUMPO_CMS_BRIDGE_KEY:a.config.secret};
  const env={CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:{fetch:async request=>{
   if(!capable&&new URL(request.url).pathname.endsWith('/capabilities'))return Response.json({error:'old'},{status:403});
   const response=await cmsGateway(request,nativeEnv,async request=>{assert.equal(request.method,'POST');assert.ok(request.url.endsWith('/content/posts'));writes++;const body=await request.json();return Response.json({success:true,data:{item:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAV',status:'draft',data:body.data}}},{status:201});});
+  if(!excerptCapable&&new URL(request.url).pathname.endsWith('/capabilities')){const payload=await response.json();delete payload.data.structuredContent.excerptVersion;return Response.json(payload);}
   if(drop&&request.method==='POST'){drop=false;throw Error('Lost native receipt');}return response;
  }}};
  const candidate={sourceDigest:'c'.repeat(64),sourceId:123,collection:'posts',title:'Imported story',content:[{_type:'block',style:'normal',markDefs:[],children:[{_type:'span',text:'Original story',marks:[]}]}],provenance:{sourceHTML:'<p>Original story</p><script>bad()</script>',author:'Source writer',sourceURL:'https://old.example/story',sourceStatus:'publish',sourceDate:'2026-09-01',sourceSlug:'story'}};
  const {canonicalImportProvenance}=await module('src/cms-import-provenance.ts');
+ const {renderCMSDraft}=await module('src/cms-preview.ts');
+ for(const published of [false,true]){const html=renderCMSDraft({collection:'posts',item:{status:'draft',data:{title:'Story',content:candidate.content,excerpt:'<script>text only</script>'}}},published);assert.ok(html.includes('&lt;script&gt;text only&lt;/script&gt;'));assert.ok(!html.includes('<script>'));}
  assert.equal(canonicalImportProvenance(candidate.provenance),JSON.stringify(candidate.provenance));
  for(const extra of [{tags:['x'.repeat(201)]},{categories:Array(51).fill('tag')},{excerpt:'x'.repeat(4001)},{tags:[null]},{unexpected:'field'}])assert.throws(()=>canonicalImportProvenance({...candidate.provenance,...extra}));
  candidate.provenance={...candidate.provenance,excerpt:'<script>excerpt marker</script>',categories:['Research & notes'],tags:['<img onerror=bad()>','Long term']};
@@ -45,6 +48,14 @@ try{
  const expired=id();await db.prepare("INSERT INTO cms_import_reviews(id,user_id,project_id,source_digest,source_id,collection,body,provenance,expires_at) VALUES(?,?,?, ?,124,'posts',?,?,'2000-01-01T00:00:00.000Z')").bind(expired,a.user,a.project,candidate.sourceDigest,row.body,row.provenance).run();await assert.rejects(confirmCMSImport(db,a.user,expired,env),e=>e.status===409);assert.equal(writes,1);
  const renewed=await prepareCMSImport(db,a.user,a.project,id(),{...candidate,sourceId:124},env);assert.equal(renewed.status,'pending');assert.equal((await readCMSImport(db,a.user,expired)).status,'superseded');await assert.rejects(confirmCMSImport(db,a.user,expired,env),e=>e.status===409);
  const competing=await Promise.all([id(),id()].map(request=>prepareCMSImport(db,a.user,a.project,request,{...candidate,sourceId:127},env)));assert.equal(competing[0].id,competing[1].id);
+ const excerptCandidate={...candidate,sourceId:128,excerpt:'An excerpt <script>as text</script>'};
+ excerptCapable=false;await assert.rejects(prepareCMSImport(db,a.user,a.project,id(),excerptCandidate,env),e=>e.status===409);excerptCapable=true;
+ const excerptReview=await prepareCMSImport(db,a.user,a.project,id(),excerptCandidate,env);
+ assert.equal(JSON.parse(excerptReview.body).data.excerpt,excerptCandidate.excerpt);
+ const excerptHTML=await(await cmsImportPage(db,a.user,excerptReview.id)).text();assert.ok(excerptHTML.includes('Native post excerpt</h3><p>An excerpt &lt;script&gt;as text&lt;/script&gt;'));assert.ok(!excerptHTML.includes('<script>'));
+ await assert.rejects(prepareCMSImport(db,a.user,a.project,id(),{...excerptCandidate,excerpt:'Changed'},env),e=>e.status===409);
+ await assert.rejects(prepareCMSImport(db,a.user,a.project,id(),{...excerptCandidate,collection:'pages'},env),e=>e.status===400);
+ excerptCapable=false;await assert.rejects(confirmCMSImport(db,a.user,excerptReview.id,env),e=>e.status===409);assert.equal(writes,1);assert.equal((await readCMSImport(db,a.user,excerptReview.id)).status,'pending');assert.equal(await db.prepare('SELECT id FROM cms_draft_requests WHERE id=?').bind(excerptReview.id).first(),null);excerptCapable=true;
  const pending=await prepareCMSImport(db,a.user,a.project,id(),{...candidate,sourceId:125},env);
  for(let n=0;n<89;n++)await db.prepare("INSERT INTO cms_draft_requests(id,project_id,user_id,collection,body,content_format) VALUES(?,?,?,'posts',?,'structured')").bind(id(),a.project,a.user,row.body).run();
  await assert.rejects(confirmCMSImport(db,a.user,pending.id,env),e=>e.status===409);assert.equal((await readCMSImport(db,a.user,pending.id)).status,'pending');assert.equal(writes,1);assert.equal(await db.prepare('SELECT id FROM cms_draft_requests WHERE id=?').bind(pending.id).first(),null);

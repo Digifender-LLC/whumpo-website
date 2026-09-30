@@ -3,6 +3,16 @@ import sax from 'sax';
 import {parseWxrString} from './vendor/emdash-wxr';
 import {gutenbergToPortableText} from '@emdash-cms/gutenberg-to-portable-text';
 import {cmsRichDraftBody} from './cms-content-shape';
+/** Excerpts are native plain text. Preserve the original HTML in provenance. */
+export function wordpressExcerpt(source:string){
+ if(!source.trim())return undefined;
+ if(/<\/?(?!p\b|br\b|strong\b|b\b|em\b|i\b|a\b|span\b|ul\b|ol\b|li\b|blockquote\b)[a-z]|\son[a-z]+\s*=|\[[a-z][a-z0-9_-]*(?:\s[^\]]*)?\]/i.test(source))throw Error('Excerpt needs manual conversion');
+ const blocks=gutenbergToPortableText(source,{mediaMap:new Map()});
+ if(!blocks.length||blocks.some(block=>block._type!=='block'||!Array.isArray(block.children)||block.children.some(span=>span._type!=='span'||typeof span.text!=='string')))throw Error('Excerpt needs manual conversion');
+ const text=blocks.map(block=>{if(block._type!=='block')throw Error('Excerpt needs manual conversion');return block.children.map(span=>span.text).join('');}).join('\n').trim();
+ if(!text||text.length>512)throw Error('Excerpt exceeds native limit');
+ return text;
+}
 const maxBytes=1048576,maxItems=100;
 function validateXML(xml:string){
  if(/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml))throw Error('DTD and entity declarations are not accepted');
@@ -39,7 +49,7 @@ export async function analyzeWordPress(bytes:Uint8Array){
   if(/<script\b|<style\b|<form\b|\son[a-z]+\s*=/i.test(html))reasons.push('active_content_requires_manual_conversion');
   if(/\[[a-z][a-z0-9_-]*(?:\s[^\]]*)?\]/i.test(html))reasons.push('shortcode_requires_manual_conversion');
   let candidate=null;
-  if(!reasons.length){try{const converted=gutenbergToPortableText(html,{mediaMap:new Map()}).map((block,i)=>{if(block._type!=='block')return block;const definitions=block.markDefs??[],keys=new Map(definitions.map((d,j)=>[d._key,'wp-link-'+j]));return {...block,_key:'wp-block-'+i,markDefs:definitions.map(d=>({...d,_key:keys.get(d._key)})),children:block.children.map((span,j)=>({...span,_key:'wp-text-'+j,marks:(span.marks??[]).map(mark=>keys.get(mark)??mark)}))};});candidate=cmsRichDraftBody(post.title,converted);}catch{reasons.push('converted_content_outside_supported_article_shape');}}
+  if(!reasons.length){try{const converted=gutenbergToPortableText(html,{mediaMap:new Map()}).map((block,i)=>{if(block._type!=='block')return block;const definitions=block.markDefs??[],keys=new Map(definitions.map((d,j)=>[d._key,'wp-link-'+j]));return {...block,_key:'wp-block-'+i,markDefs:definitions.map(d=>({...d,_key:keys.get(d._key)})),children:block.children.map((span,j)=>({...span,_key:'wp-text-'+j,marks:(span.marks??[]).map(mark=>keys.get(mark)??mark)}))};});candidate=cmsRichDraftBody(post.title,converted,post.postType==='post'?wordpressExcerpt(post.excerpt??''):undefined);}catch{reasons.push('converted_content_outside_supported_article_shape');}}
   return {sourceId:post.id!,collection:post.postType==='page'?'pages' as const:post.postType==='post'?'posts' as const:null,title:post.title??'',sourceStatus:post.status??'',sourceHTML:html,sourceAuthor:post.creator??null,sourceURL:post.link??null,sourceDate:post.postDate??null,sourceSlug:post.postName??null,sourceExcerpt:post.excerpt??'',categories:post.categories,tags:post.tags,customFieldCount:post.meta.size,translationGroup:post.translationGroup??null,locale:post.locale??null,status:candidate?'needs_review':'needs_changes',reasons,warnings,candidate};
  });
  return {contract:'whumpo-wordpress-stage',version:1,converter:{name:'emdash',version},source:{digest:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),v=>v.toString(16).padStart(2,'0')).join(''),bytes:bytes.length,items:itemCount},site:{title:data.site.title??'',url:data.site.baseSiteUrl??data.site.link??null},articles,attachments:data.attachments.map(a=>({sourceId:a.id,title:a.title??'',url:a.url??null,status:'not_fetched'})),summary:{articles:articles.length,reviewable:articles.filter(a=>a.candidate).length,needsChanges:articles.filter(a=>!a.candidate).length,attachments:data.attachments.length},exclusions:['No CMS writes or publication','No media fetched','No themes or plugins executed','No authors or accounts provisioned','No redirects created'],sourceRetained:false};

@@ -1,4 +1,4 @@
-import {cmsCapabilitiesPath,supportsStructuredCMS,supportsCMSImages} from './cms-capability-contract';
+import {cmsCapabilitiesPath,supportsStructuredCMS,supportsCMSImages,supportsCMSExcerpts} from './cms-capability-contract';
 import {callCMS,deriveCMSSecret,verifyCMSInitialization} from './cms-bridge';
 import {CMSProjectError} from './cms-projects';
 export async function cmsConnection(db:D1Database,user:string,project:string,environment:Record<string,unknown>){
@@ -29,3 +29,9 @@ export async function requireStructuredCMS(db:D1Database,user:string,project:str
 }
 
 export async function requireCMSImages(db:D1Database,user:string,project:string,env:Record<string,unknown>){if(!(await readCMSCapabilities(db,user,project,env)).imageContent)throw new CMSProjectError(409,'Article images require an updated publishing space. No new image write was attempted.');}
+
+export async function requireCMSExcerpts(db:D1Database,user:string,project:string,env:Record<string,unknown>){
+ const {service,config}=await cmsConnection(db,user,project,env);
+ let supported=false;try{supported=supportsCMSExcerpts(await callCMS(service,config,cmsCapabilitiesPath,crypto.randomUUID()));}catch{}
+ if(!supported)throw new CMSProjectError(409,'Importing excerpts requires an updated publishing space. No new draft was created.');
+}

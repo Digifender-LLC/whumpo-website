@@ -11,7 +11,7 @@ assert.equal((await fetch(base+capabilityPath)).status,403);
 assert.equal((await call(capabilityPath,undefined,id(),{...config,ownerId:id()})).status,403);
 assert.equal((await call(capabilityPath,{})).status,403);
 const capability=await call(capabilityPath);assert.equal(capability.status,200);assert.equal(capability.headers.get('cache-control'),'no-store');
-assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,media:{uploadVersion:1,uploadMaxBytes:1048576,uploadMimeType:'image/jpeg',metadataVersion:1,pageSize:20,previewVersion:1,previewMaxBytes:5242880},structuredContent:{imageVersion:1,version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
+assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,media:{uploadVersion:1,uploadMaxBytes:1048576,uploadMimeType:'image/jpeg',metadataVersion:1,pageSize:20,previewVersion:1,previewMaxBytes:5242880},structuredContent:{excerptVersion:1,excerptMaxChars:512,excerptCollections:['posts'],imageVersion:1,version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
 assert.equal((await fetch(base+'/_emdash/api/setup/status')).status,403);
 assert.equal((await call('/_emdash/api/setup/status',undefined,id(),{...config,ownerId:id()})).status,403);
 const before=await call('/_emdash/api/setup/status');assert.equal(before.status,200);const initial=await before.json();assert.equal(initial.data.needsSetup,true,JSON.stringify(initial));
@@ -32,13 +32,15 @@ const shapeBuild=await build({entryPoints:['src/cms-content-shape.ts'],bundle:tr
 for(const collection of ['posts','pages']){
  const rid=id(),initial=cmsDraftBody('Native '+collection,'A private paragraph. <script>plain text only</script>');
  initial.data.content.push({_type:'block',_key:'heading',style:'h2',markDefs:[],children:[{_type:'span',_key:'heading-text',text:'A formatted heading',marks:['strong']}]});
- const draftBody=cmsRichDraftBody('Native '+collection,initial.data.content);
+ const draftBody=cmsRichDraftBody('Native '+collection,initial.data.content,collection==='posts'?'Native excerpt <script>text only</script>':undefined);
  const created=await call('/_emdash/api/content/'+collection,draftBody,rid),data=await created.json();assert.equal(created.status,201,JSON.stringify(data));assert.equal(data.data.item.status,'draft');assert.deepEqual(data.data.item.data.content,initial.data.content);
  assert.deepEqual(await (await call('/_emdash/api/content/'+collection,draftBody,rid)).json(),data);
  assert.equal((await call('/_emdash/api/content/'+collection,cmsDraftBody('Changed','Different'),rid)).status,409);
+ if(collection==='posts')assert.equal(data.data.item.data.excerpt,draftBody.data.excerpt);
+ else assert.equal((await call('/_emdash/api/content/pages',cmsRichDraftBody('Page',initial.data.content,'No page excerpt'))).status,403);
  const item=data.data.item,read=await call('/_emdash/api/content/'+collection+'/'+item.id);assert.equal(read.status,200);const snapshot=(await read.json()).data;assert.equal(snapshot.item.data.title,'Native '+collection);assert.ok(renderCMSDraft({collection,revision:snapshot._rev,item:snapshot.item}).includes('&lt;script&gt;plain text only&lt;/script&gt;'));
  const editId=id(),editBody=cmsEditBody('Edited '+collection,'Changed paragraph',snapshot._rev),path='/_emdash/api/content/'+collection+'/'+item.id;
- const edited=await call(path,editBody,editId,config,'PUT'),editData=await edited.json();assert.equal(edited.status,200,JSON.stringify(editData));assert.equal(editData.data.item.data.title,'Edited '+collection);assert.notEqual(editData.data._rev,snapshot._rev);
+ const edited=await call(path,editBody,editId,config,'PUT'),editData=await edited.json();assert.equal(edited.status,200,JSON.stringify(editData));assert.equal(editData.data.item.data.title,'Edited '+collection);if(collection==='posts')assert.equal(editData.data.item.data.excerpt,draftBody.data.excerpt);assert.notEqual(editData.data._rev,snapshot._rev);
  assert.deepEqual(await (await call(path,editBody,editId,config,'PUT')).json(),editData);
  assert.equal((await call(path,cmsEditBody('Changed replay','Other',snapshot._rev),editId,config,'PUT')).status,409);
  assert.equal((await call(path,cmsEditBody('Stale edit','Lost update',snapshot._rev),id(),config,'PUT')).status,409);

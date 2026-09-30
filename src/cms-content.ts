@@ -9,7 +9,7 @@ import {prepareCMSUnpublish,describeCMSUnpublish} from './cms-unpublish';
 import {prepareCMSPublication,describeCMSPublication,readCMSPublication,listCMSPublications} from './cms-publication';
 import {prepareCMSPreview} from './cms-preview';
 import {cmsEditAction} from './cms-edits';
-import {cmsConnection,requireStructuredCMS,requireCMSImages,readCMSCapabilities} from './cms-status';
+import {cmsConnection,requireStructuredCMS,requireCMSImages,requireCMSExcerpts,readCMSCapabilities} from './cms-status';
 import {callCMS} from './cms-bridge';
 import {cmsDraftBody,cmsRichDraftBody,cmsItemId} from './cms-content-shape';
 import {CMSProjectError} from './cms-projects';
@@ -21,16 +21,19 @@ export async function listCMSDrafts(db:D1Database,user:string,project:string,env
  await cmsConnection(db,user,project,env);
  const {results}=await db.prepare('SELECT id,collection,item_id,created_at FROM cms_draft_requests WHERE project_id=? AND user_id=? ORDER BY created_at DESC,id LIMIT 90').bind(project,user).all();return results;
 }
-export async function createCMSDraft(db:D1Database,user:string,project:string,id:string,collection:string,title:unknown,text:unknown,env:Environment,format:ContentFormat='plain'){
+export async function createCMSDraft(db:D1Database,user:string,project:string,id:string,collection:string,title:unknown,text:unknown,env:Environment,format:ContentFormat='plain',excerpt?:unknown){
  const {service,config}=await cmsConnection(db,user,project,env);
  if(!uuid.test(id)||!['posts','pages'].includes(collection))throw new CMSProjectError(400,'Choose posts or pages and a valid request ID');
- let body:string;try{body=JSON.stringify((format==='structured'?cmsRichDraftBody:cmsDraftBody)(title,text));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
+ if(excerpt!==undefined&&(format!=='structured'||collection!=='posts'))throw new CMSProjectError(400,'Excerpts are supported only for structured posts');
+ let body:string;try{body=JSON.stringify(format==='structured'?cmsRichDraftBody(title,text,excerpt):cmsDraftBody(title,text));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
  const read=()=>db.prepare('SELECT * FROM cms_draft_requests WHERE id=?').bind(id).first<Draft>();
  let row=await read();
+ if(!row&&excerpt!==undefined)await requireCMSExcerpts(db,user,project,env);
  if(!row){if(format==='structured'&&cmsImageReferences(text).length){await requireCMSImages(db,user,project,env);await captureCMSArticleImages(db,user,project,text,env);}if(format==='structured')await requireStructuredCMS(db,user,project,env);try{await db.prepare('INSERT INTO cms_draft_requests(id,project_id,user_id,collection,body,content_format) VALUES(?,?,?,?,?,?)').bind(id,project,user,collection,body,format).run();}catch{}row=await read();}
  if(!row)throw new CMSProjectError(409,'CMS draft request capacity is full or unavailable');
  if(row.user_id!==user||row.project_id!==project||row.collection!==collection||row.body!==body||row.content_format!==format)throw new CMSProjectError(409,'CMS draft request ID already used');
  if(!row.item_id){
+  if(excerpt!==undefined)await requireCMSExcerpts(db,user,project,env);
   if(format==='structured'&&cmsImageReferences(text).length)await requireCMSImages(db,user,project,env);
   if(format==='structured')await requireStructuredCMS(db,user,project,env);
   // Exact retries use the same CMS gateway reservation; an unknown write is never dispatched twice.
