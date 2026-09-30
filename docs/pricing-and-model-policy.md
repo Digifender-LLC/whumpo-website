@@ -255,3 +255,6 @@ Live read-only acceptance (September 29, 2026): the operator command completed a
 ## Shared resource pool proposal — September 30, 2026
 
 See [shared capacity economics](resource-pool-economics.md) for the versioned offline calculator, dated provider sources, workload examples and margin/rollover stress cases. Proposed allowances are 1,000 / 2,500 / 7,500 / 14,000 Whumpo Units at the existing prices, covering total variable consumption. These are not current test-unit grants or a live dollar wallet. The owner resolved the policy: standard AI has zero customer-unit debits while its provider cost remains tracked internally; advanced models consume approved credits. The updated calculator separates unmetered AI expense and includes $1/$5/$20 standard-AI stress cases. No billing, enforcement or public allowance promise changes.
+
+
+The non-billable standard-AI receipt foundation is documented in [standard AI accounting](standard-ai-accounting.md). It does not yet replace the active legacy test-unit Chat path.
