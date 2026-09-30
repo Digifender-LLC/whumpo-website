@@ -12,11 +12,17 @@ async function main(){
  const base=JSON.parse(await readFile('wrangler.jsonc','utf8')),database=base.d1_databases.find(x=>x.binding==='DB'),api=cloudflareClient(base.account_id),db=remoteD1(api,database.database_id);
  if(project==='--list'){const {results}=await db.prepare("SELECT project_id,state FROM cms_instances WHERE state<>'ready' ORDER BY created_at LIMIT 5").all();console.log(JSON.stringify({instances:results}));return;}
  const before=await db.prepare('SELECT state FROM cms_instances WHERE project_id=?').bind(project).first();if(before?.state==='ready'){console.log('CMS is already initialized and connected; use /check-cms '+project);return;}
+ // Validate and freeze the native build before allocating hosted resources.
+ // Recovery must reuse the original artifact; it must never silently rebuild it.
+ let snapshot;
+ if(!storageOnly){
+  if(await db.prepare('SELECT project_id FROM cms_deployments WHERE project_id=?').bind(project).first())await lstat(resolve('.secrets/cms',project,'artifact'));
+  else{const build=spawnSync(process.execPath,['tools/build-emdash.mjs'],{stdio:'inherit'});if(build.error||build.status!==0)throw Error('CMS build failed before resource allocation');}
+  snapshot=await frozenArtifact(project);
+ }
  const {allocateCMSResources}=await module('src/cms-provision.ts');console.log(JSON.stringify(await allocateCMSResources(db,project,cmsCloudflareProvider(base.account_id,api))));if(storageOnly)return;
  const row=await db.prepare('SELECT * FROM cms_instances WHERE project_id=?').bind(project).first();
- if(await db.prepare('SELECT project_id FROM cms_deployments WHERE project_id=?').bind(project).first())await lstat(resolve('.secrets/cms',project,'artifact'));
- else{const build=spawnSync(process.execPath,['tools/build-emdash.mjs'],{stdio:'inherit'});if(build.status!==0)throw Error('CMS build failed');}
- const snapshot=await frozenArtifact(project),template=JSON.parse(await readFile(join(snapshot.artifact,'server/wrangler.json'),'utf8')),master=await cmsMasterKey(db),{deriveCMSSecret}=await module('src/cms-bridge.ts'),origin='https://'+row.worker_name+'.whumpo.site',secret=await deriveCMSSecret(master,project,row.user_id,origin);
+ const template=JSON.parse(await readFile(join(snapshot.artifact,'server/wrangler.json'),'utf8')),master=await cmsMasterKey(db),{deriveCMSSecret}=await module('src/cms-bridge.ts'),origin='https://'+row.worker_name+'.whumpo.site',secret=await deriveCMSSecret(master,project,row.user_id,origin);
  const config=instanceConfig(template,snapshot.artifact,row,base.account_id),configPath=join(snapshot.dir,'worker.json'),secretPath=join(snapshot.dir,'worker-secrets.json');
  await writeFile(configPath,JSON.stringify(config,null,2));await writeFile(secretPath,JSON.stringify({WHUMPO_CMS_BRIDGE_KEY:secret}),{mode:0o600});
  let probe;
