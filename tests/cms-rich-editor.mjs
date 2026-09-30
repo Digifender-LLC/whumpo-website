@@ -8,3 +8,7 @@ assert.equal(setRichLink(block,0,'').children[0].marks.includes('shared'),false)
 assert.equal(richEditable({...snapshot,item:{...snapshot.item,data:{...snapshot.item.data,content:[{...block,alignment:'center'}]}}}),null);assert.equal(richEditable({...snapshot,item:{...snapshot.item,data:{...snapshot.item.data,content:[{...block,_key:{unsafe:true}}]}}}),null);
 const fresh=newRichBlock();assert.equal(fresh.children[0].text,'');assert.notEqual(newRichBlock()._key,fresh._key);
 console.log('Rich editor adapter passed: exact round-trip, cloned state, shared link isolation and unsupported-content refusal.');
+
+const image={_type:'image',_key:'photo',asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAV'},alt:'Original description',caption:'Original caption'};
+const illustrated={...snapshot,item:{...snapshot.item,data:{...snapshot.item.data,content:[block,image]}}},imageEdit=richEditable(illustrated);assert.deepEqual(imageEdit.content,[block,image]);imageEdit.content[1].caption='Changed';assert.equal(image.caption,'Original caption');
+assert.equal(richEditable({...illustrated,item:{...illustrated.item,data:{...illustrated.item.data,content:[block,{...image,asset:{...image.asset,url:'https://tracker.test'}}]}}}),null);

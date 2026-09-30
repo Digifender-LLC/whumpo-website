@@ -32,7 +32,7 @@ export function CMSUploadPanel({project}:{project:string}){
  }
  const unresolved=uploads.data?.uploads.filter(row=>row.status==='unresolved')??[];
  return <div className="rounded-2xl border bg-muted/30 p-4 sm:p-5 space-y-4">
-  <div><h3 className="font-semibold">Add an image</h3><p className="mt-1 text-sm text-muted-foreground">Saved privately in this publishing space. Adding images to articles is coming next.</p></div>
+  <div><h3 className="font-semibold">Add an image</h3><p className="mt-1 text-sm text-muted-foreground">Saved privately in this publishing space. Choose saved images from your article editor.</p></div>
   {uploads.isPending?<p role="status" className="text-sm">Checking image uploads…</p>:uploads.error?<div role="alert" className="space-y-3"><p className="text-sm">{message(uploads.error)}</p><Button variant="outline" onClick={()=>void uploads.refetch()}>Check again</Button></div>:!uploads.data?.uploadEnabled?<p className="text-sm text-muted-foreground">This publishing space needs an update before it can accept images.</p>:<>
    {!pending&&unresolved.length>0&&<p className="text-sm">Check the unfinished uploads below before adding a replacement.</p>}
    <Field label={pending?'Re-select the original image if needed':'Choose an image'}><Input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void choose(file);}}/></Field>
