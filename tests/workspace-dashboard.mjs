@@ -6,6 +6,7 @@ import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {readLayout,saveLayout,saveCapacity,readCapacity,dashboardData,workspaceAction}=await module('src/workspace-dashboard.ts');
 const {prepareSiteAction,siteContext}=await module('src/site-agent.ts');
+const {shortcutCommand,workspaceShortcuts}=await module('src/workspace-shortcuts.ts');
 const {planChangeQuote,capacityNotice,overageNotice,recommendPlan}=await module('src/capacity-policy.ts');
 assert.equal(planChangeQuote('personal','business','month',0,100,50).dueCents,2450);
 assert.equal(planChangeQuote('starter','personal','year',0,120,40).dueCents,8667);
@@ -26,8 +27,13 @@ try{
  const a=crypto.randomUUID(),b=crypto.randomUUID(),p=crypto.randomUUID();
  for(const user of [a,b])await db.prepare("INSERT INTO users VALUES(?,?,'00','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Dashboard fixture','','draft',?,?)").bind(p,a,new Date().toISOString(),new Date().toISOString()).run();
- const initial=await readLayout(db,a),layout={widgets:['projects','storage'],tabs:[{id:'tab-cms',label:'Publishing',projectId:p,widgets:['cms','traffic']}]};
+ const initial=await readLayout(db,a),layout={widgets:['projects','storage'],tabs:[{id:'tab-cms',label:'Publishing',projectId:p,widgets:['cms','traffic'],shortcuts:['project','versions','health','checkWebsite','application']}]};
  assert.equal(initial.revision,0);await saveLayout(db,a,0,layout);
+ assert.equal((await readLayout(db,a)).revision,1);assert.deepEqual((await readLayout(db,a)).layout.tabs[0].shortcuts,layout.tabs[0].shortcuts);
+ for(const [kind,value] of Object.entries(workspaceShortcuts)){assert.equal(shortcutCommand(kind,p),value.command+' '+p);assert.equal(shortcutCommand(kind,p+' /confirm-publish'),null);}
+ assert.equal(shortcutCommand('constructor',p),null);assert.equal(shortcutCommand('project',null),null);
+ for(const shortcuts of [['confirm-publish'],['https://evil.test'],['project','project'],[{command:'/delete'}],'project',null,['constructor']])await assert.rejects(()=>saveLayout(db,a,1,{...layout,tabs:[{...layout.tabs[0],shortcuts}]}));
+ await assert.rejects(()=>saveLayout(db,a,1,{...layout,tabs:[{...layout.tabs[0],projectId:null}]}));
  assert.equal((await readLayout(db,a)).revision,1);assert.deepEqual((await readLayout(db,b)).layout.tabs,[]);
  await assert.rejects(()=>saveLayout(db,b,0,layout),/Project not found/);
  await assert.rejects(()=>saveLayout(db,a,0,layout),/changed/);
@@ -43,5 +49,5 @@ try{
  const action=await prepareSiteAction(db,a,crypto.randomUUID(),JSON.stringify({reply:'Arranging your dashboard.',action:{kind:'workspace',operation:'save',revision:2,layout:{...layout,widgets:['usage','projects','activity']}}}),context);assert.match(action.reply,/Workspace updated/);
  const dashboard=await dashboardData(db,a);assert.equal(dashboard.projects.length,1);assert.equal(dashboard.billing.plan.id,'explore');assert.deepEqual(dashboard.traffic.rows,[]);assert.equal(dashboard.traffic.metric,'successful_html_requests');assert.equal(dashboard.capacity.capacityPercent,null);
  assert.equal((await dashboardData(db,b)).projects.length,0);
- console.log('Dashboard tests passed: isolation, strict card schema, CAS concurrency, draft-only preferences, model authority, honest measurements, proration, warnings and two-cycle recommendations.');
+ console.log('Dashboard tests passed: isolation, strict card/shortcut schema, command injection rejection, saved shortcut persistence, CAS concurrency, draft-only preferences, model authority, honest measurements, proration, warnings and two-cycle recommendations.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

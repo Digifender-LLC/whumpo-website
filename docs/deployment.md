@@ -364,3 +364,12 @@ Platform `4712f560-b629-4860-b0a0-fe30eae0953e` includes owner-scoped expired-au
 Platform `7e0960c3-d38b-4fb2-88bb-af70173122e1` simplifies Dashboard to an overview with a site-unpublish safety entry. Removed routine action shortcuts and manual layout editing; existing validated agent layout tools remain. First-project guidance now invites conversation without a website/app/brief button group. Account controls, explicitly opened detail views and contextual human confirmations remain available. User-requested arbitrary action buttons are still an implementation gate.
 
 No CMS instance was provisioned or tested. The prior CMS setup wording change remains undeployed. No migration, provider consent, DNS or customer publication changed. Both TypeScript projects, chat-rendering tests, frontend build and lazy-loading checks passed. Independent readback verified the active version, all 16 frontend asset bytes, health and anonymous/origin boundaries; private evidence is `.secrets/chat-first-release-verification.json`. These checks do not constitute an authenticated browser/device journey.
+
+
+## Requested workflow shortcuts — September 30, 2026
+
+Platform `33b11a8f-acdf-40dd-895f-4df5ca4d2146` adds optional, user-requested shortcuts on owned-project workflow tabs. The fixed catalog covers project status, versions, saved health, a fresh website check and application status. No default shortcuts, model-authored executable commands, new permissions or confirmation bypasses are introduced. Existing layouts require no migration. See [workspace contract](unified-workspace-and-capacity.md#requested-workflow-shortcuts--september-30-2026).
+
+Local D1 persistence/isolation/schema/concurrency and agent-action tests passed, along with both TypeScript projects, frontend builds and loading checks. No authenticated browser or live-model shortcut journey is claimed by these tests.
+
+Cloudflare deployment metadata confirmed the active version. Two independent public verification attempts failed with a connection reset and connection timeouts to whumpo.com; full public health/asset verification for this release remains pending. No second deployment was attempted in response to those network errors.
