@@ -3,8 +3,8 @@ import {readFile,writeFile,mkdir,readdir,lstat,cp,rename} from 'node:fs/promises
 import {createHash,randomBytes} from 'node:crypto';
 import {resolve,join} from 'node:path';
 import {createServer} from 'node:net';
-export async function runWrangler(args,logFile){
- const child=spawn(process.execPath,['node_modules/wrangler/bin/wrangler.js',...args],{stdio:['ignore','pipe','pipe']});let log='';
+export async function runWrangler(args,logFile,options={}){
+ const child=spawn(process.execPath,['node_modules/wrangler/bin/wrangler.js',...args],{stdio:['ignore','pipe','pipe'],...options});let log='';
  for(const stream of [child.stdout,child.stderr])stream.on('data',chunk=>{log=(log+chunk.toString()).slice(-1000000);});
  let force;const timer=setTimeout(()=>{child.kill('SIGTERM');force=setTimeout(()=>child.kill('SIGKILL'),5000);},180000);
  try{const status=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});await writeFile(logFile,log,{mode:0o600});if(status!==0)throw Error('Wrangler operation was not confirmed; inspect the private operation log');}finally{clearTimeout(timer);if(force)clearTimeout(force);}
