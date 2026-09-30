@@ -70,7 +70,7 @@ export async function applicationGateway(request:Request,env:AppEnv):Promise<Res
    if(data.pageId!==page.id)throw new BackendError(409,'Application page changed. Reload before sending another change');
    if(typeof data.id!=='string'||typeof data.revision!=='number'||!Object.hasOwn(data,'input'))throw new BackendError(400,'Provide an operation ID, current revision and input');
    const form=backendFormConfig(JSON.parse(page.config_json)),input=data.input;
-   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length!==form.fields.length||form.fields.some(f=>{const value=(input as Record<string,unknown>)[f.key];return f.type==='text'?typeof value!=='string'||value.length>300:f.type==='number'?typeof value!=='number'||!Number.isFinite(value):typeof value!=='boolean';}))throw new BackendError(400,'Provide the fields shown in the current application form');
+   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length!==form.fields.length||form.fields.some(f=>{const value=(input as Record<string,unknown>)[f.key];return f.type==='choice'?typeof value!=='string'||!f.options.some(o=>o.value===value):f.type==='text'?typeof value!=='string'||value.length>300:f.type==='number'?typeof value!=='number'||!Number.isFinite(value):typeof value!=='boolean';}))throw new BackendError(400,'Provide the fields shown in the current application form');
    return json(await transitionAppData(env.DB,env.BACKEND_RUNTIME,session,project,data.id,data.revision,data.input));
   }
   const passkey=path.match(/^auth\/(signup|login|add)\/(options|verify)$/);

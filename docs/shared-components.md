@@ -101,4 +101,6 @@ Two independently signed synthetic visitor passkeys enroll through the actual ho
 
 The starter journey uses nine actual runtime calls (one owner check and eight visitor attempts), zero inference calls and no real customer data or deployment. The prior notebook/recovery/erasure journey still passes in the same invocation. `node --check tests/task-list-app-journey.mjs` and diff checks passed. This closes connected handler/runtime acceptance for the shared starter, not physical passkey or browser interaction acceptance.
 
-The current generic visitor form still uses text for the action name and shows structured output. Controlled choice fields and a more natural task-list presentation remain user-experience work before describing this as a polished task-management app.
+The generic visitor page still shows structured task output. A more natural task-list presentation remains user-experience work before describing this as a polished task-management app.
+
+The deployed reviewed-choice-field support replaces typed task actions with a bounded native menu in the connected starter test and permits blank new-task text for non-add operations. The task-list source/digest stays unchanged. See [choice-field contract](app-data.md#reviewed-choice-fields--september-30-2026). Task results still use the controlled structured-output view; a dedicated task-management layout remains separate work.

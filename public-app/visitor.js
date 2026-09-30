@@ -545,13 +545,28 @@
     const fields = $("#fields");
     fields.replaceChildren();
     for (const field of config.form.fields) {
-      const label = document.createElement("label"), input = document.createElement("input");
+      const label = document.createElement("label"), input = document.createElement(field.type === "choice" ? "select" : "input");
       input.name = field.key;
-      input.type = field.type === "boolean" ? "checkbox" : field.type;
+      if (field.type !== "choice") input.type = field.type === "boolean" ? "checkbox" : field.type;
       input.autocomplete = "off";
+      if (field.type === "choice") {
+        input.required = true;
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose an option";
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        input.append(placeholder);
+        for (const option of field.options) {
+          const item = document.createElement("option");
+          item.value = option.value;
+          item.textContent = option.label;
+          input.append(item);
+        }
+      }
       if (field.type === "text") {
         input.maxLength = 300;
-        input.required = true;
+        input.required = !field.optional;
       }
       if (field.type === "number") {
         input.step = "any";

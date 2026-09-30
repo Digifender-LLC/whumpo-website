@@ -67,3 +67,7 @@ for(const text of [importRequest+' |',importRequest+' | '+Array(5).fill(mediaId)
  const rendered=renderToStaticMarkup(createElement(ChatRequest,{text}));assert.ok(!rendered.includes('<details'));assert.ok(!rendered.includes('<script>'));
 }
 console.log('Request presentation passed: bounded complete WordPress commands, private review versus confirmation wording, unchanged exact request disclosure, malformed/prose preservation and no action authority.');
+
+const choicePreview=pageCard('ready',{title:'Tasks',description:'Choose an action',buttonLabel:'Apply',fields:[{key:'action',label:'Action',type:'choice',options:[{value:'add',label:'Add <script>task</script>'},{value:'remove',label:'Remove task'}]},{key:'text',label:'New task',type:'text',optional:true}]});
+assert.ok(choicePreview.includes('<select disabled'));assert.ok(choicePreview.includes('Choices for Action'));assert.ok(choicePreview.includes('Remove task'));assert.ok(choicePreview.includes('Add &lt;script&gt;task&lt;/script&gt;'));assert.ok(!choicePreview.includes('<script>'));assert.ok(choicePreview.includes('Optional text'));
+console.log('Choice review passed: all approved choices visible as escaped text, disabled native control and optional text disclosure.');
