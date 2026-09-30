@@ -1,3 +1,4 @@
+import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
 import {acceptsCustomerEligibility,customerEligibilityMessage} from './content-policy';
 import {eraseRevokedVisitor} from './app-owner-erasure';
 import {chatHistory} from './chat-history';
@@ -34,7 +35,7 @@ import {listCMSPublications} from './cms-publication';
 import {readCMSCapabilities,readCMSStatus} from './cms-status';
 import {listCMS,readCMSReview,prepareCMS,confirmCMS,CMSProjectError} from './cms-projects';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState} from './backend-state';
-import {BackendError,listBackends,saveBackend,testBackend} from './backend-versions';
+import {BackendError,listBackends,testBackend} from './backend-versions';
 import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage} from './version-diff';
@@ -423,10 +424,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(method==='GET'&&backendDiffRoute)return json(await compareBackends(env.DB,user.id,backendDiffRoute[1],backendDiffRoute[2]));
   const backendRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/backends(?:\/([0-9a-f-]{36})\/test)?$/);
   if(backendRoute){
-    if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1])});
+    if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1]),imports:await listBackendImports(env.DB,user.id,backendRoute[1])});
     if(method==='POST'){
       const data=await body(request);if(!data)return error(400,'A bounded JSON request is required');
-      return backendRoute[2]?json(await testBackend(env.DB,env.BACKEND_RUNTIME,user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await saveBackend(env.DB,user.id,backendRoute[1],data.id,data.source),201);
+      return backendRoute[2]?json(await testBackend(env.DB,env.BACKEND_RUNTIME,user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
     }
   }
   const inboxMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/inbox$/);
@@ -617,8 +618,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
-    if(_event.cron==='47 * * * *'){const checks=await Promise.allSettled([maintainHosting(env.DB,hostingConfig(env)),maintainHealth(env.DB)]);if(checks.some(r=>r.status==='rejected'))throw Error('Scheduled website checks failed');return;}
-    const results=await Promise.allSettled([cleanupFairUseObservations(env.DB),cleanupTraffic(env.DB),cleanupAppLifecycle(env.DB),cleanupContacts(env.DB),cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env)),cleanupCloudflare(env.DB,cloudflareConfig(env))]);
+    if(_event.cron==='47 * * * *'){const checks=await Promise.allSettled([scanBackendImports(env.DB),maintainHosting(env.DB,hostingConfig(env)),maintainHealth(env.DB)]);if(checks.some(r=>r.status==='rejected'))throw Error('Scheduled website checks failed');return;}
+    const results=await Promise.allSettled([scanBackendImports(env.DB),cleanupFairUseObservations(env.DB),cleanupTraffic(env.DB),cleanupAppLifecycle(env.DB),cleanupContacts(env.DB),cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env)),cleanupCloudflare(env.DB,cloudflareConfig(env))]);
     if(results.some(result=>result.status==='rejected'))throw Error('Scheduled maintenance failed');
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

@@ -63,8 +63,8 @@ Next: integrate the owned backend versions and authorized test gateway below int
 
 Migration 0033 adds immutable owned backend versions and execution receipts. Authenticated same-origin routes:
 
-- `GET /api/projects/:project/backends`: owned version IDs, digests and dates.
-- `POST /api/projects/:project/backends`: `{id, source}` saves a private JavaScript module (8 KiB maximum). The version UUID is a caller-supplied idempotency key. Reusing it with different content is rejected.
+- `GET /api/projects/:project/backends`: owned executable-version metadata plus separate quarantined import metadata.
+- `POST /api/projects/:project/backends`: `{id, source}` now returns 202 with a **quarantined import**, not an executable version (8 KiB maximum). The import UUID is a caller-supplied idempotency key; changed content is rejected. Background preliminary checks cannot approve it. See [content safety](content-safety.md).
 - `POST /api/projects/:project/backends/:version/test`: `{id, input}` tests exactly that saved version through the private service binding. Input is JSON up to 8 KiB, output up to 16 KiB; the whole HTTP JSON request remains limited to 16 KiB. Source hashes are checked before execution.
 
 This is private pure computation: no data mutation capability or public application endpoint. Saving code does not validate or publish it. The test result is data and must never be rendered as trusted HTML. Inputs are not retained; receipts retain an input fingerprint and bounded output, so test with non-sensitive examples. Outputs are not sent to AI by these routes.
@@ -81,7 +81,8 @@ The model can now propose a `backend` action to create a private version, list v
 
 Guided commands, available without AI units:
 
-- `/backends PROJECT_ID`: list version IDs and hashes.
+- `/backends PROJECT_ID`: list executable version IDs and hashes.
+- `/backend-imports PROJECT_ID`: read quarantined import safety status without exposing source or executing it.
 - `/backend VERSION_ID`: inspect owned source, explicitly labeled as untrusted.
 - `/test-backend VERSION_ID JSON`: run a non-sensitive example (defaults to null when input is omitted).
 - `/backend-result RECEIPT_ID`: read a prior test result without dispatch.
