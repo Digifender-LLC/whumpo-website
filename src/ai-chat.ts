@@ -1,4 +1,5 @@
 import {inspectionRequest,inspectionMessages,inspectionAllowance} from './agent-inspection';
+import {firstDraftProjectId,welcomeDraftProject,firstDraftProposalAllowed} from './first-draft';
 import { startAcknowledgment } from './acknowledgment';
 import { ensureInferenceBudget, inferenceReservation, dispatchInference, observeInference, uncertainInference } from './model-costs';
 import { museTestRoute } from './model-policy';
@@ -46,11 +47,16 @@ export async function reconcileChat(db: D1Database, userId: string) {
 export async function sendAIChat(db: D1Database, userId: string, id: string, revision: number, content: string, config: AIConfig, transport: typeof fetch = globalThis.fetch.bind(globalThis), dnsOptions?:DNSChatOptions) {
   const previous = await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id = ? AND user_id = ?').bind(id, userId).first<{ user_text: string; revision: number }>();
   if (previous) return previous.user_text === content && previous.revision === revision + 1 ? { status: 200 } : { status: 409, error: 'This message ID was already used for another request' };
+  const firstProjectId=firstDraftProjectId(content);
+  const firstProject=firstProjectId?await welcomeDraftProject(db,userId,firstProjectId):null;
+  if(firstProjectId&&!firstProject)return {status:409,error:'That first project is no longer waiting for a website draft. Refresh Chat to see your saved work.'};
   const context = await siteContext(db,userId);
+  if(firstProject)context.projects=[firstProject,...context.projects.filter(p=>p.id!==firstProject.id)].slice(0,5);
   const dnsStatus=await cloudflareStatus(db,userId,dnsOptions?.config);
   context.dnsConnection={enabled:dnsStatus.enabled,connected:dnsStatus.connected,expiresAt:dnsStatus.expiresAt};
-  const { results: history } = await db.prepare("SELECT user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' ORDER BY revision DESC LIMIT 4").bind(userId).all<{ user_text: string; assistant_text: string }>();
-  const system = agentPrompt(context,agentPromptFocus(content));
+  const { results: history } = await db.prepare("SELECT id,user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' ORDER BY revision DESC LIMIT 4").bind(userId).all<{id:string;user_text:string;assistant_text:string}>();
+  const websiteFollowup=!!context.latest&&history[0]?.id===context.latest.id;
+  const system = agentPrompt(context,firstProject?'website':agentPromptFocus(content,websiteFollowup))+(firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is preview for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
   // Keep each transport message within its limit without dropping system policy.
   // Budget reservations still include every byte across all chunks.
   const messages: ChatMessage[] = [];
@@ -61,7 +67,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   }
   const systemMessages=messages.length;
   for (const turn of history.reverse()) messages.push({ role: 'user', content: turn.user_text.slice(0, 600) }, { role: 'assistant', content: turn.assistant_text.slice(0, 900) });
-  messages.push({ role: 'user', content: content.startsWith('/ask ') ? content.slice(5) : content.startsWith('/edit ') ? content.slice(6) : content });
+  messages.push({ role: 'user', content: firstProject?`Build the first private website draft for project ${firstProject.id} using my saved brief. Keep it private.`:content.startsWith('/ask ') ? content.slice(5) : content.startsWith('/edit ') ? content.slice(6) : content });
   const budgetDate=new Date();
   const billing = await getBilling(db, userId,budgetDate);
   await ensureInferenceBudget(db,userId,billing.period,billing.plan.id);
@@ -81,7 +87,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   if (outputLimit < 1024) return noReservation();
   // Reserve both calls before dispatch. Low balances retain the single-call path.
   const followupInputBound=boundInput()+inspectionAllowance;
-  const canFollow=messages.length<=48&&buildUnits(boundInput()+followupInputBound,outputLimit*2)<=available;
+  const canFollow=!firstProject&&messages.length<=48&&buildUnits(boundInput()+followupInputBound,outputLimit*2)<=available;
   const reservedInput=boundInput()+(canFollow?followupInputBound:0);
   const units = buildUnits(reservedInput, outputLimit*(canFollow?2:1));
   const requestHash=await hashToken(JSON.stringify({content,revision}));
@@ -125,8 +131,13 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     // Timeout reconciliation or an operator waiver may have closed this turn while the provider ran.
     const open=await db.prepare("SELECT t.id FROM chat_turns t JOIN usage_operations o ON o.id=t.id AND o.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='pending' AND o.status IN ('dispatched','uncertain')").bind(id,userId).first();
     if(!open)return {status:200};
+    if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id))throw new ProposalError();
     proposal ??= await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
+    // Claim in the same transaction as the version and reply, after model validation.
+    // This also refuses a project removed while the provider was responding.
+    const firstDraftClaim=firstProject&&proposal.statements.length?[db.prepare('INSERT INTO welcome_first_drafts(turn_id,project_id,user_id) VALUES(?,?,?)').bind(id,firstProject.id,userId)]:[];
     await db.batch([
+      ...firstDraftClaim,
       ...proposal.statements,
       db.prepare("UPDATE chat_turns SET assistant_text = ?, input_tokens = ?, output_tokens = ? WHERE id = ? AND user_id = ?").bind(proposal.reply,result.inputTokens,result.outputTokens,id,userId)
     ]);
@@ -137,6 +148,11 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     // Recover a committed answer/draft after an acknowledgement was lost. Never regenerate.
     const persisted = await db.prepare("SELECT input_tokens FROM chat_turns WHERE id=? AND user_id=?").bind(id,userId).first<{input_tokens:number|null}>();
     if(persisted?.input_tokens != null){await reconcileChat(db,userId);return {status:200};}
+    if(String(cause).includes('welcome_first_draft_changed')){
+      await finishUsage(db,userId,id,0);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='Your first project changed while I was drafting. No additional draft was saved and no build units were charged. Open your saved versions to continue.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      return {status:200};
+    }
     if(String(cause).includes('comparison_changed')){
       await finishUsage(db,userId,id,0);
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='A compared version was removed before the comparison could be saved. Request a fresh comparison. No build units were charged.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
