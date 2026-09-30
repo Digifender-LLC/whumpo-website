@@ -558,8 +558,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (method === "POST" && pathname === "/api/chat") {
     const data = await body(request);
     if (!data) return error(400, "A JSON message is required");
-    if(typeof data.content==='string'&&/^\/(?:confirm-app-restore|remove-app-recovery)(?:\s|$)/i.test(data.content.trim())){
-      if(!await recentSession(request,env))return error(401,'Sign in again before restoring or removing application recovery data');
+    if(typeof data.content==='string'&&/^\/(?:confirm-app-restore|remove-app-recovery|confirm-app-upgrade|confirm-app-rollback)(?:\s|$)/i.test(data.content.trim())){
+      if(!await recentSession(request,env))return error(401,'Sign in again before changing application code or recovery data');
       if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)return error(429,'Too many recovery changes. Try again in a minute.');
     }
     const result = await sendChat(env.DB, user.id, data, configuredAI(env),{background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});

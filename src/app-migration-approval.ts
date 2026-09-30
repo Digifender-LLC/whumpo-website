@@ -14,7 +14,7 @@ export async function readMigrationReview(db:D1Database,user:string,id:string){
  for(const [source,digest]of [[row.old_source,row.old_digest],[row.target_source,row.target_digest],[row.transform_source,row.transform_digest]])if(await hashToken(source)!==digest)throw new BackendError(409,'Migration source integrity check failed');
  return {...progress,projectName:row.name,baseRevision:row.base_revision,changedDocuments:row.changed_documents,original:{source:row.old_source,digest:row.old_digest},target:{source:row.target_source,digest:row.target_digest},transform:{source:row.transform_source,digest:row.transform_digest}};
 }
-/** Internal until customer review/session controls are connected. Never callable by a model. */
+/** Applies only after explicit customer confirmation; Chat enforces a fresh session. Never callable by a model. */
 export async function confirmMigration(db:D1Database,user:string,id:string,confirmation:unknown){
  if(confirmation!=='UPGRADE')throw new BackendError(400,'Type UPGRADE to confirm the reviewed program and data replacement');
  const review=await readMigrationReview(db,user,id);if(review.state==='applied')return review;

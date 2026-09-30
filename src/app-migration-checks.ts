@@ -13,7 +13,7 @@ export async function readMigrationCheck(db:D1Database,user:string,id:string){
  const expected=JSON.parse(m.roster_json).length as number;
  return {id,projectId:m.project_id,fromVersion:m.from_version,toVersion:m.to_version,transformVersion:m.transform_version,testId:m.test_id,expiresAt:m.expires_at,documents:expected,pending:row!.pending,running:row!.running,ready:row!.ready,failed:row!.failed,state:row!.applied?'applied':!row!.current||row!.retained!==expected?'changed':row!.failed?'failed':row!.running?'uncertain':row!.pending?'preparing':'ready'};
 }
-/** Internal only: no route/model action or apply authority until the full reviewed workflow is connected. */
+/** Preparation only; Chat/model actions may prepare checks but cannot apply them. */
 export async function beginMigrationCheck(db:D1Database,user:string,project:string,id:string,target:string,transform:string,test:string){
  if(![project,id,target,transform,test].every(v=>uuid.test(v)))throw new BackendError(400,'Provide application, saved versions, test and request IDs');
  const previous=await db.prepare('SELECT * FROM app_migration_checks WHERE id=?').bind(id).first<Check>();
