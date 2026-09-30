@@ -11,6 +11,9 @@ async function chat(a,content){const state=await json(a,'/api/chat'),input={id:c
 const served=p=>host.fetch(new Request('https://'+p+'.whumpo.site/'),{DB:db,FILES:proxy.env.FILES});
 try{
  const owner=await account(),foreign=await account(),now=new Date().toISOString();
+ // New accounts cannot bypass welcome through history or search.
+ assert.equal((await call(owner,'/api/chat/history?before=156&q=Question')).status,409);
+ for(const account of [owner,foreign])await db.prepare('INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),account.id,'Started project',now,now).run();
  const insert=(u,n)=>db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u,n,'Question '+n,'Answer '+n,now);
  for(let start=1;start<=155;start+=50)await db.batch(Array.from({length:Math.min(50,156-start)},(_,i)=>insert(owner.id,start+i)));
  await insert(foreign.id,54).run();
@@ -27,5 +30,17 @@ try{
  assert.equal((await call(null,'/api/chat/history?before=156')).status,401);
  assert.equal((await call(owner,'/api/chat/history?before=156')).headers.get('cache-control'),'no-store');
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM chat_turns WHERE user_id=?').bind(owner.id).first()).n,156);
- console.log('Chat history passed: authenticated HTTP, tenant isolation, bounded complete pagination, concurrent new messages, strict cursors and read-only transcript fields.');
+ // Literal search reads both sides, remains owner scoped, and retains cursor boundaries.
+ assert.equal((await json(owner,'/api/chat/history?before=157&q=question')).turns.length,50);
+ assert.deepEqual((await json(owner,'/api/chat/history?before=157&q=ANSWER%2054')).turns.map(t=>t.revision),[54]);
+ assert.deepEqual((await json(owner,'/api/chat/history?before=54&q=Answer%2054')).turns,[]);
+ await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE user_id=? AND revision=54').bind("Literal 100%_ \\ quote ' OR 1=1 --",owner.id).run();
+ for(const query of ['100%_',"' OR 1=1 --",'\\'])assert.deepEqual((await json(owner,'/api/chat/history?before=157&q='+encodeURIComponent(query))).turns.map(t=>t.revision),[54]);
+ assert.deepEqual((await json(foreign,'/api/chat/history?before=157&q=100%25_')).turns,[]);
+ for(const query of ['x'.repeat(101),'a\u0000b','a\nb'])assert.equal((await call(owner,'/api/chat/history?before=157&q='+encodeURIComponent(query))).status,400);
+ const searched=[];let searchCursor=157;
+ while(searchCursor){const page=await json(owner,'/api/chat/history?before='+searchCursor+'&q=Question');searched.push(...page.turns);searchCursor=page.nextBefore;}
+ assert.equal(searched.length,156);assert.equal(new Set(searched.map(t=>t.id)).size,156);
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM usage_operations WHERE user_id=?').bind(owner.id).first()).n,0);
+ console.log('Chat history passed: authenticated HTTP, tenant isolation, bounded complete pagination, concurrent new messages, strict cursors read-only transcript fields, literal search, search pagination and welcome gating.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
