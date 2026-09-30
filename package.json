@@ -76,6 +76,7 @@
     "test:wordpress-runtime": "node tests/cms-wordpress-runtime.mjs",
     "test:wordpress-sources": "node tests/cms-wordpress-sources.mjs",
     "test:cms-imports": "node tests/cms-imports.mjs",
+    "test:wordpress-taxonomies": "node tests/cms-wordpress-taxonomies.mjs",
     "test:wordpress-stage": "node tests/cms-wordpress-stage.mjs",
     "test:cms-native-publication": "node tools/test-cms-native-publication.mjs",
     "test:emdash-bridge": "node tools/test-emdash-bridge.mjs",

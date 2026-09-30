@@ -1,3 +1,4 @@
+import {wordpressTaxonomyPlan,type WordPressTaxonomyEvidence} from './cms-wordpress-taxonomies';
 import {canonicalImportProvenance} from './cms-import-provenance';
 import sax from 'sax';
 import {parseWxrString} from './vendor/emdash-wxr';
@@ -16,8 +17,10 @@ export function wordpressExcerpt(source:string){
 const maxBytes=1048576,maxItems=100;
 function validateXML(xml:string){
  if(/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml))throw Error('DTD and entity declarations are not accepted');
+ const evidence:WordPressTaxonomyEvidence={languages:new Set(),labels:new Map()};
+ const texts:string[]=[];
  const p=sax.parser(true,{xmlns:true}),stack:sax.QualifiedTag[]=[];let items=0,channels=0,wxr=false,root=false;
- p.onopentag=tag=>{const n=tag as sax.QualifiedTag;stack.push(n);if(stack.length>40)throw Error('WordPress XML nesting exceeds the staging limit');
+ p.onopentag=tag=>{const n=tag as sax.QualifiedTag;stack.push(n);texts.push('');if(stack.length>40)throw Error('WordPress XML nesting exceeds the staging limit');
   if(stack.length===1){if(n.local!=='rss'||n.uri)throw Error('Choose a WordPress RSS export');root=true;}
   if(stack.length===2&&n.local==='channel'&&!n.uri)channels++;
   if(stack.length===3&&n.local==='item'&&!n.uri&&++items>maxItems)throw Error('Split this export into batches of at most 100 items');
@@ -25,15 +28,22 @@ function validateXML(xml:string){
   // The pinned upstream importer addresses these by their standard prefix.
   if(n.prefix==='wp'&&!/^https?:\/\/wordpress\.org\/export\/1\.[012]\/$/.test(n.uri))throw Error('Invalid WordPress namespace');
  };
- p.onclosetag=()=>stack.pop();p.onerror=()=>{throw Error('Malformed WordPress XML');};
+ p.ontext=p.oncdata=text=>{if(texts.length)texts[texts.length-1]+=text;};
+ p.onclosetag=()=>{const tag=stack.at(-1)!,text=texts.pop()!.trim();
+  if(stack.length===3&&tag.local==='language'&&!tag.uri&&text)evidence.languages.add(text);
+  if(stack.length===4&&stack[2].local==='item'&&tag.local==='category'&&!tag.uri){
+   const attr=(name:string)=>{const value=tag.attributes[name];return typeof value==='string'?value:value?.value??'';};
+   const domain=attr('domain'),slug=attr('nicename');
+   if((domain==='category'||domain==='post_tag')&&slug){const key=(domain==='post_tag'?'tag':domain)+'\0'+slug;const labels=evidence.labels.get(key)??new Set<string>();labels.add(text);evidence.labels.set(key,labels);}
+  }stack.pop();};p.onerror=()=>{throw Error('Malformed WordPress XML');};
  try{p.write(xml).close();}catch(e){if(e instanceof Error&&e.message.startsWith('Line:'))throw Error('Malformed WordPress XML');throw e;}
  if(!root||channels!==1||!wxr)throw Error('Choose a standard WordPress WXR export with one channel');
- return items;
+ return {items,evidence};
 }
 export async function analyzeWordPress(bytes:Uint8Array){
  if(!(bytes instanceof Uint8Array)||bytes.length===0||bytes.length>maxBytes)throw Error('Choose a WordPress XML export up to 1 MiB');
  let xml;try{xml=new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(bytes);}catch{throw Error('Use a UTF-8 WordPress export');}
- const itemCount=validateXML(xml),version='1.0.1';
+ const {items:itemCount,evidence}=validateXML(xml),version='1.0.1';
  let data;try{data=await parseWxrString(xml);}catch{throw Error('WordPress export could not be parsed');}
  if(data.posts.length+data.attachments.length!==itemCount)throw Error('Export items could not be accounted for; no partial staging was accepted');
  const ids=new Set<number>();for(const item of [...data.posts,...data.attachments]){if(item.id===undefined||!Number.isSafeInteger(item.id)||item.id<1||ids.has(item.id))throw Error('Every exported item needs a unique positive WordPress ID');ids.add(item.id);}
@@ -50,7 +60,7 @@ export async function analyzeWordPress(bytes:Uint8Array){
   if(/\[[a-z][a-z0-9_-]*(?:\s[^\]]*)?\]/i.test(html))reasons.push('shortcode_requires_manual_conversion');
   let candidate=null;
   if(!reasons.length){try{const converted=gutenbergToPortableText(html,{mediaMap:new Map()}).map((block,i)=>{if(block._type!=='block')return block;const definitions=block.markDefs??[],keys=new Map(definitions.map((d,j)=>[d._key,'wp-link-'+j]));return {...block,_key:'wp-block-'+i,markDefs:definitions.map(d=>({...d,_key:keys.get(d._key)})),children:block.children.map((span,j)=>({...span,_key:'wp-text-'+j,marks:(span.marks??[]).map(mark=>keys.get(mark)??mark)}))};});candidate=cmsRichDraftBody(post.title,converted,post.postType==='post'?wordpressExcerpt(post.excerpt??''):undefined);}catch{reasons.push('converted_content_outside_supported_article_shape');}}
-  return {sourceId:post.id!,collection:post.postType==='page'?'pages' as const:post.postType==='post'?'posts' as const:null,title:post.title??'',sourceStatus:post.status??'',sourceHTML:html,sourceAuthor:post.creator??null,sourceURL:post.link??null,sourceDate:post.postDate??null,sourceSlug:post.postName??null,sourceExcerpt:post.excerpt??'',categories:post.categories,tags:post.tags,customFieldCount:post.meta.size,translationGroup:post.translationGroup??null,locale:post.locale??null,status:candidate?'needs_review':'needs_changes',reasons,warnings,candidate};
+  return {sourceId:post.id!,collection:post.postType==='page'?'pages' as const:post.postType==='post'?'posts' as const:null,title:post.title??'',sourceStatus:post.status??'',sourceHTML:html,sourceAuthor:post.creator??null,sourceURL:post.link??null,sourceDate:post.postDate??null,sourceSlug:post.postName??null,sourceExcerpt:post.excerpt??'',taxonomyPlan:wordpressTaxonomyPlan(data,post,evidence),categories:post.categories,tags:post.tags,customFieldCount:post.meta.size,translationGroup:post.translationGroup??null,locale:post.locale??null,status:candidate?'needs_review':'needs_changes',reasons,warnings,candidate};
  });
  return {contract:'whumpo-wordpress-stage',version:1,converter:{name:'emdash',version},source:{digest:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),v=>v.toString(16).padStart(2,'0')).join(''),bytes:bytes.length,items:itemCount},site:{title:data.site.title??'',url:data.site.baseSiteUrl??data.site.link??null},articles,attachments:data.attachments.map(a=>({sourceId:a.id,title:a.title??'',url:a.url??null,status:'not_fetched'})),summary:{articles:articles.length,reviewable:articles.filter(a=>a.candidate).length,needsChanges:articles.filter(a=>!a.candidate).length,attachments:data.attachments.length},exclusions:['No CMS writes or publication','No media fetched','No themes or plugins executed','No authors or accounts provisioned','No redirects created'],sourceRetained:false};
 }

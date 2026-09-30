@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import {analyzeWordPress,wordpressStageHTML} from '../tools/cms-wordpress-stage.mjs';
+const category=(slug='news',label='Company news',extra='')=>`<wp:category><wp:term_id>2</wp:term_id><wp:category_nicename>${slug}</wp:category_nicename><wp:cat_name><![CDATA[${label}]]></wp:cat_name>${extra}</wp:category>`;
+const tag='<wp:tag><wp:term_id>3</wp:term_id><wp:tag_slug>news</wp:tag_slug><wp:tag_name>Updates</wp:tag_name></wp:tag>';
+const assign=(domain='category',slug='news',label='Company news')=>`<category domain="${domain}" nicename="${slug}"><![CDATA[${label}]]></category>`;
+const post=(assignments=assign(),extra='',id=1,type='post')=>`<item><title>Story</title><wp:post_id>${id}</wp:post_id><wp:post_type>${type}</wp:post_type><wp:status>draft</wp:status><content:encoded><![CDATA[<p>Story</p>]]></content:encoded>${assignments}${extra}</item>`;
+const analyze=async(definitions=category(),items=post(),language='en')=>analyzeWordPress(new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><language>${language}</language><wp:wxr_version>1.2</wp:wxr_version>${definitions}${items}</channel></rss>`));
+const plan=async(...args)=>(await analyze(...args)).articles[0].taxonomyPlan;
+const refused=async(reason,...args)=>{const p=await plan(...args);assert.equal(p.status,'needs_changes');assert.deepEqual(p.terms,[]);assert.ok(p.issues.includes(reason),JSON.stringify(p));};
+const originalFetch=globalThis.fetch;globalThis.fetch=()=>{throw Error('No network during source mapping');};
+try{
+ const report=await analyze(category()+tag,post(assign('post_tag','news','Updates')+assign()+assign()));
+ assert.deepEqual(report.articles[0].taxonomyPlan,{version:1,status:'ready_for_review',terms:[{taxonomy:'categories',slug:'news',label:'Company news'},{taxonomy:'tags',slug:'news',label:'Updates'}],issues:[],applied:false});
+ assert.equal(report.articles[0].candidate.status,'draft');
+ assert.equal((await plan('',post(''))).status,'none');
+ await refused('missing_term_definition','',post());
+ await refused('conflicting_term_labels',category()+category('news','Other'));
+ await refused('conflicting_term_labels',category(),post(assign()+assign('category','news','Other')));
+ await refused('conflicting_term_labels',category(),post()+post(assign('category','news','Other'),'',2));
+ await refused('conflicting_term_labels',category(),post(assign()+assign('category','news','news')));
+ await refused('category_hierarchy_requires_mapping',category('news','Company news','<wp:category_parent>parent</wp:category_parent>'));
+ await refused('term_descriptions_require_mapping',category('news','Company news','<wp:category_description>Keep me</wp:category_description>'));
+ await refused('taxonomy_locale_requires_review',category(),post(),'fr');
+ await refused('taxonomy_locale_requires_review',category(),post(assign(),'<wp:postmeta><wp:meta_key>_icl_lang_code</wp:meta_key><wp:meta_value>fr</wp:meta_value></wp:postmeta>'));
+ await refused('page_taxonomies_require_mapping',category(),post(assign(),'',1,'page'));
+ await refused('custom_taxonomies_require_mapping',category(),post(assign('genre','novel','Novel')));
+ await refused('term_shape_requires_changes',category('Upper','Name'),post(assign('category','Upper','Name')));
+ const many=Array.from({length:21},(_,i)=>'term-'+i);
+ await refused('too_many_initial_terms',many.map(s=>category(s,s)).join(''),post(many.map(s=>assign('category',s,s)).join('')));
+ const large=Array.from({length:20},(_,i)=>'term-'+i),label='日'.repeat(190);
+ await refused('initial_term_request_exceeds_limit',large.map(s=>category(s,label)).join(''),post(large.map(s=>assign('category',s,label)).join('')));
+ const generic='<wp:term><wp:term_id>2</wp:term_id><wp:term_taxonomy>category</wp:term_taxonomy><wp:term_slug>news</wp:term_slug><wp:term_name>Company news</wp:term_name></wp:term>';
+ assert.equal((await plan(generic)).status,'ready_for_review');
+ await refused('conflicting_term_labels',category()+generic.replace('Company news','Changed'));
+ const html=await wordpressStageHTML(await analyze(category('news','<script>'),post(assign('category','news','<script>'))));
+ assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;'));assert.match(html,/no terms have been installed/);
+ console.log('WordPress taxonomy source mapping passed: exact labels/slugs, deterministic deduplication, definition and assignment conflicts, hierarchy/locale/custom/page refusal, byte/count bounds, escaped report, no network or native writes.');
+}finally{globalThis.fetch=originalFetch;}
