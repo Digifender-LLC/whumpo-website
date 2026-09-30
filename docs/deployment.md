@@ -394,3 +394,10 @@ Both TypeScript projects, build and asset-loading checks pass. Independent live 
 ## Standard AI accounting schema — September 30, 2026
 
 Migration 0094 applied to the private test database under the owner’s all-pending-migrations authorization. Readback at 15:21 UTC confirms all 94 files applied, both standard-AI receipt triggers and zero requests. Disposable-D1 receipt race/isolation/replay/non-charging tests and both TypeScript projects passed. No Worker deployment or inference routing changed. The runtime receipt module still needs integration with Chat and internal cost receipts before unlimited standard assistance is active. Private evidence: `.secrets/standard-ai-migration.json`.
+
+
+## Standard AI internal cost admission — September 30, 2026
+
+Migration 0095 applied to the private test database under the existing authorization. Readback at 15:26 UTC confirms all 95 migrations, no pending files, both admission triggers accepting standard receipts and both guards preventing mixed accounting paths. Standard receipt and historical model-cost D1 tests passed, as did both TypeScript checks. Private evidence: `.secrets/standard-ai-inference-migration.json`.
+
+No Worker release or Chat accounting switch occurred. Standard Chat still uses historical test units until its admission, completion and recovery paths are integrated; advanced model dispatch remains disabled. Undispatched internal-reservation cleanup now supports cancelled standard receipts in source. CMS testing remains deferred.
