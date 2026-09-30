@@ -18,6 +18,8 @@ const {default:platform}=await module('src/index.ts'),{cmsGateway}=await module(
 try{
  const a=await fixture(),p=provider(a);await deployCMS(db,a.project,digest,a.config,p);await connectCMS(db,a.project,id());
  const token='a'.repeat(64),otherToken='b'.repeat(64),other=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(other,other+'@example.test',now).run();
+ // The foreign customer has their own project so Chat reaches ownership checks past the welcome gate.
+ await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Other customer project','','draft',?,?)").bind(id(),other,now,now).run();
  for(const [session,user] of [[token,a.user],[otherToken,other]])await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(session),user,new Date(Date.now()+3600000).toISOString(),now).run();
  let nativeWrites=0,bucketReads=0;
  const nativeEnv={DB:db,WHUMPO_CMS_PROJECT_ID:a.project,WHUMPO_CMS_OWNER_ID:a.user,WHUMPO_CMS_ORIGIN:a.config.origin,WHUMPO_CMS_BRIDGE_KEY:a.config.secret};
@@ -34,7 +36,7 @@ try{
  assert.equal((await call(base+'/'+source+'/import-reviews',{method:'POST',body:{id:id(),sourceItemId:9,title:'Forged replacement'}})).status,400);
  const reviewPath='/api/cms-import-reviews/'+review;assert.equal((await call(reviewPath,{cookie:otherToken})).status,404);assert.equal((await call(reviewPath+'/confirm',{method:'POST',body:{},origin:'https://foreign.test'})).status,403);assert.equal(nativeWrites,0);
  const page=await call(reviewPath+'/preview');assert.equal(page.status,200);assert.match(page.headers.get('content-security-policy'),/sandbox/);const reviewHTML=await page.text();assert.match(reviewHTML,/Original/);assert.match(reviewHTML,/Source excerpt marker/);assert.match(reviewHTML,/Categories: none retained/);assert.match(reviewHTML,/Tags: none retained/);
- const chat=async(content,cookie=token,requestId=id())=>{const state=await (await call('/api/chat',{cookie})).json();const response=await call('/api/chat',{method:'POST',cookie,body:{content,revision:state.state.revision,id:requestId}});assert.equal(response.status,200,await response.clone().text());return (await (await call('/api/chat',{cookie})).json()).turns.find(t=>t.id===requestId);};
+ const chat=async(content,cookie=token,requestId=id())=>{const stateResponse=await call('/api/chat',{cookie});assert.equal(stateResponse.status,200,await stateResponse.clone().text());const state=await stateResponse.json();const response=await call('/api/chat',{method:'POST',cookie,body:{content,revision:state.state.revision,id:requestId}});assert.equal(response.status,200,await response.clone().text());return (await (await call('/api/chat',{cookie})).json()).turns.find(t=>t.id===requestId);};
  const inventory=await chat('/wordpress-sources '+a.project);assert.match(inventory.assistant_text,/wordpress.xml/);
  const reportTurn=await chat('/wordpress-inspect '+a.project+' '+source);assert.match(reportTurn.assistant_text,/Item 9/);assert.ok(!reportTurn.assistant_text.includes('<strong>'));assert.ok(!reportTurn.assistant_text.includes('Original story'));assert.ok(!reportTurn.assistant_text.includes('Source excerpt marker'));
  const forbidden=await chat('/wordpress-inspect '+a.project+' '+source,otherToken);assert.ok(!forbidden.assistant_text.includes('Private import'));

@@ -1,3 +1,4 @@
+import {verifyCMSImportDraftMedia} from './cms-import-media';
 import {pendingCMSWork,describePendingCMS} from './cms-pending';
 import {cmsImageReferences} from './cms-image-block';
 import {captureCMSArticleImages} from './cms-article-images';
@@ -34,6 +35,7 @@ export async function createCMSDraft(db:D1Database,user:string,project:string,id
  if(!row)throw new CMSProjectError(409,'CMS draft request capacity is full or unavailable');
  if(row.user_id!==user||row.project_id!==project||row.collection!==collection||row.body!==body||row.content_format!==format)throw new CMSProjectError(409,'CMS draft request ID already used');
  if(!row.item_id){
+  await verifyCMSImportDraftMedia(db,user,id,env);
   if(await db.prepare("SELECT id FROM cms_import_reviews WHERE id=? AND taxonomy_plan<>'[]'").bind(id).first())throw new CMSProjectError(409,'Resume this article from its original import review so its categories and tags can be completed.');
   if(excerpt!==undefined)await requireCMSExcerpts(db,user,project,env);
   if(format==='structured'&&cmsImageReferences(text).length)await requireCMSImages(db,user,project,env);
