@@ -3,6 +3,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';import wrangler from 'wrangler';
 async function mod(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const platform=(await mod('src/index.ts')).default,{hashToken}=await mod('src/security.ts'),{backendAction}=await mod('src/backend-chat.ts');
 const recovery=await mod('src/app-document-recovery.ts'),backend=await mod('src/backend-versions.ts'),activation=await mod('src/app-activation.ts'),data=await mod('src/app-data.ts');
 const dir=await mkdtemp('/tmp/whumpo-app-recovery-');let proxy;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
@@ -54,5 +55,27 @@ try{
  await assert.rejects(db.prepare('INSERT INTO app_recovery_documents SELECT ?,visitor_id,revision,state_json FROM app_documents WHERE visitor_id=?').bind(point,c.id).run());
  // Replaying a snapshot request never captures the later roster.
  await recovery.createRecoveryPoint(db,user,project,point);assert.equal((await recovery.listRecoveryPoints(db,user,project))[0].retainedDocuments,0);
+ // Connected authenticated Chat controls, with no model or provider dispatch.
+ const token='a'.repeat(64),tokenHash=await hashToken(token);await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(tokenHash,user,new Date(Date.now()+3600000).toISOString(),now()).run();
+ const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:'local',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){throw Error('Unexpected AI work');}};
+ const call=(body,cookie=token,origin='http://localhost')=>platform.fetch(new Request('http://localhost/api/chat',{method:body?'POST':'GET',headers:{origin,cookie:'tellumo_session='+cookie,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,ctx);
+ async function chat(content,request=id()){const state=await(await call()).json(),response=await call({id:request,revision:state.state.revision,content});assert.equal(response.status,200,await response.clone().text());const result=await response.json();return result.turns.find(t=>t.id===request).assistant_text;}
+ const saved=id();assert.match(await chat('/save-app-recovery '+project,saved),/Saved private application recovery/);
+ const reviewed=id();assert.match(await chat(`/review-app-restore ${project} ${saved}`,reviewed),/Replace the saved documents of 1/);
+ const listing=await chat('/app-recovery '+project);assert.ok(listing.includes(saved));assert.ok(!listing.includes(c.id));
+ await assert.rejects(backendAction(db,user,id(),{kind:'backend',operation:'confirmAppRestore',projectId:project,targetId:reviewed}));
+ assert.match((await backendAction(db,user,id(),{kind:'backend',operation:'appRestoreReview',projectId:project,targetId:reviewed})).reply,/Status: pending/);
+ const request={id:id(),revision:0,content:`/confirm-app-restore ${project} ${reviewed} RESTORE`};
+ assert.equal((await call(request,'')).status,401);assert.equal((await call(request,token,'https://foreign.test')).status,403);
+ await db.prepare("UPDATE sessions SET created_at='2000-01-01T00:00:00.000Z' WHERE token_hash=?").bind(tokenHash).run();assert.equal((await call(request)).status,401);
+ await db.prepare('UPDATE sessions SET created_at=? WHERE token_hash=?').bind(now(),tokenHash).run();assert.match(await chat(request.content),/Status: applied/);
+ const doomed=id();await chat(`/review-app-restore ${project} ${saved}`,doomed);
+ assert.match(await chat(`/remove-app-recovery ${project} ${saved} REMOVE`),/removed/);
+ assert.equal((await db.prepare('SELECT count(*) n FROM app_recovery_documents WHERE point_id=?').bind(saved).first()).n,0);
+ assert.equal((await recovery.createRecoveryPoint(db,user,project,saved)).removed,1);
+ await assert.rejects(recovery.confirmAppRestore(db,user,project,doomed,'RESTORE'),e=>e.status===409);
+ assert.deepEqual(await recovery.removeRecoveryPoint(db,user,project,saved,'REMOVE'),{id:saved,removed:true});
+ assert.equal((await db.prepare('SELECT count(*) n FROM inference_calls').first()).n,0);
+ console.log('Recovery Chat passed: owned metadata, save/review/confirm/remove, unknown model-confirm refusal, origin/anonymous/stale-session denial, tombstone replay and removed-point rejection; zero inference.');
  console.log('Application recovery passed: atomic snapshots/restoration, private summaries, sealed documents, disabled-only review, owner/confirmation guards, lost-response and concurrent replay, rollback on partial failure, monotonic revisions, preserved usage, roster conflicts, revoked/erased document removal and no identity resurrection.');
 }finally{await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
