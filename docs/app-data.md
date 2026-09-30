@@ -1,5 +1,17 @@
 # Application visitor identity and persistent data
 
+## Application operations in Chat — September 30, 2026
+
+Implemented: `/app-status PROJECT_ID` gives an owned application's availability, active/revoked registered-account counts, today's admitted execution attempts and retained completed/failed/conflicted/unresolved outcomes. The current published-page handoff offers **Check app status · free**. The guided command makes no provider call; the model can request the same read through `backend / appStatus` with an exact owned project ID. A natural-language model request still uses normal AI accounting.
+
+The read uses one database statement and a UTC timestamp/day. It selects counts and project metadata, never visitor identities, documents, inputs, results, invitation codes or credential material. Project and application ownership must match. It distinguishes an unconfigured app, disabled data access, approved private app and published visitor page. Registered visitors are not concurrent users, publication state is not a network health probe, and a saved Chat result is not a live monitor.
+
+The daily attempt total comes from `app_daily_usage`, which survives visitor erasure. Outcome counts cover retained receipts only, so they can be lower than admitted attempts. Running receipts are explicitly labeled running or outcome unknown and must not be retried under a new ID. The displayed 100-attempt project ceiling is the existing separate test-stage execution guard; visitor/platform limits can also apply and these are not AI credit charges. No new limit or enforcement is introduced.
+
+Verification: `pnpm check`, `pnpm test:chat-reply`, `pnpm test:agent-prompt-focus`, `pnpm test:customer-app-journey`, isolated release TypeScript checks, build and frontend loading checks passed. The connected journey covers unconfigured/private/published/disabled states, foreign-owner denial, all retained outcome classes, unchanged daily admission counts after visitor deletion, explicit model-action validation and exclusion of private payload markers and receipt IDs from the status output. Additional outcome records are controlled test fixtures; actual runtime execution and signed synthetic passkeys remain exercised by the underlying journey. No live customer data was created for these checks.
+
+Deployed September 30, 2026 as test platform `549d9660-f4a0-4ecf-90cb-69b3f97b8b3f`. Independent readback confirmed the active version, health 200, anonymous Chat/onboarding 401 and all 16 live JS/CSS/font assets matching the tested release. No migration or new service was required. Evidence: `.secrets/app-status-release.json`.
+
 ## After publication — September 30, 2026
 
 Implemented: the latest exact receipt for the currently live visitor-page review offers **Open visitor app** and **Manage visitor access**. The first opens the fixed `app-PROJECT_ID.whumpo.site` address; the second uses the existing project-specific visitor-access navigation without an AI request. Opening controls never generates invitations or changes access. Invitation creation, recovery and revocation remain explicit operations in the visitor panel.
