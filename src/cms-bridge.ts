@@ -60,7 +60,10 @@ export async function deriveCMSSecret(master:string,projectId:string,ownerId:str
  return hex(await crypto.subtle.sign('HMAC',key,encoder.encode(JSON.stringify(['whumpo-cms-key-v1',projectId,ownerId,origin]))));
 }
 export async function callCMS(service:Fetcher,config:CMSBridgeConfig,path:string,id:string,body?:unknown,verb?:'PUT'){
- const request=await signCMSRequest(config,path,id,body,Date.now(),verb),controller=new AbortController();
+ return callSignedCMS(service,await signCMSRequest(config,path,id,body,Date.now(),verb));
+}
+export async function callSignedCMS(service:Fetcher,request:Request){
+ const controller=new AbortController();
  let timer:ReturnType<typeof setTimeout>;
  const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new CMSBridgeError(503,'CMS response timed out; check state before retrying a write'));},45000);});
  try{
