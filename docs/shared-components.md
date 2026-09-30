@@ -104,3 +104,20 @@ The starter journey uses nine actual runtime calls (one owner check and eight vi
 The generic visitor page still shows structured task output. A more natural task-list presentation remains user-experience work before describing this as a polished task-management app.
 
 The deployed reviewed-choice-field support replaces typed task actions with a bounded native menu in the connected starter test and permits blank new-task text for non-add operations. The task-list source/digest stays unchanged. See [choice-field contract](app-data.md#reviewed-choice-fields--september-30-2026). Task results now use the controlled read-only record/list cards described in [visitor presentation](app-data.md#readable-visitor-information--september-30-2026); a dedicated task editor with reviewed inline actions remains separate work.
+
+## Private reuse nominations — September 30, 2026
+
+Implemented locally, not deployed: migration `0093_backend_nominations.sql` and guided Chat commands let an owner nominate an exact saved backend version for maintainer review. This records permission to inspect; it is neither a publication license nor approval to share customer source. The nomination references the owned immutable version and its verified SHA-256 digest. It stores no second copy of source, customer inputs, secrets or configuration. No model action can nominate code.
+
+- `/nominate-backend VERSION_ID` prepares a ten-minute review, including the exact source-read command, digest, permission terms, exclusions and cancellation command.
+- `/confirm-backend-nomination NOMINATION_ID NOMINATE` records explicit consent for that review. Expired or withdrawn reviews cannot be confirmed. A confirmation replay cannot revive withdrawn permission.
+- `/backend-nomination NOMINATION_ID` reads current status; `/backend-nominations` lists the owner's retained records.
+- `/withdraw-backend-nomination NOMINATION_ID` withdraws a pending review or recorded consent. The version itself stays unchanged. Withdrawal is terminal and repeatable.
+
+The database enforces ownership/digest binding, immutable identity, allowed transitions, at most five open reviews/consents and twenty retained records per owner. Expired reviews no longer occupy an open slot but remain in the retained-record count. These are private-test safeguards, not paid-plan entitlements. Project/version or account deletion cascades the corresponding records. The twenty-record bound is not a lifetime account counter; deletion removes associated records.
+
+Exact guided request replay returns its saved Chat response; request a fresh status read for current state. Lost write acknowledgments recover only the same owner/version record or confirmed terminal state. They do not create another nomination or authorize another action. Extra list arguments are refused. No AI call, backend execution, publication, catalog install or customer unit debit is part of this flow.
+
+Remaining before customer-code reuse: a maintainer intake workflow that rechecks current consent and source integrity, separate synthetic candidate creation, privacy/secret and licensing checks, human review, approved license/provenance, tested immutable publication, withdrawal handling during review and security update notices. The existing catalog remains platform-authored. There is no background reviewer, cross-customer retrieval, source harvesting or automatic promotion. Do not describe nomination as completed screening or available sharing.
+
+Verification: `pnpm check` and the disposable D1 `node tests/backend-nominations.mjs` cover ownership refusal, source digest immutability, exact replay, review expiry, literal consent, concurrent consent, concurrent open-slot admission, retained-record capacity, recovery after lost write acknowledgments, terminal withdrawal, guided Chat privacy, refusal of model nomination actions, absence of inference/execution charges, and deletion cascade. Live migration and authenticated acceptance remain pending.

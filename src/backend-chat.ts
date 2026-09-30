@@ -1,3 +1,4 @@
+import {backendNominationCommand} from './backend-nominations';
 import {listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appUpgradeCommand,appUpgradeAction} from './app-upgrade-chat';
 import {appRecoveryCommand} from './app-recovery-chat';
@@ -27,6 +28,7 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
   const parts=content.trim().split(/\s+/);if(parts.length!==2||!uuid.test(parts[1]))throw new BackendError(400,'Use /application-build BUILD_ID');
   return ()=>readApplicationBuild(db,user,parts[1]);
  }
+ const nomination=backendNominationCommand(db,user,turnId,content);if(nomination)return nomination;
  const library=backendLibraryCommand(db,user,turnId,content);if(library)return library;
  if(/^\/check-backend(?:\s|$)/i.test(content)){
   const match=content.trim().match(/^\/check-backend\s+([0-9a-f-]+)\s+([\s\S]+)$/i);
