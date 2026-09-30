@@ -16,15 +16,23 @@ try{
  const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
  runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
  proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
- const b=await build({stdin:{contents:"export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken} from './src/security';export {applicationChatActions} from './src/app-chat-actions';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
- const {readAppStatus,describeAppStatus,backendAction,platform,host,hashToken,applicationChatActions}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+ const b=await build({stdin:{contents:"export {sendChat as sendFixtureChat} from './src/chat';export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken} from './src/security';export {applicationChatActions} from './src/app-chat-actions';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const {sendFixtureChat,readAppStatus,describeAppStatus,backendAction,platform,host,hashToken,applicationChatActions}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
  let executions=0;
  const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:async(request,init)=>{executions++;return runtime.dispatchFetch(request,init);}},ASSETS:{fetch:async()=>new Response(await readFile('public-app/index.html'),{headers:{'content-type':'text/html'}})}},ctx={waitUntil(){throw Error('Unexpected external work');}};
  async function account(){const user=id(),token=(id()+id()).replaceAll('-',''),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(token),user,new Date(Date.now()+3600000).toISOString(),now).run();return {user,token};}
  const owner=await account(),foreign=await account();
  const call=(a,path,body,method=body===undefined?'GET':'POST',origin='https://whumpo.com')=>platform.fetch(new Request('https://whumpo.com/api'+path,{method,headers:{origin,'content-type':'application/json',cookie:'tellumo_session='+(a?.token??'')},body:body===undefined?undefined:JSON.stringify(body)}),env,ctx);
  async function json(path,body,status=200,method){const r=await call(owner,path,body,method);assert.equal(r.status,status,await r.clone().text());return r.json();}
- async function chat(content){const state=await json('/chat'),request={id:id(),revision:state.state.revision,content};return json('/chat',request);}
+ // Internal setup adapters are not public message syntax. Critical approvals use the real typed endpoint.
+ async function setupChat(account,content){
+  const stateResponse=await call(account,'/chat');assert.equal(stateResponse.status,200);const state=await stateResponse.json(),request={id:id(),revision:state.state.revision};
+  const confirmation=content.match(/^\/confirm-(application|app-page) ([0-9a-f-]+)$/);
+  if(confirmation){const response=await call(account,'/chat/actions',{...request,action:{type:'confirm',kind:confirmation[1]==='application'?'application':'appPage',reviewId:confirmation[2]}});assert.equal(response.status,200,await response.clone().text());return response.json();}
+  const result=await sendFixtureChat(db,account.user,{...request,content},undefined,{backendRuntime:env.BACKEND_RUNTIME});assert.equal(result.status,200,JSON.stringify(result));
+  const response=await call(account,'/chat');assert.equal(response.status,200);return response.json();
+ }
+ async function chat(content){return setupChat(owner,content);}
  await json('/profile',{revision:0,name:'App owner',avatar_id:'planet'},200,'PATCH');await json('/onboarding');await json('/onboarding',{revision:0,stage:'review',project_name:'Private notebook',idea:'A private note for each invited member',audience:'Our team',preferred_theme:'ocean'},200,'PUT');await json('/onboarding/complete',{revision:1});
  const {id:project}=await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(owner.user).first(),path='/projects/'+project,version=id(),run=id();
  assert.equal((await readAppStatus(db,owner.user,project)).configured,0);await assert.rejects(readAppStatus(db,foreign.user,project),e=>e.status===404);
@@ -107,5 +115,5 @@ try{
  assert.equal(executions,2);assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
  await recordFixtureBenchmark(db,'application',{transportCalls:0,runtimeCalls:executions});
  console.log('Customer app journey passed: welcome, actual QuickJS test, separate program/page reviews, public host, signed passkeys, isolated visitors, exact transition replay, recovery/export/deletion, withdrawal and historical approval safety. No live deployment or AI call.');
- await taskListAppJourney({db,account,call,host,env,executions:()=>executions});
+ await taskListAppJourney({db,account,call,host,env,setupChat,executions:()=>executions});
 }finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

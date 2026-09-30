@@ -22,6 +22,8 @@ Historical receipts and internal adapter strings remain byte-for-byte stored for
 
 ## Resources available to the agent
 
+The [versioned capability planner](capability-planner.md) adds relevant maintained contracts, deterministic configuration/composition guidance and a saved missing-capability scope before new generated source. It uses the same bounded inspection continuation. Planned modules remain unavailable, and a plan grants no publication, runtime or spending authority.
+
 Existing validated tools remain the execution surface: owned project details, website drafts/edits/versions/comparisons/exports, health and traffic, plan/usage metadata, domain/DNS/hosting reviews, GitHub backup reviews, bounded backend/library/test/application actions, CMS capabilities and user-requested workspace layouts. This change adds a photo-removal review action and owned connection/photo metadata inspection. Photo inventory reads at most 20 entries plus a has-more indicator, without object keys, URLs or bytes. Connection metadata is a saved authorization snapshot, not a live provider-health claim.
 
 The `knowledge` action selects one of nine platform-authored topics: overview, websites, applications, publishing, domains, backups, account, usage and safety. Each entry includes version and repository contract references. It documents actual capabilities, prerequisites, unsupported work and approval boundaries. It is bundled with the release and reviewed with source changes; no remote document, customer message or imported code can redefine it.

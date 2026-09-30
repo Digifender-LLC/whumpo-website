@@ -1,5 +1,7 @@
 # Shared code library without shared customer data
 
+Current planning interface: the [versioned capability planner](capability-planner.md) selects supported configuration and shared helpers before custom source. Its library application handoff records pinned provenance and uses the existing synthetic-check/review lifecycle. Historical slash-command examples below are internal adapters; customer Chat uses natural language.
+
 ## Decision
 
 TellUmo should assemble the first site from reviewed, versioned components before asking a model to generate new code. A sign-in flow, contact form or pricing page should normally select an existing component and fill validated configuration. AI handles layout composition, requirements that are not covered, and later customization.

@@ -1,5 +1,7 @@
 # Generated backend execution
 
+**Current generation contract:** the [capability planner](capability-planner.md) requires a saved, current missing-capability plan for new maintainer-generated source. Application builds can also use the exact shared task-list reference with no generated source. Custom onboarding builds may use one planning lookup before their build. These requirements supersede earlier one-call/source-only milestone descriptions below; historical receipts and the existing isolated runtime/reviews remain valid.
+
 The full MVP needs generated backend behavior, durable project data and recovery. Existing contact and directory components do not satisfy arbitrary backend execution. This work adds the execution boundary first; data capabilities, generated-app publication, migrations and recovery must build on it before claiming that broader requirement is delivered.
 
 Current status: private tests, reviewed private state transitions, reviewed public stateless JSON endpoints and number/text/checkbox website forms are implemented. [Application visitor identity and persistent data](app-data.md) covers the separate controlled visitor host, passkeys, per-visitor state and owner-approved application pages. Richer generated interfaces, visitor-data migrations and whole-app recovery remain open. The sections below record implementation milestones.
