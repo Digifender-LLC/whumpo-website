@@ -1,3 +1,4 @@
+import {domainProofRemoval} from './domain-proof-removal';
 import {newSessionToken} from './security';
 export class DomainError extends Error {constructor(public status:number,message:string){super(message);}}
 type Claim={id:string;project_id:string;hostname:string;token:string;expires_at:string;verified_at:string|null;created_at:string};
@@ -26,7 +27,8 @@ export async function verifyDNS(name:string,value:string,transport:typeof fetch=
 }
 function instructions(c:Claim){const v=domainView(c);return `${c.hostname}: ${v.status==='ownership_verified'?'ownership verified':'awaiting ownership verification'}. This proof does not change hosting.\n\nAt your domain provider, add this TXT record:\nName: ${v.record.name}\nValue: ${v.record.value}\n\nSome providers append your domain automatically; enter only the remaining record-name prefix there. This proof expires ${c.expires_at}. Then use /verify-domain ${c.id}. Do not change your existing website records yet. Use /hosting to review hosting and certificate status separately.`;}
 export async function domainCommand(db:D1Database,userId:string,turnId:string,command:string){
- if(command==='/domains'||command==='show domains'){const result=await listDomains(db,userId);return {reply:(result.domains.map(d=>`${d.hostname} — ${d.status.replaceAll('_',' ')}; ${d.connected?'connected':'not connected'}\nID: ${d.id}`).join('\n\n')||'No domains added yet.')+'\n\nUse /domain www.yourdomain.com PROJECT_ID to prepare a DNS ownership proof. Find the project ID with /projects. Use /dns for reviewed Cloudflare TXT proofs, or /hosting to review hosting and check an existing connection. Ownership verification alone does not connect hosting. Purchases are not enabled.',statements:[] as D1PreparedStatement[]};}
+ const removal=await domainProofRemoval(db,userId,turnId,command);if(removal)return removal;
+ if(command==='/domains'||command==='show domains'){const result=await listDomains(db,userId);return {reply:(result.domains.map(d=>`${d.hostname} — ${d.status.replaceAll('_',' ')}; ${d.connected?'connected':'not connected'}\nID: ${d.id}`).join('\n\n')||'No domains added yet.')+'\n\nUse /domain www.yourdomain.com PROJECT_ID to prepare a DNS ownership proof. Find the project ID with /projects. Use /dns for reviewed Cloudflare TXT proofs, or /hosting to review hosting and check an existing connection. Use /remove-domain-proof CLAIM_ID to review removing an unused proof. Ownership verification alone does not connect hosting. Purchases are not enabled.',statements:[] as D1PreparedStatement[]};}
  if(command.startsWith('/domain ')){
   const args=command.split(/\s+/);if(args.length!==3||! /^[0-9a-f-]{36}$/.test(args[2]))throw new DomainError(400,'Use /domain HOSTNAME PROJECT_ID. Find the project ID with /projects.');
   const name=hostname(args[1]);if(!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(args[2],userId).first())throw new DomainError(404,'Project not found');

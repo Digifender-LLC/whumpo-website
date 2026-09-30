@@ -8,7 +8,7 @@ Hostname inputs are lowercase ASCII DNS names (IDNs must use their ASCII form), 
 
 The fixed Cloudflare DNS-over-HTTPS resolver receives only the proof record name, never a customer-controlled request URL. Responses are bounded to 32 KiB with a five-second timeout and no redirect following. Verification requires an exact TXT value at the exact requested owner name. NXDOMAIN or a wrong proof does not verify ownership. Resolver errors remain retryable failures. Checking a missing proof clears the prior verified state. A future connection must recheck the current proof immediately before provisioning; historical verification is not durable routing authority.
 
-Limits are three claims per project, ten per account and eighty across this test platform, enforced atomically before insert. Claims currently remain until project/account deletion; a user-facing disconnect/removal flow is still needed. These claims do not create provider custom hostnames, reserve registrations, change DNS, issue certificates, publish sites or consume AI units.
+Limits are three claims per project, ten per account and eighty across this test platform, enforced atomically before insert. Unused claims can be removed through the reviewed flow below. Claims referenced by hosting or Cloudflare DNS history remain retained for recovery. These claims do not create provider custom hostnames, reserve registrations, change DNS, issue certificates, publish sites or consume AI units.
 
 ## Hosting activation remains pending
 
@@ -26,3 +26,11 @@ References checked September 29, 2026:
 ## Natural-language ownership actions
 
 Customers can ask the agent to prepare domain ownership instructions for a named project and hostname, or to check a prepared proof. The server executes the same validated `/domain` and `/verify-domain` operations and supplies their actual receipts. All ten permitted owned claims are discoverable in compact model context; proof tokens are excluded from that metadata. The secondary Domains panel and free commands remain available. See [workspace agent contract](workspace-agent.md#conversational-domain-ownership).
+
+## Removing unused ownership proofs
+
+Migration 0074 adds `/remove-domain-proof CLAIM_ID` and the separate user confirmation `/confirm-domain-proof-remove REVIEW_ID`. Domains → Review proof removal opens the same Chat review. The agent may prepare a review with `domain.reviewRemoval`; it cannot confirm. A ten-minute review identifies the hostname and explains that only Whumpo’s saved proof is removed. Registration, DNS records (including manually added TXT records), hosting and public websites remain unchanged. A new proof for the same hostname can be prepared afterward with a new token.
+
+Confirmation checks the owner, exact token/expiry and explicit guided user command inside the database transaction. Renewed proofs and expired reviews fail closed. Hosting and Cloudflare DNS references are rechecked at deletion, including references added after review; their history is retained even for completed or disconnected operations. Chat confirmation, proof removal and activity commit atomically. Retrying cannot remove a replacement proof or duplicate the activity. Project deletion retains its existing separate policy and is not authorized by this feature.
+
+Status: implemented; focused disposable D1 tests cover foreign owners, raw/model deletion rejection, renewal conflicts, hosting/DNS races, replay, simultaneous confirmations, fresh re-addition and unchanged AI allowance. Deployment evidence is recorded after release.
