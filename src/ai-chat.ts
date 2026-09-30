@@ -1,3 +1,4 @@
+import {standardAIReservationStatement,dispatchStandardAI,markStandardAIUncertain,closeStandardAIAttempt} from './standard-ai-usage';
 import {reconcileStandardChat} from './standard-ai-recovery';
 import {appPageDesignProjectId,readAppPageDesign,appPageDesignPrompt,appPageDesignProposalAllowed} from './app-page-design';
 import {inspectionRequest,inspectionMessages,inspectionAllowance} from './agent-inspection';
@@ -10,7 +11,7 @@ import type {DNSChatOptions} from './dns-chat';
 import {DomainError} from './domains';
 import { siteContext, agentPrompt,agentPromptFocus, prepareSiteAction, ProposalError } from './site-agent';
 import { complete, ProviderError, type AIConfig, type ChatMessage } from './ai';
-import { dispatchUsage, finishUsage, getBilling, getOperation, usageReservationStatement, uncertainUsage } from './billing';
+import { finishUsage, ensureBilling, getOperation, uncertainUsage } from './billing';
 import { buildUnits } from './plans';
 import { hashToken } from './security';
 
@@ -71,49 +72,43 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(end<system.length){const newline=system.lastIndexOf('\n',end-1);if(newline>=offset)end=newline+1;else if(/[\uD800-\uDBFF]/.test(system[end-1]))end--;}
     messages.push({role:'system',content:system.slice(offset,end)});offset=end;
   }
-  const systemMessages=messages.length;
   if(!pageDesign)for (const turn of history.reverse()) messages.push({ role: 'user', content: turn.user_text.slice(0, 600) }, { role: 'assistant', content: turn.assistant_text.slice(0, 900) });
   messages.push({ role: 'user', content: pageDesign?'Design the visitor page for this approved application and prepare my review. Keep it unpublished.':firstProject?`Build the first private ${firstApp?'application, check a synthetic example, and prepare my approval':'website draft'} for project ${firstProject.id} using my saved brief. Keep it private.`:content.startsWith('/ask ') ? content.slice(5) : content.startsWith('/edit ') ? content.slice(6) : content });
   const budgetDate=new Date();
-  const billing = await getBilling(db, userId,budgetDate);
+  const billing = await ensureBilling(db, userId,budgetDate);
   await ensureInferenceBudget(db,userId,billing.period,billing.plan.id);
-  const available = billing.quota.available + (billing.credits.overageEnabled ? billing.credits.available : 0);
-  // UTF-8 bytes bound normal text tokenization conservatively; include per-message framing headroom.
-  // Trim old context before reducing the output budget, so small remaining balances stay usable.
+  // Standard work has bounded calls, not a customer-unit admission threshold.
   const boundInput = () => new TextEncoder().encode(JSON.stringify(messages)).length + 512;
-  while (messages.length > systemMessages + 1 && buildUnits(boundInput(), 2048) > available) messages.splice(systemMessages, 2);
-  const outputLimit = Math.min(2048, Math.floor((available * 1000 - boundInput()) / 4));
+  const outputLimit = 2048;
   async function noReservation(){
     const prior=await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id=? AND user_id=?').bind(id,userId).first<{user_text:string;revision:number}>();
     if(prior)return prior.user_text===content&&prior.revision===revision+1?{status:200}:{status:409,error:'This message ID was already used for another request'};
     const state=await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(userId).first<{revision:number}>();
     if(state?.revision!==revision)return {status:409,error:'Another message changed the conversation. Refresh and try again.'};
-    return {status:402,error:'Not enough available units to reserve this AI reply. Guided commands are still free; use /usage to see your balance.'};
+    return {status:409,error:'Another request is still being processed. Refresh Chat before sending a new message.'};
   }
-  if (outputLimit < 1024) return noReservation();
-  // Reserve both calls before dispatch. Low balances retain the single-call path.
+  // Reserve internal costs for both bounded calls before dispatch.
   const followupInputBound=boundInput()+inspectionAllowance;
-  const canFollow=!firstProject&&!pageDesign&&messages.length<=48&&buildUnits(boundInput()+followupInputBound,outputLimit*2)<=available;
+  const canFollow=!firstProject&&!pageDesign&&messages.length<=48;
   const reservedInput=boundInput()+(canFollow?followupInputBound:0);
-  const units = buildUnits(reservedInput, outputLimit*(canFollow?2:1));
   const requestHash=await hashToken(JSON.stringify({content,revision}));
-  const now = new Date().toISOString();
+  const now = budgetDate.toISOString();
   let inserted;
   try {
     inserted = await db.batch([
-      usageReservationStatement(db,userId,id,requestHash,units,billing.period,budgetDate,revision),
-      db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Working on your request…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM usage_operations WHERE id=? AND user_id=? AND request_hash=? AND quoted_units=? AND status='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId,id,userId,requestHash,units),
+      standardAIReservationStatement(db,userId,id,requestHash,budgetDate,revision),
+      db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Working on your request…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM standard_ai_requests WHERE id=? AND user_id=? AND request_hash=? AND state='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId,id,userId,requestHash),
       inferenceReservation(db,userId,id,billing.period,config,reservedInput,outputLimit*(canFollow?2:1)),
       db.prepare('UPDATE workspace_state SET revision = revision + 1 WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(userId, revision, id, userId)
     ]);
   } catch (cause) {
     // A failed batch rolls back the reservation together with the chat claim.
     // A lost acknowledgement is handled by the same message's persisted receipt on retry.
-    if(String(cause).includes('inference_budget')) return {status:402,error:'The monthly AI testing allowance is reached. Guided commands remain available.'};
+    if(String(cause).includes('inference_budget')) return {status:503,error:'AI is temporarily unavailable while the platform’s testing capacity is reviewed. Your credits were not used. Saved work and guided commands remain available.'};
     throw cause;
   }
   if (inserted[1].meta.changes !== 1) return noReservation();
-  if (!(await dispatchUsage(db, userId, id))) return { status: 200 };
+  if (!(await dispatchStandardAI(db, userId, id))) return { status: 200 };
   if (!(await dispatchInference(db,userId,id))) return {status:200};
   if(dnsOptions?.background)dnsOptions.background(startAcknowledgment(db,userId,id,billing.period,content,config,transport));
   const started = Date.now();
@@ -135,7 +130,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     }
     await observeInference(db,userId,id,result);
     // Timeout reconciliation or an operator waiver may have closed this turn while the provider ran.
-    const open=await db.prepare("SELECT t.id FROM chat_turns t JOIN usage_operations o ON o.id=t.id AND o.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='pending' AND o.status IN ('dispatched','uncertain')").bind(id,userId).first();
+    const open=await db.prepare("SELECT t.id FROM chat_turns t JOIN standard_ai_requests o ON o.id=t.id AND o.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='pending' AND o.state IN ('dispatched','uncertain')").bind(id,userId).first();
     if(!open)return {status:200};
     if(pageDesign&&!appPageDesignProposalAllowed(result.text,pageDesign.projectId))throw new ProposalError();
     if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id,firstApp?'app':'website'))throw new ProposalError();
@@ -156,35 +151,35 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     const persisted = await db.prepare("SELECT input_tokens FROM chat_turns WHERE id=? AND user_id=?").bind(id,userId).first<{input_tokens:number|null}>();
     if(persisted?.input_tokens != null){await reconcileChat(db,userId);return {status:200};}
     if(String(cause).includes('welcome_first_draft_changed')){
-      await finishUsage(db,userId,id,0);
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='Your first project changed while I was drafting. No additional draft was saved and no build units were charged. Open your saved versions to continue.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      await closeStandardAIAttempt(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='Your first project changed while I was drafting. No additional draft was saved and your credits were not used. Open your saved versions to continue.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
     }
     if(String(cause).includes('comparison_changed')){
-      await finishUsage(db,userId,id,0);
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='A compared version was removed before the comparison could be saved. Request a fresh comparison. No build units were charged.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      await closeStandardAIAttempt(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='A compared version was removed before the comparison could be saved. Request a fresh comparison. Your credits were not used.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
     }
     if(cause instanceof DomainError || String(cause).includes('domain_claim_quota')) {
-      await finishUsage(db,userId,id,0);
+      await closeStandardAIAttempt(db,userId,id);
       const detail=cause instanceof DomainError?cause.message:'Domain test limit reached: 3 per project, 10 per account and 80 platform-wide.';
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind(detail+' No domain change was applied and no build units were charged.',id,userId).run();
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind(detail+' No domain change was applied and your credits were not used.',id,userId).run();
       return {status:200};
     }
     if(cause instanceof ProposalError || String(cause).includes('site_version_quota') || String(cause).includes('project_quota') || String(cause).includes('version_photo_owner')) {
-      await finishUsage(db,userId,id,0);
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind((cause instanceof ProposalError || String(cause).includes('version_photo_owner')) ? 'The proposed change did not pass validation, so nothing was applied and no build units were charged. Try describing a smaller change.' : String(cause).includes('project_quota') ? 'Your account has reached its 20-project test limit. No project or draft was created and no build units were charged.' : 'This project has reached its 25 saved-version limit. No change was applied and no build units were charged.',id,userId).run();
+      await closeStandardAIAttempt(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind((cause instanceof ProposalError || String(cause).includes('version_photo_owner')) ? 'The proposed change did not pass validation, so nothing was applied and your credits were not used. Try describing a smaller change.' : String(cause).includes('project_quota') ? 'Your account has reached its 20-project test limit. No project or draft was created and your credits were not used.' : 'This project has reached its 25 saved-version limit. No change was applied and your credits were not used.',id,userId).run();
       return {status:200};
     }
     // Jarvis-style fixed categories: never log envelopes, prompts, credentials or raw errors.
     console.warn(JSON.stringify({ event: 'ai_request_failed', operation: id, kind: cause instanceof ProviderError ? cause.kind : 'persistence', reason: cause instanceof ProviderError ? cause.reason : undefined, elapsedMs: Date.now() - started }));
     if (cause instanceof ProviderError && ['configuration', 'rejected', 'output_limit'].includes(cause.kind)) {
-      await finishUsage(db, userId, id, 0);
-      const message = cause.kind === 'output_limit' ? 'The model reached its reply limit before finishing. No build units were charged. Try a shorter or more focused question.' : 'The AI provider could not accept this request. No build units were charged. Please try a new message later; guided commands still work.';
+      await closeStandardAIAttempt(db,userId,id);
+      const message = cause.kind === 'output_limit' ? 'The model reached its reply limit before finishing. Your credits were not used. Try a shorter or more focused question.' : 'The AI provider could not accept this request. Your credits were not used. Please try a new message later; guided commands still work.';
       await db.prepare("UPDATE chat_turns SET status = 'failed', assistant_text = ? WHERE id = ? AND user_id = ? AND status = 'pending'").bind(message, id, userId).run();
     } else {
-      await uncertainUsage(db, userId, id);
-      await db.prepare("UPDATE chat_turns SET status = 'uncertain', assistant_text = 'The AI response could not be confirmed. Its units remain held for review, and this message will not be sent again automatically. Use /usage to see held units.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(id, userId).run();
+      await markStandardAIUncertain(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status = 'uncertain', assistant_text = 'The AI response could not be confirmed. Your credits were not used, and this message will not be sent again automatically. Check your saved work before asking again.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(id, userId).run();
     }
   }
   return { status: 200 };

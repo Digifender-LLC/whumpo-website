@@ -39,7 +39,7 @@ try{
  const before=calls;await sendAIChat(db,unknown,attempt.id,0,'Say hello',config,provider('unused'));assert.equal(calls,before);
  // Budget failure rolls back customer usage and chat, without sending to provider.
  const exhausted=await account();await ensureBilling(db,exhausted);await ensureInferenceBudget(db,exhausted,new Date().toISOString().slice(0,7),'explore');await db.prepare('UPDATE inference_budgets SET spent_micros=budget_micros WHERE user_id=?').bind(exhausted).run();
- const denied=await send(exhausted,provider('unused'));assert.equal(denied.result.status,402);assert.equal(calls,before);assert.equal(await db.prepare('SELECT id FROM chat_turns WHERE id=?').bind(denied.id).first(),null);assert.equal(await db.prepare('SELECT id FROM usage_operations WHERE id=?').bind(denied.id).first(),null);
+ const denied=await send(exhausted,provider('unused'));assert.equal(denied.result.status,503);assert.equal(calls,before);assert.equal(await db.prepare('SELECT id FROM chat_turns WHERE id=?').bind(denied.id).first(),null);assert.equal(await db.prepare('SELECT id FROM usage_operations WHERE id=?').bind(denied.id).first(),null);
  // Concurrent admissions share one wallet. Exactly one of two oversized quotes fits.
  const concurrent=await account(),ids=[crypto.randomUUID(),crypto.randomUUID()];
  const admissions=await Promise.allSettled(ids.map(id=>reserve(concurrent,id,100000000,10000000)));assert.equal(admissions.filter(x=>x.status==='fulfilled').length,1);

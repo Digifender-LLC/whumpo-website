@@ -77,7 +77,7 @@ try{
   const response=await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});
   const history=await readChat(db,liveUser),last=history.turns.at(-1),billing=await getBilling(db,liveUser);
   console.log(JSON.stringify({live:true,status:response.status,turnStatus:last?.status,providerCalls,runtimeCalls:calls-before,spent:billing.quota.spent,reserved:billing.quota.reserved,hasApproval:!!last?.application_confirmation_id}));
-  assert.equal(response.status,200);assert.equal(last?.status,'completed');assert.equal(last?.application_confirmation_id,liveTurn,'Natural app request should finish with exact owner review');assert.equal(providerCalls,1);assert.equal(calls-before,1);assert.ok(billing.quota.spent>0&&billing.quota.spent<=50);assert.equal(billing.quota.reserved,0);
+  assert.equal(response.status,200);assert.equal(last?.status,'completed');assert.equal(last?.application_confirmation_id,liveTurn,'Natural app request should finish with exact owner review');assert.equal(providerCalls,1);assert.equal(calls-before,1);assert.equal(billing.quota.spent,0);assert.equal(billing.quota.reserved,0);
   assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(liveProject).first()).enabled,0);
   if(process.env.WELCOME_APP==='1'){assert.equal(history.firstDraft,null);assert.equal((await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE project_id=?').bind(liveProject).first()).turn_id,liveTurn);}
   await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});assert.equal(providerCalls,1);assert.equal(calls-before,1);

@@ -20,7 +20,7 @@ try{
  await grantCredits(db,owner.id,'agent-suite:'+owner.id,100,'Synthetic action-suite budget');await setOverage(db,owner.id,true);
  const id=await send(db,owner,{kind:'preview',projectId:owner.project,config});
  let row=await db.prepare('SELECT * FROM site_versions WHERE id=?').bind(id).first();assert.equal(row.source,'ai');assert.equal(row.component_id,'site-page@1');assert.ok(row.html.includes('Fresh bread, every morning'));assert.ok(row.html.includes('Visit us'));
- assert.equal((await getBilling(db,owner.id)).quota.spent,1);assert.equal((await readChat(db,owner.id)).turns.at(-1).version_id,id);
+ assert.equal((await getBilling(db,owner.id)).quota.spent,0);assert.equal((await readChat(db,owner.id)).turns.at(-1).version_id,id);
  await sendAIChat(db,owner.id,id,0,'Make a warm bakery site',cfg,provider(null));assert.equal(calls,1);
  const review=await send(db,owner,{kind:'review',operation:'publish',targetId:id});assert.equal((await readChat(db,owner.id)).turns.at(-1).confirmation_id,review);assert.equal((await db.prepare('SELECT version_id FROM publications WHERE project_id=?').bind(owner.project).first()).version_id,null);
  for(const action of [

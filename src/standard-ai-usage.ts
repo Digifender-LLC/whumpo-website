@@ -35,3 +35,16 @@ export async function cancelStandardAI(db:D1Database,user:string,id:string){
  if(!receipt||receipt.state!=='released')throw new BillingError(409,'The request may have been dispatched; reconcile its outcome');
  return receipt;
 }
+
+/** Admission is atomic with the Chat claim and internal inference reservation. */
+export function standardAIReservationStatement(db:D1Database,user:string,id:string,requestHash:string,date:Date,revision:number){
+ if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(id)||!/^[0-9a-f]{64}$/.test(requestHash)||!Number.isSafeInteger(revision)||revision<0)throw new BillingError(400,'Invalid standard AI request');
+ const now=date.toISOString();
+ return db.prepare("INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) SELECT ?,user_id,?,?,? FROM workspace_state WHERE user_id=? AND revision=? AND NOT EXISTS(SELECT 1 FROM chat_turns WHERE user_id=? AND status='pending') ON CONFLICT(id) DO NOTHING").bind(id,requestHash,now,now,user,revision,user);
+}
+/** Failed work can still incur internal costs; never invent a zero-token report. */
+export async function closeStandardAIAttempt(db:D1Database,user:string,id:string){
+ const cost=await db.prepare("SELECT input_tokens,output_tokens FROM inference_calls WHERE id=? AND user_id=? AND status='observed'").bind(id,user).first<{input_tokens:number;output_tokens:number}>();
+ if(cost)await completeStandardAI(db,user,id,cost.input_tokens,cost.output_tokens);
+ else await markStandardAIUncertain(db,user,id);
+}

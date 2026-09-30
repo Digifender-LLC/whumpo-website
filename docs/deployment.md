@@ -408,3 +408,12 @@ No Worker release or Chat accounting switch occurred. Standard Chat still uses h
 Migration 0096 applied to the private test database. Readback at 15:34 UTC confirms all 96 migrations, none pending and the late-result guard covering both standard and historical receipts. Private evidence: `.secrets/standard-ai-recovery-migration.json`.
 
 Source Chat reconciliation now handles saved and interrupted standard requests without customer billing mutations. `pnpm check`, `node tests/standard-ai-recovery.mjs` and `node tests/usage-recovery.mjs` passed. No Worker release, provider dispatch, CMS test or customer publication occurred. Standard request admission and customer-facing accounting still need their coordinated switch before unlimited fair-use Chat is active.
+
+
+## Standard assistance without customer credit charges — September 30, 2026
+
+Platform `be22062c-8178-40eb-90d0-64858af27411` switches new Chat requests to standard receipts, including completion, failure and interrupted-response recovery. Standard work no longer checks or consumes historical test-unit/credit balances. Internal provider-cost records, bounded calls and the separate private-test capacity ceiling remain. Historical metered receipts keep their original recovery/waiver handling. Advanced dispatch and paid billing remain disabled.
+
+Chat, agent usage lookups, Billing and Dashboard now describe standard assistance without a customer-unit meter or an instruction to buy credits. Billing separates the latest 20 standard receipts from historical charges. Full verification, explicit remaining beta gates and exact test commands are in [standard AI accounting](standard-ai-accounting.md#standard-chat-activation-verification--september-30-2026).
+
+A live Muse call with a synthetic local zero-balance account created the requested workflow page and shortcuts: 5,984 input/1,061 output tokens, zero customer charges, no replay inference, no publication. Actual local browser/D1 checks covered desktop and 390-pixel mobile views. Independent public verification at 15:47 UTC confirmed active version, 16 matching frontend assets, health and anonymous/origin boundaries, all 96 migrations and none pending. Private evidence: `.secrets/standard-ai-release-verification.json`. No CMS testing or customer resource change was performed.
