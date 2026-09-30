@@ -4,6 +4,10 @@
 
 CMS source was inspected for this map. **No CMS functional test, provisioning or customer operation was performed.** All described missing checks remain launch gates; the map does not enable them.
 
+## Saved specification follow-up
+
+WH-066B adds exact persisted-required-check holds for saved specification versions, their base/restore targets and delivery paths. See [the storage contract](project-specification-storage.md#removal-bounds-and-safety). This improves S09 when an existing screening decision requires a check; it does not dispatch screening, create clearance or close S09/S11 and the other detector/context-retention gaps.
+
 ## Required identity and state
 
 Before a protected action, the server must resolve an owned immutable target and its exact bytes. A future clearance binds:

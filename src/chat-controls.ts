@@ -21,6 +21,7 @@ export const confirmationControls = {
 } as const;
 export type ChatControl =
  | {type:'confirm';kind:keyof typeof confirmationControls;reviewId:string}
+ | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'appRestore';projectId:string;reviewId:string;confirmation:'RESTORE'}
  | {type:'appMaintenance';kind:'upgrade'|'rollback'|'cancel';reviewId:string;confirmation:'UPGRADE'|'ROLLBACK'|'CANCEL'}
  | {type:'reviewDetail';kind:'backend'|'test';targetId:string}
@@ -33,6 +34,10 @@ const exact=(a:Record<string,unknown>,keys:string[])=>Object.keys(a).every(k=>ke
 export function chatControl(value:unknown):{action:ChatControl;command:string;label:string;recentAuth:boolean}|undefined{
  if(!value||typeof value!=='object'||Array.isArray(value))return;
  const a=value as Record<string,unknown>;
+ if(a.type==='specificationApply'&&exact(a,['type','reviewId','proposalDigest','expectedRevision'])&&id(a.reviewId)&&typeof a.proposalDigest==='string'&&/^[0-9a-f]{64}$/.test(a.proposalDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
+  const action={type:'specificationApply' as const,reviewId:a.reviewId,proposalDigest:a.proposalDigest,expectedRevision:Number(a.expectedRevision)};
+  return {action,command:`/confirm-specification ${action.reviewId} ${action.proposalDigest} ${action.expectedRevision}`,label:'Save the exact reviewed private website version.',recentAuth:true};
+ }
  if(a.type==='confirm'&&exact(a,['type','kind','reviewId'])&&typeof a.kind==='string'&&Object.hasOwn(confirmationControls,a.kind)&&id(a.reviewId)){
   const kind=a.kind as keyof typeof confirmationControls,c=confirmationControls[kind];
   return {action:{type:'confirm',kind,reviewId:a.reviewId},command:`/${c.verb} ${a.reviewId}`,label:c.label+'.',recentAuth:false};

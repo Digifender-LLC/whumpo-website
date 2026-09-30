@@ -36,6 +36,7 @@ import {hostingChatCommand} from './hosting-chat';
 import {dnsChatCommand,type DNSChatOptions} from './dns-chat';
 import {listPhotos} from './files';
 import {photoRemovalCommand} from './photo-removal';
+import {applySpecificationCommand,specificationChatLinks} from './project-specification/store';
 import {inspectWorkspace} from './workspace-read';
 import {domainCommand} from './domains';
 import { attachPhoto } from './photo-versions';
@@ -84,6 +85,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await applicationChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await appRecoveryChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await appMaintenanceChatActions(db,userId,result[1].results as Record<string,unknown>[]);
+  await specificationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   const billing = await getBilling(db, userId);
   const firstDraft=await welcomeDraftProject(db,userId);
   return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };
@@ -167,6 +169,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const directory=await directoryCommand(db,userId,input.id,content);
   const contact=await contactCommand(db,userId,input.id,command);
   const versionRemoval=await versionRemovalCommand(db,userId,input.id,command);
+  const specification=await applySpecificationCommand(db,userId,input.id,command);
   const removal = await photoRemovalCommand(db,userId,input.id,command);
   const domain = await domainCommand(db,userId,input.id,command);
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
@@ -186,6 +189,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if(directory)reply=directory.reply;
   else if(comparison)reply=comparison.reply;
   else if(contact)reply=contact.reply;
+  else if(specification)reply=specification.reply;
   else if(versionRemoval)reply=versionRemoval.reply;
   else if (removal) reply = removal.reply;
   else if (domain) reply = domain.reply;
@@ -321,6 +325,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if(directory)statements.push(...directory.statements);
   if(contact)statements.push(...contact.statements);
   if(versionRemoval)statements.push(...versionRemoval.statements);
+  if(specification)statements.push(...specification.statements);
   if (removal) statements.push(...removal.statements);
   if (domain) statements.push(...domain.statements);
   if (publication) statements.push(...publication.statements);
@@ -346,6 +351,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
     }
   } catch (cause) {
+    if(/specification_(changed|expired|quota|held)|version_removal_specification/.test(String(cause))){
+      const recovered=await db.prepare('SELECT user_text FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string}>();
+      if(recovered?.user_text===content)return {status:200};
+      return {status:String(cause).includes('specification_held')?423:409,error:String(cause).includes('version_removal_specification')?'This version is retained by the current website configuration or a pending review.':String(cause).includes('specification_quota')?'Website review history has reached its test capacity.':'The website or its review changed, expired or is held for safety checks. Ask for a fresh review.'};
+    }
     if(String(cause).includes('photo_safety_required'))return {status:423,error:'A photo is held for safety checks. It cannot be attached or published until approved.'};
     if(String(cause).includes('usage_review_requests.user_id'))return {status:409,error:'Another usage review was opened. Ask “show my usage reviews” to read it.'};
     if(String(cause).includes('directory_changed'))return {status:409,error:'The directory review changed or expired. Read the current directory and prepare a new review.'};
