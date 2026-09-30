@@ -357,3 +357,10 @@ Platform `cb34d460-4938-45c1-8447-fbcc254ebbd2` includes the reviewed lost-passk
 ## Connection guidance release — September 30, 2026
 
 Platform `4712f560-b629-4860-b0a0-fe30eae0953e` includes owner-scoped expired-authorization metadata and clearer Settings/Chat guidance. Cloudflare Connect now follows the existing disconnect-first rule; an older GitHub revocation does not mask a current active connection. Source `ca401f6`. No schema, scope, customer connection, DNS or provider authorization changed. The isolated release preserved prior recovery, pricing and CMS behavior. TypeScript checks for both projects, build, frontend-loading checks, connection Chat and Cloudflare OAuth suites passed. Live version/asset and access-boundary evidence: `.secrets/connection-guidance-release-verification.json`. Real provider consent remains a separate gate.
+
+
+## Chat-first workspace refinement — September 30, 2026
+
+Platform `7e0960c3-d38b-4fb2-88bb-af70173122e1` simplifies Dashboard to an overview with a site-unpublish safety entry. Removed routine action shortcuts and manual layout editing; existing validated agent layout tools remain. First-project guidance now invites conversation without a website/app/brief button group. Account controls, explicitly opened detail views and contextual human confirmations remain available. User-requested arbitrary action buttons are still an implementation gate.
+
+No CMS instance was provisioned or tested. The prior CMS setup wording change remains undeployed. No migration, provider consent, DNS or customer publication changed. Both TypeScript projects, chat-rendering tests, frontend build and lazy-loading checks passed. Independent readback verified the active version, all 16 frontend asset bytes, health and anonymous/origin boundaries; private evidence is `.secrets/chat-first-release-verification.json`. These checks do not constitute an authenticated browser/device journey.
