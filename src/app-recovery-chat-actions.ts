@@ -15,7 +15,7 @@ export async function appRecoveryChatActions(db:D1Database,user:string,turns:Tur
   const {results}=await db.prepare(`SELECT r.id,r.project_id,r.point_id,r.status,r.expires_at,p.created_at point_created_at,p.version_id,project.name project_name,json_array_length(r.roster_json) documents,r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') unexpired,
   a.enabled=0 AND a.revision=r.base_revision AND a.version_id=p.version_id AND p.removed=0 AND p.sealed=1 AND roster.roster_json=r.roster_json AND NOT EXISTS(SELECT 1 FROM json_each(r.roster_json) entry WHERE NOT EXISTS(SELECT 1 FROM app_recovery_documents d WHERE d.point_id=r.point_id AND d.visitor_id=json_extract(entry.value,'$.visitor'))) eligible
   FROM app_restore_reviews r JOIN app_recovery_points p ON p.id=r.point_id AND p.user_id=r.user_id AND p.project_id=r.project_id JOIN projects project ON project.id=r.project_id AND project.owner_user_id=r.user_id JOIN app_spaces a ON a.project_id=r.project_id AND a.owner_user_id=r.user_id JOIN app_recovery_rosters roster ON roster.project_id=r.project_id
-  WHERE r.user_id=? AND r.id IN (${batch.map(()=>'?').join(',')})`).bind(user,...batch).all<Row>();
+  WHERE r.user_id=? AND r.restore_program=0 AND r.id IN (${batch.map(()=>'?').join(',')})`).bind(user,...batch).all<Row>();
   for(const r of results){
    const review={id:r.id,projectId:r.project_id,pointId:r.point_id,status:r.status,documents:r.documents,expiresAt:r.expires_at,pointCreatedAt:r.point_created_at,versionId:r.version_id,projectName:r.project_name};
    const description=describeAppRestore(review),historical=r.status==='applied'?describeAppRestore({...review,status:'pending'}):undefined;
