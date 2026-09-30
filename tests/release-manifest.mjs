@@ -3,15 +3,16 @@ import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {saveBuildSnapshot} from '../tools/build-snapshot.mjs';
-import {prepareRelease,archivedConfig} from '../tools/prepare-release.mjs';
-import {workerOrder,configFiles,readJSON,verifyRelease,applyRelease,fileInventory,migrationPlan,validateCompatibility,digest,copyTree} from '../tools/release-manifest.mjs';
+import {prepareRelease,archivedConfig,expectedServiceBindings} from '../tools/prepare-release.mjs';
+import {workerOrder,configFiles,readJSON,verifyRelease,applyRelease,fileInventory,migrationPlan,validateCompatibility,digest,copyTree,assertWorker} from '../tools/release-manifest.mjs';
 import {bindingSummary} from '../tools/release-provider.mjs';
 
 const root=await mkdtemp(join(tmpdir(),'whumpo-release-'));
 const sql=['0001_initial.sql','0002_expand.sql'];
 const configs={};
 let live,counts,failAfter,failBefore,observeFailure,mutations;
-const baseline=()=>({workers:Object.fromEntries(workerOrder.map(role=>[role,{id:'before-'+role,tag:null,services:configs[role].services??[],secrets:role==='platform'?['AI_API_KEY']:[]}])),cms:[],migrations:sql.slice(0,1)});
+const reportedServices=role=>(configs[role].services??[]).map(s=>({...s,environment:'production'}));
+const baseline=()=>({workers:Object.fromEntries(workerOrder.map(role=>[role,{id:'before-'+role,tag:null,services:reportedServices(role),secrets:role==='platform'?['AI_API_KEY']:[]}])),cms:[],migrations:sql.slice(0,1)});
 const driver={
  configs,verifyToolchain:async()=>{},withLock:async work=>work(async()=>{}),
  observe:async()=>{if(observeFailure){observeFailure=false;throw Error('Private provider error must not be persisted');}return structuredClone(live);},
@@ -21,7 +22,7 @@ const driver={
   mutations++;counts[role]++;
   const journal=await readJSON(join(directory,'journal.json'));assert.equal(journal.steps[role].status,'running');
   if(failBefore===role)throw Error('Private failed command detail');
-  live.workers[role]={id:'after-'+role,tag:manifest.workers[role].tag,services:manifest.workers[role].services,secrets:[...live.workers[role].secrets]};
+  live.workers[role]={id:'after-'+role,tag:manifest.workers[role].tag,services:reportedServices(role),secrets:[...live.workers[role].secrets]};
   await onDeployed();
   if(failAfter===role){failAfter=null;observeFailure=true;}
  }
@@ -30,11 +31,12 @@ const reset=()=>{live=baseline();counts=Object.fromEntries(['migrations',...work
 let review;
 const prepare=()=>prepareRelease(root,driver,review,{git:()=>({commit:'a'.repeat(40),dirty:false})});
 try{
- for(const dir of ['src','frontend','web','public-app','tools','dist','migrations','node_modules/wrangler'])await mkdir(join(root,dir),{recursive:true});
- for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/build.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs'])await writeFile(join(root,name),'fixture');
+ for(const dir of ['src','frontend','web','public-app','tools','dist','migrations','node_modules/wrangler','compiler-locks'])await mkdir(join(root,dir),{recursive:true});
+ for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/build.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v1.json'])await writeFile(join(root,name),'fixture');
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
  for(const role of workerOrder){
   configs[role]={name:'tellumo-'+role,account_id:'a'.repeat(32),main:'src/index.ts',workers_dev:false,preview_urls:false,...(role==='runtime'?{}:{d1_databases:[{binding:'DB',database_name:'tellumo-control',database_id:'1'.repeat(36),migrations_dir:'./migrations'}]}),...(['apps','platform'].includes(role)?{assets:{directory:role==='apps'?'./public-app':'./dist'}}:{})};
+  if(role==='apps')configs[role].services=[{binding:'BACKEND_RUNTIME',service:'tellumo-runtime'}];
   await writeFile(join(root,configFiles[role]),JSON.stringify(configs[role]));
  }
  await writeFile(join(root,'src/index.ts'),'source');await writeFile(join(root,'dist/index.html'),'static asset');await writeFile(join(root,'public-app/visitor.js'),'visitor');
@@ -45,6 +47,10 @@ try{
  const first=await prepare(),manifest=await verifyRelease(first.directory);
  assert.equal(mutations,0);assert.deepEqual(manifest.order,workerOrder);assert.equal(manifest.migrations.pending.length,1);
  assert.equal(manifest.before.workers.platform.id,'before-platform');
+ assert.deepEqual(manifest.workers.apps.services,[{binding:'BACKEND_RUNTIME',service:'tellumo-runtime',environment:'production'}]);
+ for(const mismatch of [{service:'other'},{environment:'staging'},{entrypoint:'Other'}])assert.throws(()=>assertWorker(manifest,'apps',{tag:manifest.workers.apps.tag,services:[{...manifest.workers.apps.services[0],...mismatch}],secrets:[]}),/service bindings changed/);
+ assert.deepEqual(expectedServiceBindings([{binding:'TEST',service:'worker',entrypoint:'API'}]),[{binding:'TEST',service:'worker',environment:'production',entrypoint:'API'}]);
+ assert.throws(()=>expectedServiceBindings([{binding:'TEST',service:'worker',props:{unexpected:true}}]),/archive support/);
  assert.ok(manifest.files.some(f=>f.path==='workers/runtime/runtime.wasm'));
  assert.ok(!JSON.stringify(manifest).includes('DO_NOT_ARCHIVE'));
  assert.ok(!manifest.files.some(f=>f.path.includes('.secrets')||f.path.includes('node_modules')));
