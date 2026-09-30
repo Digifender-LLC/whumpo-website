@@ -64,3 +64,5 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 - [Safe reuse and Jarvis ports](docs/jarvis-reuse.md)
 
 The maintained Word design is [Whumpo MVP technical design](docs/whumpo_mvp_design.docx). The original document under `docs/reference/` and `docs/ai_managed_cloud_mvp_design_revised.docx` are historical snapshots, not current implementation contracts. See the [documentation/code reconciliation](docs/docs-code-sync.md) for checked-off work, resolved decisions and verification boundaries.
+
+The [Cloudflare capability catalog and roadmap](docs/cloudflare-capability-roadmap.md) explains the Cloudflare services Whumpo already uses, the customer-facing features that are feasible next, official documentation links, and cost/plan caveats. Repository-specific contribution and agent guidance is in [AGENTS.md](AGENTS.md).
