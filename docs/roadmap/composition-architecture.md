@@ -1,0 +1,151 @@
+# Composition architecture and operating strategy
+
+**Direction accepted September 30, 2026; implementation proposed unless explicitly identified below.** Configure and compose reviewed capabilities first, write custom code for uncovered requirements second, and dedicate infrastructure when the workload requires it. This appendix expands the roadmap; it changes no runtime, customer entitlement, deployment approval or live acceptance claim.
+
+Whumpo's AI serves the signed-in owner who creates and maintains a project. Visitors use the resulting application and its deterministic services. **Visitor requests, scheduled business rules, webhooks and service workflow steps must never invoke Whumpo's owner-facing AI, start its maintenance sessions, or receive its model credentials.** A customer-configured AI provider, or an explicitly exposed Cloudflare AI Gateway/Workers AI application capability, is a separate deferred product: it would need its own consent, credentials, budgets, privacy contract and abuse controls. It must have no fallback to Whumpo's inference account or owner-assistance allowance.
+
+## Accepted direction and present evidence
+
+| Area | Current foundation | Proposed delivery |
+| --- | --- | --- |
+| Composition | Validated static/photo components and immutable private versions; exact backend-library copies with provenance. | One versioned project specification, trusted compiler, richer component catalog and structured change operations. |
+| Custom behavior | Separate bounded QuickJS Worker; reviewed stateless functions and per-visitor document transitions. | Reuse those capabilities first; add reviewed typed module operations before considering another execution service. |
+| Data | Shared control D1 currently holds platform and bounded application records; CMS has its separate registry/provisioning contract. | Prefer project D1 databases for substantial project application data, with explicit registry, migration and lifecycle delivery. Do not move existing data merely by changing configuration. |
+| Automation | Existing deterministic maintenance and a D1/cron background-job ADR; no new dispatcher activated. | Versioned business rules and durable jobs, using the same receipt/authorization discipline. No AI step type. |
+| Builds and hosting | Repository builds, immutable artifacts and separate public host/visitor services. | Isolated, short-lived pooled build jobs; static delivery where suitable; shared deterministic runtime modules; dedicated services only after measured justification. |
+
+Read [shared components](../shared-components.md), [backend execution](../backend-execution.md), [application data](../app-data.md), [background jobs](../background-jobs.md), [content safety](../content-safety.md) and [lifecycle policy](../data-lifecycle.md) before implementation. Existing feature contracts and owner deferrals remain authoritative. The general shared module system, portable full-app export and project-database fleet described here are not implemented by the existing small helper catalog.
+
+## 1. Make the project specification the primary change surface
+
+Persist a project-owned, schema-versioned specification with pages/routes, layout and design tokens, content schemas, forms, file collections, access roles, deterministic rules, module references and non-secret configuration. Pin compiler version, every module version/digest, dependency lock information and the required data-schema version. Record authority and secret **references**, never secret values. Separate owner-editable design from platform-enforced authorization, safety and funding policy.
+
+The owner-facing assistant should propose narrow operations such as `addPage`, `setField`, `bindForm`, `enableModule` or `changeTheme`, with stable object IDs and expected base revision. A deterministic command path may apply supported private edits without a model call. Operations validate through server-owned schemas; configuration cannot smuggle JavaScript, arbitrary SQL, install commands or an outbound destination. Custom code is a separately identified artifact with its own review and runtime contract.
+
+The proposed change pipeline is:
+
+1. **Inspect:** read the owned specification, relevant module contracts and minimized project context; check what the existing catalog can satisfy.
+2. **Plan:** produce exact structured operations plus any genuinely required private code patch. Explain unsupported needs and the reason for fallback.
+3. **Compile:** resolve pinned artifacts, validate schemas/capabilities, derive the dependency/data migration plan and build an immutable candidate. Reject unknown versions and unsupported combinations.
+4. **Preview:** show the visual result, changed fields/routes, capability/data effects, tests and expected operating cost. Keep drafts private and safety-gated.
+5. **Apply:** commit the exact private specification/version transactionally against its expected revision. A stale base requires a new comparison; retries recover the same operation receipt. Private apply is not publication, resource provisioning or permission to migrate live data.
+6. **Release:** prepare and obtain the existing exact owner publication/activation reviews; separately review destructive data changes, provider writes and spending. Bind the compiled digest, dependencies and relevant current revisions.
+7. **Recover:** retain specification, source, module/compiler versions, manifests and receipts. Restore the exact artifact or rebuild reproducibly; pair code rollback with a compatible schema/data recovery plan. Never imply that code rollback reverses messages already sent or external effects.
+
+A release manifest must explain whether restoration uses saved bytes or a rebuild and which dependencies must still be available. Failure before publication leaves the current project intact. Unknown provider outcomes remain visible and cannot trigger a new deployment, charge or notification automatically.
+
+## 2. Reuse small, explicit capabilities
+
+The first modules should cover common jobs completely, with typed operations and independent ownership/limit checks. They should avoid becoming a generic privileged SQL or HTTP proxy.
+
+| Module | Narrow contract and reuse boundary |
+| --- | --- |
+| Content | Versioned records, validation, draft/published projections and allowed queries; server-enforced project scope. Keep CMS-specific behavior behind its existing adapter. |
+| Forms | Typed fields, validation, spam/abuse controls, durable submission receipt and approved destination. Visitor input cannot choose a project, SQL query, recipient or privileged follow-up action. |
+| Files | Private upload intents, size/type limits, safety approval, scoped reads and deletion lifecycle. A filename or object prefix is not authorization. |
+| Access | Reuse reviewed owner/visitor identity and session verification; project roles and policy decisions come from trusted services. Theme changes cannot edit authentication logic. |
+| Notifications | Fixed reviewed provider adapters, versioned templates, verified destinations, consent/preferences, deduplication, delivery receipts and spending limits. A provider timeout stays uncertain. No generative step or Whumpo inference is available. |
+
+Each module version needs source/license provenance, schemas, capabilities, test fixtures, limits, migration compatibility, operational diagnostics and an upgrade/withdrawal policy. Instances keep customer data and configuration private. Shared module code and synthetic fixtures may be cached by immutable digest; completed customer outputs, prompts, records and credentials must not enter a shared cache or catalog.
+
+After the initial modules, evaluate supported directory, booking, membership and catalog rules when repeated customer needs justify maintaining them. A photographer's gallery, a club document library and a customer portal can share the same file-access contract while using distinct interfaces and permissions. An appointment-request form does not establish a complete scheduling/availability engine.
+
+Prefer versioned modules over copying an entire starter into every project. This centralizes tested fixes without silently changing installed behavior. Updates pin a new version, compile/preview the diff, test project compatibility and use reviewed rollout/rollback. A private customization can be an override or patch against its pinned base. If it becomes a fork, record the divergence and maintenance owner; upstream updates need merge/verification rather than blind replacement. Withdrawal blocks new installs and creates a documented response for existing projects.
+
+## 3. Compose rich interfaces without rewriting the backend
+
+Build a reusable frontend vocabulary for navigation, sections, editable lists/tables, validated forms, dialogs, loading/empty/error states and responsive layouts. Use design tokens, typed data bindings and reviewed interaction primitives so different projects can have distinctive interfaces while sharing tested behavior. Compile the selected presentation and module contracts into ordinary frontend assets; keep custom code small and attributable.
+
+Do not force every application into the current generic input/result form. Test at least a content site, contact workflow and authenticated task/list application through actual browser interactions, keyboard navigation and narrow/mobile layouts. Measure whether a requested change preserves unrelated copy, routes and behavior. An attractive preview alone does not establish correct authorization, data handling or useful task completion.
+
+Custom JavaScript must remain outside the owner workspace and credential-bearing visitor shell until its hosting/origin/isolation contract is explicitly designed and accepted. Reuse visual components without giving tenant code platform sessions or provider credentials. The existing controlled visitor origin and review gates remain in force during this work.
+
+## 4. Run business automation deterministically
+
+Represent automation as a versioned event/condition/action graph over allowlisted operations: a form submission creates a record; a reviewed status change schedules a fixed notification; an authorized timer advances a retention step. Define schemas, current permissions, idempotency keys, maximum fan-out, deadlines, cancellation and effect receipts. Rules cannot dynamically install modules, select arbitrary destinations, grant spending, publish code or invoke a model.
+
+Use the [selected D1-owned job journal and bounded scheduled passes](../background-jobs.md) initially. Cron supplies a wake-up; persistent intent and current domain receipts determine whether work may proceed. Preserve leases/fencing for local state, separate uncertain external effects from due work, and never treat retry delivery as authority to repeat a mutation. Add the reviewed short-interval dispatcher only when the feature and measured latency/cost gates justify it.
+
+Cloudflare Queues remains a later delivery option if measured polling latency, backlog or cost misses the ADR targets; it has [at-least-once delivery](https://developers.cloudflare.com/queues/reference/delivery-guarantees/), so domain idempotency remains required. Workflows remains deferred under that ADR. Neither product would authorize an AI agent step, additional customer capabilities or a provider mutation merely by being provisioned.
+
+## 5. Choose execution and data placement per workload
+
+| Workload | Preferred delivery | Escalation condition |
+| --- | --- | --- |
+| Public brochure/content page | Precompiled static artifact plus only necessary deterministic dynamic endpoints. | Personalization/authentication or freshness genuinely requires dynamic processing. |
+| Ordinary forms/content/access/files | Platform-authored shared modules with enforced tenant capabilities and bounded request work. | Measured load, isolation, data/schema or lifecycle needs exceed the supported shared contract. |
+| Small private/public custom calculation or document transition | Current bounded QuickJS runtime, with existing review, input/output and invocation limits. | A concrete requirement cannot fit its limits; do not relax isolation to make it fit. |
+| Larger custom backend or specialized processing | A separately reviewed isolated execution option and resource plan. | Evidence justifies the operational/cost burden and the owner approves activation. |
+
+Workers for Platforms is a **candidate**, not the selected replacement for QuickJS or a service enabled by this roadmap. Its [dynamic dispatch](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/configuration/dynamic-dispatch/) can route to tenant Workers, and its [untrusted namespace mode](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/reference/worker-isolation/) provides a documented tenant-code boundary. Adoption still requires entitlement/minimum-charge review, per-project capabilities, outbound policy, code screening, immutable deployment manifests, budgets and recovery tests. Dedicated runtime placement need not mean an always-running server per project.
+
+For substantial application data, prefer a D1 database **per project** so schema changes, restore and workload contention have a smaller scope. Keep platform identities, billing, authorization decisions and authoritative resource ownership in the control plane. Cloudflare documents [database-per-tenant and shared-row approaches](https://developers.cloudflare.com/use-cases/saas/data-isolation/); choosing one does not remove application authorization. Small current bounded records can remain in the shared store until a measured, reviewed migration is worthwhile.
+
+Deliver project D1 as a lifecycle, not a database-create helper: exact reviewed intent → provision/reconcile → register owner/project/resource identity → apply schema → verify → admit traffic → monitor → export/restore → withdraw/delete under policy. Record schema/version history, resource state, recoverable provisioning errors and orphan cleanup. No visitor, model or untrusted source may supply a provider database ID or access an account management credential.
+
+Before provisioning a fleet, prove how trusted data services obtain only the intended binding/capability, including deployment updates and revocation. A registry row does not create a Worker binding. Account/binding/storage limits and database contention require capacity planning; D1 documents [per-database serialization and platform limits](https://developers.cloudflare.com/d1/platform/limits/). Prefer narrow service operations over exposing an arbitrary SQL tunnel. Cross-database changes are not one D1 transaction: coordinate durable receipts and reconciliation, with no partial cutover visible as success.
+
+If a demonstrated workload needs PostgreSQL, evaluate shared tables with enforced row security or isolated project resources. The ordinary request role must not be a superuser, `BYPASSRLS` role or table owner: those roles bypass row policies by default, with additional owner-specific controls available. Customer code never receives an unrestricted all-tenant connection. [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html).
+
+Use numbered, versioned schema migrations; run compatibility and restore checks on a representative copy, then canary before a bounded rollout. Maintain forward/backward code compatibility where practical; record the approved outage/data transformation when not. Route changes require fencing/revision checks, data verification and a retained rollback target. Restores must reapply deletion suppression and current safety/credential policy rather than resurrect withdrawn authority.
+
+## 6. Make static delivery and private storage economical without weakening policy
+
+Cloudflare [Static Assets](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) treats asset-serving requests differently from Worker invocations; `run_worker_first` paths invoke the Worker. Do not equate all HTML or all R2 delivery with free static hosting. Whumpo's current site host routes through `src/site-host.ts` and may read D1/R2 or write counters. Measure those operations, cache behavior and revocation requirements before changing the serving path.
+
+Compile reusable public assets and cache immutable approved bytes where the publication/safety contract permits. Keep a reliable withdrawal mechanism: stale edge content must not bypass unpublish, revised access, deletion or safety holds. Private previews and authenticated data remain private/no-store as required. Optimize counters and control lookups only after measuring correctness and cost; a cache hit is not permission to serve a revoked artifact.
+
+Retain shared **private** R2 where appropriate. Bind every object to owner/project, exact bytes, content class and lifecycle state; authorize upload/read/delete through trusted routes and enforce safety approval before eligible delivery. Object keys/prefixes organize storage but do not enforce tenant permissions. Public customer assets can be served through the approved host while the bucket remains private; [public bucket configuration](https://developers.cloudflare.com/r2/buckets/public-buckets/) is a separate exposure and is not authorized here. Account for storage, operations, retained versions, scans and Worker work; shared storage does not make those costs vanish.
+
+## 7. Pool build capacity; invoke maintenance when the owner asks
+
+Use a bounded shared pool for short-lived compile/test/build jobs instead of a permanent build server for every project. Jobs require immutable input manifests, project ownership, dependency locks, capability/network policy, resource/time/output budgets and reproducible artifact digests. Isolate filesystem, process, cache and output state between jobs. Shared caches contain verified public dependency bytes only; private source and filled configuration use tenant-scoped storage.
+
+Running an arbitrary dependency installer or bundler requires a separately reviewed sandbox/build executor; it cannot run inside the control Worker or inherit its secrets. No shared writable workspace, Docker/socket access, broad provider token or unrestricted network egress is available to tenant builds. Publish only verified bounded artifacts after cleanup and review. A compromised or timed-out build must not contaminate the next tenant or hold the whole queue indefinitely. This executor and its provider/cost choice remain unimplemented.
+
+The owner's explicit Chat request starts a bounded maintenance session: inspect the owned project, propose structured changes, build/test privately and return an exact review. Stop and retain recoverable receipts at deadlines or uncertainty. Normal traffic keeps running when the assistant is unavailable. Deterministic health checks can report a problem and collect minimized diagnostics; a visitor error, traffic spike, webhook or cron event must not silently start an AI repair session. Owner session credentials and model keys never flow into the deployed application.
+
+Run deterministic schema/type/dependency/build checks first and present concise actionable failures to the maintainer when interpretation is needed. Retrieve the relevant module/component contract rather than the whole platform manual. Provider-supported prompt caching may reuse stable instructions/tools after privacy and tenant-boundary review; it does not avoid generating output code. For example, Anthropic documents exact-prefix cache matching and unchanged output generation in its [prompt caching guide](https://platform.claude.com/docs/en/build-with-claude/prompt-caching). This is an optimization candidate, not a provider switch or automatic paid fallback.
+
+## 8. Bound shared failure domains and measure outcomes
+
+Admission needs distinct limits for owner maintenance, build jobs, visitor/runtime requests, database work, storage, safety scans and outbound notifications. Enforce per-project and account fairness plus platform ceilings; reserve capacity for account access, recovery, safety and essential maintenance. Use bounded queues, due-work indexes and fair scheduling. Do not let one tenant consume all build slots, serialized database time, notification budget or runtime capacity.
+
+Tenant identity comes from authenticated server-side authority, never a model argument or untrusted header. Bind jobs and cache entries to the verified project and, where needed, actor and permission revision. Test cross-customer records, files and result access, quota exhaustion and permission revocation. [OWASP multitenant guidance](https://cheatsheetseries.owasp.org/cheatsheets/Multi_Tenant_Security_Cheat_Sheet.html) informs these isolation checks; a project-ID prefix is not sufficient enforcement.
+
+Size shared modules and database/service groups so a bad release or noisy tenant has a bounded blast radius. Use pinned versions, limited canaries, current-authority checks, timeouts, circuit breakers and explicit degraded states. A fallback cannot silently elevate permissions, provision a paid resource, switch to a more expensive model, bypass a safety gate or invoke owner AI. Record the reason for any approved move to custom code, another runtime, another data placement or dedicated resources.
+
+Track **cost per successful owner change**, **cost per active project per period**, and **composition/custom-code/dedicated-resource fallback rates and reasons**. Define a successful change as the requested accepted behavior with relevant verification, not an inference completion or compiled bundle. Report failed attempts, retries, rollbacks, uncertainty and manual intervention alongside successful outcomes; retain workload and version context without raw customer content.
+
+Separate internal cost categories: owner-assistance inference/evaluation; compilation/tests/build isolation; visitor requests/CPU; project/control database operations/storage; files/media and retained versions; safety processing; deterministic job orchestration; notifications/connectors; backups/recovery; observability/support; account-level floors and unused reserved capacity. Attribute shared overhead consistently and show unknown costs as unknown. Avoid counting one provider charge twice across services or treating subscription-shadow estimates as paid invoices. Standard owner assistance stays non-billable under its existing policy; measurement creates no customer debit.
+
+Compare equivalent workloads for component-only changes, small custom patches and fully custom builds. Include maintenance cost and regression frequency, not only first-build tokens. Prefer the least complex placement that meets measured correctness, quality, latency, isolation and recovery needs. Recheck provider prices, enabled entitlement, recurring/minimum charges and shared-account allowance before any activation; this appendix introduces no new price or profitability promise. See [resource economics](../resource-pool-economics.md) and the [capability catalog](../cloudflare-capability-roadmap.md).
+
+## 9. Export a recoverable application, with honest portability boundaries
+
+Define a full-app export manifest covering the specification, generated/private source, pinned module/compiler versions, license notices, dependency locks, asset bytes/checksums, compatible schema/migrations, eligible project data, deterministic rules and runtime configuration templates. Include restore/build instructions, portability classification and omitted/unsupported items. Export actual retained evidence rather than claiming every older version or provider backup is available.
+
+Never export platform/provider secret values, owner or visitor session tokens, password/passkey private material, another tenant's data or restricted held evidence. Use destination-side credential reauthorization. External domains, provider accounts, email delivery, Cloudflare bindings, payment state and platform identity services need documented replacements or reconfiguration; a source ZIP cannot reproduce them automatically. Some modules may require an adapter or remain Cloudflare-dependent, and licenses may constrain redistribution.
+
+Accept portability only after restoring a representative exported application into a clean authorized target, verifying code/data/assets and recording unsupported behaviors. Keep existing static/source export claims narrower until that full journey exists. Full export does not complete account deletion, transfer a subscription, or authorize publishing the imported application.
+
+## Delivery and acceptance order
+
+Start with specification/operation schemas, module contracts and a deterministic compiler for a small set of current supported projects. Then deliver browser-quality frontend composition and private previews; add structured changes, immutable release/version recovery and narrow deterministic service/automation modules. Introduce isolated build pooling and project D1 only with their reviewed lifecycle and measured justification. Expand runtime choices, optional customer AI and dedicated infrastructure through separate decision/activation packets.
+
+The roadmap packets should require two-tenant isolation, exact/stale/concurrent review behavior, replay without duplicate effects, lost-response recovery, cancellation, quotas/fairness, dependency/version integrity, safety and restore-aware deletion. Add measured cost and useful browser outcomes for each representative project. Source, local tests, configured services, deployment and accepted live journeys remain distinct evidence. This document is the target strategy, not evidence that these capabilities have shipped.
+
+## Provider cost and capability reference — September 30, 2026
+
+These are checked public documentation facts, not verified Whumpo account entitlements or permission to buy/provision. Recheck before activation; included allowances are shared account resources rather than a free allocation for every project.
+
+| Capability | What it does, Whumpo path and status | Cost/limit caveats |
+| --- | --- | --- |
+| [Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/reference/pricing/) | Candidate isolated custom-code route in WH-071/055; current QuickJS remains. Bundle custom routes per project where appropriate. | $25/month base includes 1,000 scripts; additional scripts are $0.02 each/month, with request/CPU allowances and overages. It is a separate product commitment from existing Workers Paid. |
+| [D1](https://developers.cloudflare.com/d1/platform/pricing/) | Existing control storage; project database lifecycle proposed in WH-072. | No charge per database itself; rows read/written and storage are billed. Each primary database processes queries serially and has a [10 GB maximum](https://developers.cloudflare.com/d1/platform/limits/); separate databases can bound contention. Verify aggregate/binding/provisioning limits. |
+| [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) | Existing platform assets; proposed compiled customer delivery in WH-073 where revocation permits. | Direct asset requests are free/unlimited with no additional asset-storage charge. Worker execution, including routing/authentication via `run_worker_first`, is billed; current site-host traffic must be measured separately. |
+| [R2](https://developers.cloudflare.com/r2/pricing/) | Existing private storage and shared file service foundation. | Storage/operations are priced; direct R2 egress is free. Worker execution, scanning and other delivery services can still cost money. Different storage classes have different retrieval/minimum-retention terms. |
+| [Queues](https://developers.cloudflare.com/queues/platform/pricing/) / [Workflows](https://developers.cloudflare.com/workflows/reference/pricing/) | Deferred delivery/orchestration alternatives under the current D1/cron ADR; customer rules remain deterministic. | Queue operations/retries and retained workflow state/steps matter. Workflow step/storage billing began August 10, 2026; waiting without CPU does not imply no storage cost. No new service is configured here. |
+| [Containers](https://developers.cloudflare.com/containers/platform/pricing/) | Deferred isolated native/build/sustained-workload option. | Paid Workers required. Running memory/disk are charged from provisioned capacity and CPU from active usage; sleep stops container resource billing, with Worker/DO/network and other supporting costs still relevant. Compare sustained workloads with VM alternatives before choosing. |
+
+For Workers for Platforms, adopt the documented [untrusted isolation mode](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/reference/worker-isolation/) and narrowly scoped [bindings](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/configuration/bindings/). Asset deduplication is namespace-scoped: follow the [tenant-hash and trusted upload-token guidance](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/configuration/static-assets/) when private isolation requires it. [Outbound Worker interception](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/configuration/outbound-workers/) has exceptions such as Durable Object/mTLS fetches, so audit all granted capabilities. [Workflows cannot deploy inside those namespaces](https://developers.cloudflare.com/workflows/reference/limits/); any shared orchestration binding needs its own tenant/purpose authority. None of these services implies a visitor connection to Whumpo AI.

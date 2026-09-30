@@ -27,6 +27,11 @@
       "id": "F4",
       "title": "Measured expansion",
       "outcome": "Demand-led scale, collaboration, search and advanced hosting after the core product proves useful."
+    },
+    {
+      "id": "F5",
+      "title": "Configuration and shared capabilities",
+      "outcome": "Configure and compose maintained modules first; generate only missing custom behavior; preserve isolated customer data and execution with workload-appropriate infrastructure. Whumpo AI maintains projects and chats with owners only."
     }
   ],
   "tasks": [
@@ -854,7 +859,7 @@
     },
     {
       "id": "WH-021",
-      "title": "Activate a reviewed production inference route and Gateway canary",
+      "title": "Activate reviewed owner-maintenance inference and Gateway canary",
       "phase": "F3",
       "priority": "P0",
       "readiness": "planned",
@@ -866,7 +871,7 @@
         "WH-022"
       ],
       "blockers": [],
-      "outcome": "Production routing has verified model/rate/privacy contracts and complete spending receipts without silent paid fallback.",
+      "outcome": "Owner-facing maintenance and Chat routing has verified model/rate/privacy contracts and complete spending receipts without silent paid fallback.",
       "scope": [
         "Connect existing route and Gateway foundations to approved task orchestration",
         "Add versioned model/protocol/context/price configuration and safe log/cache/retry policy",
@@ -876,7 +881,8 @@
         "Standard work never acquires premium debits",
         "Task/account/platform reservations precede billable work; uncertain outcomes stay held",
         "Real canary verifies provider request/cost receipt and chosen Gateway settings",
-        "No new provider billing, service or fallback activates without explicit exact review"
+        "No new provider billing, service or fallback activates without explicit exact review",
+        "Visitor requests and customer service workflows cannot invoke this route, borrow its credentials/context or consume owner maintenance funding; optional customer runtime AI is a separate WH-079 capability"
       ],
       "verification": [
         "pnpm test:ai-gateway",
@@ -891,7 +897,8 @@
         "src/gateway-inference.ts",
         "src/gateway-provider-receipt.ts",
         "src/gateway-spend.ts",
-        "src/inference-routing.ts"
+        "src/inference-routing.ts",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -1068,7 +1075,8 @@
       "size": "L",
       "dependsOn": [
         "WH-020",
-        "WH-014"
+        "WH-014",
+        "WH-066"
       ],
       "blockers": [],
       "outcome": "The supported site builder delivers useful, distinct small-business and personal sites with predictable edits.",
@@ -1081,7 +1089,8 @@
         "Each new component has versioned schema, export and preview/publish/restore support",
         "Edits preserve fields outside requested scope and never mutate prior versions",
         "Fixture acceptance covers mobile layout, semantic headings, link safety and exact restore",
-        "Do not advertise arbitrary scripts or unrestricted multipage apps beyond supported contracts"
+        "Do not advertise arbitrary scripts or unrestricted multipage apps beyond supported contracts",
+        "Use validated project specification changes and maintained module APIs first; generate only a justified missing component, with no visitor access to the Whumpo maintainer model"
       ],
       "verification": [
         "pnpm test:site-agent",
@@ -1095,7 +1104,8 @@
         "docs/version-comparisons.md",
         "src/components.ts",
         "src/ai-chat.ts",
-        "src/publications.ts"
+        "src/publications.ts",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -1154,7 +1164,9 @@
       "size": "L",
       "dependsOn": [
         "WH-014",
-        "WH-020"
+        "WH-020",
+        "WH-066",
+        "WH-067"
       ],
       "blockers": [],
       "outcome": "The task-list and notebook starters become usable applications instead of generic action/JSON entry forms.",
@@ -1167,7 +1179,8 @@
         "UI actions bind the approved program/page/data revisions",
         "Visitor identities/documents remain isolated; rejected transitions preserve prior data",
         "No frontend can enlarge storage/execution authority",
-        "Export, revocation and program withdrawal remain discoverable and tested"
+        "Export, revocation and program withdrawal remain discoverable and tested",
+        "Use validated project specification changes and maintained module APIs first; generate only a justified missing component, with no visitor access to the Whumpo maintainer model"
       ],
       "verification": [
         "pnpm test:customer-app-journey",
@@ -1181,7 +1194,8 @@
         "src/app-page-design.ts",
         "src/app-pages.ts",
         "src/backend-task-list.ts",
-        "web/visitor.js"
+        "web/visitor.js",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -1246,7 +1260,8 @@
       "scope": [
         "Build synthetic candidate promotion from the existing nomination/intake workflow",
         "Require provenance, license, sensitive-data and security review plus human approval",
-        "Define consent withdrawal, version pinning, deprecation and security update notices"
+        "Define consent withdrawal, version pinning, deprecation and security update notices",
+        "Distinguish copied starter templates from maintained versioned module dependencies; WH-076 defines module upgrade governance"
       ],
       "acceptance": [
         "No cross-customer source harvesting or automatic promotion",
@@ -1836,7 +1851,8 @@
         "Standard work and internal model escalation cannot silently consume premium credit",
         "Quote identity/model/tariff/limits are server-owned and immutable",
         "Lost acknowledgments cannot dispatch twice or release an uncertain hold",
-        "Customer receives a plain-language authoritative receipt"
+        "Customer receives a plain-language authoritative receipt",
+        "Premium maintenance inference is owner-facing only; visitor/service AI cannot use this wallet or route and requires the separate customer-configured WH-079 contract"
       ],
       "verification": [
         "pnpm test:gateway-spend",
@@ -1848,7 +1864,8 @@
         "docs/pricing-and-model-policy.md",
         "docs/ai-gateway-transport.md",
         "src/gateway-spend.ts",
-        "src/gateway-inference.ts"
+        "src/gateway-inference.ts",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -2016,7 +2033,8 @@
         "Owner approves customer/data cohort and provider privacy scope",
         "No full-MVP claim; waived/omitted features require explicit scope decision",
         "Stop conditions and review cadence are recorded before invitations are issued",
-        "Support/recovery remains reachable when Chat or onboarding fails, with a responsible operator and tested access path"
+        "Support/recovery remains reachable when Chat or onboarding fails, with a responsible operator and tested access path",
+        "Supported visitor/service flows continue with Whumpo maintenance inference unavailable and create zero maintainer requests, reservations or conversation changes; any optional customer runtime AI remains separately scoped"
       ],
       "verification": [
         "Candidate-release connected site/app journeys and auth boundaries",
@@ -2028,7 +2046,8 @@
         "docs/acceptance.md",
         "docs/content-safety.md",
         "docs/deployment.md",
-        "docs/mvp.md"
+        "docs/mvp.md",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -2075,7 +2094,8 @@
         "No unavailable payment/provider/CMS journey is marked complete by a local test",
         "Two-period economics and funded entitlements are evidenced",
         "Device, tenant, uncertainty, publication/restore and recovery checks are current",
-        "Any removal of a delivery-contract requirement needs an explicit owner amendment before closure"
+        "Any removal of a delivery-contract requirement needs an explicit owner amendment before closure",
+        "Supported visitor/service flows continue with Whumpo maintenance inference unavailable and create zero maintainer requests, reservations or conversation changes; any optional customer runtime AI remains separately scoped"
       ],
       "verification": [
         "Full requirement-to-evidence review at candidate release",
@@ -2086,7 +2106,8 @@
         "docs/mvp.md",
         "docs/acceptance.md",
         "docs/pricing-and-model-policy.md",
-        "docs/roadmap/README.md"
+        "docs/roadmap/README.md",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -2220,7 +2241,7 @@
     },
     {
       "id": "WH-053",
-      "title": "Pilot tenant-isolated search over approved published content",
+      "title": "Pilot approved-content search with optional customer-configured AI",
       "phase": "F4",
       "priority": "P2",
       "readiness": "deferred",
@@ -2232,17 +2253,20 @@
         "WH-022"
       ],
       "blockers": [],
-      "outcome": "Customers with measured search demand can query their approved content with bounded retrieval/inference cost.",
+      "outcome": "Projects with measured search demand can use deterministic search; optional inference requires their explicitly configured runtime AI capability, independent of the Whumpo maintainer.",
       "scope": [
         "Evaluate AI Search versus explicit indexing/Vectorize against real retrieval requirements",
         "Bind tenant, published version and safety state to indexed documents",
-        "Design removal, reindex, citation and query-budget behavior"
+        "Design removal, reindex, citation and query-budget behavior",
+        "Choose deterministic indexed search by default; semantic/answer generation uses only an explicitly enabled customer-configured provider or exposed Cloudflare runtime route",
+        "Deterministic search may proceed independently; an AI-enabled variant must be a separate reviewed child dependent on WH-079, never an implicit use of owner-maintenance inference"
       ],
       "acceptance": [
         "No private draft, revoked artifact or other tenant document can be retrieved",
         "Prompt injection in retrieved content cannot authorize actions",
         "Search/index/inference charges and plan eligibility are reviewed",
-        "Pilot has measurable answer/citation quality and a deletion SLA verified by tests"
+        "Pilot has measurable answer/citation quality and a deletion SLA verified by tests",
+        "Visitor search never invokes Whumpo maintenance inference or shares its credentials/context; disabled customer AI has no platform-model fallback"
       ],
       "verification": [
         "Cross-tenant retrieval, removal and unsafe-source fixtures",
@@ -2252,7 +2276,8 @@
       "references": [
         "docs/cloudflare-capability-roadmap.md",
         "docs/content-safety.md",
-        "docs/resource-pool-economics.md"
+        "docs/resource-pool-economics.md",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -2314,6 +2339,7 @@
       "blockers": [],
       "outcome": "A measured business case determines whether QuickJS needs an additional isolated hosting tier.",
       "scope": [
+        "Evaluate existing configuration/shared modules first; justify any isolated custom or dedicated runtime by a specific unsupported execution, dependency, networking, capacity or isolation requirement",
         "Collect concrete unsupported customer workloads",
         "Compare bounded QuickJS, Workers for Platforms, Containers and Durable Objects against those workloads",
         "Specify secrets/network boundaries, review, metering, backup, abuse controls and minimum charges"
@@ -2362,7 +2388,8 @@
         "Connector target hosts/scopes are server-controlled",
         "Unknown results reconcile without duplicate side effects",
         "Customer consent and price are explicit",
-        "No arbitrary outbound fetch from generated source is introduced"
+        "No arbitrary outbound fetch from generated source is introduced",
+        "Connector and notification runtime actions remain deterministic and cannot invoke the owner maintainer; any customer-configured AI route is separately governed by WH-079"
       ],
       "verification": [
         "Synthetic connector conformance and revoked-token tests",
@@ -2372,7 +2399,8 @@
       "references": [
         "docs/integrations/cloudflare-connection.md",
         "docs/contact-forms.md",
-        "docs/backend-execution.md"
+        "docs/backend-execution.md",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -2436,7 +2464,8 @@
       "scope": [
         "Promote representative benchmark fixtures into release evaluation",
         "Include unsafe/unsupported asks, prompt injection, edit preservation and recovery",
-        "Record model/prompt/tool/component versions and quality/cost changes"
+        "Record model/prompt/tool/component versions and quality/cost changes",
+        "Evaluate configuration/composition selection and justified custom-code fallback for owner maintenance; standard visitor/service execution must have zero maintainer dispatches, including errors and retries"
       ],
       "acceptance": [
         "Evaluators distinguish prepared, confirmed and completed operations",
@@ -2584,7 +2613,7 @@
     },
     {
       "id": "WH-062",
-      "title": "Evaluate bounded multi-agent task execution",
+      "title": "Evaluate bounded multi-agent execution for owner maintenance only",
       "phase": "F4",
       "priority": "P2",
       "readiness": "deferred",
@@ -2596,7 +2625,7 @@
         "WH-058"
       ],
       "blockers": [],
-      "outcome": "Parallel model roles are introduced only if they improve task outcomes within one explicit authority and cost envelope.",
+      "outcome": "Parallel maintainer roles may improve explicitly authorized owner maintenance within one authority and cost envelope; customer website/service execution remains independent.",
       "scope": [
         "Compare a single bounded agent with planner/builder/evaluator roles on the same synthetic task corpus",
         "Specify parent/child receipts, shared reservations, cancellation, context minimization and maximum concurrency",
@@ -2606,7 +2635,8 @@
         "Every child call rolls up to one task budget and preserves standard versus premium funding",
         "Failed/cancelled children cannot orphan dispatch or mutate after withdrawal",
         "Customer source and credentials are not broadened across roles without necessity",
-        "Measured completion quality, latency and total cost justify a go/no-go decision; no automatic paid fan-out"
+        "Measured completion quality, latency and total cost justify a go/no-go decision; no automatic paid fan-out",
+        "No visitor event, schedule or customer service workflow invokes these maintainer roles; optional runtime AI is a separate customer-controlled capability"
       ],
       "verification": [
         "Offline orchestration/failure/concurrency prototype",
@@ -2617,7 +2647,8 @@
         "docs/pricing-and-model-policy.md",
         "docs/workspace-agent.md",
         "src/gateway-spend.ts",
-        "src/ai-chat.ts"
+        "src/ai-chat.ts",
+        "docs/roadmap/composition-architecture.md"
       ],
       "issue": null,
       "owner": null,
@@ -2660,6 +2691,771 @@
         "docs/account-closure.md",
         "frontend/src/auth.tsx",
         "frontend/src/profile-picture-picker.tsx"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-064",
+      "title": "Define versioned project specifications and supported change operations",
+      "phase": "F5",
+      "priority": "P0",
+      "readiness": "ready",
+      "kind": "decision",
+      "size": "M",
+      "dependsOn": [],
+      "blockers": [],
+      "outcome": "Owner requests become validated changes to a project specification before any custom-code or infrastructure proposal.",
+      "scope": [
+        "Inventory existing site components, app/page/data contracts and reusable helpers before designing the shared schema",
+        "Define pages, design, content references, feature/module versions, data schemas, project permissions, integrations and deterministic workflow rules",
+        "Specify operation schemas and exact input/output/error contracts for propose, validate, preview, apply and version",
+        "Record the owner-facing maintainer boundary and a narrow initial content/forms/files/access/notification capability set"
+      ],
+      "acceptance": [
+        "Unknown fields, unsupported module versions and incompatible permission/schema combinations fail closed",
+        "Tenant/project scope comes from verified authorization, never model-provided ownership fields",
+        "An operation records expected revision, immutable diff, preview and acceptance evidence; permission/publication/spending changes retain their exact approval gates",
+        "Business hours, a supported vehicle field, notification rule and staff-only upload policy can be expressed without generating a new application stack",
+        "No operation wires Whumpo maintenance inference into visitors, customer service jobs or website traffic"
+      ],
+      "verification": [
+        "Schema and operation examples validated against existing contracts using benign fixtures",
+        "Review detailing-site change table with compatibility, stale-revision and unauthorized-policy cases",
+        "Decision artifact only; no module, database or AI provider is provisioned"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/shared-components.md",
+        "docs/app-data.md",
+        "docs/workspace-agent.md",
+        "src/components.ts",
+        "src/site-agent.ts",
+        "src/ai-chat.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-065",
+      "title": "Build a versioned capability catalog and composition planner",
+      "phase": "F5",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-064"
+      ],
+      "blockers": [],
+      "outcome": "The maintainer discovers supported modules and proposes the smallest configuration or composition change before custom generation.",
+      "scope": [
+        "Publish module interfaces, supported operations, permissions, dependencies, compatibility and cost characteristics",
+        "Retrieve only the relevant catalog/contract subset for the owner request",
+        "Extend current site/backend library inspection and application handoff instead of creating a parallel lifecycle",
+        "Require a recorded missing capability and bounded extension scope before custom code"
+      ],
+      "acceptance": [
+        "Catalog lookup never exposes another customer source, configuration, files or credentials",
+        "Planner prefers supported content/config/schema/policy operations and deterministic diagnostics",
+        "Unknown capabilities do not become invented configuration fields or silent framework migrations",
+        "Representative supported requests produce no new backend source or infrastructure plan",
+        "Owner maintenance model cannot be invoked through a visitor or deterministic automation action"
+      ],
+      "verification": [
+        "Offline planner fixtures covering configuration, composition, unsupported behavior and custom escape hatch",
+        "Existing library/agent inspection and application journey suites where modified",
+        "Measure retrieved context and generated source without paid model tests by default"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/shared-components.md",
+        "docs/backend-execution.md",
+        "src/backend-library.ts",
+        "src/site-agent.ts",
+        "src/agent-inspection.ts",
+        "src/ai-chat.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-066",
+      "title": "Compile specification changes into deterministic previews and releases",
+      "phase": "F5",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "L",
+      "dependsOn": [
+        "WH-064",
+        "WH-065"
+      ],
+      "blockers": [],
+      "outcome": "The same validated specification and pinned module/compiler versions reproduce exact artifacts and recoverable project versions.",
+      "scope": [
+        "Implement schema validation and deterministic render/compiler adapters for the initial supported presentation/forms/API clients",
+        "Connect proposal diff, permission/compatibility checks, isolated preview, explicit apply and immutable version recording",
+        "Reuse existing publication/export/restore receipts and expected-revision guards",
+        "Plan legacy version import/adapters without rewriting immutable saved artifacts"
+      ],
+      "acceptance": [
+        "Identical supported inputs and pinned versions yield byte-identical outputs/digests without model generation",
+        "Stale/concurrent changes cannot partially apply incompatible config/content/data references",
+        "Visibility, permission expansion, publication and destructive/data migration changes keep relevant reviews and safety gates",
+        "Rollback selects compatible recorded spec/module/data state and rechecks current safety/deletion rules",
+        "Configuration-only changes require focused deterministic checks and do not trigger an open-ended coding session"
+      ],
+      "verification": [
+        "Reproducibility/digest and migration-compatibility fixtures",
+        "Existing preview/publication/version/export concurrency and lost-response tests",
+        "Connected loopback spec change, preview, apply, restore with zero compiler model calls"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/mvp.md",
+        "docs/version-retention.md",
+        "docs/version-comparisons.md",
+        "src/components.ts",
+        "src/publications.ts",
+        "docs/releases.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-067",
+      "title": "Expose shared content, forms, records, files and access modules",
+      "phase": "F5",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "L",
+      "dependsOn": [
+        "WH-065",
+        "WH-066",
+        "WH-009",
+        "WH-010"
+      ],
+      "blockers": [],
+      "outcome": "Composed interfaces and custom frontends reuse the same maintained tenant-scoped standard APIs.",
+      "scope": [
+        "Define stable API/schema boundaries for content, form validation/submissions/record views, scoped files/galleries and project users/roles",
+        "Adapt existing contact/directory/visitor-data/photo services instead of generating new auth/storage/CRUD implementations",
+        "Keep module organization independent of deployment count; several modules can share the current backend",
+        "Evaluate proven libraries or managed services before building complex identity/payment engines"
+      ],
+      "acceptance": [
+        "Authenticated scope and field/record/file permissions are enforced inside every API, including direct/custom frontend use",
+        "Standard form/gallery/record actions execute deterministically with zero maintainer inference",
+        "Staff-only upload access is a project role policy, not a filename prefix or public bucket",
+        "Shared APIs do not bypass media quarantine, exact publication reviews or restricted preservation",
+        "Initial delivery is split into coherent API slices; no universal no-code engine or unsupported booking promise is implied"
+      ],
+      "verification": [
+        "Cross-tenant/user/role/direct-API fixtures with replay and revocation",
+        "Existing contact/directory/photo/app lifecycle suites relevant to each slice",
+        "Two different frontend compositions share one API contract without custom auth/handlers"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/contact-forms.md",
+        "docs/directories.md",
+        "docs/photos.md",
+        "docs/app-data.md",
+        "src/contacts.ts",
+        "src/app-gateway.ts",
+        "src/photo-safety.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-068",
+      "title": "Implement shared notification templates and delivery configuration",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-067",
+        "WH-036",
+        "WH-052"
+      ],
+      "blockers": [],
+      "outcome": "Customers configure deterministic notifications while Whumpo maintains one delivery implementation.",
+      "scope": [
+        "Build on the selected contact/outbound delivery contract and durable receipts",
+        "Define versioned templates, verified senders, recipient scope, consent/preferences and delivery events",
+        "Offer standard appointment-request receipt and staff-notification rules as configuration"
+      ],
+      "acceptance": [
+        "Submission and notification delivery never invoke the Whumpo maintainer model",
+        "Provider secrets remain in authorized backend adapters and recipient/template inputs cannot form an open relay",
+        "Retries, delivery timeouts, bounces and cancellation use exact receipts and bounded reconciliation",
+        "Sender/DNS/provider charges require concrete review; no service is provisioned by a template",
+        "A failed notification does not lose the accepted form record"
+      ],
+      "verification": [
+        "Synthetic configured notification, duplicate event, timeout/bounce and revoked-recipient tests",
+        "Existing contact/delivery tests selected by changes",
+        "Approved provider canary only after sender/recipient and cost review"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/contact-forms.md",
+        "docs/background-jobs.md",
+        "docs/integrations/cloudflare-dns.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-069",
+      "title": "Run stored automation rules on a shared deterministic engine",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "L",
+      "dependsOn": [
+        "WH-065",
+        "WH-067",
+        "WH-068",
+        "WH-052"
+      ],
+      "blockers": [],
+      "outcome": "Customer workflows are versioned definitions and execution state, with no always-running per-customer scheduler or maintainer-agent step.",
+      "scope": [
+        "Implement a narrow trigger/condition/action catalog for records, approvals, notifications and bounded schedules",
+        "Use the current D1-owned receipt/scheduled-pass ADR; evaluate Queues/Workflows only at its measured adoption triggers",
+        "Bind each execution to verified project scope, exact rule/module version, actor authority and event ID",
+        "Support wait, cancel, resume and read-only progress with current permission checks"
+      ],
+      "acceptance": [
+        "Catalog has no Whumpo maintainer, agent callback, prompt or premium-model action",
+        "Visitor events may start approved deterministic workflows but cannot start owner maintenance sessions",
+        "Duplicate/out-of-order events and uncertain external effects cannot repeat unsafe email/payment/provisioning operations",
+        "Waits persist state rather than keeping a process/request alive; expired/revoked permission prevents later steps",
+        "Scheduling retries do not imply exactly-once external delivery or permission to provision paid services"
+      ],
+      "verification": [
+        "Synthetic appointment request to saved record to staff approval to confirmation with model transport disabled",
+        "Job receipt, cancellation, lost response and replay fixtures",
+        "No live customer automation or new schedule activated by local acceptance"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/background-jobs.md",
+        "docs/contact-forms.md",
+        "docs/app-data.md",
+        "tools/prototypes/job-journal.mjs"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-070",
+      "title": "Separate visual customization from maintained backend behavior",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-066",
+        "WH-067"
+      ],
+      "blockers": [],
+      "outcome": "Distinctive sites and portals use different presentation while retaining the same tested standard APIs.",
+      "scope": [
+        "Deliver three extension levels: design configuration, component composition and a small custom frontend component",
+        "Define versioned frontend/backend contracts, scoped API clients and safe custom-component boundaries",
+        "Load/edit only the affected component and its contracts for owner maintenance"
+      ],
+      "acceptance": [
+        "Custom presentation cannot enlarge backend permissions or access platform credentials/model transports",
+        "Standard backend services are not copied/forked merely to change typography, navigation or gallery interaction",
+        "Existing frontend isolation/CSP, content checks, preview and publication reviews still apply",
+        "Visual diversity and accessibility are evaluated independently of functional reuse",
+        "Templates and maintained module dependencies are identified separately in the project specification"
+      ],
+      "verification": [
+        "Compare three different compositions against identical API/permission conformance cases",
+        "Visual/accessibility and focused-edit preservation checks",
+        "Export/build deterministic output tests for supported composition levels"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/shared-components.md",
+        "docs/app-data.md",
+        "docs/mvp.md",
+        "src/components.ts",
+        "src/app-page-design.ts",
+        "web/visitor.js"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-071",
+      "title": "Specify workload placement and bounded custom execution paths",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "decision",
+      "size": "M",
+      "dependsOn": [
+        "WH-064",
+        "WH-050",
+        "WH-022"
+      ],
+      "blockers": [],
+      "outcome": "Placement favors static assets and shared maintained APIs, with isolated on-demand custom logic and persistent resources only for measured workload needs.",
+      "scope": [
+        "Define static/shared API/custom isolated function/persistent process admission classes and reviewed placement criteria",
+        "Keep existing QuickJS for supported custom logic; evaluate Workers for Platforms for workloads needing a broader execution boundary",
+        "Plan project route bundling rather than one script per tiny feature",
+        "Compare Containers/VMs for actual sustained/native workloads including supporting services and minimum costs"
+      ],
+      "acceptance": [
+        "Customer-controlled code never runs in the privileged shared platform process or receives cross-tenant connections",
+        "Separate tenant data/execution remains mandatory even when capacity is pooled",
+        "Static sites need no project database/always-on process by default",
+        "WfP, container or VM selection requires current account entitlement, full cost model, threat/lifecycle review and explicit activation",
+        "Whumpo owner maintenance inference is not part of any visitor placement path"
+      ],
+      "verification": [
+        "Official provider pricing/limit review at execution date",
+        "Synthetic workload/placement compatibility and rejection table",
+        "No resource provisioning, guest deployment or automatic platform migration in this decision task"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/backend-execution.md",
+        "docs/cloudflare-capability-roadmap.md",
+        "docs/resource-pool-economics.md",
+        "src/runtime/worker.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-072",
+      "title": "Design project data provisioning, migrations and recovery boundaries",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "L",
+      "dependsOn": [
+        "WH-064",
+        "WH-067",
+        "WH-071",
+        "WH-009",
+        "WH-019"
+      ],
+      "blockers": [],
+      "outcome": "Static projects avoid unnecessary databases; projects with application data can use separate managed project databases with complete lifecycle.",
+      "scope": [
+        "Keep shared platform registry/catalog metadata while assessing per-project D1 for application data",
+        "Implement a reviewed registry/provision/schema-migrate/export/restore/delete workflow with immutable resource identity",
+        "Define trusted routing/binding limits, migration fan-out, failure recovery and safe upgrades from current shared visitor data",
+        "For a justified PostgreSQL adapter, specify non-owner/non-superuser/non-BYPASSRLS request roles and scoped connections"
+      ],
+      "acceptance": [
+        "No blind migration of existing tenants or database-count reduction as a cost goal",
+        "Database choice accounts for query/storage pricing, per-database limits and contention rather than assumed per-server rent",
+        "Guest code receives project resources or a scoped API, never an all-customer database credential",
+        "Partial provisioning/migration and lost provider responses reconcile without duplicated resources or dropped data",
+        "Per-project backup/deletion/restoration preserves platform publication, revoked identity, legal holds and tombstones"
+      ],
+      "verification": [
+        "Disposable schema/registry/provisioning-adapter and cross-project routing fixtures",
+        "Restore/migration failure and deletion reconciliation tests",
+        "Cloud provider creation requires a separate exact resource/cost review"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/app-data.md",
+        "docs/account-closure.md",
+        "docs/data-lifecycle.md",
+        "docs/deployment.md",
+        "docs/emdash.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-073",
+      "title": "Serve published content and standard actions without maintenance inference",
+      "phase": "F5",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-066",
+        "WH-067",
+        "WH-071"
+      ],
+      "blockers": [],
+      "outcome": "Published sites and deterministic customer services remain functional while Whumpo owner AI is unavailable.",
+      "scope": [
+        "Pre-render supported public content on approved changes and serve immutable assets repeatedly",
+        "Use shared APIs only for real dynamic reads/writes; ordinary menus/forms/galleries/availability rules use no model",
+        "Choose delivery/cache invalidation that preserves current unpublish, permission and safety-revocation behavior",
+        "Measure direct-asset versus Worker-routed requests accurately"
+      ],
+      "acceptance": [
+        "Visitor/service route inventories and transport stubs prove zero Whumpo maintainer model dispatch",
+        "Maintenance model outage or exhausted owner premium balance does not break published standard services",
+        "No serving optimization makes pending/private/revoked content publicly cacheable",
+        "A routing/auth Worker is counted as execution; direct static-asset allowances are not applied to dynamic traffic",
+        "Model-required customer extensions are separately configured under WH-079 and never fall back to Whumpo AI"
+      ],
+      "verification": [
+        "Connected visitor/site journeys with maintainer transport unavailable and dispatch count asserted zero",
+        "Publish/restore/unpublish, permission-change and scanner-revocation cache tests",
+        "Measured request path and cold/warm cost evidence before delivery changes"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/mvp.md",
+        "docs/site-health.md",
+        "docs/content-safety.md",
+        "src/site-host.ts",
+        "src/app-host.ts",
+        "src/app-gateway.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-074",
+      "title": "Pool isolated builds and on-demand owner maintenance sessions",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "L",
+      "dependsOn": [
+        "WH-065",
+        "WH-071",
+        "WH-052"
+      ],
+      "blockers": [],
+      "outcome": "Persistent project/owner context uses stored state while shared capacity runs clean bounded jobs only when authorized work arrives.",
+      "scope": [
+        "Reuse approved immutable toolchains/dependency caches and content-addressed artifacts",
+        "Give every build/conversion job a fresh isolated writable workspace, scoped inputs/outputs, short-lived authority and explicit cleanup",
+        "Load the relevant owner conversation/project state for bounded maintenance and release capacity afterward",
+        "Run schema/type/dependency/build diagnostics before model repair; return focused failure context and use supported prompt caching only after privacy/provider validation"
+      ],
+      "acceptance": [
+        "No always-running agent container or automation server is allocated per customer by default",
+        "Writable shells, credentials and private customer caches/workspaces are never shared",
+        "Visitor requests or customer workflow events cannot wake the maintainer agent",
+        "Cancelled/expired jobs cannot publish, spend or reuse another job authority; cleanup failures are recorded",
+        "Prepared-image/cache reuse is distinguished from private artifact reuse and does not assume idle running memory/disk is free"
+      ],
+      "verification": [
+        "Two-tenant build/cache contamination, cleanup, cancelled-job and output-ownership fixtures",
+        "Owner session resume/concurrency and bounded resource tests",
+        "Synthetic maintenance task with deterministic diagnostics preceding any optional model call"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/background-jobs.md",
+        "docs/backend-execution.md",
+        "docs/releases.md",
+        "docs/workspace-agent.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-075",
+      "title": "Bound shared capacity and separate interactive from batch failures",
+      "phase": "F5",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-065",
+        "WH-050",
+        "WH-052"
+      ],
+      "blockers": [],
+      "outcome": "Pooling reduces idle work without allowing one project or job class to exhaust another project service.",
+      "scope": [
+        "Carry server-verified project/actor/purpose scope into jobs, cached results and provider adapters",
+        "Enforce per-project and platform concurrency, queue length, database work, upload/transform bytes, custom CPU/memory and spend bounds",
+        "Reserve interactive capacity separately from scans/imports/builds; plan bounded failure groups as observed load grows",
+        "Support reviewed selective dedicated isolation only when performance/containment evidence warrants it"
+      ],
+      "acceptance": [
+        "Forged tenant arguments/headers and copied job IDs cannot cross records, files, caches or outputs",
+        "Permission-sensitive cache entries key/invalidate by tenant and required actor/authorization revision",
+        "Load tests demonstrate bounded noisy-neighbor impact and recoverable backpressure, with no silent data loss",
+        "Quotas do not silently meter standard owner AI or automatically upgrade a plan",
+        "Unknown cost and pooled fixed overhead remain visible in internal accounting"
+      ],
+      "verification": [
+        "Cross-tenant job/cache/file/result access fixtures",
+        "Interactive-versus-batch saturation and recovery tests using bounded local workloads",
+        "Re-run the WH-050 envelope for newly introduced bottlenecks"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/security-risk-actions.md",
+        "docs/background-jobs.md",
+        "docs/resource-pool-economics.md",
+        "docs/app-data.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-076",
+      "title": "Govern maintained module versions and controlled upgrades",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-065",
+        "WH-066",
+        "WH-030"
+      ],
+      "blockers": [],
+      "outcome": "Reuse produces maintained dependencies with predictable upgrades rather than many independently forked templates.",
+      "scope": [
+        "Define module interface/version compatibility, dependency pins, conformance tests and security maintenance ownership",
+        "Implement reviewed staged rollout, project migration, deprecation and rollback rules",
+        "Productize repeated missing capabilities deliberately with provenance, rights and privacy review"
+      ],
+      "acceptance": [
+        "Project specification records exact module versions and custom overrides",
+        "An upstream release never silently changes customer behavior/permissions/data schema",
+        "Rollback declares data compatibility and preserves current safety/deletion requirements",
+        "No automatic copying or model-context sharing of private customer implementations",
+        "Promotion considers aggregate development, support and maintenance cost against repeated custom work avoided"
+      ],
+      "verification": [
+        "Old/new module conformance and mixed-version fixture matrix",
+        "Staged upgrade/failure/rollback on two synthetic projects",
+        "Existing nomination consent/withdrawal and provenance tests"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/shared-components.md",
+        "docs/jarvis-reuse.md",
+        "docs/app-data.md",
+        "src/backend-nominations.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-077",
+      "title": "Define and verify portable project exports and managed-service adapters",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "L",
+      "dependsOn": [
+        "WH-066",
+        "WH-067",
+        "WH-072",
+        "WH-076",
+        "WH-009"
+      ],
+      "blockers": [],
+      "outcome": "Customers can export what they own with an honest account of managed dependencies and a tested route to running supported outcomes elsewhere.",
+      "scope": [
+        "Export specification, content, allowed customer data, custom source, asset manifests/digests and exact module/compiler versions",
+        "Distinguish static source download, data portability and a functioning standalone application",
+        "Select a supported self-hostable runtime, replacement adapters or a documented migration path for each shared capability",
+        "Include export format/version/migrations, unavailable feature report and secure secret reconfiguration instructions"
+      ],
+      "acceptance": [
+        "Exports never include platform/other-tenant secrets or unapproved private data",
+        "A frontend still requiring private Whumpo APIs is never described as a complete runnable export",
+        "A fresh isolated environment runs at least the claimed portable subset with Whumpo APIs and maintainer model unavailable",
+        "Unsupported managed integrations and customer action/cost steps are explicit",
+        "Whumpo internal platform source need not be disclosed to provide the defined customer ownership/exit contract"
+      ],
+      "verification": [
+        "Deterministic bundle/checksum and permission-filter tests",
+        "Clean-environment import/boot for advertised subset",
+        "Compare restored data/assets/module versions and documented exclusions"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/mvp.md",
+        "docs/account-closure.md",
+        "docs/data-lifecycle.md",
+        "docs/shared-components.md",
+        "docs/app-data.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-078",
+      "title": "Measure composition reuse and full lifecycle cost per outcome",
+      "phase": "F5",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-065",
+        "WH-066",
+        "WH-022"
+      ],
+      "blockers": [],
+      "outcome": "Architecture choices are judged by successful owner changes and active-project operating cost instead of token prices alone.",
+      "scope": [
+        "Classify configuration, composition, custom-component, custom-backend and dedicated-runtime outcomes",
+        "Track custom-code fallback reason and repeated missing capability with necessary metadata only",
+        "Measure AI, build/test, runtime, database, storage, external services, retries, support and module maintenance separately",
+        "Evaluate shared-module break-even and recurring active-project cost without claiming an unmeasured savings percentage"
+      ],
+      "acceptance": [
+        "No prompt/source/visitor content is copied into analytics",
+        "Internal category/event attribution prevents double counting even if a later customer balance combines eligible usage",
+        "Standard owner AI remains non-billable under existing policy; optional visitor AI has its own explicit funding and caps",
+        "Reporting separates observed cost, estimates, unknown dimensions and fixed pooled overhead",
+        "Savings comparisons use equivalent successful outcomes, quality and maintenance scope; no automatic upgrades or implicit budget expansion"
+      ],
+      "verification": [
+        "Synthetic cost-event duplication, category reconciliation and fallback classification fixtures",
+        "Representative composition-versus-custom benchmark using existing WH-020 corpus",
+        "Record sample size, versions, quality and uncertainty; paid evaluation only within approved scope"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/resource-pool-economics.md",
+        "docs/company-finance-review.md",
+        "docs/standard-ai-accounting.md",
+        "docs/pricing-and-model-policy.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-079",
+      "title": "Design optional customer-configured runtime AI as a separate capability",
+      "phase": "F5",
+      "priority": "P2",
+      "readiness": "deferred",
+      "kind": "decision",
+      "size": "M",
+      "dependsOn": [
+        "WH-065",
+        "WH-071",
+        "WH-075"
+      ],
+      "blockers": [],
+      "outcome": "A customer may later connect their own AI provider or a separately exposed Cloudflare AI capability without giving visitors access to Whumpo maintenance inference.",
+      "scope": [
+        "Define explicit per-project opt-in for customer-owned provider access or an exposed Gateway/Workers AI route",
+        "Use dedicated project-scoped adapters, credentials, model configuration, identity/permissions, budgets, data-use terms and receipts",
+        "Specify customer request/response handling separately from Whumpo owner conversation, prompts, tools and memory",
+        "Keep this outside default deterministic capability delivery and select implementation only after customer demand"
+      ],
+      "acceptance": [
+        "Visitor and service calls cannot use Whumpo maintainer credentials, context, tools, premium wallet or implicit provider fallback",
+        "Customer credentials remain server-side; an exposed Gateway is not itself a free model or funded inference entitlement",
+        "Disabled/unconfigured/exhausted runtime AI fails explicitly without waking the owner maintainer",
+        "Rate/abuse/concurrency controls and cost caps bound visitor exposure; owner receives a concrete provider/data/cost review",
+        "Customer AI requests cannot gain publication, infrastructure, ownership or maintenance authority through this extension"
+      ],
+      "verification": [
+        "Architecture/credential/budget separation review with negative route and configuration cases",
+        "Synthetic disabled/exhausted/forged-project tests with zero maintainer dispatch",
+        "No live provider activation or visitor AI endpoint in this decision task"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/ai-gateway-transport.md",
+        "docs/pricing-and-model-policy.md",
+        "docs/backend-execution.md",
+        "wrangler.apps.jsonc",
+        "wrangler.runtime.jsonc"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-080",
+      "title": "Accept a specification-composed business-site and portal pilot",
+      "phase": "F5",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-066",
+        "WH-067",
+        "WH-068",
+        "WH-069",
+        "WH-070",
+        "WH-073",
+        "WH-075",
+        "WH-078",
+        "WH-017"
+      ],
+      "blockers": [],
+      "outcome": "A representative customer outcome proves reuse, visual flexibility and independent deterministic visitor operation.",
+      "scope": [
+        "Use a mobile-detailing site with service packages, appointment requests, approved photo intake, staff-only access and confirmation emails",
+        "Demonstrate changes to business hours, vehicle field, notification rule, staff file policy and premium visual composition",
+        "Reuse maintained modules; an appointment request is not a promise of a full booking/calendar engine",
+        "Exercise preview/review/version/restore and measured maintenance/serving cost on disposable synthetic projects"
+      ],
+      "acceptance": [
+        "First four changes alter supported records/specification/policy without bespoke generated backend/auth/upload/email stacks",
+        "Visitor submission, file access and confirmation flow use zero Whumpo maintainer model calls and remain functional during its outage",
+        "Two differently styled synthetic customers have isolated records/files/jobs and reuse the same maintained API implementations",
+        "Custom visual work is bounded to the missing component; module/version provenance and fallback reason are recorded",
+        "Media safety, real sender/provider, devices, live customer publication and payments remain their separate activation/acceptance gates"
+      ],
+      "verification": [
+        "Connected loopback two-tenant pilot with maintainer transport disabled for visitor flows",
+        "Replay/stale permission/notification timeout/quarantine/version-restore checks",
+        "Cost and fallback report with synthetic versus live evidence labels"
+      ],
+      "references": [
+        "docs/roadmap/composition-architecture.md",
+        "docs/contact-forms.md",
+        "docs/photos.md",
+        "docs/shared-components.md",
+        "docs/app-data.md",
+        "docs/roadmap/README.md"
       ],
       "issue": null,
       "owner": null,

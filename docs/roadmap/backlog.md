@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-09-30 against source `05443262a88b658c8d72460a75b28facacabec4f`. 63 planned tasks.
+Reviewed 2026-09-30 against source `05443262a88b658c8d72460a75b28facacabec4f`. 80 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -1169,6 +1169,7 @@ An explicitly scoped invited beta is released only with evidence for safety, pri
 - [ ] No full-MVP claim; waived/omitted features require explicit scope decision
 - [ ] Stop conditions and review cadence are recorded before invitations are issued
 - [ ] Support/recovery remains reachable when Chat or onboarding fails, with a responsible operator and tested access path
+- [ ] Supported visitor/service flows continue with Whumpo maintenance inference unavailable and create zero maintainer requests, reservations or conversation changes; any optional customer runtime AI remains separately scoped
 
 ### Verification
 
@@ -1189,6 +1190,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/content-safety.md](../../docs/content-safety.md)
 - [docs/deployment.md](../../docs/deployment.md)
 - [docs/mvp.md](../../docs/mvp.md)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 
 ### Execution coordination
 
@@ -1440,6 +1442,7 @@ The supported site builder delivers useful, distinct small-business and personal
 - [ ] Edits preserve fields outside requested scope and never mutate prior versions
 - [ ] Fixture acceptance covers mobile layout, semantic headings, link safety and exact restore
 - [ ] Do not advertise arbitrary scripts or unrestricted multipage apps beyond supported contracts
+- [ ] Use validated project specification changes and maintained module APIs first; generate only a justified missing component, with no visitor access to the Whumpo maintainer model
 
 ### Verification
 
@@ -1450,7 +1453,7 @@ The supported site builder delivers useful, distinct small-business and personal
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-020, WH-014. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-020, WH-014, WH-066. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -1462,6 +1465,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/components.ts](../../src/components.ts)
 - [src/ai-chat.ts](../../src/ai-chat.ts)
 - [src/publications.ts](../../src/publications.ts)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 
 ### Execution coordination
 
@@ -1549,6 +1553,7 @@ The task-list and notebook starters become usable applications instead of generi
 - [ ] Visitor identities/documents remain isolated; rejected transitions preserve prior data
 - [ ] No frontend can enlarge storage/execution authority
 - [ ] Export, revocation and program withdrawal remain discoverable and tested
+- [ ] Use validated project specification changes and maintained module APIs first; generate only a justified missing component, with no visitor access to the Whumpo maintainer model
 
 ### Verification
 
@@ -1559,7 +1564,7 @@ The task-list and notebook starters become usable applications instead of generi
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-014, WH-020. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-014, WH-020, WH-066, WH-067. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -1571,6 +1576,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/app-pages.ts](../../src/app-pages.ts)
 - [src/backend-task-list.ts](../../src/backend-task-list.ts)
 - [web/visitor.js](../../web/visitor.js)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 
 ### Execution coordination
 
@@ -1650,6 +1656,7 @@ Reusable components can improve quality without copying private customer source 
 - Build synthetic candidate promotion from the existing nomination/intake workflow
 - Require provenance, license, sensitive-data and security review plus human approval
 - Define consent withdrawal, version pinning, deprecation and security update notices
+- Distinguish copied starter templates from maintained versioned module dependencies; WH-076 defines module upgrade governance
 
 ### Acceptance criteria
 
@@ -2174,6 +2181,7 @@ Model/prompt/component changes cannot silently degrade accepted site/app outcome
 - Promote representative benchmark fixtures into release evaluation
 - Include unsafe/unsupported asks, prompt injection, edit preservation and recovery
 - Record model/prompt/tool/component versions and quality/cost changes
+- Evaluate configuration/composition selection and justified custom-code fallback for owner maintenance; standard visitor/service execution must have zero maintainer dispatches, including errors and retries
 
 ### Acceptance criteria
 
@@ -2320,7 +2328,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Verified provider economics, funded plans and the remaining full delivery-contract capabilities.
 
-## WH-021 — Activate a reviewed production inference route and Gateway canary
+## WH-021 — Activate reviewed owner-maintenance inference and Gateway canary
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
@@ -2330,7 +2338,7 @@ Follow the [agent execution contract](../../docs/roadmap/execution.md) and [cano
 
 ### Outcome
 
-Production routing has verified model/rate/privacy contracts and complete spending receipts without silent paid fallback.
+Owner-facing maintenance and Chat routing has verified model/rate/privacy contracts and complete spending receipts without silent paid fallback.
 
 ### Scope
 
@@ -2344,6 +2352,7 @@ Production routing has verified model/rate/privacy contracts and complete spendi
 - [ ] Task/account/platform reservations precede billable work; uncertain outcomes stay held
 - [ ] Real canary verifies provider request/cost receipt and chosen Gateway settings
 - [ ] No new provider billing, service or fallback activates without explicit exact review
+- [ ] Visitor requests and customer service workflows cannot invoke this route, borrow its credentials/context or consume owner maintenance funding; optional customer runtime AI is a separate WH-079 capability
 
 ### Verification
 
@@ -2367,6 +2376,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/gateway-provider-receipt.ts](../../src/gateway-provider-receipt.ts)
 - [src/gateway-spend.ts](../../src/gateway-spend.ts)
 - [src/inference-routing.ts](../../src/inference-routing.ts)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 
 ### Execution coordination
 
@@ -2666,6 +2676,7 @@ Advanced-model work runs only against the exact customer-approved scope and fund
 - [ ] Quote identity/model/tariff/limits are server-owned and immutable
 - [ ] Lost acknowledgments cannot dispatch twice or release an uncertain hold
 - [ ] Customer receives a plain-language authoritative receipt
+- [ ] Premium maintenance inference is owner-facing only; visitor/service AI cannot use this wallet or route and requires the separate customer-configured WH-079 contract
 
 ### Verification
 
@@ -2686,6 +2697,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/ai-gateway-transport.md](../../docs/ai-gateway-transport.md)
 - [src/gateway-spend.ts](../../src/gateway-spend.ts)
 - [src/gateway-inference.ts](../../src/gateway-inference.ts)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 
 ### Execution coordination
 
@@ -2719,6 +2731,7 @@ Whumpo can claim the agreed MVP only after every contract requirement has approp
 - [ ] Two-period economics and funded entitlements are evidenced
 - [ ] Device, tenant, uncertainty, publication/restore and recovery checks are current
 - [ ] Any removal of a delivery-contract requirement needs an explicit owner amendment before closure
+- [ ] Supported visitor/service flows continue with Whumpo maintenance inference unavailable and create zero maintainer requests, reservations or conversation changes; any optional customer runtime AI remains separately scoped
 
 ### Verification
 
@@ -2738,6 +2751,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/acceptance.md](../../docs/acceptance.md)
 - [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
 - [docs/roadmap/README.md](../../docs/roadmap/README.md)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 
 ### Execution coordination
 
@@ -3064,7 +3078,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-## WH-053 — Pilot tenant-isolated search over approved published content
+## WH-053 — Pilot approved-content search with optional customer-configured AI
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: implementation. Size: L.
 
@@ -3074,13 +3088,15 @@ Follow the [agent execution contract](../../docs/roadmap/execution.md) and [cano
 
 ### Outcome
 
-Customers with measured search demand can query their approved content with bounded retrieval/inference cost.
+Projects with measured search demand can use deterministic search; optional inference requires their explicitly configured runtime AI capability, independent of the Whumpo maintainer.
 
 ### Scope
 
 - Evaluate AI Search versus explicit indexing/Vectorize against real retrieval requirements
 - Bind tenant, published version and safety state to indexed documents
 - Design removal, reindex, citation and query-budget behavior
+- Choose deterministic indexed search by default; semantic/answer generation uses only an explicitly enabled customer-configured provider or exposed Cloudflare runtime route
+- Deterministic search may proceed independently; an AI-enabled variant must be a separate reviewed child dependent on WH-079, never an implicit use of owner-maintenance inference
 
 ### Acceptance criteria
 
@@ -3088,6 +3104,7 @@ Customers with measured search demand can query their approved content with boun
 - [ ] Prompt injection in retrieved content cannot authorize actions
 - [ ] Search/index/inference charges and plan eligibility are reviewed
 - [ ] Pilot has measurable answer/citation quality and a deletion SLA verified by tests
+- [ ] Visitor search never invokes Whumpo maintenance inference or shares its credentials/context; disabled customer AI has no platform-model fallback
 
 ### Verification
 
@@ -3106,6 +3123,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/cloudflare-capability-roadmap.md](../../docs/cloudflare-capability-roadmap.md)
 - [docs/content-safety.md](../../docs/content-safety.md)
 - [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 
 ### Execution coordination
 
@@ -3181,6 +3199,7 @@ A measured business case determines whether QuickJS needs an additional isolated
 
 ### Scope
 
+- Evaluate existing configuration/shared modules first; justify any isolated custom or dedicated runtime by a specific unsupported execution, dependency, networking, capacity or isolation requirement
 - Collect concrete unsupported customer workloads
 - Compare bounded QuickJS, Workers for Platforms, Containers and Durable Objects against those workloads
 - Specify secrets/network boundaries, review, metering, backup, abuse controls and minimum charges
@@ -3243,6 +3262,7 @@ Demanded integrations reuse scoped consent, exact reviews and reliable delivery 
 - [ ] Unknown results reconcile without duplicate side effects
 - [ ] Customer consent and price are explicit
 - [ ] No arbitrary outbound fetch from generated source is introduced
+- [ ] Connector and notification runtime actions remain deterministic and cannot invoke the owner maintainer; any customer-configured AI route is separately governed by WH-079
 
 ### Verification
 
@@ -3261,6 +3281,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
 - [docs/contact-forms.md](../../docs/contact-forms.md)
 - [docs/backend-execution.md](../../docs/backend-execution.md)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 
 ### Execution coordination
 
@@ -3321,7 +3342,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-## WH-062 — Evaluate bounded multi-agent task execution
+## WH-062 — Evaluate bounded multi-agent execution for owner maintenance only
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
@@ -3331,7 +3352,7 @@ Follow the [agent execution contract](../../docs/roadmap/execution.md) and [cano
 
 ### Outcome
 
-Parallel model roles are introduced only if they improve task outcomes within one explicit authority and cost envelope.
+Parallel maintainer roles may improve explicitly authorized owner maintenance within one authority and cost envelope; customer website/service execution remains independent.
 
 ### Scope
 
@@ -3345,6 +3366,7 @@ Parallel model roles are introduced only if they improve task outcomes within on
 - [ ] Failed/cancelled children cannot orphan dispatch or mutate after withdrawal
 - [ ] Customer source and credentials are not broadened across roles without necessity
 - [ ] Measured completion quality, latency and total cost justify a go/no-go decision; no automatic paid fan-out
+- [ ] No visitor event, schedule or customer service workflow invokes these maintainer roles; optional runtime AI is a separate customer-controlled capability
 
 ### Verification
 
@@ -3364,6 +3386,959 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/workspace-agent.md](../../docs/workspace-agent.md)
 - [src/gateway-spend.ts](../../src/gateway-spend.ts)
 - [src/ai-chat.ts](../../src/ai-chat.ts)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+# F5 — Configuration and shared capabilities
+
+Configure and compose maintained modules first; generate only missing custom behavior; preserve isolated customer data and execution with workload-appropriate infrastructure. Whumpo AI maintains projects and chats with owners only.
+
+## WH-064 — Define versioned project specifications and supported change operations
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Owner requests become validated changes to a project specification before any custom-code or infrastructure proposal.
+
+### Scope
+
+- Inventory existing site components, app/page/data contracts and reusable helpers before designing the shared schema
+- Define pages, design, content references, feature/module versions, data schemas, project permissions, integrations and deterministic workflow rules
+- Specify operation schemas and exact input/output/error contracts for propose, validate, preview, apply and version
+- Record the owner-facing maintainer boundary and a narrow initial content/forms/files/access/notification capability set
+
+### Acceptance criteria
+
+- [ ] Unknown fields, unsupported module versions and incompatible permission/schema combinations fail closed
+- [ ] Tenant/project scope comes from verified authorization, never model-provided ownership fields
+- [ ] An operation records expected revision, immutable diff, preview and acceptance evidence; permission/publication/spending changes retain their exact approval gates
+- [ ] Business hours, a supported vehicle field, notification rule and staff-only upload policy can be expressed without generating a new application stack
+- [ ] No operation wires Whumpo maintenance inference into visitors, customer service jobs or website traffic
+
+### Verification
+
+- Schema and operation examples validated against existing contracts using benign fixtures
+- Review detailing-site change table with compatibility, stale-revision and unauthorized-policy cases
+- Decision artifact only; no module, database or AI provider is provisioned
+
+### Dependencies and blockers
+
+Planning dependencies: None. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/shared-components.md](../../docs/shared-components.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [docs/workspace-agent.md](../../docs/workspace-agent.md)
+- [src/components.ts](../../src/components.ts)
+- [src/site-agent.ts](../../src/site-agent.ts)
+- [src/ai-chat.ts](../../src/ai-chat.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-065 — Build a versioned capability catalog and composition planner
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The maintainer discovers supported modules and proposes the smallest configuration or composition change before custom generation.
+
+### Scope
+
+- Publish module interfaces, supported operations, permissions, dependencies, compatibility and cost characteristics
+- Retrieve only the relevant catalog/contract subset for the owner request
+- Extend current site/backend library inspection and application handoff instead of creating a parallel lifecycle
+- Require a recorded missing capability and bounded extension scope before custom code
+
+### Acceptance criteria
+
+- [ ] Catalog lookup never exposes another customer source, configuration, files or credentials
+- [ ] Planner prefers supported content/config/schema/policy operations and deterministic diagnostics
+- [ ] Unknown capabilities do not become invented configuration fields or silent framework migrations
+- [ ] Representative supported requests produce no new backend source or infrastructure plan
+- [ ] Owner maintenance model cannot be invoked through a visitor or deterministic automation action
+
+### Verification
+
+- Offline planner fixtures covering configuration, composition, unsupported behavior and custom escape hatch
+- Existing library/agent inspection and application journey suites where modified
+- Measure retrieved context and generated source without paid model tests by default
+
+### Dependencies and blockers
+
+Planning dependencies: WH-064. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/shared-components.md](../../docs/shared-components.md)
+- [docs/backend-execution.md](../../docs/backend-execution.md)
+- [src/backend-library.ts](../../src/backend-library.ts)
+- [src/site-agent.ts](../../src/site-agent.ts)
+- [src/agent-inspection.ts](../../src/agent-inspection.ts)
+- [src/ai-chat.ts](../../src/ai-chat.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-066 — Compile specification changes into deterministic previews and releases
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The same validated specification and pinned module/compiler versions reproduce exact artifacts and recoverable project versions.
+
+### Scope
+
+- Implement schema validation and deterministic render/compiler adapters for the initial supported presentation/forms/API clients
+- Connect proposal diff, permission/compatibility checks, isolated preview, explicit apply and immutable version recording
+- Reuse existing publication/export/restore receipts and expected-revision guards
+- Plan legacy version import/adapters without rewriting immutable saved artifacts
+
+### Acceptance criteria
+
+- [ ] Identical supported inputs and pinned versions yield byte-identical outputs/digests without model generation
+- [ ] Stale/concurrent changes cannot partially apply incompatible config/content/data references
+- [ ] Visibility, permission expansion, publication and destructive/data migration changes keep relevant reviews and safety gates
+- [ ] Rollback selects compatible recorded spec/module/data state and rechecks current safety/deletion rules
+- [ ] Configuration-only changes require focused deterministic checks and do not trigger an open-ended coding session
+
+### Verification
+
+- Reproducibility/digest and migration-compatibility fixtures
+- Existing preview/publication/version/export concurrency and lost-response tests
+- Connected loopback spec change, preview, apply, restore with zero compiler model calls
+
+### Dependencies and blockers
+
+Planning dependencies: WH-064, WH-065. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/mvp.md](../../docs/mvp.md)
+- [docs/version-retention.md](../../docs/version-retention.md)
+- [docs/version-comparisons.md](../../docs/version-comparisons.md)
+- [src/components.ts](../../src/components.ts)
+- [src/publications.ts](../../src/publications.ts)
+- [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-067 — Expose shared content, forms, records, files and access modules
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Composed interfaces and custom frontends reuse the same maintained tenant-scoped standard APIs.
+
+### Scope
+
+- Define stable API/schema boundaries for content, form validation/submissions/record views, scoped files/galleries and project users/roles
+- Adapt existing contact/directory/visitor-data/photo services instead of generating new auth/storage/CRUD implementations
+- Keep module organization independent of deployment count; several modules can share the current backend
+- Evaluate proven libraries or managed services before building complex identity/payment engines
+
+### Acceptance criteria
+
+- [ ] Authenticated scope and field/record/file permissions are enforced inside every API, including direct/custom frontend use
+- [ ] Standard form/gallery/record actions execute deterministically with zero maintainer inference
+- [ ] Staff-only upload access is a project role policy, not a filename prefix or public bucket
+- [ ] Shared APIs do not bypass media quarantine, exact publication reviews or restricted preservation
+- [ ] Initial delivery is split into coherent API slices; no universal no-code engine or unsupported booking promise is implied
+
+### Verification
+
+- Cross-tenant/user/role/direct-API fixtures with replay and revocation
+- Existing contact/directory/photo/app lifecycle suites relevant to each slice
+- Two different frontend compositions share one API contract without custom auth/handlers
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-066, WH-009, WH-010. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/directories.md](../../docs/directories.md)
+- [docs/photos.md](../../docs/photos.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [src/contacts.ts](../../src/contacts.ts)
+- [src/app-gateway.ts](../../src/app-gateway.ts)
+- [src/photo-safety.ts](../../src/photo-safety.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-073 — Serve published content and standard actions without maintenance inference
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Published sites and deterministic customer services remain functional while Whumpo owner AI is unavailable.
+
+### Scope
+
+- Pre-render supported public content on approved changes and serve immutable assets repeatedly
+- Use shared APIs only for real dynamic reads/writes; ordinary menus/forms/galleries/availability rules use no model
+- Choose delivery/cache invalidation that preserves current unpublish, permission and safety-revocation behavior
+- Measure direct-asset versus Worker-routed requests accurately
+
+### Acceptance criteria
+
+- [ ] Visitor/service route inventories and transport stubs prove zero Whumpo maintainer model dispatch
+- [ ] Maintenance model outage or exhausted owner premium balance does not break published standard services
+- [ ] No serving optimization makes pending/private/revoked content publicly cacheable
+- [ ] A routing/auth Worker is counted as execution; direct static-asset allowances are not applied to dynamic traffic
+- [ ] Model-required customer extensions are separately configured under WH-079 and never fall back to Whumpo AI
+
+### Verification
+
+- Connected visitor/site journeys with maintainer transport unavailable and dispatch count asserted zero
+- Publish/restore/unpublish, permission-change and scanner-revocation cache tests
+- Measured request path and cold/warm cost evidence before delivery changes
+
+### Dependencies and blockers
+
+Planning dependencies: WH-066, WH-067, WH-071. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/mvp.md](../../docs/mvp.md)
+- [docs/site-health.md](../../docs/site-health.md)
+- [docs/content-safety.md](../../docs/content-safety.md)
+- [src/site-host.ts](../../src/site-host.ts)
+- [src/app-host.ts](../../src/app-host.ts)
+- [src/app-gateway.ts](../../src/app-gateway.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-075 — Bound shared capacity and separate interactive from batch failures
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Pooling reduces idle work without allowing one project or job class to exhaust another project service.
+
+### Scope
+
+- Carry server-verified project/actor/purpose scope into jobs, cached results and provider adapters
+- Enforce per-project and platform concurrency, queue length, database work, upload/transform bytes, custom CPU/memory and spend bounds
+- Reserve interactive capacity separately from scans/imports/builds; plan bounded failure groups as observed load grows
+- Support reviewed selective dedicated isolation only when performance/containment evidence warrants it
+
+### Acceptance criteria
+
+- [ ] Forged tenant arguments/headers and copied job IDs cannot cross records, files, caches or outputs
+- [ ] Permission-sensitive cache entries key/invalidate by tenant and required actor/authorization revision
+- [ ] Load tests demonstrate bounded noisy-neighbor impact and recoverable backpressure, with no silent data loss
+- [ ] Quotas do not silently meter standard owner AI or automatically upgrade a plan
+- [ ] Unknown cost and pooled fixed overhead remain visible in internal accounting
+
+### Verification
+
+- Cross-tenant job/cache/file/result access fixtures
+- Interactive-versus-batch saturation and recovery tests using bounded local workloads
+- Re-run the WH-050 envelope for newly introduced bottlenecks
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-050, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/app-data.md](../../docs/app-data.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-078 — Measure composition reuse and full lifecycle cost per outcome
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Architecture choices are judged by successful owner changes and active-project operating cost instead of token prices alone.
+
+### Scope
+
+- Classify configuration, composition, custom-component, custom-backend and dedicated-runtime outcomes
+- Track custom-code fallback reason and repeated missing capability with necessary metadata only
+- Measure AI, build/test, runtime, database, storage, external services, retries, support and module maintenance separately
+- Evaluate shared-module break-even and recurring active-project cost without claiming an unmeasured savings percentage
+
+### Acceptance criteria
+
+- [ ] No prompt/source/visitor content is copied into analytics
+- [ ] Internal category/event attribution prevents double counting even if a later customer balance combines eligible usage
+- [ ] Standard owner AI remains non-billable under existing policy; optional visitor AI has its own explicit funding and caps
+- [ ] Reporting separates observed cost, estimates, unknown dimensions and fixed pooled overhead
+- [ ] Savings comparisons use equivalent successful outcomes, quality and maintenance scope; no automatic upgrades or implicit budget expansion
+
+### Verification
+
+- Synthetic cost-event duplication, category reconciliation and fallback classification fixtures
+- Representative composition-versus-custom benchmark using existing WH-020 corpus
+- Record sample size, versions, quality and uncertainty; paid evaluation only within approved scope
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-066, WH-022. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/company-finance-review.md](../../docs/company-finance-review.md)
+- [docs/standard-ai-accounting.md](../../docs/standard-ai-accounting.md)
+- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-080 — Accept a specification-composed business-site and portal pilot
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A representative customer outcome proves reuse, visual flexibility and independent deterministic visitor operation.
+
+### Scope
+
+- Use a mobile-detailing site with service packages, appointment requests, approved photo intake, staff-only access and confirmation emails
+- Demonstrate changes to business hours, vehicle field, notification rule, staff file policy and premium visual composition
+- Reuse maintained modules; an appointment request is not a promise of a full booking/calendar engine
+- Exercise preview/review/version/restore and measured maintenance/serving cost on disposable synthetic projects
+
+### Acceptance criteria
+
+- [ ] First four changes alter supported records/specification/policy without bespoke generated backend/auth/upload/email stacks
+- [ ] Visitor submission, file access and confirmation flow use zero Whumpo maintainer model calls and remain functional during its outage
+- [ ] Two differently styled synthetic customers have isolated records/files/jobs and reuse the same maintained API implementations
+- [ ] Custom visual work is bounded to the missing component; module/version provenance and fallback reason are recorded
+- [ ] Media safety, real sender/provider, devices, live customer publication and payments remain their separate activation/acceptance gates
+
+### Verification
+
+- Connected loopback two-tenant pilot with maintainer transport disabled for visitor flows
+- Replay/stale permission/notification timeout/quarantine/version-restore checks
+- Cost and fallback report with synthetic versus live evidence labels
+
+### Dependencies and blockers
+
+Planning dependencies: WH-066, WH-067, WH-068, WH-069, WH-070, WH-073, WH-075, WH-078, WH-017. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/photos.md](../../docs/photos.md)
+- [docs/shared-components.md](../../docs/shared-components.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [docs/roadmap/README.md](../../docs/roadmap/README.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-068 — Implement shared notification templates and delivery configuration
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Customers configure deterministic notifications while Whumpo maintains one delivery implementation.
+
+### Scope
+
+- Build on the selected contact/outbound delivery contract and durable receipts
+- Define versioned templates, verified senders, recipient scope, consent/preferences and delivery events
+- Offer standard appointment-request receipt and staff-notification rules as configuration
+
+### Acceptance criteria
+
+- [ ] Submission and notification delivery never invoke the Whumpo maintainer model
+- [ ] Provider secrets remain in authorized backend adapters and recipient/template inputs cannot form an open relay
+- [ ] Retries, delivery timeouts, bounces and cancellation use exact receipts and bounded reconciliation
+- [ ] Sender/DNS/provider charges require concrete review; no service is provisioned by a template
+- [ ] A failed notification does not lose the accepted form record
+
+### Verification
+
+- Synthetic configured notification, duplicate event, timeout/bounce and revoked-recipient tests
+- Existing contact/delivery tests selected by changes
+- Approved provider canary only after sender/recipient and cost review
+
+### Dependencies and blockers
+
+Planning dependencies: WH-067, WH-036, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
+- [docs/integrations/cloudflare-dns.md](../../docs/integrations/cloudflare-dns.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-069 — Run stored automation rules on a shared deterministic engine
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Customer workflows are versioned definitions and execution state, with no always-running per-customer scheduler or maintainer-agent step.
+
+### Scope
+
+- Implement a narrow trigger/condition/action catalog for records, approvals, notifications and bounded schedules
+- Use the current D1-owned receipt/scheduled-pass ADR; evaluate Queues/Workflows only at its measured adoption triggers
+- Bind each execution to verified project scope, exact rule/module version, actor authority and event ID
+- Support wait, cancel, resume and read-only progress with current permission checks
+
+### Acceptance criteria
+
+- [ ] Catalog has no Whumpo maintainer, agent callback, prompt or premium-model action
+- [ ] Visitor events may start approved deterministic workflows but cannot start owner maintenance sessions
+- [ ] Duplicate/out-of-order events and uncertain external effects cannot repeat unsafe email/payment/provisioning operations
+- [ ] Waits persist state rather than keeping a process/request alive; expired/revoked permission prevents later steps
+- [ ] Scheduling retries do not imply exactly-once external delivery or permission to provision paid services
+
+### Verification
+
+- Synthetic appointment request to saved record to staff approval to confirmation with model transport disabled
+- Job receipt, cancellation, lost response and replay fixtures
+- No live customer automation or new schedule activated by local acceptance
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-067, WH-068, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [tools/prototypes/job-journal.mjs](../../tools/prototypes/job-journal.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-070 — Separate visual customization from maintained backend behavior
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Distinctive sites and portals use different presentation while retaining the same tested standard APIs.
+
+### Scope
+
+- Deliver three extension levels: design configuration, component composition and a small custom frontend component
+- Define versioned frontend/backend contracts, scoped API clients and safe custom-component boundaries
+- Load/edit only the affected component and its contracts for owner maintenance
+
+### Acceptance criteria
+
+- [ ] Custom presentation cannot enlarge backend permissions or access platform credentials/model transports
+- [ ] Standard backend services are not copied/forked merely to change typography, navigation or gallery interaction
+- [ ] Existing frontend isolation/CSP, content checks, preview and publication reviews still apply
+- [ ] Visual diversity and accessibility are evaluated independently of functional reuse
+- [ ] Templates and maintained module dependencies are identified separately in the project specification
+
+### Verification
+
+- Compare three different compositions against identical API/permission conformance cases
+- Visual/accessibility and focused-edit preservation checks
+- Export/build deterministic output tests for supported composition levels
+
+### Dependencies and blockers
+
+Planning dependencies: WH-066, WH-067. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/shared-components.md](../../docs/shared-components.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [docs/mvp.md](../../docs/mvp.md)
+- [src/components.ts](../../src/components.ts)
+- [src/app-page-design.ts](../../src/app-page-design.ts)
+- [web/visitor.js](../../web/visitor.js)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-071 — Specify workload placement and bounded custom execution paths
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: decision. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Placement favors static assets and shared maintained APIs, with isolated on-demand custom logic and persistent resources only for measured workload needs.
+
+### Scope
+
+- Define static/shared API/custom isolated function/persistent process admission classes and reviewed placement criteria
+- Keep existing QuickJS for supported custom logic; evaluate Workers for Platforms for workloads needing a broader execution boundary
+- Plan project route bundling rather than one script per tiny feature
+- Compare Containers/VMs for actual sustained/native workloads including supporting services and minimum costs
+
+### Acceptance criteria
+
+- [ ] Customer-controlled code never runs in the privileged shared platform process or receives cross-tenant connections
+- [ ] Separate tenant data/execution remains mandatory even when capacity is pooled
+- [ ] Static sites need no project database/always-on process by default
+- [ ] WfP, container or VM selection requires current account entitlement, full cost model, threat/lifecycle review and explicit activation
+- [ ] Whumpo owner maintenance inference is not part of any visitor placement path
+
+### Verification
+
+- Official provider pricing/limit review at execution date
+- Synthetic workload/placement compatibility and rejection table
+- No resource provisioning, guest deployment or automatic platform migration in this decision task
+
+### Dependencies and blockers
+
+Planning dependencies: WH-064, WH-050, WH-022. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/backend-execution.md](../../docs/backend-execution.md)
+- [docs/cloudflare-capability-roadmap.md](../../docs/cloudflare-capability-roadmap.md)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [src/runtime/worker.ts](../../src/runtime/worker.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-072 — Design project data provisioning, migrations and recovery boundaries
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Static projects avoid unnecessary databases; projects with application data can use separate managed project databases with complete lifecycle.
+
+### Scope
+
+- Keep shared platform registry/catalog metadata while assessing per-project D1 for application data
+- Implement a reviewed registry/provision/schema-migrate/export/restore/delete workflow with immutable resource identity
+- Define trusted routing/binding limits, migration fan-out, failure recovery and safe upgrades from current shared visitor data
+- For a justified PostgreSQL adapter, specify non-owner/non-superuser/non-BYPASSRLS request roles and scoped connections
+
+### Acceptance criteria
+
+- [ ] No blind migration of existing tenants or database-count reduction as a cost goal
+- [ ] Database choice accounts for query/storage pricing, per-database limits and contention rather than assumed per-server rent
+- [ ] Guest code receives project resources or a scoped API, never an all-customer database credential
+- [ ] Partial provisioning/migration and lost provider responses reconcile without duplicated resources or dropped data
+- [ ] Per-project backup/deletion/restoration preserves platform publication, revoked identity, legal holds and tombstones
+
+### Verification
+
+- Disposable schema/registry/provisioning-adapter and cross-project routing fixtures
+- Restore/migration failure and deletion reconciliation tests
+- Cloud provider creation requires a separate exact resource/cost review
+
+### Dependencies and blockers
+
+Planning dependencies: WH-064, WH-067, WH-071, WH-009, WH-019. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [docs/account-closure.md](../../docs/account-closure.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/deployment.md](../../docs/deployment.md)
+- [docs/emdash.md](../../docs/emdash.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-074 — Pool isolated builds and on-demand owner maintenance sessions
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Persistent project/owner context uses stored state while shared capacity runs clean bounded jobs only when authorized work arrives.
+
+### Scope
+
+- Reuse approved immutable toolchains/dependency caches and content-addressed artifacts
+- Give every build/conversion job a fresh isolated writable workspace, scoped inputs/outputs, short-lived authority and explicit cleanup
+- Load the relevant owner conversation/project state for bounded maintenance and release capacity afterward
+- Run schema/type/dependency/build diagnostics before model repair; return focused failure context and use supported prompt caching only after privacy/provider validation
+
+### Acceptance criteria
+
+- [ ] No always-running agent container or automation server is allocated per customer by default
+- [ ] Writable shells, credentials and private customer caches/workspaces are never shared
+- [ ] Visitor requests or customer workflow events cannot wake the maintainer agent
+- [ ] Cancelled/expired jobs cannot publish, spend or reuse another job authority; cleanup failures are recorded
+- [ ] Prepared-image/cache reuse is distinguished from private artifact reuse and does not assume idle running memory/disk is free
+
+### Verification
+
+- Two-tenant build/cache contamination, cleanup, cancelled-job and output-ownership fixtures
+- Owner session resume/concurrency and bounded resource tests
+- Synthetic maintenance task with deterministic diagnostics preceding any optional model call
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-071, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
+- [docs/backend-execution.md](../../docs/backend-execution.md)
+- [docs/releases.md](../../docs/releases.md)
+- [docs/workspace-agent.md](../../docs/workspace-agent.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-076 — Govern maintained module versions and controlled upgrades
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Reuse produces maintained dependencies with predictable upgrades rather than many independently forked templates.
+
+### Scope
+
+- Define module interface/version compatibility, dependency pins, conformance tests and security maintenance ownership
+- Implement reviewed staged rollout, project migration, deprecation and rollback rules
+- Productize repeated missing capabilities deliberately with provenance, rights and privacy review
+
+### Acceptance criteria
+
+- [ ] Project specification records exact module versions and custom overrides
+- [ ] An upstream release never silently changes customer behavior/permissions/data schema
+- [ ] Rollback declares data compatibility and preserves current safety/deletion requirements
+- [ ] No automatic copying or model-context sharing of private customer implementations
+- [ ] Promotion considers aggregate development, support and maintenance cost against repeated custom work avoided
+
+### Verification
+
+- Old/new module conformance and mixed-version fixture matrix
+- Staged upgrade/failure/rollback on two synthetic projects
+- Existing nomination consent/withdrawal and provenance tests
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-066, WH-030. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/shared-components.md](../../docs/shared-components.md)
+- [docs/jarvis-reuse.md](../../docs/jarvis-reuse.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [src/backend-nominations.ts](../../src/backend-nominations.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-077 — Define and verify portable project exports and managed-service adapters
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Customers can export what they own with an honest account of managed dependencies and a tested route to running supported outcomes elsewhere.
+
+### Scope
+
+- Export specification, content, allowed customer data, custom source, asset manifests/digests and exact module/compiler versions
+- Distinguish static source download, data portability and a functioning standalone application
+- Select a supported self-hostable runtime, replacement adapters or a documented migration path for each shared capability
+- Include export format/version/migrations, unavailable feature report and secure secret reconfiguration instructions
+
+### Acceptance criteria
+
+- [ ] Exports never include platform/other-tenant secrets or unapproved private data
+- [ ] A frontend still requiring private Whumpo APIs is never described as a complete runnable export
+- [ ] A fresh isolated environment runs at least the claimed portable subset with Whumpo APIs and maintainer model unavailable
+- [ ] Unsupported managed integrations and customer action/cost steps are explicit
+- [ ] Whumpo internal platform source need not be disclosed to provide the defined customer ownership/exit contract
+
+### Verification
+
+- Deterministic bundle/checksum and permission-filter tests
+- Clean-environment import/boot for advertised subset
+- Compare restored data/assets/module versions and documented exclusions
+
+### Dependencies and blockers
+
+Planning dependencies: WH-066, WH-067, WH-072, WH-076, WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/mvp.md](../../docs/mvp.md)
+- [docs/account-closure.md](../../docs/account-closure.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/shared-components.md](../../docs/shared-components.md)
+- [docs/app-data.md](../../docs/app-data.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-079 — Design optional customer-configured runtime AI as a separate capability
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
+
+Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A customer may later connect their own AI provider or a separately exposed Cloudflare AI capability without giving visitors access to Whumpo maintenance inference.
+
+### Scope
+
+- Define explicit per-project opt-in for customer-owned provider access or an exposed Gateway/Workers AI route
+- Use dedicated project-scoped adapters, credentials, model configuration, identity/permissions, budgets, data-use terms and receipts
+- Specify customer request/response handling separately from Whumpo owner conversation, prompts, tools and memory
+- Keep this outside default deterministic capability delivery and select implementation only after customer demand
+
+### Acceptance criteria
+
+- [ ] Visitor and service calls cannot use Whumpo maintainer credentials, context, tools, premium wallet or implicit provider fallback
+- [ ] Customer credentials remain server-side; an exposed Gateway is not itself a free model or funded inference entitlement
+- [ ] Disabled/unconfigured/exhausted runtime AI fails explicitly without waking the owner maintainer
+- [ ] Rate/abuse/concurrency controls and cost caps bound visitor exposure; owner receives a concrete provider/data/cost review
+- [ ] Customer AI requests cannot gain publication, infrastructure, ownership or maintenance authority through this extension
+
+### Verification
+
+- Architecture/credential/budget separation review with negative route and configuration cases
+- Synthetic disabled/exhausted/forged-project tests with zero maintainer dispatch
+- No live provider activation or visitor AI endpoint in this decision task
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-071, WH-075. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/ai-gateway-transport.md](../../docs/ai-gateway-transport.md)
+- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
+- [docs/backend-execution.md](../../docs/backend-execution.md)
+- [wrangler.apps.jsonc](../../wrangler.apps.jsonc)
+- [wrangler.runtime.jsonc](../../wrangler.runtime.jsonc)
 
 ### Execution coordination
 

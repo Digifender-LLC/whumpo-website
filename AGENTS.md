@@ -22,6 +22,7 @@ Whumpo is a private test-stage, Cloudflare-hosted AI website and application pla
 
 ## Roadmap execution
 
+- Follow the accepted composition direction in `docs/roadmap/composition-architecture.md`: configure and compose maintained capabilities first, generate only missing custom behavior, and allocate dedicated infrastructure only for justified workloads. Whumpo AI is an owner-facing maintainer/chat service; visitor traffic and customer service workflows must not invoke it. Optional customer-configured AI is a separate scoped capability, with no maintainer credential/context/funding fallback.
 - Start planned work from `docs/roadmap/README.md` and `docs/roadmap/execution.md`. `docs/roadmap/backlog.json` owns task scope, dependencies and planning readiness; mapped GitHub issues own current execution state and claims.
 - Use `node tools/roadmap.mjs validate`, `next`, and `show WH-001` to inspect tasks. Check live issue/dependency evidence and current source before claiming work; a planning-ready task may already be assigned or completed.
 - Edit the JSON backlog, then run `node tools/roadmap.mjs render` and `render --check`; do not hand-edit generated `docs/roadmap/backlog.md`. Preserve owner-deferred Stripe setup and CMS testing, and distinguish implementation from activation/customer acceptance when closing work.

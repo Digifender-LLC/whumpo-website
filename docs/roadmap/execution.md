@@ -28,6 +28,8 @@ Ready packets are safe to **begin**, not preauthorized for every future side eff
 
 ## Preserve the invariants
 
+- Configure existing presentation/content/policy, compose maintained modules, then generate only the missing custom portion. Follow [composition architecture](composition-architecture.md); the appended F5 workstream starts with a high-priority specification decision and is not postponed until every earlier phase ends.
+- Whumpo AI chats with owners and maintains their projects. Visitors, website/service actions, scheduled business rules and webhooks cannot invoke the maintainer, share its context/credentials or consume its inference funding. Prove standard runtime operation with maintenance inference unavailable. Any optional customer-configured provider or exposed Cloudflare runtime AI route is a separate opt-in capability without maintainer fallback.
 - Scope records, reads and mutations to the correct owner/project/visitor. Keep platform, site, visitor and runtime authority separate; R2 stays private.
 - Generated customer source runs only in the bounded QuickJS boundary. Do not execute it in the platform Worker, install untrusted dependencies or expand host callbacks/networking casually.
 - Models prepare actions. Exact human reviews bind immutable version/source/data, destination, policy and current revision before publication, activation, provider mutation or spending.

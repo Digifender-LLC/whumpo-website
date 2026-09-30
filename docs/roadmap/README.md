@@ -127,3 +127,75 @@ Official delivery references checked September 30, 2026: [Queues delivery guaran
 At each completed task, update its issue with the exact result and evidence, and update the relevant feature contract. Change JSON readiness/dependencies only when planning facts change; a closed issue does not require a duplicate local status field. Re-render the backlog after JSON edits. Review priorities after each beta cohort, major incident, new provider decision or release gate; no recurring automation is installed by this plan.
 
 Future capabilities stay deferred until they have customer evidence and an operator/cost case: media streaming/realtime, VPC/Zero Trust, arbitrary containers, broad Cloudflare administration, enterprise networking and data catalogs. The roadmap is full coverage of current commitments plus a gated expansion path, not a promise to implement every entry in the Cloudflare catalog.
+
+## Appended architecture direction — configure and compose first
+
+**Owner decision, September 30, 2026; extension planned against `ba6dfc5`.** Whumpo should assemble and operate a shared, maintained platform: **configure existing capabilities first, compose them next, generate only the missing custom code, and allocate dedicated infrastructure only when the workload requires it.** Reduce duplicated implementation and idle capacity while preserving separate customer data, permissions and execution boundaries. Invest in this before marginal model-price optimization; existing safety, privacy, reliability and funded-spending requirements still apply.
+
+The complete design is in [composition architecture and operating strategy](composition-architecture.md). New packets **WH-064–WH-080** are appended to the [backlog](backlog.md) under **F5 — Configuration and shared capabilities**. F5 is an appended workstream, **not** a requirement to finish F0–F4 first. Begin the P0 specification/catalog work now alongside existing release prerequisites; avoid expanding unrelated premium-routing experiments before that foundation. Implementation is proposed unless the feature contract records delivery.
+
+### Whumpo AI is the owner's maintainer
+
+Whumpo's agent chats with the owner and maintains the owner's project. It is **not wired into customer website or service execution**. Visitors, form submissions, appointment rules, background business jobs, webhooks and scheduled service checks must not invoke that agent, start a maintenance conversation, borrow its tools/context/credentials or consume its inference funding. Published pages and standard services must keep working when the maintainer model is unavailable.
+
+A customer may later explicitly connect their own model, or a separately exposed Cloudflare AI Gateway/Workers AI capability, to their website or service. **WH-079** is a deferred design packet for that separate option: project-scoped authorization, server-held credentials, quotas, privacy, receipts and customer-approved costs. There is no fallback to Whumpo's maintainer provider or owner-assistance allowance. The initial automation catalog contains deterministic rules and actions, with no agent/model step. AI Gateway configuration alone supplies neither a model nor funding.
+
+### Make the project specification the normal change surface
+
+Each project should retain a validated, versioned specification covering pages, presentation, enabled modules, content/data schemas, permissions, integrations and deterministic automation rules. The agent proposes supported operations with explicit inputs/outputs; trusted software validates and compiles them. Configuration cannot invent new fields, embed arbitrary executable expressions or change infrastructure directly.
+
+**Understand → propose specification changes → validate permissions and compatibility → compile/preview → apply the exact reviewed change → record an immutable version.** Existing publication, visibility, permission, data-migration and spending reviews remain in place. Deterministic compilation can produce HTML, forms, API clients and exportable source without model-written equivalents. Every configuration change still needs appropriate checks, a receipt and a compatible rollback plan.
+
+| Owner request | Preferred change |
+| --- | --- |
+| Change business hours | Content record/version. |
+| Ask what vehicle the customer drives | Supported form/schema definition. |
+| Email staff when an appointment is requested | Deterministic workflow and notification configuration. |
+| Let only staff see customer uploads | Server-enforced project authorization policy. |
+| Make the homepage feel more premium | Design settings and composition; a small custom frontend component only for an uncovered requirement. |
+
+### Share maintained functions while allowing distinctive presentation
+
+Start with **content, forms/records, files/galleries, accounts/access and notifications**. Reuse the existing components, contact/directory modules, visitor identity/data, file safety and publication machinery through stable scoped APIs. Several modules can live in one well-structured backend; this is not a mandate for a new microservice per capability. Evaluate proven libraries/services before implementing complex identity or payment engines.
+
+Offer three presentation levels: configure a design, compose existing components differently, or create a bounded custom frontend component using the same shared APIs. Layout, typography, navigation, imagery and interactions can vary without reinventing authentication, upload handling or notification delivery. Later, add deterministic automation, record views, directories and simple portals where demand justifies them. More specialized booking/catalog/membership behavior needs its own supported contract.
+
+Maintained module versions require compatibility tests, controlled upgrades, migrations and rollback. Starter copies remain useful, but a collection of diverged copies is not a maintained shared module. Promote recurring functionality only after deliberate rights, privacy, provenance and security review; never harvest private customer code automatically.
+
+### Match execution, data and capacity to the workload
+
+| Workload or resource | Default direction | Required boundary |
+| --- | --- | --- |
+| Public pages | Publish prebuilt assets; run dynamic code only where needed. | Approved publication, withdrawal, safety and cache invalidation still work. |
+| Standard application features | Shared Whumpo-maintained APIs with scoped customer records. | Server-verified tenant/user authority, quotas and permission-aware caches. |
+| Customer-controlled executable logic | Isolated on-demand execution; keep current QuickJS until a reviewed broader route is justified. | Workers for Platforms is a candidate; bundle project routes rather than multiplying tiny scripts. Never run guest code in the privileged platform Worker. |
+| Native/sustained processes | Isolated container/VM only for a demonstrated workload need. | Benchmark full running/idle/supporting-service costs; no default server per customer. |
+| Platform metadata | Shared project/resource registry and module catalog. | Customer requests cannot choose arbitrary resource identities. |
+| Project application data | Prefer separate project databases where useful; static sites may need none. | Automated reviewed provisioning, migrations, export, deletion and restore; no blind migration of current shared data. |
+| Files | Shared private storage service. | A customer-ID path is organization, not authorization; no unrestricted bucket credentials. |
+| Automations and builds | Stored rule/job state on pooled execution capacity. | Deterministic service rules; clean isolated writable workspace per build; no persistent per-customer agent container. |
+
+The [current background-job ADR](../background-jobs.md) already selects D1-owned receipts and bounded scheduled passes initially. Reuse that decision; adopt Queues or Workflows only when its measured triggers justify the cost and complexity. At-least-once delivery still requires business idempotency and reconciliation of uncertain effects. Reuse prepared build images, approved immutable dependencies and artifacts; keep private workspaces, credentials, inputs and outputs scoped to the job/project.
+
+Enforce limits on concurrency, queued work, database activity, upload/transform size and execution resources as well as requests. Reserve interactive capacity separately from batch work. Move to independently scalable groups or selectively dedicated resources when measured isolation/performance needs justify them. Savings must not come from one unrestricted process, database connection or cache shared across tenants.
+
+### Measure reuse and preserve a credible exit path
+
+Track **cost per successful customer change**, **ongoing cost per active project**, and **custom-code/dedicated-resource fallback rate and missing-capability reason**. Include retries, builds/tests, operations, maintenance and support. Keep separate internal records for AI, execution, database/storage and external services even if the approved customer presentation later combines eligible balances. Preserve standard owner AI's existing policy, spending caps and explicit upgrade consent. Do not claim a savings percentage before representative outcome comparisons.
+
+Every project retains its specification, eligible content/data, custom source, asset manifest and exact module/compiler versions. A frontend export dependent on private Whumpo APIs is not a functioning standalone application. **WH-077** requires a tested self-hostable subset, replacement adapters or an explicit migration path, with managed dependencies and reauthorization steps disclosed. Customer ownership does not require exporting Whumpo's entire internal platform or its credentials.
+
+The first pilot is a mobile-detailing site with service packages, appointment requests, approved uploads, staff access and confirmation emails. **WH-080** proves that ordinary edits configure existing capabilities, visually different projects reuse the same APIs, customer records stay isolated, and visitor/service execution makes **zero calls to the Whumpo maintainer model**. Live media/provider/device/customer acceptance remains separately gated.
+
+### Delivery packets
+
+| Priority/order | Task IDs | Deliverable |
+| --- | --- | --- |
+| First, P0 | WH-064–067 | Specification/operations, capability discovery, deterministic compiler and narrow shared APIs. |
+| Then | WH-068–070 | Configured notifications, deterministic automation and flexible presentation. |
+| Foundational placement and isolation | WH-071–075 | Workload placement, project data lifecycle, model-independent serving, pooled builds and bounded shared capacity. |
+| Sustainable operation | WH-076–078 | Maintained version governance, honest exports and complete outcome/cost measurement. |
+| Separate optional research | WH-079 | Customer-configured runtime AI; no Whumpo maintainer access. |
+| Connected proof, P0 | WH-080 | Specification-composed business-site/portal pilot with isolated data and zero visitor maintainer calls. |
+
+Earlier WH-021/044 now explicitly describe **owner-maintenance** inference/funding; WH-053's optional runtime AI requires the separate customer route; WH-056/062 cannot become visitor-triggered agent workflows. WH-026/028 build on the new specification pipeline. This clarifies earlier scope rather than authorizing visitor AI or any new paid infrastructure.
