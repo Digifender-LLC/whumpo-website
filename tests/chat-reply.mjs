@@ -81,3 +81,7 @@ for(const verb of ['project','versions','health','check-site']){
 console.log('Shortcut request presentation passed: friendly exact-command labels; malformed or extended requests remain visible verbatim.');
 
 for(const command of ['/ai-history','/ai-history 2','/ai-request '+review]){assert.notEqual(displayChatRequest(command),command);assert.equal(displayChatRequest(command+' trailing'),command+' trailing');}
+
+assert.ok(actions({chat_transcript_download:true}).includes('href="/api/chat/export"'));
+for(const value of [undefined,false,'true',1])assert.ok(!actions({chat_transcript_download:value}).includes('/api/chat/export'));
+assert.ok(!actions({assistant_text:'Download Chat history /api/chat/export'}).includes('/api/chat/export'));
