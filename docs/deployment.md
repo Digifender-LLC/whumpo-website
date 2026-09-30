@@ -1,12 +1,27 @@
-# TellUmo test deployment
+# Whumpo test deployment
+
+
+## Current deployment status and release caveat
+
+September 30, 2026 readback: platform `b21f6da7-9703-41bd-963b-bf5dd4665aa8`; sites `d1208b4c-f49b-496a-b659-ad6d84f9566e`; apps `9bee8593-ee7f-4dd3-8934-2b41f43d692e`; runtime `662ea586-726d-4a00-ad22-d84024a7c0b2`. The platform is **whumpo.com**, customer content is on **whumpo.site**, and the private repository is **zemdregon/whumpo**. Digifender addresses below are historical and have no product fallback. Workers Paid ($5/month) is owner-authorized. Private R2 and the separate QuickJS runtime are in use; customer Containers/Stream/Gateway inference are not enabled by the platform's plan.
+
+Migrations through 0093 are applied except inactive Gateway migrations **0075/0076**. `pnpm db:remote` and `pnpm deploy` currently apply all pending migration files; they do not implement the current selective-release policy. Until the owner resolves this conflict, apply only explicitly reviewed migrations and deploy the prepared platform through `tools/deploy-platform.mjs`, preserving CMS bindings. Do not follow the old blanket migration instructions below as a current release recipe. Database changes are not reverted by Worker rollback.
+
+Use [current readiness](acceptance.md), [domain configuration](whumpo-migration.md) and [reconciliation decisions](docs-code-sync.md) for current status. Existing local owner-recovery changes have not been included in the active release. The sections below are chronological evidence, including past resource inventories and deferred features subsequently delivered.
 
 Current domain/frontend configuration: see [Whumpo migration](whumpo-migration.md). Older entries below are historical release evidence and do not describe the current hostname.
 
-## Confirmed decisions
+## Public pricing panel — September 29, 2026
+
+Deployed the Monthly/Annual and Personal/Business pricing switches with three cards per audience to the test `tellumo-platform` Worker, active version `bca9c6e9-a275-4fde-a478-47a9effd6e63`. The deploy used an isolated checkout based on `c7223d2` containing only the pricing UI and policy update, so unrelated working-tree edits were excluded. No migration, payment flow, customer resource, or plan entitlement changed.
+
+`pnpm check`, `pnpm build`, and `git diff --check` passed in the isolated checkout. The platform deployment wrapper verified the active Worker version. Live `https://whumpo.com/api/health` returned 200. Browser readback confirmed the default Try it/Starter/Personal view, switching to annual Business/Business Pro/Enterprise with $790/$1,390 annual prices, and the unavailable trial/contact controls. Trial card verification and Enterprise contact remain planned.
+
+## Historical initial decisions
 
 On September 28 2026, the user authorized digifender.com as the temporary test domain, invite-only registration, and the existing account's included Workers/D1 allowance without upgrades or paid-only services. GitHub is restricted to free features.
 
-## Deployed resources
+## Historical initial resources
 
 | Resource | Name | Purpose |
 | --- | --- | --- |
@@ -20,7 +35,7 @@ The workers.dev endpoint and preview URLs are disabled. Wrangler manages the ape
 
 The root URL serves the public landing page. The account and project dashboard lives at `/workspace/`, with direct invitation signup at `/workspace/?signup=1`. The landing page distinguishes the product vision from currently available test features.
 
-## Cost boundary
+## Historical initial cost boundary
 
 The domain has a Free Website plan. The existing account reports Workers Standard enabled; the user approved its included allowance after that distinction was explained. This deployment does not change the subscription. Included usage is shared with other apps, so application quotas cannot guarantee an account-wide zero bill.
 
@@ -44,7 +59,7 @@ Invitation codes are random, expire in seven days, and work once. Only hashes en
 
 Email is an account identifier, not verified ownership. No special authorization depends on owning an email address. Email-based password reset, email verification, and support tooling remain future work. Passkeys and recovery codes were subsequently delivered as recorded below. Keep registration invite-only until those paths are ready.
 
-## Operations
+## Historical initial operations
 
 Run `pnpm invite` to create a code; open the generated local `.secrets/invitation-*.txt`. These files are ignored by Git and restricted to the local user. `TURNSTILE_SECRET` is a Wrangler secret. The configured site key is public.
 

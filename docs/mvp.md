@@ -2,7 +2,7 @@
 
 The public homepage advertises the product. The signed-in default is a conversation, with only compact service and usage stats. Dashboard and workflow pages are separate sidebar destinations; Profile and Settings hold personal/account and platform controls respectively. Domain and project controls remain accessible from Chat. This checklist preserves the full MVP scope; an unchecked item is not delivered.
 
-Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The [Whumpo technical design v0.7](whumpo_mvp_design.docx) consolidates current architecture, customer flows, pricing and outstanding launch gates. The earlier Word design v0.5 remains historical. Historical milestone paragraphs below retain their original sequence.
+Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The [Whumpo technical design v0.8](whumpo_mvp_design.docx) consolidates current architecture, customer flows, pricing and outstanding launch gates. The earlier Word design v0.5 remains historical. Historical milestone paragraphs below retain their original sequence.
 
 ## Acceptance checklist
 
@@ -12,10 +12,10 @@ Current requirement-by-requirement evidence and remaining gates are in [the acce
 - [x] Conversational onboarding collects the customer's idea and preferences, resumes after interruption, and clearly identifies guided mode until a model is configured.
 - [x] Persistent chat is the default workspace; owner-scoped history and minimal service/usage stats survive reloads.
 - [x] OpenAI-compatible server adapter integrated with chat, with OpenCode Go configuration and a verified live Muse provider test.
-- [ ] Chat tools create projects, show status/activity/usage, propose edits, preview, publish, and restore versions. Server-side permissions and confirmation gates govern actions.
-- [ ] Working site generation, isolated previews, published sites, retained versions, rollback, and bounded uploads.
-- [ ] Deliver current paid-plan lifecycle and unlimited standard assistance under fair use, with operator Monitor mode and separately approved premium credits. Preserve atomic spending, retry accounting and uncertain-outcome reconciliation. Current Explore test quotas are not the paid launch promise.
-- [ ] Domain setup and status available through chat and a secondary screen, including verified ownership and DNS instructions.
+- [x] Chat tools create projects, show status/activity/usage, propose edits, preview, publish, and restore versions. Server-side permissions and confirmation gates govern actions.
+- [x] Working site generation, isolated previews, published sites, retained versions, rollback, and bounded uploads.
+- [ ] Resolve shared-pool versus unlimited standard-AI policy and deliver the paid-plan lifecycle, with operator Monitor mode and separately approved premium credits. Preserve atomic spending, retry accounting and uncertain-outcome reconciliation. Current Explore test quotas are not the paid launch promise.
+- [x] Domain setup and status available through chat and a secondary screen, including verified ownership and DNS instructions.
 - [ ] Domain purchase flow shows availability, price, renewal terms, and explicit confirmation before any purchase.
 - [ ] Optional customer GitHub and Cloudflare connections use scoped authorization, revocation, and secret storage. Chat can initiate the same flows; provider consent occurs in the provider UI.
 - [ ] End-to-end verification covers tenant isolation, auth replay, budget concurrency, provider failures, publish/restore, and mobile usability.
@@ -30,7 +30,7 @@ Current requirement-by-requirement evidence and remaining gates are in [the acce
 | Business | $79 | $790 |
 | Business Pro | $139 | $1,390 |
 
-Paid launch assistance is **unlimited standard site work under fair use**, with tier-sensitive observation and **Monitor mode as the default**. Monitor sends no fair-use warnings and imposes no throttles or restrictions. Active enforcement requires an operator choice and verified company-wide profit deterioration with substantially stable revenue, plus the individual review/notice workflow. Company financial attribution and enforcement remain unfinished. Cost alone does not establish abuse.
+The earlier paid-launch decision was **unlimited standard site work under fair use**; the newer shared-pool proposal conflicts on standard-AI metering and awaits owner resolution. The existing fair-use controls continue with tier-sensitive observation and **Monitor mode as the default**. Monitor sends no fair-use warnings and imposes no throttles or restrictions. Active enforcement requires an operator choice and verified company-wide profit deterioration with substantially stable revenue, plus the individual review/notice workflow. Company financial attribution and enforcement remain unfinished. Cost alone does not establish abuse.
 
 Premium model add-ons/credits and separately approved infrastructure spending remain distinct. Annual plans propose standard-domain benefits under a wholesale cost cap; domain redemption is not implemented. Stripe remains disconnected at the owner's request, so subscriptions, credit purchases and domain purchases are unavailable. See [current pricing, routing and fair-use contracts](pricing-and-model-policy.md) and [payment foundation](payments.md).
 
@@ -190,7 +190,7 @@ An internal fulfillment boundary now grants a paid tier for one UTC month with u
 
 ## Reviewed photo removal — September 29, 2026
 
-The photo panel and `/photos`, `/delete-photo` and `/confirm-photo-delete` commands support owner-scoped, expiring reviews for removing unused photos. Confirmation atomically records the chat receipt, deletes metadata and queues storage cleanup. Original upload IDs cannot resurrect removed photos. Saved-version references block removal, including a reference added after review. Pending physical deletions count toward platform capacity. Saved-version deletion, customer account deletion and full long-lived retention controls remain unfinished. See [photo lifecycle](photos.md).
+The photo panel and `/photos`, `/delete-photo` and `/confirm-photo-delete` commands support owner-scoped, expiring reviews for removing unused photos. Confirmation atomically records the chat receipt, deletes metadata and queues storage cleanup. Original upload IDs cannot resurrect removed photos. Saved-version references block removal, including a reference added after review. Pending physical deletions count toward platform capacity. Saved-version deletion was subsequently implemented; customer account deletion and full long-lived retention controls remain unfinished. See [photo lifecycle](photos.md).
 
 
 ## Customer Cloudflare OAuth foundation — September 29, 2026
@@ -284,7 +284,7 @@ Native post excerpt mapping is deployed to the test platform (`92cb02d0-cbc8-481
 
 ## CMS creation recovery — September 30, 2026
 
-The next native CMS artifact reserves a stable draft identity before creation and can reconcile a lost response by reading the exact unchanged initial draft. Actual EmDash tests prove the same article/revision is recovered without duplication and survives backup/restore. Legacy uncertain receipts stay unresolved. This is implemented locally and requires a reviewed native artifact deployment; customer category/tag mapping remains unfinished. See [native draft recovery](emdash.md#recoverable-native-draft-identity--september-30-2026).
+The next native CMS artifact reserves a stable draft identity before creation and can reconcile a lost response by reading the exact unchanged initial draft. Actual EmDash tests prove the same article/revision is recovered without duplication and survives backup/restore. Legacy uncertain receipts stay unresolved. This is implemented locally and requires a reviewed native artifact deployment; customer category/tag mapping is now implemented with connected native acceptance and deployed platform coordination; live customer CMS deployment remains open. See [native draft recovery](emdash.md#recoverable-native-draft-identity--september-30-2026).
 
 ## Technical design reconciliation — September 30, 2026
 

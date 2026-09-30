@@ -1,4 +1,4 @@
-> Latest decision: paid launch plans use unlimited standard site assistance under fair use, with tier-sensitive monitoring—not fixed AI allowances. See [fair-use policy](#unlimited-standard-ai-under-fair-use--september-29-2026-decision). Monitor is the default; enforcement requires operator choice and verified overall profit decline with stable revenue. Premium spending remains opt-in. Current preview limits are separate.
+> Policy conflict awaiting owner decision: the September 29 unlimited standard-assistance policy below and the September 30 shared-pool proposal differ on whether standard agent work consumes customer capacity. The code still enforces only existing preview quotas; neither future launch policy is enabled. See [reconciliation](docs-code-sync.md). Earlier decision: paid launch plans use unlimited standard site assistance under fair use, with tier-sensitive monitoring—not fixed AI allowances. See [fair-use policy](#unlimited-standard-ai-under-fair-use--september-29-2026-decision). Monitor is the default; enforcement requires operator choice and verified overall profit decline with stable revenue. Premium spending remains opt-in. Current preview limits are separate.
 
 > September 29 update: flexible capacity, approval-only plan changes, draft overage controls and the unified dashboard are specified in [unified-workspace-and-capacity.md](unified-workspace-and-capacity.md). Its decisions supersede the fixed storage targets below.
 
@@ -18,6 +18,12 @@ Supersedes the old Launch/Studio public proposal. Source: the owner's “AI VPS 
 Monthly prices are the owner's explicit choices. Annual prices follow the final discussion's proposed ten-month equivalent. Annual benefit: up to $20 wholesale per eligible standard registration or renewal, premium domains excluded. The quote helper shows the uncovered wholesale amount; it is not a retail invoice, transfer workflow, payment, inventory reservation or benefit redemption. No domain purchase is enabled. Renewal/transfer fulfillment, benefit ledger, customer ownership and transfer-out controls still need implementation before advertising an available benefit.
 
 The public landing page, API and `/plans` use the same catalogue. Resource amounts are labeled launch targets. They do not override current upload, project, domain, CMS, backend or platform safety caps. Explore remains the free invite-only test. Paid subscriptions remain unavailable because no Stripe account is configured. No annual entitlement or recurring payment fulfillment is claimed.
+
+### Public pricing panel with planned trial and Enterprise flows — September 29, 2026
+
+The landing page has inline Monthly/Annual and Personal/Business switches. Personal shows three cards: a proposed seven-day **Try it** trial, Starter and Personal. Business shows Business, Business Pro and a contact-priced Enterprise option. The four priced cards read amounts from the existing catalogue; the interval switch displays the selected billing amount and annual domain wording only for annual billing. Enterprise proposes SSO integrations and custom integrations scoped to the customer. It is a sales proposal, not a provisioned SSO or integration entitlement.
+
+Trial card verification, trial admission/expiry, subscription conversion, billing consent and a provider-hosted card flow are not implemented. The Try it control stays unavailable until those terms and flows are reviewed and accepted. The Enterprise Contact us control is a placeholder until an owner-approved contact destination and response process exist. Neither card grants an entitlement, gathers payment details, or claims a request was sent. The existing free, invite-only Explore preview remains the working signup path.
 
 New monthly entitlement receipts recognize all four tiers. Old Launch/Studio receipts retain their exact identities and original allowances. Migration 0052 copies receipts without replaying grants or changing the existing usage ledger. Publication-slot guards read current-period receipts. The legacy `billing_accounts.plan_id` cache is not authoritative.
 
@@ -245,3 +251,7 @@ Verification: disposable actual-D1 tests cover aggregate and account scope, curr
 
 
 Live read-only acceptance (September 29, 2026): the operator command completed against the configured test database, resolved Monitor mode, returned no active restrictions and kept company profit unknown. Its output was saved privately to ignored `.secrets/fair-use-report.json`; no account identifiers or contents were printed. `pnpm check`, `pnpm test:fair-use` and `git diff --check` passed. This delivery requires no migration or Worker deployment and does not change customer request handling.
+
+## Shared resource pool proposal — September 30, 2026
+
+See [shared capacity economics](resource-pool-economics.md) for the versioned offline calculator, dated provider sources, workload examples and margin/rollover stress cases. Proposed allowances are 1,000 / 2,500 / 7,500 / 14,000 Whumpo Units at the existing prices, covering total variable consumption. These are not current test-unit grants or a live dollar wallet. Standard-AI metering versus the earlier unlimited policy remains a decision to resolve before launch; no billing, enforcement or public allowance promise changes in this analysis.
