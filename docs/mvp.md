@@ -2,7 +2,7 @@
 
 The public homepage advertises the product. The signed-in default is a conversation, with only compact service and usage stats. Dashboard and workflow pages are separate sidebar destinations; Profile and Settings hold personal/account and platform controls respectively. Domain and project controls remain accessible from Chat. This checklist preserves the full MVP scope; an unchecked item is not delivered.
 
-Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The [Whumpo technical design v0.9](whumpo_mvp_design.docx) consolidates current architecture, customer flows, pricing and outstanding launch gates. The earlier Word design v0.5 remains historical. Historical milestone paragraphs below retain their original sequence.
+Current requirement-by-requirement evidence and remaining gates are in [the capability matrix](capability-matrix.md) and [the acceptance audit](acceptance.md). Checked implementation milestones do not override newer safety holds or establish full customer/device acceptance; photo serving and publication now require trusted scanner approval. The [Whumpo technical design v0.9](whumpo_mvp_design.docx) consolidates current architecture, customer flows, pricing and outstanding launch gates. The earlier Word design v0.5 remains historical. Historical milestone paragraphs below retain their original sequence.
 
 ## Acceptance checklist
 
@@ -48,7 +48,7 @@ References checked September 29, 2026:
 
 ## Deployment constraints
 
-GitHub free features only; no paid Actions, packages, or LFS. Cloudflare uses the existing account's included allowance, with no upgrades or paid-only services. Invitations remain required. Product pricing is independent of permission to spend on infrastructure. Payment-provider selection and customer domain purchases will require explicit configuration before real transactions are enabled.
+GitHub free features only; no paid Actions, packages, or LFS. Cloudflare uses the owner-authorized Workers Paid ($5/month) included allowance. New paid services or plan upgrades require their own authorization. Invitations remain required. Product pricing is independent of permission to spend on infrastructure. Payment-provider selection and customer domain purchases will require explicit configuration before real transactions are enabled.
 
 ## Guided conversation milestone
 
