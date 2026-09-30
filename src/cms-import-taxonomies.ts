@@ -1,3 +1,4 @@
+import {verifyCMSImportDraftMedia} from './cms-import-media';
 import {callCMS} from './cms-bridge';
 import {cmsConnection} from './cms-status';
 import {cmsCapabilitiesPath,supportsCMSImportTaxonomies} from './cms-capability-contract';
@@ -22,6 +23,7 @@ export async function importStepId(review:string,step:string){
 export async function completeMappedCMSImport(db:D1Database,user:string,id:string,env:Record<string,unknown>){
  const row=await db.prepare("SELECT r.* FROM cms_import_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=? AND r.status IN ('approved','imported') AND r.taxonomy_plan<>'[]'").bind(id,user,user).first<{project_id:string;body:string;taxonomy_plan:string;status:string}>();
  if(!row)throw new CMSProjectError(404,'An approved mapped import was not found');if(row.status==='imported')return;
+ await verifyCMSImportDraftMedia(db,user,id,env);
  const {service,config}=await cmsConnection(db,user,row.project_id,env);await requireCMSImportTaxonomies(db,user,row.project_id,env);
  const read=()=>db.prepare('SELECT body,state FROM cms_import_taxonomy_jobs WHERE review_id=?').bind(id).first<Job>();
  let job=await read();

@@ -1,3 +1,4 @@
+import {prepareWordPressMediaCandidate} from './cms-wordpress-mapped-media';
 import type {wordpressTaxonomyPlan} from './cms-wordpress-taxonomies';
 import {captureCMSWordPressSource} from './cms-wordpress-sources';
 import {prepareCMSImport} from './cms-imports';
@@ -12,4 +13,10 @@ export async function prepareCMSWordPressImport(db:D1Database,files:R2Bucket,use
  const a=articles[0];
  if(a.taxonomyPlan?.status==='needs_changes')throw new CMSProjectError(409,'This article’s categories or tags need changes before a complete import can be reviewed. Inspect the source mapping report.');
  return prepareCMSImport(db,user,project,reviewId,{sourceDigest:source.digest,sourceId:a.sourceId,collection:a.collection!,...(a.taxonomyPlan?.terms.length?{taxonomyPlan:a.taxonomyPlan.terms}:{}),title:a.candidate!.data.title,content:a.candidate!.data.content,...(a.candidate!.data.excerpt===undefined?{}:{excerpt:a.candidate!.data.excerpt}),provenance:{sourceHTML:a.sourceHTML,author:a.sourceAuthor??'',sourceURL:a.sourceURL??'',sourceStatus:a.sourceStatus,sourceDate:a.sourceDate??'',sourceSlug:a.sourceSlug??'',excerpt:a.sourceExcerpt??'',categories:a.categories??[],tags:a.tags??[]}},{...env,FILES:files},sourceUploadId);
+}
+
+/** Explicit local selections prepare a review; they never approve or write the customer draft. */
+export async function prepareCMSWordPressMediaImport(db:D1Database,files:R2Bucket,user:string,project:string,sourceUploadId:string,sourceItemId:number,reviewId:string,selections:unknown,env:Record<string,unknown>){
+ const mapped=await prepareWordPressMediaCandidate(db,files,user,project,sourceUploadId,sourceItemId,selections,env);
+ return prepareCMSImport(db,user,project,reviewId,{sourceDigest:mapped.sourceDigest,sourceId:sourceItemId,collection:mapped.collection,title:mapped.body.data.title,content:mapped.body.data.content,...(mapped.body.data.excerpt===undefined?{}:{excerpt:mapped.body.data.excerpt}),provenance:mapped.provenance,taxonomyPlan:mapped.taxonomyPlan,mediaPlan:mapped.mediaPlan},{...env,FILES:files},sourceUploadId);
 }
