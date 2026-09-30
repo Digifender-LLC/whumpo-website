@@ -1,3 +1,4 @@
+import {recordFixtureBenchmark} from '../tools/benchmark-evidence.mjs';
 // Reproducible connected handlers + actual isolated QuickJS; no live account or fixed port.
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
@@ -104,6 +105,7 @@ try{
  await assert.rejects(db.prepare('UPDATE app_owner_erasures SET visitor_id=? WHERE id=?').bind(id(),eraseId).run());await assert.rejects(db.prepare('DELETE FROM app_owner_erasures WHERE id=?').bind(eraseId).run());
  console.log('Owner erasure passed: explicit typed confirmation, recent session, revoked-only target, owner/origin bounds, disabled app, concurrent/lost-response retry, full credential/document/history erasure and retained aggregate usage.');
  assert.equal(executions,2);assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
+ await recordFixtureBenchmark(db,'application',{transportCalls:0,runtimeCalls:executions});
  console.log('Customer app journey passed: welcome, actual QuickJS test, separate program/page reviews, public host, signed passkeys, isolated visitors, exact transition replay, recovery/export/deletion, withdrawal and historical approval safety. No live deployment or AI call.');
  await taskListAppJourney({db,account,call,host,env,executions:()=>executions});
 }finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

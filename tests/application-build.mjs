@@ -1,3 +1,4 @@
+import {recordFixtureBenchmark} from '../tools/benchmark-evidence.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readdir,readFile} from 'node:fs/promises';
@@ -83,5 +84,6 @@ try{
   await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});assert.equal(providerCalls,1);assert.equal(calls-before,1);
   const recovered=await sendChat(db,liveUser,{id:id(),revision:history.state.revision,content:'/application-build '+liveTurn});assert.equal(recovered.status,200);assert.equal((await readChat(db,liveUser)).turns.at(-1).application_confirmation_id,liveTurn);assert.equal((await getBilling(db,liveUser)).quota.spent,billing.quota.spent);
  }
+ await recordFixtureBenchmark(db,'application-build',{runtimeCalls:calls});
  console.log('Application build passed: actual QuickJS, expected-output checks, immutable intent, pending-turn/owner/field gates, approval buttons and recovery, no automatic activation/page, concurrent replay, lost draft/reservation acknowledgments and enrolled-project migration gate.');
 }finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

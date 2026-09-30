@@ -1,3 +1,4 @@
+import {recordFixtureBenchmark} from '../tools/benchmark-evidence.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
@@ -43,5 +44,6 @@ try{
   await sendAIChat(db,live.user,t,rev,'/design-app-page '+live.project,liveConfig,(url,init)=>{liveCalls++;assert.ok(!init.body.includes('PRIVATE_RECEIPT_CANARY'));return fetch(url,init)});
   const row=await db.prepare('SELECT config_json FROM app_page_reviews WHERE id=?').bind(t).first(),billing=await getBilling(db,live.user);console.log(JSON.stringify({live:true,calls:liveCalls,hasReview:!!row,spent:billing.quota.spent,reserved:billing.quota.reserved}));assert.ok(row,'Muse must prepare the page review');assert.equal(liveCalls,1);const fields=JSON.parse(row.config_json).fields;assert.deepEqual(fields.map(f=>({key:f.key,type:f.type})),[{key:'note',type:'text'}]);assert.equal((await readChat(db,live.user)).turns.at(-1).app_page_confirmation_id,t);assert.equal((await readAppPage(db,live.user,live.project)).page,null);assert.equal(billing.quota.reserved,0);assert.equal(billing.quota.spent,0);
  }
+ await recordFixtureBenchmark(db,'page-design');
  console.log('Page design passed: approved owned source, focused single-call proposal, exact program/page revisions, replay, forbidden/foreign denial, private history/receipt exclusion, no code execution and separate publication approval.');
 }finally{await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

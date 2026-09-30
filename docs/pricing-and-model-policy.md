@@ -135,6 +135,7 @@ Keep one auditable customer credit ledger, with immutable receipts recording the
 
 ### Beta activation gates
 
+- [Customer outcome benchmarks and privacy](customer-benchmarks.md) defines the reproducible offline suite, complete task-cost categories, real-provider scoring protocol and Muse Contributor's ineligibility for confidential beta content. Synthetic transport passes are not real-model quality evidence.
 - Reviewed gateway configuration and scoped credentials; metadata-only observability by default, with private prompt/response logging and shared response caching disabled unless separately designed and consented to.
 - Versioned candidate catalogue, dated rate cards, paid-provider admission, aggregate limits and approved rollback to the previous route.
 - Contract tests for each enabled protocol/provider, tool outputs, token/reasoning accounting, streaming cancellation, timeouts, unknown outcomes and no hidden fallback/retry.

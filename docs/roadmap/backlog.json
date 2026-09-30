@@ -846,11 +846,16 @@
         "docs/standard-ai-accounting.md",
         "tests/customer-site-journey.mjs",
         "tests/customer-app-journey.mjs",
-        "src/ai.ts"
+        "src/ai.ts",
+        "docs/customer-benchmarks.md",
+        "tools/benchmark.mjs",
+        "tests/fixtures/customer-benchmark.json"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/9",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-09-30: offline benchmark foundation passed seven scripted fixture families with unchanged source manifest; all-call inference receipt accounting and unknown total expense preserved. Provider privacy comparison recorded. No real-provider quality/cost or confidential beta acceptance; see docs/customer-benchmarks.md."
+      ]
     },
     {
       "id": "WH-021",

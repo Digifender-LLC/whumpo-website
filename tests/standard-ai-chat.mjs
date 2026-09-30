@@ -1,3 +1,4 @@
+import {recordFixtureBenchmark} from '../tools/benchmark-evidence.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -37,5 +38,6 @@ try{
  const lost=await account(),lostId=crypto.randomUUID();let injected=false;
  const flaky={prepare:sql=>db.prepare(sql),async batch(statements){const result=await db.batch(statements);if(!injected&&await readStandardAI(db,lost,lostId)){injected=true;throw Error('Synthetic admission acknowledgment lost');}return result;}};
  await assert.rejects(()=>sendAIChat(flaky,lost,lostId,0,'Help with my site',config,provider),/acknowledgment lost/);const callsBeforeRetry=calls;assert.equal((await sendAIChat(db,lost,lostId,0,'Help with my site',config,provider)).status,200);assert.equal(calls,callsBeforeRetry);await db.prepare('UPDATE chat_turns SET created_at=? WHERE id=?').bind(new Date(Date.now()-180000).toISOString(),lostId).run();await reconcileChat(db,lost);assert.equal((await readStandardAI(db,lost,lostId)).state,'released');
+ await recordFixtureBenchmark(db,'failures',{transportCalls:calls+raceCalls,runtimeCalls:0});
  console.log('Standard Chat passed: zero monthly units/credits, explicit legacy overage non-spend, exact replay, changed-ID refusal, failed proposal cost retention, uncertain provider outcomes, concurrent revision claims, atomic capacity denial and lost-admission recovery.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
