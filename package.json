@@ -19,6 +19,8 @@
     "build": "node tools/build.mjs",
     "test:passkeys": "node tests/passkeys.mjs",
     "test:usage-recovery": "node tests/usage-recovery.mjs",
+    "test:usage-history-ui": "node tests/usage-history-ui.mjs",
+    "test:usage-history": "node tests/usage-history.mjs",
     "test:billing": "node tests/billing.mjs",
     "test:runtime-ai": "node tests/runtime-ai.mjs",
     "test:previews": "node tests/previews.mjs",
