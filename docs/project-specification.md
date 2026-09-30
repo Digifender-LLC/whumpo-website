@@ -4,6 +4,8 @@
 
 Whumpo's maintainer serves authenticated owners. Visitors, form submissions, scheduled customer rules and webhooks cannot start maintainer inference, borrow its context/tools/credentials or draw on its funding. Standard runtime actions must function when maintenance inference is unavailable. Optional customer runtime AI is the separate WH-079 contract; there is no AI operation in this initial specification.
 
+**Implementation follow-up:** WH-065's [capability planner](capability-planner.md) is deployed in test. WH-066A adds the [typed schema and deterministic content compiler](project-specification-compiler.md), with exact artifact locks, pure edits and legacy site import. That library is locally verified but not mounted as an API; durable proposals, apply/restore and forms/API delivery remain open. The decision and prototype descriptions below retain their original scope.
+
 ## Current inventory and reuse decision
 
 | Existing foundation | What is actually implemented | Specification relationship and missing work |
@@ -95,13 +97,13 @@ WH-066 should implement a project head, immutable specification versions, bounde
 
 An adapter can import an owned existing `site-page@1` configuration into content references with an origin version/digest. It must preserve every rendered string/theme, leave original immutable bytes alone and make no live change. Photo, CMS, custom backend and visitor state need their own explicit adapters; do not flatten them into text or silently migrate data. CMS testing remains owner-deferred. Do not deploy this prototype as an API or treat its trusted fixture actor objects as authentication.
 
-Next concrete work: WH-065 publishes the maintained capability/version/compatibility/readiness catalog and a bounded planner; WH-066 then connects durable proposals, real preview artifacts, version transactions and existing approvals. WH-067 adds narrow shared records/access/files APIs; WH-068/069 implements configured notifications and deterministic rules. Dedicated project storage, broader execution and optional runtime AI retain their separate roadmap gates.
+WH-065 has published the maintained capability/version/compatibility/readiness catalog and bounded planner. WH-066's schema/content compiler is implemented; next it connects durable proposals, real preview delivery, version transactions and existing approvals. WH-067 adds narrow shared records/access/files APIs; WH-068/069 implements configured notifications and deterministic rules. Dedicated project storage, broader execution and optional runtime AI retain their separate roadmap gates.
 
 ## Verification and coordination
 
 - `node tests/project-specification-prototype.mjs` uses the current `siteConfig`, `renderSite` and `backendFormConfig`, an in-memory protocol model and the synthetic JSON fixture. It checks unknown/deep/oversized and incompatible inputs, module/dependency/reference validation, all four changes, owner/visitor/workflow isolation, no model confirmation, exact digest/class approval, stale competing proposals, invalid-batch non-application, request conflicts/replay, expiry, immutable returned copies/history and escaped text. Network dispatch is replaced with a failing stub and remains unused. No model, D1/R2, CMS, provider or customer operation is performed.
 - The validation artifact digest includes the prototype and bundled current component/form code. Canonical input key reordering preserves the specification digest and the current single-page renderer output. This is not full multi-module reproducibility or a signed release manifest.
 - `node tools/roadmap.mjs validate`, `node tools/roadmap.mjs render --check`, and `git diff --check` verify the local roadmap/render state and patch. No frontend/runtime TypeScript is changed, so no new build or deployment is needed for this decision slice.
-- Live issue #12 was read before starting: open, unassigned, no comments and no recorded dependency; PR #1 contains the parallel roadmap extension. This work preserves those concurrent roadmap/AGENTS edits. The issue is not claimed or closed by this source-only evidence, and the larger roadmap remains active.
+- Live issue #12 was open and unassigned when this decision work started. Its WH-064 decision/prototype deliverable was subsequently committed as `d27b46a` and the issue closed with verification evidence. PR #1 contains the parallel roadmap extension; its concurrent roadmap/AGENTS edits remain preserved. The larger roadmap and WH-066 connected acceptance remain open.
 
 WH-064's decision deliverable is recorded here with executable contract evidence. Production enforcement, real shared module runtime, provider activation and connected/customer acceptance remain separate delivery gates.
