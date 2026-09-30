@@ -39,3 +39,7 @@ Deployment evidence (September 29): migration 0028 applied remotely; platform `1
 The long site-agent regression fixture now receives explicit synthetic credits so its final saved-version-limit scenario is not intercepted by unrelated allowance exhaustion. Its helper asserts each request status. Production allowances are unchanged; the separate billing suite still exercises insufficient funds and concurrency.
 
 D1 batch rollback semantics were checked against [Cloudflare's D1 binding documentation](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch) on September 29, 2026, and exercised by the closed-result rollback test.
+
+## Private test inventory — September 30, 2026
+
+A read-only aggregate inspection following the account-closure inventory found one legacy AI operation and matching Chat turn in `uncertain`, last updated September 29 at 05:45:31 UTC, holding 11 monthly test units and zero credits, with no saved input/output token receipt. This does not establish zero provider usage and does not consume the current unlimited-standard-AI allowance. No waiver, retry or balance change was performed. The existing reviewed operator waiver is available if the owner decides to absorb the unknown cost; missing token evidence alone is not authorization to waive it.

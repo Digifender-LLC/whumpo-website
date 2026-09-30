@@ -22,6 +22,7 @@ const metrics={
  blockedBackendImports:['backend_imports','user_id',"state='blocked'"],
  blockedProfilePhotos:['profile_photo_safety','user_id',"state='blocked'"],
  blockedProjectPhotos:['project_photo_safety','user_id',"state='blocked'"],
+ riskEvidence:['content_risk_evidence','user_id'], riskCorrections:['content_risk_reversals','user_id'],
  scanTickets:['photo_scan_tickets','user_id'],
  pendingScanTickets:['photo_scan_tickets','user_id',"state='reserved'"],
  unresolvedUsage:['usage_operations','user_id',"status IN ('reserved','dispatched','uncertain')"],
