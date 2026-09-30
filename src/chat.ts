@@ -1,3 +1,4 @@
+import {appRecoveryChatActions} from './app-recovery-chat-actions';
 import {appPageDesignProjectId} from './app-page-design';
 import {readUsageHistory,describeUsageHistory} from './billing';
 import {applicationChatActions} from './app-chat-actions';
@@ -70,6 +71,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   const cmsRemovals=await cmsUnpublishLinks(db,userId);
   for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsRemovals.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_unpublish_confirmation_id=r.id;turn.cms_unpublish_recovery=r.status==='approved';}}
   await applicationChatActions(db,userId,result[1].results as Record<string,unknown>[]);
+  await appRecoveryChatActions(db,userId,result[1].results as Record<string,unknown>[]);
   const billing = await getBilling(db, userId);
   const firstDraft=await welcomeDraftProject(db,userId);
   return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : aiEnabled ? greeting + ' After we save your brief, we can discuss your website with AI. Use /ask followed by a question at any time.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };

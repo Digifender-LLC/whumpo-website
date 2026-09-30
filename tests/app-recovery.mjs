@@ -3,6 +3,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';import wrangler from 'wrangler';
 async function mod(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const {appRecoveryChatActions}=await mod('src/app-recovery-chat-actions.ts'),{describeAppRestore}=await mod('src/app-recovery-chat.ts');
 const platform=(await mod('src/index.ts')).default,{hashToken}=await mod('src/security.ts'),{backendAction}=await mod('src/backend-chat.ts');
 const recovery=await mod('src/app-document-recovery.ts'),backend=await mod('src/backend-versions.ts'),activation=await mod('src/app-activation.ts'),data=await mod('src/app-data.ts');
 const dir=await mkdtemp('/tmp/whumpo-app-recovery-');let proxy;
@@ -62,6 +63,11 @@ try{
  async function chat(content,request=id()){const state=await(await call()).json(),response=await call({id:request,revision:state.state.revision,content});assert.equal(response.status,200,await response.clone().text());const result=await response.json();return result.turns.find(t=>t.id===request).assistant_text;}
  const saved=id();assert.match(await chat('/save-app-recovery '+project,saved),/Saved private application recovery/);
  const reviewed=id();assert.match(await chat(`/review-app-restore ${project} ${saved}`,reviewed),/Replace the saved documents of 1/);
+ const readyChat=await(await call()).json();assert.equal(readyChat.turns.find(t=>t.id===reviewed).app_restore_review.state,'ready');
+ const pendingText=readyChat.turns.find(t=>t.id===reviewed).assistant_text;
+ const forged=[{id:reviewed,user_text:'fixture',assistant_text:pendingText+' Changed',status:'completed'},{id:reviewed,user_text:'fixture',assistant_text:pendingText,status:'pending'},{id:id(),user_text:'fixture',assistant_text:pendingText,status:'completed'}];await appRecoveryChatActions(db,user,forged);assert.ok(forged.every(t=>!t.app_restore_review));
+ const foreign=[{id:reviewed,user_text:'fixture',assistant_text:pendingText,status:'completed'}];await appRecoveryChatActions(db,other,foreign);assert.ok(!foreign[0].app_restore_review);
+ const expiredRow=await recovery.readAppRestore(db,user,project,expired),expiredTurn={id:id(),user_text:`/app-restore-review ${project} ${expired}`,assistant_text:describeAppRestore(expiredRow),status:'completed'};await appRecoveryChatActions(db,user,[expiredTurn]);assert.equal(expiredTurn.app_restore_review.state,'expired');
  const listing=await chat('/app-recovery '+project);assert.ok(listing.includes(saved));assert.ok(!listing.includes(c.id));
  await assert.rejects(backendAction(db,user,id(),{kind:'backend',operation:'confirmAppRestore',projectId:project,targetId:reviewed}));
  assert.match((await backendAction(db,user,id(),{kind:'backend',operation:'appRestoreReview',projectId:project,targetId:reviewed})).reply,/Status: pending/);
@@ -69,8 +75,10 @@ try{
  assert.equal((await call(request,'')).status,401);assert.equal((await call(request,token,'https://foreign.test')).status,403);
  await db.prepare("UPDATE sessions SET created_at='2000-01-01T00:00:00.000Z' WHERE token_hash=?").bind(tokenHash).run();assert.equal((await call(request)).status,401);
  await db.prepare('UPDATE sessions SET created_at=? WHERE token_hash=?').bind(now(),tokenHash).run();assert.match(await chat(request.content),/Status: applied/);
+ const appliedChat=await(await call()).json();assert.equal(appliedChat.turns.find(t=>t.id===reviewed).app_restore_review.state,'applied');
  const doomed=id();await chat(`/review-app-restore ${project} ${saved}`,doomed);
  assert.match(await chat(`/remove-app-recovery ${project} ${saved} REMOVE`),/removed/);
+ const changedChat=await(await call()).json();assert.equal(changedChat.turns.find(t=>t.id===doomed).app_restore_review.state,'changed');assert.equal(changedChat.turns.find(t=>t.id===reviewed).app_restore_review.state,'applied');
  assert.equal((await db.prepare('SELECT count(*) n FROM app_recovery_documents WHERE point_id=?').bind(saved).first()).n,0);
  assert.equal((await recovery.createRecoveryPoint(db,user,project,saved)).removed,1);
  await assert.rejects(recovery.confirmAppRestore(db,user,project,doomed,'RESTORE'),e=>e.status===409);
