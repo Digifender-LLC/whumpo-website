@@ -1,3 +1,4 @@
+import type {AppPageExpectation} from './app-page-design';
 import {buildApplication,readApplicationBuild} from './application-build';
 import {backendLibraryCommand,describeBackendLibrary,describeBackendComponent,installBackendComponent} from './backend-library';
 import {compareBackends,describeBackendComparison} from './backend-diff';
@@ -100,7 +101,7 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
   }catch(error){return error instanceof BackendError?error.message:'The backend result could not be retrieved. Use /backend-result '+turnId+' to inspect its receipt. This message will not dispatch execution again.';}
  };
 }
-export async function backendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher){
+export async function backendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher,pageExpectation?:AppPageExpectation){
  const operation=action.operation;
  if(operation==='buildApplication')return {reply:await buildApplication(db,user,turnId,action,service),statements:[] as D1PreparedStatement[]};
  if(['library','component','useComponent'].includes(String(operation))){
@@ -128,7 +129,7 @@ export async function backendAction(db:D1Database,user:string,turnId:string,acti
  }
  if(operation==='reviewAppPage'){
   if(Object.keys(action).some(k=>!['kind','operation','projectId','form'].includes(k))||typeof action.projectId!=='string'||!uuid.test(action.projectId)||!action.form)throw new BackendError(400,'Provide a project and application form');
-  return {reply:describeAppPage(await prepareAppPage(db,user,action.projectId,turnId,action.form)),statements:[] as D1PreparedStatement[]};
+  return {reply:describeAppPage(await prepareAppPage(db,user,action.projectId,turnId,action.form,pageExpectation)),statements:[] as D1PreparedStatement[]};
  }
  if(operation==='reviewForm'){
   if(Object.keys(action).some(k=>!['kind','operation','projectId','form'].includes(k))||typeof action.projectId!=='string'||!uuid.test(action.projectId)||!action.form)throw new BackendError(400,'Provide a project and form configuration');

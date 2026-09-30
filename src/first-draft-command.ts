@@ -3,6 +3,7 @@ export const firstDraftProjectId=(content:string)=>/^\/first-draft ([0-9a-f]{8}-
 export function displayChatRequest(content:string){
  if(firstAppProjectId(content))return 'Build and test my first private app using my saved brief.';
  if(firstDraftProjectId(content))return 'Build my first private website draft using my saved brief.';
+ if(/^\/design-app-page [0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(content))return 'Design the visitor page for my approved app and show me the review.';
  const id='[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}';
  if(new RegExp('^/brief '+id+'$').test(content))return 'Show my saved project brief.';
  const starter=new RegExp('^/build (ocean|clay|forest) '+id+'$').exec(content);

@@ -27,3 +27,6 @@ for(const state of ['ready','applied','expired','changed']){const html=card(stat
 assert.ok(card('applied').includes('historical receipt'));assert.ok(card('expired').includes('can no longer be approved'));assert.ok(card('changed').includes('fresh review'));
 const off=renderToStaticMarkup(createElement(ApplicationReviewCard,{review:{id:review,projectName:'Notebook',operation:'disable',state:'ready',expiresAt:'2026-09-30T12:00:00.000Z',source:'export default x=>x',digest:'a'.repeat(64),testId:null}}));assert.ok(off.includes('signs out every visitor'));assert.ok(off.includes('does not delete visitor data'));
 console.log('Application summary passed: clear enable/disable effects, separate publication, historical/stale states, escaped source/project names, closed technical details and no approval authority in the card.');
+
+assert.ok(actions({application_page_design_project_id:review}).includes('Design visitor page · uses AI'));
+assert.ok(!actions({application_page_design_project_id:'invalid'}).includes('Design visitor page'));

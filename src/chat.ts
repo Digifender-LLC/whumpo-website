@@ -1,3 +1,4 @@
+import {appPageDesignProjectId} from './app-page-design';
 import {readUsageHistory,describeUsageHistory} from './billing';
 import {applicationChatActions} from './app-chat-actions';
 import {cmsPendingRequest,pendingCMSWork,describePendingCMS} from './cms-pending';
@@ -105,6 +106,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const pendingCMS=cmsPendingRequest(content);
   if(pendingCMS&&'error' in pendingCMS)return {status:400,error:pendingCMS.error};
   const help=chatHelp(command,!!ai);
+  if(/^\/design-app-page(?:\s|$)/.test(command)){
+    if(!appPageDesignProjectId(content))return {status:400,error:'Choose the approved application from Chat.'};
+    if(!ai)return {status:503,error:'AI page design is not connected in this environment.'};
+    return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
+  }
   if(/^\/first-(?:draft|app)(?:\s|$)/.test(command)){
     if(!firstDraftProjectId(content)&&!firstAppProjectId(content))return {status:400,error:'Choose your saved first project from Chat.'};
     if(!ai)return {status:503,error:'AI drafting is not connected. You can still create a free starter preview from Chat.'};
