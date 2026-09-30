@@ -12,6 +12,8 @@ Latest mapped-import release (September 30): platform `582ecff8-5a89-4fe0-8095-f
 
 Latest account-connection setup: the private Cloudflare OAuth client and encrypted-vault key are configured. Live temporary-account checks verified the PKCE handoff and cancellation, then removed the fixture. Real Cloudflare consent, zones and revocation remain unverified; GitHub and Stripe setup remain absent. See [private client evidence](integrations/cloudflare-connection.md#private-client-configured--september-29-2026).
 
+Latest application journey acceptance (September 30): `pnpm test:customer-app-journey` now runs without prebuilt account fixtures or fixed ports. Disposable D1, the actual isolated QuickJS/Wasm Worker, platform/visitor HTTP handlers and signed synthetic passkeys verified welcome → tested backend → separate authority/page approvals → two isolated visitors → exact transition replay → identity recovery/export/deletion → withdrawal. It recorded exactly two runtime calls (one owner test and one visitor transition), with no model call or live customer mutation. Physical-device/browser acceptance, general workload coverage and whole-app recovery remain open. See [repeatable application journey](app-data.md#repeatable-customer-application-journey--september-30-2026).
+
 ## Requirement map and proof still needed
 
 | Requirement | Current evidence and scope | Remaining proof/work |
