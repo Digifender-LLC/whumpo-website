@@ -133,7 +133,9 @@
     "report:connections": "node tools/report-connections.mjs",
     "test:connection-readiness": "node tests/connection-readiness.mjs",
     "test:chat-history": "node tests/chat-history.mjs",
-    "test:provider-return": "node tests/provider-return.mjs"
+    "test:provider-return": "node tests/provider-return.mjs",
+    "setup:github": "node tools/configure-github-app.mjs",
+    "test:github-app-setup": "node tests/github-app-setup.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
