@@ -1,3 +1,4 @@
+Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -10,7 +11,7 @@ execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB'
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,env=proxy.env;
 async function account(){const id=crypto.randomUUID(),project=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Photos','Synthetic test','draft',?,?)").bind(project,id,new Date().toISOString(),new Date().toISOString()).run();await readChat(db,id);return {id,project};}
 function request(){return new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':'Garden'},body:jpeg});}
-async function upload(owner){const id=crypto.randomUUID();await uploadPhoto(request(),env,owner.id,owner.project,id);return id;}
+async function upload(owner){const id=crypto.randomUUID();await uploadPhoto(request(),env,owner.id,owner.project,id);/* Synthetic receipt isolates removal behavior; no provider scan. */await db.prepare("UPDATE project_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic',expires_at=? WHERE file_id=?").bind(new Date(Date.now()+3600000).toISOString(),id).run();return id;}
 async function chat(owner,content,connection=db){const state=await readChat(db,owner.id),id=crypto.randomUUID(),input={id,content,revision:state.state.revision};const result=await sendChat(connection,owner.id,input);return {id,input,result};}
 async function review(owner,file){const r=await chat(owner,'/delete-photo '+file);assert.equal(r.result.status,200);return r;}
 try{

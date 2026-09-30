@@ -443,3 +443,7 @@ Platform `aab040f8-7c60-46ec-8344-3133f4af8214` and migration 0098 are deployed.
 ## Profile photo safety gate — September 30, 2026
 
 Platform `2aa7f348-b078-4a73-885a-03cbff9d1510` and migration 0099 are deployed. Uploaded profile images remain hidden pending separate clear CSAM/sexual-content checks bound to their exact digest and current policy; existing unscanned pictures also stay hidden. Built-in artwork remains usable. No detection provider or approval endpoint is configured. Profile safety/authentication tests, both type checks, build and frontend loading passed. Independent readback at 16:40 UTC verified 99 migrations, three safety guards, 16 matching assets and health/auth/signup boundaries. See [scope and remaining detection work](content-safety.md).
+
+## Project photo safety gate — September 30, 2026
+
+Platform `a2e9dcb3-60ad-4a52-9547-eff3d749bd1a`, site host `ba9b4c29-0566-4541-8747-0834183c1197` and migration 0100 are deployed. Unapproved project photos cannot be attached, previewed, exported, published or delivered. Photo versions, storage and removal tests passed with synthetic approval fixtures, plus type/build/loading checks. Independent live readback at 16:52 UTC confirmed both versions, 100 migrations, seven safety triggers and the approval view, 16 matching assets and health/auth/signup boundaries; synthetic absent-photo GET/HEAD returned 404. No customer photos or approvals exist, and no scanner was activated. See [photo safety scope](photos.md).
