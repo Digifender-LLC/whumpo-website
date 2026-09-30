@@ -373,3 +373,12 @@ Platform `33b11a8f-acdf-40dd-895f-4df5ca4d2146` adds optional, user-requested sh
 Local D1 persistence/isolation/schema/concurrency and agent-action tests passed, along with both TypeScript projects, frontend builds and loading checks. No authenticated browser or live-model shortcut journey is claimed by these tests.
 
 Cloudflare deployment metadata confirmed the active version. Two independent public verification attempts failed with a connection reset and connection timeouts to whumpo.com; full public health/asset verification for this release remains pending. No second deployment was attempted in response to those network errors.
+
+
+## Shortcut language and live model acceptance — September 30, 2026
+
+Platform `e62fdedc-3a47-4f61-8f9c-1c08ba4fc49b` presents recognized workflow shortcut requests in plain language while retaining the exact-command disclosure. Rendering tests reject malformed/extended matches; both TypeScript projects and frontend builds/loading checks pass.
+
+The opt-in `tests/workspace-shortcuts-live.mjs` probe uses a disposable local account and the existing Muse subscription. One natural request saved a page with exactly project/version shortcuts and preserved the default layout; exact replay made no extra model call. Both shortcuts ran through actual guided Chat handlers without additional AI units, and no site version or publication was created. Details and measured usage are in the workspace contract. This is live-model acceptance with local storage, not authenticated browser acceptance on whumpo.com.
+
+At 15:08 UTC, independent verification succeeded: active version, all 16 frontend assets, health 200, anonymous private routes 401 and recovery cross-origin denial 403. This resolves the earlier public connection failures for the latest release. Private evidence: `.secrets/shortcut-language-release-verification.json`.

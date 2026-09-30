@@ -71,3 +71,11 @@ console.log('Request presentation passed: bounded complete WordPress commands, p
 const choicePreview=pageCard('ready',{title:'Tasks',description:'Choose an action',buttonLabel:'Apply',fields:[{key:'action',label:'Action',type:'choice',options:[{value:'add',label:'Add <script>task</script>'},{value:'remove',label:'Remove task'}]},{key:'text',label:'New task',type:'text',optional:true}]});
 assert.ok(choicePreview.includes('<select disabled'));assert.ok(choicePreview.includes('Choices for Action'));assert.ok(choicePreview.includes('Remove task'));assert.ok(choicePreview.includes('Add &lt;script&gt;task&lt;/script&gt;'));assert.ok(!choicePreview.includes('<script>'));assert.ok(choicePreview.includes('Optional text'));
 console.log('Choice review passed: all approved choices visible as escaped text, disabled native control and optional text disclosure.');
+
+for(const verb of ['project','versions','health','check-site']){
+ const command='/'+verb+' '+review;
+ assert.notEqual(displayChatRequest(command),command);
+ assert.equal(displayChatRequest(command+' /confirm-publish'),command+' /confirm-publish');
+ assert.equal(displayChatRequest(command.replace(review,'not-a-project')),command.replace(review,'not-a-project'));
+}
+console.log('Shortcut request presentation passed: friendly exact-command labels; malformed or extended requests remain visible verbatim.');
