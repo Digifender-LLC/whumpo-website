@@ -94,7 +94,7 @@ export function planInferenceRoute(candidates:RouteCandidate[],r:RouteRequest){
   extraMicrosPerCall:c.extraMicrosPerCall,rateValidUntil:c.rateValidUntil,
   inputBound:r.inputBound,outputBound:r.outputBound,providerReservationMicros:winner.providerBound,
   customerReservationMicros:winner.customerBound,
-  approvalId:p?.approvalId??null,tariffId:p?.tariffId??null,
+  approvalId:p?.approvalId??null,tariffId:p?.tariffId??null,retailMultiplierBps:p?.retailMultiplierBps??null,
   expectedMicrosPerSuccessfulTask:safe((winner.observedCost+BigInt(c.benchmark.successes)-1n)/BigInt(c.benchmark.successes)),
  },rejected};
 }
