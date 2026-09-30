@@ -112,6 +112,12 @@ try{
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM cms_draft_requests WHERE id=?').bind(illustratedReviewId).first()).n,1);
  assert.equal((await hosted(`https://${project}.whumpo.site/cms/posts/${finalImport.item.id}`)).status,404);
  console.log('Combined actual-native WordPress import passed: retained source, confirmed JPEG, source caption/alt/excerpt, category and tag assignment, owner comparison, changed-byte refusal, hidden interrupted import, exact assignment recovery, single version increment and completed replay without publication.');
+ if(process.env.CMS_BROWSER==='1'){
+  const browserSource=id(),browserXML=illustratedXML.replace('Illustrated studio import','Browser studio import').replace('<wp:post_id>84</wp:post_id>','<wp:post_id>184</wp:post_id>');
+  assert.equal((await request(`/api/cms/${project}/wordpress/sources/${browserSource}`,'PUT',browserXML,{'content-type':'application/xml','x-source-name':'browser-import.xml'})).status,200);
+  const {cmsBrowserAcceptance}=await import('./cms-browser-acceptance.mjs');
+  await cmsBrowserAcceptance({platform:api.platform,env:httpEnv,session,project,source:browserSource,db,readDraft:review=>api.readCMSDraft(db,user,project,review,env)});
+ }
  console.log('Connected actual-native acceptance passed: owner upload/draft, frozen private review, lost publication acknowledgement recovery, public article/image, staged edit, replacement/replay and unpublish revocation.');
 }finally{
  if(server&&server.exitCode===null){server.kill('SIGTERM');await new Promise(r=>{const timer=setTimeout(()=>{server.kill('SIGKILL');r();},4000);server.once('exit',()=>{clearTimeout(timer);r();});});}
