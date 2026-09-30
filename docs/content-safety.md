@@ -176,7 +176,7 @@ Verification: `pnpm check`, `node tests/content-policy.mjs`, and `node tests/cus
 
 ## Durable reviewed risk evidence — inactive integration foundation
 
-Migration 0105 and `src/content-risk-evidence.ts` add internal recording, correction and history-reading functions for adaptive safety. There is no customer endpoint, general-agent tool, operator intake CLI or automated classifier writing these records yet. The live build does not use this history to change scanning or restrict customers. Do not automatically turn a model refusal, keyword mention, preliminary import flag or high cost into a confirmed violation.
+Migration 0105 and `src/content-risk-evidence.ts` add internal recording, correction and history-reading functions for adaptive safety. There is no customer endpoint, general-agent tool or automated classifier writing these records. The reviewed operator CLI below is now available. The live build does not use this history to change scanning or restrict customers. Do not automatically turn a model refusal, keyword mention, preliminary import flag or high cost into a confirmed violation.
 
 Evidence records bind an immutable ID, owner, incident, kind, occurrence time and opaque evidence/reviewer references. References must point to independently reviewed evidence in the future restricted case system; accepting a syntactically valid reference does not authenticate an adjudicator or verify the evidence. Raw messages, source, media, secrets and reviewer names do not belong in these fields. The API permits exact replay, recovers a committed insert after a lost acknowledgement, and rejects conflicting reuse. Database triggers reject future occurrence times, mutation and ordinary deletion, and bound storage at 10,000 evidence rows per owner / 100,000 globally. This is an inactive storage safeguard, not an advertised customer AI quota.
 
@@ -189,3 +189,26 @@ Ordinary account deletion cascades these rows. They are **not a legal preservati
 Verification: `pnpm check`, `node tests/content-risk-evidence.mjs`, `node tests/content-risk.mjs` and `node tests/account-closure-inventory.mjs` passed. The evidence test applies the full schema to disposable in-memory SQLite and covers owner separation, duplicate/conflicting records, correction replay/conflicts, strongest-incident scoring, a 400-day-old critical incident, lost insert/correction acknowledgements, immutable records, future-date refusal, read failures and account cascades. These are local SQL/service tests, not detector or live evidence-ingestion acceptance.
 
 Migration 0105 was applied to the private test D1 database on September 30, 2026. Readback at **17:50:54 UTC** confirmed 105 applied migrations, all six ledger triggers and zero evidence/correction rows. No Worker deployment was needed because the module has no runtime caller. Local ignored evidence: `.secrets/content-risk-evidence-migration.json` and `.secrets/content-risk-evidence-migration.log`.
+
+## Operator safety review workflow
+
+`tools/review-content-risk.mjs` provides `read`, `record` and `reverse` through private JSON input. This uses operator D1 credentials, not customer OAuth or a model credential. Preview/apply uses the same pattern as financial review tools, but content-safety decisions remain independent of economic Monitor mode. No customer notice, appeal UI, automatic intake, provider detector or restriction is activated by this command.
+
+```sh
+node tools/review-content-risk.mjs --input .secrets/content-risk-review.json
+node tools/review-content-risk.mjs --input .secrets/content-risk-review.json --apply EXACT_PREVIEW_DIGEST
+```
+
+The input file must contain exactly the fields for its action:
+
+- Read: `action: "read"`, `account` (UUID).
+- Record: `action: "record"`, `account`, `id` (unique evidence receipt), `incident` (shared across receipts for one incident), `kind`, `occurredAt` (UTC Unix milliseconds), `evidenceRef`, `reviewerRef`, `reviewed: true`.
+- Correct: `action: "reverse"`, `account`, `incident`, `evidenceRef` (the correction decision), `reviewerRef`, `reviewed: true`.
+
+Kinds are `verified_benign`, `uncertain_flag`, `confirmed_violation`, `confirmed_evasion` and `critical_incident`. IDs/references are opaque identifiers containing only letters, digits, underscores, dots, colons and hyphens (1–128 characters). Do not put allegations, messages, imagery, source, names or credentials in the input. The independently reviewed case and the actual operator identity must be established outside this tool. The `reviewed` flag and digest are declarations/accidental-change protection, not authentication or proof that a finding is correct. A future restricted case system must enforce that linkage before automated intake is enabled.
+
+Without `--apply`, mutations return the proposed input, current aggregate assessment and the digest without writing. The digest binds the canonical exact action and all its fields; it does not freeze a score or concurrent evidence. Read actions reject `--apply`. Reports contain the selected account, evidence-row count and aggregate assessment; they omit incident lists, evidence/reviewer references and private content. Case references appear only in the explicit proposed mutation preview. These are private operator reports, not customer/model context.
+
+Apply uses the immutable ledger functions and then reads the current assessment. Identical retries do not create another finding/correction; changed receipt IDs are not a recovery strategy. After an unknown outcome, read or retry the same input and digest. If the final report read fails after a successful insert, the ledger remains committed and the same retry is safe. A correction applies to the entire owned incident permanently, including later duplicate receipts; it does not delete history, reopen a corrected case, release quarantined content or change customer access. Empty history remains incomplete and cannot lower screening requirements.
+
+Verification: `node tests/content-risk-review.mjs` passed against all migrations in disposable SQLite. It covers strict schemas, malformed/oversized inputs, no-write previews, digest tampering, read-only reporting, duplicate/conflicting receipts, cross-account refusal, correction replay/conflict and reference-free aggregate reports. The real CLI was also exercised in read-only mode against the sole owner test account; no evidence or correction was added. Customer-history completeness and enforcement remained false. Evidence is stored locally in ignored `.secrets/content-risk-read-report.json`; no customer messages were accessed. No migration or Worker deployment was needed for this operator-only tool.
