@@ -1,5 +1,17 @@
 # Application visitor identity and persistent data
 
+## Find unfinished application work — September 30, 2026
+
+`/app-maintenance [PROJECT_ID or all] [PAGE]`, “show unfinished app work”, “show app maintenance” and “show pending app work” read unfinished app-access, visitor-page, upgrade, document-restore and program-rollback reviews. The list is owner-scoped, with an optional exact owned project and 20 results per page. Failed, uncertain and changed upgrade checks appear first, followed by deterministic expiry/family/ID order. Applied, cancelled and expired reviews are omitted; retained recovery points remain separately accessible through `/app-recovery`.
+
+Each entry provides a read command for its existing review. Opening the list never confirms, executes, retries or publishes. Presence in the list does not establish that a review remains applicable; opening it rechecks current authority and exposes the existing review card where supported. This does not automatically retry uncertain transformations or replace their request IDs. No visitor identities, source code or document payloads are selected. Project names are presented as quoted text, and no executable controls are inferred from them.
+
+Exact guided commands and the three phrases bypass inference even when AI is configured, preserving ordinary conversation revision/replay behavior and consuming no AI units. The model can request `backend.appMaintenance` with optional `projectId` and integer `page` (1–100); that model turn retains its normal inference accounting. Unknown fields and invalid filters are refused. `/help backends` and individual app status summaries expose the discovery path. No schema or paid-service change is needed.
+
+Verification: `pnpm check`, `pnpm test:app-migration-checks` and `pnpm test:agent-prompt-focus` passed. Connected disposable D1 tests exercise all five review families, foreign-owner/project refusal, uncertain/failed state, applied/cancelled/expired exclusion, deterministic pagination, strict filters, absence of visitor payloads, validated model reads and guided Chat/replay with AI configured. Provider calls were forbidden during guided-list tests; AI spending and runtime counts were unchanged, and pending reviews remained pending.
+
+Deployed to test platform `5fb7e815-627a-4c73-ab59-1762ab256da6` with no migration or frontend change. The isolated release passed its backend TypeScript and frontend-loading checks. Independent live readback verified the active version, health 200, anonymous Chat/onboarding 401 and all 16 frontend assets matching the release. Evidence: `.secrets/maintenance-list-release.json`. No customer application operation was performed.
+
 ## Customer upgrade and rollback cards — September 30, 2026
 
 Chat now presents upgrade/rollback reviews as cards with project, document/check counts, saved-point date where applicable, offline effects and code inspection controls. Exact version IDs and recovery references stay in collapsed details. Customers can continue bounded checks, read the saved source/test, or open an explicit apply/discard dialog. Applying requires exact `UPGRADE` or `ROLLBACK`; discarding requires `CANCEL`. Opening/dismissing a dialog never submits. Busy controls and a synchronous in-flight lock prevent duplicate UI sends. Historical, cancelled and invalid reviews cannot apply; final server confirmation always rechecks current authority.
