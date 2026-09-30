@@ -280,3 +280,7 @@ Remaining: controlled visitor page/host, owner invitation and revocation UI, liv
 ## WordPress source taxonomy analysis — September 30, 2026
 
 The shared source analyzer and private offline report now produce exact category/tag mapping proposals and identify unsupported or ambiguous source metadata. Type checks, focused source mapping/staging suites, and actual workerd parity tests passed. No native terms are written or attached by this change; the owner-reviewed, resumable native import coordinator remains incomplete. This source/tooling increment has not been deployed. See [source mapping contract](emdash.md#source-taxonomy-mapping-analysis--september-30-2026).
+
+## Operator profitability comparison — September 30, 2026
+
+Added an optional private company-finance summary to `report:fair-use`, with explicit unknown values, closed/comparable-period checks, cost-category deltas and the proposed profit-decline comparison. Inputs are operator-attested, never represented as independently verified finances. This read-only companion cannot change the persisted mode, activate restrictions or attribute company cost to customer abuse. Type, finance-boundary/file/CLI and existing fair-use tests passed. No Worker/schema deployment is required. Real finance ingestion and reconciliation remain open; see [operator finance review](company-finance-review.md).
