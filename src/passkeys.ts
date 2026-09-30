@@ -67,7 +67,7 @@ export async function passkeyOptions(request: Request, env: Env, kind: Challenge
   return { options, cookie: await remember(env, request, options.challenge, kind, user, inviteHash) };
 }
 
-export async function passkeyVerify(request: Request, env: Env, kind: Challenge['kind'], data: Record<string, unknown>, signedIn: User | null): Promise<{ user: User; recoveryCode?: string }> {
+export async function passkeyVerify(request: Request, env: Env, kind: Challenge['kind'], data: Record<string, unknown>, signedIn: User | null): Promise<{ user: User; recoveryCode?: string; credentialId?: string }> {
   const challenge = await consume(env, request, kind);
   const { origin, rpID } = rp(request, env);
   if (kind === 'add' && (!signedIn || signedIn.id !== challenge.user_id)) throw new AuthError(401, 'Sign in again before adding a passkey');
@@ -81,7 +81,7 @@ export async function passkeyVerify(request: Request, env: Env, kind: Challenge[
     if (!result.verified) throw new AuthError(401, 'Passkey verification failed');
     const changed = await env.DB.prepare('UPDATE passkeys SET counter = ?, last_used_at = ? WHERE id = ? AND counter = ?').bind(result.authenticationInfo.newCounter, new Date().toISOString(), key.id, key.counter).run();
     if (changed.meta.changes !== 1) throw new AuthError(409, 'Passkey changed during sign-in. Try again.');
-    return { user: { id: key.user_id, email: key.email } };
+    return { user: { id: key.user_id, email: key.email }, credentialId: key.id };
   }
   let verified;
   try { verified = await verifyRegistrationResponse({ response: data.credential as RegistrationResponseJSON, expectedChallenge: challenge.challenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true, supportedAlgorithmIDs: [-7, -257] }); }
@@ -99,11 +99,14 @@ export async function passkeyVerify(request: Request, env: Env, kind: Challenge[
     statements.push(env.DB.prepare('INSERT INTO recovery_codes (user_id, code_hash, created_at) SELECT id, ?, ? FROM users WHERE id = ?').bind(await hashToken(recoveryCode!), now, user.id));
   }
   const name = typeof data.name === 'string' && data.name.trim() ? data.name.trim().slice(0, 80) : 'My passkey';
-  statements.push(env.DB.prepare('INSERT INTO passkeys (id, user_id, public_key, counter, name, created_at) SELECT ?, id, ?, ?, ?, ? FROM users WHERE id = ?').bind(credential.id, base64(credential.publicKey), credential.counter, name, now, user.id));
-  statements.push(env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, id, 'passkey.added', 'Passkey added', ? FROM users WHERE id = ?").bind(crypto.randomUUID(), now, user.id));
+  const session = request.headers.get('cookie')?.match(/(?:^|;\s*)tellumo_session=([0-9a-f]{64})(?:;|$)/)?.[1];
+  const sessionGuard = kind === 'add' ? ' AND EXISTS (SELECT 1 FROM sessions WHERE user_id = users.id AND token_hash = ? AND expires_at > ? AND created_at > ?)' : '';
+  statements.push(env.DB.prepare(`INSERT INTO passkeys (id, user_id, public_key, counter, name, created_at) SELECT ?, id, ?, ?, ?, ? FROM users WHERE id = ?${sessionGuard}`)
+    .bind(credential.id, base64(credential.publicKey), credential.counter, name, now, user.id, ...(kind === 'add' ? [session ? await hashToken(session) : '', now, new Date(Date.now() - 600000).toISOString()] : [])));
+  statements.push(env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, user_id, 'passkey.added', 'Passkey added', ? FROM passkeys WHERE id = ? AND user_id = ?").bind(crypto.randomUUID(), now, credential.id, user.id));
   try {
     const result = await env.DB.batch(statements);
-    if (result[kind === 'signup' ? 3 : 0].meta.changes !== 1) throw new AuthError(403, 'Invitation expired or was already used. Please start again.');
+    if (result[kind === 'signup' ? 3 : 0].meta.changes !== 1) throw new AuthError(kind === 'add' ? 401 : 403, kind === 'add' ? 'Session changed. Sign in again before adding a passkey.' : 'Invitation expired or was already used. Please start again.');
   } catch (cause) {
     if (cause instanceof AuthError) throw cause;
     if (/UNIQUE|quota/.test(String(cause))) throw new AuthError(409, 'This account or passkey already exists, or the test account limit has been reached.');
@@ -112,18 +115,54 @@ export async function passkeyVerify(request: Request, env: Env, kind: Challenge[
   return { user, recoveryCode };
 }
 
-export async function recoverAccount(env: Env, data: Record<string, unknown>) {
+async function recoveryIdentity(env: Env, data: Record<string, unknown>) {
   const email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
   const code = typeof data.code === 'string' ? data.code.trim() : '';
   if (!/^[0-9a-f]{64}$/.test(code)) throw new AuthError(401, 'Invalid email or recovery code');
   const user = await env.DB.prepare('SELECT users.id, users.email FROM users JOIN recovery_codes ON users.id = recovery_codes.user_id WHERE email = ? AND code_hash = ?').bind(email, await hashToken(code)).first<User>();
   if (!user) throw new AuthError(401, 'Invalid email or recovery code');
-  const replacement = newSessionToken();
+  return { user, code };
+}
+
+export async function recoveryPasskeys(env: Env, data: Record<string, unknown>) {
+  const { user } = await recoveryIdentity(env, data);
+  const { results } = await env.DB.prepare('SELECT id, name, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY created_at, id').bind(user.id).all<{ id: string; name: string; created_at: string; last_used_at: string | null }>();
+  return { passkeys: results };
+}
+
+export async function recoverAccount(env: Env, data: Record<string, unknown>) {
+  const { user, code } = await recoveryIdentity(env, data);
+  const nonce = data.nonce;
+  if (typeof nonce !== 'string' || !/^[0-9a-f]{64}$/.test(nonce)) throw new AuthError(400, 'Save a new recovery code before continuing');
+  const choice = data.lostPasskeys;
+  if (!choice || typeof choice !== 'object' || Array.isArray(choice)) throw new AuthError(400, 'Choose which passkeys were lost');
+  const selection = choice as Record<string, unknown>;
+  if (!['all', 'some', 'none'].includes(String(selection.mode))) throw new AuthError(400, 'Choose all, some, or none of your passkeys');
+  const ids = selection.ids;
+  if (!Array.isArray(ids) || ids.length > 10 || ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,1024}$/.test(id)) || new Set(ids).size !== ids.length) throw new AuthError(400, 'Choose valid passkeys');
+  if (selection.mode === 'some' ? ids.length === 0 : ids.length !== 0) throw new AuthError(400, 'Choose valid passkeys');
+  const replacement = await hashToken(`whumpo-owner-recovery-v1|${code}|${nonce}`);
+  const oldHash = await hashToken(code), newHash = await hashToken(replacement), now = new Date().toISOString();
+  const selected = selection.mode === 'some' ? ids as string[] : [];
+  const selectedCheck = selected.length ? ` AND (SELECT COUNT(*) FROM passkeys WHERE user_id = ? AND id IN (${selected.map(() => '?').join(',')})) = ?` : '';
+  const update = env.DB.prepare(`UPDATE recovery_codes SET code_hash = ?, created_at = ? WHERE user_id = ? AND code_hash = ?${selectedCheck}`)
+    .bind(newHash, now, user.id, oldHash, ...(selected.length ? [user.id, ...selected, selected.length] : []));
+  // Only this attempt's successful rotation may admit cleanup. A deterministic
+  // replacement hash alone also matches a competing attempt using the same nonce.
+  const receiptId = crypto.randomUUID();
+  const admitted = "EXISTS (SELECT 1 FROM activity_events WHERE id = ? AND user_id = ? AND action = 'account.recovered')";
+  const revoked = selection.mode === 'none' ? null : selection.mode === 'all'
+    ? env.DB.prepare(`DELETE FROM passkeys WHERE user_id = ? AND ${admitted}`).bind(user.id, receiptId, user.id)
+    : env.DB.prepare(`DELETE FROM passkeys WHERE user_id = ? AND id IN (${selected.map(() => '?').join(',')}) AND ${admitted}`)
+      .bind(user.id, ...selected, receiptId, user.id);
   const results = await env.DB.batch([
-    env.DB.prepare('UPDATE recovery_codes SET code_hash = ?, created_at = ? WHERE user_id = ? AND code_hash = ?').bind(await hashToken(replacement), new Date().toISOString(), user.id, await hashToken(code)),
-    env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND EXISTS (SELECT 1 FROM recovery_codes WHERE user_id = ? AND code_hash = ?)').bind(user.id, user.id, await hashToken(replacement)),
-    env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, user_id, 'account.recovered', 'Account recovered; previous sessions signed out', ? FROM recovery_codes WHERE user_id = ? AND code_hash = ?").bind(crypto.randomUUID(), new Date().toISOString(), user.id, await hashToken(replacement))
+    update,
+    env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, user_id, 'account.recovered', ?, ? FROM recovery_codes WHERE user_id = ? AND code_hash = ? AND changes() = 1")
+      .bind(receiptId, `Account recovered; previous sessions signed out; ${selection.mode === 'all' ? 'all' : selection.mode === 'none' ? 'no' : selected.length} passkeys removed`, now, user.id, newHash),
+    ...(revoked ? [revoked] : []),
+    env.DB.prepare(`DELETE FROM sessions WHERE user_id = ? AND ${admitted}`).bind(user.id, receiptId, user.id)
   ]);
-  if (results[0].meta.changes !== 1) throw new AuthError(401, 'Recovery code was already used');
+  if (results[0].meta.changes !== 1 || results[1].meta.changes !== 1) throw new AuthError(409, 'Recovery code or selected passkeys changed. Start again.');
+  if (selection.mode === 'some' && results[2].meta.changes !== selected.length) throw new AuthError(409, 'Selected passkeys changed. Start again.');
   return { user, recoveryCode: replacement };
 }

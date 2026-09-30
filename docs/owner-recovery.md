@@ -1,0 +1,24 @@
+# Owner recovery and lost passkeys
+
+**Source status: implemented locally September 29, 2026; not deployed or accepted on a real device.** This extends the original passkey/recovery milestone in [mvp.md](mvp.md). The platform owner account is separate from controlled application visitor accounts; visitor recovery is described in [app-data.md](app-data.md).
+
+## Recovery journey
+
+1. The owner enters their email and existing 64-character recovery code. `POST /api/auth/recover/passkeys` checks both and returns only that account's registered passkey IDs, names and usage dates. It rotates nothing and signs in no one. The same Origin check, authentication rate limit, bounded JSON body and no-store response policy as other authentication routes apply. An invalid email/code pair gives the same error.
+2. The browser **stops** and requires a choice: **all**, **some**, or **none** of the owner's passkeys may be lost or compromised. For **some**, the owner selects exact listed passkeys. Passkeys may sync across devices; disabling one registered credential makes it unusable for Whumpo wherever that credential is available. Choosing **none** keeps every passkey active.
+3. Before the final request, the browser derives and displays a new recovery code from the old code and a fresh 256-bit nonce. The owner must save it before continuing. Neither code nor nonce is stored in local storage, sent to AI, or placed in a URL. If the final response is lost after the database commit, the already-saved new code can recover access again.
+4. `POST /api/auth/recover` requires the choice, exact selected IDs and nonce. A D1 batch atomically rotates the recovery code, removes the chosen passkeys, revokes all prior sessions and writes a content-free activity event. A stale selection or code is rejected without silently removing a different passkey. The resulting new session lets an owner who chose **all** enroll a replacement passkey immediately; the new recovery code remains their fallback.
+
+Passkey login also rechecks that the verified credential still exists when issuing its session. Passkey enrollment rechecks the owner's fresh session at insertion. These checks prevent a verified assertion or in-flight enrollment from restoring access after recovery removes credentials. Recovery does not reset a password or revoke third-party OAuth grants. A broader suspected-compromise response remains a separate decision tracked in [MVP acceptance](acceptance.md).
+
+## Verification and remaining acceptance
+
+`pnpm check`, `pnpm db:local` and `pnpm test:passkeys` passed locally. The signed WebAuthn fixture covers invalid preflight, missing choice, stale selected ID, **some/none/all** results, old-session revocation, old-passkey rejection, deterministic code readback and replacement passkey enrollment. `pnpm dev` built the frontend for a local Worker. This is local source and synthetic-account evidence. It does not establish a native passkey prompt, mobile layout, production deployment, or a live account-recovery journey. Do not test by disabling a real customer's credentials without a separately reviewed disposable account.
+
+## Concurrent recovery acceptance — September 30, 2026
+
+Recovery cleanup now requires the unique activity receipt created immediately after that attempt successfully rotates the code. The receipt and cleanup use one [D1 batch transaction](https://developers.cloudflare.com/d1/worker-api/d1-database/). A matching replacement-code hash alone cannot authorize a losing same-nonce attempt. Session creation also rechecks the current recovery-code hash; a newer recovery cannot be bypassed by an older handler finishing late.
+
+`node tests/owner-recovery-concurrency.mjs` passed against disposable actual D1. It pauses an admitted attempt, completes a competing same-nonce attempt, adds replacement credentials/session, and then resumes the loser. Duplicate and conflicting all/some/none choices preserve the winner’s state and produce one activity record. A forced cleanup failure rolls back the code, credential removal and activity. A separate handler interleaving verifies that superseded completion returns 401 without a session cookie. Both failures were reproduced before the corrections.
+
+`node tests/owner-passkeys-http.mjs` passed the existing signed WebAuthn suite through the actual platform handler served on loopback with disposable D1. Coverage includes registration/login, origin and user verification, challenge replay, reviewed recovery choices, session revocation and replacement credential enrollment. This runner uses Node for the handler and local Cloudflare D1; it does not establish deployed Worker or native-device behavior. Both TypeScript checks also passed. Source remains undeployed; browser/mobile recovery acceptance remains open. No real credentials were changed.

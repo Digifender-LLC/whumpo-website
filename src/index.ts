@@ -54,7 +54,7 @@ import { componentCatalog, previewHeaders } from './components';
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { publicPlans, domainBenefit, creditPack } from "./plans";
 import { readChat, sendChat } from "./chat";
-import { AuthError, passkeyOptions, passkeyVerify, recoverAccount } from "./passkeys";
+import { AuthError, passkeyOptions, passkeyVerify, recoverAccount, recoveryPasskeys } from "./passkeys";
 import { BillingError, getBilling, setOverage } from "./billing";
 import { configuredAI } from "./ai-chat";
 
@@ -121,12 +121,12 @@ async function recentSession(request: Request, env: Env): Promise<boolean> {
   const session = await env.DB.prepare("SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ? AND created_at > ?").bind(await hashToken(token), new Date().toISOString(), new Date(Date.now() - 600000).toISOString()).first();
   return !!session;
 }
-async function issueSession(request: Request, env: Env, user: User, recoveryCode?: string, expectedPasswordHash?: string): Promise<Response> {
+async function issueSession(request: Request, env: Env, user: User, recoveryCode?: string, expectedPasswordHash?: string, expectedPasskeyId?: string): Promise<Response> {
   const token = newSessionToken();
   const now = new Date();
   const expiry = new Date(now.getTime() + sessionDays * 86400_000).toISOString();
-  await env.DB.prepare("INSERT INTO sessions (token_hash,user_id,expires_at,created_at) SELECT ?,id,?,? FROM users WHERE id=? AND (? IS NULL OR password_hash=?)")
-    .bind(await hashToken(token),expiry,now.toISOString(),user.id,expectedPasswordHash??null,expectedPasswordHash??null).run();
+  await env.DB.prepare("INSERT INTO sessions (token_hash,user_id,expires_at,created_at) SELECT ?,id,?,? FROM users WHERE id=? AND (? IS NULL OR password_hash=?) AND (? IS NULL OR EXISTS (SELECT 1 FROM passkeys WHERE id=? AND user_id=users.id)) AND (? IS NULL OR EXISTS (SELECT 1 FROM recovery_codes WHERE user_id=users.id AND code_hash=?))")
+    .bind(await hashToken(token),expiry,now.toISOString(),user.id,expectedPasswordHash??null,expectedPasswordHash??null,expectedPasskeyId??null,expectedPasskeyId??null,recoveryCode ? await hashToken(recoveryCode) : null,recoveryCode ? await hashToken(recoveryCode) : null).run();
   if(!await env.DB.prepare('SELECT token_hash FROM sessions WHERE token_hash=? AND user_id=?').bind(await hashToken(token),user.id).first())return error(401,'Credentials changed. Sign in again.');
   return json({ user, ...(recoveryCode ? { recoveryCode } : {}) }, 200, { "set-cookie": cookie(token, request) });
 }
@@ -156,7 +156,12 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return json({ options: result.options }, 200, { "set-cookie": result.cookie });
     }
     const result = await passkeyVerify(request, env, kind, data, signedIn);
-    return kind === "add" ? json({ ok: true }) : issueSession(request, env, result.user, result.recoveryCode);
+    return kind === "add" ? json({ ok: true }) : issueSession(request, env, result.user, result.recoveryCode, undefined, result.credentialId);
+  }
+  if (method === "POST" && pathname === "/api/auth/recover/passkeys") {
+    const data = await body(request);
+    if (!data) return error(400, "A JSON request is required");
+    return json(await recoveryPasskeys(env, data));
   }
   if (method === "POST" && pathname === "/api/auth/recover") {
     const data = await body(request);
