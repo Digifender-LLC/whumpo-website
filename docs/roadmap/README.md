@@ -6,6 +6,7 @@ Whumpo should first become a dependable way for an invited customer to create, i
 
 ## Start here
 
+- [GitHub execution hub](https://github.com/zemdregon/whumpo/issues/2): nine initial task issues, claims, progress and handoffs. The complete longer-term plan remains in the backlog below.
 - [Full backlog](backlog.md): every task, dependency, acceptance criterion and verification boundary.
 - [Canonical task data](backlog.json): stable `WH-001` IDs for agents and automation; generated Markdown is never edited directly.
 - [Agent execution guide](execution.md): selection, coordination, implementation, evidence and handoff.
