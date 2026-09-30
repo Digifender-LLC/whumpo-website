@@ -1,6 +1,6 @@
 import {eraseRevokedVisitor} from './app-owner-erasure';
 import {chatHistory} from './chat-history';
-import {readOnboarding,saveOnboarding,completeOnboarding} from './onboarding';
+import {readOnboarding,saveOnboarding,completeOnboarding,onboardingComplete} from './onboarding';
 import {cmsWordPressAction,cmsWordPressCommand} from './cms-wordpress-chat';
 import {analyzeCMSWordPress,inspectCMSWordPress,uploadCMSWordPressRequest} from './cms-wordpress-api';
 import {listCMSWordPressSources,readCMSWordPressSource,downloadCMSWordPressSource} from './cms-wordpress-sources';
@@ -220,6 +220,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  // Check persisted completion before reading workspace data or dispatching Chat work.
+  if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before opening your workspace.',code:'onboarding_required'},409);
   if(pathname==='/api/onboarding'){
     if(method==='GET')return json(await readOnboarding(env.DB,user.id));
     if(method==='PUT')return json(await saveOnboarding(env.DB,user.id,(await body(request))??{}));
