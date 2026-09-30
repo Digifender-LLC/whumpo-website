@@ -1,3 +1,4 @@
+import {fairUseInferenceReport} from './fair-use-inference-report';
 import {assessFairUse,fairUseThresholds,type FairUsePlan} from './fair-use-policy';
 import {fairUseMode,type FairUseMode} from './fair-use-mode';
 /** Operator-only aggregate report. Never mount this on a customer API or send it to a model. */
@@ -34,5 +35,6 @@ export async function fairUseReport(db:Pick<D1Database,'prepare'>,owner?:string,
    if(Object.values(group).some(value=>!Number.isSafeInteger(value)))throw Error('Report aggregate overflow');
   }
  }
- return {asOf:end,scope:owner?'one_account':'all_accounts',mode,activeRestrictions:[],windows:{activityFrom:start7,costFrom:start30},totals,byPlan,...(owner?{accountAssessment}:{}),economics:{verified:false,revenueMicros:null,costMicros:null,profitMicros:null,reason:'Financial reporting is not connected. Plan prices and Muse shadow estimates are not revenue or actual expense.'},coverage:{purpose:'not_classified',providerExpense:'not_attributed',exports:'archive_preparation_not_download_confirmation',projectRemoval:'database_deletion_only_no_customer_removal_flow',exploreAndLegacy:'no_launch_fair_use_policy_applied',consistency:'Read-only observation at query time; not an audited financial snapshot.'}};
+ const inferenceOperations30d=await fairUseInferenceReport(db,owner,start30,end);
+ return {inferenceOperations30d,asOf:end,scope:owner?'one_account':'all_accounts',mode,activeRestrictions:[],windows:{activityFrom:start7,costFrom:start30},totals,byPlan,...(owner?{accountAssessment}:{}),economics:{verified:false,revenueMicros:null,costMicros:null,profitMicros:null,reason:'Financial reporting is not connected. Plan prices and Muse shadow estimates are not revenue or actual expense.'},coverage:{purpose:'not_classified',providerExpense:'not_attributed',exports:'archive_preparation_not_download_confirmation',projectRemoval:'database_deletion_only_no_customer_removal_flow',exploreAndLegacy:'no_launch_fair_use_policy_applied',consistency:'Read-only observation at query time; not an audited financial snapshot.'}};
 }
