@@ -1,3 +1,4 @@
+import type {AppPageExpectation} from './app-page-design';
 import {BackendError,listBackends} from './backend-versions';
 import {backendFormConfig} from './backend-form-render';
 type Review={id:string;user_id:string;project_id:string;program_revision:number;base_revision:number;config_json:string|null;status:string;expires_at:string};
@@ -13,19 +14,20 @@ export async function readAppPageReview(db:D1Database,user:string,id:string){
  const row=await db.prepare('SELECT r.* FROM app_page_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id WHERE r.id=? AND r.user_id=?').bind(id,user).first<Review>();
  if(!row)throw new BackendError(404,'Application page review not found');return row;
 }
-export async function prepareAppPage(db:D1Database,user:string,project:string,id:string,value:unknown){
+export async function prepareAppPage(db:D1Database,user:string,project:string,id:string,value:unknown,expected?:AppPageExpectation){
+ if(expected&&expected.projectId!==project)throw new BackendError(409,'The application target changed');
  if(!uuid.test(id))throw new BackendError(400,'Provide a review UUID');
  await listBackends(db,user,project);const config=value===null?null:JSON.stringify(backendFormConfig(value));
  const old=await db.prepare('SELECT id FROM app_page_reviews WHERE id=?').bind(id).first();
  if(!old){
   const app=await db.prepare('SELECT revision,enabled FROM app_spaces WHERE project_id=? AND owner_user_id=?').bind(project,user).first<{revision:number;enabled:number}>();
-  if(!app||config&&!app.enabled)throw new BackendError(409,'Authorize a tested application before publishing its page');
+  if(!app||config&&!app.enabled||expected&&app.revision!==expected.programRevision)throw new BackendError(409,'Authorize a tested application before publishing its page');
   await db.prepare('INSERT OR IGNORE INTO app_page_settings(project_id) VALUES(?)').bind(project).run();
   const current=await readAppPage(db,user,project);
-  try{await db.prepare('INSERT INTO app_page_reviews(id,user_id,project_id,program_revision,base_revision,config_json) VALUES(?,?,?,?,?,?)').bind(id,user,project,app.revision,current.revision,config).run();}catch{/* Read back only this exact request after uncertain storage. */}
+  try{await db.prepare('INSERT INTO app_page_reviews(id,user_id,project_id,program_revision,base_revision,config_json) VALUES(?,?,?,?,?,?)').bind(id,user,project,expected?.programRevision??app.revision,expected?.pageRevision??current.revision,config).run();}catch{/* Read back only this exact request after uncertain storage. */}
  }
  let row:Review;try{row=await readAppPageReview(db,user,id);}catch{throw new BackendError(409,'Page review unavailable; the app changed or review storage is full');}
- if(row.project_id!==project||row.config_json!==config)throw new BackendError(409,'Review ID already used');return row;
+ if(row.project_id!==project||row.config_json!==config||expected&&(row.program_revision!==expected.programRevision||row.base_revision!==expected.pageRevision))throw new BackendError(409,'Review ID already used');return row;
 }
 export async function confirmAppPage(db:D1Database,user:string,id:string){
  const row=await readAppPageReview(db,user,id);if(row.status==='applied')return row;

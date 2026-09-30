@@ -1,5 +1,17 @@
 # Application visitor identity and persistent data
 
+## Design a visitor page from Chat — September 30, 2026
+
+Implemented: the current approved application receipt offers **Design visitor page · uses AI** when the program is enabled and there is no live page or current pending page review. The action prepares a review; the existing separate owner confirmation publishes it. Historical or superseded program approvals do not offer the action.
+
+`/design-app-page PROJECT_ID` reads the owned, enabled program's exact source and digest, complete bounded project purpose and audience, and current program/page revisions. One model call may propose only `backend / reviewAppPage` for that project or ask a clarification. Prior Chat history, visitor documents and synthetic execution receipts are excluded. The source and brief are untrusted data. Unsupported input contracts should result in a clarification; the controlled form currently supports 1–8 text, number or boolean fields. This step does not execute or test the proposed form and does not claim that it did.
+
+Review admission pins the revisions observed before inference. A program change or competing page publication rejects a stale result. Same-request retries return the existing Chat result without another dispatch or charge. Normal inference accounting applies, including inference consumed before a stale review is rejected. No database migration, service provisioning or automatic publication is introduced.
+
+Verification: both TypeScript projects, `test:chat-reply`, `test:customer-app-journey` and `RUN_LIVE_MUSE=1 pnpm test:app-page-design` passed. Disposable-state checks cover ownership, proposal scope, replay, program/page races, private-history exclusion and missing AI. The actual Muse probe designed the approved notebook's `note` text input in one call, prepared the owner review, spent 7 test units and left no reservation or live page. The existing full journey separately verifies real QuickJS execution, controlled visitor sign-in, isolated state and publication/withdrawal. These checks do not establish physical-device passkey acceptance or correctness for every generated form.
+
+Deployed to the test platform September 30, 2026 as `37448b68-8e51-4b8f-acc4-07909af62c3d`. The isolated release passed both TypeScript checks, production build and frontend loading checks. Independent readback confirmed the active version, health 200, anonymous Chat/onboarding 401 and all 18 live JS/CSS/font assets matching the release bytes. No customer page was published. Evidence: `.secrets/app-page-design-release.json`.
+
 ## Current boundary
 
 `src/app-data.ts` implements per-visitor state and immutable execution receipts. The controlled application host at `app-PROJECT_ID.whumpo.site` connects invitation-only passkeys to this engine only after a separate owner-approved application-page review. Program authorization alone does not publish a visitor page. Existing public backend endpoints and website forms remain stateless.
