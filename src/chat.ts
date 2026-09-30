@@ -1,3 +1,4 @@
+import {readStandardAIHistory,readStandardAIRequest,describeStandardAIHistory,describeStandardAIRequest} from './standard-ai-history';
 import {describeConnections} from './connection-chat';
 import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
@@ -124,7 +125,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(!ai)return {status:503,error:'AI drafting is not connected. You can still create a free starter preview from Chat.'};
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
   }
-  const known = ['/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','show usage history','show my usage history','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
+  const known = ['show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','show usage history','show my usage history','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && !help && !navigation && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
@@ -209,13 +210,23 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
     const { results } = await db.prepare('SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ id: string; name: string; purpose: string; status: string;site_live:number;backend_live:number;cms_articles:number }>();
     reply = results.length ? results.map(p => `${p.name} — ${p.site_live||p.cms_articles||p.backend_live?'live':p.status}\n${p.purpose}\nID: ${p.id}${p.site_live ? '\n' + siteURL(p.id) : ''}${p.backend_live?'\nPublic JSON backend · https://'+p.id+'.whumpo.site/backend':''}${p.cms_articles?'\n'+p.cms_articles+' public CMS article(s) · https://'+p.id+'.whumpo.site/cms':''}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
+  } else if (/^\/ai-history(?:\s|$)/.test(command)||['show my ai requests','show ai history','show recent ai requests'].includes(command)) {
+    const parts=command.startsWith('/')?command.split(/\s+/):['/ai-history'];
+    if(parts.length>2||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))return {status:400,error:'Use /ai-history, optionally followed by a page from 1 to 1000.'};
+    reply=describeStandardAIHistory(await readStandardAIHistory(db,userId,Number(parts[1]??1)));
+  } else if (/^\/ai-request(?:\s|$)/.test(command)) {
+    const match=/^\/ai-request ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(command);
+    if(!match)return {status:400,error:'Use /ai-request followed by a request ID from /ai-history.'};
+    const request=await readStandardAIRequest(db,userId,match[1]);
+    if(!request)return {status:404,error:'AI request not found.'};
+    reply=describeStandardAIRequest(request)+'\n\nThis is a saved status, not a retry. Read the original Chat response for the work result. An interrupted request is not sent again automatically.';
   } else if (/^\/usage-history(?:\s|$)/.test(command)||['show usage history','show my usage history'].includes(command)) {
     const parts=command.startsWith('/')?command.split(/\s+/):['/usage-history'];
     if(parts.length>2||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))return {status:400,error:'Use /usage-history, optionally followed by a page from 1 to 1000.'};
     reply=describeUsageHistory(await readUsageHistory(db,userId,Number(parts[1]??1)));
   } else if (['/usage', 'show usage', '/credits'].includes(command)) {
     const billing = await getBilling(db, userId);
-    reply = `${billing.plan.name} · ${billing.period}\nStandard AI assistance uses no credits or monthly test units. It is intended for building and maintaining your projects under fair use. Advanced models are not enabled yet; future advanced work will require explicit credit-spending approval.\n\nHistorical test accounting: ${billing.quota.spent} monthly units used; ${billing.quota.reserved} held for earlier requests. ${billing.credits.available} existing test credits available; ${billing.credits.reserved} held. These balances do not limit new standard assistance.\n\nUse /usage-history for historical test-unit receipts. Billing settings show recent standard requests. Testing capacity and provider availability can still interrupt service; credits do not bypass those checks. Paid upgrades and credit purchases are not enabled yet.`;
+    reply = `${billing.plan.name} · ${billing.period}\nStandard AI assistance uses no credits or monthly test units. It is intended for building and maintaining your projects under fair use. Advanced models are not enabled yet; future advanced work will require explicit credit-spending approval.\n\nHistorical test accounting: ${billing.quota.spent} monthly units used; ${billing.quota.reserved} held for earlier requests. ${billing.credits.available} existing test credits available; ${billing.credits.reserved} held. These balances do not limit new standard assistance.\n\nUse /usage-history for historical test-unit receipts. Say “show my AI requests” or use /ai-history to read recent standard requests here. Testing capacity and provider availability can still interrupt service; credits do not bypass those checks. Paid upgrades and credit purchases are not enabled yet.`;
   } else if (['/credits on', '/credits off'].includes(command)) {
     await ensureBilling(db, userId);
     overage = command === '/credits on';

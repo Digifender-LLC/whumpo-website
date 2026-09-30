@@ -79,3 +79,5 @@ for(const verb of ['project','versions','health','check-site']){
  assert.equal(displayChatRequest(command.replace(review,'not-a-project')),command.replace(review,'not-a-project'));
 }
 console.log('Shortcut request presentation passed: friendly exact-command labels; malformed or extended requests remain visible verbatim.');
+
+for(const command of ['/ai-history','/ai-history 2','/ai-request '+review]){assert.notEqual(displayChatRequest(command),command);assert.equal(displayChatRequest(command+' trailing'),command+' trailing');}

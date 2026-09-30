@@ -9,6 +9,8 @@ export function displayChatRequest(content:string){
  for(const [verb,label] of Object.entries(shortcutLabels))if(new RegExp('^/'+verb+' '+id+'$').test(content))return label;
  if(new RegExp('^/app-status '+id+'$').test(content))return 'Show the current status and usage of my app.';
  if(new RegExp('^/brief '+id+'$').test(content))return 'Show my saved project brief.';
+ if(/^\/ai-history(?: [1-9]\d{0,2}| 1000)?$/.test(content))return 'Show my standard AI request history.';
+ if(new RegExp('^/ai-request '+id+'$').test(content))return 'Show the saved status of this AI request.';
  const starter=new RegExp('^/build (ocean|clay|forest) '+id+'$').exec(content);
  if(starter)return 'Make a private starter preview with a '+({ocean:'fresh and bright',clay:'warm and cozy',forest:'calm and natural'}[starter[1]])+' feel.';
  // Presentation only: recognize complete requests, never interpret prose or grant approval.

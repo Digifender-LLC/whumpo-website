@@ -417,3 +417,10 @@ Platform `be22062c-8178-40eb-90d0-64858af27411` switches new Chat requests to st
 Chat, agent usage lookups, Billing and Dashboard now describe standard assistance without a customer-unit meter or an instruction to buy credits. Billing separates the latest 20 standard receipts from historical charges. Full verification, explicit remaining beta gates and exact test commands are in [standard AI accounting](standard-ai-accounting.md#standard-chat-activation-verification--september-30-2026).
 
 A live Muse call with a synthetic local zero-balance account created the requested workflow page and shortcuts: 5,984 input/1,061 output tokens, zero customer charges, no replay inference, no publication. Actual local browser/D1 checks covered desktop and 390-pixel mobile views. Independent public verification at 15:47 UTC confirmed active version, 16 matching frontend assets, health and anonymous/origin boundaries, all 96 migrations and none pending. Private evidence: `.secrets/standard-ai-release-verification.json`. No CMS testing or customer resource change was performed.
+
+
+## Standard AI history through Chat — September 30, 2026
+
+Platform `28677f35-6f81-487f-843f-9704fba457da` adds “show my AI requests,” paginated `/ai-history`, and owned `/ai-request REQUEST_ID` lookups. The agent's usage inspection includes standard request status. Metadata-only reads distinguish failed work from completed provider accounting and never retry or charge requests. Existing historical usage remains separately accessible.
+
+Disposable-D1 standard/historical history suites, Chat rendering, both TypeScript projects, release build and loading checks passed. At 15:58 UTC independent public verification confirmed the active version, all 16 frontend assets, health 200, anonymous private-route denial, recovery-origin denial and all 96 migrations with none pending. Evidence: `.secrets/standard-history-release-verification.json`. No schema, provider, CMS service, connection or customer publication changed. Readiness and README accounting claims now reflect the standard-AI activation.

@@ -24,7 +24,7 @@ The token counts are evidence, not invoice amounts, provider-cost reservations, 
 1. Keep advanced-model consent and credits separate when premium dispatch is built. Internal model choice cannot silently convert a standard task into premium work.
 2. Calibrate real-provider cost accounting and platform capacity before beta. Current Muse costs are hypothetical subscription-shadow estimates; they are not invoices or fair-use misuse evidence.
 3. Complete the independent fair-use notice, appeal and narrowly scoped restriction workflow. Monitor remains non-blocking; cost/volume alone must not establish abuse.
-4. Add pagination/detail views for standard receipt history when needed; Billing currently shows the latest 20 owned receipts. Chat keeps the corresponding work result. Historical test-unit history remains separately available.
+4. Standard history now has deployed paginated Chat reads and individual request lookup; Billing shows the latest 20 owned receipts. Historical test-unit history remains separately available. See [Chat history contract](workspace-agent.md#standard-ai-request-history-in-chat).
 
 ## Verification
 
