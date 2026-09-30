@@ -9,7 +9,7 @@ type Page=Awaited<ReturnType<typeof readAppPageReview>>&{current_revision:number
 export async function applicationChatActions(db:D1Database,user:string,turns:Turn[]){
  for(const kind of ['application','app-page'] as const){
   const candidates=turns.slice(0,100).filter(t=>t.status==='completed'&&typeof t.assistant_text==='string'&&t.assistant_text.startsWith(kind==='application'?'Application review ':'Application page review ')).map(turn=>{
-   const read=String(turn.user_text).trim().match(new RegExp('^/'+kind+'-review\\s+([0-9a-f-]{36})$','i'));
+   const read=String(turn.user_text).trim().match(new RegExp('^/'+(kind==='application'?'application-(?:review|build)':'app-page-review')+'\\s+([0-9a-f-]{36})$','i'));
    return {turn,id:read?.[1]??String(turn.id)};
   }).filter(c=>uuid.test(c.id));
   const ids=[...new Set(candidates.map(c=>c.id))];

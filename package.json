@@ -27,6 +27,7 @@
     "test:directory-history": "node tests/directory-history.mjs",
     "test:directories": "node tests/directories.mjs",
     "test:site-health": "node tests/site-health.mjs",
+    "test:application-build": "node tests/application-build.mjs",
     "test:customer-app-journey": "node tests/customer-app-journey.mjs",
     "test:customer-site-journey": "node tests/customer-site-journey.mjs",
     "test:publications": "node tests/publications.mjs",
