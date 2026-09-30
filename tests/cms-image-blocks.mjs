@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const output=await build({stdin:{contents:"export * from './src/cms-image-block';export * from './src/cms-rich-text';export * from './src/cms-preview';export * from './src/cms-content-shape';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const {cmsImageBlock,cmsImageReferences,renderCMSRichText,renderCMSDraft,validCMSDraft,validCMSEdit}=await import('data:text/javascript;base64,'+Buffer.from(output.outputFiles[0].text).toString('base64'));
+const media='01ARZ3NDEKTSV4RRFFQ69G5FAV',project='11111111-1111-4111-8111-111111111111';
+const image={_type:'image',_key:'photo-1',asset:{_ref:media},alt:'A <blue> sky & "cloud"',caption:'A caption <script>alert(1)</script>'};
+const paragraph={_type:'block',style:'normal',markDefs:[],children:[{_type:'span',text:'Article text',marks:[]}]};
+const preview={src:`/api/cms/${project}/media/${media}/preview`,width:1600,height:800};
+assert.deepEqual(cmsImageBlock(image),image);assert.equal(cmsImageReferences([paragraph,image]).length,1);
+const rich=renderCMSRichText([{...paragraph,listItem:'bullet',level:1},image,paragraph],()=>preview);
+assert.match(rich,/<\/li><\/ul><figure><img/);assert.match(rich,/<\/figure><p>Article text<\/p>$/);
+assert.ok(rich.includes('alt="A &lt;blue&gt; sky &amp; &quot;cloud&quot;"'));assert.ok(rich.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));assert.ok(!rich.includes('<script>'));
+assert.match(rich,/width="1600" height="800" loading="lazy"/);
+const frozen={...preview,src:`/cms/media/${project}/${'a'.repeat(64)}.jpg`};
+const html=renderCMSDraft({projectId:project,collection:'posts',revision:'revision',item:{status:'draft',data:{title:'Photos',content:[paragraph,image]}}},true,()=>frozen);
+assert.ok(html.includes(frozen.src));assert.ok(!html.includes('/api/cms/'));assert.ok(html.includes('.body img{'));
+for(const extra of [{asset:{_ref:'https://private.test/image.jpg'}},{asset:{_ref:media,url:'https://tracker.test'}},{asset:{_ref:media,provider:'external'}},{link:{href:'https://tracker.test'}},{width:500},{alignment:'center'},{alt:null},{caption:'\u0000'},{caption:'x'.repeat(1001)},{_key:'../path'}])assert.throws(()=>cmsImageBlock({...image,...extra}));
+assert.throws(()=>cmsImageReferences([image,image]));assert.throws(()=>cmsImageReferences(Array.from({length:5},(_,i)=>({...image,_key:'image-'+i}))));
+for(const src of ['https://evil.test/image.jpg','//evil.test','data:image/jpeg;base64,x','/api/cms/'+project+'/media/'+media+'/preview?auth=x',frozen.src+'#x',frozen.src.replace('.jpg','.svg'),'/cms/media/../x.jpg'])assert.throws(()=>renderCMSRichText([image],()=>({...preview,src})));
+for(const size of [0,-1,1601,NaN,Infinity,1.5])assert.throws(()=>renderCMSRichText([image],()=>({...preview,width:size})));
+assert.throws(()=>renderCMSRichText([image],()=>undefined));
+// No caller can accidentally broaden today's draft/publication surface before media resolution is wired.
+assert.throws(()=>renderCMSRichText([image]));
+assert.equal(validCMSDraft(JSON.stringify({status:'draft',data:{title:'Image',content:[paragraph,image]}})),false);
+assert.equal(validCMSEdit(JSON.stringify({data:{title:'Image',content:[paragraph,image]},_rev:'revision'})),false);
+console.log('CMS image rendering passed: native local references, explicit resolver requirement, balanced mixed lists, escaping, fixed Whumpo routes, bounded dimensions/count, extension refusal and unchanged write admission.');

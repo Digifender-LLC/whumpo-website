@@ -1,3 +1,4 @@
+import {cmsImageBlock,cmsImageReferences,cmsResolvedImage,type CMSImageBlock,type CMSResolvedImage} from './cms-image-block';
 import {CMSProjectError} from './cms-error';
 const record=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
 export const escapeCMS=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -11,11 +12,14 @@ function linkURL(value:unknown){
  return value;
 }
 /** Render the supported native Portable Text subset without accepting customer HTML. */
-export function renderCMSRichText(value:unknown){
+export function renderCMSRichText(value:unknown,resolveImage?: (image:CMSImageBlock)=>CMSResolvedImage){
  if(!Array.isArray(value)||value.length>30||new TextEncoder().encode(JSON.stringify(value)).length>12000)throw unsupported();
+ if(resolveImage)cmsImageReferences(value);
  let textBytes=0;
  const blocks=value.map(raw=>{
-  const b=record(raw);if(b?._type!=='block'||!Array.isArray(b.children)||b.children.length>100||!Array.isArray(b.markDefs)||b.markDefs.length>20)throw unsupported();
+  const b=record(raw);
+  if(b?._type==='image'&&resolveImage){const image=cmsImageBlock(b),asset=cmsResolvedImage(resolveImage(image));const caption=image.caption?`<figcaption>${escapeCMS(image.caption)}</figcaption>`:'';return {html:`<img src="${escapeCMS(asset.src)}" alt="${escapeCMS(image.alt)}" width="${asset.width}" height="${asset.height}" loading="lazy" decoding="async">${caption}`,list:'',level:0,tag:'figure'};}
+  if(b?._type!=='block'||!Array.isArray(b.children)||b.children.length>100||!Array.isArray(b.markDefs)||b.markDefs.length>20)throw unsupported();
   const style=b.style??'normal';if(typeof style!=='string'||!['normal','h1','h2','h3','h4','h5','h6','blockquote'].includes(style))throw unsupported();
   // Alignment and other extensions need explicit rendering support, never silent removal.
   if(Object.keys(b).some(k=>!['_type','_key','style','children','markDefs','listItem','level'].includes(k)))throw unsupported();

@@ -51,6 +51,15 @@ try{
  for(let n=0;n<16;n++)await upload();assert.equal(await count(),19);
  const before=writes;const full=await Promise.allSettled([upload(),upload()]);assert.equal(full.filter(r=>r.status==='fulfilled').length,1);assert.equal(await count(),20);assert.equal(writes,before+1);assert.equal(await ops(),40);
  const listing=await readCMSUploads(db,a.user,a.project,env);assert.equal(listing.uploadEnabled,true);assert.equal(listing.uploads.length,20);assert.ok(!JSON.stringify(listing).includes('PRIVATE_'));assert.ok(!JSON.stringify(listing).includes(a.config.origin));
+ const {captureCMSArticleImages}=await module('src/cms-article-images.ts');
+ const image={_type:'image',_key:'one',asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAV'},alt:'Synthetic image'};
+ let imageReads=0,changed=false;
+ const imageEnv={CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:{fetch:async request=>{const verified=await verifyCMSRequest(request,a.config);assert.equal(verified.path,'/_emdash/api/whumpo/media/'+image.asset._ref+'/preview');imageReads++;const body=photo.bytes.slice();if(changed)body[body.length-4]^=1;return new Response(body,{headers:{'content-type':'image/jpeg'}});}}};
+ const captured=await captureCMSArticleImages(db,a.user,a.project,[image,{...image,_key:'two'}],imageEnv);assert.equal(captured.length,1);assert.equal(imageReads,1);assert.deepEqual(captured[0].bytes,photo.bytes);assert.equal(captured[0].width,32);
+ await assert.rejects(captureCMSArticleImages(db,id(),a.project,[image],imageEnv),e=>e.status===404);assert.equal(imageReads,1);
+ await assert.rejects(captureCMSArticleImages(db,a.user,a.project,[{...image,asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}}],imageEnv),e=>e.status===409);assert.equal(imageReads,1);
+ changed=true;await assert.rejects(captureCMSArticleImages(db,a.user,a.project,[image],imageEnv),e=>e.status===409);assert.equal(imageReads,2);
+ console.log('Article image capture passed: confirmed owner/project receipt, exact native-byte hash, dimensions, deduplicated reads and changed/missing media refusal.');
  const worker=(await module('src/index.ts')).default,{hashToken}=await module('src/security.ts');
  const session='c'.repeat(64);await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(session),a.user,new Date(Date.now()+3600000).toISOString(),new Date().toISOString()).run();
  const http=(suffix,method='GET',body,headers={})=>worker.fetch(new Request('https://whumpo.com/api/cms/'+a.project+'/media/uploads'+suffix,{method,headers:{origin:'https://whumpo.com',cookie:'whumpo_session='+session,'content-type':'image/jpeg','x-photo-name':'studio.jpg',...headers},body}),{...env,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
