@@ -1,6 +1,6 @@
 # Versioned capability catalog and composition planner
 
-**WH-065 — September 30, 2026. Implemented in source; local verification and deployment are recorded below.** [Execution issue](https://github.com/zemdregon/whumpo/issues/13). This implements the discovery/planning layer after the [WH-064 specification decision](project-specification.md). Whole-project specification persistence, compilation and module runtime services remain WH-066–069. A catalog entry describes a contract, not an installed customer service.
+**WH-065 — September 30, 2026. Implemented and deployed to test; verification scope is recorded below.** [Execution issue](https://github.com/zemdregon/whumpo/issues/13). This implements the discovery/planning layer after the [WH-064 specification decision](project-specification.md). Whole-project specification persistence, compilation and module runtime services remain WH-066–069. A catalog entry describes a contract, not an installed customer service.
 
 ## Owner experience
 
@@ -80,4 +80,9 @@ Checks passed on Node 24.21.0 / pnpm 11.19.0:
 
 No CMS functional tests, live model calls, customer publication, provider activation or physical-device tests ran. Existing lifecycle fixtures seed plans only for their downstream setup; the dedicated planner and onboarding suites exercise the actual lookup/validation path. The optional live-model fixture was adjusted for the bounded planning continuation but not executed. Scripted choices do not prove natural-language classification quality. Source verification and deployment are separate evidence.
 
-GitHub #13 is the active execution record. WH-064 closed with the decision/prototype evidence in `d27b46a`. The concurrently edited roadmap source belongs to PR #1; its unrelated files are preserved. Backlog issue mapping must be reconciled with that roadmap change rather than overwriting it.
+GitHub #13 is the execution record. WH-064 closed with the decision/prototype evidence in `d27b46a`. The concurrently edited roadmap source belongs to PR #1; its unrelated files are preserved. Backlog issue mapping must be reconciled with that roadmap change rather than overwriting it.
+
+
+Test release: platform `7e5014d0-5e60-4c6f-9d0d-059be84f3b5a`, deployed at 2026-09-30T21:35:04.911Z from implementation commit `b457f6b`. Migration `0109_composition_plans.sql` was applied first. Independent live readback at 2026-09-30T21:36:35.806Z verified all 109 migrations with none pending, the backend revision column and all seven new guards, health/landing/workspace 200, anonymous Chat/action POSTs 401, and the workspace HTML plus all 16 frontend assets matching the build byte-for-byte. The first verifier attempt used the wrong local SPA HTML path; correcting it to `dist/index.html` produced this complete readback without redeploying.
+
+The existing platform wrapper preserved configured bindings; it does not create a four-Worker release journal. Previous platform was `2ed299fd-f7d4-4842-88c7-b7d950d7a59a`; rollback can retain the additive schema/evidence. The site, visitor and runtime Workers were not redeployed. Private operator evidence: `.secrets/composition-release-review.json`, `.secrets/composition-migration.log`, `.secrets/composition-deployment.json` and `.secrets/composition-release-verification.json`. No live authenticated owner or real-model acceptance is inferred from this readback.
