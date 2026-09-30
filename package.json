@@ -11,6 +11,7 @@
     "test:ai": "node tests/ai.mjs",
     "test:ai-gateway": "node tests/ai-gateway.mjs",
     "test:gateway-inference": "node tests/gateway-inference.mjs",
+    "report:gateway": "node tools/report-gateway.mjs",
     "deploy": "node tools/deploy.mjs",
     "db:remote": "wrangler d1 migrations apply tellumo-control --remote",
     "invite": "node tools/create-invite.mjs",
