@@ -14,7 +14,7 @@ const reasonLabels:Record<string,string>={
  unsupported_post_type:'Only posts and pages can be imported.',
  password_protected_content:'This article is password protected. Review its privacy before preparing an import.',
  unsupported_source_status:'This article’s WordPress status is not supported.',
- source_provenance_exceeds_review_limit:'This article’s original content is too large for the comparison review.',
+ source_provenance_exceeds_review_limit:'This article’s original content or metadata exceeds the comparison review limits.',
  media_requires_reviewed_local_import:'This article contains media. Add reviewed images separately before publishing.',
  active_content_requires_manual_conversion:'Interactive or executable content needs to be rewritten as article content.',
  shortcode_requires_manual_conversion:'Replace WordPress shortcodes with their intended article content.',
