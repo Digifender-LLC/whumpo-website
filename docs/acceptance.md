@@ -284,3 +284,7 @@ The shared source analyzer and private offline report now produce exact category
 ## Operator profitability comparison — September 30, 2026
 
 Added an optional private company-finance summary to `report:fair-use`, with explicit unknown values, closed/comparable-period checks, cost-category deltas and the proposed profit-decline comparison. Inputs are operator-attested, never represented as independently verified finances. This read-only companion cannot change the persisted mode, activate restrictions or attribute company cost to customer abuse. Type, finance-boundary/file/CLI and existing fair-use tests passed. No Worker/schema deployment is required. Real finance ingestion and reconciliation remain open; see [operator finance review](company-finance-review.md).
+
+## Publishing recovery inventory — September 30, 2026
+
+Chat now has a free `/cms-pending` inventory covering seven CMS operation families, with exact saved review/retry commands, owner scoping, expiry/completion filtering and pagination. The model has a corresponding project-scoped read tool. Opening the inventory performs no provider calls or retries. Actual D1, Chat, model-dispatch and mapped-import recovery tests passed; a read-only remote query also passed. This improves recovery discovery without claiming live CMS customer acceptance or completion of non-CMS workflows. See [publishing recovery](workspace-agent.md#unfinished-publishing-work-in-chat--september-30-2026).
