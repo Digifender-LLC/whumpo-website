@@ -4,7 +4,7 @@ export const cmsCapabilities={
  contract:'whumpo-cms-capabilities',version:1,
  media:{uploadVersion:1,uploadMaxBytes:1048576,uploadMimeType:'image/jpeg',metadataVersion:1,pageSize:20,previewVersion:1,previewMaxBytes:5242880},
  draftIdentity:{version:1,readRecovery:true},
- taxonomyManagement:{version:1,names:['categories','tags'],locale:'en',collection:'posts',articleAssignments:false},
+ taxonomyManagement:{version:1,readRecovery:true,names:['categories','tags'],locale:'en',collection:'posts',articleAssignments:false},
  structuredContent:{excerptVersion:1,excerptMaxChars:512,excerptCollections:['posts'],imageVersion:1,version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true},
 } as const;
 export function supportsStructuredCMS(value:unknown):boolean{
