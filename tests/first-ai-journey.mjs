@@ -1,3 +1,4 @@
+import {recordFixtureBenchmark} from '../tools/benchmark-evidence.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -41,5 +42,6 @@ try{
  assert.equal(await db.prepare('SELECT id FROM site_versions WHERE id=?').bind(bad).first(),null);
  assert.equal((await getBilling(db,user)).quota.available,50);
 
+ await recordFixtureBenchmark(db,'edits',{transportCalls:calls+1,runtimeCalls:0});
  console.log('Standard AI journey passes creation + three edits without spending customer units, exact ancestry/content, zero holds and replay without extra calls. Provider behavior is synthetic; live model acceptance is separate.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

@@ -1,3 +1,4 @@
+import {recordFixtureBenchmark} from '../tools/benchmark-evidence.mjs';
 // Connected handler acceptance: actual platform HTTP boundary and visitor host, disposable D1.
 // SITE_AI=1 exercises the configured Responses transport with synthetic replies; never live inference.
 Error.stackTraceLimit=0;
@@ -51,5 +52,6 @@ try{
  const off=await chat(owner,'/unpublish '+project);assert.ok(off.data.turns.at(-1).confirmation_id);assert.match(await(await call(owner,'/api/publication-reviews/'+off.input.id+'/diff')).text(),/After unpublishing/);await chat(owner,'/confirm '+off.input.id);assert.equal((await served(project)).status,404);assert.equal((await call(owner,'/api/site-versions/'+version+'/preview')).status,200);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM projects WHERE owner_user_id=?').bind(owner.id).first()).n,1);await Promise.all(background);
  if(ai){assert.equal(providerCalls,2);const billing=await json(owner,'/api/billing');assert.equal(billing.quota.spent,0);assert.equal(billing.quota.reserved,0);assert.equal(billing.credits.reserved,0);assert.equal((await db.prepare("SELECT COUNT(*) n FROM inference_calls WHERE role='orchestrator' AND status='observed'").first()).n,2);assert.equal((await db.prepare("SELECT COUNT(*) n FROM inference_calls WHERE status IN ('reserved','dispatched','uncertain')").first()).n,0);}else assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
+ await recordFixtureBenchmark(db,'site',{transportCalls:providerCalls+ackCalls,runtimeCalls:0});
  console.log('Connected HTTP journey passed: welcome, private preview/export, owner/origin boundaries, exact review, lost-response replay, private revision, stale review, byte-exact restore, unpublish and retained preview. No real customer publication or paid provider request. Mode: '+(ai?'synthetic Responses; two main calls, '+ackCalls+' acknowledgments, zero customer units charged':'guided; no inference')+'.');
 }finally{await Promise.allSettled(background);globalThis.fetch=originalFetch;await proxy.dispose();await rm(dir,{recursive:true,force:true});}
