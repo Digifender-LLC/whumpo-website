@@ -36,7 +36,8 @@ export async function runFairUseOperator(service,db,input,apply){
  if(input.action==='read')return {review:await service.readFairUseReview(db,input.account,input.id),enforcementEnabled:false};
  if(apply===undefined){
   let current=null;try{current=await service.readFairUseReview(db,input.account,input.id);}catch(error){if(error.status!==404||input.action==='resolve')throw error;}
-  return {preview:true,request:input,current,applyDigest:digest,enforcementEnabled:false,notice:'Internal review only. No warning is delivered and no customer request is restricted.'};
+  const observation=input.action==='open'&&!current?await service.previewFairUseReviewObservation(db,input.account,input.plan):undefined;
+  return {preview:true,request:input,current,...(observation?{observation}:{}),applyDigest:digest,enforcementEnabled:false,notice:'Internal review only. No warning is delivered and no customer request is restricted.'};
  }
  if(input.action==='open')return service.openFairUseReview(db,input.account,input.id,{plan:input.plan,category:input.category,reviewer:input.reviewer,context:input.context});
  return service.resolveFairUseReview(db,input.account,input.id,{revision:input.revision,outcome:input.outcome,reviewer:input.reviewer,resolution:input.resolution});
