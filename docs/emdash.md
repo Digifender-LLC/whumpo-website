@@ -4,7 +4,7 @@ EmDash is an explicit Whumpo workload, added at the owner's request on September
 
 ## Implementation
 
-### Current support status — September 29, 2026
+### Current support status — September 30, 2026
 
 The sections below record successive implementation milestones. Earlier verification notes describe the state at that milestone; this table summarizes the current boundary.
 
@@ -12,11 +12,11 @@ The sections below record successive implementation milestones. Earlier verifica
 | --- | --- | --- |
 | Native EmDash core | Pinned 1.0.1 Astro application; private Cloudflare preview deployed | Complete a real approved customer's provisioning and lifecycle on Cloudflare |
 | Tenant ownership | Dedicated Worker/D1/R2/KV provisioner, signed owner bridge, reviewed setup queue | Live customer allocation/bootstrap; multi-tenant production acceptance |
-| Chat authoring | Create/read/edit posts and pages, private previews, native revision checks | Media authoring, richer portable text, imported-item discovery |
+| Chat authoring | Create/read/edit posts and pages, rich-text and image workflows, private previews, native revision checks | Full live customer lifecycle and physical-device acceptance |
 | Publication | Human-confirmed publish, same-URL replacement, withdrawal and staged-edit discard | CMS custom domains and scheduled publication |
 | Public delivery | Approved immutable article HTML and CMS index through the public site host | Native theme routes, archives, search and RSS are not exposed by this delivery path |
 | Recovery | Native database and paired media capture tools; isolated local D1/R2 restore and native boot verified | Coordinated production capture, protected keys/artifacts/control state, remote restore and traffic switch |
-| WordPress migration | Required in the integration contract; not implemented | WXR staging, conversion report, bounded media import and reviewed publication |
+| WordPress migration | Private WXR upload/staging, immutable review, confirmed draft import and post excerpts deployed to the platform | Native taxonomy mapping integration, bounded media import, complete migration and live customer acceptance |
 | Plugin execution | Disabled in this profile | Cloudflare sandbox runner requires a paid-only Worker Loader; excluded by the current service constraint |
 | CMS administration | Whumpo owner authentication and narrowly allowed management operations | Public native admin UI, native passkey enrollment and additional CMS roles are not enabled |
 
@@ -612,3 +612,15 @@ Both the staging report and immutable owner review show the proposed excerpt. Pr
 The built native EmDash test verified exact excerpt creation and preservation during subsequent revision-bound edits, plus refusal of excerpts on pages. Local staging/import tests cover conversion bounds, escaped review/preview output, unchanged provenance-only reviews and missing-capability refusal. This does not establish live customer CMS acceptance or complete WordPress migration. Reviewed media acquisition, category/tag mapping and first live native provisioning remain open.
 
 Released September 30, 2026 as platform version `92cb02d0-cbc8-4817-8f66-8df6f2615e99` through the binding-preserving deployment wrapper. The isolated release passed both TypeScript checks, production build and frontend loading checks, preserving the current pricing/workspace source. All 18 deployed JS/CSS/font assets matched the tested build byte for byte; health returned 200 and anonymous Chat, onboarding, private-photo and CMS-import preview routes returned 401. Live inventory contained zero registered CMS instances. No migration, customer resource allocation or customer publication occurred. Native excerpt behavior remains verified against the disposable built EmDash service, not a live customer instance.
+
+### Native category/tag operations — September 30, 2026
+
+Implemented locally, not deployed or wired into customer import confirmation. The native capability contract advertises bounded category/tag management separately from structured article support, with `articleAssignments:false`. Signed operations can read a named definition or term, create the fixed English Categories/Tags definitions for posts, create a term with an explicit slug/label, and read a post’s assignments. Arbitrary taxonomies, locale changes, parent edits, term reassignment, deletion and schema edits remain denied. Labels are bounded to 200 characters; slugs use a restricted 80-character lowercase ASCII form. Unsupported source slugs will need an explicit mapping rather than silent rewriting.
+
+Definitions and terms are separate mutations protected by the existing signed owner boundary and immutable native request receipts. The existing 100-receipt per-instance bound still applies; term creation consumes that capacity. No automatic retention cleanup or capacity increase is introduced. The platform import helper does not yet invoke these operations, and source categories/tags remain private provenance.
+
+**D1 atomicity finding:** upstream content creation calls taxonomy assignment inside `withTransaction`, but the pinned native D1 adapter falls back to direct execution without rollback (`emdash/src/database/transaction.ts`). A disposable native probe created a post with an unknown term: the API returned 400 while the additional article remained in the database. The combined `taxonomies` article-create field therefore remains denied at Whumpo’s bridge. Do not advertise atomic category/tag imports or expose the upstream combined write without a recoverable multi-step operation contract. This was found locally; no customer data was affected.
+
+Native acceptance covers definition/term creation, exact replay, changed-retry conflicts, disallowed term updates, and refusal of combined article mappings before dispatch. Snapshot/restore verifies retained native terms and exact article counts. The restore check now compares each article’s pre-restore native response and revision instead of only base-table columns, which can lag staged draft revisions. Shape checks cover names, locale/collection restrictions, forbidden term changes and unchanged legacy drafts.
+
+Next, bind the exact source-to-native mapping and required term creations into an immutable owner review, reserve a recoverable draft identity, and record/reconcile each native step before customer import activation. Native labels may already exist and must be inspected rather than overwritten. Parent/category hierarchy, translations, public taxonomy navigation and post-publication taxonomy edits need separate contracts. These bridge operations are not customer-facing taxonomy migration acceptance.

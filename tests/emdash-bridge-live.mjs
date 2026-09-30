@@ -11,7 +11,7 @@ assert.equal((await fetch(base+capabilityPath)).status,403);
 assert.equal((await call(capabilityPath,undefined,id(),{...config,ownerId:id()})).status,403);
 assert.equal((await call(capabilityPath,{})).status,403);
 const capability=await call(capabilityPath);assert.equal(capability.status,200);assert.equal(capability.headers.get('cache-control'),'no-store');
-assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,media:{uploadVersion:1,uploadMaxBytes:1048576,uploadMimeType:'image/jpeg',metadataVersion:1,pageSize:20,previewVersion:1,previewMaxBytes:5242880},structuredContent:{excerptVersion:1,excerptMaxChars:512,excerptCollections:['posts'],imageVersion:1,version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
+assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,media:{uploadVersion:1,uploadMaxBytes:1048576,uploadMimeType:'image/jpeg',metadataVersion:1,pageSize:20,previewVersion:1,previewMaxBytes:5242880},taxonomyManagement:{version:1,names:['categories','tags'],locale:'en',collection:'posts',articleAssignments:false},structuredContent:{excerptVersion:1,excerptMaxChars:512,excerptCollections:['posts'],imageVersion:1,version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
 assert.equal((await fetch(base+'/_emdash/api/setup/status')).status,403);
 assert.equal((await call('/_emdash/api/setup/status',undefined,id(),{...config,ownerId:id()})).status,403);
 const before=await call('/_emdash/api/setup/status');assert.equal(before.status,200);const initial=await before.json();assert.equal(initial.data.needsSetup,true,JSON.stringify(initial));
@@ -29,6 +29,22 @@ assert.equal((await fetch(base+'/_emdash/admin/setup')).status,403);
 const service={fetch:async request=>{const u=new URL(request.url);return fetch(base+u.pathname+u.search,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),signal:request.signal});}};assert.deepEqual((await verifyCMSInitialization(service,config)).collections.sort(),['pages','posts']);
 console.log('Actual EmDash bridge passed: unsigned/wrong-owner denial, empty-content setup, replay/conflict handling, pinned owner administration, schema reads, setup closed and other management routes denied.');
 const shapeBuild=await build({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsDraftBody,cmsEditBody,cmsStagedEditBody,cmsRichDraftBody,cmsRichEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeBuild.outputFiles[0].text).toString('base64'));
+const taxonomyBuild=await build({entryPoints:['src/cms-taxonomy-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsTaxonomyDefinition,cmsTaxonomyTerm}=await import('data:text/javascript;base64,'+Buffer.from(taxonomyBuild.outputFiles[0].text).toString('base64'));
+for(const name of ['categories','tags']){
+ const defPath='/_emdash/api/taxonomies/'+name,definition=cmsTaxonomyDefinition(name),definitionId=id();
+ const existing=await call(defPath);
+ if(existing.status===404){const created=await call('/_emdash/api/taxonomies',definition,definitionId);assert.equal(created.status,201,await created.clone().text());assert.deepEqual(await(await call('/_emdash/api/taxonomies',definition,definitionId)).json(),await created.json());}
+ else assert.equal(existing.status,200,await existing.text());
+ const term=cmsTaxonomyTerm('studio-notes','Studio notes'),termId=id(),termPath=defPath+'/terms';
+ const created=await call(termPath,term,termId);assert.equal(created.status,201,await created.clone().text());const result=await created.json();assert.deepEqual(await(await call(termPath,term,termId)).json(),result);
+ assert.equal((await call(termPath,cmsTaxonomyTerm('studio-notes','Changed'),termId)).status,409);
+ assert.equal((await call(termPath+'/studio-notes')).status,200);
+ assert.equal((await call(termPath,{...term,parentId:'unreviewed'})).status,403);
+ assert.equal((await call(defPath,definition,id(),config,'PUT')).status,403);
+}
+const unsupportedMapping={...cmsDraftBody('Mapped post','A categorized article'),taxonomies:{tags:['studio-notes']}};
+assert.equal((await call('/_emdash/api/content/posts',unsupportedMapping)).status,403);
+console.log('Native taxonomy terms passed: bounded definitions and terms, exact replay/conflict protection, assignment writes denied pending D1 recovery support.');
 for(const collection of ['posts','pages']){
  const rid=id(),initial=cmsDraftBody('Native '+collection,'A private paragraph. <script>plain text only</script>');
  initial.data.content.push({_type:'block',_key:'heading',style:'h2',markDefs:[],children:[{_type:'span',_key:'heading-text',text:'A formatted heading',marks:['strong']}]});
