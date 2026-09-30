@@ -65,7 +65,7 @@
         "docs/security-risk-actions.md",
         "docs/cloudflare-capability-roadmap.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/3",
       "owner": null,
       "evidence": []
     },
@@ -145,7 +145,7 @@
         "docs/acceptance.md",
         "AGENTS.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/4",
       "owner": null,
       "evidence": []
     },
@@ -186,7 +186,7 @@
         "src/billing.ts",
         "migrations"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/5",
       "owner": null,
       "evidence": []
     },
@@ -265,7 +265,7 @@
         "docs/deployment.md",
         "docs/usage-recovery.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/6",
       "owner": null,
       "evidence": []
     },
@@ -384,7 +384,7 @@
         "docs/content-safety.md",
         "tools/account-closure-inventory.mjs"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/7",
       "owner": null,
       "evidence": []
     },
@@ -425,7 +425,7 @@
         "src/site-host.ts",
         "src/cms-media.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/8",
       "owner": null,
       "evidence": []
     },
@@ -842,7 +842,7 @@
         "tests/customer-app-journey.mjs",
         "src/ai.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/9",
       "owner": null,
       "evidence": []
     },
@@ -1007,7 +1007,7 @@
         "frontend/src/pricing.tsx",
         "docs/workspace-refinement-acceptance.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/10",
       "owner": null,
       "evidence": []
     },
@@ -2203,7 +2203,7 @@
         "docs/account-closure.md",
         "src/index.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/11",
       "owner": null,
       "evidence": []
     },
