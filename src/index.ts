@@ -1,3 +1,4 @@
+import {runMaintenance} from './maintenance';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
 import {acceptsCustomerEligibility,customerEligibilityMessage,customerEligibilityStatement} from './content-policy';
@@ -621,9 +622,19 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
-    if(_event.cron==='47 * * * *'){const checks=await Promise.allSettled([scanBackendImports(env.DB),maintainHosting(env.DB,hostingConfig(env)),maintainHealth(env.DB)]);if(checks.some(r=>r.status==='rejected'))throw Error('Scheduled website checks failed');return;}
-    const results=await Promise.allSettled([scanBackendImports(env.DB),cleanupFairUseObservations(env.DB),cleanupTraffic(env.DB),cleanupAppLifecycle(env.DB),cleanupContacts(env.DB),cleanupPhotos(env),cleanupGitHub(env.DB,githubConfig(env)),cleanupCloudflare(env.DB,cloudflareConfig(env))]);
-    if(results.some(result=>result.status==='rejected'))throw Error('Scheduled maintenance failed');
+    const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
+    if(_event.cron==='47 * * * *'){
+      await runMaintenance(env.DB,[imports,{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)}]);return;
+    }
+    await runMaintenance(env.DB,[imports,
+      {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
+      {name:'traffic',run:()=>cleanupTraffic(env.DB)},
+      {name:'applications',run:()=>cleanupAppLifecycle(env.DB)},
+      {name:'contacts',run:()=>cleanupContacts(env.DB)},
+      {name:'photos',run:()=>cleanupPhotos(env)},
+      {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
+      {name:'cloudflare',enabled:!!cloudflareConfig(env),run:()=>cleanupCloudflare(env.DB,cloudflareConfig(env))},
+    ]);
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestId = crypto.randomUUID();
