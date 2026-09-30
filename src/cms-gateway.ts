@@ -1,3 +1,4 @@
+import {isCMSMediaUpload,verifyCMSMediaUpload} from './cms-media-upload-bridge';
 import {nativeCMSPreview} from './cms-native-media-preview';
 import {cmsMediaPreviewPath} from './cms-media-preview-shape';
 import {cmsCapabilities,cmsCapabilitiesPath} from './cms-capability-contract';
@@ -6,12 +7,12 @@ const reply=(status:number,message:string)=>Response.json({error:message},{statu
 // Reserved namespace in each isolated CMS database; never the platform account DB.
 export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:D1Database},dispatch:(request:Request)=>Promise<Response>){
  try{
-  const config=cmsBridgeConfig(env),verified=await verifyCMSRequest(request,config);
-  if(!cmsRequestAllowed(request.method,verified.path,verified.body))return reply(403,'CMS operation not available');
+  const config=cmsBridgeConfig(env),upload=isCMSMediaUpload(request),verified=upload?await verifyCMSMediaUpload(request,config):await verifyCMSRequest(request,config);
+  if(!upload&&!(typeof verified.body==='string'&&cmsRequestAllowed(request.method,verified.path,verified.body)))return reply(403,'CMS operation not available');
   if(verified.path===cmsCapabilitiesPath)return Response.json({success:true,data:cmsCapabilities},{headers:{'cache-control':'no-store'}});
   const preview=verified.path.match(cmsMediaPreviewPath);
   if(preview)return nativeCMSPreview(preview[1],config,env.MEDIA as R2Bucket|undefined,dispatch);
-  const headers=new Headers({'content-type':'application/json','origin':config.origin,'x-emdash-request':'1'});
+  const headers=new Headers({'content-type':'contentType' in verified?verified.contentType:'application/json','origin':config.origin,'x-emdash-request':'1'});
   for(const name of ['x-townhello-cms-id','x-townhello-cms-expires','x-townhello-cms-signature'])headers.set(name,request.headers.get(name)!);
   const internal=new Request(request.url,{method:request.method,headers,...(request.method!=='GET'?{body:verified.body}:{})});
   if(request.method==='GET')return await dispatch(internal);
