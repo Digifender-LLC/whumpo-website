@@ -43,9 +43,10 @@ export async function cleanupCloudflare(db:D1Database,config:CloudflareConfig|un
  }
 }
 export async function cloudflareStatus(db:D1Database,userId:string,config:CloudflareConfig|undefined){
- const row=await db.prepare("SELECT id,created_at,expires_at FROM cloudflare_token_vault WHERE user_id=? AND state='active' AND expires_at>?").bind(userId,now()).first<{created_at:string;expires_at:string}>();
+ const row=await db.prepare("SELECT created_at,expires_at FROM cloudflare_token_vault WHERE user_id=? AND state='active' ORDER BY expires_at DESC LIMIT 1").bind(userId).first<{created_at:string;expires_at:string}>();
  const pending=await db.prepare("SELECT COUNT(*) n FROM cloudflare_token_vault WHERE user_id=? AND state='revoking' AND expires_at>?").bind(userId,now()).first<{n:number}>();
- return {enabled:!!config,connected:!!config&&!!row,expiresAt:row?.expires_at??null,connectedAt:row?.created_at??null,revocationPending:!!pending?.n,dnsChangesEnabled:!!config&&!!row};
+ const expired=!!row&&row.expires_at<=now(),connected=!!config&&!!row&&!expired;
+ return {enabled:!!config,connected,expired:!!config&&expired,expiresAt:row?.expires_at??null,connectedAt:row?.created_at??null,revocationPending:!!pending?.n,dnsChangesEnabled:connected};
 }
 export async function startCloudflare(db:D1Database,userId:string,sessionHash:string,configuration:CloudflareConfig|undefined){
  const config=required(configuration),state=newSessionToken(),stateHash=await hashToken(state),verifier=newSessionToken();
