@@ -2,7 +2,7 @@
 
 The public homepage advertises the product. The signed-in default is a conversation, with only compact service and usage stats. Dashboard and workflow pages are separate sidebar destinations; Profile and Settings hold personal/account and platform controls respectively. Domain and project controls remain accessible from Chat. This checklist preserves the full MVP scope; an unchecked item is not delivered.
 
-Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The [Whumpo technical design v0.6](whumpo_mvp_design.docx) consolidates current architecture, customer flows, pricing and outstanding launch gates. The earlier Word design v0.5 remains historical. Historical milestone paragraphs below retain their original sequence.
+Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The [Whumpo technical design v0.7](whumpo_mvp_design.docx) consolidates current architecture, customer flows, pricing and outstanding launch gates. The earlier Word design v0.5 remains historical. Historical milestone paragraphs below retain their original sequence.
 
 ## Acceptance checklist
 
@@ -285,3 +285,9 @@ Native post excerpt mapping is deployed to the test platform (`92cb02d0-cbc8-481
 ## CMS creation recovery — September 30, 2026
 
 The next native CMS artifact reserves a stable draft identity before creation and can reconcile a lost response by reading the exact unchanged initial draft. Actual EmDash tests prove the same article/revision is recovered without duplication and survives backup/restore. Legacy uncertain receipts stay unresolved. This is implemented locally and requires a reviewed native artifact deployment; customer category/tag mapping remains unfinished. See [native draft recovery](emdash.md#recoverable-native-draft-identity--september-30-2026).
+
+## Technical design reconciliation — September 30, 2026
+
+Design v0.7 reconciles the Word overview with conversational question checkpoints, the single-project first-draft claim, reviewed resumable WordPress categories/tags, unfinished CMS work in Chat, the private operator finance report and the inactive AI Gateway transport/dispatch foundations. It corrects the Cloudflare OAuth configuration snapshot and separates native CMS migrations from control migrations. Historical design files are unchanged.
+
+Read-only provider inspection confirmed platform `2304496a-7c65-429c-a201-72254448b33e` at 100 percent, applied migrations 0074/0077/0078/0079, Monitor mode and zero CMS instances. Only secret names were inspected; no values or customer content were collected. Gateway migrations 0075/0076 remain inactive. `pnpm test:onboarding-welcome` and `pnpm test:profile` passed immediately before this reconciliation. The final ten-page DOCX was rendered with the bundled document runtime and every page visually inspected; table corrections were re-rendered and unchanged pages compared byte-for-byte. No Worker, schema, account or billing behavior changed in this documentation increment. The overall MVP checklist remains open.
