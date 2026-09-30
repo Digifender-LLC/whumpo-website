@@ -63,6 +63,37 @@ try{
  await assert.rejects(captureCMSArticleImages(db,a.user,a.project,[{...image,asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}}],imageEnv),e=>e.status===409);assert.equal(imageReads,1);
  changed=true;await assert.rejects(captureCMSArticleImages(db,a.user,a.project,[image],imageEnv),e=>e.status===409);assert.equal(imageReads,2);
  console.log('Article image capture passed: confirmed owner/project receipt, exact native-byte hash, dimensions, deduplicated reads and changed/missing media refusal.');
+ // Source-derived image mapping uses retained WXR and confirmed native bytes, without a draft write.
+ const {prepareWordPressMediaCandidate}=await module('src/cms-wordpress-mapped-media.ts');
+ const {uploadCMSWordPressSource,cmsWordPressSourceKey}=await module('src/cms-wordpress-sources.ts');
+ const sourceHTML='<!-- wp:paragraph --><p>A <strong>local</strong> story.</p><!-- /wp:paragraph --><!-- wp:image {"id":2} --><figure class="wp-block-image"><img src="https://old.example/image.jpg" alt="Bread"/><figcaption>Fresh bread</figcaption></figure><!-- /wp:image -->';
+ const wxr=html=>new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><wp:wxr_version>1.2</wp:wxr_version><item><title>Story</title><wp:post_id>1</wp:post_id><wp:post_type>post</wp:post_type><wp:status>draft</wp:status><content:encoded><![CDATA[${html}]]></content:encoded></item><item><title>Photo</title><wp:post_id>2</wp:post_id><wp:post_type>attachment</wp:post_type><wp:attachment_url>https://old.example/image.jpg</wp:attachment_url></item></channel></rss>`);
+ const sourceBytes=wxr(sourceHTML),source=await uploadCMSWordPressSource(db,proxy.env.FILES,a.user,a.project,id(),'images.xml',sourceBytes,env),binding='CMS_'+a.project.replaceAll('-','');
+ const mappedEnv={...env,[binding]:{fetch:request=>{assert.equal(request.method,'GET');return new URL(request.url).pathname.endsWith('/preview')?imageEnv[binding].fetch(request):env[binding].fetch(request);}}};
+ const choice=[{position:0,mediaId:image.asset._ref}],map=(input=choice,owner=a.user,project=a.project,sourceId=source.id)=>prepareWordPressMediaCandidate(db,proxy.env.FILES,owner,project,sourceId,1,input,mappedEnv);
+ changed=false;const writesBeforeMapping=writes,mapped=await map();
+ assert.equal(mapped.sourceDigest,source.digest);assert.equal(mapped.imported,false);assert.equal(mapped.published,false);assert.equal(mapped.reviewRequired,true);
+ assert.equal(mapped.body.data.content[1].asset._ref,image.asset._ref);assert.equal(mapped.body.data.content[1].alt,'Bread');assert.equal(mapped.body.data.content[1].caption,'Fresh bread');
+ assert.ok(!JSON.stringify(mapped.body).includes('old.example'));assert.deepEqual(mapped.mediaPlan,[{position:0,blockKey:'wp-image-0',sourceAttachmentId:2,sourceURL:'https://old.example/image.jpg',attachmentURL:'https://old.example/image.jpg',...manifestMetadata(captured[0])}]);
+ function manifestMetadata({bytes,...metadata}){return metadata;}
+ assert.deepEqual(await map(),mapped,'The converted body and evidence must be deterministic');
+ const mutable=[{...choice[0]}],inFlight=map(mutable);mutable[0].mediaId='01ARZ3NDEKTSV4RRFFQ69G5FAA';assert.deepEqual(await inFlight,mapped,'Copy caller choices before asynchronous work');
+ for(const invalid of [[],null,[{...choice[0],url:'https://evil.test'}],[choice[0],choice[0]],[{...choice[0],position:1}],[{...choice[0],mediaId:'bad'}]])await assert.rejects(map(invalid),e=>e.status===400);
+ await assert.rejects(map(choice,id()),e=>e.status===404);await assert.rejects(map(choice,a.user,id()),e=>e.status===404);
+ await assert.rejects(map([{position:0,mediaId:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}]),e=>e.status===409);
+ changed=true;await assert.rejects(map(),e=>e.status===409);changed=false;
+ capable=false;await assert.rejects(map(),e=>e.status===409);capable=true;
+ const unsupported=await uploadCMSWordPressSource(db,proxy.env.FILES,a.user,a.project,id(),'unsupported.xml',wxr(sourceHTML+'<script>bad()</script>'),env);
+ await assert.rejects(map(choice,a.user,a.project,unsupported.id),e=>e.status===409);
+ const repeated=await uploadCMSWordPressSource(db,proxy.env.FILES,a.user,a.project,id(),'repeated.xml',wxr(sourceHTML+sourceHTML),env);
+ const beforeRepeatedReads=imageReads,repeatedMap=await map([{position:1,mediaId:image.asset._ref},{position:0,mediaId:image.asset._ref}],a.user,a.project,repeated.id);
+ assert.equal(imageReads,beforeRepeatedReads+1,'Repeated image occurrences verify the native bytes once');assert.deepEqual(repeatedMap.mediaPlan.map(row=>row.blockKey),['wp-image-0','wp-image-1']);assert.equal(new Set(repeatedMap.body.data.content.map(block=>block._key)).size,4);
+ const oversized=await uploadCMSWordPressSource(db,proxy.env.FILES,a.user,a.project,id(),'oversized.xml',wxr('<!-- wp:paragraph --><p>'+'x'.repeat(4200)+'</p><!-- /wp:paragraph -->'+sourceHTML),env);
+ await assert.rejects(map(choice,a.user,a.project,oversized.id),e=>e.status===409);
+ const sourceKey=cmsWordPressSourceKey({project_id:a.project,id:source.id,digest:source.digest}),corrupt=sourceBytes.slice();corrupt[corrupt.length-1]^=1;await proxy.env.FILES.put(sourceKey,corrupt);
+ await assert.rejects(map(),e=>e.status===503);await proxy.env.FILES.put(sourceKey,sourceBytes);
+ assert.equal(writes,writesBeforeMapping);assert.equal((await db.prepare('SELECT count(*) n FROM cms_import_reviews').first()).n,0);assert.equal((await db.prepare('SELECT count(*) n FROM cms_draft_requests').first()).n,0);
+ console.log('WordPress local image preparation passed: retained source, deterministic conversion, immutable caller choices, exact owner media, corruption/capability refusal and no review, draft or native write.');
  const {freezeCMSPublicationMedia,publicCMSPublicationImage,cmsPublicationMediaKey}=await module('src/cms-publication-media.ts');
  const {cmsDraftBody}=await module('src/cms-content-shape.ts');
  const draft=id(),review=id(),snapshot={item:{data:{title:'Frozen images',content:[image]}}},manifest=captured.map(({bytes,...rest})=>rest);
