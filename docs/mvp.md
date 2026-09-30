@@ -277,3 +277,7 @@ Deployed history access to test platform `a0334042-8699-4505-b4d4-ae68b96573e9`.
 ## AI Gateway network adapter — September 29, 2026
 
 The server now has an OpenAI-compatible Cloudflare gateway adapter for explicit Chat Completions or Responses requests, including per-request privacy, retry and provider-credential controls. It passes local protocol/error/usage checks and preserves the Muse-only live policy. A subsequent server-only service connects existing reservations to one claimed dispatch and recoverable saved-answer settlement. Neither service is wired into live Chat or provisioned for customers; reviewed model/rate configuration, funded admission, provider invoice reconciliation and live acceptance remain open. Header-only provider evidence and a private unresolved-attempt report are now implemented and tested locally. See [AI Gateway transport](ai-gateway-transport.md).
+
+## WordPress excerpt mapping — September 30, 2026
+
+Native post excerpt mapping is implemented locally with an explicit capability gate, immutable review, bounded conversion and escaped preview/publication rendering. Actual built EmDash preserves excerpts during later edits. No customer artifact has been deployed for this change. Categories/tags remain private migration provenance; whole-site migration and first live CMS acceptance remain open. See [EmDash details](emdash.md#native-post-excerpts--september-30-2026).

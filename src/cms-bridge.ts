@@ -50,7 +50,7 @@ export function cmsRequestAllowed(method:string,path:string,body:string){
  const publish=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)\/(?:publish|unpublish|discard-draft)$/);
  if(method==='POST'&&publish&&cmsItemId.test(publish[2])){try{const v=JSON.parse(body);return Object.keys(v).length===1&&typeof v._rev==='string'&&/^[A-Za-z0-9+/=_-]{4,256}$/.test(v._rev);}catch{return false;}}
  if(method==='PUT'&&item&&cmsItemId.test(item[2]))return validCMSEdit(body);
- if(method==='POST'&&/^\/_emdash\/api\/content\/(posts|pages)$/.test(path))return validCMSDraft(body);
+ if(method==='POST'&&/^\/_emdash\/api\/content\/(posts|pages)$/.test(path)){if(!validCMSDraft(body))return false;return path.endsWith('/posts')||JSON.parse(body).data.excerpt===undefined;}
  if(method!=='POST'||path!=='/_emdash/api/setup')return false;
  try{const value=JSON.parse(body);return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(k=>['title','tagline','includeContent'].includes(k))&&typeof value.title==='string'&&value.title.trim().length>0&&value.title.length<=100&&(value.tagline===undefined||typeof value.tagline==='string'&&value.tagline.length<=200)&&value.includeContent===false;}catch{return false;}
 }

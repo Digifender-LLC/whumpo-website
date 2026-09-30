@@ -3,7 +3,7 @@ export const cmsCapabilitiesPath='/_emdash/api/whumpo/capabilities';
 export const cmsCapabilities={
  contract:'whumpo-cms-capabilities',version:1,
  media:{uploadVersion:1,uploadMaxBytes:1048576,uploadMimeType:'image/jpeg',metadataVersion:1,pageSize:20,previewVersion:1,previewMaxBytes:5242880},
- structuredContent:{imageVersion:1,version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true},
+ structuredContent:{excerptVersion:1,excerptMaxChars:512,excerptCollections:['posts'],imageVersion:1,version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true},
 } as const;
 export function supportsStructuredCMS(value:unknown):boolean{
  if(!value||typeof value!=='object')return false;
@@ -18,3 +18,5 @@ export function supportsCMSUpload(value:unknown):boolean{
 }
 
 export function supportsCMSImages(value:unknown):boolean{return supportsStructuredCMS(value)&&supportsCMSUpload(value)&&(value as {structuredContent:{imageVersion?:unknown}}).structuredContent.imageVersion===1;}
+
+export function supportsCMSExcerpts(value:unknown):boolean{const s=(value as {structuredContent?:Record<string,unknown>}|null)?.structuredContent;return supportsStructuredCMS(value)&&s?.excerptVersion===1&&s.excerptMaxChars===512&&Array.isArray(s.excerptCollections)&&s.excerptCollections.length===1&&s.excerptCollections[0]==='posts';}
