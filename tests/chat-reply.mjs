@@ -1,0 +1,12 @@
+Error.stackTraceLimit=0;
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const {outputFiles}=await build({stdin:{resolveDir:process.cwd(),contents:"export {ChatReply} from './frontend/src/chat-reply';export {renderToStaticMarkup} from 'react-dom/server';export {createElement} from 'react';"},banner:{js:"import {createRequire as moduleRequire} from 'node:module';const require=moduleRequire(process.cwd()+'/package.json');"},bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic'});
+const {ChatReply,renderToStaticMarkup,createElement}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const path='/workspace/cms?project=11111111-1111-4111-8111-111111111111',render=text=>renderToStaticMarkup(createElement(ChatReply,{text}));
+const html=render('First upload\n'+path+'\nSecond upload\n'+path+'\nDone');
+assert.equal((html.match(/<a /g)||[]).length,2);assert.ok(html.includes('href="'+path+'"'));assert.ok(html.includes('Open publishing desk'));assert.ok(html.includes('min-h-11'));assert.ok(html.includes('Second upload'));
+for(const text of [path+'&confirm=true',path+'/extra','https://evil.test'+path,'/api/delete',path.replace('11111111','bad'),'<img src=x onerror=alert(1)>','javascript:alert(1)','[Confirm]('+path+')'])assert.ok(!render(text).includes('<a '));
+assert.ok(render('<script>alert(1)</script>').includes('&lt;script&gt;'));
+assert.equal(render('Ordinary response'), 'Ordinary response');
+console.log('Chat reply passed: fixed internal project links, multiple links, touch target, plain text preservation and escaping; arbitrary URLs, action paths and suffixes remain text.');

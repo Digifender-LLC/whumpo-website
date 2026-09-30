@@ -15,6 +15,7 @@ function provider(a){let tag=null,version=null,initialized=false,setupId=null;co
  else if(verified.path==='/_emdash/api/auth/me')data={email:p.owner+'@owners.whumpo.invalid',role:50};
  else if(verified.path==='/_emdash/api/schema/collections')data={items:p.missingPages?[{slug:'posts'}]:[{slug:'posts'},{slug:'pages'}]};
  else throw Error('unexpected path');return Response.json({success:true,data});}}};return p;}
+const {pendingCMSWork}=await module('src/cms-pending.ts');
 const {uploadCMSWordPressSource,captureCMSWordPressSource,listCMSWordPressSources,downloadCMSWordPressSource,cmsWordPressSourceKey}=await module('src/cms-wordpress-sources.ts');
 try{
  const a=await fixture(),p=provider(a);await deployCMS(db,a.project,digest,a.config,p);await connectCMS(db,a.project,id());
@@ -22,7 +23,9 @@ try{
  const storage={get:async(...args)=>{reads++;return files.get(...args);},put:async(...args)=>{puts++;const result=await files.put(...args);if(drop){drop=false;throw Error('Lost R2 put acknowledgement');}return result;}};
  await assert.rejects(uploadCMSWordPressSource(db,storage,a.user,a.project,request,'export.xml',bytes,env),e=>e.status===503);assert.equal(puts,1);
  const listing=await listCMSWordPressSources(db,a.user,a.project,env);assert.equal(listing[0].state,'pending');assert.ok(!JSON.stringify(listing).includes('Private source'));
+ const unfinished=await pendingCMSWork(db,a.user,a.project);assert.equal(unfinished.rows.filter(r=>r.kind==='source-upload'&&r.id===request).length,1);assert.equal(puts,1);
  const saved=await uploadCMSWordPressSource(db,storage,a.user,a.project,request,'export.xml',bytes,env);assert.equal(saved.state,'ready');assert.equal(puts,1);
+ assert.ok(!(await pendingCMSWork(db,a.user,a.project)).rows.some(r=>r.id===request));
  assert.deepEqual(await uploadCMSWordPressSource(db,storage,a.user,a.project,id(),'renamed.xml',bytes,env),saved);assert.equal(puts,1);
  assert.deepEqual((await captureCMSWordPressSource(db,storage,a.user,request)).bytes,bytes);
  const downloaded=await downloadCMSWordPressSource(db,storage,a.user,request);assert.equal(downloaded.headers.get('content-type'),'application/octet-stream');assert.equal(downloaded.headers.get('cache-control'),'private, no-store');assert.match(downloaded.headers.get('content-disposition'),/^attachment;/);assert.deepEqual(new Uint8Array(await downloaded.arrayBuffer()),bytes);

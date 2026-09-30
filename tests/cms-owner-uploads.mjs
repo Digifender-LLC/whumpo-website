@@ -15,6 +15,7 @@ function provider(a){let tag=null,version=null,initialized=false,setupId=null;co
  else if(verified.path==='/_emdash/api/schema/collections')data={items:p.missingPages?[{slug:'posts'}]:[{slug:'posts'},{slug:'pages'}]};
  else throw Error('unexpected path');return Response.json({success:true,data});}}};return p;}
 const {cmsGateway}=await module('src/cms-gateway.ts');
+const {pendingCMSWork,describePendingCMS}=await module('src/cms-pending.ts');
 const {uploadCMSMedia,readCMSUploads}=await module('src/cms-media-uploads.ts'),{cleanPhoto}=await module('src/files.ts');
 try{
  const a=await fixture(),p=provider(a);await deployCMS(db,a.project,digest,a.config,p);await connectCMS(db,a.project,id());
@@ -33,7 +34,9 @@ try{
  capable=false;await assert.rejects(upload(),e=>e.status===409);assert.equal(await count(),0);assert.equal(writes,0);
  capable=true;const first=id();drop=true;await assert.rejects(upload(first),e=>e.status===503);assert.equal(writes,1);assert.equal(await count(),1);assert.equal(await ops(),2);
  assert.equal((await readCMSUploads(db,a.user,a.project,env)).uploads[0].status,'unresolved');
+ const unfinished=await pendingCMSWork(db,a.user,a.project);assert.equal(unfinished.rows.filter(r=>r.kind==='image-upload'&&r.id===first).length,1);assert.ok(describePendingCMS(unfinished).includes('/workspace/cms?project='+a.project));assert.equal(writes,1);
  const saved=await upload(first);assert.equal(saved.status,'saved');assert.equal(writes,1);assert.equal(await ops(),2);assert.ok(!JSON.stringify(saved).includes('PRIVATE_'));
+ assert.ok(!(await pendingCMSWork(db,a.user,a.project)).rows.some(r=>r.id===first));
  capable=false;assert.deepEqual(await upload(first),saved);capable=true;
  await assert.rejects(upload(first,'other.jpg'),e=>e.status===409);
  await assert.rejects(uploadCMSMedia(db,id(),a.project,id(),bytes,'studio.jpg',env),e=>e.status===404);
@@ -117,7 +120,7 @@ try{
   const verified=await verifyCMSRequest(request,a.config);
   if(verified.path.endsWith('/capabilities')&&!imageCapability)return Response.json({success:true,data:{...cmsCapabilities,structuredContent:{...cmsCapabilities.structuredContent,imageVersion:undefined}}});
   if(verified.path.endsWith('/preview'))return new Response(photo.bytes,{headers:{'content-type':'image/jpeg'}});
-  return cmsGateway(request,nativeEnv,async request=>{if(request.method!=='GET'){const body=await request.json();if(request.method==='PUT'&&body._rev!==imageRevision)return Response.json({error:'stale'},{status:409});imageWrites++;imageRevision='image-rev'+(imageWrites+1);imageArticle={id:'01ARZ3NDEKTSV4RRFFQ69G5FAB',status:'draft',data:body.data};}return Response.json({success:true,data:{item:imageArticle,_rev:imageRevision}});});
+  return cmsGateway(request,nativeEnv,async request=>{if(request.method!=='GET'){const body=await request.json();if(request.method==='PUT'&&body._rev!==imageRevision)return Response.json({error:'stale'},{status:409});imageWrites++;imageRevision='image-rev'+(imageWrites+1);imageArticle={id:'01ARZ3NDEKTSV4RRFFQ69G5FAB',status:'draft',version:1,slug:body.slug??imageArticle?.slug,data:body.data};}return Response.json({success:true,data:{item:imageArticle,_rev:imageRevision}});});
  }}};
  const imageContent=article.data.content,imageDraft=id();imageCapability=false;
  await assert.rejects(createCMSDraft(db,a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured'),e=>e.status===409);assert.equal(await db.prepare('SELECT id FROM cms_draft_requests WHERE id=?').bind(imageDraft).first(),null);
