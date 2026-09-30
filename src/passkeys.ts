@@ -1,4 +1,4 @@
-import {acceptsCustomerEligibility,customerEligibilityMessage} from './content-policy';
+import {acceptsCustomerEligibility,customerEligibilityMessage,customerEligibilityStatement} from './content-policy';
 import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse, type AuthenticationResponseJSON, type RegistrationResponseJSON } from '@simplewebauthn/server';
 import { hashToken, newSessionToken } from './security';
 
@@ -107,6 +107,7 @@ export async function passkeyVerify(request: Request, env: Env, kind: Challenge[
   statements.push(env.DB.prepare(`INSERT INTO passkeys (id, user_id, public_key, counter, name, created_at) SELECT ?, id, ?, ?, ?, ? FROM users WHERE id = ?${sessionGuard}`)
     .bind(credential.id, base64(credential.publicKey), credential.counter, name, now, user.id, ...(kind === 'add' ? [session ? await hashToken(session) : '', now, new Date(Date.now() - 600000).toISOString()] : [])));
   statements.push(env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, user_id, 'passkey.added', 'Passkey added', ? FROM passkeys WHERE id = ? AND user_id = ?").bind(crypto.randomUUID(), now, credential.id, user.id));
+  if (kind === 'signup' && acceptsCustomerEligibility(data)) statements.push(customerEligibilityStatement(env.DB,user.id,'passkey'));
   try {
     const result = await env.DB.batch(statements);
     if (result[kind === 'signup' ? 3 : 0].meta.changes !== 1) throw new AuthError(kind === 'add' ? 401 : 403, kind === 'add' ? 'Session changed. Sign in again before adding a passkey.' : 'Invitation expired or was already used. Please start again.');

@@ -1,5 +1,5 @@
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
-import {acceptsCustomerEligibility,customerEligibilityMessage} from './content-policy';
+import {acceptsCustomerEligibility,customerEligibilityMessage,customerEligibilityStatement} from './content-policy';
 import {eraseRevokedVisitor} from './app-owner-erasure';
 import {chatHistory} from './chat-history';
 import {readOnboarding,saveOnboarding,completeOnboarding,onboardingComplete} from './onboarding';
@@ -203,6 +203,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
         : env.DB.prepare("INSERT INTO users (id, email, password_salt, password_hash, created_at) SELECT ?, ?, ?, ?, ? FROM invitations WHERE code_hash = ? AND used_by IS NULL AND expires_at > ?").bind(user.id, user.email, passwordInfo.salt, passwordInfo.hash, now, inviteHash, now);
       const result = await env.DB.batch([
         insert,
+        ...(acceptsCustomerEligibility(data) ? [customerEligibilityStatement(env.DB,user.id,'password')] : []),
         env.DB.prepare("UPDATE invitations SET used_by = ? WHERE code_hash = ? AND used_by IS NULL AND EXISTS (SELECT 1 FROM users WHERE id = ?)").bind(user.id, inviteHash, user.id),
         env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, id, 'user.created', 'Account created', ? FROM users WHERE id = ?").bind(crypto.randomUUID(), now, user.id)
       ]);
