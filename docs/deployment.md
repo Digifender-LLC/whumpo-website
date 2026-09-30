@@ -459,3 +459,9 @@ Migration 0101 was applied and independently read back at 17:08 UTC: 101 migrati
 Migration 0102 was applied and read back at 17:11 UTC: 102 applied, none pending, three ticket guards, the one-reserved-attempt index and both expiry-gated safety-reset triggers verified. Zero tickets exist in the test environment. The platform version is unchanged; the internal module still has no runtime dispatcher/provider caller. Evidence: `.secrets/photo-scan-retries-migration.json`.
 
 `pnpm check`, `node tests/photo-scan-results.mjs` and `python3 tests/photo-scan-migration.py` passed. Synthetic tests cover concurrent retries, expired profile/project approvals, inconclusive/expired attempts, lost acknowledgements and preservation of existing ledger rows through the schema upgrade. No customer photo was scanned or released, and no external service was activated.
+
+## Persistent screening requirements — September 30, 2026
+
+Migration 0103 was applied and read back at 17:25 UTC: 103 applied, none pending, three screening guards verified and zero decision records. Platform remains `a2e9dcb3-60ad-4a52-9547-eff3d749bd1a`; no Worker deployment was needed for the currently unconnected module. Evidence: `.secrets/content-screening-migration.json`.
+
+Both TypeScript checks, content-risk/sampling tests and disposable-D1 screening-decision tests passed. No customer content was processed, provider activated or restriction changed. Trusted history, detection/dispatch, receipt completion and atomic action authorization remain required before live integration; see [persisted requirements](content-safety.md#persisted-screening-requirements--source-foundation-inactive).
