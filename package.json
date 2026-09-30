@@ -115,6 +115,7 @@
     "test:agent-prompt-focus": "node tests/agent-prompt-focus.mjs",
     "test:agent-inspection": "node tests/agent-inspection.mjs",
     "test:welcome-ai-live": "node tests/welcome-ai-live.mjs",
+    "test:welcome-first-draft": "node tests/welcome-first-draft.mjs",
     "test:onboarding-welcome": "node tests/onboarding-welcome.mjs",
     "test:backend-library": "node tests/backend-library.mjs",
     "test:backend-diff": "node tests/backend-diff.mjs",

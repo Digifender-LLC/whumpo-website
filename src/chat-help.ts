@@ -6,6 +6,7 @@ const guides:Record<string,string>={
 Tell me what you want to put online, or describe a change to an existing site. /ask YOUR_QUESTION asks the agent a question.
 
 Start: /new begins a project; /skip skips optional brief questions; /brief shows your preferences; /cancel exits setup.
+After welcome: Build my first draft in Chat uses your saved brief and AI allowance for a private website draft. /first-draft PROJECT_ID is the same action for your original welcome project. It requires connected AI and disappears once that first draft exists. Nothing is published or purchased.
 Find: /projects lists services; /project PROJECT_ID shows details; /versions lists saved versions; /inspect VERSION_ID shows saved content.
 Build: /build creates a private preview from a reusable layout. /build clay or /build forest changes its theme. AI edits use ordinary language or /edit YOUR_REQUEST.
 Review: /diff VERSION_ID compares with the live version; add BASELINE_ID to compare two saved versions.

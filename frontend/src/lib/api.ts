@@ -9,5 +9,5 @@ export type Layout={widgets:string[];tabs:{id:string;label:string;projectId:stri
 export type Traffic={enabledAt:string|null;days:number;rows:{project_id:string;day:string;requests:number}[];metric:string};
 export type Dashboard={traffic?:Traffic;revision:number;layout:Layout;projects:Project[];measuredAt:string;billing:{plan:{id:string;name:string};quota:{allowance:number;available:number;spent:number;reserved:number}};activity:{id:string;project_id:string;summary:string;created_at:string}[];storage:{project_id:string;bytes:number}[];capacity:{preferences:{revision:number;preferred_plan:string;billing_interval:string;draft_overage_cents:number}}};
 export type Turn={id:string;user_text:string;assistant_text:string;status:string;[key:string]:unknown};
-export type Chat={greeting:string;state:{revision:number;brief_stage?:string};turns:Turn[];stats:{projects:number;live:number;cms_articles?:number};mode:string;usage:{available:number;reserved:number}};
+export type Chat={firstDraft?:{id:string;name:string;purpose:string;preferred_theme:string}|null;greeting:string;state:{revision:number;brief_stage?:string};turns:Turn[];stats:{projects:number;live:number;cms_articles?:number};mode:string;usage:{available:number;reserved:number}};
 export const message=(error:unknown)=>error instanceof Error?error.message:'This request could not finish.';

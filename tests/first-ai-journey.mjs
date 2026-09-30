@@ -25,7 +25,7 @@ try{
    return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Proposed draft',action})}]}],usage:{input_tokens:2400,output_tokens:step===0?1900:600}});
   };
   const result=await sendAIChat(db,user,id,state.revision,content,{baseURL:'https://provider.test/v1',apiKey:'synthetic',model:'fixture',protocol:'responses'},transport);
-  assert.equal(result.status,200,JSON.stringify(result));
+  assert.equal(result.status,200,`Step ${step}: ${JSON.stringify(result)}`);
   const row=await db.prepare('SELECT config_json,base_version_id FROM site_versions WHERE id=?').bind(id).first();assert.ok(row);
   if(step)Object.assign(expected,changes);assert.deepEqual(JSON.parse(row.config_json),expected);assert.equal(row.base_version_id,base??null);
   assert.equal((await readChat(db,user)).turns.at(-1).status,'completed');

@@ -1,4 +1,5 @@
 import {cmsWordPressLinks} from './cms-wordpress-chat';
+import {firstDraftProjectId,welcomeDraftProject} from './first-draft';
 import {visitorAccessCommand} from './visitor-navigation';
 import {cmsExportLinks} from './cms-export';
 import {workspaceNavigation,workspaceNavigationHelp} from './workspace-navigation';
@@ -65,7 +66,8 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   const cmsRemovals=await cmsUnpublishLinks(db,userId);
   for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsRemovals.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_unpublish_confirmation_id=r.id;turn.cms_unpublish_recovery=r.status==='approved';}}
   const billing = await getBilling(db, userId);
-  return { mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : aiEnabled ? greeting + ' After we save your brief, we can discuss your website with AI. Use /ask followed by a question at any time.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };
+  const firstDraft=await welcomeDraftProject(db,userId);
+  return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : aiEnabled ? greeting + ' After we save your brief, we can discuss your website with AI. Use /ask followed by a question at any time.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };
 }
 
 export async function sendChat(db: D1Database, userId: string, input: Record<string, unknown>, ai?: AIConfig, dnsOptions?: DNSChatOptions) {
@@ -97,6 +99,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
   const navigation=workspaceNavigation(content);
   const help=chatHelp(command,!!ai);
+  if(/^\/first-draft(?:\s|$)/.test(command)){
+    if(!firstDraftProjectId(content))return {status:400,error:'Choose your saved first project from Chat.'};
+    if(!ai)return {status:503,error:'AI drafting is not connected. You can still create a free starter preview from Chat.'};
+    return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
+  }
   const known = ['/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && !help && !navigation && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
