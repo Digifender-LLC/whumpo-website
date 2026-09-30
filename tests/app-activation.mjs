@@ -8,7 +8,7 @@ const {saveBackend,testBackend}=await module('src/backend-versions.ts');
 const {prepareApplication:prepare,confirmApplication:confirm,readApplication:read,readApplicationReview:review}=await module('src/app-activation.ts');
 const {issueAppSession,readAppData}=await module('src/app-data.ts');
 const {backendAction}=await module('src/backend-chat.ts');
-const dir=await mkdtemp('/tmp/townhello-activation-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/townhello-activation-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const id=()=>crypto.randomUUID(),stamp=()=>new Date().toISOString();
 async function fixture(){const user=id(),project=id();await db.prepare("INSERT INTO users VALUES(?,?,'00','test',?)").bind(user,user+'@example.test',stamp()).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Fixture','','draft',?,?)").bind(project,user,stamp(),stamp()).run();return {user,project};}

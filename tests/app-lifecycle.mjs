@@ -6,7 +6,7 @@ import {authenticator} from './app-authenticator.mjs';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const life=await module('src/app-lifecycle.ts'),data=await module('src/app-data.ts'),auth=await module('src/app-auth.ts'),pages=await module('src/app-pages.ts');
 const {saveBackend,testBackend}=await module('src/backend-versions.ts'),{prepareApplication,confirmApplication}=await module('src/app-activation.ts'),{applicationGateway}=await module('src/app-gateway.ts'),{hashToken}=await module('src/security.ts');
-const dir=await mkdtemp('/tmp/townhello-app-lifecycle-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/townhello-app-lifecycle-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 const service={fetch:async(_url,init)=>{const {input}=JSON.parse(init.body);return Response.json({ok:true,value:{state:input.input,result:'saved'}});}};

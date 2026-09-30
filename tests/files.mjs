@@ -5,7 +5,7 @@ import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {cleanPhoto,uploadPhoto,readPhoto,listPhotos,cleanupPhotos}=await module('src/files.ts');const {getBilling}=await module('src/billing.ts');const worker=(await module('src/index.ts')).default;
-const dir=await mkdtemp('/tmp/tellumo-files-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/tellumo-files-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 execFileSync('python3',['-c',"from PIL import Image; import sys; im=Image.new('RGB',(32,24),(80,120,60)); im.save(sys.argv[1]+'/fixture.jpg'); im.save(sys.argv[1]+'/progressive.jpg',progressive=True); Image.new('RGB',(1601,1)).save(sys.argv[1]+'/oversized.jpg')",dir]);
 const jpeg=new Uint8Array(await readFile(dir+'/fixture.jpg'));
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,env=proxy.env;

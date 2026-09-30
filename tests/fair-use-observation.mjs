@@ -7,7 +7,7 @@ const bundle=await build({stdin:{contents:"export * from './src/fair-use-observa
 const {noteSourceExport,readFairUseObservation,cleanupFairUseObservations,fairUseReport}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const dir=await mkdtemp('/tmp/whumpo-fair-use-');let proxy;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+ execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
  proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
  const owner=crypto.randomUUID(),other=crypto.randomUUID(),created=new Date(Date.now()-60000).toISOString();
  for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'test','test',?)").bind(user,user+'@example.test',created).run();

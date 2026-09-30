@@ -22,7 +22,7 @@ tabs=[];assert.equal((await resolve({view:'page',label:'Publishing desk'},load))
 tabs=[{id:'tab-one',label:'Desk'},{id:'tab-two',label:'desk'}];assert.equal((await resolve({view:'page',label:'Desk'},load)).view,undefined);
 await assert.rejects(resolve({view:'pages'},async()=>{throw Error('Lookup unavailable');}));
 const {sendChat,chatState}=await module('src/chat.ts'),{saveLayout}=await module('src/workspace-dashboard.ts');
-const dir=await mkdtemp('/tmp/townhello-navigation-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
+const dir=await mkdtemp('/tmp/townhello-navigation-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 try{const user=crypto.randomUUID(),other=crypto.randomUUID();for(const id of [user,other]){await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(id,id+'@example.test',new Date().toISOString()).run();await chatState(db,id);}
  await saveLayout(db,other,0,{widgets:['projects'],tabs:[{id:'tab-private-desk',label:'Other visitor secret page',projectId:null,widgets:['activity']}]});
  await db.prepare("UPDATE workspace_state SET step='name',idea='Keep this onboarding idea' WHERE user_id=?").bind(user).run();

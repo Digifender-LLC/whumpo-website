@@ -4,7 +4,7 @@ const {prepareBackendForm:prepare,confirmBackendForm:confirm,readBackendForm:rea
 const {backendFormConfig,backendFormScript,backendFormScriptPolicy}=await module('src/backend-form-render.ts');
 const {sendChat,readChat}=await module('src/chat.ts'),{backendAction,backendChatCommand}=await module('src/backend-chat.ts'),{saveBackend,testBackend}=await module('src/backend-versions.ts'),{prepareBackendPublication,confirmBackendPublication}=await module('src/backend-publication.ts');
 const {checkHealth,listHealth}=await module('src/site-health.ts'),host=(await module('src/site-host.ts')).default;
-const dir=await mkdtemp('/tmp/townhello-forms-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
+const dir=await mkdtemp('/tmp/townhello-forms-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();let calls=0;
 const service={fetch:async(_url,init)=>{calls++;const data=JSON.parse(init.body);return Response.json({ok:true,value:data.input});}};
 const config={title:'Estimate your order',description:'Try a quantity and price.',buttonLabel:'Calculate',fields:[{key:'quantity',label:'Quantity',type:'number'},{key:'price',label:'Unit price',type:'number'}]};

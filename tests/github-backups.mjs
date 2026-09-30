@@ -9,7 +9,7 @@ async function module(path){const b=await build({entryPoints:[path],bundle:true,
 const {reviewBackup,confirmBackup,listBackups,githubRepositories}=await module('src/github-backups.ts');
 const worker=(await module('src/index.ts')).default,{hashToken}=await module('src/security.ts');
 const {sendChat,readChat}=await module('src/chat.ts'),{ownedExport}=await module('src/exports.ts'),{seal}=await module('src/connection-vault.ts');
-const dir=await mkdtemp('/tmp/tellumo-backups-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/tellumo-backups-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'test',key:'ab'.repeat(32)},now=new Date().toISOString();
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',now).run();return id;}

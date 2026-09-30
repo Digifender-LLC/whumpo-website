@@ -10,7 +10,7 @@ async function module(path){const b=await build({entryPoints:[path],bundle:true,
 const {readProfile,updateProfile,agentProfile,updateProfilePhoto,profilePhoto}=await module('src/profile.ts');
 const worker=(await module('src/index.ts')).default;
 const {hashToken,hashPassword,verifyPassword}=await module('src/security.ts');
-const dir=await mkdtemp('/tmp/townhello-profile-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/townhello-profile-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(128,128),(90,125,95)).save(sys.argv[1]+'/avatar.jpg'); Image.new('RGB',(300,300)).save(sys.argv[1]+'/large.jpg')",dir]);
 const jpeg=await readFile(dir+'/avatar.jpg');
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;

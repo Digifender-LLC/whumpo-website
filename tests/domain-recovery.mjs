@@ -5,7 +5,7 @@ import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {inspectRecovery,applyRecovery}=await module('src/domain-recovery.ts'),{reviewHosting,refreshHosting,disconnectHosting}=await module('src/domain-hosting.ts');
-const dir=await mkdtemp('/tmp/tellumo-recovery-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/tellumo-recovery-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,config={token:'synthetic-token',zone:'a'.repeat(32),target:'hosting.whumpo.site'};
 const operator='test-operator',evidence='Controlled provider audit fixture establishes the request identity.';
 async function fixture(){const user=crypto.randomUUID(),project=crypto.randomUUID(),claim=crypto.randomUUID(),id=crypto.randomUUID(),now=new Date().toISOString(),name='host-'+id+'.example.com';

@@ -5,7 +5,7 @@ import {build} from 'esbuild';
 import wrangler from 'wrangler';
 const code=await build({entryPoints:['src/backend-versions.ts'],bundle:true,format:'esm',platform:'node',write:false});
 const {saveBackend,listBackends,testBackend,callBackend}=await import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/townhello-backends-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/townhello-backends-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const id=()=>crypto.randomUUID();const now=()=>new Date().toISOString();
 async function account(){const user=id(),project=id();await db.prepare("INSERT INTO users VALUES(?,?, '00','fixture',?)").bind(user,user+'@example.com',now()).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Backend fixture','','draft',?,?)").bind(project,user,now(),now()).run();return {user,project};}

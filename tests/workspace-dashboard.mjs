@@ -20,7 +20,7 @@ assert.equal(recommendPlan(periods,'downgrade').recommend,true);
 assert.equal(recommendPlan(periods.map(p=>({...p,candidateCapacityPercent:66})),'downgrade').recommend,false);
 assert.equal(recommendPlan(periods.slice(1),'upgrade').recommend,false);
 assert.equal(recommendPlan(periods.map(p=>({...p,complete:false})),'upgrade').recommend,false);
-const dir=await mkdtemp('/tmp/townhello-dashboard-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/townhello-dashboard-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 try{
  const a=crypto.randomUUID(),b=crypto.randomUUID(),p=crypto.randomUUID();

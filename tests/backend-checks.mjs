@@ -7,7 +7,7 @@ async function module(path){const b=await build({entryPoints:[path],bundle:true,
 const {saveBackend,testBackend,equalBackendJSON}=await module('src/backend-versions.ts'),{backendAction,backendChatCommand}=await module('src/backend-chat.ts'),{compareBackends}=await module('src/backend-diff.ts'),{prepareBackendPublication}=await module('src/backend-publication.ts'),{prepareApplication}=await module('src/app-activation.ts');
 for(const [a,b,equal] of [[{a:1,b:[2,null]},{b:[2,null],a:1},true],[[1,2],[2,1],false],[{},[],false],[1,'1',false],[null,false,false],[{x:null},{},false],[JSON.parse('{"__proto__":1}'),{},false],[JSON.parse('{"__proto__":1}'),JSON.parse('{"__proto__":1}'),true]])assert.equal(equalBackendJSON(a,b),equal);
 assert.equal(equalBackendJSON(JSON.parse('['.repeat(3000)+'0'+']'.repeat(3000)),JSON.parse('['.repeat(3000)+'0'+']'.repeat(3000))),true);
-const dir=await mkdtemp('/tmp/townhello-backend-checks-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/townhello-backend-checks-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID();
 const user=id(),project=id(),version=id();let calls=0;
 const service={fetch:async(url,init)=>{calls++;const payload=JSON.parse(init.body);assert.deepEqual(Object.keys(payload),['version','source','input']);return Response.json({ok:true,value:payload.input});}};
