@@ -23,6 +23,7 @@ try{
  await assert.rejects(analyzeWordPress(new Uint8Array(1048577)),/1 MiB/);
  await assert.rejects(analyzeWordPress(new Uint8Array([255])),/UTF-8/);
  await assert.rejects(analyzeWordPress(encode(wxr('<x>'.repeat(45)+'</x>'.repeat(45)))),/nesting/);
+ const largeSource=await analyzeWordPress(encode(wxr(item(1,'<!--'+'a'.repeat(25000)+'--><p>Short article</p>'))));assert.ok(largeSource.articles[0].reasons.includes('source_provenance_exceeds_review_limit'));assert.equal(largeSource.articles[0].candidate,null);
  const large=await analyzeWordPress(encode(wxr(item(1,'<p>'+'a'.repeat(6000)+'</p>'))));assert.equal(large.articles[0].candidate,null);assert.ok(large.articles[0].reasons.includes('converted_content_outside_supported_article_shape'));
  await writeFile(dir+'/source.xml',xml);const staged=await stageWordPress(dir+'/source.xml',dir+'/stages');assert.equal(await readFile(staged.directory+'/source.xml','utf8'),xml);assert.equal((await stat(staged.directory)).mode&0o777,0o700);assert.equal((await stat(staged.directory+'/review.html')).mode&0o777,0o600);assert.equal((await stat(staged.directory+'/source.xml')).mode&0o777,0o600);assert.equal((await stat(staged.directory+'/report.json')).mode&0o777,0o600);assert.equal(JSON.parse(await readFile(staged.directory+'/report.json','utf8')).source.digest,report.source.digest);
  await writeFile(dir+'/bad.xml','bad');await assert.rejects(stageWordPress(dir+'/bad.xml',dir+'/stages'));assert.equal((await readdir(dir+'/stages')).length,1);assert.equal(fetches,0);
