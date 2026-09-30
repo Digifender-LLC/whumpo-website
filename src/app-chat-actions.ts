@@ -1,3 +1,4 @@
+import {readChatReviewReceipts} from './chat-review-receipts';
 import {backendFormConfig} from './backend-form-render';
 import type {AppPageReviewPresentation} from './app-page-review-shape';
 import type {ApplicationReviewPresentation} from './application-review-shape';
@@ -9,12 +10,14 @@ const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 type Program=Awaited<ReturnType<typeof readApplicationReview>>&{current_revision:number;current_version:string;visitors:number;project_name:string;unexpired:number;current_review:string;active_program:number;has_page:number;has_page_review:number};
 type Page=Awaited<ReturnType<typeof readAppPageReview>>&{current_revision:number;current_program:number;program_enabled:number;project_name:string;unexpired:number;live_review:string|null};
 /** Presentation and buttons require an exact authoritative receipt; only a current pending review grants a button. */
-export async function applicationChatActions(db:D1Database,user:string,turns:Turn[]){
+export async function applicationChatActions(db:D1Database,user:string,turns:Turn[],receipts?:Awaited<ReturnType<typeof readChatReviewReceipts>>){
+ receipts??=await readChatReviewReceipts(db,user,turns);
  for(const turn of turns){delete turn.app_page_live_project_id;delete turn.app_page_review;delete turn.application_page_design_project_id;delete turn.application_review;delete turn.application_confirmation_id;delete turn.application_operation;delete turn.app_page_confirmation_id;delete turn.app_page_operation;}
  for(const kind of ['application','app-page'] as const){
   const candidates=turns.slice(0,100).filter(t=>t.status==='completed'&&typeof t.assistant_text==='string'&&t.assistant_text.startsWith(kind==='application'?'Application review ':'Application page review ')).map(turn=>{
    const read=String(turn.user_text).trim().match(new RegExp('^/'+(kind==='application'?'(?:application-(?:review|build)|confirm-application)':'(?:app-page-review|confirm-app-page)')+'\\s+([0-9a-f-]{36})$','i'));
-   return {turn,id:read?.[1]??String(turn.id)};
+   const saved=receipts!.get(String(turn.id)),linked=saved?.kind===(kind==='application'?'application':'appPage')?saved.review_id:undefined;
+   return {turn,id:linked??read?.[1]??String(turn.id)};
   }).filter(c=>uuid.test(c.id));
   const ids=[...new Set(candidates.map(c=>c.id))];
   for(let offset=0;offset<ids.length;offset+=50){

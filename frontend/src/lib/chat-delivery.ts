@@ -1,4 +1,5 @@
-export type ChatRequest = {id: string; revision: number; content: string};
+import type {ChatControl} from '../../../src/chat-controls';
+export type ChatRequest = {id: string; revision: number; content: string; action?:ChatControl};
 type Transcript = {turns: {id: string; user_text: string}[]};
 
 /** Definitive validation/auth failures should be shown immediately. */

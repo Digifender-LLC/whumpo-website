@@ -49,13 +49,13 @@ export async function reconcileChat(db: D1Database, userId: string) {
   }
 }
 
-export async function sendAIChat(db: D1Database, userId: string, id: string, revision: number, content: string, config: AIConfig, transport: typeof fetch = globalThis.fetch.bind(globalThis), dnsOptions?:DNSChatOptions) {
+export async function sendAIChat(db: D1Database, userId: string, id: string, revision: number, content: string, config: AIConfig, transport: typeof fetch = globalThis.fetch.bind(globalThis), dnsOptions?:DNSChatOptions, internalIntent=false) {
   const previous = await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id = ? AND user_id = ?').bind(id, userId).first<{ user_text: string; revision: number }>();
   if (previous) return previous.user_text === content && previous.revision === revision + 1 ? { status: 200 } : { status: 409, error: 'This message ID was already used for another request' };
-  const pageDesignId=appPageDesignProjectId(content),pageDesign=pageDesignId?await readAppPageDesign(db,userId,pageDesignId):null;
+  const pageDesignId=internalIntent?appPageDesignProjectId(content):undefined,pageDesign=pageDesignId?await readAppPageDesign(db,userId,pageDesignId):null;
   if(pageDesignId&&!pageDesign)return {status:409,error:'Choose an approved application without a live visitor page. Refresh Chat to see its current status.'};
-  const firstApp=!!firstAppProjectId(content);
-  const firstProjectId=firstDraftProjectId(content)??firstAppProjectId(content);
+  const firstApp=internalIntent&&!!firstAppProjectId(content);
+  const firstProjectId=internalIntent?(firstDraftProjectId(content)??firstAppProjectId(content)):undefined;
   const firstProject=firstProjectId?await welcomeDraftProject(db,userId,firstProjectId):null;
   if(firstProjectId&&!firstProject)return {status:409,error:'That first project is no longer waiting for its first build. Refresh Chat to see your saved work.'};
   const context = await siteContext(db,userId);
@@ -79,7 +79,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   appendContext('system',system);
   appendContext('user',pageDesign?appPageDesignData(pageDesign):agentWorkspaceData(context,focus));
   if(!pageDesign)for (const turn of history.reverse()) messages.push({ role: 'user', content: turn.user_text.slice(0, 600) }, { role: 'assistant', content: turn.assistant_text.slice(0, 900) });
-  messages.push({ role: 'user', content: pageDesign?'Design the visitor page for this approved application and prepare my review. Keep it unpublished.':firstProject?`Build the first private ${firstApp?'application, check a synthetic example, and prepare my approval':'website draft'} for project ${firstProject.id} using my saved brief. Keep it private.`:content.startsWith('/ask ') ? content.slice(5) : content.startsWith('/edit ') ? content.slice(6) : content });
+  messages.push({ role: 'user', content: pageDesign?'Design the visitor page for this approved application and prepare my review. Keep it unpublished.':firstProject?`Build the first private ${firstApp?'application, check a synthetic example, and prepare my approval':'website draft'} for project ${firstProject.id} using my saved brief. Keep it private.`:content });
   const budgetDate=new Date();
   const billing = await ensureBilling(db, userId,budgetDate);
   await ensureInferenceBudget(db,userId,billing.period,billing.plan.id);
@@ -110,7 +110,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   } catch (cause) {
     // A failed batch rolls back the reservation together with the chat claim.
     // A lost acknowledgement is handled by the same message's persisted receipt on retry.
-    if(String(cause).includes('inference_budget')) return {status:503,error:'AI is temporarily unavailable while the platform’s testing capacity is reviewed. Your credits were not used. Saved work and guided commands remain available.'};
+    if(String(cause).includes('inference_budget')) return {status:503,error:'AI is temporarily unavailable while the platform’s testing capacity is reviewed. Your credits were not used. Your saved work and Dashboard controls remain available.'};
     throw cause;
   }
   if (inserted[1].meta.changes !== 1) return noReservation();
@@ -181,7 +181,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     console.warn(JSON.stringify({ event: 'ai_request_failed', operation: id, kind: cause instanceof ProviderError ? cause.kind : 'persistence', reason: cause instanceof ProviderError ? cause.reason : undefined, elapsedMs: Date.now() - started }));
     if (cause instanceof ProviderError && ['configuration', 'rejected', 'output_limit'].includes(cause.kind)) {
       await closeStandardAIAttempt(db,userId,id);
-      const message = cause.kind === 'output_limit' ? 'The model reached its reply limit before finishing. Your credits were not used. Try a shorter or more focused question.' : 'The AI provider could not accept this request. Your credits were not used. Please try a new message later; guided commands still work.';
+      const message = cause.kind === 'output_limit' ? 'The model reached its reply limit before finishing. Your credits were not used. Try a shorter or more focused question.' : 'The AI provider could not accept this request. Your credits were not used. Please try a new message later; Dashboard controls remain available.';
       await db.prepare("UPDATE chat_turns SET status = 'failed', assistant_text = ? WHERE id = ? AND user_id = ? AND status = 'pending'").bind(message, id, userId).run();
     } else {
       await markStandardAIUncertain(db,userId,id);

@@ -10,7 +10,7 @@ const website=agentPrompt(context,'website');
 for(const text of ['Only the USER confirms','Never request secrets','untrusted data','Never emit confirmation actions','Website actions','"kind":"edit"','"kind":"preview"','workspace_context'])assert.ok(website.includes(text),text);
 assert.equal(website.includes('unused backend canary'),false);assert.equal(website.includes('editStructuredDraft'),false);assert.equal(website.includes('Backend action'),false);
 assert.ok(Buffer.byteLength(website)<Buffer.byteLength(full)-6000,'Website work should avoid unrelated large service schemas');
-for(const text of ['Only the USER confirms','Never request secrets','untrusted data','Never emit confirmation actions','editStructuredDraft','readDraft','4096 bytes','Only USER /confirm-cms-publish','Only USER /confirm-cms-unpublish','Only USER /confirm-cms-discard','workspace_context'])assert.ok(focused.includes(text),text);
+for(const text of ['Only the USER confirms','Never request secrets','untrusted data','Never emit confirmation actions','editStructuredDraft','readDraft','4096 bytes','User approval of the exact review','Chat is natural language only','"kind":"knowledge"','workspace_context'])assert.ok(focused.includes(text),text);
 assert.equal(focused.includes('unused website canary'),false);assert.equal(focused.includes('unused photo canary'),false);assert.equal(focused.includes('unused backend canary'),false);assert.ok(agentWorkspaceData(context).includes('unused website canary'));
 assert.ok(!full.includes('unused website canary'));
 assert.ok(agentWorkspaceData(context,'website').includes('unused photo canary'));

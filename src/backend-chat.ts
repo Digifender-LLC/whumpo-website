@@ -1,3 +1,4 @@
+import {linkChatReviewReply} from './chat-review-receipts';
 import {listBackendImports} from './backend-imports';
 import {backendNominationCommand} from './backend-nominations';
 import {listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
@@ -113,6 +114,11 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
  };
 }
 export async function backendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher,pageExpectation?:AppPageExpectation){
+ const result=await prepareBackendAction(db,user,turnId,action,service,pageExpectation);
+ await linkChatReviewReply(db,user,turnId,result.reply);
+ return result;
+}
+async function prepareBackendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher,pageExpectation?:AppPageExpectation){
  const maintenance=appUpgradeAction(db,user,turnId,action,service);if(maintenance)return {reply:await maintenance(),statements:[] as D1PreparedStatement[]};
  const operation=action.operation;
  if(operation==='appMaintenance'){

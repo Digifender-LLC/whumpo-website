@@ -25,7 +25,7 @@ try{
  const seen=[...first.turns];let cursor=first.nextBefore;
  while(cursor){const page=await json(owner,'/api/chat/history?before='+cursor);assert.ok(page.turns.length<=50);seen.push(...page.turns);cursor=page.nextBefore;}
  assert.equal(seen.length,155);assert.equal(new Set(seen.map(t=>t.id)).size,155);assert.equal(Math.max(...seen.map(t=>t.revision)),155);
- for(const t of seen)assert.deepEqual(Object.keys(t).sort(),['id','revision','user_text','assistant_text','created_at','status'].sort());
+ for(const t of seen)assert.deepEqual(Object.keys(t).sort(),['id','revision','user_text','assistant_text','created_at','status','mode'].sort());
  assert.equal((await json(foreign,'/api/chat/history?before=156')).turns.length,1);
  assert.equal((await json(owner,'/api/chat/history?before=1')).turns.length,0);
  for(const suffix of ['', '?before=0','?before=-1','?before=1.5','?before=1e2','?before=9007199254740992','?before=1%20OR%201=1'])assert.equal((await call(owner,'/api/chat/history'+suffix)).status,400);

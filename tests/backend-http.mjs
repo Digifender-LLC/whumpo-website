@@ -73,8 +73,8 @@ const failedId=crypto.randomUUID(),wrong=await (await post(checkPath,{id:failedI
 assert.equal((await post(publicationPath,{id:crypto.randomUUID(),operation:'publish',versionId:version,runId:failedId})).status,409);
 assert.equal((await post(checkPath,{id:crypto.randomUUID(),input:null,expected:null},other)).status,404);
 const chatBefore=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();const chatRun=crypto.randomUUID();
-assert.equal((await post('/api/chat',{id:chatRun,revision:chatBefore.state.revision,content:'/check-backend '+version+' {"input":{"values":[4,5]},"expected":{"total":9}}'})).status,200);
-const chatAfter=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();assert.match(chatAfter.turns.at(-1).assistant_text,/Expected-output check: passed/);assert.equal(chatAfter.usage.available,chatBefore.usage.available);
-console.log('Expected-output HTTP/runtime checks passed: correct/wrong answers, immutable replay, ownership, failed publication gate and free chat command.');
+assert.equal((await post('/api/chat',{id:chatRun,revision:chatBefore.state.revision,content:'/check-backend '+version+' {"input":{"values":[4,5]},"expected":{"total":9}}'})).status,503);
+const chatAfter=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();assert.equal(chatAfter.state.revision,chatBefore.state.revision);assert.equal(chatAfter.usage.available,chatBefore.usage.available);
+console.log('Expected-output HTTP/runtime checks passed: correct/wrong answers, immutable replay, ownership, failed publication gate and literal-chat rejection while inference is unavailable.');
 
 } finally {await fixture.dispose();}

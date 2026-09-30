@@ -1,3 +1,4 @@
+import type {ChatControl} from '../../src/chat-controls';
 import {useRef,useState} from 'react';
 import {History} from 'lucide-react';
 import type {AppRestorePresentation} from '../../src/app-restore-review-shape';
@@ -5,10 +6,10 @@ import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from './components/ui/dialog';
 import {message} from './lib/api';
-export function AppRestoreReviewCard({review,busy=false,onSend}:{review:AppRestorePresentation;busy?:boolean;onSend:(content:string)=>Promise<void>}){
+export function AppRestoreReviewCard({review,busy=false,onAction}:{review:AppRestorePresentation;busy?:boolean;onAction:(action:ChatControl)=>Promise<void>}){
  const [open,setOpen]=useState(false),[confirmation,setConfirmation]=useState(''),[sending,setSending]=useState(false),[error,setError]=useState(''),lock=useRef(false);
  const ready=review.state==='ready',waiting=busy||sending;
- async function restore(){if(lock.current||waiting||!ready||confirmation!=='RESTORE')return;lock.current=true;setSending(true);setError('');try{await onSend(`/confirm-app-restore ${review.projectId} ${review.id} RESTORE`);setOpen(false);setConfirmation('');}catch(e){setError(message(e));}finally{setSending(false);lock.current=false;}}
+ async function restore(){if(lock.current||waiting||!ready||confirmation!=='RESTORE')return;lock.current=true;setSending(true);setError('');try{await onAction({type:'appRestore',projectId:review.projectId,reviewId:review.id,confirmation:'RESTORE'});setOpen(false);setConfirmation('');}catch(e){setError(message(e));}finally{setSending(false);lock.current=false;}}
  return <section aria-label="Application data restore review" className="rounded-2xl border bg-card p-4 sm:p-5 space-y-4">
   <div className="flex items-start gap-3"><History className="size-5 shrink-0 mt-1 text-primary"/><div className="min-w-0"><p className="text-xs text-muted-foreground">{{ready:'Waiting for your review',applied:'Restore recorded',expired:'Review expired',changed:'A new review is needed'}[review.state]}</p><h3 className="font-bold text-lg mt-1">{review.state==='applied'?'Application data restored':'Restore saved application data'}</h3><p className="text-sm break-words mt-1">{review.projectName}</p></div></div>
   <dl className="rounded-xl bg-secondary/60 p-4 space-y-3"><div><dt className="text-xs text-muted-foreground">Recovery point saved</dt><dd className="font-medium text-sm">{new Date(review.pointCreatedAt).toLocaleString()}</dd></div><div><dt className="text-xs text-muted-foreground">Visitor documents in this review</dt><dd className="font-medium text-sm">{review.documents}</dd></div></dl>

@@ -57,7 +57,8 @@ import { checkoutEnabled, createCheckout, stripeWebhook } from './checkout';
 import { componentCatalog, previewHeaders } from './components';
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { publicPlans, domainBenefit, creditPack } from "./plans";
-import { readChat, sendChat } from "./chat";
+import { readChat, sendConversation, sendChatControl } from "./chat";
+import {chatControl} from "./chat-controls";
 import { AuthError, passkeyOptions, passkeyVerify, recoverAccount, recoveryPasskeys } from "./passkeys";
 import { BillingError, getBilling, setOverage } from "./billing";
 import { configuredAI } from "./ai-chat";
@@ -567,14 +568,17 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (method === "GET" && pathname === "/api/chat/export") return exportChatTranscript(request,env.DB,user.id);
   if (method === "GET" && pathname === "/api/chat/history") return chatHistory(request,env.DB,user.id);
   if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id, !!configuredAI(env)));
-  if (method === "POST" && pathname === "/api/chat") {
+  if (method === "POST" && (pathname === "/api/chat" || pathname === "/api/chat/actions")) {
     const data = await body(request);
     if (!data) return error(400, "A JSON message is required");
-    if(typeof data.content==='string'&&/^\/(?:confirm-app-restore|remove-app-recovery|confirm-app-upgrade|confirm-app-rollback|cancel-app-upgrade)(?:\s|$)/i.test(data.content.trim())){
+    const explicitAction=pathname==='/api/chat/actions';
+    const control=explicitAction?chatControl(data.action):undefined;
+    if(explicitAction&&!control)return error(400,'Choose a valid reviewed action.');
+    if(control?.recentAuth){
       if(!await recentSession(request,env))return error(401,'Sign in again before changing application code or recovery data');
       if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)return error(429,'Too many recovery changes. Try again in a minute.');
     }
-    const result = await sendChat(env.DB, user.id, data, configuredAI(env),{background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
+    const result = await (explicitAction?sendChatControl:sendConversation)(env.DB, user.id, data, configuredAI(env),{background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
     return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "POST" && pathname === "/api/auth/logout") {

@@ -1,13 +1,16 @@
+import {readChatReviewReceipts} from './chat-review-receipts';
 import {describeAppRestore} from './app-recovery-chat';
 import type {AppRestorePresentation} from './app-restore-review-shape';
 type Turn=Record<string,unknown>;
 type Row={id:string;project_id:string;point_id:string;status:string;expires_at:string;point_created_at:string;version_id:string;project_name:string;documents:number;unexpired:number;eligible:number};
 /** Never derive restore authority from model prose or a historical transcript alone. */
-export async function appRecoveryChatActions(db:D1Database,user:string,turns:Turn[]){
+export async function appRecoveryChatActions(db:D1Database,user:string,turns:Turn[],receipts?:Awaited<ReturnType<typeof readChatReviewReceipts>>){
+ receipts??=await readChatReviewReceipts(db,user,turns);
  for(const turn of turns)delete turn.app_restore_review;
  const candidates=turns.slice(0,100).filter(t=>t.status==='completed'&&typeof t.assistant_text==='string'&&t.assistant_text.startsWith('Application data restore review ')).map(turn=>{
   const match=String(turn.user_text).trim().match(/^\/(?:app-restore-review|confirm-app-restore)\s+([0-9a-f-]{36})\s+([0-9a-f-]{36})(?:\s+RESTORE)?$/i);
-  return {turn,id:match?.[2]??String(turn.id),project:match?.[1]};
+  const saved=receipts!.get(String(turn.id)),linked=saved?.kind==='appRestore'?saved.review_id:undefined;
+  return {turn,id:linked??match?.[2]??String(turn.id),project:match?.[1]};
  }).filter(c=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(c.id));
  const ids=[...new Set(candidates.map(c=>c.id))];
  for(let offset=0;offset<ids.length;offset+=50){
