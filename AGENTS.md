@@ -20,6 +20,12 @@ Whumpo is a private test-stage, Cloudflare-hosted AI website and application pla
 - Use Node.js 24 and pnpm 11. `pnpm check` type-checks both TypeScript projects. Run only the verification appropriate to the requested change and report exactly what ran.
 - Preserve unrelated working-tree changes. Inspect `git status` before edits and review the diff after.
 
+## Roadmap execution
+
+- Start planned work from `docs/roadmap/README.md` and `docs/roadmap/execution.md`. `docs/roadmap/backlog.json` owns task scope, dependencies and planning readiness; mapped GitHub issues own current execution state and claims.
+- Use `node tools/roadmap.mjs validate`, `next`, and `show WH-001` to inspect tasks. Check live issue/dependency evidence and current source before claiming work; a planning-ready task may already be assigned or completed.
+- Edit the JSON backlog, then run `node tools/roadmap.mjs render` and `render --check`; do not hand-edit generated `docs/roadmap/backlog.md`. Preserve owner-deferred Stripe setup and CMS testing, and distinguish implementation from activation/customer acceptance when closing work.
+
 ## Documentation conventions
 
 - Link Cloudflare product claims to the relevant `https://developers.cloudflare.com/...` official documentation page.

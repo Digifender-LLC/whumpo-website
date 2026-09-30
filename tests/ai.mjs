@@ -61,3 +61,19 @@ try {
   assert.equal((await complete(config,messages)).text,'Bound fetch works');
 } finally { globalThis.fetch = originalFetch; }
 console.log('Default transport retains the Workers global receiver.');
+
+// Go requires a stable session; reject invalid probes without network traffic.
+const go={...config,baseURL:'https://opencode.ai/zen/go/v1'};
+await assert.rejects(complete(go,messages,()=>assert.fail('Missing session must not dispatch')),{kind:'configuration',reason:'missing_session'});
+for(const sessionId of ['bad\r\nheader','has spaces','x'.repeat(129),42])await assert.rejects(complete({...go,sessionId},messages,()=>assert.fail('Invalid session must not dispatch')),{kind:'configuration',reason:'invalid_session'});
+for(const protocol of ['chat','responses'])for(let attempt=0;attempt<2;attempt++){
+ await complete({...go,protocol,sessionId:'whumpo-test-conversation'},messages,async(url,init)=>{
+  assert.equal(init.headers['x-opencode-session'],'whumpo-test-conversation');
+  return Response.json(protocol==='chat'?{choices:[{finish_reason:'stop',message:{content:'Stable session'}}],usage:{prompt_tokens:1,completion_tokens:1}}:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'Stable session'}]}],usage:{input_tokens:1,output_tokens:1}});
+ });
+}
+await complete({...config,sessionId:'whumpo-test-conversation'},messages,async(url,init)=>{
+ assert.equal(init.headers['x-opencode-session'],undefined);
+ return Response.json({choices:[{finish_reason:'stop',message:{content:'Other provider'}}],usage:{prompt_tokens:1,completion_tokens:1}});
+});
+console.log('OpenCode Go session validation passed: no missing/invalid-session dispatch, stable caller identity on both protocols/repeats, and no forwarding to other providers.');

@@ -8,7 +8,7 @@ Chat remains the default standalone workspace view. Routine dashboard action con
 
 The September 30 14:21 configuration inspection found Monitor persisted, zero registered CMS instances, configured Cloudflare OAuth/encryption bindings and absent customer GitHub App, Stripe and custom-hostname activation bindings. These are dated configuration observations, not customer consent/operation acceptance.
 
-**Live Muse inference needs rechecking:** a synthetic compatibility probe and a minimal greeting control were rejected by the configured provider (HTTP 400 on the control, 18:15 UTC). Local synthetic-provider tests passed; no provider setting or fallback changed. See [message-role verification](content-safety.md#ai-message-roles-for-saved-data--september-30-2026).
+**Latest live Muse check:** the actual Chat visitor-page design path passed with synthetic content and disposable local storage: one provider call prepared the exact private review, zero customer units/holds, and no publication. The previous standalone HTTP 400 was `MissingSessionID`; the probe omitted a header that Chat already supplies. See [OpenCode session verification](content-safety.md#opencode-go-session-verification--september-30-2026). This is one provider-backed workflow, not broad live customer acceptance.
 
 **Content safety remains a launch gate.** Direct source uploads are quarantined and cannot execute; background triage cannot approve them. Media/CSAM detection, comprehensive generated-source checks and reporting/preservation operations remain unfinished. See [content safety](content-safety.md).
 
