@@ -447,3 +447,9 @@ Platform `2aa7f348-b078-4a73-885a-03cbff9d1510` and migration 0099 are deployed.
 ## Project photo safety gate — September 30, 2026
 
 Platform `a2e9dcb3-60ad-4a52-9547-eff3d749bd1a`, site host `ba9b4c29-0566-4541-8747-0834183c1197` and migration 0100 are deployed. Unapproved project photos cannot be attached, previewed, exported, published or delivered. Photo versions, storage and removal tests passed with synthetic approval fixtures, plus type/build/loading checks. Independent live readback at 16:52 UTC confirmed both versions, 100 migrations, seven safety triggers and the approval view, 16 matching assets and health/auth/signup boundaries; synthetic absent-photo GET/HEAD returned 404. No customer photos or approvals exist, and no scanner was activated. See [photo safety scope](photos.md).
+
+## Photo scan reservation ledger — September 30, 2026
+
+Migration 0101 was applied and independently read back at 17:08 UTC: 101 migrations applied, none pending, all three new triggers present and zero scan tickets. Platform remains `a2e9dcb3-60ad-4a52-9547-eff3d749bd1a`; no Worker or frontend redeployment was needed because the new result-handling module has no runtime caller yet. No provider or customer scan/approval was activated. Evidence: `.secrets/photo-scan-tickets-migration.json`.
+
+`pnpm check` and the disposable-D1/R2 `node tests/photo-scan-results.mjs` passed for profile and project image results. See [integration scope and outstanding lifecycle/provider gates](content-safety.md#trusted-photo-scan-results--integration-foundation). Schema deployment does not establish real detection, provider acceptance, reporting or a complete scanning workflow.
