@@ -101,6 +101,7 @@
     "test:backend-checks": "node tests/backend-checks.mjs",
     "dev:frontend": "vite",
     "test:chat-delivery": "node tests/chat-delivery.mjs",
+    "test:cms-owner-uploads": "node tests/cms-owner-uploads.mjs",
     "test:cms-media-upload": "node tests/cms-media-upload.mjs",
     "test:cms-media-preview": "node tests/cms-media-preview.mjs",
     "test:cms-media": "node tests/cms-media.mjs",

@@ -1,3 +1,4 @@
+import {readCMSUploads,uploadCMSMediaRequest} from './cms-media-uploads';
 import {cleanupFairUseObservations} from './fair-use-observation';
 import {readCMSMediaPreview} from './cms-media-preview';
 import {listCMSMedia} from './cms-media';
@@ -262,6 +263,13 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       if(!data||typeof data.id!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(data.id)||Object.keys(data).some(k=>!allowed.includes(k)))return error(400,'Provide a request ID and supported content fields');
       return json(await cmsContentAction(env.DB,user.id,{operation:requestId?(structured?'editStructuredDraft':'editDraft'):(structured?'structuredDraft':'draft'),projectId,...(requestId?{requestId,revision:data.revision}:{collection:data.collection}),title:data.title,[field]:data[field]},data.id,cmsEnv));
     }
+    return error(405,'Method not allowed');
+  }
+  const cmsUploadsRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/media\/uploads(?:\/([0-9a-f-]{36}))?$/);
+  if(cmsUploadsRoute){
+    const project=cmsUploadsRoute[1],requestId=cmsUploadsRoute[2],cmsEnv=env as unknown as Record<string,unknown>;
+    if(method==='GET'&&!requestId)return json(await readCMSUploads(env.DB,user.id,project,cmsEnv));
+    if(method==='PUT'&&requestId)return json(await uploadCMSMediaRequest(request,env.DB,user.id,project,requestId,cmsEnv));
     return error(405,'Method not allowed');
   }
   const cmsImagePreviewRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/media\/([0-9A-HJKMNP-TV-Z]{26})\/preview$/);
