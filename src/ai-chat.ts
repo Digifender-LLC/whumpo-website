@@ -1,3 +1,4 @@
+import {reconcileStandardChat} from './standard-ai-recovery';
 import {appPageDesignProjectId,readAppPageDesign,appPageDesignPrompt,appPageDesignProposalAllowed} from './app-page-design';
 import {inspectionRequest,inspectionMessages,inspectionAllowance} from './agent-inspection';
 import {firstDraftProjectId,firstAppProjectId,welcomeDraftProject,firstDraftProposalAllowed} from './first-draft';
@@ -22,6 +23,7 @@ export function configuredAI(env: Env): AIConfig | undefined {
 export async function reconcileChat(db: D1Database, userId: string) {
   const { results } = await db.prepare("SELECT id,input_tokens,output_tokens,created_at FROM chat_turns WHERE user_id = ? AND status = 'pending' LIMIT 5").bind(userId).all<{ id: string; input_tokens: number | null; output_tokens: number | null; created_at: string }>();
   for (const turn of results) {
+    if(await reconcileStandardChat(db,userId,turn))continue;
     if (turn.input_tokens !== null && turn.output_tokens !== null) {
       try {
         await finishUsage(db, userId, turn.id, buildUnits(turn.input_tokens, turn.output_tokens));
