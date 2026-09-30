@@ -61,6 +61,8 @@
     "test:backend-state": "node tests/backend-state.mjs",
     "test:cms-bridge": "node tests/cms-bridge.mjs",
     "test:emdash-bridge-live": "node tests/emdash-bridge-live.mjs",
+    "stage:wordpress": "node tools/cms-wordpress-stage.mjs",
+    "test:wordpress-stage": "node tests/cms-wordpress-stage.mjs",
     "test:cms-native-publication": "node tools/test-cms-native-publication.mjs",
     "test:emdash-bridge": "node tools/test-emdash-bridge.mjs",
     "test:cms-projects": "node tests/cms-projects.mjs",
