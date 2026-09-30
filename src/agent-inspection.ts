@@ -9,6 +9,8 @@ export function inspectionRequest(raw:string){
   return a.operation==='readDraft'&&Object.keys(a).every(k=>['kind','operation','projectId','requestId'].includes(k))&&[a.projectId,a.requestId].every(v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v));
  }
  if(a&&typeof a==='object'&&!Array.isArray(a)&&a.kind==='backend'){
+  if(a.operation==='library')return Object.keys(a).every(k=>['kind','operation'].includes(k));
+  if(a.operation==='component')return Object.keys(a).every(k=>['kind','operation','reference'].includes(k))&&typeof a.reference==='string'&&/^[a-z][a-z0-9-]{0,79}@[1-9][0-9]{0,5}$/.test(a.reference);
   const fields:Record<string,string>={list:'projectId',inspect:'versionId',result:'receiptId'};
   const field=typeof a.operation==='string'&&Object.hasOwn(fields,a.operation)?fields[a.operation]:undefined;
   return !!field&&Object.keys(a).every(k=>['kind','operation',field].includes(k))&&typeof a[field]==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(a[field]);

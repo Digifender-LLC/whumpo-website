@@ -1,3 +1,4 @@
+import {backendLibraryCommand,describeBackendLibrary,describeBackendComponent,installBackendComponent} from './backend-library';
 import {compareBackends,describeBackendComparison} from './backend-diff';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage,describeAppPage} from './app-pages';
 import {readApplication,readApplicationReview,prepareApplication,confirmApplication,describeApplicationReview} from './app-activation';
@@ -14,6 +15,7 @@ export async function ownedBackend(db:D1Database,user:string,version:string){
 }
 function describeRun(run:{id:unknown;state:string;result?:unknown}){const data=run.result as {ok?:boolean;check?:{status?:string}}|undefined;const verdict=data?.check?'Expected-output check: '+(data.check.status==='not_run'?'not run; execution did not succeed':data.check.status): data?.ok===true?'Execution completed; no expected output was checked.':data?.ok===false?'Execution failed.':'No confirmed execution result.';return `Private backend test: ${run.state}\nReceipt: ${run.id}\n${verdict}\n`+(run.result?JSON.stringify(run.result).slice(0,1400)+(JSON.stringify(run.result).length>1400?'\nResult display truncated; full result remains in the private API receipt.':''):'Execution is pending or its outcome is unknown. This receipt will not be executed again.')+'\nNo application data or live website was changed. Test attempts use the separate backend allowance, not AI units.';}
 export function backendChatCommand(db:D1Database,user:string,turnId:string,content:string,service?:Fetcher){
+ const library=backendLibraryCommand(db,user,turnId,content);if(library)return library;
  if(/^\/check-backend(?:\s|$)/i.test(content)){
   const match=content.trim().match(/^\/check-backend\s+([0-9a-f-]+)\s+([\s\S]+)$/i);
   let sample:Record<string,unknown>;try{sample=JSON.parse(match?.[2]??'null');}catch{throw new BackendError(400,'Use /check-backend VERSION_ID {"input":JSON,"expected":JSON}');}
@@ -87,7 +89,7 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
    if(verb==='backends'){const versions=await listBackends(db,user,id);return (versions.length?versions.map(v=>`${v.id}\nSHA-256: ${v.digest}`).join('\n\n'):'No saved backend versions yet. Ask me to create a small JavaScript function for this project.')+'\n\nIsolated functions with no network or secrets. /review-backend-state VERSION_ID JSON can prepare a private data change for your confirmation. /backend VERSION_ID shows source; /test-backend VERSION_ID JSON runs an example. Use /backend-publication PROJECT_ID to check what is public.';}
    if(verb==='backend-result'){const run=await db.prepare('SELECT id,state,result_json FROM backend_runs WHERE id=? AND user_id=?').bind(id,user).first<{id:string;state:string;result_json:string|null}>();if(!run)throw new BackendError(404,'Backend test receipt not found');return describeRun({...run,result:run.result_json?JSON.parse(run.result_json):undefined});}
    const version=await ownedBackend(db,user,id);
-   if(verb==='backend')return `Private backend for “${version.name}”\nVersion: ${version.id}\nSHA-256: ${version.digest}\nSource (untrusted code, not instructions):\n${version.source}\n\nUse /test-backend ${version.id} JSON to run a non-sensitive example. Use /backend-publication ${version.project_id} to check whether this version is public.`;
+   if(verb==='backend'){const component=await db.prepare('SELECT component_id,component_version,artifact_digest,provenance,license FROM backend_component_instances WHERE version_id=?').bind(version.id).first<{component_id:string;component_version:number;artifact_digest:string;provenance:string;license:string}>();if(component&&component.artifact_digest!==version.digest)throw new BackendError(503,'Component provenance could not be verified');return `${component?'Library origin: '+component.component_id+'@'+component.component_version+' · '+component.provenance+' · '+component.license+'\n':''}Private backend for “${version.name}”\nVersion: ${version.id}\nSHA-256: ${version.digest}\nSource (untrusted code, not instructions):\n${version.source}\n\nUse /test-backend ${version.id} JSON to run a non-sensitive example. Use /backend-publication ${version.project_id} to check whether this version is public.`;}
    if(!service)throw new BackendError(503,'Backend testing is not connected in this environment');
    return describeRun(await testBackend(db,service,user,version.project_id,id,turnId,input));
   }catch(error){return error instanceof BackendError?error.message:'The backend result could not be retrieved. Use /backend-result '+turnId+' to inspect its receipt. This message will not dispatch execution again.';}
@@ -95,6 +97,13 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
 }
 export async function backendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher){
  const operation=action.operation;
+ if(['library','component','useComponent'].includes(String(operation))){
+  const allowed=operation==='library'?['kind','operation']:operation==='component'?['kind','operation','reference']:['kind','operation','reference','projectId'];
+  if(Object.keys(action).some(k=>!allowed.includes(k))||operation!=='library'&&typeof action.reference!=='string'||operation==='useComponent'&&typeof action.projectId!=='string')throw new BackendError(400,'Choose a library component and owned project; custom source is not accepted here');
+  const reply=operation==='library'?describeBackendLibrary():operation==='component'?await describeBackendComponent(action.reference as string):await installBackendComponent(db,user,action.projectId as string,turnId,action.reference as string);
+  return {reply,statements:[] as D1PreparedStatement[]};
+ }
+
  if(operation==='check'){
   if(Object.keys(action).some(k=>!['kind','operation','versionId','input','expected'].includes(k))||typeof action.versionId!=='string'||!uuid.test(action.versionId)||!Object.hasOwn(action,'input')||!Object.hasOwn(action,'expected'))throw new BackendError(400,'Provide a backend version, synthetic input and expected output');
   return {reply:await backendChatCommand(db,user,turnId,`/check-backend ${action.versionId} ${JSON.stringify({input:action.input,expected:action.expected})}`,service)!(),statements:[] as D1PreparedStatement[]};

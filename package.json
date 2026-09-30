@@ -104,6 +104,7 @@
     "test:workspace-navigation": "node tests/workspace-navigation.mjs",
     "test:agent-prompt-focus": "node tests/agent-prompt-focus.mjs",
     "test:agent-inspection": "node tests/agent-inspection.mjs",
+    "test:backend-library": "node tests/backend-library.mjs",
     "test:backend-diff": "node tests/backend-diff.mjs",
     "test:backend-checks": "node tests/backend-checks.mjs",
     "dev:frontend": "vite",
