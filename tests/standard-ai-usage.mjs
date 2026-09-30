@@ -30,5 +30,31 @@ try{
  const racing=crypto.randomUUID();await reserveStandardAI(db,user,racing,hash);const race=await Promise.allSettled([dispatchStandardAI(db,user,racing),cancelStandardAI(db,user,racing)]);const final=await readStandardAI(db,user,racing);assert.ok(['dispatched','released'].includes(final.state));assert.equal(race[0].value,final.state==='dispatched');assert.equal(race[1].status,final.state==='released'?'fulfilled':'rejected');
  // Even without any billing account or allowance, standard receipts complete without charging.
  for(const table of ['billing_accounts','usage_periods','usage_operations','billing_ledger','credit_grants','inference_calls'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0,table);
+ const costsCode=await build({entryPoints:['src/model-costs.ts'],bundle:true,format:'esm',platform:'node',write:false});
+ const {ensureInferenceBudget,inferenceReservation,dispatchInference,observeInference}=await import('data:text/javascript;base64,'+Buffer.from(costsCode.outputFiles[0].text).toString('base64'));
+ const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-not-dispatched',protocol:'responses'},period=now.slice(0,7);
+ await ensureInferenceBudget(db,user,period,'explore');
+ let revision=0;
+ async function turn(owner=user){const request=crypto.randomUUID();await reserveStandardAI(db,owner,request,hash);await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Synthetic','Pending',?,'ai','pending')").bind(request,owner,++revision,now).run();return request;}
+ const standard=await turn();
+ await inferenceReservation(db,user,standard,period,config,10000,2000).run();
+ const reserved=await db.prepare('SELECT reserved_micros FROM inference_budgets WHERE user_id=? AND period=?').bind(user,period).first();assert.ok(reserved.reserved_micros>0);
+ await dispatchStandardAI(db,user,standard);assert.equal(await dispatchInference(db,user,standard),true);
+ await db.prepare("INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,'Synthetic lookup',10,2)").bind(standard,user).run();
+ await observeInference(db,user,standard,{text:'Synthetic',inputTokens:1000,outputTokens:100});
+ await completeStandardAI(db,user,standard,1000,100);
+ const observed=await db.prepare('SELECT reserved_micros,spent_micros FROM inference_budgets WHERE user_id=? AND period=?').bind(user,period).first();assert.equal(observed.reserved_micros,0);assert.ok(observed.spent_micros>0);
+ const cancel=await turn();await inferenceReservation(db,user,cancel,period,config,10000,2000).run();await cancelStandardAI(db,user,cancel);await ensureInferenceBudget(db,user,period,'explore');assert.equal((await db.prepare('SELECT status FROM inference_calls WHERE id=?').bind(cancel).first()).status,'released');
+ const foreign=await turn(other);await inferenceReservation(db,user,foreign,period,config,10000,2000).run();assert.equal(await db.prepare('SELECT id FROM inference_calls WHERE id=?').bind(foreign).first(),null);
+ const wrongMonth=await turn();await ensureInferenceBudget(db,user,'2000-01','explore');await assert.rejects(()=>inferenceReservation(db,user,wrongMonth,'2000-01',config,10000,2000).run(),/inference_owner/);
+ const closed=await turn();await cancelStandardAI(db,user,closed);await assert.rejects(()=>inferenceReservation(db,user,closed,period,config,10000,2000).run(),/inference_owner/);
+ const premature=await turn();await inferenceReservation(db,user,premature,period,config,10000,2000).run();await assert.rejects(()=>db.prepare("INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,'No dispatch',1,1)").bind(premature,user).run(),/agent_inspection_closed/);
+ const excessive=await turn();await assert.rejects(()=>inferenceReservation(db,user,excessive,period,config,1_000_000_000,1_000_000_000).run(),/inference_budget/);
+ for(const table of ['billing_accounts','usage_periods','usage_operations','billing_ledger','credit_grants'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0,table);
+ const billingCode=await build({entryPoints:['src/billing.ts'],bundle:true,format:'esm',platform:'node',write:false});
+ const {reserveUsage}=await import('data:text/javascript;base64,'+Buffer.from(billingCode.outputFiles[0].text).toString('base64'));
+ await assert.rejects(()=>reserveUsage(db,user,standard,hash,1),/ai_accounting_path_conflict/);
+ const legacy=crypto.randomUUID();await reserveUsage(db,user,legacy,hash,1);await assert.rejects(()=>reserveStandardAI(db,user,legacy,hash),/ai_accounting_path_conflict/);assert.equal(await readStandardAI(db,user,legacy),null);
+ console.log('Standard inference bridge passed: internal cost reservation/settlement, cancelled reserve cleanup, bounded inspection continuation, foreign/closed/wrong-month denial, retained provider ceiling and zero customer ledger changes.');
  console.log('Standard AI receipts passed: duplicate/competing admission, owner isolation, dispatch/cancel race, uncertain-result retention, exact completion replay, immutable identity and zero customer/provider ledger mutation.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
