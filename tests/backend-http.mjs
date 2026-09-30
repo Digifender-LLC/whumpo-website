@@ -1,12 +1,16 @@
+Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
-const base=process.env.WHUMPO_TEST_URL||'http://localhost:8787';assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname));
+import {backendHttpFixture} from './backend-http-fixture.mjs';
+const fixture=await backendHttpFixture(),base=fixture.base;
+try {
+
 const headers={origin:base,'content-type':'application/json'};
 async function account(){const r=await fetch(base+'/api/auth/register',{method:'POST',headers,body:JSON.stringify({email:crypto.randomUUID()+'@example.com',password:crypto.randomUUID()+'local-test'})});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0];}
 const cookie=await account(),other=await account();
 const post=(path,data,session=cookie,origin=base)=>fetch(base+path,{method:'POST',headers:{...headers,origin,cookie:session},body:JSON.stringify(data)});
 const project=await (await post('/api/projects',{name:'Backend HTTP fixture'})).json(),pid=project.project.id;
 const path='/api/projects/'+pid+'/backends',version=crypto.randomUUID(),rid=crypto.randomUUID();
-assert.equal((await post(path,{id:version,source:'export default input=>({total:input.values.reduce((a,b)=>a+b,0)})'})).status,201);
+await fixture.seedBackend(pid,version,'export default input=>({total:input.values.reduce((a,b)=>a+b,0)})',cookie);
 assert.equal((await fetch(base+path)).status,401);
 assert.equal((await fetch(base+path,{headers:{cookie:other}})).status,404);
 assert.equal((await post(path,{id:crypto.randomUUID(),source:'export default ()=>1'},cookie,'https://evil.example')).status,403);
@@ -14,11 +18,11 @@ const run=await post(path+'/'+version+'/test',{id:rid,input:{values:[2,3,7]}});a
 assert.deepEqual(await (await post(path+'/'+version+'/test',{id:rid,input:{values:[2,3,7]}})).json(),result);
 assert.equal((await post(path+'/'+version+'/test',{id:rid,input:{values:[1]}})).status,409);
 assert.equal((await post(path+'/'+version+'/test',{id:crypto.randomUUID(),input:{}},other)).status,404);
-const hostile=crypto.randomUUID();await post(path,{id:hostile,source:'export default ()=>{while(true){}}'});const bad=await (await post(path+'/'+hostile+'/test',{id:crypto.randomUUID(),input:null})).json();assert.deepEqual(bad.result,{ok:false,error:'work_limit'});
+const hostile=crypto.randomUUID();await fixture.seedBackend(pid,hostile,'export default ()=>{while(true){}}',cookie);const bad=await (await post(path+'/'+hostile+'/test',{id:crypto.randomUUID(),input:null})).json();assert.deepEqual(bad.result,{ok:false,error:'work_limit'});
 const recovery=await (await post(path+'/'+version+'/test',{id:crypto.randomUUID(),input:{values:[1,2]}})).json();assert.deepEqual(recovery.result,{ok:true,value:{total:3}});
 console.log('HTTP backend checks passed with actual bound runtime: authentication, ownership, CSRF, immutable saves, execution, replay, conflict and post-exhaustion recovery.');
 const statePath='/api/projects/'+pid+'/backend-state',sv=crypto.randomUUID(),sr=crypto.randomUUID();
-assert.equal((await post(path,{id:sv,source:'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:"updated"})'})).status,201);
+await fixture.seedBackend(pid,sv,'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:"updated"})',cookie);
 assert.equal((await fetch(base+statePath)).status,401);
 assert.equal((await post(statePath,{id:sr,versionId:sv,input:{add:5}},other)).status,404);
 const reviewed=await post(statePath,{id:sr,versionId:sv,input:{add:5}});assert.equal(reviewed.status,200);assert.equal((await reviewed.json()).status,'ready');
@@ -47,7 +51,7 @@ assert.equal((await post(publicationPath,{id:publicationId,operation:'publish',v
 const publicationConfirm='/api/backend-publication-reviews/'+publicationId+'/confirm';
 assert.equal((await post(publicationConfirm,{},other)).status,404);
 assert.equal((await post(publicationConfirm,{},cookie,'https://evil.example')).status,403);
-const sites=process.env.WHUMPO_SITES_TEST_URL;
+const sites=base;
 if(sites){
  assert.ok(['localhost','127.0.0.1'].includes(new URL(sites).hostname));
  const invoke=()=>fetch(sites+'/s/'+pid+'/backend',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({values:[7,11,13]})});
@@ -72,3 +76,5 @@ const chatBefore=await (await fetch(base+'/api/chat',{headers:{cookie}})).json()
 assert.equal((await post('/api/chat',{id:chatRun,revision:chatBefore.state.revision,content:'/check-backend '+version+' {"input":{"values":[4,5]},"expected":{"total":9}}'})).status,200);
 const chatAfter=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();assert.match(chatAfter.turns.at(-1).assistant_text,/Expected-output check: passed/);assert.equal(chatAfter.usage.available,chatBefore.usage.available);
 console.log('Expected-output HTTP/runtime checks passed: correct/wrong answers, immutable replay, ownership, failed publication gate and free chat command.');
+
+} finally {await fixture.dispose();}

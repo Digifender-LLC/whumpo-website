@@ -1,13 +1,17 @@
+Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
-const base=process.env.WHUMPO_TEST_URL||'http://localhost:8793';assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname));
+import {backendHttpFixture} from './backend-http-fixture.mjs';
+const fixture=await backendHttpFixture(),base=fixture.base;
+try {
+
 async function register(){const response=await fetch(base+'/api/auth/register',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({email:crypto.randomUUID()+'@example.test',password:crypto.randomUUID()+'local-test'})});assert.equal(response.status,200);return response.headers.get('set-cookie').split(';')[0];}
 const cookie=await register(),other=await register();
 const post=(path,data,origin=base,session=cookie)=>fetch(base+path,{method:'POST',headers:{origin,cookie:session,'content-type':'application/json'},body:JSON.stringify(data)});
 const get=path=>fetch(base+path,{headers:{cookie}});
 async function chat(content){const state=await(await get('/api/chat')).json(),id=crypto.randomUUID(),response=await post('/api/chat',{id,revision:state.state.revision,content});assert.equal(response.status,200,await response.text());return id;}
-await chat('A simple private counter');const project=await chat('Counter application');
+const project=await fixture.firstProject(cookie,'Counter application','A simple private counter');
 const version=crypto.randomUUID(),run=crypto.randomUUID();const path='/api/projects/'+project;
-assert.equal((await post(path+'/backends',{id:version,source:'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:"Count saved"})'})).status,201);
+await fixture.seedBackend(project,version,'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:"Count saved"})',cookie);
 const tested=await post(path+'/backends/'+version+'/test',{id:run,input:{state:{},input:{add:2}}});assert.equal(tested.status,200);assert.deepEqual((await tested.json()).result,{ok:true,value:{state:{count:2},result:'Count saved'}});
 const id=crypto.randomUUID(),review='/api/application-reviews/'+id;
 assert.equal((await fetch(base+path+'/application')).status,401);
@@ -23,3 +27,5 @@ const off=await chat('/disable-application '+project);await chat('/confirm-appli
 assert.equal((await post(review+'/confirm',{})).status,200);assert.equal((await(await get(path+'/application')).json()).configuration.enabled,0);
 const guided=await chat('/enable-application '+version+' '+run);await chat('/confirm-application '+guided);assert.equal((await(await get(path+'/application')).json()).configuration.enabled,1);
 console.log('Application HTTP acceptance passed: real QuickJS transition test, authenticated review/confirmation, cross-owner isolation, CSRF denial, guided disable and historical confirmation replay. Visitor access remains gated.');
+
+} finally {await fixture.dispose();}
