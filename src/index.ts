@@ -1,3 +1,7 @@
+import {analyzeCMSWordPress,inspectCMSWordPress,uploadCMSWordPressRequest} from './cms-wordpress-api';
+import {listCMSWordPressSources,readCMSWordPressSource,downloadCMSWordPressSource} from './cms-wordpress-sources';
+import {prepareCMSWordPressImport} from './cms-wordpress-import';
+import {readCMSImport,confirmCMSImport,cmsImportPage} from './cms-imports';
 import {readCMSUploads,uploadCMSMediaRequest} from './cms-media-uploads';
 import {cleanupFairUseObservations} from './fair-use-observation';
 import {readCMSMediaPreview} from './cms-media-preview';
@@ -248,6 +252,31 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if(method==='PUT')return json(await saveCapacity(env.DB,user.id,await body(request)));
   }
 
+  const wordpressSourceRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/wordpress\/sources(?:\/([0-9a-f-]{36})(?:\/(download|import-reviews))?)?$/);
+  if(wordpressSourceRoute){
+    const [,project,source,action]=wordpressSourceRoute,cmsEnv=env as unknown as Record<string,unknown>;
+    if(method==='GET'&&!source)return json({sources:await listCMSWordPressSources(env.DB,user.id,project,cmsEnv)});
+    if(method==='PUT'&&source&&!action)return json(await uploadCMSWordPressRequest(request,env.DB,env.FILES,user.id,project,source,cmsEnv));
+    if(source){const owned=await readCMSWordPressSource(env.DB,user.id,source);if(owned.project_id!==project)return error(404,'Source file not found');
+      if(method==='GET'&&!action)return json(await inspectCMSWordPress(env.DB,env.FILES,user.id,project,source));
+      if(method==='GET'&&action==='download')return downloadCMSWordPressSource(env.DB,env.FILES,user.id,source);
+      if(method==='POST'&&action==='import-reviews'){const data=await body(request);if(!data||Object.keys(data).some(k=>!['id','sourceItemId'].includes(k))||typeof data.id!=='string'||typeof data.sourceItemId!=='number'||!Number.isSafeInteger(data.sourceItemId)||data.sourceItemId<1)return error(400,'Choose one source article and a review request ID');return json(await prepareCMSWordPressImport(env.DB,env.FILES,user.id,project,source,data.sourceItemId,data.id,cmsEnv,analyzeCMSWordPress));}
+    }
+    return error(405,'Method not allowed');
+  }
+  const wordpressReviewsRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/wordpress\/import-reviews$/);
+  if(wordpressReviewsRoute&&method==='GET'){
+    const project=wordpressReviewsRoute[1];await listCMSWordPressSources(env.DB,user.id,project,env as unknown as Record<string,unknown>);
+    return json({reviews:(await env.DB.prepare("SELECT id,source_upload_id,source_id,status,collection,expires_at,json_extract(body,'$.data.title') title FROM cms_import_reviews WHERE user_id=? AND project_id=? AND source_upload_id IS NOT NULL ORDER BY created_at DESC,id LIMIT 100").bind(user.id,project).all()).results});
+  }
+  const wordpressReviewRoute=pathname.match(/^\/api\/cms-import-reviews\/([0-9a-f-]{36})(?:\/(preview|confirm))?$/);
+  if(wordpressReviewRoute){
+    const [,reviewId,action]=wordpressReviewRoute,row=await readCMSImport(env.DB,user.id,reviewId);if(!row.source_upload_id)return error(404,'Source-bound import review not found');
+    if(method==='GET'&&!action)return json(row);
+    if(method==='GET'&&action==='preview')return cmsImportPage(env.DB,user.id,reviewId);
+    if(method==='POST'&&action==='confirm')return json(await confirmCMSImport(env.DB,user.id,reviewId,env as unknown as Record<string,unknown>));
+    return error(405,'Method not allowed');
+  }
   const cmsPublicationRoute=pathname.match(/^\/api\/cms-publication-reviews\/([0-9a-f-]{36})\/preview$/);
   if(method==='GET'&&cmsPublicationRoute)return cmsPublicationPage(env.DB,user.id,cmsPublicationRoute[1],env.FILES);
   const cmsExportRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content\/([0-9a-f-]{36})\/export$/);
