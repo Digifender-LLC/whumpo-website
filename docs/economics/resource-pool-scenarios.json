@@ -1,0 +1,481 @@
+{
+  "proposal": {
+    "version": "whumpo-pool-proposal-2026-09-30",
+    "status": "proposal",
+    "allowances": {
+      "starter": 1000,
+      "personal": 2500,
+      "business": 7500,
+      "business-pro": 14000
+    },
+    "ceilingUSDPerUnit": 0.002,
+    "costContingency": 0.2,
+    "paymentFraction": 0.03,
+    "paymentFixedUSD": 0.3,
+    "monthlyOperatingReserveUSD": 1,
+    "topup": {
+      "units": 1000,
+      "priceUSD": 10,
+      "enabled": false
+    }
+  },
+  "caveat": "Planning estimates only; no metering, payments, paid services or enforcement enabled.",
+  "plans": [
+    {
+      "plan": "Starter",
+      "monthlyUSD": 17,
+      "annualUSD": 170,
+      "units": 1000,
+      "capacityMultiplier": 1,
+      "maxUnitsAt60Percent": 1062,
+      "monthly": {
+        "grossUSD": 17,
+        "paymentUSD": 0.81,
+        "domainReserveUSD": 0,
+        "variableUSD": 2,
+        "contingencyUSD": 0.4,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 12.790000000000001,
+        "margin": 0.7523529411764707
+      },
+      "annual": {
+        "grossUSD": 14.166666666666666,
+        "paymentUSD": 0.45,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 2,
+        "contingencyUSD": 0.4,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 8.65,
+        "margin": 0.6105882352941177
+      },
+      "annualRolloverBurst": {
+        "grossUSD": 14.166666666666666,
+        "paymentUSD": 0.45,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 4,
+        "contingencyUSD": 0.8,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 6.250000000000001,
+        "margin": 0.4411764705882354
+      },
+      "annualDoubleProviderCost": {
+        "grossUSD": 14.166666666666666,
+        "paymentUSD": 0.45,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 4,
+        "contingencyUSD": 0.8,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 6.250000000000001,
+        "margin": 0.4411764705882354
+      },
+      "annualRolloverAndDoubleCost": {
+        "grossUSD": 14.166666666666666,
+        "paymentUSD": 0.45,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 8,
+        "contingencyUSD": 1.6,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 1.4500000000000006,
+        "margin": 0.10235294117647063
+      }
+    },
+    {
+      "plan": "Personal",
+      "monthlyUSD": 30,
+      "annualUSD": 300,
+      "units": 2500,
+      "capacityMultiplier": 2.5,
+      "maxUnitsAt60Percent": 2732,
+      "monthly": {
+        "grossUSD": 30,
+        "paymentUSD": 1.2,
+        "domainReserveUSD": 0,
+        "variableUSD": 5,
+        "contingencyUSD": 1,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 21.8,
+        "margin": 0.7266666666666667
+      },
+      "annual": {
+        "grossUSD": 25,
+        "paymentUSD": 0.775,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 5,
+        "contingencyUSD": 1,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 15.558333333333334,
+        "margin": 0.6223333333333333
+      },
+      "annualRolloverBurst": {
+        "grossUSD": 25,
+        "paymentUSD": 0.775,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 10,
+        "contingencyUSD": 2,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 9.558333333333334,
+        "margin": 0.38233333333333336
+      },
+      "annualDoubleProviderCost": {
+        "grossUSD": 25,
+        "paymentUSD": 0.775,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 10,
+        "contingencyUSD": 2,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 9.558333333333334,
+        "margin": 0.38233333333333336
+      },
+      "annualRolloverAndDoubleCost": {
+        "grossUSD": 25,
+        "paymentUSD": 0.775,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 20,
+        "contingencyUSD": 4,
+        "operatingReserveUSD": 1,
+        "contributionUSD": -2.4416666666666664,
+        "margin": -0.09766666666666665
+      }
+    },
+    {
+      "plan": "Business",
+      "monthlyUSD": 79,
+      "annualUSD": 790,
+      "units": 7500,
+      "capacityMultiplier": 7.5,
+      "maxUnitsAt60Percent": 9027,
+      "monthly": {
+        "grossUSD": 79,
+        "paymentUSD": 2.67,
+        "domainReserveUSD": 0,
+        "variableUSD": 15,
+        "contingencyUSD": 3,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 57.33,
+        "margin": 0.7256962025316456
+      },
+      "annual": {
+        "grossUSD": 65.83333333333333,
+        "paymentUSD": 1.9999999999999998,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 15,
+        "contingencyUSD": 3,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 43.166666666666664,
+        "margin": 0.6556962025316456
+      },
+      "annualRolloverBurst": {
+        "grossUSD": 65.83333333333333,
+        "paymentUSD": 1.9999999999999998,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 30,
+        "contingencyUSD": 6,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 25.166666666666664,
+        "margin": 0.3822784810126582
+      },
+      "annualDoubleProviderCost": {
+        "grossUSD": 65.83333333333333,
+        "paymentUSD": 1.9999999999999998,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 30,
+        "contingencyUSD": 6,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 25.166666666666664,
+        "margin": 0.3822784810126582
+      },
+      "annualRolloverAndDoubleCost": {
+        "grossUSD": 65.83333333333333,
+        "paymentUSD": 1.9999999999999998,
+        "domainReserveUSD": 1.6666666666666667,
+        "variableUSD": 60,
+        "contingencyUSD": 12,
+        "operatingReserveUSD": 1,
+        "contributionUSD": -10.833333333333336,
+        "margin": -0.1645569620253165
+      }
+    },
+    {
+      "plan": "Business Pro",
+      "monthlyUSD": 139,
+      "annualUSD": 1390,
+      "units": 14000,
+      "capacityMultiplier": 14,
+      "maxUnitsAt60Percent": 16041,
+      "monthly": {
+        "grossUSD": 139,
+        "paymentUSD": 4.47,
+        "domainReserveUSD": 0,
+        "variableUSD": 28,
+        "contingencyUSD": 5.6000000000000005,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 99.93,
+        "margin": 0.7189208633093526
+      },
+      "annual": {
+        "grossUSD": 115.83333333333333,
+        "paymentUSD": 3.4999999999999996,
+        "domainReserveUSD": 3.3333333333333335,
+        "variableUSD": 28,
+        "contingencyUSD": 5.6000000000000005,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 74.4,
+        "margin": 0.6423021582733813
+      },
+      "annualRolloverBurst": {
+        "grossUSD": 115.83333333333333,
+        "paymentUSD": 3.4999999999999996,
+        "domainReserveUSD": 3.3333333333333335,
+        "variableUSD": 56,
+        "contingencyUSD": 11.200000000000001,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 40.8,
+        "margin": 0.3522302158273381
+      },
+      "annualDoubleProviderCost": {
+        "grossUSD": 115.83333333333333,
+        "paymentUSD": 3.4999999999999996,
+        "domainReserveUSD": 3.3333333333333335,
+        "variableUSD": 56,
+        "contingencyUSD": 11.200000000000001,
+        "operatingReserveUSD": 1,
+        "contributionUSD": 40.8,
+        "margin": 0.3522302158273381
+      },
+      "annualRolloverAndDoubleCost": {
+        "grossUSD": 115.83333333333333,
+        "paymentUSD": 3.4999999999999996,
+        "domainReserveUSD": 3.3333333333333335,
+        "variableUSD": 112,
+        "contingencyUSD": 22.400000000000002,
+        "operatingReserveUSD": 1,
+        "contributionUSD": -26.400000000000002,
+        "margin": -0.22791366906474822
+      }
+    }
+  ],
+  "workloads": [
+    {
+      "name": "Small business site",
+      "quantities": {
+        "quick": 100,
+        "standard": 30,
+        "intensive": 2,
+        "workerRequests": 0.1,
+        "workerCPU": 1,
+        "r2Storage": 5,
+        "r2Reads": 0.02,
+        "r2Writes": 0.001,
+        "d1Storage": 0.1,
+        "d1Reads": 10,
+        "d1Writes": 0.01
+      },
+      "version": "whumpo-pool-proposal-2026-09-30",
+      "units": 659.8,
+      "costUSD": 0.9417,
+      "categories": {
+        "Agent activity": 500,
+        "Apps & websites": 52,
+        "Storage": 107.8
+      }
+    },
+    {
+      "name": "Active personal app",
+      "quantities": {
+        "quick": 200,
+        "standard": 80,
+        "intensive": 8,
+        "workerRequests": 1,
+        "workerCPU": 10,
+        "r2Storage": 20,
+        "r2Reads": 0.1,
+        "r2Writes": 0.005,
+        "d1Storage": 0.5,
+        "d1Reads": 20,
+        "d1Writes": 0.05
+      },
+      "version": "whumpo-pool-proposal-2026-09-30",
+      "units": 2294,
+      "costUSD": 3.3434999999999997,
+      "categories": {
+        "Agent activity": 1400,
+        "Apps & websites": 405,
+        "Storage": 489
+      }
+    },
+    {
+      "name": "Business with video",
+      "quantities": {
+        "quick": 300,
+        "standard": 100,
+        "intensive": 10,
+        "workerRequests": 2,
+        "workerCPU": 20,
+        "r2Storage": 50,
+        "d1Storage": 1,
+        "d1Writes": 0.1,
+        "streamStorage": 300,
+        "streamDelivery": 2000
+      },
+      "version": "whumpo-pool-proposal-2026-09-30",
+      "units": 6170,
+      "costUSD": 8.7,
+      "categories": {
+        "Agent activity": 1800,
+        "Apps & websites": 770,
+        "Storage": 1000,
+        "Video": 2600
+      }
+    },
+    {
+      "name": "Always-on 1 GiB container",
+      "quantities": {
+        "containerCPU": 73,
+        "containerMemory": 730,
+        "containerDisk": 2920,
+        "containerEgress": 10
+      },
+      "version": "whumpo-pool-proposal-2026-09-30",
+      "units": 8964,
+      "costUSD": 13.061839999999998,
+      "categories": {
+        "Apps & websites": 8380,
+        "Storage": 584
+      }
+    }
+  ],
+  "tariff": {
+    "quick": {
+      "basis": "completed quick interaction",
+      "units": 1,
+      "costUSD": 0.001,
+      "category": "Agent activity"
+    },
+    "standard": {
+      "basis": "completed standard task",
+      "units": 10,
+      "costUSD": 0.015,
+      "category": "Agent activity"
+    },
+    "intensive": {
+      "basis": "reviewed intensive task",
+      "units": 50,
+      "costUSD": 0.08,
+      "category": "Agent activity"
+    },
+    "workerRequests": {
+      "basis": "million dynamic requests",
+      "units": 200,
+      "costUSD": 0.3,
+      "category": "Apps & websites"
+    },
+    "workerCPU": {
+      "basis": "million CPU milliseconds",
+      "units": 15,
+      "costUSD": 0.02,
+      "category": "Apps & websites"
+    },
+    "r2Storage": {
+      "basis": "GB-month, Standard",
+      "units": 10,
+      "costUSD": 0.015,
+      "category": "Storage"
+    },
+    "r2Writes": {
+      "basis": "million Class A operations",
+      "units": 3000,
+      "costUSD": 4.5,
+      "category": "Storage"
+    },
+    "r2Reads": {
+      "basis": "million Class B operations",
+      "units": 240,
+      "costUSD": 0.36,
+      "category": "Storage"
+    },
+    "d1Reads": {
+      "basis": "million rows scanned",
+      "units": 1,
+      "costUSD": 0.001,
+      "category": "Apps & websites"
+    },
+    "d1Writes": {
+      "basis": "million rows written",
+      "units": 700,
+      "costUSD": 1,
+      "category": "Apps & websites"
+    },
+    "d1Storage": {
+      "basis": "GB-month",
+      "units": 500,
+      "costUSD": 0.75,
+      "category": "Storage"
+    },
+    "containerCPU": {
+      "basis": "active vCPU-hour",
+      "units": 50,
+      "costUSD": 0.072,
+      "category": "Apps & websites"
+    },
+    "containerMemory": {
+      "basis": "provisioned GiB-hour while running",
+      "units": 6,
+      "costUSD": 0.009,
+      "category": "Apps & websites"
+    },
+    "containerDisk": {
+      "basis": "provisioned GB-hour while running",
+      "units": 0.2,
+      "costUSD": 0.000252,
+      "category": "Storage"
+    },
+    "containerEgress": {
+      "basis": "GB, conservative highest listed region",
+      "units": 35,
+      "costUSD": 0.05,
+      "category": "Apps & websites"
+    },
+    "doRequests": {
+      "basis": "million requests",
+      "units": 100,
+      "costUSD": 0.15,
+      "category": "Apps & websites"
+    },
+    "doDuration": {
+      "basis": "million GB-seconds",
+      "units": 8500,
+      "costUSD": 12.5,
+      "category": "Apps & websites"
+    },
+    "doReads": {
+      "basis": "million SQLite rows read",
+      "units": 1,
+      "costUSD": 0.001,
+      "category": "Apps & websites"
+    },
+    "doWrites": {
+      "basis": "million SQLite rows written",
+      "units": 700,
+      "costUSD": 1,
+      "category": "Apps & websites"
+    },
+    "doStorage": {
+      "basis": "SQLite GB-month",
+      "units": 150,
+      "costUSD": 0.2,
+      "category": "Storage"
+    },
+    "streamStorage": {
+      "basis": "stored video minute-month",
+      "units": 4,
+      "costUSD": 0.005,
+      "category": "Video"
+    },
+    "streamDelivery": {
+      "basis": "delivered video minute",
+      "units": 0.7,
+      "costUSD": 0.001,
+      "category": "Video"
+    }
+  }
+}
