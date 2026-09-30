@@ -4,6 +4,8 @@ export type WorkspaceDestination='chat'|'dashboard'|'settings'|'profile'|'billin
 export type WorkspaceNavigation={view:WorkspaceDestination}|{view:'page';label:string};
 export function workspaceNavigation(input:string):WorkspaceNavigation|undefined{
  const value=input.trim().replace(/\s+/g,' ').toLowerCase();
+ // This request reads status in Chat; explicit open/go-to still navigates.
+ if(value==='show connections')return;
  const aliases:Record<string,WorkspaceDestination>={connections:'connections','external connections':'connections','connected accounts':'connections','github connection':'connections','cloudflare connection':'connections',domains:'domains','domain settings':'domains',photos:'photos','project photos':'photos',files:'photos',inbox:'inbox','contact inbox':'inbox',security:'security',passkeys:'security','sign-in security':'security','visitor access':'visitors',visitors:'visitors',publishing:'cms','publishing desk':'cms','cms dashboard':'cms',chat:'chat',dashboard:'dashboard',settings:'settings',profile:'profile',billing:'billing',appearance:'appearance',pages:'pages','custom pages':'pages','billing settings':'billing','usage details':'billing','theme settings':'appearance','site settings':'settings','account settings':'profile'};
  const command=value.match(/^\/(chat|dashboard|settings|profile|billing|appearance|pages|publishing)$/);
  if(command)return {view:aliases[command[1]]};
