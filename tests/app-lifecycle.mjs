@@ -42,6 +42,11 @@ try{
  const fresh=await data.issueAppSession(db,y.who);assert.equal((await call('export','GET',undefined,fresh)).status,200);
  // Deletion cannot reset project admission: aggregate quota applies without retained runs.
  await db.prepare('UPDATE app_daily_usage SET attempts=100 WHERE project_id=?').bind(a.project).run();await assert.rejects(data.transitionAppData(db,service,fresh,a.project,id(),1,{note:'over quota'}),e=>e.status===409);
+ // Expired owner erasure receipts are cleaned; current receipts survive the same sweep.
+ const retained=await signup(a),oldReceipt=id(),newReceipt=id();await auth.revokeAppVisitor(db,a.user,a.project,y.who);await auth.revokeAppVisitor(db,a.user,a.project,retained.who);
+ await db.prepare("INSERT INTO app_owner_erasures(id,user_id,project_id,visitor_id,created_at,expires_at) VALUES(?,?,?,?, '2020-01-01T00:00:00.000Z','2020-01-31T00:00:00.000Z')").bind(oldReceipt,a.user,a.project,y.who).run();
+ await db.prepare('INSERT INTO app_owner_erasures(id,user_id,project_id,visitor_id) VALUES(?,?,?,?)').bind(newReceipt,a.user,a.project,retained.who).run();
+ await life.cleanupAppLifecycle(db);assert.equal(await db.prepare('SELECT id FROM app_owner_erasures WHERE id=?').bind(oldReceipt).first(),null);assert.ok(await db.prepare('SELECT id FROM app_owner_erasures WHERE id=?').bind(newReceipt).first());await erased(y);await erased(retained);
  await life.cleanupAppLifecycle(db);assert.equal((await db.prepare('SELECT attempts FROM app_daily_usage WHERE project_id=?').bind(a.project).first()).attempts,100);
  console.log('Visitor lifecycle passed: private streamed export, origin/identity checks, fresh sign-in and revision guards, atomic credential/data erasure, lost-ack and concurrent retry, interrupted export, in-flight non-resurrection, retained quotas and gateway receipts after withdrawal.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

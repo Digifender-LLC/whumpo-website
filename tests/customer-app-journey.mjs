@@ -84,6 +84,22 @@ try{
  const disabled=await chat('/disable-application '+project),disable=disabled.turns.at(-1).id;assert.equal(disabled.turns.at(-1).application_confirmation_id,disable);assert.equal(disabled.turns.at(-1).application_operation,'disable');await chat('/confirm-application '+disable);assert.ok((await json('/chat')).turns.every(t=>!t.application_confirmation_id&&!t.app_page_confirmation_id&&!t.app_page_live_project_id));
  assert.equal((await json('/chat')).turns.find(t=>t.id===laterRead.turns.at(-1).id).app_page_review.state,'changed');
  const disabledStatus=await readAppStatus(db,owner.user,project);assert.equal(disabledStatus.enabled,0);assert.equal(disabledStatus.published,0);assert.match(describeAppStatus(disabledStatus),/data access is disabled/);
+ // Owner erasure is distinct from revocation and remains available while the app is disabled.
+ const remaining=await db.prepare('SELECT id FROM app_visitors WHERE project_id=?').bind(project).first(),eraseId=id(),erasePath=path+'/application-access/visitors/'+remaining.id+'/erase',eraseBody={id:eraseId,confirmation:'ERASE'};
+ assert.equal((await call(null,erasePath,eraseBody)).status,401);assert.equal((await call(foreign,erasePath,eraseBody)).status,404);assert.equal((await call(owner,erasePath,eraseBody,'POST','https://foreign.test')).status,403);
+ await json(erasePath,{...eraseBody,confirmation:'erase'},400);await json(erasePath,{...eraseBody,extra:true},400);await json(erasePath,eraseBody,409);
+ await json(path+'/application-access/visitors/'+remaining.id+'/revoke',{});
+ const sessionHash=await hashToken(owner.token),fresh=(await db.prepare('SELECT created_at FROM sessions WHERE token_hash=?').bind(sessionHash).first()).created_at;
+ await db.prepare('UPDATE sessions SET created_at=? WHERE token_hash=?').bind(new Date(Date.now()-11*60000).toISOString(),sessionHash).run();await json(erasePath,eraseBody,401);await db.prepare('UPDATE sessions SET created_at=? WHERE token_hash=?').bind(fresh,sessionHash).run();
+ // Simulate a lost storage acknowledgement; concurrent retries recover one committed deletion.
+ env.DB=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const stmt=target.prepare(sql);if(!sql.startsWith('INSERT INTO app_owner_erasures'))return stmt;return {bind(...args){const bound=stmt.bind(...args);return {async run(){await bound.run();throw Error('Lost erasure acknowledgement');}};}};};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
+ try{const results=await Promise.all([json(erasePath,eraseBody),json(erasePath,eraseBody)]);assert.ok(results.every(r=>r.erased&&r.receiptId===eraseId));}finally{env.DB=db;}
+ assert.equal((await json(erasePath,eraseBody)).erased,true);await json(path+'/application-access/visitors/'+id()+'/erase',eraseBody,409);
+ assert.equal((await db.prepare('SELECT count(*) n FROM app_owner_erasures WHERE id=?').bind(eraseId).first()).n,1);
+ for(const table of ['app_visitors','app_documents','app_runs','app_passkeys','app_recovery_codes','app_sessions','app_auth_challenges']){const column=table==='app_visitors'?'id':'visitor_id';assert.equal((await db.prepare('SELECT count(*) n FROM '+table+' WHERE '+column+'=?').bind(remaining.id).first()).n,0);}
+ assert.equal((await db.prepare('SELECT count(*) n FROM app_invitations WHERE used_by=?').bind(remaining.id).first()).n,0);assert.equal((await readAppStatus(db,owner.user,project)).attempts,5);assert.equal((await readAppStatus(db,owner.user,project)).visitors,0);
+ await assert.rejects(db.prepare('UPDATE app_owner_erasures SET visitor_id=? WHERE id=?').bind(id(),eraseId).run());await assert.rejects(db.prepare('DELETE FROM app_owner_erasures WHERE id=?').bind(eraseId).run());
+ console.log('Owner erasure passed: explicit typed confirmation, recent session, revoked-only target, owner/origin bounds, disabled app, concurrent/lost-response retry, full credential/document/history erasure and retained aggregate usage.');
  assert.equal(executions,2);assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
  console.log('Customer app journey passed: welcome, actual QuickJS test, separate program/page reviews, public host, signed passkeys, isolated visitors, exact transition replay, recovery/export/deletion, withdrawal and historical approval safety. No live deployment or AI call.');
 }finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
