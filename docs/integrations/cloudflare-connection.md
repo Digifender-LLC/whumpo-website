@@ -28,17 +28,17 @@ Locally stored connection status is not a continuous provider-side validation. Z
 
 `test:cloudflare-connection` uses disposable D1 and controlled responses for PKCE, binding/replay, encryption isolation, scope/lifetime validation, malformed and redirected responses, cancellation and disconnect races, staged-token cleanup, leased revocation, lost activation acknowledgement and zone filtering/pagination. This is not live provider consent or DNS-change acceptance.
 
-Still needed: registered client and consenting real tester; real token/zone/revocation acceptance; real reviewed TXT/CNAME creation acceptance; exact-record update/removal; domain setup through the customer's own account; final-domain OAuth migration. Domain purchases remain a separate unfinished requirement. Public client promotion is irreversible and requires verified publisher-domain ownership, so private test setup is the first step.
+Still needed: registered client and consenting real tester; real token/zone/revocation acceptance; real reviewed TXT/CNAME creation acceptance; exact-record update/removal; domain setup through the customer's own account; registered Whumpo callback verification. Domain purchases remain a separate unfinished requirement. Public client promotion is irreversible and requires verified publisher-domain ownership, so private test setup is the first step.
 
 ## Operator setup
 
 In Cloudflare → Manage Account → OAuth clients, register a **private** test client:
 
-- Client name: Whumpo test (placeholder).
-- Client URL: `https://digifender.com`.
+- Client name: Whumpo test.
+- Client URL: `https://whumpo.com`.
 - Grant type: Authorization Code; response type: code.
 - Token authentication: `client_secret_basic`.
-- Redirect URI: `https://digifender.com/api/connections/cloudflare/callback`.
+- Redirect URI: `https://whumpo.com/api/connections/cloudflare/callback`.
 - Required scopes: `zone.read`, `dns.read`, `dns.write`.
 - No offline/refresh, registrar, billing, Workers or account-administration permissions.
 
@@ -65,3 +65,9 @@ Sources checked September 29, 2026:
 Migration 0022 applied locally and remotely before the Workers deployed. Main version `e62105fd-a60d-4d1c-bdff-dc2e48c02748`; public version `4ea34b3a-4fba-451a-b1b5-5cd59587f2a4`. TypeScript, the Cloudflare OAuth suite (including expiry reconnect, unexpected refresh rejection and HTTP route gates), and the GitHub authorization regression passed. A local UI fixture verified opening from chat, retaining disconnect controls after a zone-read failure, and rendering the disconnected state.
 
 A temporary production passkey account verified disabled Cloudflare status, 503 for unconfigured start/zone requests, anonymous 401, cross-origin 403, the fixed no-referrer callback redirect, idempotent local disconnect and zero AI usage. It was removed after the check. No real customer authorization, revocation, DNS change, OAuth client creation or new service activation was tested or performed. Callback URLs necessarily contain a one-use code and state; infrastructure request logs must be treated as sensitive operational data even though application errors omit provider bodies.
+
+## Configuration readiness
+
+Run `pnpm report:connections` with the operator’s existing authorization to inspect deployed secret names and aggregate credential/revocation counts. Exit 0 means required names are present, **not** that credentials or customer consent work; exit 2 identifies incomplete configuration, and exit 1 means the inspection failed. No credentials, identities or ciphertext are printed, and nothing is changed. If encrypted rows exist without the vault key, recover the original key before proceeding. Never generate a replacement to bypass this condition.
+
+Registration and a real customer consent/disconnect check remain required. Current callbacks use only `https://whumpo.com`; do not register the retired domain.

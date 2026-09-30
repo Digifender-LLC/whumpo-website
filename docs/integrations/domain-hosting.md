@@ -8,11 +8,11 @@ Before activation, the operator must:
 
 1. Verify the zone's included Cloudflare for SaaS allowance and enable only the included/free hostname feature. No paid add-ons, custom origins, custom metadata, apex proxying, dedicated certificates or Workers for Platforms are used.
 2. Install the previously requested zone-limited SSL and Certificates Edit token as `CLOUDFLARE_DOMAINS_TOKEN`. Do not reuse Wrangler's interactive OAuth token.
-3. Configure `hosting.digifender.com` as an originless proxied AAAA record (`100::`) and the zone's fallback origin. Confirm its provider state is active.
-4. Configure the customer-hostname route to `whumpo-sites`, with explicit more-specific exclusions for `digifender.com/*`, `sites.digifender.com/*` and other existing platform hostnames as appropriate. Test custom-domain/route precedence before enabling customer traffic. Do not install a blanket route that intercepts workspace traffic. Current Wrangler configuration deliberately does not add this wildcard route yet.
+3. Configure `hosting.whumpo.site` as an originless proxied AAAA record (`100::`) and the zone's fallback origin. Confirm its provider state is active.
+4. Review customer-hostname routing to `whumpo-sites` on the `whumpo.site` zone. The existing `*.whumpo.site/*` route serves project subdomains; it does not prove custom-hostname fallback routing works. Keep `whumpo.com` workspace traffic separate and verify route precedence before enabling customer traffic. Do not install an account-wide blanket route.
 5. Verify the actual domain and certificate with a controlled customer hostname, including photo assets, HTTPS, root path, unknown paths, publish/restore/unpublish, workspace exclusion and disconnect. Check the hourly job and its request budget under the existing account allowance. Then set the activation flag only after the infrastructure prerequisites have been confirmed; finish live customer acceptance before claiming the feature delivered.
 
-The current connection check requires a direct, publicly visible DNS-only CNAME to `hosting.digifender.com`. Flattened apex records, proxied customer DNS, and nameserver delegation are not supported by this first connection verifier. These remain follow-up work, not silently accepted routing configurations.
+The current connection check requires a direct, publicly visible DNS-only CNAME to `hosting.whumpo.site`. Flattened apex records, proxied customer DNS, and nameserver delegation are not supported by this first connection verifier. These remain follow-up work, not silently accepted routing configurations.
 
 ## Review and provisioning
 

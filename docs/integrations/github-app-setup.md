@@ -4,9 +4,9 @@ The existing `gh` login belongs to the operator. It is not a customer authorizat
 
 Register at https://github.com/settings/apps/new with:
 
-- Name: a unique Whumpo test name (placeholder brand).
-- Homepage: https://digifender.com
-- Callback: https://digifender.com/api/connections/github/callback
+- Name: a unique Whumpo test name.
+- Homepage: https://whumpo.com
+- Callback: https://whumpo.com/api/connections/github/callback
 - User access tokens: expiration enabled (the default eight-hour lifetime).
 - Request user authorization during installation: optional; the workspace's Connect button starts authorization.
 - Webhook: inactive for this initial connection release.
@@ -33,3 +33,11 @@ Current callback tokens are encrypted, never returned to the browser/model, and 
 References checked September 29, 2026:
 - https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
 - https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-token
+
+## Configuration readiness
+
+Run `pnpm report:connections` with the operator’s existing authorization to inspect deployed secret names and aggregate credential/revocation counts. Exit 0 means required names are present, **not** that credentials or customer consent work; exit 2 identifies incomplete configuration, and exit 1 means the inspection failed. No credentials, identities or ciphertext are printed, and nothing is changed. If encrypted rows exist without the vault key, recover the original key before proceeding. Never generate a replacement to bypass this condition.
+
+Registration and a real customer consent/disconnect check remain required. Current callbacks use only `https://whumpo.com`; do not register the retired domain.
+
+Read-only acceptance on September 29, 2026 (America/Chicago): the live report returned exit 2 with all GitHub/Cloudflare connection secrets absent, zero retained credentials and zero pending revocations for both providers. The focused readiness suite passed missing-name, unvalidated-presence, retained-vault recovery, malformed-inventory, read-only query and source-callback alignment checks. This run did not register applications, activate connections or test real consent.
