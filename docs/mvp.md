@@ -307,3 +307,21 @@ Deployed to test as `1db3d339-1ff1-479c-99b7-08aa7e387f3d`. Independent readback
 The actual `ChatHistoryDialog` component and deployed production CSS were exercised in a 390 × 844 browser against a loopback-only synthetic 155-message fixture. Literal `100%_` search returned only message 54; clearing restored the latest page. Searching `Bakery`, choosing Older, and returning with Newer retained the phrase and moved between 56–105 and 106–155. A no-match query displayed recovery guidance. Closing preserved the unsent composer value and returned focus to Find past messages; reopening reset the search and focused its field.
 
 Read-only DOM measurements confirmed document width 390 at a 390 viewport, and Search, Clear search, Older, Newer and Close were each at least 44 pixels tall. The screenshot `.secrets/history-search-mobile.png` records the single literal match. The fixture's request log contains only GET history reads; no real customer messages, provider calls or payment operations were involved. This closes the earlier browser-interaction gap for this component. Physical-device touch, software keyboard behavior and the broader mobile MVP journey remain unverified. No application code or deployment change was needed for this acceptance run.
+
+
+## Connected AI website journey — September 30, 2026
+
+`tests/customer-site-journey.mjs` now has an opt-in synthetic AI mode alongside its original guided mode:
+
+```sh
+pnpm test:customer-site-journey
+SITE_AI=1 pnpm test:customer-site-journey
+```
+
+The AI mode enters through the actual authenticated HTTPS platform handlers with the test environment, pinned Muse route and Responses adapter. Its injected transport accepts only the fixed provider endpoint and validates the model/redirect policy; it reads no credentials and makes no real inference request. Background acknowledgment tasks are collected and awaited before checking accounting and disposing the fixture.
+
+The journey starts with a fresh synthetic authenticated account, confirms Chat is blocked before a first project, completes welcome with an unshared bio and selected avatar, then invokes the saved-brief first-draft action. Replaying the same first-draft request neither calls the main model again nor increases its charge. Private preview/export and foreign-owner/anonymous denials are checked before an explicit publication review. A foreign-origin confirmation cannot publish. Discarding the first successful confirmation response and replaying it leaves exactly one publication revision.
+
+The next ordinary Chat request creates a private AI edit without changing the live site. A later confirmed publication invalidates an older restore review. A fresh restore returns the public bytes exactly to the original source archive, and confirmed unpublish returns 404 while the private preview remains accessible. The whole flow leaves exactly one project. Guided publication/restore controls do not dispatch AI, even with AI configured.
+
+Both modes passed September 30. The AI run observed two main requests and two acknowledgment requests, six settled monthly test units, no quota/credit holds, and no unresolved inference receipts. The unshared profile marker never entered either request type. The guided run had zero inference receipts. This extends verification across the full handler/adapter/ledger/public-host path; it does not replace separate live Muse probes, real-device authentication or final deployed customer acceptance. Only test/documentation files changed, so no runtime deployment was required.
