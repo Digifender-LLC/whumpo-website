@@ -1,3 +1,4 @@
+import {readOnboarding,saveOnboarding,completeOnboarding} from './onboarding';
 import {cmsWordPressAction,cmsWordPressCommand} from './cms-wordpress-chat';
 import {analyzeCMSWordPress,inspectCMSWordPress,uploadCMSWordPressRequest} from './cms-wordpress-api';
 import {listCMSWordPressSources,readCMSWordPressSource,downloadCMSWordPressSource} from './cms-wordpress-sources';
@@ -217,6 +218,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
   const user = await currentUser(request, env);
   if (!user) return error(401, "Sign in required");
+  if(pathname==='/api/onboarding'){
+    if(method==='GET')return json(await readOnboarding(env.DB,user.id));
+    if(method==='PUT')return json(await saveOnboarding(env.DB,user.id,(await body(request))??{}));
+  }
+  if(pathname==='/api/onboarding/complete'&&method==='POST')return json(await completeOnboarding(env.DB,user.id,(await body(request))??{}));
   if(pathname==='/api/profile'){
     if(method==='GET')return json(await readProfile(env.DB,user.id));
     if(method==='PATCH')return json(await updateProfile(env.DB,user.id,await body(request)));

@@ -1,21 +1,23 @@
+import {onboardingComplete} from './onboarding';
 import {BillingError} from './billing';
 import {cleanPhoto} from './files';
 export async function readProfile(db:D1Database,user:string){
  const account=await db.prepare("SELECT email,password_hash!='passkey-only' AS passwordEnabled FROM users WHERE id=?").bind(user).first<{email:string;passwordEnabled:number}>();
  if(!account)throw new BillingError(404,'Account not found');
- const row=await db.prepare('SELECT revision,name,about_me,share_context,theme,photo IS NOT NULL AS hasPhoto FROM user_profiles WHERE user_id=?').bind(user).first<{revision:number;name:string;about_me:string;share_context:number;theme:string;hasPhoto:number}>();
- return {...(row??{revision:0,name:'',about_me:'',share_context:0,theme:'system',hasPhoto:0}),email:account.email,passwordEnabled:!!account.passwordEnabled};
+ const row=await db.prepare('SELECT revision,name,about_me,share_context,theme,avatar_id,photo IS NOT NULL AS hasPhoto FROM user_profiles WHERE user_id=?').bind(user).first<{revision:number;name:string;about_me:string;share_context:number;theme:string;avatar_id:string;hasPhoto:number}>();
+ return {...(row??{revision:0,name:'',about_me:'',share_context:0,theme:'system',avatar_id:'cloud',hasPhoto:0}),onboardingComplete:await onboardingComplete(db,user),email:account.email,passwordEnabled:!!account.passwordEnabled};
 }
 async function ensure(db:D1Database,user:string){await db.prepare('INSERT OR IGNORE INTO user_profiles(user_id) VALUES(?)').bind(user).run();}
 export async function updateProfile(db:D1Database,user:string,input:unknown){
  if(!input||typeof input!=='object'||Array.isArray(input))throw new BillingError(400,'Invalid profile');
  const v=input as Record<string,unknown>,keys=Object.keys(v).filter(k=>k!=='revision');
- if(!Number.isSafeInteger(v.revision)||Number(v.revision)<0||!keys.length||keys.some(k=>!['name','about_me','share_context','theme'].includes(k)))throw new BillingError(400,'Invalid profile fields');
+ if(!Number.isSafeInteger(v.revision)||Number(v.revision)<0||!keys.length||keys.some(k=>!['name','about_me','share_context','theme','avatar_id'].includes(k)))throw new BillingError(400,'Invalid profile fields');
  for(const k of ['name','about_me'])if(k in v&&(typeof v[k]!=='string'||(v[k] as string).length>(k==='name'?80:1200)||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v[k] as string)))throw new BillingError(400,'Profile text is too long or contains unsupported characters');
  if('share_context'in v&&typeof v.share_context!=='boolean'||'theme'in v&&(typeof v.theme!=='string'||!['system','light','dark'].includes(v.theme)))throw new BillingError(400,'Invalid preference');
+ if('avatar_id' in v&&(typeof v.avatar_id!=='string'||!['cloud','sun','moon','leaf','star','planet'].includes(v.avatar_id)))throw new BillingError(400,'Choose an available profile picture');
  await ensure(db,user);
  const args=keys.map(k=>k==='share_context'?(v[k]?1:0):v[k]);
- const r=await db.prepare(`UPDATE user_profiles SET ${keys.map(k=>k+'=?').join(',')},revision=revision+1 WHERE user_id=? AND revision=?`).bind(...args,user,v.revision).run();
+ const r=await db.prepare(`UPDATE user_profiles SET ${keys.map(k=>k+'=?').join(',')}${'avatar_id'in v?',photo=NULL':''},revision=revision+1 WHERE user_id=? AND revision=?`).bind(...args,user,v.revision).run();
  if(r.meta.changes!==1)throw new BillingError(409,'Your profile changed elsewhere. Reload before saving.');
  return readProfile(db,user);
 }

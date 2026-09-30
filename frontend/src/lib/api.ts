@@ -3,7 +3,7 @@ export class APIError extends Error{constructor(message:string,public status:num
 export const queryClient=new QueryClient({defaultOptions:{queries:{retry:false,staleTime:15000,refetchOnWindowFocus:false},mutations:{retry:false}}});
 export async function api<T>(path:string,options:RequestInit={}):Promise<T>{const response=await fetch('/api'+path,{credentials:'same-origin',...options,headers:{'content-type':'application/json',...options.headers}});const data=await response.json();if(!response.ok)throw new APIError(data.error??'This request could not finish.',response.status);return data;}
 export const send=<T>(path:string,body:unknown={},method='POST')=>api<T>(path,{method,body:JSON.stringify(body)});
-export type Profile={revision:number;name:string;about_me:string;email:string;share_context:number;theme:string;hasPhoto:number;passwordEnabled:boolean};
+export type Profile={revision:number;avatar_id:string;onboardingComplete:boolean;name:string;about_me:string;email:string;share_context:number;theme:string;hasPhoto:number;passwordEnabled:boolean};
 export type Project={id:string;name:string;status:string;purpose:string;cms_articles:number};
 export type Layout={widgets:string[];tabs:{id:string;label:string;projectId:string|null;widgets:string[]}[]};
 export type Traffic={enabledAt:string|null;days:number;rows:{project_id:string;day:string;requests:number}[];metric:string};
