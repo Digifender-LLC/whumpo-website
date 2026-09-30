@@ -382,3 +382,10 @@ Platform `e62fdedc-3a47-4f61-8f9c-1c08ba4fc49b` presents recognized workflow sho
 The opt-in `tests/workspace-shortcuts-live.mjs` probe uses a disposable local account and the existing Muse subscription. One natural request saved a page with exactly project/version shortcuts and preserved the default layout; exact replay made no extra model call. Both shortcuts ran through actual guided Chat handlers without additional AI units, and no site version or publication was created. Details and measured usage are in the workspace contract. This is live-model acceptance with local storage, not authenticated browser acceptance on whumpo.com.
 
 At 15:08 UTC, independent verification succeeded: active version, all 16 frontend assets, health 200, anonymous private routes 401 and recovery cross-origin denial 403. This resolves the earlier public connection failures for the latest release. Private evidence: `.secrets/shortcut-language-release-verification.json`.
+
+
+## Workflow page title and browser acceptance — September 30, 2026
+
+Platform `a30b9af5-9d51-4fe7-81b0-fe4e5ff28aa1` displays a custom page's saved label in the browser title rather than its internal tab ID. Local browser acceptance verified the title and both shortcut-to-Chat actions with disposable actual D1; final assertions found exactly two guided shortcut requests, zero inference and zero publications. The mobile pages sheet and 390 CSS-pixel layout were checked separately. Physical-device acceptance remains open.
+
+Both TypeScript projects, build and asset-loading checks pass. Independent live verification at 15:17 UTC confirmed the active version, all 16 frontend assets, health 200, anonymous private-route denial and recovery origin checks. Evidence: `.secrets/workflow-title-release-verification.json`. No schema, customer data, CMS resources or provider permissions changed.
