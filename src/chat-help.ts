@@ -55,7 +55,7 @@ Abandon edits or take an article offline
 /confirm-cms-unpublish REVIEW_ID — apply or recover that unpublish.
 
 Recover saved work
-/cms-pending lists unfinished publishing work across your projects, with saved review/retry commands. Add PROJECT_ID to narrow the list. “Show unfinished publishing work” is the same free read. Opening the list retries and approves nothing.
+/cms-pending lists unfinished publishing work across your projects, including unfinished image and WordPress-export uploads, with saved review/retry commands or a publishing-desk link. Upload recovery requires the original file. Add PROJECT_ID to narrow the list. “Show unfinished publishing work” is the same free read. Opening the list retries and approves nothing.
 /cms-retry PROJECT_ID REQUEST_ID recovers a creation receipt.
 /cms-edits PROJECT_ID REQUEST_ID lists edit receipts; /cms-retry-edit PROJECT_ID EDIT_REQUEST_ID recovers one.
 Reuse the saved request or review ID after an interrupted operation. Do not create a replacement request just to retry.
