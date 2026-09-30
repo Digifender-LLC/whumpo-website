@@ -1,3 +1,6 @@
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {createRequire} from 'node:module';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,mkdir,writeFile} from 'node:fs/promises';
 import {dirname} from 'node:path';
@@ -6,6 +9,10 @@ import {build} from 'esbuild';
 import {unzipSync} from 'fflate';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const uiBuild=await build({entryPoints:['frontend/src/chat-turn-actions.tsx'],bundle:true,format:'cjs',platform:'node',jsx:'automatic',alias:{'@':'./frontend/src'},external:['react','react/*'],write:false});
+const uiModule={exports:{}};new Function('require','module','exports',uiBuild.outputFiles[0].text)(createRequire(import.meta.url),uiModule,uiModule.exports);
+const {TurnActions}=uiModule.exports;
+const renderActions=turn=>renderToStaticMarkup(createElement(TurnActions,{turn,onSend:async()=>{}}));
 const {reviewBackup,confirmBackup,listBackups,githubRepositories}=await module('src/github-backups.ts');
 const worker=(await module('src/index.ts')).default,{hashToken}=await module('src/security.ts');
 const {sendChat,readChat}=await module('src/chat.ts'),{ownedExport}=await module('src/exports.ts'),{seal}=await module('src/connection-vault.ts');
@@ -54,6 +61,9 @@ try{
  const concurrent=await Promise.all([message('/confirm-backup '+review.id,confirmId,revision),message('/confirm-backup '+review.id,confirmId,revision)]);assert.ok(concurrent.every(r=>r.result.status===200));assert.equal(writes,1);
  await message('/confirm-backup '+review.id,confirmId,revision);assert.equal(writes,1);
  const completed=(await readChat(db,user)).turns.find(t=>t.id===review.id);assert.equal(completed.backup_confirmation_id,null);assert.ok(completed.backup_url.startsWith('https://github.com/test/backup/tree/'));assert.ok(completed.backup_url.endsWith('/versions/'+version));
+ const markup=renderActions(completed);assert.ok(markup.includes('View GitHub backup'));assert.ok(markup.includes('href="'+completed.backup_url+'"'));assert.ok(markup.includes('rel="noopener noreferrer"'));assert.ok(!markup.includes('Confirm GitHub backup'));
+ for(const url of [completed.backup_url.replace('github.com','github.com.evil.invalid'),completed.backup_url+'?redirect=evil',completed.backup_url+'/../../settings',completed.backup_url.replace('/tree/','/commit/'),'javascript:alert(1)',null])assert.ok(!renderActions({...completed,backup_url:url}).includes('View GitHub backup'));
+
  // A lost provider response is reconciled by reading, never by repeating the commit.
  remote=false;const uncertain=await message('/review-backup '+version+' test/backup 17');mode='after';await message('/confirm-backup '+uncertain.id);assert.equal(writes,2);assert.equal((await listBackups(db,user)).backups.find(b=>b.id===uncertain.id).state,'uncertain');
  await message('/check-backup '+uncertain.id);assert.equal(writes,2);assert.equal((await listBackups(db,user)).backups.find(b=>b.id===uncertain.id).state,'complete');mode='ok';
