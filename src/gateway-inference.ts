@@ -1,3 +1,4 @@
+import {captureGatewayReceipt} from './gateway-provider-receipt';
 import {completeGateway,validateGatewayConfig,type GatewayConfig} from './ai-gateway';
 import {type ChatMessage,type Completion} from './ai';
 import {GatewaySpendError,dispatchGatewaySpend,settleGatewaySpend,uncertainGatewaySpend} from './gateway-spend';
@@ -38,7 +39,11 @@ export async function runGatewayInference(db:D1Database,owner:string,id:string,s
  // This atomic claim is the only path to provider dispatch. No retries after a lost claim response.
  if(!await dispatchGatewaySpend(db,owner,id))return {status:(await read(db,owner,id))?.status??'uncertain',replayed:true};
  try{
-  const result=await completeGateway(config,messages,transport);
+  const result=await completeGateway(config,messages,async (url,request)=>{
+   const response=await (transport??globalThis.fetch.bind(globalThis))(url,request);
+   try{await captureGatewayReceipt(db,owner,id,config,response);}catch(error){await response.body?.cancel();throw error;}
+   return response;
+  });
   await db.prepare('UPDATE gateway_inference_requests SET result_json=? WHERE attempt_id=? AND request_hash=? AND result_json IS NULL').bind(JSON.stringify(result),id,requestHash).run();
   return await finish(result,false);
  }catch{
