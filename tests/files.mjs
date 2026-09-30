@@ -1,3 +1,4 @@
+Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -18,6 +19,9 @@ try{
  for(const invalid of [new TextEncoder().encode('<svg onload="alert(1)"></svg>'),jpeg.subarray(0,100),Buffer.concat([jpeg,Buffer.from('trailing data')]),new Uint8Array(await readFile(dir+'/progressive.jpg')),new Uint8Array(await readFile(dir+'/oversized.jpg'))])assert.throws(()=>cleanPhoto(invalid),{status:400});
  const pair=await Promise.all([uploadPhoto(request(metadata),env,owner.id,owner.project,id),uploadPhoto(request(metadata),env,owner.id,owner.project,id)]);assert.ok(pair.every(p=>p.status==='ready'));
  const listed=await listPhotos(db,owner.id,owner.project);assert.equal(listed.files.length,1);assert.equal((await env.FILES.list()).objects.length,1);
+ assert.equal(listed.files[0].safetyStatus,'pending');await assert.rejects(()=>readPhoto(env,owner.id,id),{status:423});
+ // Synthetic trusted receipt for storage/decoder regression, not a real scan.
+ await db.prepare("UPDATE project_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic',expires_at=? WHERE file_id=?").bind(new Date(Date.now()+3600000).toISOString(),id).run();
  const photo=await readPhoto(env,owner.id,id);assert.equal(photo.headers.get('content-type'),'image/jpeg');assert.equal(photo.headers.get('x-content-type-options'),'nosniff');assert.deepEqual(new Uint8Array(await photo.arrayBuffer()),clean.bytes);
  // Independent pixel decoding confirms stripping metadata retained a real, readable image.
  execFileSync('python3',['-c',"from PIL import Image; import sys,io; im=Image.open(io.BytesIO(sys.stdin.buffer.read())); im.load(); assert im.size==(32,24)"] ,{input:clean.bytes});
