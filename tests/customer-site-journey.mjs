@@ -13,7 +13,7 @@ if(ai)globalThis.fetch=async(url,init)=>{
  const request=JSON.parse(init.body);assert.equal(request.model,'muse-spark-1.3-contributor');assert.equal(init.redirect,'manual');
  assert.ok(!init.body.includes('Unshared profile marker'));
  const ack=request.max_output_tokens===256;
- if(ack)ackCalls++;else{providerCalls++;assert.ok(nextAction,'Unexpected extra main-model dispatch');}
+ if(ack)ackCalls++;else{assert.ok(request.input.filter(m=>m.role==='system').every(m=>!m.content.includes('UNTRUSTED_BRIEF_CANARY')));assert.ok(request.input.filter(m=>m.role==='user').some(m=>m.content.includes('UNTRUSTED_BRIEF_CANARY')));providerCalls++;assert.ok(nextAction,'Unexpected extra main-model dispatch');}
  const text=JSON.stringify(ack?{intent:'editing'}:{reply:'Synthetic private draft',action:nextAction});
  if(!ack)nextAction=undefined;
  return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text}]}],usage:{input_tokens:ack?10:1000,output_tokens:ack?10:400}});
@@ -27,7 +27,7 @@ try{
  const owner=await account(),foreign=await account();
  assert.equal((await call(owner,'/api/chat')).status,409);assert.equal(providerCalls,0);
  await json(owner,'/api/profile','PATCH',{revision:0,name:'River',avatar_id:'sun',about_me:'Unshared profile marker',share_context:false});await json(owner,'/api/onboarding');
- await json(owner,'/api/onboarding','PUT',{revision:0,stage:'review',project_name:'Copper Oven',idea:'A neighborhood bakery with fresh bread',audience:'Neighbors',preferred_theme:'clay'});
+ await json(owner,'/api/onboarding','PUT',{revision:0,stage:'review',project_name:'Copper Oven',idea:'A neighborhood bakery with fresh bread. UNTRUSTED_BRIEF_CANARY',audience:'Neighbors',preferred_theme:'clay'});
  await json(owner,'/api/onboarding/complete','POST',{revision:1});assert.equal((await json(owner,'/api/profile')).onboardingComplete,true);
  const {id:project}=await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(owner.id).first();
  if(ai){assert.equal((await json(owner,'/api/chat')).firstDraft.id,project);nextAction={kind:'preview',projectId:project,config:{name:'Copper Oven',headline:'Bread for our neighbors',description:'Fresh bread daily.',theme:'clay',aboutTitle:'Our bakery',aboutText:'A neighborhood bakery.',sections:[]}};}
@@ -51,5 +51,5 @@ try{
  const off=await chat(owner,'/unpublish '+project);assert.ok(off.data.turns.at(-1).confirmation_id);assert.match(await(await call(owner,'/api/publication-reviews/'+off.input.id+'/diff')).text(),/After unpublishing/);await chat(owner,'/confirm '+off.input.id);assert.equal((await served(project)).status,404);assert.equal((await call(owner,'/api/site-versions/'+version+'/preview')).status,200);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM projects WHERE owner_user_id=?').bind(owner.id).first()).n,1);await Promise.all(background);
  if(ai){assert.equal(providerCalls,2);const billing=await json(owner,'/api/billing');assert.equal(billing.quota.spent,0);assert.equal(billing.quota.reserved,0);assert.equal(billing.credits.reserved,0);assert.equal((await db.prepare("SELECT COUNT(*) n FROM inference_calls WHERE role='orchestrator' AND status='observed'").first()).n,2);assert.equal((await db.prepare("SELECT COUNT(*) n FROM inference_calls WHERE status IN ('reserved','dispatched','uncertain')").first()).n,0);}else assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
- console.log('Connected HTTP journey passed: welcome, private preview/export, owner/origin boundaries, exact review, lost-response replay, private revision, stale review, byte-exact restore, unpublish and retained preview. No real customer publication or paid provider request. Mode: '+(ai?'synthetic Responses; two main calls, '+ackCalls+' acknowledgments, six test units settled':'guided; no inference')+'.');
+ console.log('Connected HTTP journey passed: welcome, private preview/export, owner/origin boundaries, exact review, lost-response replay, private revision, stale review, byte-exact restore, unpublish and retained preview. No real customer publication or paid provider request. Mode: '+(ai?'synthetic Responses; two main calls, '+ackCalls+' acknowledgments, zero customer units charged':'guided; no inference')+'.');
 }finally{await Promise.allSettled(background);globalThis.fetch=originalFetch;await proxy.dispose();await rm(dir,{recursive:true,force:true});}

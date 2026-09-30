@@ -1,7 +1,7 @@
 import {policyInputBound} from './ai';
 import {standardAIReservationStatement,dispatchStandardAI,markStandardAIUncertain,closeStandardAIAttempt} from './standard-ai-usage';
 import {reconcileStandardChat} from './standard-ai-recovery';
-import {appPageDesignProjectId,readAppPageDesign,appPageDesignPrompt,appPageDesignProposalAllowed} from './app-page-design';
+import {appPageDesignProjectId,readAppPageDesign,appPageDesignPrompt,appPageDesignData,appPageDesignProposalAllowed} from './app-page-design';
 import {inspectionRequest,inspectionMessages,inspectionAllowance} from './agent-inspection';
 import {firstDraftProjectId,firstAppProjectId,welcomeDraftProject,firstDraftProposalAllowed} from './first-draft';
 import { startAcknowledgment } from './acknowledgment';
@@ -10,7 +10,7 @@ import { museTestRoute } from './model-policy';
 import {cloudflareStatus} from './cloudflare-connection';
 import type {DNSChatOptions} from './dns-chat';
 import {DomainError} from './domains';
-import { siteContext, agentPrompt,agentPromptFocus, prepareSiteAction, ProposalError } from './site-agent';
+import { siteContext, agentPrompt,agentWorkspaceData,agentPromptFocus, prepareSiteAction, ProposalError } from './site-agent';
 import { complete, ProviderError, type AIConfig, type ChatMessage } from './ai';
 import { finishUsage, ensureBilling, getOperation, uncertainUsage } from './billing';
 import { buildUnits } from './plans';
@@ -64,15 +64,20 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   context.dnsConnection={enabled:dnsStatus.enabled,connected:dnsStatus.connected,expiresAt:dnsStatus.expiresAt};
   const { results: history } = await db.prepare("SELECT id,user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' AND ai_context_allowed=1 ORDER BY revision DESC LIMIT 4").bind(userId).all<{id:string;user_text:string;assistant_text:string}>();
   const websiteFollowup=!!context.latest&&history[0]?.id===context.latest.id;
-  const system = pageDesign?appPageDesignPrompt(pageDesign):agentPrompt(context,firstProject?(firstApp?'all':'website'):agentPromptFocus(content,websiteFollowup))+(firstProject&&firstApp?`\nThis request is specifically the first private application build for existing project ${firstProject.id}. Use its complete saved purpose and audience. The only allowed action is backend buildApplication for that exact projectId, including a non-sensitive synthetic example and its expected state/result derived from the brief, or action:null to ask one essential question or explain an unsupported requirement. Never substitute a website or CMS, create another project, inspect another service, publish, activate, connect or purchase anything. A successful synthetic check prepares an owner approval only. If the brief needs unavailable capabilities or is too vague to derive a meaningful check, ask before building. No inspection call is needed; the complete brief is in context.`:firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is preview for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
+  const focus=firstProject?(firstApp?'all':'website'):agentPromptFocus(content,websiteFollowup);
+  const system = pageDesign?appPageDesignPrompt(pageDesign):agentPrompt(context,focus)+(firstProject&&firstApp?`\nThis request is specifically the first private application build for existing project ${firstProject.id}. Use its complete saved purpose and audience. The only allowed action is backend buildApplication for that exact projectId, including a non-sensitive synthetic example and its expected state/result derived from the brief, or action:null to ask one essential question or explain an unsupported requirement. Never substitute a website or CMS, create another project, inspect another service, publish, activate, connect or purchase anything. A successful synthetic check prepares an owner approval only. If the brief needs unavailable capabilities or is too vague to derive a meaningful check, ask before building. No inspection call is needed; the complete brief is in context.`:firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is preview for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
   // Keep each transport message within its limit without dropping system policy.
   // Budget reservations still include every byte across all chunks.
   const messages: ChatMessage[] = [];
-  for(let offset=0;offset<system.length;){
-    let end=Math.min(offset+16000,system.length);
-    if(end<system.length){const newline=system.lastIndexOf('\n',end-1);if(newline>=offset)end=newline+1;else if(/[\uD800-\uDBFF]/.test(system[end-1]))end--;}
-    messages.push({role:'system',content:system.slice(offset,end)});offset=end;
+  function appendContext(role:'system'|'user',text:string){
+  for(let offset=0;offset<text.length;){
+    let end=Math.min(offset+16000,text.length);
+    if(end<text.length){const newline=text.lastIndexOf('\n',end-1);if(newline>=offset)end=newline+1;else if(/[\uD800-\uDBFF]/.test(text[end-1]))end--;}
+    messages.push({role,content:text.slice(offset,end)});offset=end;
   }
+  }
+  appendContext('system',system);
+  appendContext('user',pageDesign?appPageDesignData(pageDesign):agentWorkspaceData(context,focus));
   if(!pageDesign)for (const turn of history.reverse()) messages.push({ role: 'user', content: turn.user_text.slice(0, 600) }, { role: 'assistant', content: turn.assistant_text.slice(0, 900) });
   messages.push({ role: 'user', content: pageDesign?'Design the visitor page for this approved application and prepare my review. Keep it unpublished.':firstProject?`Build the first private ${firstApp?'application, check a synthetic example, and prepare my approval':'website draft'} for project ${firstProject.id} using my saved brief. Keep it private.`:content.startsWith('/ask ') ? content.slice(5) : content.startsWith('/edit ') ? content.slice(6) : content });
   const budgetDate=new Date();
