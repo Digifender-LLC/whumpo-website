@@ -1,12 +1,14 @@
-import {renderCMSRichText} from '../../../src/cms-rich-text';
+import type {CMSImageBlock} from '../../../src/cms-image-block';
+import {validateCMSRichContent} from '../../../src/cms-rich-text';
 export type RichSpan={_type:'span';_key?:string;text:string;marks:string[]};
 export type RichBlock={_type:'block';_key?:string;style?:string;listItem?:'bullet'|'number';level?:number;markDefs:{_type:'link';_key:string;href:string}[];children:RichSpan[]};
-export function richEditable(snapshot:unknown):{title:string;content:RichBlock[]}|null{
+export type RichContent=RichBlock|CMSImageBlock;
+export function richEditable(snapshot:unknown):{title:string;content:RichContent[]}|null{
  try{
-  const s=snapshot as {revision:string;item:{status:string;data:{title:string;content:RichBlock[]}}};
+  const s=snapshot as {revision:string;item:{status:string;data:{title:string;content:RichContent[]}}};
   if(!['draft','published'].includes(s.item.status)||typeof s.revision!=='string'||typeof s.item.data.title!=='string'||s.item.data.title.length>100)return null;
-  renderCMSRichText(s.item.data.content);
-  if(s.item.data.content.some(b=>b._key!==undefined&&typeof b._key!=='string'||b.children.some(c=>c._key!==undefined&&typeof c._key!=='string')))return null;
+  validateCMSRichContent(s.item.data.content);
+  if(s.item.data.content.some(b=>b._key!==undefined&&typeof b._key!=='string'||b._type==='block'&&b.children.some(c=>c._key!==undefined&&typeof c._key!=='string')))return null;
   return {title:s.item.data.title,content:structuredClone(s.item.data.content)};
  }catch{return null;}
 }
