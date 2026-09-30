@@ -1,73 +1,65 @@
 # Whumpo
 
-The test platform is at **https://whumpo.com**, with source in the private **zemdregon/TellUmo** GitHub repository. Whumpo is the product name.
+Whumpo is an invitation-only AI website and application platform in private testing at **https://whumpo.com**. The signed-in workspace is `/workspace/`; customer sites use project subdomains of **whumpo.site**. Source: private **zemdregon/whumpo** repository. Historical `tellumo-*` service names remain internal infrastructure identifiers.
 
-The public homepage introduces the product. Sign in at `/workspace/`; invitation links open `/workspace/?signup=1`. The landing page is rendered by React and makes no API calls.
+**MVP is not complete.** Start with the [current readiness assessment](docs/acceptance.md#current-mvp-readiness--september-29-2026) and [delivery contract](docs/mvp.md). Detailed feature documents distinguish implemented code, configured services and verified customer journeys; an implemented integration is not automatically available to customers.
 
-Implemented: invitation-only signup with Turnstile, passkeys by default, optional password sign-in, recovery codes, revocable cookie sessions, persistent guided chat, conversational project onboarding, projects, activity, tenant isolation, authentication throttling, and test data quotas. Muse Spark 1.3 Contributor planning chat, monthly build-unit reservations, an immutable usage ledger, and opt-in credit spending are implemented. A Stripe test credit-checkout foundation is implemented but unconfigured; paid entitlements and checkout remain disabled. See [payment integration](docs/payments.md). Chat can assemble private, versioned previews from a reusable launch-page component without model usage. Confirmed publication, exact-version restore and unpublish are available through chat. Natural-language requests can now create private website drafts and prepare publication reviews. Saved sites can be exported as standalone source ZIPs through /export. Domain ownership checks are available through chat and the Domains menu; custom-domain hosting remains pending. See [domain controls](docs/domains.md).
+## Current product
 
-## Local development
+- React workspace with Chat first, a separate dashboard, workflow pages, mobile navigation, and separate Profile and Settings screens. Exact navigation requests use no AI units.
+- Passkeys by default, invite/Turnstile signup, optional password sign-in, recovery codes and revocable sessions. Guided conversational onboarding persists without requiring AI or an external account.
+- Muse-assisted private drafts and edits, saved versions, source export, and explicit publication/restore reviews. Supported static/photo sites publish to customer subdomains.
+- Bounded customer backend execution in a separate QuickJS Worker, reviewed application activation, controlled visitor pages and scoped visitor accounts/data. This is not a general-purpose VPS or unrestricted deployment environment.
+- CMS content editing, reviews and private media viewing are implemented; native customer provisioning and complete media/import workflows still need acceptance. See [EmDash](docs/emdash.md).
 
-Use Node.js 24 and pnpm 11. Run `pnpm install --frozen-lockfile`, `pnpm db:local`, then `pnpm dev`.
+## Plans and inference
 
-The dev command explicitly sets `ENVIRONMENT=local`, using local D1 and bypassing invite/Turnstile checks. Deployment defaults to `test` and never bypasses them. Do not expose the local dev server publicly.
+Proposed monthly/annual prices: **Starter $17/$170**, **Personal $30/$300**, **Business $79/$790**, **Business Pro $139/$1,390**. Paid launch assistance is planned as unlimited standard site work under fair use. Annual domain benefits, infrastructure allowances and premium model funding have separate rules; none imply an enabled purchase. [Pricing and model policy](docs/pricing-and-model-policy.md) is authoritative.
 
-Use `http://localhost:8787` for passkey development: its relying-party origin is intentionally fixed, because Wrangler rewrites route headers internally. With the server running, run `pnpm test:smoke`, `pnpm test:chat`, and `pnpm test:passkeys` in another terminal. `pnpm test:ai` runs provider contract tests without API credentials. `pnpm test:billing` uses a disposable local D1 database to verify concurrency, settlement and AI recovery. Local development never calls the configured real model. Tests check login/logout, tenant boundaries, Origin enforcement, activity, and the project quota under concurrent requests. `pnpm check` checks TypeScript.
+Owner testing uses `muse-spark-1.3-contributor` on OpenCode Go via the OpenAI-compatible Responses adapter. Chat Completions is also supported by the transport. There is no automatic paid fallback. Contributor prompts/replies may be used for training; the UI displays the testing notice. Keep credentials and sensitive customer data out of model context.
 
-## Test deployment
+Cloudflare AI Gateway, comparative Workers AI/external routing and premium-model credits are planned; route selection and spending-reservation foundations do not constitute live provider dispatch. **Monitor mode is deployed by default:** fair-use observations never warn, throttle or block users. Company finance data and active enforcement remain unimplemented. Run `pnpm report:fair-use` for a private read-only operator report.
 
-Run `pnpm check`, `pnpm db:remote`, then `pnpm deploy`. Run `pnpm invite` to generate a one-use, seven-day invitation. Its hash is stored in D1; the code is written to a permission-restricted file under `.secrets/`, ignored by Git. Share the code with the intended tester yourself, never through a public issue or URL.
+Explore retains its 50-unit test allowance and atomic reservation/settlement. Test credits require explicit overage opt-in. These preview rules are separate from the intended paid-plan fair-use policy. Stripe checkout is disabled because the owner has no Stripe account; no subscriptions or credit purchases are available. See [payments](docs/payments.md).
 
-The public Turnstile site key is in Wrangler config. Set its server secret with `wrangler secret put TURNSTILE_SECRET`. The widget is restricted to whumpo.com. Signup validates the invitation, hostname, and Turnstile register action.
+## Development
 
-Password hashing also requires `PASSWORD_PEPPER`, a random secret of at least 32 characters. It is already installed on the test Worker. Preserve the existing value; changing it invalidates stored passwords. See the runtime constraints and versioned hash format in the deployment notes.
+Use **Node.js 24 and pnpm 11**:
 
-GitHub is source storage only. There are no Actions workflows, paid marketplace apps, Packages, or Git LFS. Deploy from the authenticated local Wrangler installation.
+```sh
+pnpm install --frozen-lockfile
+pnpm db:local
+pnpm dev
+```
 
-## Budget and scope
+The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http://localhost:8787` for passkey development. Deployment uses `ENVIRONMENT=test` and keeps invitation/security checks enabled. Run `pnpm check` for backend/frontend types, and the focused `test:*` scripts listed in `package.json` for the feature being changed. Some HTTP tests require a running local server; inspect their documented setup.
 
-The user authorized the existing account's included Workers/D1 allowance. No plan upgrade or paid-only service is enabled. Workers Static Assets, a workspace Worker, a separate public-site Worker, one D1 database, a private R2 photo bucket, and a free Turnstile widget form the deployed stack. Allowances are shared with existing apps; this is not a separate free account or an account-wide spending cap. See [deployment notes](docs/deployment.md).
+| Area | Authoritative source |
+| --- | --- |
+| Owner workspace and landing page | `frontend/` → Vite build in `dist/` |
+| Platform API and orchestration | `src/index.ts` and feature modules |
+| Public website host | `src/site-host.ts`, `wrangler.sites.jsonc` |
+| Controlled visitor frontend | `web/visitor.js` → `public-app/visitor.js` |
+| Separate visitor/runtime services | `wrangler.apps.jsonc`, `wrangler.runtime.jsonc` |
+| Database changes | Numbered `migrations/` SQL files |
 
-Test limits: 50 accounts, 20 projects per account, 10 retained sessions per user, 10 auth requests per minute per IP and location, and 120 API requests per minute per IP and location. Each account can save ten passkeys. New passkey accounts receive a one-use recovery code; using it rotates the code and revokes previous sessions. Adding/removing passkeys or replacing recovery codes requires authentication within ten minutes. Keep a backup passkey and store the recovery code safely. Email-based password reset is not implemented.
+Run `pnpm build` to generate assets. Never hand-edit bundles. The older owner UI in `web/app.js` is not the current frontend.
 
-## API
+## Deployment and boundaries
 
-`GET /api/health`, `GET /api/config`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me`, `GET/POST /api/projects`, `GET /api/projects/:id`, and `GET /api/activity`.
+The owner authorized Workers Paid ($5/month) resources, with GitHub restricted to free-tier use. New paid services, purchases and customer deployments still require the applicable review. R2 `FILES` remains private; customer credentials never enter generated source or model context. Scope resource access by owner and preserve publication/activation confirmations.
 
-Mutations require a same-origin Origin header. Sessions use hashed random tokens and HttpOnly SameSite cookies, with Secure on HTTPS. Project queries scope by authenticated owner. Project creation and activity commit together. SQL triggers enforce quotas under concurrent requests.
+For the full test stack, `pnpm deploy` applies migrations, builds assets, deploys runtime/visitor/site Workers and then deploys the platform with its registered CMS service bindings. For a platform-only update, apply required migrations, run `pnpm build`, then `node tools/deploy-platform.mjs`. Do not bypass that platform wrapper: it preserves per-project CMS bindings. Check the active Worker version and appropriate live behavior after deployment. See [deployment notes](docs/deployment.md) and [domain boundaries](docs/whumpo-migration.md).
 
-Frontend source lives in `web/app.js`; `pnpm build` bundles it into `public/app.js`. Development and deployment commands rebuild automatically. Do not edit the generated bundle.
+`pnpm invite` creates a one-use invitation in ignored `.secrets/`. Share it privately. Never commit keys, session cookies, recovery codes or provider credentials. The supplied key files and `.secrets/` remain ignored.
 
-Passkey routes are `POST /api/auth/passkeys/{signup,login,add}/{options,verify}`, `GET /api/passkeys`, `POST /api/auth/passkeys/remove`, `POST /api/auth/recover`, and `POST /api/auth/recovery-code`. Chat lives at `GET/POST /api/chat`; draft plans at `GET /api/plans`.
+## Feature references
 
-The current delivery checklist and commercial model are in [docs/mvp.md](docs/mvp.md). The expanded design is in `docs/ai_managed_cloud_mvp_design_revised.docx`. The deployment notes supersede its paid-service assumptions for this test platform.
+- [Chat tools and navigation](docs/workspace-agent.md)
+- [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)
+- [GitHub authorization](docs/integrations/github-connection.md) and [reviewed backups](docs/integrations/github-backups.md)
+- [Cloudflare authorization](docs/integrations/cloudflare-connection.md) and [reviewed DNS](docs/integrations/cloudflare-dns.md)
+- [Photos](docs/photos.md), [CMS](docs/emdash.md), and [visitor applications/data](docs/app-data.md)
+- [Safe reuse and Jarvis ports](docs/jarvis-reuse.md)
 
-## AI testing
-
-The deployed test uses OpenCode Go at `https://opencode.ai/zen/go/v1`, model `muse-spark-1.3-contributor`, Responses protocol. `AI_API_KEY` is stored as a Worker secret; the supplied `opencode.key` is ignored by Git and never included in assets. There is no automatic provider/model fallback. Contributor prompts and replies may be used for training; the workspace displays this notice.
-
-Guided onboarding and account commands are free. After creating a draft project, ordinary messages use the model; `/ask question` invokes it at any onboarding step. The model can propose private website drafts, focused edits and publication reviews through validated component contracts; it cannot confirm publication or execute arbitrary backend code. Usage reserves a bounded amount before dispatch, settles reported input/output (including reasoning) tokens, and never automatically retries uncertain inference. Use `/usage` or Details → Usage for balances; `/credits on` opts into spending existing credits only. Credit purchases are disabled.
-
-Billing endpoints: `GET /api/billing`, `POST /api/billing/preferences`. Browser input cannot grant credits or select a paid entitlement. Jarvis ports and remaining reusable components are documented in [docs/jarvis-reuse.md](docs/jarvis-reuse.md).
-
-Use `/build`, `/build clay`, or `/build forest` after creating a project to save a private first preview. An optional project UUID selects another project; otherwise the most recently created project is used. Each project retains up to 25 immutable previews. `pnpm test:previews` verifies the local preview flow, tenant boundaries, escaping and quotas.
-
-Publication commands: `/versions` lists saved versions; `/publish VERSION_ID` reviews a release; `/restore VERSION_ID` reviews restoring an earlier release; `/unpublish PROJECT_ID` reviews taking a site offline. Confirm the exact review within ten minutes using `/confirm REVIEW_ID` or its chat button. Explore allows one live site; the database enforces this at confirmation. Public pages are served by the separate `tellumo-sites` Worker at `PROJECT_ID.whumpo.site`.
-
-Deploy the public host with `pnpm deploy:sites` after applying remote migrations. It has D1 and private R2 bindings and exposes only read-only published-site routes and photos referenced by the current publication. `pnpm test:publications` uses disposable local D1 state to verify confirmation, concurrency, ownership, quotas, restore and unpublish.
-
-Use `/files` or Details → Project photos for private uploads. JPEG, PNG and WebP inputs are resized in your browser and stored as metadata-stripped JPEGs. Choose Use in website to attach a photo to a private version without AI usage. AI edits can arrange up to four project-owned photos; publishing requires confirmation. Source ZIPs include the exact referenced images. See [photo storage](docs/photos.md).
-
-Use `/domains` or Details → Domains to prepare and check a project-specific DNS TXT proof. Proofs expire after seven days and cost no AI units. Verification does not connect a hostname, provision a certificate or purchase a domain. `pnpm test:domains` verifies ownership boundaries, exact DNS proofs, retries, expiry and quotas.
-
-Onboarding collects your idea, project name, intended audience and style, then creates a private first preview without AI units. Use `/skip` for optional questions, `/brief` to inspect the saved planning notes, and `/cancel` to leave setup. Free-form style notes guide later AI edits; the first preview supports ocean, clay and forest themes. `pnpm test:onboarding` covers persistence, retries, owner isolation and quota rollback.
-
-The AI can create a new project and its private website from a request with a name and purpose, and prepare an authenticated source download in ordinary language. These interpreted requests use AI units; `/new` and `/export` stay available without model charges. See [workspace AI actions](docs/workspace-agent.md).
-
-Ask the AI about current projects, saved versions, activity, usage or domain status to inspect authoritative workspace records. `/project PROJECT_ID` and `/inspect VERSION_ID` show exact details without model charges; `show my saved versions` is also free. The agent has an index of every owned project, including projects outside its bounded detailed context.
-
-Optional GitHub authorization has a Connected accounts panel with session-bound PKCE, encrypted expiring tokens and disconnect/revocation. It is disabled pending operator GitHub App configuration. Reviewed source backups are implemented for initialized repositories, with readable files and no-overwrite atomic commits; live acceptance remains pending configuration. See [backup design](docs/integrations/github-backups.md). See [connection design](docs/integrations/github-connection.md) and [app setup](docs/integrations/github-app-setup.md).
-
-## Frontend
-
-The landing page and owner workspace use React, Vite, TypeScript, Tailwind CSS, shadcn/ui with Radix primitives, and TanStack Query/Router. Source is in `frontend/`; `pnpm build` produces `dist/`. The controlled visitor application has separate assets and a separate Worker service. See `docs/whumpo-migration.md` for domain boundaries.
+The revised Word design in `docs/ai_managed_cloud_mvp_design_revised.docx` is a historical design snapshot. Current feature contracts and acceptance evidence supersede its old pricing, domains and implementation status; the Word document still needs a final MVP reconciliation.
