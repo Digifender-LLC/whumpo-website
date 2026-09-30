@@ -2,7 +2,7 @@
 
 The public homepage advertises the product. The signed-in default is a conversation, with only compact service and usage stats. Dashboard and workflow pages are separate sidebar destinations; Profile and Settings hold personal/account and platform controls respectively. Domain and project controls remain accessible from Chat. This checklist preserves the full MVP scope; an unchecked item is not delivered.
 
-Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The [Whumpo technical design v0.8](whumpo_mvp_design.docx) consolidates current architecture, customer flows, pricing and outstanding launch gates. The earlier Word design v0.5 remains historical. Historical milestone paragraphs below retain their original sequence.
+Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The [Whumpo technical design v0.9](whumpo_mvp_design.docx) consolidates current architecture, customer flows, pricing and outstanding launch gates. The earlier Word design v0.5 remains historical. Historical milestone paragraphs below retain their original sequence.
 
 ## Acceptance checklist
 
@@ -14,7 +14,7 @@ Current requirement-by-requirement evidence and remaining gates are in [the acce
 - [x] OpenAI-compatible server adapter integrated with chat, with OpenCode Go configuration and a verified live Muse provider test.
 - [x] Chat tools create projects, show status/activity/usage, propose edits, preview, publish, and restore versions. Server-side permissions and confirmation gates govern actions.
 - [x] Working site generation, isolated previews, published sites, retained versions, rollback, and bounded uploads.
-- [ ] Resolve shared-pool versus unlimited standard-AI policy and deliver the paid-plan lifecycle, with operator Monitor mode and separately approved premium credits. Preserve atomic spending, retry accounting and uncertain-outcome reconciliation. Current Explore test quotas are not the paid launch promise.
+- [ ] Deliver the paid-plan lifecycle with unlimited standard AI under fair use and credit-funded advanced models, with operator Monitor mode and separately approved premium credits. Preserve atomic spending, retry accounting and uncertain-outcome reconciliation. Current Explore test quotas are not the paid launch promise.
 - [x] Domain setup and status available through chat and a secondary screen, including verified ownership and DNS instructions.
 - [ ] Domain purchase flow shows availability, price, renewal terms, and explicit confirmation before any purchase.
 - [ ] Optional customer GitHub and Cloudflare connections use scoped authorization, revocation, and secret storage. Chat can initiate the same flows; provider consent occurs in the provider UI.
@@ -30,7 +30,7 @@ Current requirement-by-requirement evidence and remaining gates are in [the acce
 | Business | $79 | $790 |
 | Business Pro | $139 | $1,390 |
 
-The earlier paid-launch decision was **unlimited standard site work under fair use**; the newer shared-pool proposal conflicts on standard-AI metering and awaits owner resolution. The existing fair-use controls continue with tier-sensitive observation and **Monitor mode as the default**. Monitor sends no fair-use warnings and imposes no throttles or restrictions. Active enforcement requires an operator choice and verified company-wide profit deterioration with substantially stable revenue, plus the individual review/notice workflow. Company financial attribution and enforcement remain unfinished. Cost alone does not establish abuse.
+The owner reconfirmed **unlimited standard site work under fair use** on September 30; advanced models consume explicitly approved credits. Standard assistance does not draw down shared infrastructure capacity. The existing fair-use controls continue with tier-sensitive observation and **Monitor mode as the default**. Monitor sends no fair-use warnings and imposes no throttles or restrictions. Active enforcement requires an operator choice and verified company-wide profit deterioration with substantially stable revenue, plus the individual review/notice workflow. Company financial attribution and enforcement remain unfinished. Cost alone does not establish abuse.
 
 Premium model add-ons/credits and separately approved infrastructure spending remain distinct. Annual plans propose standard-domain benefits under a wholesale cost cap; domain redemption is not implemented. Stripe remains disconnected at the owner's request, so subscriptions, credit purchases and domain purchases are unavailable. See [current pricing, routing and fair-use contracts](pricing-and-model-policy.md) and [payment foundation](payments.md).
 
