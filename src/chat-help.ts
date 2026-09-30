@@ -87,6 +87,7 @@ GitHub backups: /help backups`,
 /usage-history [PAGE] lists historical test-unit charges and holds separately.
 /credits shows historical credit balances. /credits on and /credits off save the legacy overage preference; neither enables advanced models or charges standard assistance.
 /activity shows recorded workspace activity. /traffic shows recorded public-page requests.
+For operator help, type “request a usage review: ” followed by your explanation. This saves a private request; it does not send external mail or change limits. “Show my usage reviews” reads responses. Review statements and responses stay out of later AI context.
 
 Payments and credit purchases are not enabled yet. Help and guided commands do not consume AI units. Some operations, such as private backend tests, have separate limits.`,
  backends:`Private backend functions and data

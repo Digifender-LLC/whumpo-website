@@ -1,6 +1,6 @@
 # Current MVP readiness — September 30, 2026
 
-**Current reconciliation:** standard accounting baseline `28e2fd2` plus the standard-history update, with platform `28677f35-6f81-487f-843f-9704fba457da` independently verified at September 30 15:58 UTC. All **96 migrations** are applied, none pending; all 16 frontend assets matched. Health and anonymous/origin boundaries passed. Site, visitor and runtime releases are unchanged: `d1208b4c-f49b-496a-b659-ad6d84f9566e`, `9bee8593-ee7f-4dd3-8934-2b41f43d692e`, `662ea586-726d-4a00-ad22-d84024a7c0b2`.
+**Current reconciliation:** platform `828912b1-21d7-484d-ace4-c623f5c82173` independently verified September 30 at 16:11 UTC, including standard accounting/history and customer usage-review requests. All **97 migrations** are applied, none pending; all 16 frontend assets matched. Health and anonymous/origin boundaries passed. Site, visitor and runtime releases are unchanged: `d1208b4c-f49b-496a-b659-ad6d84f9566e`, `9bee8593-ee7f-4dd3-8934-2b41f43d692e`, `662ea586-726d-4a00-ad22-d84024a7c0b2`.
 
 Standard Chat now uses non-billable receipts. Zero test units/credits do not prevent standard work; historical metered requests keep their settlement/waiver behavior. Local actual-handler/D1 recovery, concurrency, first-project and inspection tests passed. A live Muse request against disposable local storage succeeded at zero balance with zero customer charges. Chat now provides paginated standard request history and exact request lookup without inference; Billing and Dashboard show standard assistance separately from historical accounting; desktop and 390-pixel browser views were inspected. The internal testing-capacity ceiling remains, so this is not proof of unrestricted provider capacity or completed launch fair-use enforcement. See [standard AI accounting](standard-ai-accounting.md).
 
@@ -9,6 +9,8 @@ Chat remains the default standalone workspace view. Routine dashboard action con
 The September 30 14:21 configuration inspection found Monitor persisted, zero registered CMS instances, configured Cloudflare OAuth/encryption bindings and absent customer GitHub App, Stripe and custom-hostname activation bindings. These are dated configuration observations, not customer consent/operation acceptance.
 
 **MVP remains incomplete.** [Documentation/code sync](docs-code-sync.md) records decisions; the requirement map below retains unfinished provider, finance, device and broader workload gates. The maintained Word design is v0.9 and predates standard Chat activation; the linked current feature contracts supersede that accounting snapshot until its next revision. No full-MVP completion is claimed.
+
+Customer-initiated [usage reviews](usage-review-requests.md) now support a private guided Chat submission, status/detail read and preview-bound operator response. These turns are excluded from later model context. This support channel does not implement notices, automatic restrictions, restriction-bound appeals or access independent of Chat limits. Monitor remains non-blocking.
 
 ## Earlier milestone evidence
 
