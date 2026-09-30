@@ -93,6 +93,8 @@ Ask the agent to create a pure JavaScript function for an existing project.
 /backend-library lists reusable platform-authored helpers. /backend-component NAME@VERSION shows exact source and a synthetic check. /use-backend PROJECT_ID NAME@VERSION copies an untested private version without AI usage.
 /backends PROJECT_ID lists private drafts; /backend-diff NEW_VERSION_ID ORIGINAL_VERSION_ID compares saved source and reports the latest test status without executing or publishing.
 /backend VERSION_ID reads source.
+Offline upgrades: /review-app-upgrade PROJECT_ID TARGET_VERSION_ID TRANSFORM_VERSION_ID TEST_ID saves a pre-upgrade recovery point and prepares checks. /check-app-upgrade REVIEW_ID checks up to three visitor documents privately. /app-upgrade REVIEW_ID reads progress and exact version references. Only /confirm-app-upgrade REVIEW_ID UPGRADE applies the reviewed program/data replacement after a recent sign-in.
+Program rollback: /review-app-rollback PROJECT_ID POINT_ID preserves a before-copy and reviews an older program with its saved visitor documents. /app-rollback REVIEW_ID reads the review; only /confirm-app-rollback REVIEW_ID ROLLBACK applies it after a recent sign-in. Apps must be offline for either workflow and remain offline afterward. Read the referenced sources before approval. No visitor documents enter Chat.
 /check-backend VERSION_ID {"input":JSON,"expected":JSON} verifies an expected answer; object key order is ignored and array order is exact.
 /test-backend VERSION_ID JSON runs a non-sensitive example; /backend-result RECEIPT_ID reads its saved result.
 

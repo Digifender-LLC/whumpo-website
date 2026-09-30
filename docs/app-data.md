@@ -1,5 +1,17 @@
 # Application visitor identity and persistent data
 
+## Upgrade and rollback through Chat — September 30, 2026
+
+Implemented locally, not deployed: the existing migration/rollback foundations now have authenticated Chat commands and preparation/read actions for the agent. `/review-app-upgrade PROJECT_ID TARGET_VERSION_ID TRANSFORM_VERSION_ID TEST_ID` captures the pre-upgrade point; `/check-app-upgrade REVIEW_ID` claims at most three private transformations per call; `/app-upgrade REVIEW_ID` reads progress. `/review-app-rollback PROJECT_ID POINT_ID` preserves a current before-copy and prepares the older program/data review; `/app-rollback REVIEW_ID` reads it. `/help backends` documents these controls.
+
+Reviews show project, state, counts, expiry, recovery references and exact immutable program/transformer IDs and verified digests. Customers can inspect complete source with the existing `/backend VERSION_ID` command and the target check with `/backend-result TEST_ID`. Visitor IDs and document payloads never enter these replies. Confirmation warns about replacing data, signing visitors out and leaving the app offline; reopening/publication remain separate reviews. Uncertain checks are not automatically re-executed.
+
+Only explicit customer `/confirm-app-upgrade REVIEW_ID UPGRADE` and `/confirm-app-rollback REVIEW_ID ROLLBACK` can apply. Both require a recent session and the existing auth limiter at the HTTP boundary. The model action allowlist includes preparation, bounded progress and reads, never confirmation. Extra fields attempting to smuggle confirmation into a read action are rejected. Existing origin checks, tenant ownership, immutable reviews and atomic transaction guards remain authoritative.
+
+Verification: `pnpm check`, `pnpm test:app-migration-checks`, `pnpm test:agent-prompt-focus` and `pnpm test:app-document-recovery` passed. Connected HTTP/Chat tests use disposable D1 and actual isolated QuickJS, with no inference: preparation, progress, review, concurrent confirmation/lost-response recovery and replay, anonymous/foreign-origin/old-session refusal, rate limiting, model-confirm denial and exclusion of visitor identities/payloads. The existing whole-transaction failure and document-only recovery tests also remain in those suites.
+
+Release remains pending: migrations 0085–0087, temporary staged-payload retention/cancellation, readable confirmation cards and end-to-end release acceptance must be delivered together. No new migration or live customer operation occurred in this increment. Earlier foundation sections below record their point-in-time implementation status.
+
 ## Cross-version rollback foundation — September 30, 2026
 
 Implemented locally, not deployed or connected to customer controls: migration 0087 and `src/app-program-rollback.ts` restore a recovery point's saved program together with its visitor documents. This is a separate rollback review and exact `ROLLBACK` confirmation. Existing document-only restore services and cards exclude rollback reviews, so their `RESTORE` controls cannot unexpectedly replace code.

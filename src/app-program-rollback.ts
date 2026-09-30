@@ -1,7 +1,7 @@
 import {BackendError} from './backend-versions';
 import {hashToken} from './security';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
-/** Internal foundation: customer fresh-session/review controls must be wired before rollout. */
+/** Owned rollback review; Chat confirmation separately requires a fresh owner session. */
 export async function readProgramRollback(db:D1Database,user:string,id:string){
  if(!uuid.test(id))throw new BackendError(400,'Choose a rollback review');
  const r=await db.prepare(`SELECT r.id,r.project_id,r.point_id,r.from_version,r.status,r.expires_at,json_array_length(r.roster_json) documents,p.version_id,p.created_at point_created_at,project.name,

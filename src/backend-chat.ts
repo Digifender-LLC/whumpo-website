@@ -1,3 +1,4 @@
+import {appUpgradeCommand,appUpgradeAction} from './app-upgrade-chat';
 import {appRecoveryCommand} from './app-recovery-chat';
 import {readAppStatus,describeAppStatus} from './app-status';
 import type {AppPageExpectation} from './app-page-design';
@@ -19,6 +20,7 @@ export async function ownedBackend(db:D1Database,user:string,version:string){
 }
 function describeRun(run:{id:unknown;state:string;result?:unknown}){const data=run.result as {ok?:boolean;check?:{status?:string}}|undefined;const verdict=data?.check?'Expected-output check: '+(data.check.status==='not_run'?'not run; execution did not succeed':data.check.status): data?.ok===true?'Execution completed; no expected output was checked.':data?.ok===false?'Execution failed.':'No confirmed execution result.';return `Private backend test: ${run.state}\nReceipt: ${run.id}\n${verdict}\n`+(run.result?JSON.stringify(run.result).slice(0,1400)+(JSON.stringify(run.result).length>1400?'\nResult display truncated; full result remains in the private API receipt.':''):'Execution is pending or its outcome is unknown. This receipt will not be executed again.')+'\nNo application data or live website was changed. Test attempts use the separate backend allowance, not AI units.';}
 export function backendChatCommand(db:D1Database,user:string,turnId:string,content:string,service?:Fetcher){
+ const upgrade=appUpgradeCommand(db,user,turnId,content,service);if(upgrade)return upgrade;
  const recovery=appRecoveryCommand(db,user,turnId,content);if(recovery)return recovery;
  if(/^\/application-build(?:\s|$)/i.test(content)){
   const parts=content.trim().split(/\s+/);if(parts.length!==2||!uuid.test(parts[1]))throw new BackendError(400,'Use /application-build BUILD_ID');
@@ -106,6 +108,7 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
  };
 }
 export async function backendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher,pageExpectation?:AppPageExpectation){
+ const maintenance=appUpgradeAction(db,user,turnId,action,service);if(maintenance)return {reply:await maintenance(),statements:[] as D1PreparedStatement[]};
  const operation=action.operation;
  if(operation==='buildApplication')return {reply:await buildApplication(db,user,turnId,action,service),statements:[] as D1PreparedStatement[]};
  if(['library','component','useComponent'].includes(String(operation))){
