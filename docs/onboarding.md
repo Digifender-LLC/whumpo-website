@@ -1,5 +1,13 @@
 # Customer welcome and project setup
 
+## Workspace entry gate — September 30, 2026
+
+Chat (including history) and workspace dashboard/layout/capacity APIs now return `409 onboarding_required` for signed-in customers who have not started a project. Profile, private photo upload and saved welcome progress remain accessible. The existing frontend gate prevents the workspace from rendering or requesting its data during welcome. Existing project owners and customers with recorded welcome completion retain access, including after deleting their first project.
+
+Verification: `pnpm check` and `pnpm test:onboarding-welcome` passed. Disposable database HTTP tests exercise direct reads/writes before completion, confirm no Chat turn or project is created by rejected requests, and verify Chat/dashboard/layout unlock after atomic project creation. The existing welcome tests cover avatar selection, profile privacy, resume checkpoints, stale writes and concurrent/lost-response completion. No new UI or migration was needed; the six avatar choices, upload, profile questions and project brief already existed.
+
+Deployed to the test platform as `b30479a5-85b3-4568-91cf-8b31cd477339`, preserving the previous frontend assets and unrelated work. The isolated release passed the backend TypeScript check and `node tests/frontend-loading.mjs`. Independent live readback confirmed the active version, health 200, anonymous Chat/onboarding/dashboard 401 and all 16 JS/CSS/font assets matching the release. Authenticated onboarding acceptance used disposable local records; no real customer project was created by this verification.
+
 ## Choose a website or application first — September 30, 2026
 
 Implemented: the welcome project's Chat card now offers **Draft a website**, **Build an app**, and **Read my saved brief**. The controls stack on phones and wrap on wider screens. No guess based on keywords silently chooses the build type. The app option creates and checks a private backend before owner approval; it does not promise a finished visitor interface. Customers can describe a different workflow in Chat. Without AI, only the free website starter preview is offered.

@@ -40,7 +40,15 @@ try{
  const env={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})}};
  const call=(path,method='GET',body,cookie=token,origin='http://localhost')=>platform.fetch(new Request('http://localhost'+path,{method,headers:{origin,cookie:'tellumo_session='+cookie,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,{waitUntil(){throw Error('No AI work expected');}});
  assert.equal((await call('/api/onboarding','GET',undefined,'')).status,401);assert.equal((await call('/api/onboarding','PUT',draft,token,'https://foreign.test')).status,403);assert.equal((await call('/api/onboarding')).status,200);
+ // Direct links/requests cannot bypass welcome or dispatch paid work.
+ for(const [path,method] of [['/api/chat','GET'],['/api/chat','POST'],['/api/chat/history','GET'],['/api/workspace/dashboard','GET'],['/api/workspace/layout','GET'],['/api/workspace/layout','PUT'],['/api/workspace/capacity','PUT']]){
+  const response=await call(path,method,method==='GET'?undefined:{content:'Build me a site',revision:0,requestId:id()});
+  assert.equal(response.status,409,path);assert.equal((await response.json()).code,'onboarding_required');
+ }
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM chat_turns WHERE user_id=?').bind(fresh).first()).n,0);
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM projects WHERE owner_user_id=?').bind(fresh).first()).n,0);
  assert.equal((await call('/api/profile','PATCH',{revision:0,name:'Welcome tester',avatar_id:'sun'})).status,200);assert.equal((await call('/api/onboarding','PUT',draft)).status,200);assert.equal((await call('/api/onboarding/complete','POST',{revision:1})).status,200);assert.equal((await(await call('/api/profile')).json()).onboardingComplete,true);
+ for(const path of ['/api/chat','/api/workspace/dashboard','/api/workspace/layout'])assert.equal((await call(path)).status,200,path+' unlocks after project creation');
  for(const table of ['publications','inference_calls'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
  // Questions resume from server state, including on a different browser/device.
  const conversational=id();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(conversational,conversational+'@example.test',now).run();
