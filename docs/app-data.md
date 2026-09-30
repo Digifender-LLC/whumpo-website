@@ -141,3 +141,14 @@ Acceptance: `test:app-lifecycle`, existing `test:app-data` and `test:app-auth`, 
 On 29 September 2026 the user confirmed Workers Paid at $5/month and authorized using its resources as needed. Keep per-application admission and spending protections; this does not authorize unrelated paid services or plan upgrades. GitHub remains free-tier-only. The platform continues using the existing account and domain.
 
 Release verification: migration 0058 applied remotely; visitor Worker `7a12cf38-7fae-4ae9-94d0-d0ea21d9d727`; platform Worker `6ae85a92-75a6-4491-9bd4-e54bbdb49d82`. Live visitor assets match the build. An unauthenticated deletion request returns 401 and a foreign-origin request returns 403. No production visitor was created or deleted for acceptance.
+
+
+## Project-specific visitor navigation — September 29, 2026
+
+`/visitor-access PROJECT_ID` now carries the exact project through to the workspace URL and project selector. Previously the browser discarded the argument. The shared command parser rejects malformed IDs and extra arguments; the browser keeps the typed request with a correction notice instead of silently opening an untargeted panel. API chat retains authoritative owner-scoped reads, and invalid commands do not advance conversation revision.
+
+The visitor panel follows the URL project. Selecting another project updates that URL, and Back/Forward restores the selection. Each project has a separately mounted panel, so invitation codes, pending confirmation dialogs and local action state are discarded when the project changes. An already authorized request remains bound to its original project's endpoint; a late response cannot populate the new project's panel. No invitation code is added to URLs, Chat or persistent browser storage. Opening other controls from Chat clears incidental project parameters. Server ownership and recent-session requirements remain authoritative.
+
+Verification: `pnpm check`, `pnpm test:workspace-navigation`, `pnpm build`, and diff checks passed. Tests cover strict ID syntax, duplicate query parameters, preserving the exact target, malformed-command revision stability and foreign-project denial. A synthetic browser fixture opened Studio two from Chat, generated a fixture-only code, switched to Studio one and verified the code disappeared; Back restored Studio two without the code. Recorded requests showed the correct first project and zero Chat submissions. The panel fit a 360px viewport without horizontal overflow; screenshot `.secrets/visitor-project-mobile.png`. This verifies UI state handling, not physical passkeys or live visitor invitation delivery. No real visitor access was changed.
+
+Release: platform `02416110-7913-44a6-a19e-fdbca3a0ed96` verified active. Live JS/CSS match the tested build and anonymous visitor-access reads return 401. No migration or customer invitation was required.

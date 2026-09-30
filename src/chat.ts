@@ -1,3 +1,4 @@
+import {visitorAccessCommand} from './visitor-navigation';
 import {cmsExportLinks} from './cms-export';
 import {workspaceNavigation,workspaceNavigationHelp} from './workspace-navigation';
 import {readLayout} from './workspace-dashboard';
@@ -127,9 +128,9 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if (photoDraft) reply = photoDraft.reply;
   else if (publication) reply = publication.reply;
   else if (/^\/visitor-access(?:\s|$)/.test(command)||['visitor access','manage visitor access'].includes(command)) {
-    const args=command.startsWith('/')?command.split(/\s+/):['/visitor-access'];
-    if(args.length>2||(args[1]&&!/^[0-9a-f-]{36}$/.test(args[1])))return {status:400,error:'Use /visitor-access, optionally followed by a project ID.'};
-    const target=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[1]??null,args[1]??null).first<{id:string;name:string}>();
+    const access=visitorAccessCommand(command)??{};
+    if(access.error)return {status:400,error:access.error};
+    const target=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,access.projectId??null,access.projectId??null).first<{id:string;name:string}>();
     if(!target)reply='No matching project found. Create one with /new first.';
     else {const access=await readAppAccess(db,userId,target.id);reply=`Visitor access for “${target.name}”: ${access.visitors.filter(v=>!v.revoked).length} active visitor(s). Open Dashboard → Visitor access, or use /visitor-access ${target.id} in the workspace. Create invitations, cancel unused invitations and review revoking a visitor there. Access changes require a recent sign-in. Keep all invitation and recovery codes out of chat. ${access.publicAccessReady?'The reviewed visitor page is published.':'A visitor page still needs to be reviewed and published.'}`;}
   }
