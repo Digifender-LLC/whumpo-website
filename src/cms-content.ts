@@ -19,7 +19,7 @@ type Draft={id:string;project_id:string;user_id:string;collection:string;body:st
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export async function listCMSDrafts(db:D1Database,user:string,project:string,env:Environment){
  await cmsConnection(db,user,project,env);
- const {results}=await db.prepare('SELECT id,collection,item_id,created_at FROM cms_draft_requests WHERE project_id=? AND user_id=? ORDER BY created_at DESC,id LIMIT 90').bind(project,user).all();return results;
+ const {results}=await db.prepare(`SELECT id,collection,item_id,created_at FROM cms_draft_requests WHERE project_id=? AND user_id=? AND NOT EXISTS(SELECT 1 FROM cms_import_reviews r WHERE r.id=cms_draft_requests.id AND r.taxonomy_plan<>'[]' AND r.status<>'imported') ORDER BY created_at DESC,id LIMIT 90`).bind(project,user).all();return results;
 }
 export async function createCMSDraft(db:D1Database,user:string,project:string,id:string,collection:string,title:unknown,text:unknown,env:Environment,format:ContentFormat='plain',excerpt?:unknown){
  const {service,config}=await cmsConnection(db,user,project,env);
@@ -33,6 +33,7 @@ export async function createCMSDraft(db:D1Database,user:string,project:string,id
  if(!row)throw new CMSProjectError(409,'CMS draft request capacity is full or unavailable');
  if(row.user_id!==user||row.project_id!==project||row.collection!==collection||row.body!==body||row.content_format!==format)throw new CMSProjectError(409,'CMS draft request ID already used');
  if(!row.item_id){
+  if(await db.prepare("SELECT id FROM cms_import_reviews WHERE id=? AND taxonomy_plan<>'[]'").bind(id).first())throw new CMSProjectError(409,'Resume this article from its original import review so its categories and tags can be completed.');
   if(excerpt!==undefined)await requireCMSExcerpts(db,user,project,env);
   if(format==='structured'&&cmsImageReferences(text).length)await requireCMSImages(db,user,project,env);
   if(format==='structured')await requireStructuredCMS(db,user,project,env);
@@ -74,7 +75,7 @@ export async function cmsContentAction(db:D1Database,user:string,action:Record<s
   await cmsConnection(db,user,project,env);
   const row=await db.prepare('SELECT * FROM cms_draft_requests WHERE id=? AND project_id=? AND user_id=?').bind(action.requestId,project,user).first<Draft>();
   if(!row)throw new CMSProjectError(404,'CMS draft request not found');
-  const body=JSON.parse(row.body);return createCMSDraft(db,user,project,row.id,row.collection,body.data.title,row.content_format==='structured'?body.data.content:body.data.content[0].children[0].text,env,row.content_format);
+  const body=JSON.parse(row.body);return createCMSDraft(db,user,project,row.id,row.collection,body.data.title,row.content_format==='structured'?body.data.content:body.data.content[0].children[0].text,env,row.content_format,body.data.excerpt);
  }
  throw new CMSProjectError(400,'Unsupported CMS content operation');
 }

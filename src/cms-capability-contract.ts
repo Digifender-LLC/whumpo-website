@@ -22,3 +22,8 @@ export function supportsCMSUpload(value:unknown):boolean{
 export function supportsCMSImages(value:unknown):boolean{return supportsStructuredCMS(value)&&supportsCMSUpload(value)&&(value as {structuredContent:{imageVersion?:unknown}}).structuredContent.imageVersion===1;}
 
 export function supportsCMSExcerpts(value:unknown):boolean{const s=(value as {structuredContent?:Record<string,unknown>}|null)?.structuredContent;return supportsStructuredCMS(value)&&s?.excerptVersion===1&&s.excerptMaxChars===512&&Array.isArray(s.excerptCollections)&&s.excerptCollections.length===1&&s.excerptCollections[0]==='posts';}
+
+export function supportsCMSImportTaxonomies(value:unknown):boolean{
+ const v=value as {draftIdentity?:Record<string,unknown>;taxonomyManagement?:Record<string,unknown>}|null,t=v?.taxonomyManagement;
+ return supportsStructuredCMS(value)&&v?.draftIdentity?.version===1&&v.draftIdentity.readRecovery===true&&t?.version===1&&t.readRecovery===true&&t.locale==='en'&&t.collection==='posts'&&t.initialAssignmentVersion===1&&t.maxInitialTerms===20&&Array.isArray(t.names)&&t.names.length===2&&t.names[0]==='categories'&&t.names[1]==='tags';
+}
