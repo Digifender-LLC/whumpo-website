@@ -32,6 +32,14 @@ Write and preview
 /cms-preview PROJECT_ID REQUEST_ID — open your latest private preview.
 /cms-export PROJECT_ID REQUEST_ID — download saved article content as JSON.
 
+Import WordPress articles
+/wordpress-sources PROJECT_ID — list saved exports.
+/wordpress-inspect PROJECT_ID SOURCE_ID — summarize article conversion results.
+/import-wordpress PROJECT_ID SOURCE_ID ITEM_NUMBER — prepare an exact private-draft review.
+/cms-import-review REVIEW_ID — reopen the comparison and confirmation.
+/confirm-cms-import REVIEW_ID — import or recover that exact reviewed draft.
+Original metadata remains in the private review. Media, themes and plugins are not imported; publication requires its own review.
+
 Publish and replace
 /publish-cms PROJECT_ID REQUEST_ID — freeze the article and destination for review, including the current public version when replacing a live article.
 /cms-publication REVIEW_ID — read that review.
