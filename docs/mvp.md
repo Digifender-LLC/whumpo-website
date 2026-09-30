@@ -1,6 +1,6 @@
 # Whumpo MVP delivery contract
 
-The public homepage advertises the product. The signed-in default is a conversation, with only compact service and usage stats. Account, domain, billing, and project details live in a secondary menu. This checklist preserves the full MVP scope; an unchecked item is not delivered.
+The public homepage advertises the product. The signed-in default is a conversation, with only compact service and usage stats. Dashboard and workflow pages are separate sidebar destinations; Profile and Settings hold personal/account and platform controls respectively. Domain and project controls remain accessible from Chat. This checklist preserves the full MVP scope; an unchecked item is not delivered.
 
 Current requirement-by-requirement evidence and remaining gates are in [the acceptance audit](acceptance.md). The Word design v0.5 is a historical snapshot before the Explore allowance revision; this evidence map and later deployment milestones record subsequent changes. Historical milestone paragraphs below retain their original sequence.
 
@@ -14,26 +14,27 @@ Current requirement-by-requirement evidence and remaining gates are in [the acce
 - [x] OpenAI-compatible server adapter integrated with chat, with OpenCode Go configuration and a verified live Muse provider test.
 - [ ] Chat tools create projects, show status/activity/usage, propose edits, preview, publish, and restore versions. Server-side permissions and confirmation gates govern actions.
 - [ ] Working site generation, isolated previews, published sites, retained versions, rollback, and bounded uploads.
-- [ ] Plans and monthly quotas enforced atomically; credits cover overage only with explicit opt-in; retries cannot charge twice; failures release reservations.
+- [ ] Deliver current paid-plan lifecycle and unlimited standard assistance under fair use, with operator Monitor mode and separately approved premium credits. Preserve atomic spending, retry accounting and uncertain-outcome reconciliation. Current Explore test quotas are not the paid launch promise.
 - [ ] Domain setup and status available through chat and a secondary screen, including verified ownership and DNS instructions.
 - [ ] Domain purchase flow shows availability, price, renewal terms, and explicit confirmation before any purchase.
 - [ ] Optional customer GitHub and Cloudflare connections use scoped authorization, revocation, and secret storage. Chat can initiate the same flows; provider consent occurs in the provider UI.
 - [ ] End-to-end verification covers tenant isolation, auth replay, budget concurrency, provider failures, publish/restore, and mobile usability.
 - [ ] Technical design and operations instructions reflect the actual deployed implementation and remaining limitations.
 
-## Proposed commercial model (draft; no checkout enabled)
+## Current commercial direction (draft; payments disabled)
 
-| Plan | Monthly USD | Published sites | Monthly build units |
-| --- | ---: | ---: | ---: |
-| Explore | $0 | 1 | 25 |
-| Launch | $12 | 3 | 250 |
-| Studio | $29 | 10 | 800 |
+| Plan | Monthly USD | Annual USD |
+| --- | ---: | ---: |
+| Starter | $17 | $170 |
+| Personal | $30 | $300 |
+| Business | $79 | $790 |
+| Business Pro | $139 | $1,390 |
 
-One build unit covers 1,000 weighted model tokens: input tokens count once and output tokens count four times. Round up once per completed operation, not per internal model call. Read-only account/status tools and guided onboarding are free. This is a product allowance, not a promise of unlimited infrastructure. Final pricing needs measured provider and hosting costs before sale.
+Paid launch assistance is **unlimited standard site work under fair use**, with tier-sensitive observation and **Monitor mode as the default**. Monitor sends no fair-use warnings and imposes no throttles or restrictions. Active enforcement requires an operator choice and verified company-wide profit deterioration with substantially stable revenue, plus the individual review/notice workflow. Company financial attribution and enforcement remain unfinished. Cost alone does not establish abuse.
 
-Proposed top-up: $5 for 100 credits, each covering one build unit after monthly quota. Monthly units reset each UTC calendar month and do not roll over. Purchased credits do not reset monthly. Credits cannot bypass storage, site count, abuse, or infrastructure safety limits. Domain registration/renewal is separately priced and never silently paid from build credits.
+Premium model add-ons/credits and separately approved infrastructure spending remain distinct. Annual plans propose standard-domain benefits under a wholesale cost cap; domain redemption is not implemented. Stripe remains disconnected at the owner's request, so subscriptions, credit purchases and domain purchases are unavailable. See [current pricing, routing and fair-use contracts](pricing-and-model-policy.md) and [payment foundation](payments.md).
 
-Reserve the maximum bounded cost before a model operation; settle actual usage afterward and release unused units. Use a unique operation ID and an append-only ledger with conditional atomic debits. A timeout with uncertain provider usage must remain reconcilable; never automatically retry a potentially billable call. Reject before calling the provider if funds are insufficient. The initial test remains free and does not collect payments or grant a paid entitlement from browser input.
+Explore currently has 50 monthly test units with atomic reservation/settlement and opt-in use of existing test credits. The older $5/100-credit product and Launch/Studio receipts are legacy test mechanics, not the new premium API-credit tariff or launch plans. Keep unknown outcomes reserved for reconciliation and never automatically retry a potentially billable request. Browser input cannot grant an entitlement. Historical milestones below retain earlier pricing and scope for provenance; they are not current offers.
 
 ## Provider interface
 
