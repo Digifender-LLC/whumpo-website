@@ -273,3 +273,7 @@ Historical pages contain saved text, timestamps and status only. They do not rec
 `pnpm test:chat-history` passed against actual authenticated handlers and disposable D1: 155 turns paged without duplication, stable boundaries after a new message, foreign-owner separation, anonymous denial, malformed cursors and transcript-only response fields. `pnpm check`, both isolated release type checks and production builds passed. Browser preview of the local fixture was blocked (`ERR_BLOCKED_BY_CLIENT`); dialog interaction, focus and physical-mobile acceptance remain unverified.
 
 Deployed history access to test platform `a0334042-8699-4505-b4d4-ae68b96573e9`. Live JS/CSS matched the isolated release byte for byte; health returned 200 and anonymous history returned 401. Existing pricing assets were preserved. No migration or customer content mutation was needed.
+
+## AI Gateway network adapter — September 29, 2026
+
+The server now has an OpenAI-compatible Cloudflare gateway adapter for explicit Chat Completions or Responses requests, including per-request privacy, retry and provider-credential controls. It passes local protocol/error/usage checks and preserves the Muse-only live policy. It has not been connected to paid reservation dispatch or provisioned for customers; reviewed model/rate configuration, receipt linkage and live acceptance remain open. See [AI Gateway transport](ai-gateway-transport.md).
