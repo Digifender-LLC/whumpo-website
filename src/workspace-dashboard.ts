@@ -1,9 +1,10 @@
+import {workspaceShortcuts,type WorkspaceShortcut} from './workspace-shortcuts';
 import {readTraffic} from './site-traffic';
 import { BillingError, getBilling } from './billing';
 import {capacityPolicy} from './capacity-policy';
 export const widgetKinds=['projects','usage','storage','activity','traffic','cms','performance'] as const;
 export type WidgetKind=typeof widgetKinds[number];
-export type WorkspaceLayout={widgets:WidgetKind[];tabs:{id:string;label:string;projectId:string|null;widgets:WidgetKind[]}[]};
+export type WorkspaceLayout={widgets:WidgetKind[];tabs:{id:string;label:string;projectId:string|null;widgets:WidgetKind[];shortcuts?:WorkspaceShortcut[]}[]};
 export const defaultLayout:WorkspaceLayout={widgets:['projects','usage','activity'],tabs:[]};
 function object(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==='object'&&!Array.isArray(value);}
 const exact=(v:Record<string,unknown>,keys:string[])=>Object.keys(v).every(k=>keys.includes(k));
@@ -12,7 +13,8 @@ export function parseLayout(value:unknown):WorkspaceLayout{
  if(!object(value)||!exact(value,['widgets','tabs'])||!widgets(value.widgets)||!Array.isArray(value.tabs)||value.tabs.length>8)throw new BillingError(400,'Choose up to eight tabs and seven supported cards');
  const ids=new Set();
  for(const tab of value.tabs){
-  if(!object(tab)||!exact(tab,['id','label','projectId','widgets'])||typeof tab.id!=='string'||!/^tab-[a-z0-9-]{1,40}$/.test(tab.id)||ids.has(tab.id)||typeof tab.label!=='string'||!tab.label.trim()||tab.label.length>40||/[\x00-\x1f\x7f]/.test(tab.label)||!(tab.projectId===null||typeof tab.projectId==='string'&&/^[0-9a-f-]{36}$/.test(tab.projectId))||!widgets(tab.widgets))throw new BillingError(400,'Invalid workflow tab');
+  if(!object(tab)||!exact(tab,['id','label','projectId','widgets','shortcuts'])||typeof tab.id!=='string'||!/^tab-[a-z0-9-]{1,40}$/.test(tab.id)||ids.has(tab.id)||typeof tab.label!=='string'||!tab.label.trim()||tab.label.length>40||/[\x00-\x1f\x7f]/.test(tab.label)||!(tab.projectId===null||typeof tab.projectId==='string'&&/^[0-9a-f-]{36}$/.test(tab.projectId))||!widgets(tab.widgets))throw new BillingError(400,'Invalid workflow tab');
+  if(tab.shortcuts!==undefined&&(!Array.isArray(tab.shortcuts)||tab.shortcuts.length>5||new Set(tab.shortcuts).size!==tab.shortcuts.length||tab.shortcuts.some(k=>typeof k!=='string'||!Object.hasOwn(workspaceShortcuts,k))||tab.shortcuts.length>0&&!tab.projectId))throw new BillingError(400,'Choose supported shortcuts on a project-specific page');
   ids.add(tab.id);
  }
  return value as unknown as WorkspaceLayout;
