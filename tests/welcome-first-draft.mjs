@@ -1,3 +1,4 @@
+Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -78,5 +79,35 @@ try{
  const guided=await account();assert.equal((await sendChat(db,guided.user,{id:crypto.randomUUID(),revision:1,content:'/first-draft '+guided.project})).status,503);
  assert.equal((await sendChat(db,guided.user,{id:crypto.randomUUID(),revision:1,content:'/first-draft invalid'},config)).status,400);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM publications').first()).n,0);
+ // App handoff uses the full saved welcome brief and only the bounded build action.
+ const appOwner=await account(),appTurn=crypto.randomUUID(),appCommand='/first-app '+appOwner.project,appState=(await readChat(db,appOwner.user,true)).state;
+ let executions=0,appCalls=0;const backendRuntime={fetch:async(_url,init)=>{executions++;const request=JSON.parse(init.body);assert.deepEqual(request.input,{state:{},input:{note:'Synthetic note'}});return Response.json({ok:true,value:{state:{note:'Synthetic note'},result:'Saved'}});}};
+ const appAction=projectId=>({kind:'backend',operation:'buildApplication',projectId,source:'export default ({input})=>({state:{note:input.note},result:"Saved"})',input:{state:{},input:{note:'Synthetic note'}},expected:{state:{note:'Synthetic note'},result:'Saved'}});
+ const appTransport=async(_url,init)=>{appCalls++;assert.ok(init.body.includes('Opening hours Tuesday through Sunday'),'Full saved brief included');assert.ok(!init.body.includes('lavender telescope'));assert.ok(init.body.includes('only allowed action is backend buildApplication'));return response(appAction(appOwner.project));};
+ assert.equal(displayChatRequest(appCommand),'Build and test my first private app using my saved brief.');
+ assert.equal((await sendAIChat(db,appOwner.user,appTurn,appState.revision,appCommand,config,appTransport,{backendRuntime})).status,200);
+ const appHistory=await readChat(db,appOwner.user,true);assert.equal(appHistory.firstDraft,null);assert.equal(appHistory.turns.at(-1).application_confirmation_id,appTurn);assert.equal(executions,1);assert.equal(appCalls,1);
+ assert.equal((await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE project_id=?').bind(appOwner.project).first()).turn_id,appTurn);
+ assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(appOwner.project).first()).enabled,0);
+ assert.equal((await db.prepare('SELECT count(*) n FROM site_versions WHERE project_id=?').bind(appOwner.project).first()).n,0);
+ await sendAIChat(db,appOwner.user,appTurn,appState.revision,appCommand,config,appTransport,{backendRuntime});assert.equal(appCalls,1);assert.equal(executions,1);
+ assert.equal((await run(appOwner,()=>assert.fail('App already started'))).result.status,409);
+ const scoped=await account();for(const action of [{kind:'preview',projectId:scoped.project,config:page},appAction(appOwner.project),{...appAction(scoped.project),operation:'create'},{kind:'inspect',scope:'usage'}]){
+  const turn=crypto.randomUUID(),state=(await readChat(db,scoped.user)).state;
+  await sendAIChat(db,scoped.user,turn,state.revision,'/first-app '+scoped.project,config,async()=>response(action),{backendRuntime});
+  assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(turn).first()).status,'failed');assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(turn).first(),null);
+ }
+ assert.equal(executions,1);assert.equal((await getBilling(db,scoped.user)).quota.spent,0);
+ assert.equal((await sendAIChat(db,scoped.user,crypto.randomUUID(),(await readChat(db,scoped.user)).state.revision,appCommand,config,()=>assert.fail('Foreign welcome project'))).status,409);
+ // A website saved while the app inference runs wins without partial app artifacts.
+ const racingApp=await account(),raceTurn=crypto.randomUUID(),raceState=(await readChat(db,racingApp.user)).state;
+ await sendAIChat(db,racingApp.user,raceTurn,raceState.revision,'/first-app '+racingApp.project,config,async()=>{
+  await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source) VALUES(?,?,'site-page@1',?,'<h1>Saved elsewhere</h1>',?,?,'guided')").bind(crypto.randomUUID(),racingApp.project,JSON.stringify(page),'a'.repeat(64),new Date().toISOString()).run();return response(appAction(racingApp.project));
+ },{backendRuntime});
+ assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(raceTurn).first()).status,'failed');assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(raceTurn).first(),null);assert.equal(await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE turn_id=?').bind(raceTurn).first(),null);assert.equal((await getBilling(db,racingApp.user)).quota.spent,0);assert.equal(executions,1);
+ // Ordinary backend drafts also remove the start card; no assumption that only websites count.
+ const existingApp=await account();await db.prepare('INSERT INTO backend_versions VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),existingApp.project,'export default x=>x','b'.repeat(64),new Date().toISOString()).run();assert.equal((await readChat(db,existingApp.user,true)).firstDraft,null);
+ const noAI=await account();assert.equal((await sendChat(db,noAI.user,{id:crypto.randomUUID(),revision:1,content:'/first-app '+noAI.project})).status,503);assert.equal((await sendChat(db,noAI.user,{id:crypto.randomUUID(),revision:1,content:'/first-app invalid'},config)).status,400);
+ console.log('First app passed: complete private brief, bounded same-project action, synthetic check and review, shared atomic claim, exact retry, website/app race, backend-aware starter card, foreign/forbidden denial and no automatic activation/publication.');
  console.log('First draft passed: exact welcome ownership, full saved brief, unshared bio exclusion, single dispatch, scoped action denial, actual cost receipts, replay, stale build rejection, atomic concurrent-build rollback, lost-commit recovery, no publication and guided-mode boundary.');
 }finally{if(proxy)await proxy.dispose();await rm(dir,{recursive:true,force:true});}

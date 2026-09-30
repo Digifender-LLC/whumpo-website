@@ -1,5 +1,7 @@
+export const firstAppProjectId=(content:string)=>/^\/first-app ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(content)?.[1];
 export const firstDraftProjectId=(content:string)=>/^\/first-draft ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(content)?.[1];
 export function displayChatRequest(content:string){
+ if(firstAppProjectId(content))return 'Build and test my first private app using my saved brief.';
  if(firstDraftProjectId(content))return 'Build my first private website draft using my saved brief.';
  const id='[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}';
  if(new RegExp('^/brief '+id+'$').test(content))return 'Show my saved project brief.';

@@ -32,13 +32,16 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
  if(prior){match(prior);return readApplicationBuild(db,user,id);}
  // The intent and version commit together. If acknowledgment is lost, never
  // continue into execution: report the saved private artifact for recovery.
+ const welcome=await db.prepare("SELECT id FROM chat_turns WHERE id=? AND user_id=? AND user_text=? AND status='pending'").bind(id,user,'/first-app '+action.projectId).first();
  const now=new Date().toISOString();
  try{await db.batch([
+  ...(welcome?[db.prepare('INSERT INTO welcome_first_drafts(turn_id,project_id,user_id) VALUES(?,?,?)').bind(id,action.projectId,user)]:[]),
   db.prepare('INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,?,?,?)').bind(id,action.projectId,action.source,digest,now),
   db.prepare('INSERT INTO application_builds(id,project_id,user_id,request_hash) VALUES(?,?,?,?)').bind(id,action.projectId,user,requestHash),
   db.prepare("INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES(?,?,?,'application.draft.created','Saved a private application draft for a synthetic check',?)").bind('application-build:'+id,user,action.projectId,now)
- ]);}catch{
+ ]);}catch(error){
   const saved=await read();if(saved){match(saved);return readApplicationBuild(db,user,id);}
+  if(String(error).includes('welcome_first_draft_changed'))throw error;
   throw new BackendError(409,'Application draft was not saved. Check project ownership, the draft allowance and whether existing visitors require a data migration.');
  }
  try{
