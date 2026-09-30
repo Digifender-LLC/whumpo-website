@@ -1,3 +1,4 @@
+import {verifyMappedImport} from '../tests/cms-mapped-import.mjs';
 import {verifyNativeMediaUpload} from '../tests/cms-native-media-upload.mjs';
 import {verifyNativeMediaPreview} from '../tests/cms-native-media-preview.mjs';
 import {randomUUID} from 'node:crypto';
@@ -90,6 +91,8 @@ try{
   const shapeCode=await bundle({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsStagedEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeCode.outputFiles[0].text).toString('base64'));
   const edit=await callCMS(service,identity,path,randomUUID(),cmsStagedEditBody('Recovered article edit','Native write after isolated restore',current._rev),'PUT');if(edit.item.data.title!=='Recovered article edit'||edit._rev===current._rev)throw Error('Restored native CMS could not save a revision');
   console.log('Restored native EmDash boots on isolated local D1: closed setup, pinned owner, schemas, text/image article bodies and post-restore native text editing verified (database restoration only; media bytes excluded).');
+  const importTarget=await wrangler.getPlatformProxy({configPath:targetPath,persist:{path:join(dir,'state','v3')},remoteBindings:false});
+  try{await verifyMappedImport({service,identity,db:importTarget.env.DB});}finally{await importTarget.dispose();}
  }finally{restored.close();await proxy.dispose();}
 
 }finally{

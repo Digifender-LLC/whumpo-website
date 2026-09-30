@@ -11,6 +11,16 @@ type Source={id:string;filename:string;digest:string;size:number;state:'pending'
 type Review={id:string;title:string;status:string;expires_at:string};
 type Report={summary:{reviewable:number;needsChanges:number;attachments:number};articles:{sourceId:number;title:string;status:string;reasons:string[]}[]};
 const reasonLabels:Record<string,string>={
+ custom_taxonomies_require_mapping:'Custom WordPress taxonomies need a separate mapping.',
+ page_taxonomies_require_mapping:'Categories and tags on pages need a separate mapping.',
+ taxonomy_locale_requires_review:'This article’s language or translations need review before term mapping.',
+ too_many_initial_terms:'Split or simplify this article’s category and tag assignments before importing.',
+ missing_term_definition:'Export the full category and tag definitions from WordPress.',
+ conflicting_term_labels:'The export has conflicting names for the same category or tag.',
+ category_hierarchy_requires_mapping:'Nested categories need a hierarchy mapping before import.',
+ term_descriptions_require_mapping:'Category or tag descriptions need a separate mapping.',
+ term_shape_requires_changes:'A category or tag name or slug needs adjustment before import.',
+ initial_term_request_exceeds_limit:'This article’s category and tag mapping is too large for one import.',
  unsupported_post_type:'Only posts and pages can be imported.',
  password_protected_content:'This article is password protected. Review its privacy before preparing an import.',
  unsupported_source_status:'This article’s WordPress status is not supported.',
