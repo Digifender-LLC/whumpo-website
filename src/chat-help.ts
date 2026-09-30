@@ -83,6 +83,7 @@ Never paste passwords, API keys or recovery codes into chat.
 GitHub backups: /help backups`,
  billing:`Plans and usage
 /plans shows available plan information; /usage shows usage and allowances.
+/usage-history [PAGE] or “show my usage history” lists request charges and holds without AI usage. These preview units/test credits are not dollars or premium-model pricing.
 /credits shows credit settings. /credits on opts into spending available credits beyond your plan allowance; /credits off disables that choice.
 /activity shows recorded workspace activity. /traffic shows recorded public-page requests.
 

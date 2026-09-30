@@ -1,0 +1,1 @@
+export type UsageHistoryRow={id:string;period:string;status:'reserved'|'dispatched'|'uncertain'|'settled'|'released';quoted_units:number;quota_reserved:number;credits_reserved:number;actual_units:number|null;quota_charged:number;credits_charged:number;created_at:string;updated_at:string};

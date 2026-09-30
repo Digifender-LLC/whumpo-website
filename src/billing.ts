@@ -1,3 +1,4 @@
+import type {UsageHistoryRow} from './usage-history-shape';
 import { plans, entitlementPlans } from './plans';
 
 export class BillingError extends Error {
@@ -26,7 +27,7 @@ export async function getBilling(db: D1Database, userId: string, date = new Date
     db.prepare('SELECT id, operation_id, period, event, quota_delta, credits_delta, created_at FROM billing_ledger WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 50').bind(userId)
   ]);
   const account = result[0].results[0] as Account;
-  return { plan, period, quota: result[1].results[0] as { allowance: number; spent: number; reserved: number; available: number }, credits: { available: account.credits_available, reserved: account.credits_reserved, overageEnabled: !!account.overage_enabled }, ledger: result[2].results, checkoutEnabled: false };
+  return { history:await readUsageHistory(db,userId), plan, period, quota: result[1].results[0] as { allowance: number; spent: number; reserved: number; available: number }, credits: { available: account.credits_available, reserved: account.credits_reserved, overageEnabled: !!account.overage_enabled }, ledger: result[2].results, checkoutEnabled: false };
 }
 export async function setOverage(db: D1Database, userId: string, enabled: boolean) {
   await ensureBilling(db, userId);
@@ -95,4 +96,15 @@ export async function grantPlan(db:D1Database,userId:string,id:string,period:str
  const receipt=await db.prepare('SELECT user_id,period,plan_id,reference FROM plan_grants WHERE id=?').bind(id).first<{user_id:string;period:string;plan_id:string;reference:string}>();
  if(receipt?.user_id!==userId||receipt.period!==period||receipt.plan_id!==planId||receipt.reference!==reference)throw new BillingError(409,'Plan grant ID already used');
  return receipt;
+}
+
+export type {UsageHistoryRow} from './usage-history-shape';
+export async function readUsageHistory(db:Pick<D1Database,'prepare'>,user:string,page=1){
+  if(!Number.isSafeInteger(page)||page<1||page>1000)throw new BillingError(400,'Choose a usage-history page from 1 to 1000.');
+  const {results}=await db.prepare('SELECT id,period,status,quoted_units,quota_reserved,credits_reserved,actual_units,quota_charged,credits_charged,created_at,updated_at FROM usage_operations WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?').bind(user,(page-1)*20).all<UsageHistoryRow>();
+  return {rows:results.slice(0,20),page,hasMore:results.length>20&&page<1000,truncated:results.length>20&&page===1000};
+}
+export function describeUsageHistory(history:Awaited<ReturnType<typeof readUsageHistory>>){
+  const status={reserved:'Reserved; not yet sent',dispatched:'Sent; awaiting completion',uncertain:'Outcome needs review',settled:'Completed',released:'Released; no charge'};
+  return 'Test AI usage history — page '+history.page+'\n\n'+(history.rows.length?history.rows.map(r=>`${r.created_at} · ${status[r.status]}\n${r.status==='settled'?`${r.quota_charged} monthly units + ${r.credits_charged} test credits charged`:r.status==='released'?'No units or credits charged':`${r.quota_reserved} monthly units + ${r.credits_reserved} test credits held (not a final charge)`}\nRequest: ${r.id}`).join('\n\n'):'No AI usage requests found on this page.')+(history.hasMore?'\n\nNext: /usage-history '+(history.page+1):history.truncated?'\n\nOlder requests are outside this preview history window.':'')+'\n\nThese are preview build units and test credits, not dollars or premium-model credit prices. A held request is not a second charge. Unknown outcomes remain held for review; this list does not retry or release them. Guided commands use no AI units. /usage shows current totals.';
 }

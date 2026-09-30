@@ -1,3 +1,4 @@
+import {readUsageHistory,describeUsageHistory} from './billing';
 import {applicationChatActions} from './app-chat-actions';
 import {cmsPendingRequest,pendingCMSWork,describePendingCMS} from './cms-pending';
 import {cmsWordPressLinks} from './cms-wordpress-chat';
@@ -109,7 +110,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(!ai)return {status:503,error:'AI drafting is not connected. You can still create a free starter preview from Chat.'};
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
   }
-  const known = ['/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
+  const known = ['/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','show usage history','show my usage history','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && !help && !navigation && !pendingCMS && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
@@ -193,9 +194,13 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
     const { results } = await db.prepare('SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ id: string; name: string; purpose: string; status: string;site_live:number;backend_live:number;cms_articles:number }>();
     reply = results.length ? results.map(p => `${p.name} — ${p.site_live||p.cms_articles||p.backend_live?'live':p.status}\n${p.purpose}\nID: ${p.id}${p.site_live ? '\n' + siteURL(p.id) : ''}${p.backend_live?'\nPublic JSON backend · https://'+p.id+'.whumpo.site/backend':''}${p.cms_articles?'\n'+p.cms_articles+' public CMS article(s) · https://'+p.id+'.whumpo.site/cms':''}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
+  } else if (/^\/usage-history(?:\s|$)/.test(command)||['show usage history','show my usage history'].includes(command)) {
+    const parts=command.startsWith('/')?command.split(/\s+/):['/usage-history'];
+    if(parts.length>2||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))return {status:400,error:'Use /usage-history, optionally followed by a page from 1 to 1000.'};
+    reply=describeUsageHistory(await readUsageHistory(db,userId,Number(parts[1]??1)));
   } else if (['/usage', 'show usage', '/credits'].includes(command)) {
     const billing = await getBilling(db, userId);
-    reply = `${billing.plan.name} · ${billing.period}\n${billing.quota.available} of ${billing.quota.allowance} monthly build units available. ${billing.quota.spent} used; ${billing.quota.reserved} held for pending work.\n${billing.credits.available} credits available; ${billing.credits.reserved} held.\nUsing existing credits after your monthly allowance is ${billing.credits.overageEnabled ? 'enabled' : 'disabled'}.\n\nGuided chat is free. Monthly units reset on the first day of each month (UTC); credits carry over. Use /credits on or /credits off to change overage use. Buying credits and paid upgrades are not enabled yet.`;
+    reply = `${billing.plan.name} · ${billing.period}\n${billing.quota.available} of ${billing.quota.allowance} monthly build units available. ${billing.quota.spent} used; ${billing.quota.reserved} held for pending work.\n${billing.credits.available} credits available; ${billing.credits.reserved} held.\nUsing existing credits after your monthly allowance is ${billing.credits.overageEnabled ? 'enabled' : 'disabled'}.\n\nGuided chat is free. Monthly units reset on the first day of each month (UTC); credits carry over. Use /usage-history for individual requests. Use /credits on or /credits off to change overage use. Buying credits and paid upgrades are not enabled yet.`;
   } else if (['/credits on', '/credits off'].includes(command)) {
     await ensureBilling(db, userId);
     overage = command === '/credits on';
