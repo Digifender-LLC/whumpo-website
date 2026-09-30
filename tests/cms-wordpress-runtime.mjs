@@ -15,6 +15,8 @@ const send=xml=>runtime.dispatchFetch('http://localhost/',{method:'POST',body:xm
 try{
  const xml=wxr(item(1)+item(2,'<p>Image</p><img src="https://external.test/photo.jpg">')),response=await send(xml);assert.equal(response.status,200,await response.clone().text());const result=await response.json();
  assert.deepEqual(result,await analyzeWordPress(new TextEncoder().encode(xml)));assert.equal(result.summary.reviewable,1);assert.equal(result.summary.needsChanges,1);assert.equal(result.sourceRetained,false);
+ const largeTaxonomy=item(3).replace('</item>',Array.from({length:51},(_,i)=>'<category domain="post_tag" nicename="tag-'+i+'">Tag '+i+'</category>').join('')+'</item>');
+ const bounded=(await (await send(wxr(largeTaxonomy))).json()).articles[0];assert.equal(bounded.candidate,null);assert.ok(bounded.reasons.includes('source_provenance_exceeds_review_limit'));
  const repeated=await send(xml);assert.deepEqual(await repeated.json(),result);
  for(const invalid of [wxr(item(1)).replace('<rss','<!DOCTYPE rss [<!ENTITY x SYSTEM "https://external.test/">]><rss'),'<rss>',wxr(item(1)+item(1)),wxr(Array.from({length:101},(_,i)=>item(i+1)).join(''))])assert.equal((await send(invalid)).status,400);
  const maximum=await send(wxr(Array.from({length:100},(_,i)=>item(i+1,'<p>'+'text '.repeat(800)+'</p>')).join('')));assert.equal(maximum.status,200);assert.equal((await maximum.json()).summary.needsChanges,100);
