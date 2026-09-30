@@ -1,3 +1,4 @@
+import {publicCMSPublicationImage} from './cms-publication-media';
 import {recordTraffic} from './site-traffic';
 import {customerProject,visitorProject,projectOrigin} from './hosts';
 import {activeBackendForm} from './backend-forms';
@@ -26,10 +27,12 @@ const serving = {
     if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
     url.pathname='/s/'+mapping.project_id+url.pathname;
    }
+   const cmsImage=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/media\/([0-9a-f-]{36})\/([0-9a-f]{64})\.jpg$/);
+   if(cmsImage)return publicCMSPublicationImage(request,env.DB,env.FILES,cmsImage[1],cmsImage[2],cmsImage[3]);
    const cmsListing=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/?$/);
    if(cmsListing){const html=await cmsIndex(env.DB,cmsListing[1]);return new Response(request.method==='HEAD'?null:html??'Articles not found',{status:html?200:404,headers});}
    const cms=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/(posts|pages)\/([0-9A-HJKMNP-TV-Z]{26})$/);
-   if(cms){const row=await env.DB.prepare("SELECT public_html,digest FROM cms_live_articles WHERE project_id=? AND collection=? AND item_id=?").bind(cms[1],cms[2],cms[3]).first<{public_html:string;digest:string}>();if(!row)return new Response('Article not found',{status:404,headers});if(await hashToken(row.public_html)!==row.digest)return new Response('Article unavailable',{status:503,headers});return new Response(request.method==='HEAD'?null:row.public_html,{headers});}
+   if(cms){const row=await env.DB.prepare("SELECT public_html,digest FROM cms_live_articles WHERE project_id=? AND collection=? AND item_id=?").bind(cms[1],cms[2],cms[3]).first<{public_html:string;digest:string}>();if(!row)return new Response('Article not found',{status:404,headers});if(await hashToken(row.public_html)!==row.digest)return new Response('Article unavailable',{status:503,headers});return new Response(request.method==='HEAD'?null:row.public_html,{headers:{...headers,'content-security-policy':headers['content-security-policy']+"; img-src 'self'"}});}
    const directory=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/directory(\.json)?$/);
    if(directory){const data=await publicDirectory(env.DB,directory[1]);if(!data)return new Response('Directory not found',{status:404,headers});const json=!!directory[2];return new Response(request.method==='HEAD'?null:json?JSON.stringify(data):directoryPage(data),{headers:{...headers,...(json?{'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin'}:{})}});}
    const asset=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/assets\/([0-9a-f-]{36})\.jpg$/);
