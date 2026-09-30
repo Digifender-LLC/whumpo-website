@@ -4,7 +4,9 @@ September 30, 2026. Implements the owner's decision that standard assistance is 
 
 ## Status
 
-`src/standard-ai-usage.ts` and migration `0094_standard_ai_requests.sql` introduce non-billable request receipts. This is the accounting foundation, **not an activated unlimited Chat path**. Current Muse Chat still uses historical test-unit accounting. Premium dispatch and billing remain disabled. Migration 0094 is applied in the private test database; September 30 at 15:21 UTC readback confirms all 94 migrations, no pending files, both transition/identity triggers and zero standard requests. The deployed Chat handler has not switched admission to standard receipts. Do not advertise that current test balances have stopped limiting requests until the integration work below passes.
+New Chat admission, dispatch, completion and failure handling now use non-billable standard receipts. The same receipt month is used for internal cost admission, including UTC month boundaries. Customer test-unit balances and legacy credit opt-in no longer constrain standard replies or bounded inspection follow-ups. Historical receipts retain their original settlement and operator-waiver path. Premium dispatch and billing remain disabled. Migrations 0094–0096 are applied; all 96 files were verified at 15:34 UTC on September 30.
+
+This implements customer-credit separation, **not unlimited provider capacity**. The private test's existing internal monthly subscription-shadow ceiling remains enforced. Exhaustion returns temporary unavailability (503), not a payment/credit prompt. Monitor-mode abuse restrictions remain non-blocking, but Monitor does not disable this separate test-provider capacity ceiling. Replacing that testing ceiling with calibrated platform-wide capacity controls and launch fair-use enforcement remains a beta gate.
 
 ## Contract
 
@@ -19,11 +21,10 @@ The token counts are evidence, not invoice amounts, provider-cost reservations, 
 
 ## Remaining integration
 
-1. Connect Chat admission, dispatch and failure handling to these receipts for standard routes. Source reconciliation now recognizes standard receipts; complete-handler activation and historical replay acceptance are still required.
-2. Internal inference admission now accepts owned standard receipts through migration 0095, while preserving legacy admission, unknown cost holds and budget checks. Wire the Chat handler to this path and verify its complete recovery behavior.
-3. Keep advanced-model consent and credits separate. Internal model choice cannot silently convert a standard task into premium work.
-4. Update balance/status/history UI and Chat responses together. Historical test debits remain labelled historical; new standard work must not suggest purchasing credits to continue.
-5. Test zero-balance standard work, concurrent admission, recovery after lost provider/database acknowledgments, monitor mode, provider-cost admission and customer-unit non-mutation through the full handler before activation.
+1. Keep advanced-model consent and credits separate when premium dispatch is built. Internal model choice cannot silently convert a standard task into premium work.
+2. Calibrate real-provider cost accounting and platform capacity before beta. Current Muse costs are hypothetical subscription-shadow estimates; they are not invoices or fair-use misuse evidence.
+3. Complete the independent fair-use notice, appeal and narrowly scoped restriction workflow. Monitor remains non-blocking; cost/volume alone must not establish abuse.
+4. Add pagination/detail views for standard receipt history when needed; Billing currently shows the latest 20 owned receipts. Chat keeps the corresponding work result. Historical test-unit history remains separately available.
 
 ## Verification
 
@@ -47,4 +48,16 @@ Migration 0096 extends the existing atomic late-result guard to standard receipt
 
 `node tests/standard-ai-recovery.mjs` passed using actual disposable D1 and the Chat reconciler: persisted answer, lost settlement acknowledgment, pre-dispatch cleanup, retained uncertain cost, late-result transaction rollback, exact request replay without inference, stale-snapshot race, foreign ownership, pre-dispatch result rejection and zero customer billing mutations. Both TypeScript checks passed. No new standard request admission or premium dispatch is enabled by this recovery integration.
 
-Historical recovery regression (`node tests/usage-recovery.mjs`) also passed, including credit holds, operator waivers, lost acknowledgments and late-result rollback. Remote readback at 15:34 UTC on September 30 verified all 96 migrations applied, none pending and the result guard admitting both accounting paths. The recovery source change is not yet deployed; the active platform remains on historical test-unit Chat admission.
+Historical recovery regression (`node tests/usage-recovery.mjs`) also passed, including credit holds, operator waivers, lost acknowledgments and late-result rollback. Remote readback at 15:34 UTC on September 30 verified all 96 migrations applied, none pending and the result guard admitting both accounting paths. At that schema-only step, the recovery source was not yet deployed and the platform still used historical test-unit Chat admission. The activation below supersedes that status.
+
+## Standard Chat activation verification — September 30, 2026
+
+`tests/standard-ai-chat.mjs` exercises the actual Chat handler with disposable D1: zero monthly units and zero credits, enabled legacy overage without spending, exact replay, changed-request refusal, failed-proposal internal costs, unknown provider outcomes, competing revisions, rollback when internal capacity is unavailable and lost admission acknowledgment recovery. Existing historical balances and ledger rows remain byte-for-byte unchanged by standard requests. The recovery suite also closes a failed action whose internal receipt settled before its Chat update was lost.
+
+Passed: `pnpm check`, `node tests/billing.mjs`, `node tests/standard-ai-chat.mjs`, `node tests/standard-ai-recovery.mjs`, `node tests/first-ai-journey.mjs`, `node tests/model-costs.mjs`, `node tests/agent-inspection.mjs`, `node tests/welcome-first-draft.mjs`, `node tests/usage-recovery.mjs`, `node tests/usage-history-ui.mjs`, frontend builds and `node tests/frontend-loading.mjs`. Release checkout TypeScript checks and build/loading checks also passed.
+
+Live Muse acceptance (`RUN_LIVE_MUSE=1 node tests/workspace-shortcuts-live.mjs`) used a synthetic local account with zero available test units: one call, 5,984 input tokens and 1,061 output tokens; zero customer units/credits, exact requested page/shortcuts, replay without another call, and no publication. This is real-provider/local-storage acceptance, not a hosted authenticated customer journey.
+
+Browser acceptance used the actual local platform and disposable D1. Billing distinguished standard requests from historical balances; Dashboard showed included assistance instead of an AI-unit meter. Desktop and 390 CSS-pixel mobile layouts were inspected. The fixture verified authenticated reads and zero mutations/inference/publications. Its assertions passed; the fixture process needed explicit shutdown after its connection cleanup stalled, and its disposable directory was removed. The harness now closes open connections during cleanup. Physical-device acceptance remains separate. Evidence: `.secrets/standard-billing-browser.json`, `.secrets/standard-billing-browser.png`, `.secrets/standard-dashboard-mobile.png`.
+
+Deployment: platform `be22062c-8178-40eb-90d0-64858af27411` activates this path. Independent public readback at 15:47 UTC confirms the active version, all 16 built JS/CSS/font assets, health 200, anonymous private-route denial, recovery-origin denial, all 96 applied migrations and no pending migrations. Evidence: `.secrets/standard-ai-release-verification.json`. No CMS test, new provider, account connection, purchase or customer publication occurred.

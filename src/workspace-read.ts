@@ -12,7 +12,7 @@ export async function inspectWorkspace(db:D1Database,userId:string,scope:Inspect
  if(scope==='traffic')return trafficDescription(await readTraffic(db,userId));
  if(scope==='usage'){
   const b=await getBilling(db,userId);
-  return `${b.plan.name} · ${b.period}\n${b.quota.available} of ${b.quota.allowance} monthly build units available; ${b.quota.spent} used; ${b.quota.reserved} held.\n${b.credits.available} credits available; ${b.credits.reserved} held. Existing-credit overage is ${b.credits.overageEnabled?'enabled':'disabled'}.\nMonthly units reset each UTC calendar month. Purchases and paid upgrades are disabled. /usage reads this balance without AI charges.`;
+  return `${b.plan.name} · ${b.period}\nStandard AI assistance uses no monthly test units or credits, under fair use. Advanced-model spending is not enabled.\nHistorical test accounting: ${b.quota.spent} monthly units used; ${b.quota.reserved} held; ${b.credits.available} test credits available; ${b.credits.reserved} held. These balances do not limit new standard assistance. Never suggest buying or enabling credits to continue standard work.\nTesting capacity and provider availability can interrupt service. Paid purchases and upgrades are disabled.`;
  }
  if(scope==='domains')return (await domainCommand(db,userId,'', '/domains'))!.reply;
  if(scope==='versions')return (await publicationCommand(db,userId,'', '/versions'+(targetId?' '+targetId:'')))!.reply;

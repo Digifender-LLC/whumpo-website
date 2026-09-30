@@ -215,11 +215,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     reply=describeUsageHistory(await readUsageHistory(db,userId,Number(parts[1]??1)));
   } else if (['/usage', 'show usage', '/credits'].includes(command)) {
     const billing = await getBilling(db, userId);
-    reply = `${billing.plan.name} · ${billing.period}\n${billing.quota.available} of ${billing.quota.allowance} monthly build units available. ${billing.quota.spent} used; ${billing.quota.reserved} held for pending work.\n${billing.credits.available} credits available; ${billing.credits.reserved} held.\nUsing existing credits after your monthly allowance is ${billing.credits.overageEnabled ? 'enabled' : 'disabled'}.\n\nGuided chat is free. Monthly units reset on the first day of each month (UTC); credits carry over. Use /usage-history for individual requests. Use /credits on or /credits off to change overage use. Buying credits and paid upgrades are not enabled yet.`;
+    reply = `${billing.plan.name} · ${billing.period}\nStandard AI assistance uses no credits or monthly test units. It is intended for building and maintaining your projects under fair use. Advanced models are not enabled yet; future advanced work will require explicit credit-spending approval.\n\nHistorical test accounting: ${billing.quota.spent} monthly units used; ${billing.quota.reserved} held for earlier requests. ${billing.credits.available} existing test credits available; ${billing.credits.reserved} held. These balances do not limit new standard assistance.\n\nUse /usage-history for historical test-unit receipts. Billing settings show recent standard requests. Testing capacity and provider availability can still interrupt service; credits do not bypass those checks. Paid upgrades and credit purchases are not enabled yet.`;
   } else if (['/credits on', '/credits off'].includes(command)) {
     await ensureBilling(db, userId);
     overage = command === '/credits on';
-    reply = overage ? 'Existing credits may now cover build usage after your monthly allowance runs out. This does not buy credits or charge a payment method. You can turn this off with /credits off.' : 'Credit overage is off for new operations. Already reserved work can still settle against its existing hold.';
+    reply = overage ? 'Your legacy credit preference is saved. Standard AI does not spend these credits. This does not authorize advanced models, buy credits or charge a payment method.' : 'Your legacy credit preference is off. Earlier reserved work can still settle against its existing hold. Standard AI does not spend credits.';
   } else if (['/plans', 'show plans', 'pricing'].includes(command)) {
     reply = describePlans();
   } else if (['/activity', 'show activity'].includes(command)) {

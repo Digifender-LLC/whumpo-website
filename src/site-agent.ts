@@ -180,7 +180,7 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
   if(hasTarget&&(typeof action.targetId!=='string'||!/^[0-9a-f-]{36}$/.test(action.targetId)))throw new ProposalError();
   if(['project','version'].includes(scope)&&!hasTarget || !['project','version','versions'].includes(scope)&&hasTarget)throw new ProposalError();
   const reply=await inspectWorkspace(db,userId,scope,action.targetId as string|undefined);
-  return {reply:reply+(scope==='usage'?'\nThis snapshot includes the hold for this AI reply. Use /usage after it finishes for the settled balance.':''),statements:[] as D1PreparedStatement[]};
+  return {reply:reply+(scope==='usage'?'\nStandard assistance does not place a unit or credit hold. Historical test holds, if any, belong to earlier requests.':''),statements:[] as D1PreparedStatement[]};
  }
  if(action.kind==='projectDetails'){
   if(Object.keys(action).some(k=>!['kind','projectId','revision','name','purpose','audience','style_notes','preferred_theme'].includes(k))||typeof action.projectId!=='string')throw new ProposalError();

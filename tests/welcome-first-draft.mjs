@@ -34,7 +34,7 @@ try{
  assert.equal((await readChat(db,owner.user,true)).firstDraft,null);
  assert.equal((await db.prepare('SELECT project_id FROM site_versions WHERE id=?').bind(made.id).first()).project_id,owner.project);
  assert.equal((await db.prepare('SELECT project_id FROM welcome_first_drafts WHERE turn_id=?').bind(made.id).first()).project_id,owner.project);
- const charged=(await getBilling(db,owner.user)).quota.spent;assert.ok(charged>0);
+ const charged=(await getBilling(db,owner.user)).quota.spent;assert.equal(charged,0);
  await sendAIChat(db,owner.user,made.id,made.revision,made.content,config,transport);assert.equal(calls,1);assert.equal((await getBilling(db,owner.user)).quota.spent,charged);
  const again=await run(owner,transport);assert.equal(again.result.status,409);assert.equal(calls,1);
  const denied=await sendAIChat(db,foreign.user,crypto.randomUUID(),1,made.content,config,()=>assert.fail('Foreign first project must not dispatch'));assert.equal(denied.status,409);

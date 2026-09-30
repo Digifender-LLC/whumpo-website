@@ -6,7 +6,7 @@ import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {reconcileChat,sendAIChat}=await module('src/ai-chat.ts');
 const {reconcileStandardChat}=await module('src/standard-ai-recovery.ts');
-const {reserveStandardAI,dispatchStandardAI,readStandardAI}=await module('src/standard-ai-usage.ts');
+const {reserveStandardAI,dispatchStandardAI,readStandardAI,closeStandardAIAttempt}=await module('src/standard-ai-usage.ts');
 const {ensureInferenceBudget,inferenceReservation,dispatchInference,observeInference}=await module('src/model-costs.ts');
 const dir=await mkdtemp('/tmp/whumpo-standard-recovery-');
 execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
@@ -34,6 +34,8 @@ try{
  const flaky={prepare(sql){const stmt=db.prepare(sql);if(!sql.startsWith("UPDATE standard_ai_requests SET state='completed'"))return stmt;return {bind(...args){const bound=stmt.bind(...args);return {async run(){await bound.run();if(!injected){injected=true;throw Error('Synthetic lost acknowledgment');}return {meta:{changes:0}};}};}};}};
  await assert.rejects(()=>reconcileChat(flaky,lost.user),/lost acknowledgment/);
  assert.equal((await turn(lost)).status,'pending');await reconcileChat(db,lost.user);assert.equal((await turn(lost)).status,'completed');
+ // A failed action can settle its known provider usage before losing the Chat update.
+ const rejected=await fixture();await observeInference(db,rejected.user,rejected.id,{text:'Invalid action',inputTokens:100,outputTokens:200});await closeStandardAIAttempt(db,rejected.user,rejected.id);await reconcileChat(db,rejected.user);assert.equal((await turn(rejected)).status,'failed');assert.equal((await readStandardAI(db,rejected.user,rejected.id)).state,'completed');
  const reserved=await fixture(false);await reconcileChat(db,reserved.user);
  assert.equal((await turn(reserved)).status,'failed');assert.equal((await readStandardAI(db,reserved.user,reserved.id)).state,'released');assert.equal((await db.prepare('SELECT status FROM inference_calls WHERE id=?').bind(reserved.id).first()).status,'released');
  const unknown=await fixture();await reconcileChat(db,unknown.user);
