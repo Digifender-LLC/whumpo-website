@@ -13,9 +13,14 @@ try{
  proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
  const owner=crypto.randomUUID(),other=crypto.randomUUID(),id=crypto.randomUUID();
  for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'test','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
+ const period=new Date().toISOString().slice(0,7);
+ const grant=async(user,plan)=>{const receipt=crypto.randomUUID();await db.prepare('INSERT OR IGNORE INTO billing_accounts(user_id) VALUES(?)').bind(user).run();await db.prepare('INSERT INTO plan_grants(id,user_id,period,plan_id,reference,created_at) VALUES(?,?,?,?,?,?)').bind(receipt,user,period,plan,receipt,new Date().toISOString()).run();};
+ for(const user of [owner,other])await grant(user,'starter');
+ const billingBefore=await db.prepare('SELECT * FROM billing_ledger ORDER BY id').all();
  const context={plan:'starter',category:'project_churn',reviewer:'operator-fixture',context:'Check whether the repeated sites are legitimate client work.'};
  const [a,b]=await Promise.all([open(db,owner,id,context),open(db,owner,id,context)]);
  assert.equal(Number(a.replayed)+Number(b.replayed),1);assert.deepEqual(a.review,b.review);assert.equal(a.enforcementEnabled,false);
+ const snapshot=JSON.parse(a.review.observation_json);assert.equal(snapshot.entitlement.planId,'starter');assert.equal(snapshot.entitlement.period,period);assert.equal(snapshot.metrics.verifiedStandardProviderMicros30d,null);assert.equal(snapshot.metrics.completedAITurns7d,0);for(const marker of [owner,other,'example.test','Check whether'])assert.ok(!a.review.observation_json.includes(marker));
  assert.equal(a.review.state,'open');assert.equal(a.review.revision,0);
  for(const change of [{plan:'business'},{context:'Different context'},{reviewer:'other-operator'},{category:'unrelated_chat'}])await assert.rejects(open(db,owner,id,{...context,...change}),e=>e.status===409);
  await assert.rejects(read(db,other,id),e=>e.status===404);
@@ -28,16 +33,16 @@ try{
  const retry=await resolve(db,owner,id,{revision:0,outcome:resolved.outcome,reviewer:resolved.resolved_by,resolution:resolved.resolution});assert.equal(retry.replayed,true);assert.deepEqual(retry.review,resolved);
  assert.deepEqual((await open(db,owner,id,context)).review,resolved);
  assert.equal(resolved.state,'resolved');assert.equal(resolved.revision,1);assert.ok(resolved.resolved_at);
- for(const sql of ["UPDATE fair_use_reviews SET context='changed' WHERE id=?","UPDATE fair_use_reviews SET user_id='changed' WHERE id=?","UPDATE fair_use_reviews SET state='open',revision=0,outcome=NULL,resolution=NULL,resolved_by=NULL,resolved_at=NULL WHERE id=?","UPDATE fair_use_reviews SET resolution='changed' WHERE id=?"]){await assert.rejects(db.prepare(sql).bind(id).run());}
+ for(const sql of ["UPDATE fair_use_reviews SET context='changed' WHERE id=?","UPDATE fair_use_reviews SET user_id='changed' WHERE id=?","UPDATE fair_use_reviews SET state='open',revision=0,outcome=NULL,resolution=NULL,resolved_by=NULL,resolved_at=NULL WHERE id=?","UPDATE fair_use_reviews SET resolution='changed' WHERE id=?","UPDATE fair_use_reviews SET observation_json=NULL WHERE id=?"]){await assert.rejects(db.prepare(sql).bind(id).run());}
  const missing=crypto.randomUUID();await assert.rejects(open(db,missing,crypto.randomUUID(),context),e=>e.status===404);
  for(const change of [{plan:'explore'},{category:'heavy_usage'},{context:''},{context:'x'.repeat(2001)},{reviewer:'\0bad'}])await assert.rejects(open(db,owner,crypto.randomUUID(),{...context,...change}),e=>e.status===400);
  assert.equal((await db.prepare('SELECT count(*) n FROM fair_use_reviews').first()).n,1);
  assert.equal((await db.prepare('SELECT requested_mode FROM fair_use_control WHERE id=1').first()).requested_mode,'monitor');
  assert.equal((await db.prepare('SELECT count(*) n FROM chat_turns').first()).n,0);
- assert.equal((await db.prepare('SELECT count(*) n FROM billing_accounts').first()).n,0);
+ assert.deepEqual((await db.prepare('SELECT * FROM billing_ledger ORDER BY id').all()).results,billingBefore.results);
  const operatorId=crypto.randomUUID(),input={action:'open',account:owner,id:operatorId,...context};
- const readOnly={prepare(sql){assert.match(sql,/^SELECT/);return db.prepare(sql);}};
- const preview=await runFairUseOperator(service,readOnly,input);assert.equal(preview.preview,true);assert.equal(preview.current,null);assert.equal(preview.applyDigest,fairUseOperatorDigest(fairUseOperatorInput(JSON.stringify(input))));
+ const readOnly={prepare(sql){assert.match(sql,/^SELECT/);return db.prepare(sql);},batch:statements=>db.batch(statements)};
+ const preview=await runFairUseOperator(service,readOnly,input);assert.equal(preview.preview,true);assert.equal(preview.current,null);assert.equal(preview.observation.entitlement.planId,'starter');assert.equal(preview.applyDigest,fairUseOperatorDigest(fairUseOperatorInput(JSON.stringify(input))));
  await assert.rejects(runFairUseOperator(service,readOnly,{...input,context:'Changed after review'},preview.applyDigest));
  assert.equal((await db.prepare('SELECT count(*) n FROM fair_use_reviews').first()).n,1);
  const applied=await runFairUseOperator(service,db,input,preview.applyDigest);assert.equal(applied.replayed,false);assert.equal((await runFairUseOperator(service,db,input,preview.applyDigest)).replayed,true);
@@ -48,7 +53,7 @@ try{
  await assert.rejects(runFairUseOperator(service,never,{action:'read',account:owner,id},preview.applyDigest));
  assert.equal((await runFairUseOperator(service,readOnly,{action:'read',account:owner,id:operatorId})).review.id,operatorId);
  const fixed='2026-09-29T00:00:00.000Z';
- for(let n=0;n<27;n++)await db.prepare("INSERT INTO fair_use_reviews(id,user_id,policy_version,plan_id,category,opened_by,context,created_at) VALUES(?,?,'test','business','legitimate_capacity','fixture','Private contextual review',?)").bind(crypto.randomUUID(),owner,fixed).run();
+ for(let n=0;n<27;n++)await db.prepare("INSERT INTO fair_use_reviews(id,user_id,policy_version,plan_id,category,opened_by,context,created_at,observation_json) VALUES(?,?,'test','starter','legitimate_capacity','fixture','Private contextual review',?,?)").bind(crypto.randomUUID(),owner,fixed,a.review.observation_json).run();
  await open(db,other,crypto.randomUUID(),context);
  const page1=await runFairUseOperator(service,readOnly,{action:'list',account:owner});assert.equal(page1.reviews.length,25);assert.ok(page1.nextBefore);
  const page2=await runFairUseOperator(service,readOnly,{action:'list',account:owner,before:page1.nextBefore});assert.equal(page2.reviews.length,4);assert.equal(page2.nextBefore,null);
@@ -56,6 +61,13 @@ try{
  assert.equal((await list(db,other)).reviews.length,1);
  await assert.rejects(list(db,owner,{createdAt:'invalid',id}));
  assert.equal((await db.prepare('SELECT requested_mode FROM fair_use_control WHERE id=1').first()).requested_mode,'monitor');
+ await grant(owner,'business');
+ assert.deepEqual((await open(db,owner,id,context)).review,resolved,'Historical retries preserve the original snapshot after upgrade');
+ await assert.rejects(open(db,owner,crypto.randomUUID(),context),e=>e.status===409);
+ const raceId=crypto.randomUUID();let injected=false;
+ const racing={batch:statements=>db.batch(statements),prepare(sql){const statement=db.prepare(sql);if(!sql.startsWith('INSERT INTO fair_use_reviews'))return statement;return {bind(...args){const bound=statement.bind(...args);return {async run(){injected=true;await grant(owner,'business-pro');return bound.run();}};}};}};
+ await assert.rejects(open(racing,owner,raceId,{...context,plan:'business'}),e=>e.status===409);assert.equal(injected,true);assert.equal(await db.prepare('SELECT id FROM fair_use_reviews WHERE id=?').bind(raceId).first(),null);
+ const latest=await open(db,owner,raceId,{...context,plan:'business-pro'});assert.equal(JSON.parse(latest.review.observation_json).entitlement.planId,'business-pro');
  await db.prepare('DELETE FROM users WHERE id=?').bind(owner).run();assert.equal((await db.prepare('SELECT count(*) n FROM fair_use_reviews WHERE user_id=?').bind(owner).first()).n,0);assert.equal((await list(db,other)).reviews.length,1);
- console.log('Fair-use review records passed: owner isolation, immutable scope, concurrent creation/resolution, exact lost-response replay, input limits, account deletion and unchanged Monitor/chat/billing state, read-only previews, exact digest application and bounded account history.');
+ console.log('Fair-use review records passed: owner isolation, immutable scope, concurrent creation/resolution, exact lost-response replay, input limits, account deletion and unchanged Monitor/chat/billing state, read-only previews, exact digest application and bounded account history, private observation snapshots and atomic entitlement rechecks.');
 }finally{await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
