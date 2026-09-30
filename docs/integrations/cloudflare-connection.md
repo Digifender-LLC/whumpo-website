@@ -83,3 +83,13 @@ A temporary live test account verified enabled/disconnected status, exact PKCE a
 The workspace now recognizes the server’s `connection_error` marker, reports cancellation/failure without echoing provider query data, refreshes connection/billing status, and removes callback query parameters when opening the corresponding fixed workspace page. Checkout return also avoids claiming payment success from a URL. Passed `pnpm check`, `node tests/provider-return.mjs`, isolated frontend type checking and production build.
 
 Return-flow fix deployed as `233afcd4-59f6-4345-84f4-bb963c667458`. Readback verified that the Cloudflare client/vault secret names survived deployment, live JS/CSS matched the tested build, health returned 200 and anonymous connections returned 401. Real credential exchange and customer consent remain distinct open checks.
+
+## Connection status and reconnect guidance — September 30, 2026
+
+The owner-only status read can distinguish retained expired authorization from a never-connected account. It reads timestamps and state only, never token ciphertext or the provider. Expired authorization keeps `connected` and `dnsChangesEnabled` false. Cleanup may remove expired metadata; after that the status is simply disconnected, without inventing a reason. Chat labels its saved snapshot and reports expiry and pending cleanup; `/connections` refreshes it without inference.
+
+External connections explains that active Cloudflare access must be disconnected before switching accounts. Its Connect button is unavailable while that connection or provider revocation is active, matching the existing server admission rule. Disconnect/revocation and a new provider consent remain explicit user actions. A pending authorization not represented by those two states can still be refused by the server; its bounded-expiry message remains authoritative.
+
+GitHub continues to permit reviewed reconnection. When a prior GitHub token is awaiting cleanup while the new connection is active, Settings and Chat accurately preserve the current connected state. Provider status remains a local authorization snapshot, not a live account-health test. No new scope, credential handling, automatic reconnection or DNS mutation is introduced.
+
+Verification: both TypeScript projects, the production build and the disposable-D1 Cloudflare OAuth suite passed. Connection Chat tests cover owner isolation, no credential/provider disclosure, retained expired authorization, active connection plus old revocation, immutable historical replies and refreshed zero-inference status. Live customer consent remains a separate setup/acceptance gate.
