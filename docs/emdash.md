@@ -28,6 +28,29 @@ Run `pnpm install`, then `pnpm build:emdash` from the repository root. Run `pnpm
 
 The production profile uses dedicated D1, R2 and Astro session KV resources. The native CMS Worker has no public route, workers.dev address or public preview URL. Ownership/bootstrap and content operations use the signed bridge described below; approved article snapshots are served separately by the public site host. The profile checker examines the generated Cloudflare configuration as well as the source, since Astro can insert bindings at build time.
 
+## First hosted customer test preparation — September 30, 2026
+
+The current native build and generated private profile pass. A fresh read of the test control database found no CMS instances and no setup reviews. No hosted customer resources were created by this preparation. The existing private preview is not an enrolled customer instance.
+
+The operator provisioner now builds, checks and freezes the native artifact **before** resource allocation, so a failed build does not leave newly allocated customer stores. Recovery still requires the original frozen artifact when a deployment intent exists. The explicit `--storage-only` path retains its allocation-only behavior. This ordering is local operator code; the updated customer setup cost wording requires the next platform release.
+
+The first test needs an owned project and its exact approved setup review. In Whumpo Chat, request an EmDash CMS for that project (or use `/setup-cms PROJECT_ID | title | tagline`), then approve the returned review. The existing owner and confirmation checks remain authoritative; the operator does not synthesize a customer approval in the database.
+
+The reviewed footprint is one private Worker, one D1 database, one Standard R2 media bucket and one KV session namespace. The platform receives a private service binding. No customer DNS change or public article is part of setup. Public article publication remains a separate review. Build/bootstrap, owner/schema verification, draft creation/edit/preview, reviewed publish/withdraw, and database/media capture are the acceptance sequence; each stage needs recorded results before it is checked off.
+
+### Cost review
+
+Pricing checked September 30, 2026. These are shared account allowances, not reserved capacity for each CMS. Remaining account headroom and actual invoice attribution have not been verified; zero incremental cost is not guaranteed. The existing Workers Paid subscription is $5/month minimum; this footprint does not require another plan upgrade.
+
+| Resource | Included allowance | Usage above allowance |
+| --- | --- | --- |
+| Worker compute | 10 million requests and 30 million CPU ms/month | $0.30/million requests; $0.02/million CPU ms |
+| D1 | 25 billion rows read, 50 million written/month; 5 GB storage | $0.001/million reads; $1/million writes; $0.75/GB-month |
+| Standard R2 | 10 GB-month; 1 million Class A and 10 million Class B operations/month | $0.015/GB-month; $4.50/million Class A; $0.36/million Class B; billing-unit rounding applies |
+| KV | 10 million reads/month; 1 million each writes, deletes and lists; 1 GB storage | $0.50/million reads; $5/million each writes, deletes and lists; $0.50/GB-month |
+
+Official pricing: [Workers](https://developers.cloudflare.com/workers/platform/pricing/), [D1](https://developers.cloudflare.com/d1/platform/pricing/), [R2](https://developers.cloudflare.com/r2/pricing/), [KV](https://developers.cloudflare.com/kv/platform/pricing/). These rates support the setup review; they are not a customer-facing Whumpo tariff or an account spending cap.
+
 ## Cost and plugin boundary
 
 No Worker Loader, Dynamic Workers, Container, email or Images binding is configured. Astro's default Images binding is explicitly avoided with passthrough image handling. Native plugin arrays are empty, and a sandbox runner is not selected. Upstream supports the core CMS without a Worker Loader; installing/executing sandboxed plugins requires the paid-only loader and is unavailable under the owner's current restriction. Never substitute `sandbox: false` or run untrusted plugins in-process to bypass that restriction. Keep this distinction visible in the future customer interface.
