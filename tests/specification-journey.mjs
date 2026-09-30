@@ -12,10 +12,17 @@ execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','mig
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_PROTOCOL:'responses',AI_API_KEY:'synthetic-fixture-only'};
 const background=[],ctx={waitUntil:p=>background.push(p)},originalFetch=globalThis.fetch;
-let actions=[],calls=0;
+let actions=[],calls=0,expectSpecificationLookup=false;
 globalThis.fetch=async(url,init)=>{
  assert.equal(String(url),'https://opencode.ai/zen/go/v1/responses');const body=JSON.parse(init.body),ack=body.max_output_tokens===256;
- if(!ack){calls++;assert.ok(actions.length,'Unexpected inference call');}
+ if(!ack){calls++;assert.ok(actions.length,'Unexpected inference call');
+  if(expectSpecificationLookup&&actions[0]?.kind==='specification'&&actions[0]?.operation==='change'){
+   expectSpecificationLookup=false;
+   const lookup=body.input.map(m=>{try{return JSON.parse(m.content);}catch{return null;}}).find(m=>m?.type==='workspace_lookup_result');
+   assert.ok(lookup,'A read/change continuation must include the saved lookup');
+   const saved=JSON.parse(lookup.result);assert.equal(saved.type,'website_specification');assert.equal(saved.revision,actions[0].expectedRevision);assert.ok(saved.content.some(c=>c.id==='section-1-text'&&c.text==='Monday through Friday'));
+  }
+ }
  return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(ack?{intent:'editing'}:{reply:'Synthetic fixture proposal',action:actions.shift()})}]}],usage:{input_tokens:100,output_tokens:100}});
 };
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
@@ -23,7 +30,7 @@ const call=(a,path,method='GET',data,origin='https://whumpo.com')=>m.platform.fe
 async function json(a,path,method='GET',data){const r=await call(a,path,method,data);assert.equal(r.status,200,path+' '+await r.clone().text());return r.json();}
 async function account(){const a={id:id(),token:(id()+id()).replaceAll('-','')};await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(a.id,a.id+'@example.test',now()).run();await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await m.hashToken(a.token),a.id,new Date(Date.now()+3600000).toISOString(),now()).run();
  await json(a,'/api/profile','PATCH',{revision:0,name:'River',avatar_id:'sun',about_me:'',share_context:false});await json(a,'/api/onboarding');await json(a,'/api/onboarding','PUT',{revision:0,stage:'review',project_name:'Example Garden',idea:'A local landscaping business.',audience:'Neighbors',preferred_theme:'forest'});await json(a,'/api/onboarding/complete','POST',{revision:1});a.project=(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(a.id).first()).id;return a;}
-async function chat(a,action,text='Please prepare this website change.'){actions=Array.isArray(action)?action:[action];const state=await json(a,'/api/chat'),input={id:id(),revision:state.state.revision,content:text},data=await json(a,'/api/chat','POST',input);await Promise.all(background);assert.equal(actions.length,0);return {input,data,turn:data.turns.at(-1)};}
+async function chat(a,action,text='Please prepare this website change.'){actions=Array.isArray(action)?action:[action];expectSpecificationLookup=Array.isArray(action)&&action[0]?.kind==='specification'&&action[0]?.operation==='read'&&action[1]?.operation==='change';const state=await json(a,'/api/chat'),input={id:id(),revision:state.state.revision,content:text},data=await json(a,'/api/chat','POST',input);await Promise.all(background);assert.equal(actions.length,0);assert.equal(expectSpecificationLookup,false);return {input,data,turn:data.turns.at(-1)};}
 const spec=(a,operation,fields)=>({kind:'specification',operation,projectId:a.project,...fields});
 async function input(a,action){return {id:id(),revision:(await json(a,'/api/chat')).state.revision,action};}
 const approval=q=>({type:'specificationApply',reviewId:q.id,proposalDigest:q.proposalDigest,expectedRevision:q.expectedRevision});
@@ -130,5 +137,6 @@ try{
  const heldRestore=await chat(owner,spec(owner,'restore',{expectedRevision:3,versionId:v2}));assert.equal(heldRestore.turn.specification_review,undefined);assert.match(heldRestore.turn.assistant_text,/held for safety/);
  // Explicit operator parent cascade must clean up the bounded state and metadata receipts.
  await db.prepare('DELETE FROM projects WHERE id=?').bind(owner.project).run();for(const table of ['project_spec_proposals','project_spec_versions','project_spec_applies','project_spec_heads'])assert.equal(await count(table,owner.project),0);
+ await db.prepare('DELETE FROM users WHERE id=?').bind(foreign.id).run();assert.equal(await db.prepare('SELECT id FROM projects WHERE id=?').bind(foreign.project).first(),null);assert.equal(await count('project_spec_applies',foreign.project),0);
  console.log('Specification journey passed: actual authenticated HTTP Chat/tools and exact recent-auth controls; private preview/diff, import/change/forward restore, immutable versions, export/publication reuse, foreign/origin/refusal, lost acknowledgement replay, stale/late rollback, deletion cleanup/tombstones, current-head retention, safety holds across delivery and operator cascade. Scripted interpretation only; compiler/approval/preview execute no model calls.');
 }finally{await Promise.allSettled(background);globalThis.fetch=originalFetch;await proxy.dispose();await rm(dir,{recursive:true,force:true});}

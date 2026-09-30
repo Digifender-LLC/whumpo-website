@@ -1,6 +1,6 @@
 # Four-Worker releases and partial recovery
 
-**WH-002 implementation, September 30, 2026.** This is operator tooling for the private test platform. It does not publish customer code, provision a CMS, activate a provider or replace application acceptance. The archive/journal protocol is implemented; synthetic failure recovery and real local Wrangler bundle round trips are verified. A live four-Worker release/recovery drill through this new protocol has not been performed.
+**WH-002 implementation, September 30, 2026.** This is operator tooling for the private test platform. It does not publish customer code, provision a CMS, activate a provider or replace application acceptance. The archive/journal protocol is implemented; synthetic failure recovery and real local Wrangler bundle round trips are verified. The first completed live four-Worker release and a real interrupted-release reconciliation are recorded below and in [WH-066B deployment evidence](project-specification-storage.md#test-deployment-and-recovery). A deliberate fault-injection or complete disaster-recovery drill remains unverified.
 
 ## Prepare before changing anything
 
@@ -83,7 +83,7 @@ Already-deployed versions from **before** this protocol have provider version ID
 - `node tests/release-lock.mjs`: actual in-memory SQLite, lease renewal/concurrency/expiry/failure cleanup and preventing an old operator from releasing a replacement lock.
 - `pnpm build` plus `node tests/release-bundles.mjs`: actual Wrangler 4.143.0 dry-run compilation and archived `--no-bundle` re-ingestion for all four Workers. Exact executable-module byte equality, including runtime Wasm. Empty temporary HOME and allowlisted environment; no account/deployment/model call or functional CMS test.
 
-No TypeScript behavior changed; no `pnpm check` was needed for this tooling change. No live Worker/schema/customer-content mutation, CMS test or paid service activation was performed. Fresh live release preparation, application acceptance and a real recovery drill must be recorded separately when performed. Wrangler's [dry-run, output and no-bundle commands](https://developers.cloudflare.com/workers/wrangler/commands/workers/) are the provider interface used here (checked September 30, 2026).
+No TypeScript behavior changed; no `pnpm check` was needed for this tooling change. That original local verification performed no live Worker/schema/customer-content mutation, CMS test or paid service activation. The subsequent WH-066B live release and application evidence are recorded separately below; broader recovery drills remain separate. Wrangler's [dry-run, output and no-bundle commands](https://developers.cloudflare.com/workers/wrangler/commands/workers/) are the provider interface used here (checked September 30, 2026).
 
 ## Live binding-readback correction — September 30, 2026
 

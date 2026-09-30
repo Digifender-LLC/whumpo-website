@@ -131,7 +131,10 @@ export async function specificationAction(db:D1Database,user:string,turn:string,
  try{
   if(request.operation==='read'){
    shape(request,['kind','operation','projectId']);id(request.projectId);const data=await readSpecification(db,user,request.projectId);
-   return {reply:data.versionId?`Saved website configuration revision ${data.revision}.${data.otherDraftChanges?' Other drafts changed; choose a saved page to import before editing.':''}`:'This website does not have a saved specification yet. Choose an existing website version to prepare for structured editing.',inspection:data,statements:[] as D1PreparedStatement[]};
+   // Inspection continuations accept a bounded string. Include editable references
+   // and actual text, not the ever-growing version history or a status-only reply.
+   const s=data.specification,inspection=JSON.stringify({type:'website_specification',projectId:data.projectId,revision:data.revision,versionId:data.versionId,otherDraftChanges:data.otherDraftChanges,...(s?{name:s.name,theme:s.design.theme,pages:s.pages,content:s.content}:{})});
+   return {reply:data.versionId?`Saved website configuration revision ${data.revision}.${data.otherDraftChanges?' Other drafts changed; choose a saved page to import before editing.':''}`:'This website does not have a saved specification yet. Choose an existing website version to prepare for structured editing.',inspection,statements:[] as D1PreparedStatement[]};
   }
   if(request.operation==='review'){
    shape(request,['kind','operation','reviewId']);id(request.reviewId);const q=await readSpecificationProposal(db,user,request.reviewId),reply=description(q);
