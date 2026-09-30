@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';import {mkdtemp,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {prepareBackendForm:prepare,confirmBackendForm:confirm,readBackendForm:read,activeBackendForm:active}=await module('src/backend-forms.ts');
-const {backendFormConfig,backendFormScript,backendFormScriptPolicy}=await module('src/backend-form-render.ts');
+const {backendFormConfig,backendFormScript,backendFormScriptPolicy,renderBackendForm}=await module('src/backend-form-render.ts');
 const {sendChat,readChat}=await module('src/chat.ts'),{backendAction,backendChatCommand}=await module('src/backend-chat.ts'),{saveBackend,testBackend}=await module('src/backend-versions.ts'),{prepareBackendPublication,confirmBackendPublication}=await module('src/backend-publication.ts');
 const {checkHealth,listHealth}=await module('src/site-health.ts'),host=(await module('src/site-host.ts')).default;
 const dir=await mkdtemp('/tmp/townhello-forms-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
@@ -15,6 +15,10 @@ try{
  const a=await fixture(),b=await fixture();
  for(const tail of ['', ' null'])assert.match(await backendChatCommand(db,a.user,id(),'/configure-backend-form '+a.project+tail)(),/^Provide form JSON/);
  for(const bad of [{...config,url:'https://evil.test'},{...config,fields:[{key:'constructor',label:'Bad',type:'text'}]},{...config,fields:[config.fields[0],config.fields[0]]},{...config,fields:[{key:'code',label:'Code',type:'script'}]},{...config,fields:Array(9).fill(config.fields[0])}])assert.throws(()=>backendFormConfig(bad));
+ const choice={key:'action',label:'Action',type:'choice',options:[{value:'add',label:'Add <script>task</script>'},{value:'remove',label:'Remove "task"'}]};
+ const choices={...config,fields:[choice,{key:'text',label:'Optional text',type:'text',optional:true}]};assert.deepEqual(backendFormConfig(choices),choices);
+ for(const field of [{...choice,options:[]},{...choice,options:Array(13).fill(choice.options[0])},{...choice,options:[choice.options[0],choice.options[0]]},{...choice,options:[{value:'bad value',label:'No'},choice.options[1]]},{...choice,options:[{value:'ok',label:' '},choice.options[1]]},{...choice,options:[{value:'ok',label:'Ok',execute:true},choice.options[1]]},{...choice,optional:true},{key:'n',label:'N',type:'number',options:choice.options},{key:'n',label:'N',type:'number',optional:true}])assert.throws(()=>backendFormConfig({...config,fields:[field]}));
+ const choiceHTML=renderBackendForm(choices,a.project,a.publication);assert.ok(choiceHTML.includes('<select'));assert.ok(choiceHTML.includes('value="add"'));assert.ok(choiceHTML.includes('Add &lt;script&gt;task&lt;/script&gt;'));assert.ok(!choiceHTML.includes('<script>task'));assert.match(choiceHTML,/<input name="text" type="text" maxlength="300"/);assert.ok(backendFormScript.includes("querySelectorAll.call(form,'input,select')"));
  const first=id(),competing=id();await prepare(db,a.user,a.project,first,config);await prepare(db,a.user,a.project,competing,config);
  assert.equal(await active(db,a.project),null);await assert.rejects(confirm(db,b.user,first),e=>e.status===404);
  await confirm(db,a.user,first);await assert.rejects(confirm(db,a.user,competing),e=>e.status===409);

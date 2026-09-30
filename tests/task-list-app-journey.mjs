@@ -16,13 +16,16 @@ export async function taskListAppJourney({db,account,call,host,env,executions}){
  const program=await chat('/enable-application '+version+' '+run);assert.equal(program.application_confirmation_id,program.id);
  assert.equal((await host.fetch(new Request(origin+'/'),env)).status,404);
  await chat('/confirm-application '+program.id);assert.equal((await host.fetch(new Request(origin+'/'),env)).status,404);
- const form={title:'Private tasks',description:'Choose add, list, complete, reopen or remove. Use a saved task ID for changes.',buttonLabel:'Apply task action',fields:[{key:'action',label:'Action',type:'text'},{key:'text',label:'New task text',type:'text'},{key:'id',label:'Task ID (0 for new tasks)',type:'number'}]};
+ const form={title:'Private tasks',description:'Choose add, list, complete, reopen or remove. Use a saved task ID for changes.',buttonLabel:'Apply task action',fields:[{key:'action',label:'What would you like to do?',type:'choice',options:[{value:'add',label:'Add a task'},{value:'list',label:'Show my tasks'},{value:'complete',label:'Mark complete'},{value:'reopen',label:'Reopen a task'},{value:'remove',label:'Remove a task'}]},{key:'text',label:'New task text (for adding)',type:'text',optional:true},{key:'id',label:'Task ID (0 for new tasks)',type:'number'}]};
  const page=await chat('/configure-app-page '+project+' '+JSON.stringify(form));assert.equal(page.app_page_confirmation_id,page.id);
  await chat('/confirm-app-page '+page.id);assert.equal((await host.fetch(new Request(origin+'/'),env)).status,200);
  function client(){const jar=new Map();return {async request(suffix,body){const response=await host.fetch(new Request(origin+suffix,{method:body===undefined?'GET':'POST',headers:{origin,'content-type':'application/json',cookie:[...jar].map(([k,v])=>k+'='+v).join('; ')},body:body===undefined?undefined:JSON.stringify(body)}),env);for(const cookie of response.headers.getSetCookie()){const pair=cookie.split(';')[0],position=pair.indexOf('=');jar.set(pair.slice(0,position),pair.slice(position+1));}return {status:response.status,data:await response.json()};}};}
  async function signup(client){const invite=await json(path+'/application-access/invitations',{},201),key=authenticator(origin),options=await client.request('/auth/signup/options',{inviteCode:invite.code});assert.equal(options.status,200);assert.equal((await client.request('/auth/signup/verify',{credential:key.registration(options.data.options)})).status,200);}
  const first=client(),second=client();await signup(first);await signup(second);
  const config=await first.request('/config');assert.equal(config.status,200);assert.deepEqual(config.data.form,form);assert.equal(config.data.pageId,page.id);
+ const beforeChoice=executions();
+ for(const action of ['', 'destroy', 'Add a task']){const bad=await first.request('/data',{id:id(),revision:0,pageId:page.id,input:{action,id:0,text:''}});assert.equal(bad.status,400);}
+ assert.equal(executions(),beforeChoice,'Unapproved choices must not reach the runtime');
  const initial={id:id(),revision:0,pageId:page.id,input:{action:'add',id:0,text:'First visitor private task'}};
  const response=await first.request('/data',initial);assert.equal(response.status,200);assert.equal(response.data.state,'complete');assert.equal(executions(),startExecutions+2);
  assert.deepEqual((await first.request('/data',initial)).data,response.data);assert.equal(executions(),startExecutions+2);
