@@ -120,6 +120,7 @@
     "deploy:apps": "wrangler deploy --config wrangler.apps.jsonc",
     "test:app-pages-http": "node tests/app-pages-http.mjs",
     "test:cloudflare-token-refresh": "node tests/cloudflare-token-refresh.mjs",
+    "test:app-migration-checks": "node tests/app-migration-checks.mjs",
     "test:app-document-recovery": "node tests/app-recovery.mjs",
     "test:app-lifecycle": "node tests/app-lifecycle.mjs",
     "test:workspace-navigation": "node tests/workspace-navigation.mjs",
