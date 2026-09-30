@@ -3,7 +3,7 @@
 
 ## Current deployment status and release caveat
 
-September 30, 2026 readback: platform `cb34d460-4938-45c1-8447-fbcc254ebbd2`; sites `d1208b4c-f49b-496a-b659-ad6d84f9566e`; apps `9bee8593-ee7f-4dd3-8934-2b41f43d692e`; runtime `662ea586-726d-4a00-ad22-d84024a7c0b2`. The platform is **whumpo.com**, customer content is on **whumpo.site**, and the private repository is **zemdregon/whumpo**. Digifender addresses below are historical and have no product fallback. Workers Paid ($5/month) is owner-authorized. Private R2 and the separate QuickJS runtime are in use; customer Containers/Stream/Gateway inference are not enabled by the platform's plan.
+September 30, 2026 readback: platform `4712f560-b629-4860-b0a0-fe30eae0953e`; sites `d1208b4c-f49b-496a-b659-ad6d84f9566e`; apps `9bee8593-ee7f-4dd3-8934-2b41f43d692e`; runtime `662ea586-726d-4a00-ad22-d84024a7c0b2`. The platform is **whumpo.com**, customer content is on **whumpo.site**, and the private repository is **zemdregon/whumpo**. Digifender addresses below are historical and have no product fallback. Workers Paid ($5/month) is owner-authorized. Private R2 and the separate QuickJS runtime are in use; customer Containers/Stream/Gateway inference are not enabled by the platform's plan.
 
 Owner decision September 30: apply all pending migrations in the private test environment. At 14:21 UTC, `pnpm db:remote` applied 0075/0076; independent readback confirms all 93 migrations with no pending files and both Gateway receipt tables empty. No Worker or provider route changed. Private evidence: `.secrets/test-migrations-2026-09-30.json`. `pnpm deploy` and `pnpm db:remote` now match this release policy. Keep the CMS-binding-preserving platform wrapper. Database changes are not reverted by Worker rollback.
 
@@ -353,3 +353,7 @@ TypeScript, real-D1 allocator/concurrency/recovery tests and CMS chat regression
 ## Owner recovery release — September 30, 2026
 
 Platform `cb34d460-4938-45c1-8447-fbcc254ebbd2` includes the reviewed lost-passkey flow, save-before-rotation, competing-attempt isolation and mobile-sized controls. Connected local browser/D1 acceptance exercised a lost response followed by recovery with the saved replacement code. Release checks and limitations are in [owner recovery](owner-recovery.md). No schema, provider, price, customer publication or live customer credential changed.
+
+## Connection guidance release — September 30, 2026
+
+Platform `4712f560-b629-4860-b0a0-fe30eae0953e` includes owner-scoped expired-authorization metadata and clearer Settings/Chat guidance. Cloudflare Connect now follows the existing disconnect-first rule; an older GitHub revocation does not mask a current active connection. Source `ca401f6`. No schema, scope, customer connection, DNS or provider authorization changed. The isolated release preserved prior recovery, pricing and CMS behavior. TypeScript checks for both projects, build, frontend-loading checks, connection Chat and Cloudflare OAuth suites passed. Live version/asset and access-boundary evidence: `.secrets/connection-guidance-release-verification.json`. Real provider consent remains a separate gate.
