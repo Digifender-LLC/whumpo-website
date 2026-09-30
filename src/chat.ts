@@ -1,10 +1,11 @@
+import {usageReviewCommand,prepareUsageReviewChat} from './usage-review-requests';
 import {readStandardAIHistory,readStandardAIRequest,describeStandardAIHistory,describeStandardAIRequest} from './standard-ai-history';
 import {describeConnections} from './connection-chat';
 import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
 import {appRecoveryChatActions} from './app-recovery-chat-actions';
 import {appPageDesignProjectId} from './app-page-design';
-import {readUsageHistory,describeUsageHistory} from './billing';
+import {readUsageHistory,describeUsageHistory,BillingError} from './billing';
 import {applicationChatActions} from './app-chat-actions';
 import {cmsPendingRequest,pendingCMSWork,describePendingCMS} from './cms-pending';
 import {cmsWordPressLinks} from './cms-wordpress-chat';
@@ -114,6 +115,9 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if(maintenance&&'error' in maintenance)return {status:400,error:maintenance.error};
   const pendingCMS=cmsPendingRequest(content);
   if(pendingCMS&&'error' in pendingCMS)return {status:400,error:pendingCMS.error};
+  const usageReview=usageReviewCommand(content);
+  let usageReviewReply:Awaited<ReturnType<typeof prepareUsageReviewChat>>|undefined;
+  if(usageReview){try{usageReviewReply=await prepareUsageReviewChat(db,userId,input.id,content);}catch(e){return {status:e instanceof BillingError?e.status:503,error:e instanceof BillingError?e.message:'Usage review unavailable. Try again with the same message.'};}}
   const help=chatHelp(command,!!ai);
   if(/^\/design-app-page(?:\s|$)/.test(command)){
     if(!appPageDesignProjectId(content))return {status:400,error:'Choose the approved application from Chat.'};
@@ -126,7 +130,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
   }
   const known = ['show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','show usage history','show my usage history','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
-  if (ai && !help && !navigation && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
+  if (ai && !usageReview && !help && !navigation && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
   const backup=backupChatCommand(db,userId,input.id,command,dnsOptions);
@@ -143,7 +147,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
-  if(navigation){const pages=(navigation.view==='pages'||navigation.view==='page')?(await readLayout(db,userId)).layout.tabs:[];reply=workspaceNavigationHelp+(navigation.view==='pages'||navigation.view==='page'?'\n'+(pages.length?'Your pages: '+pages.map(p=>p.label).join(', '):'No custom pages yet. Ask Whumpo to create one for your workflow.'):'');}
+  if(usageReviewReply)reply=usageReviewReply.reply;
+  else if(navigation){const pages=(navigation.view==='pages'||navigation.view==='page')?(await readLayout(db,userId)).layout.tabs:[];reply=workspaceNavigationHelp+(navigation.view==='pages'||navigation.view==='page'?'\n'+(pages.length?'Your pages: '+pages.map(p=>p.label).join(', '):'No custom pages yet. Ask Whumpo to create one for your workflow.'):'');}
   else if(maintenance){try{reply=describeAppMaintenance(await listAppMaintenance(db,userId,maintenance.projectId,maintenance.page),maintenance.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Application maintenance could not be read. Try again; nothing was executed.'};}}
   else if(pendingCMS){try{reply=describePendingCMS(await pendingCMSWork(db,userId,pendingCMS.projectId,pendingCMS.page),pendingCMS.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Publishing work could not be read. Try again; no operation was retried.'};}}
   else if(cms)reply='CMS command recorded. Inspect /cms or /cms-review '+input.id+' to recover its saved state.';
@@ -281,9 +286,10 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   const now = new Date().toISOString();
   const statements = [
-    db.prepare("INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at) SELECT ?, user_id, revision + 1, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending')").bind(input.id, content, reply, now, userId, state.revision, userId),
+    db.prepare("INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at, ai_context_allowed) SELECT ?, user_id, revision + 1, ?, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending')").bind(input.id, content, reply, now, usageReview?0:1, userId, state.revision, userId),
     db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ?, brief_project_id = ?, brief_stage = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, briefProject, briefStage, userId, state.revision, input.id, userId)
   ];
+  if(usageReviewReply)statements.push(...usageReviewReply.statements);
   if (preference) statements.push(db.prepare('UPDATE projects SET audience=COALESCE(?,audience),style_notes=COALESCE(?,style_notes),preferred_theme=COALESCE(?,preferred_theme),updated_at=? WHERE id=? AND owner_user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(preference.audience??null,preference.style??null,preference.theme??null,now,preference.projectId,userId,input.id,userId));
   if(comparison)statements.push(...comparison.statements);
   if(directory)statements.push(...directory.statements);
@@ -314,6 +320,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
     }
   } catch (cause) {
+    if(String(cause).includes('usage_review_requests.user_id'))return {status:409,error:'Another usage review was opened. Ask “show my usage reviews” to read it.'};
     if(String(cause).includes('directory_changed'))return {status:409,error:'The directory review changed or expired. Read the current directory and prepare a new review.'};
     if(String(cause).includes('directory_capacity'))return {status:409,error:'The test directory capacity or review-history limit has been reached.'};
     if(String(cause).includes('comparison_changed'))return {status:409,error:'A compared version changed or was removed. Request the comparison again.'};

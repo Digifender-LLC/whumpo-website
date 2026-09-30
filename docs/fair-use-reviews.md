@@ -2,7 +2,7 @@
 
 ## Internal review foundation — September 30, 2026
 
-Status: operator CLI implemented and review storage configured in the test database; not connected to customer request handling. Migration `0091_fair_use_reviews.sql` and `src/fair-use-reviews.ts` persist an internal review and its final decision. This implements the recordkeeping portion of the [fair-use policy](pricing-and-model-policy.md#unlimited-standard-ai-under-fair-use--september-29-2026-decision). It does not implement customer notices, appeals, restrictions or finance verification.
+Status: operator CLI implemented and review storage configured in the test database; not connected to customer request handling. Migration `0091_fair_use_reviews.sql` and `src/fair-use-reviews.ts` persist an internal review and its final decision. This implements the recordkeeping portion of the [fair-use policy](pricing-and-model-policy.md#unlimited-standard-ai-under-fair-use--september-29-2026-decision). It does not implement customer notices, enforcement appeals, restrictions or finance verification. A separate [customer-initiated usage-review channel](usage-review-requests.md) now implements guided requests and intentional operator responses without exposing these internal records.
 
 A review records its account, policy version, operator-recorded plan label, category, reviewer and bounded context. Categories separate unrelated chat, project churn and legitimate capacity. Context should explain the relevant pattern and legitimate-work possibilities without copying raw customer prompts, source code or credentials. Operator identities and notes are private support data; do not expose these rows through customer APIs or send them to inference providers. For new reviews with migration 0092, the requested plan must match the current-period entitlement receipts. Earlier records without a snapshot retain their historical reviewer assertion; it is not upgraded into verified evidence. Entitlement receipts do not establish collected subscription revenue.
 
@@ -18,7 +18,7 @@ The local operator CLI uses the existing Wrangler/Cloudflare credential authoriz
 - Add a browser operator interface with role-based authorization; the local CLI and bounded account history are available.
 - Connect independently verified company finances and an audited, explicit operator mode decision.
 - Add customer-visible notices with actual delivery receipts. Notice creation must not count as delivery, and Monitor must suppress notice delivery.
-- Add an authenticated customer appeal view and Chat action with private customer statements, operator responses and exact replay. Internal notes must not leak through it.
+- The customer-initiated usage-review Chat path and preview/apply operator response are implemented separately. Bind future enforcement appeals to actual notice/restriction decisions and provide account-level access independent of Chat limits; never expose internal notes.
 - Add dated restrictions with expiry/recheck and scope limited to confirmed offending categories; preserve maintenance, hosting, account access, export, backups, deletion and appeal.
 
 Verification uses disposable D1, never a live customer review. `pnpm test:fair-use-reviews` covers owner isolation, immutable SQL scope, racing creation and conflicting decisions, exact replay, limits, deletion cascade and unchanged Monitor/Chat/billing state. `pnpm check` covers both TypeScript projects. No recurring service or external provider is added.
