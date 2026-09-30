@@ -401,3 +401,10 @@ Migration 0094 applied to the private test database under the owner’s all-pend
 Migration 0095 applied to the private test database under the existing authorization. Readback at 15:26 UTC confirms all 95 migrations, no pending files, both admission triggers accepting standard receipts and both guards preventing mixed accounting paths. Standard receipt and historical model-cost D1 tests passed, as did both TypeScript checks. Private evidence: `.secrets/standard-ai-inference-migration.json`.
 
 No Worker release or Chat accounting switch occurred. Standard Chat still uses historical test units until its admission, completion and recovery paths are integrated; advanced model dispatch remains disabled. Undispatched internal-reservation cleanup now supports cancelled standard receipts in source. CMS testing remains deferred.
+
+
+## Standard AI result guard and recovery — September 30, 2026
+
+Migration 0096 applied to the private test database. Readback at 15:34 UTC confirms all 96 migrations, none pending and the late-result guard covering both standard and historical receipts. Private evidence: `.secrets/standard-ai-recovery-migration.json`.
+
+Source Chat reconciliation now handles saved and interrupted standard requests without customer billing mutations. `pnpm check`, `node tests/standard-ai-recovery.mjs` and `node tests/usage-recovery.mjs` passed. No Worker release, provider dispatch, CMS test or customer publication occurred. Standard request admission and customer-facing accounting still need their coordinated switch before unlimited fair-use Chat is active.
