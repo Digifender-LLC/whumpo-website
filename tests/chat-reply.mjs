@@ -18,9 +18,9 @@ assert.ok(!actions({application_confirmation_id:'bad-id'}).includes('<button'));
 console.log('Application controls passed: distinct enable/disable/publish/withdraw labels, mobile target size, no action from prose and no confirmation while rendering.');
 
 const start=ai=>renderToStaticMarkup(createElement(FirstDraftCard,{project:{id:review,name:'My idea',purpose:'A private notebook',preferred_theme:'ocean'},ai,busy:true,onSend:async()=>{throw Error('Render must not start a build');}}));
-assert.ok(start(true).includes('Draft a website'));assert.ok(start(true).includes('Build an app'));assert.ok(start(true).includes('Read my saved brief'));assert.ok(start(true).includes('disabled=""'));assert.ok(start(true).includes('sm:flex-wrap'));
-assert.ok(!start(false).includes('Build an app'));assert.ok(start(false).includes('Make a starter preview'));
-console.log('First-build card passed: explicit website/app choices, saved brief, disabled actions, mobile wrapping and guided-only fallback.');
+for(const ai of [true,false]){const html=start(ai);assert.ok(!html.includes('<button'));assert.ok(html.includes('My idea'));assert.ok(html.includes('A private notebook'));assert.ok(html.includes('approval'));}
+assert.ok(start(true).includes('Tell me what'));assert.ok(start(false).includes('Tell me about'));
+console.log('First-build card passed: saved brief, conversational invitation, approval disclosure and no routine action buttons.');
 
 const card=state=>renderToStaticMarkup(createElement(ApplicationReviewCard,{review:{id:review,projectName:'<script>Not HTML</script>',operation:'enable',state,expiresAt:'2026-09-30T12:00:00.000Z',source:'<img src=x onerror=alert(1)>',digest:'a'.repeat(64),testId:review}}));
 for(const state of ['ready','applied','expired','changed']){const html=card(state);assert.ok(html.includes('Application approval'));assert.ok(html.includes('Each visitor has their own separate data'));assert.ok(html.includes('separate page approval'));assert.ok(html.includes('<details'));assert.ok(!html.includes('<details open'));assert.ok(!html.includes('<script>'));assert.ok(!html.includes('<img src=x'));assert.ok(html.includes('&lt;img src=x'));assert.ok(!html.includes('<button'));}

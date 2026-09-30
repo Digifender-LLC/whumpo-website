@@ -25,17 +25,20 @@ A versioned offline [shared-pool economics proposal](resource-pool-economics.md)
 
 ## Workspace
 
-Chat is the first and default navigation item. Chat, Dashboard, Settings, Profile and workflow pages occupy separate full-width views; Dashboard never includes a side chat. There is no global header. Brand sits top left; Settings icon and private profile-photo button share the bottom sidebar row. Email and sign-out appear only in Profile. No Tools menu or Add Workspace button exists. An empty workflow list invites the user to ask Whumpo for a custom page. Existing pages remain customizable.
+September 30 refinement: routine project operations belong in Chat. The default Dashboard is a read-only overview, with an explicit site-unpublish entry for urgent takedowns. Removed its control directory, new-project/export/publication/health shortcuts, photo management links and manual layout editor. Layout changes go through the existing validated agent workspace action. First-project guidance is conversational rather than a website/app/brief button group. Account/profile/security and external-consent controls remain available; exact action confirmations remain contextual in Chat. Workflow pages already requested by users remain available. Arbitrary user-requested action buttons are not yet supported by the declarative layout schema; do not promise that every requested shortcut can be created.
+
+
+Chat is the first and default navigation item. Chat, Dashboard, Settings, Profile and workflow pages occupy separate full-width views; Dashboard never includes a side chat. There is no global header. Brand sits top left; Settings icon and private profile-photo button share the bottom sidebar row. Email and sign-out appear only in Profile. No Tools menu or Add Workspace button exists. An empty workflow list invites the user to ask Whumpo for a custom page. Existing pages can be customized by asking Whumpo.
 
 Default dashboard includes projects, AI test allowance and activity. Static account controls remain available independently of customization. Connections, domains, photos, billing and contact inbox render inside the workspace; sensitive passkey/recovery flows retain dialogs. CMS drafting/editing/review opens the Chat tab, rather than requiring the user to leave for a separate admin website.
 
-Customers and the agent can arrange cards and add/rename/remove up to eight tabs. Each tab may filter to an owned project. Supported card types:
+Through Chat, customers can ask the agent to arrange cards and add/rename/remove up to eight tabs. Each tab may filter to an owned project. Supported card types:
 
-- Projects: recorded publication/service status and project actions.
+- Projects: recorded publication/service status.
 - AI assistance: current account-wide test allowance, used/held units; never represented as infrastructure utilization.
 - File storage: ready uploaded project photo bytes only; scope explicitly excludes CMS media and database storage.
 - Activity: recorded owner activity with timestamps, optionally project filtered.
-- Publishing desk: actual published CMS article counts and in-workspace content commands.
+- Publishing desk: actual published CMS article counts.
 - Visitor traffic and processing performance: explicitly unavailable until telemetry is connected. No sample figures shown as real measurements.
 
 Model action `workspace/read` returns the current revision/layout. `workspace/save` accepts only strict declarative JSON and a matching revision; no HTML, code, URLs, custom SQL, arbitrary metric values or permission changes. Preserve unrelated widgets/tabs. Settings and account controls cannot be hidden by layout data. The model cannot save capacity preferences. Each save rechecks project ownership. All data queries separately scope to the authenticated owner, including after ownership changes.
