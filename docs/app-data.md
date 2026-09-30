@@ -1,5 +1,17 @@
 # Application visitor identity and persistent data
 
+## Owner erasure of revoked visitors — September 30, 2026
+
+Implemented: Visitor access offers **Erase retained data** only for revoked visitors. A separate dialog names the project and exact visitor, describes irreversible removal and retention exceptions, and requires typing `ERASE`. A recent owner sign-in and the existing access-change rate limit are required. The UI keeps one request ID across errors/retries and keeps the target bound to its project. This is a private owner control, not an AI tool; neither the model nor opening the dialog can erase an account.
+
+`POST /api/projects/:project/application-access/visitors/:visitor/erase` accepts exactly `{id:UUID,confirmation:"ERASE"}`. Current ownership of both the project and app is required, including on replay. Migration 0082 admits a receipt only for an already-revoked visitor, then deletes the visitor in the same database transaction. The existing erasure trigger removes the document, runs, passkeys, recovery codes, sessions, pending authentication challenges and used invitation. Disabled apps can be cleaned up without reopening them. Aggregate daily attempts remain so erasure cannot reset admission limits. No app code, other visitor or site publication is changed.
+
+The receipt retains only operation/account/project/visitor identifiers and timestamps for 30 days; no private payload or credential is copied into it. Current receipts are immutable, are capped at 1,000 and are removed after expiry by the existing scheduled lifecycle cleanup. A lost insertion acknowledgement reads back the exact receipt. Same-ID concurrent retries recover one completed deletion; reusing that ID for another visitor is rejected. After receipt expiry, a missing visitor is reported as missing rather than claiming a new erasure succeeded. The action does not erase provider backups, external exports or data copied outside the platform.
+
+Verification: both TypeScript projects, the connected customer-app journey, visitor lifecycle suite, isolated release build and frontend loading checks passed. Actual disposable-D1 tests cover owner/origin/session/confirmation boundaries, active-visitor rejection, erasure while disabled, concurrent/lost-response retries, removal of credential/document/history records, preservation of usage, immutable current receipts and cleanup of expired receipts. The journey retains signed synthetic visitor passkeys and actual isolated QuickJS. A 390px component fixture verified the review copy, exact-case confirmation, disabled/enabled button states and cancellation without submitting an erasure; document width matched the viewport. Screenshot: `.secrets/visitor-erasure-mobile.png`. No real visitor was erased for acceptance.
+
+Deployed September 30, 2026 as test platform `cd7db7c3-c19a-445a-8258-12a7e443db72`. Only migration 0082 was pending in the scoped release; its receipt table and four guards were verified remotely. Independent readback confirmed the active version, health 200, anonymous Chat/onboarding/erasure denial (401) and all 16 live JS/CSS/font assets matching the tested bytes. No live visitor was erased. Evidence: `.secrets/owner-visitor-erasure-release.json`.
+
 ## Application operations in Chat — September 30, 2026
 
 Implemented: `/app-status PROJECT_ID` gives an owned application's availability, active/revoked registered-account counts, today's admitted execution attempts and retained completed/failed/conflicted/unresolved outcomes. The current published-page handoff offers **Check app status · free**. The guided command makes no provider call; the model can request the same read through `backend / appStatus` with an exact owned project ID. A natural-language model request still uses normal AI accounting.
@@ -48,7 +60,7 @@ Deployed to the test platform September 30, 2026 as `37448b68-8e51-4b8f-acc4-079
 
 `src/app-data.ts` implements per-visitor state and immutable execution receipts. The controlled application host at `app-PROJECT_ID.whumpo.site` connects invitation-only passkeys to this engine only after a separate owner-approved application-page review. Program authorization alone does not publish a visitor page. Existing public backend endpoints and website forms remain stateless.
 
-This is an initial application workflow, not completion of all application hosting. Automatic retention, deletion for revoked/disabled accounts, schema migrations, whole-app recovery and physical-device passkey acceptance remain unfinished. Synthetic fixtures are used for automated and browser tests; no customer application is automatically published by a platform deployment.
+This is an initial application workflow, not completion of all application hosting. Explicit owner erasure for revoked visitors works even while an app is disabled. Automatic visitor-data retention, schema migrations, whole-app recovery and physical-device passkey acceptance remain unfinished. Synthetic fixtures are used for automated and browser tests; no customer application is automatically published by a platform deployment.
 
 ## Identity and code authority
 
@@ -79,7 +91,7 @@ Completed receipts retain bounded next-state snapshots and results. They are pri
 1. Owner-reviewed configuration is implemented and tested. The visitor UI must distinguish saved authority from public availability. Never reinterpret stateless publication as permission to use visitor data.
 2. Visitor passkeys, cookie binding, recovery and revocation are connected through the controlled host. Physical-device/browser passkey acceptance remains required; generated code never handles credentials.
 3. Controlled application forms and authenticated data/receipt routes are implemented with bounded bodies, origin checks and request limits. The existing credential-free public forms remain stateless. Expand reviewed form capabilities as real workloads require.
-4. Retention, revoked-account erasure, schema/data migration, snapshot restoration and whole-app backup. Handle program upgrades against existing visitor documents explicitly.
+4. Automatic visitor-data retention, schema/data migration, snapshot restoration and whole-app backup. Explicit owner erasure of revoked visitors is implemented. Handle program upgrades against existing visitor documents explicitly.
 5. Real runtime and browser acceptance for authenticated applications, concurrent visitors/projects, expired/revoked credentials, uncertain provider outcomes and privacy boundaries. Add abuse controls and operational recovery before public enrollment.
 
 ## Evidence
@@ -125,7 +137,7 @@ The HTTP gateway accepts only the controlled application origin and a currently 
 
 Gateway tests exercise signed enrollment through cookie-bound requests, missing/wrong origins, wrong host, body limits, rate denial, platform-session separation, authenticated data and private receipts, exact transition retry without redispatch, recovery and logout against local D1. The runtime service is controlled in this suite; this is not deployed/browser/QuickJS acceptance.
 
-Next: bounded retention, revoked-account erasure, whole-app recovery and physical-device passkey acceptance. Do not serve arbitrary generated scripts on the credential-bearing application origin. Existing stateless public forms remain separate.
+Remaining: automatic bounded retention, whole-app recovery and physical-device passkey acceptance. Explicit owner erasure of revoked visitors is now available. Do not serve arbitrary generated scripts on the credential-bearing application origin. Existing stateless public forms remain separate.
 
 
 ## Owner visitor controls
@@ -176,7 +188,7 @@ A 24-hour receipt contains project, request UUID and a hash binding the former s
 
 Project/global daily admission now uses aggregate counters backfilled from existing runs. Erasing individual history cannot reset those limits. Counters older than 35 days are removed; today's counts are retained. Visitor limits still apply per extant account. Invitation-only enrollment remains required.
 
-Deletion removes active storage. D1 Time Travel may retain prior copies for up to 30 days on Workers Paid ([Cloudflare documentation](https://developers.cloudflare.com/d1/reference/time-travel/)). This is not a compliance certification. Before any whole-control-database restore, deletion reconciliation must be implemented and tested; the 24-hour retry receipt is not a durable backup deletion ledger. Revoked/disabled visitor erasure and owner/project deletion are also still outstanding.
+Deletion removes active storage. D1 Time Travel may retain prior copies for up to 30 days on Workers Paid ([Cloudflare documentation](https://developers.cloudflare.com/d1/reference/time-travel/)). This is not a compliance certification. Before any whole-control-database restore, deletion reconciliation must be implemented and tested; the 24-hour retry receipt is not a durable backup deletion ledger. Owner erasure of revoked visitors, including while an app is disabled, is implemented above. Owner/project deletion and backup deletion reconciliation remain outstanding.
 
 Acceptance: `test:app-lifecycle`, existing `test:app-data` and `test:app-auth`, and `test:app-pages-http` cover real D1 and HTTP boundaries, lost acknowledgments, concurrency, authorization, stale revisions, in-flight deletion and quotas. Browser review uses synthetic data and verifies the export link and deletion review UI; no physical passkey or real visitor deletion is implied.
 
@@ -203,7 +215,7 @@ Release: platform `02416110-7913-44a6-a19e-fdbca3a0ed96` verified active. Live J
 
 The journey starts at profile/welcome, creates the private project, saves and tests a transition backend, and prepares/confirms its authority through Chat. It separately reviews the visitor form and checks that neither a private backend nor its authority approval makes the page available. It then enrolls two visitors, verifies isolated data and private receipts, replays the same transition without another execution, recovers one identity, exports its document, deletes the other identity with exact retry, and withdraws the public page. Replaying an old page approval must not republish it; the deleted visitor's exact deletion receipt remains recoverable after withdrawal.
 
-This is connected application acceptance, not physical-device passkey or browser interaction acceptance. It covers a bounded private-notebook workload, not arbitrary generated applications, schema migration, backup restoration or revoked-account erasure. Owner signup, model interpretation, real visitor enrollment and real customer publication remain outside this fixture. No secrets or visitor content are written to tracked files.
+This is connected application acceptance, not physical-device passkey or browser interaction acceptance. It covers a bounded private-notebook workload, not arbitrary generated applications, schema migration or backup restoration. Revoked-visitor erasure is now covered by the extension documented above. Owner signup, model interpretation, real visitor enrollment and real customer publication remain outside this fixture. No secrets or visitor content are written to tracked files.
 
 Acceptance: `pnpm test:customer-app-journey` passed, with exactly two actual runtime executions (owner test plus one visitor transition) and zero inference records. The first harness run exposed incorrect fixture assumptions about the Chat review identifier and form field names; aligning the fixture to the documented contracts resolved them. No runtime change or deployment was required. `git diff --check` passed.
 
