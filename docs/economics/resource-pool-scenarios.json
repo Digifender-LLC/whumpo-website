@@ -1,7 +1,9 @@
 {
   "proposal": {
-    "version": "whumpo-pool-proposal-2026-09-30",
+    "version": "whumpo-pool-fair-use-proposal-2026-09-30",
     "status": "proposal",
+    "standardAI": "unlimited-fair-use",
+    "premiumAI": "explicitly-approved-credits",
     "allowances": {
       "starter": 1000,
       "personal": 2500,
@@ -19,7 +21,7 @@
       "enabled": false
     }
   },
-  "caveat": "Planning estimates only; no metering, payments, paid services or enforcement enabled.",
+  "caveat": "Planning estimates only. Standard AI consumes zero customer units but has uncapped provider cost. Base margins exclude standard AI; see explicit AI cost stress cases. No billing or enforcement enabled.",
   "plans": [
     {
       "plan": "Starter",
@@ -28,11 +30,50 @@
       "units": 1000,
       "capacityMultiplier": 1,
       "maxUnitsAt60Percent": 1062,
+      "annualStandardAIStress": [
+        {
+          "standardAICostUSD": 1,
+          "grossUSD": 14.166666666666666,
+          "paymentUSD": 0.45,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 2,
+          "includedAIUSD": 1,
+          "contingencyUSD": 0.6000000000000001,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 7.450000000000001,
+          "margin": 0.5258823529411766
+        },
+        {
+          "standardAICostUSD": 5,
+          "grossUSD": 14.166666666666666,
+          "paymentUSD": 0.45,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 2,
+          "includedAIUSD": 5,
+          "contingencyUSD": 1.4000000000000001,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 2.6500000000000004,
+          "margin": 0.1870588235294118
+        },
+        {
+          "standardAICostUSD": 20,
+          "grossUSD": 14.166666666666666,
+          "paymentUSD": 0.45,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 2,
+          "includedAIUSD": 20,
+          "contingencyUSD": 4.4,
+          "operatingReserveUSD": 1,
+          "contributionUSD": -15.35,
+          "margin": -1.0835294117647059
+        }
+      ],
       "monthly": {
         "grossUSD": 17,
         "paymentUSD": 0.81,
         "domainReserveUSD": 0,
         "variableUSD": 2,
+        "includedAIUSD": 0,
         "contingencyUSD": 0.4,
         "operatingReserveUSD": 1,
         "contributionUSD": 12.790000000000001,
@@ -43,6 +84,7 @@
         "paymentUSD": 0.45,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 2,
+        "includedAIUSD": 0,
         "contingencyUSD": 0.4,
         "operatingReserveUSD": 1,
         "contributionUSD": 8.65,
@@ -53,6 +95,7 @@
         "paymentUSD": 0.45,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 4,
+        "includedAIUSD": 0,
         "contingencyUSD": 0.8,
         "operatingReserveUSD": 1,
         "contributionUSD": 6.250000000000001,
@@ -63,6 +106,7 @@
         "paymentUSD": 0.45,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 4,
+        "includedAIUSD": 0,
         "contingencyUSD": 0.8,
         "operatingReserveUSD": 1,
         "contributionUSD": 6.250000000000001,
@@ -73,6 +117,7 @@
         "paymentUSD": 0.45,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 8,
+        "includedAIUSD": 0,
         "contingencyUSD": 1.6,
         "operatingReserveUSD": 1,
         "contributionUSD": 1.4500000000000006,
@@ -86,11 +131,50 @@
       "units": 2500,
       "capacityMultiplier": 2.5,
       "maxUnitsAt60Percent": 2732,
+      "annualStandardAIStress": [
+        {
+          "standardAICostUSD": 1,
+          "grossUSD": 25,
+          "paymentUSD": 0.775,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 5,
+          "includedAIUSD": 1,
+          "contingencyUSD": 1.2000000000000002,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 14.358333333333334,
+          "margin": 0.5743333333333334
+        },
+        {
+          "standardAICostUSD": 5,
+          "grossUSD": 25,
+          "paymentUSD": 0.775,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 5,
+          "includedAIUSD": 5,
+          "contingencyUSD": 2,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 9.558333333333334,
+          "margin": 0.38233333333333336
+        },
+        {
+          "standardAICostUSD": 20,
+          "grossUSD": 25,
+          "paymentUSD": 0.775,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 5,
+          "includedAIUSD": 20,
+          "contingencyUSD": 5,
+          "operatingReserveUSD": 1,
+          "contributionUSD": -8.441666666666666,
+          "margin": -0.33766666666666667
+        }
+      ],
       "monthly": {
         "grossUSD": 30,
         "paymentUSD": 1.2,
         "domainReserveUSD": 0,
         "variableUSD": 5,
+        "includedAIUSD": 0,
         "contingencyUSD": 1,
         "operatingReserveUSD": 1,
         "contributionUSD": 21.8,
@@ -101,6 +185,7 @@
         "paymentUSD": 0.775,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 5,
+        "includedAIUSD": 0,
         "contingencyUSD": 1,
         "operatingReserveUSD": 1,
         "contributionUSD": 15.558333333333334,
@@ -111,6 +196,7 @@
         "paymentUSD": 0.775,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 10,
+        "includedAIUSD": 0,
         "contingencyUSD": 2,
         "operatingReserveUSD": 1,
         "contributionUSD": 9.558333333333334,
@@ -121,6 +207,7 @@
         "paymentUSD": 0.775,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 10,
+        "includedAIUSD": 0,
         "contingencyUSD": 2,
         "operatingReserveUSD": 1,
         "contributionUSD": 9.558333333333334,
@@ -131,6 +218,7 @@
         "paymentUSD": 0.775,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 20,
+        "includedAIUSD": 0,
         "contingencyUSD": 4,
         "operatingReserveUSD": 1,
         "contributionUSD": -2.4416666666666664,
@@ -144,11 +232,50 @@
       "units": 7500,
       "capacityMultiplier": 7.5,
       "maxUnitsAt60Percent": 9027,
+      "annualStandardAIStress": [
+        {
+          "standardAICostUSD": 1,
+          "grossUSD": 65.83333333333333,
+          "paymentUSD": 1.9999999999999998,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 15,
+          "includedAIUSD": 1,
+          "contingencyUSD": 3.2,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 41.96666666666666,
+          "margin": 0.6374683544303797
+        },
+        {
+          "standardAICostUSD": 5,
+          "grossUSD": 65.83333333333333,
+          "paymentUSD": 1.9999999999999998,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 15,
+          "includedAIUSD": 5,
+          "contingencyUSD": 4,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 37.166666666666664,
+          "margin": 0.5645569620253165
+        },
+        {
+          "standardAICostUSD": 20,
+          "grossUSD": 65.83333333333333,
+          "paymentUSD": 1.9999999999999998,
+          "domainReserveUSD": 1.6666666666666667,
+          "variableUSD": 15,
+          "includedAIUSD": 20,
+          "contingencyUSD": 7,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 19.166666666666664,
+          "margin": 0.2911392405063291
+        }
+      ],
       "monthly": {
         "grossUSD": 79,
         "paymentUSD": 2.67,
         "domainReserveUSD": 0,
         "variableUSD": 15,
+        "includedAIUSD": 0,
         "contingencyUSD": 3,
         "operatingReserveUSD": 1,
         "contributionUSD": 57.33,
@@ -159,6 +286,7 @@
         "paymentUSD": 1.9999999999999998,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 15,
+        "includedAIUSD": 0,
         "contingencyUSD": 3,
         "operatingReserveUSD": 1,
         "contributionUSD": 43.166666666666664,
@@ -169,6 +297,7 @@
         "paymentUSD": 1.9999999999999998,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 30,
+        "includedAIUSD": 0,
         "contingencyUSD": 6,
         "operatingReserveUSD": 1,
         "contributionUSD": 25.166666666666664,
@@ -179,6 +308,7 @@
         "paymentUSD": 1.9999999999999998,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 30,
+        "includedAIUSD": 0,
         "contingencyUSD": 6,
         "operatingReserveUSD": 1,
         "contributionUSD": 25.166666666666664,
@@ -189,6 +319,7 @@
         "paymentUSD": 1.9999999999999998,
         "domainReserveUSD": 1.6666666666666667,
         "variableUSD": 60,
+        "includedAIUSD": 0,
         "contingencyUSD": 12,
         "operatingReserveUSD": 1,
         "contributionUSD": -10.833333333333336,
@@ -202,11 +333,50 @@
       "units": 14000,
       "capacityMultiplier": 14,
       "maxUnitsAt60Percent": 16041,
+      "annualStandardAIStress": [
+        {
+          "standardAICostUSD": 1,
+          "grossUSD": 115.83333333333333,
+          "paymentUSD": 3.4999999999999996,
+          "domainReserveUSD": 3.3333333333333335,
+          "variableUSD": 28,
+          "includedAIUSD": 1,
+          "contingencyUSD": 5.800000000000001,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 73.2,
+          "margin": 0.6319424460431655
+        },
+        {
+          "standardAICostUSD": 5,
+          "grossUSD": 115.83333333333333,
+          "paymentUSD": 3.4999999999999996,
+          "domainReserveUSD": 3.3333333333333335,
+          "variableUSD": 28,
+          "includedAIUSD": 5,
+          "contingencyUSD": 6.6000000000000005,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 68.4,
+          "margin": 0.5905035971223023
+        },
+        {
+          "standardAICostUSD": 20,
+          "grossUSD": 115.83333333333333,
+          "paymentUSD": 3.4999999999999996,
+          "domainReserveUSD": 3.3333333333333335,
+          "variableUSD": 28,
+          "includedAIUSD": 20,
+          "contingencyUSD": 9.600000000000001,
+          "operatingReserveUSD": 1,
+          "contributionUSD": 50.4,
+          "margin": 0.43510791366906476
+        }
+      ],
       "monthly": {
         "grossUSD": 139,
         "paymentUSD": 4.47,
         "domainReserveUSD": 0,
         "variableUSD": 28,
+        "includedAIUSD": 0,
         "contingencyUSD": 5.6000000000000005,
         "operatingReserveUSD": 1,
         "contributionUSD": 99.93,
@@ -217,6 +387,7 @@
         "paymentUSD": 3.4999999999999996,
         "domainReserveUSD": 3.3333333333333335,
         "variableUSD": 28,
+        "includedAIUSD": 0,
         "contingencyUSD": 5.6000000000000005,
         "operatingReserveUSD": 1,
         "contributionUSD": 74.4,
@@ -227,6 +398,7 @@
         "paymentUSD": 3.4999999999999996,
         "domainReserveUSD": 3.3333333333333335,
         "variableUSD": 56,
+        "includedAIUSD": 0,
         "contingencyUSD": 11.200000000000001,
         "operatingReserveUSD": 1,
         "contributionUSD": 40.8,
@@ -237,6 +409,7 @@
         "paymentUSD": 3.4999999999999996,
         "domainReserveUSD": 3.3333333333333335,
         "variableUSD": 56,
+        "includedAIUSD": 0,
         "contingencyUSD": 11.200000000000001,
         "operatingReserveUSD": 1,
         "contributionUSD": 40.8,
@@ -247,6 +420,7 @@
         "paymentUSD": 3.4999999999999996,
         "domainReserveUSD": 3.3333333333333335,
         "variableUSD": 112,
+        "includedAIUSD": 0,
         "contingencyUSD": 22.400000000000002,
         "operatingReserveUSD": 1,
         "contributionUSD": -26.400000000000002,
@@ -270,11 +444,11 @@
         "d1Reads": 10,
         "d1Writes": 0.01
       },
-      "version": "whumpo-pool-proposal-2026-09-30",
-      "units": 659.8,
+      "version": "whumpo-pool-fair-use-proposal-2026-09-30",
+      "units": 159.8,
       "costUSD": 0.9417,
       "categories": {
-        "Agent activity": 500,
+        "Included standard AI": 0,
         "Apps & websites": 52,
         "Storage": 107.8
       }
@@ -294,11 +468,11 @@
         "d1Reads": 20,
         "d1Writes": 0.05
       },
-      "version": "whumpo-pool-proposal-2026-09-30",
-      "units": 2294,
+      "version": "whumpo-pool-fair-use-proposal-2026-09-30",
+      "units": 894,
       "costUSD": 3.3434999999999997,
       "categories": {
-        "Agent activity": 1400,
+        "Included standard AI": 0,
         "Apps & websites": 405,
         "Storage": 489
       }
@@ -317,11 +491,11 @@
         "streamStorage": 300,
         "streamDelivery": 2000
       },
-      "version": "whumpo-pool-proposal-2026-09-30",
-      "units": 6170,
+      "version": "whumpo-pool-fair-use-proposal-2026-09-30",
+      "units": 4370,
       "costUSD": 8.7,
       "categories": {
-        "Agent activity": 1800,
+        "Included standard AI": 0,
         "Apps & websites": 770,
         "Storage": 1000,
         "Video": 2600
@@ -335,7 +509,7 @@
         "containerDisk": 2920,
         "containerEgress": 10
       },
-      "version": "whumpo-pool-proposal-2026-09-30",
+      "version": "whumpo-pool-fair-use-proposal-2026-09-30",
       "units": 8964,
       "costUSD": 13.061839999999998,
       "categories": {
@@ -347,21 +521,27 @@
   "tariff": {
     "quick": {
       "basis": "completed quick interaction",
-      "units": 1,
+      "units": 0,
       "costUSD": 0.001,
-      "category": "Agent activity"
+      "category": "Included standard AI"
     },
     "standard": {
       "basis": "completed standard task",
-      "units": 10,
+      "units": 0,
       "costUSD": 0.015,
-      "category": "Agent activity"
+      "category": "Included standard AI"
     },
     "intensive": {
       "basis": "reviewed intensive task",
+      "units": 0,
+      "costUSD": 0.08,
+      "category": "Included standard AI"
+    },
+    "advanced": {
+      "basis": "explicitly approved advanced-model task (illustrative quote)",
       "units": 50,
       "costUSD": 0.08,
-      "category": "Agent activity"
+      "category": "Advanced AI"
     },
     "workerRequests": {
       "basis": "million dynamic requests",

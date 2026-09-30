@@ -1,48 +1,48 @@
 # Shared capacity and plan economics
 
-**September 30, 2026 — proposed launch economics, not enabled billing.** This document evaluates the owner's shared-pool direction. `src/resource-economics.ts` implements a versioned offline tariff/scenario calculator; `tools/report-resource-economics.mjs` produces [reproducible scenarios](economics/resource-pool-scenarios.json). No new entitlement, charge, customer restriction, rollover grant, infrastructure provisioning or live usage gauge is implemented by this change. Existing test units and historical receipts retain their meaning. The earlier unlimited standard-AI policy remains active pending resolution of whether ordinary agent work becomes metered.
+**September 30, 2026 — proposed launch economics, not enabled billing.** This document evaluates the owner's shared-pool direction. `src/resource-economics.ts` implements a versioned offline tariff/scenario calculator; `tools/report-resource-economics.mjs` produces [reproducible scenarios](economics/resource-pool-scenarios.json). No new entitlement, charge, customer restriction, rollover grant, infrastructure provisioning or live usage gauge is implemented by this change. Existing test units and historical receipts retain their meaning. The owner reconfirmed unlimited standard AI under fair use; advanced models consume explicitly approved credits. Standard task classes have zero customer-unit debits while retaining internal provider cost.
 
 ## Recommendation
 
 Keep the existing prices. Start with conservative capacity, measure real task costs and completion quality, then increase value if the evidence supports it. Do not advertise the examples as guaranteed workloads.
 
-| Plan | Monthly | Annual | Proposed monthly units | Capacity | Internal variable-cost envelope | Annual full-use contribution margin |
+| Plan | Monthly | Annual | Proposed monthly units | Capacity | Internal variable-cost envelope | Annual margin before standard AI |
 |---|---:|---:|---:|---:|---:|---:|
 | Starter | $17 | $170 | 1,000 | 1× | $2 | 61.1% |
 | Personal | $30 | $300 | 2,500 | 2.5× | $5 | 62.2% |
 | Business | $79 | $790 | 7,500 | 7.5× | $15 | 65.6% |
 | Business Pro | $139 | $1,390 | 14,000 | 14× | $28 | 64.2% |
 
-These envelopes cover **all variable resources together**, not an additional AI allowance. Existing `internalAITargetCents` and legacy unit grants are not rewritten by this proposal. Features remain separate: current project/domain/collaboration and other capability contracts still apply. Remove fixed storage promises from launch marketing when adopting the pool; the existing storage targets are not extra free capacity on top of it.
+These envelopes cover **metered infrastructure and approved advanced AI**. Unlimited standard AI is an additional variable expense; it cannot be assumed to fit the unit envelope or treated as free. Existing `internalAITargetCents` and legacy unit grants are not rewritten by this proposal. Features remain separate: current project/domain/collaboration and other capability contracts still apply. Remove fixed storage promises from launch marketing when adopting the pool; the existing storage targets are not extra free capacity on top of it.
 
 ### Calculation and limits
 
 Use annual revenue divided by twelve, not the monthly sticker price. Deduct assumed payment processing of 3% + $0.30 per transaction (annual fixed fee spread over twelve months), maximum domain redemption of $20 per annual domain per year (one, one, one, two), full variable envelope, a 20% variable-cost contingency, and a provisional $1/customer/month operations reserve. Payment pricing is a scenario assumption, not a processor quote; no Stripe account exists. Annual units would grant monthly, not all twelve months at purchase.
 
-The internal stress ceiling is $0.002 variable cost per consumed unit. It is a **design constraint**, not a customer dollar exchange rate. Proposed tariffs are rounded, versioned prices for dimensions of service. Every modeled resource stays below this envelope, so a mixture of those resources also does. AI figures are unproven completion-cost targets; they require benchmarks including retries, acknowledgment, orchestration, tools, safety inference and failed work. Without that validation, the ceiling is not a cost guarantee.
+The internal stress ceiling is $0.002 variable cost per consumed unit. It is a **design constraint**, not a customer dollar exchange rate. Proposed tariffs are rounded, versioned prices for dimensions of service. Every credit-metered modeled resource stays below this envelope. Standard AI has no customer-unit debit and sits outside that bound. AI figures are unproven completion-cost targets; they require benchmarks including retries, acknowledgment, orchestration, tools, safety inference and failed work. Without that validation, the ceiling is not a cost guarantee.
 
-At a minimum 60% modeled annual contribution margin, the maximum allowances are 1,062 / 2,732 / 9,027 / 16,041 units. The proposed round allowances sit below those ceilings; Business and Pro keep extra uncertainty headroom for more complex workloads. Formula: `(monthly recognized revenue × 40% − payment fee − domain reserve − operating reserve) / (internal unit cost ceiling × 1.20)`. These are conditional ceilings, not measured capacity.
+Before standard AI expense, at a minimum 60% modeled annual contribution margin, the maximum allowances are 1,062 / 2,732 / 9,027 / 16,041 units. The proposed round allowances sit below those ceilings; Business and Pro keep extra uncertainty headroom for more complex workloads. Formula: `(monthly recognized revenue × 40% − payment fee − domain reserve − operating reserve) / (internal unit cost ceiling × 1.20)`. These are conditional ceilings, not measured capacity.
 
-Full-use monthly margins are 75.2%, 72.7%, 72.6%, 71.9%. Annual remaining contributions are $8.65, $15.56, $43.17 and $74.40 per customer-month. These are **contribution estimates, not net profit**. Salaries/support, acquisition, taxes, refunds, disputes, fraud, registrar overhead, third-party integrations, backups, logs, recovery and unmetered control-plane work require actual budgets. The $1 reserve is a hypothesis, not proof those expenses fit. Tax-inclusive prices require subtracting tax before calculating margins. Reserve the full domain purchase cash when redeemed; amortization does not delay payment.
+Full-use monthly margins are 75.2%, 72.7%, 72.6%, 71.9%. Annual remaining contributions are $8.65, $15.56, $43.17 and $74.40 per customer-month. These are **contribution estimates before standard AI, not net profit**. The report separately models $1/$5/$20 monthly standard-AI expense per account, plus 20% contingency. At $5, annual margins fall to approximately 18.7% / 38.2% / 56.5% / 59.1%; at $20, Starter and Personal become loss-making. Unlimited fair use cannot guarantee a per-account margin; assess measured company-wide contribution and tier-sensitive abuse review without hidden ordinary-AI debits. Salaries/support, acquisition, taxes, refunds, disputes, fraud, registrar overhead, third-party integrations, backups, logs, recovery and unmetered control-plane work require actual budgets. The $1 reserve is a hypothesis, not proof those expenses fit. Tax-inclusive prices require subtracting tax before calculating margins. Reserve the full domain purchase cash when redeemed; amortization does not delay payment.
 
 Use marginal provider rates with no per-tenant free allowance. Account-wide free/included allocations are shared upside. Minimum bills, prepaid blocks and rounding can make actual low-volume account cost higher than these linear estimates. Reconcile account invoices and allocate residual overhead; do not charge the same included allowance to every tenant or assume it makes a service permanently free. At launch even the Workers $5 account floor must fit aggregate contribution; optional Stream has a $5/month storage block. Durable Object duration billing rounds excess to whole million GB-seconds ($12.50). These floors require company-level cash headroom beyond the per-user model.
 
 ## Customer value scenarios
 
-These are synthetic workloads calculated from the tariff, not production measurements or complete bills. Details and omitted dimensions remain visible in the JSON report.
+These are synthetic workloads calculated from the tariff, not production measurements or complete bills. Standard AI contributes provider cost but no units. Details and omitted dimensions remain visible in the JSON report.
 
 | Example | Units/month | Modeled provider cost | Fits proposed pool |
 |---|---:|---:|---|
-| Small business site: 100 quick interactions, 30 standard tasks, 2 intensive tasks, light traffic and 5 GB files | 660 | $0.94 | Starter |
-| Active personal app: 200 quick, 80 standard, 8 intensive tasks, 1M dynamic requests and 20 GB files | 2,294 | $3.34 | Personal, little spare capacity |
-| Business with video: 100 standard tasks, 300 stored video minutes, 2,000 delivered minutes, app/storage activity | 6,170 | $8.70 | Business |
+| Small business site: 100 quick interactions, 30 standard tasks, 2 intensive tasks, light traffic and 5 GB files | 160 | $0.94 | Starter |
+| Active personal app: 200 quick, 80 standard, 8 intensive tasks, 1M dynamic requests and 20 GB files | 894 | $3.34 | Personal |
+| Business with video: 100 standard tasks, 300 stored video minutes, 2,000 delivered minutes, app/storage activity | 4,370 | $8.70 | Business |
 | Container running 730 hours with 1 GiB provisioned memory, 4 GB disk, 10% of one CPU active and 10 GB egress | 8,964 | $13.06 | Pro for this component alone |
 
 The container example excludes its controlling Worker/DO, agent work, logs and backups; it is not a complete deployment quote. Favor sleeping workloads where suitable. The agent must review recurring consumption before provisioning, and never promise arbitrary always-on servers on Starter.
 
 ## Work classes and routing
 
-Proposed quick / standard / intensive work costs 1 / 10 / 50 units, with internal modeled completion costs $0.001 / $0.015 / $0.08. A task means a bounded, reviewed outcome, not each hidden model call. Retrieval of account status, billing explanations, safety refusals and Whumpo-caused retries should not repeatedly consume customer task units. Ordinary work must not become intensive solely because the router chose an expensive model. Classify scope before starting; get explicit agreement before increasing an intensive quote. Settle once per task and return unused reservations.
+Quick / standard / intensive work using standard AI costs **zero customer units**, with internal modeled completion costs $0.001 / $0.015 / $0.08. An explicit advanced-model task has an illustrative 50-unit / $0.08 estimate; this is not an approved premium tariff. Complexity alone never makes standard assistance chargeable. A task means a bounded, reviewed outcome, not each hidden model call. Retrieval of account status, billing explanations, safety refusals and Whumpo-caused retries should not repeatedly consume customer task units. Ordinary work must not become intensive solely because the router chose an expensive model. Classify scope before starting; get explicit agreement before increasing an intensive quote. Settle once per task and return unused reservations.
 
 The router compares total expected completion cost and demonstrated quality: input/output/cache/reasoning tokens, retries, tools, safety calls, latency and provider/gateway fees. Keep Muse Contributor pinned during private testing. Workers AI is a preferred candidate when competitive, not a mandatory cheapest-token route. Internal escalation absorbs its cost inside the quote. If a task cannot fit, offer a narrower scope or separately approved premium work; never silently use the premium wallet. AI Search/vector/storage/tools need attribution into the task envelope or their own reviewed tariff before admission. No unknown dimension may be treated as zero cost.
 
@@ -60,11 +60,11 @@ A full 2× rollover burst reduces annual-period contribution margins to 44.1%, 3
 
 Automatic top-ups must be off by default, with explicit amount/monthly-dollar ceiling and receipt. Do not automatically upgrade plans. Distinguish exhaustion from abuse: legitimate demand gets optimization, a top-up or a plan recommendation. Define a reviewed grace/continuity policy before launch; do not delete data or abruptly take sites offline. New expensive work may need funding, while essential account access, export/recovery and cost explanations remain available.
 
-Monitor mode continues to suppress abuse penalties. Track total provider COGS and company contribution, not just AI spend or revenue. Positive total profit can justify outliers. Pool exhaustion, explicit purchase consent and security boundaries are separate from abuse classification. If standard AI stays unlimited, these allowances cannot guarantee per-customer margins: model the additional AI distribution separately and remove its customer debits. Do not simultaneously advertise unlimited metered work and enforce a hidden hard allowance.
+Monitor mode continues to suppress abuse penalties. Track total provider COGS and company contribution, not just AI spend or revenue. Positive total profit can justify outliers. Pool exhaustion, explicit purchase consent and security boundaries are separate from abuse classification. Standard AI stays unlimited under fair use: these allowances cannot guarantee per-customer margins. Model the additional AI distribution separately; its customer debits are zero. Do not simultaneously advertise unlimited metered work and enforce a hidden hard allowance.
 
 ## Presentation and accounting delivery
 
-Show remaining monthly capacity, category shares (Apps & websites, Agent activity, Storage, Video, Other), billing-period dates, rollover expiry and paid balance separately. Forecast only with enough complete history and explain uncertainty; bursts and persistent storage need recurring-cost projections. Unknown telemetry must show “still calculating,” not a false 100% remaining. Drill-down shows versioned units and plain-language causes. Chat can explain usage from owned durable receipts, with no provider credentials or internal margin information in customer responses.
+Show remaining monthly capacity, category shares (Apps & websites, Advanced AI, Storage, Video, Other), billing-period dates, rollover expiry and paid balance separately. Forecast only with enough complete history and explain uncertainty; bursts and persistent storage need recurring-cost projections. Unknown telemetry must show “still calculating,” not a false 100% remaining. Drill-down shows versioned units and plain-language causes. Chat can explain usage from owned durable receipts, with no provider credentials or internal margin information in customer responses.
 
 Before enabling billing:
 
@@ -90,9 +90,10 @@ Official pricing checked September 30, 2026. Tariff values are Whumpo proposals;
 
 | Resource | Quantity basis | Proposed units | Modeled provider USD |
 |---|---|---:|---:|
-| quick | completed quick interaction | 1 | $0.001 |
-| standard | completed standard task | 10 | $0.015 |
-| intensive | reviewed intensive task | 50 | $0.08 |
+| quick | completed quick interaction | 0 | $0.001 |
+| standard | completed standard task | 0 | $0.015 |
+| intensive | reviewed intensive standard-model task | 0 | $0.08 |
+| advanced | explicitly approved advanced-model task; illustrative only | 50 | $0.08 |
 | workerRequests | million dynamic requests | 200 | $0.3 |
 | workerCPU | million CPU milliseconds | 15 | $0.02 |
 | r2Storage | GB-month, Standard | 10 | $0.015 |

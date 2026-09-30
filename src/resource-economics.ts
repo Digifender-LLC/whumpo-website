@@ -1,6 +1,7 @@
 /** Offline proposal only. Never use these estimates to debit a customer or authorize a provider. */
 export const resourceProposal = {
-  version: 'whumpo-pool-proposal-2026-09-30', status: 'proposal',
+  version: 'whumpo-pool-fair-use-proposal-2026-09-30', status: 'proposal',
+  standardAI: 'unlimited-fair-use', premiumAI: 'explicitly-approved-credits',
   allowances: { starter: 1000, personal: 2500, business: 7500, 'business-pro': 14000 },
   // Internal stress envelope, NOT a redeemable dollar value or customer exchange rate.
   ceilingUSDPerUnit: 0.002,
@@ -13,9 +14,10 @@ export const resourceProposal = {
 type Rate = { basis: string; units: number; costUSD: number; category: string };
 /** Fractional units accumulate; never round every request up to a whole unit. Costs are marginal estimates. */
 export const resourceTariff = {
-  quick: { basis: 'completed quick interaction', units: 1, costUSD: .001, category: 'Agent activity' },
-  standard: { basis: 'completed standard task', units: 10, costUSD: .015, category: 'Agent activity' },
-  intensive: { basis: 'reviewed intensive task', units: 50, costUSD: .08, category: 'Agent activity' },
+  quick: { basis: 'completed quick interaction', units: 0, costUSD: .001, category: 'Included standard AI' },
+  standard: { basis: 'completed standard task', units: 0, costUSD: .015, category: 'Included standard AI' },
+  intensive: { basis: 'reviewed intensive task', units: 0, costUSD: .08, category: 'Included standard AI' },
+  advanced: { basis: 'explicitly approved advanced-model task (illustrative quote)', units: 50, costUSD: .08, category: 'Advanced AI' },
   workerRequests: { basis: 'million dynamic requests', units: 200, costUSD: .30, category: 'Apps & websites' },
   workerCPU: { basis: 'million CPU milliseconds', units: 15, costUSD: .02, category: 'Apps & websites' },
   r2Storage: { basis: 'GB-month, Standard', units: 10, costUSD: .015, category: 'Storage' },
@@ -57,7 +59,7 @@ export function estimateWorkload(quantities: Partial<Record<Resource, number>>) 
 }
 
 export function planEconomics(plan: { monthlyCents: number; annualCents: number; annualDomains: number },
-  allowance: number, interval: 'month' | 'year', consumptionMultiplier = 1) {
+  allowance: number, interval: 'month' | 'year', consumptionMultiplier = 1, standardAICostUSD = 0) {
   if (!['month', 'year'].includes(interval)) throw Error('Invalid interval');
   const periods = interval === 'year' ? 12 : 1;
   const grossUSD = nonnegative(interval === 'year' ? plan.annualCents : plan.monthlyCents) / 100 / periods;
@@ -65,9 +67,10 @@ export function planEconomics(plan: { monthlyCents: number; annualCents: number;
   const paymentUSD = grossUSD * resourceProposal.paymentFraction + resourceProposal.paymentFixedUSD / periods;
   const domainReserveUSD = interval === 'year' ? nonnegative(plan.annualDomains) * 20 / 12 : 0;
   const variableUSD = nonnegative(allowance) * nonnegative(consumptionMultiplier) * resourceProposal.ceilingUSDPerUnit;
-  const contingencyUSD = variableUSD * resourceProposal.costContingency;
-  const contributionUSD = grossUSD - paymentUSD - domainReserveUSD - variableUSD - contingencyUSD - resourceProposal.monthlyOperatingReserveUSD;
-  return { grossUSD, paymentUSD, domainReserveUSD, variableUSD, contingencyUSD,
+  const includedAIUSD = nonnegative(standardAICostUSD);
+  const contingencyUSD = (variableUSD + includedAIUSD) * resourceProposal.costContingency;
+  const contributionUSD = grossUSD - paymentUSD - domainReserveUSD - variableUSD - includedAIUSD - contingencyUSD - resourceProposal.monthlyOperatingReserveUSD;
+  return { grossUSD, paymentUSD, domainReserveUSD, variableUSD, includedAIUSD, contingencyUSD,
     operatingReserveUSD: resourceProposal.monthlyOperatingReserveUSD, contributionUSD, margin: contributionUSD / grossUSD };
 }
 

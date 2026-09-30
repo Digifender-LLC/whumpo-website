@@ -2,14 +2,14 @@
 
 September 30, 2026. Compared the current checkout (source through `a8906af` plus existing local edits), feature contracts, numbered migrations, scripts, maintained Word design and fresh read-only Cloudflare state. This is a documentation/status audit, not a new security audit or proof of every customer journey. No runtime code, account, billing, DNS or deployment was changed for this sync.
 
-## Decisions for the owner
+## Owner decisions — resolved September 30
 
-| Conflict | Documentation / intended behavior | Current source and deployment | Decision needed |
-|---|---|---|---|
-| Standard AI and shared capacity | Earlier policy promises unlimited standard AI under fair use. The newer economic proposal charges quick/standard/intensive agent work to a common pool. | `src/plans.ts` and billing retain legacy preview units. `src/resource-economics.ts` is an offline proposal; it is not a customer ledger. Monitor is live. | Choose shared-pool metering of standard agent work, or keep standard AI unlimited and define the pool around infrastructure/premium work. No future policy has been silently activated. |
-| Migration admission during deployment | Gateway transport docs and actual releases keep migrations 0075/0076 inactive until their capability is reviewed. | `tools/deploy.mjs` runs all pending migrations before deploying; `pnpm db:remote` does the same. It has no reviewed allowlist. Live database currently excludes exactly 0075/0076. | Choose an explicit approved migration list, or deliberately allow all schema migrations while keeping Gateway dispatch disabled by configuration. Until resolved, use reviewed individual migrations. Applying schema alone would not start inference, but would contradict the stated release policy. |
+The owner resolved both conflicts after the initial audit:
 
-Questions were raised to the owner; both remain unresolved at the time of this revision. Policy conflicts are retained explicitly in the current overview and Word design, rather than choosing one side during a documentation edit.
+- Standard AI remains unlimited under fair use as much as possible. Advanced models consume explicitly approved credits. The shared capacity calculator now assigns no customer units to standard AI while retaining its internal cost and exposing separate cost-stress cases. Production billing remains unfinished.
+- Apply all pending migrations in the private, owner-only test environment. The existing deployment scripts already follow this policy. Migrations 0075/0076 were applied at 14:21 UTC; independent readback confirms all 93 migrations, no pending files and empty Gateway receipt tables. Muse routing is unchanged; schema application does not activate inference.
+
+The snapshot below preserves the initial audit evidence. Current migration status supersedes its earlier exclusions. No policy decision remains open from this audit.
 
 ## Completed work checked off or corrected
 
@@ -23,7 +23,7 @@ Questions were raised to the owner; both remain unresolved at the time of this r
 - [x] Internal fair-use review records, entitlement/observation snapshots and operator CLI are implemented; migrations 0091/0092 are applied. Operator-attested company-finance comparison also exists. Corrected the implication that all finance/review work is absent; verified ingestion, customer notices/appeals and enforcement are still absent.
 - [x] Reusable backend nominations, explicit consent and terminal withdrawal are deployed (0093). Private maintainer inventory/integrity checks are implemented. Shared publication/license/privacy screening and human promotion are still open.
 - [x] Earlier Chat access and search already exist. `src/chat-history.ts`, `/api/chat/history` (including its `q` search parameter), and frontend history controls are present. The latest-100-turn primary query is not the only history access path; no duplicate feature was added.
-- [x] Current document identity corrected: maintained `whumpo_mvp_design.docx` is now v0.8, not the v0.5/v0.6 overview linked or named in some older text. Original and v0.5 documents are retained as historical inputs.
+- [x] Current document identity corrected: maintained `whumpo_mvp_design.docx` is now v0.9, not the v0.5/v0.6 overview linked or named in some older text. Original and v0.5 documents are retained as historical inputs.
 
 ## Verified deployment snapshot
 
