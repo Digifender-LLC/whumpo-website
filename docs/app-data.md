@@ -233,7 +233,7 @@ HTTP equivalents: owned `GET/POST /api/projects/:project/application`, `GET /api
 
 `test:app-activation` covers ownership, malformed/oversized test outcomes, review immutability, competing/stale confirmation, expiry, lost acknowledgments, version replacement before enrollment, the migration gate afterwards, session revocation, owner transfer and rejection of model confirmation. `test:app-data` now builds all active fixtures through reviewed activation and proves an approved revision change invalidates in-flight writes.
 
-`test:app-activation-http` additionally verifies these HTTP boundaries against local workerd and the actual QuickJS Worker: successful transition receipt, anonymous and foreign-owner denial, same-origin confirmation, guided enable/disable, and historical-confirmation replay without reactivation. Local testing pins `ENVIRONMENT=local` in an ignored config; a CLI-only override was lost during hot reload. No visitor enrollment is exercised by this test.
+`test:app-activation-http` additionally verifies these HTTP boundaries through a disposable loopback HTTP server and the actual QuickJS Worker in local workerd: successful transition receipt, anonymous and foreign-owner denial, same-origin confirmation, guided enable/disable, and historical-confirmation replay without reactivation. The current disposable fixture pins `ENVIRONMENT=local` directly in its handler environment; it does not depend on a hot-reloaded shared development server. No visitor enrollment is exercised by this test.
 
 ## Configuration deployment
 

@@ -1,12 +1,16 @@
-import assert from 'node:assert/strict';import {writeFile} from 'node:fs/promises';
-const base=process.env.TELLUMO_TEST_URL||'http://localhost:8791';assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname));
+Error.stackTraceLimit=0;
+import assert from 'node:assert/strict';
+import {backendHttpFixture} from './backend-http-fixture.mjs';
+const fixture=await backendHttpFixture(),base=fixture.base;
+try {
+
 const register=await fetch(base+'/api/auth/register',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({email:crypto.randomUUID()+'@example.test',password:crypto.randomUUID()+'local-test'})});assert.equal(register.status,200);const cookie=register.headers.get('set-cookie').split(';')[0];
 const post=(path,data,origin=base,session=cookie)=>fetch(base+path,{method:'POST',headers:{origin,cookie:session,'content-type':'application/json'},body:JSON.stringify(data)});
 const get=path=>fetch(base+path,{headers:{cookie}});
 async function chat(content){const state=await(await get('/api/chat')).json(),id=crypto.randomUUID();const r=await post('/api/chat',{id,revision:state.state.revision,content});assert.equal(r.status,200,await r.text());return id;}
-await chat('A small order calculator');const project=await chat('Neighborhood orders'),siteVersion=await chat('/build'),siteReview=await chat('/publish '+siteVersion);await chat('/confirm '+siteReview);
+const project=await fixture.firstProject(cookie,'Neighborhood orders','A small order calculator'),siteVersion=await chat('/build'),siteReview=await chat('/publish '+siteVersion);await chat('/confirm '+siteReview);
 const versionId=crypto.randomUUID(),runId=crypto.randomUUID(),reviewId=crypto.randomUUID(),backendPath='/api/projects/'+project+'/backends';
-assert.equal((await post(backendPath,{id:versionId,source:'export default ({quantity,price,express,querySelector:note})=>({total:quantity*price+(express?5:0),note})'})).status,201);
+await fixture.seedBackend(project,versionId,'export default ({quantity,price,express,querySelector:note})=>({total:quantity*price+(express?5:0),note})',cookie);
 const run=await post(backendPath+'/'+versionId+'/test',{id:runId,input:{quantity:2,price:12.5,express:true,querySelector:'Example'}});assert.equal(run.status,200);assert.deepEqual((await run.json()).result,{ok:true,value:{total:30,note:'Example'}});
 await post('/api/projects/'+project+'/backend-publication',{id:reviewId,operation:'publish',versionId,runId});assert.equal((await post('/api/backend-publication-reviews/'+reviewId+'/confirm',{})).status,200);
 const config={title:'Estimate your order',description:'Get an estimate before you place your order.',buttonLabel:'Calculate total',fields:[{key:'quantity',label:'Quantity',type:'number'},{key:'price',label:'Unit price',type:'number'},{key:'express',label:'Add express service ($5)',type:'boolean'},{key:'querySelector',label:'Order note',type:'text'}]},formId=crypto.randomUUID(),formPath='/api/projects/'+project+'/backend-form';
@@ -17,5 +21,6 @@ assert.equal((await post('/api/backend-form-reviews/'+formId+'/confirm',{},'http
 assert.equal((await post('/api/backend-form-reviews/'+formId+'/confirm',{})).status,200);
 const publicPage=await fetch(base+'/s/'+project);assert.equal(publicPage.status,200);assert.ok((await publicPage.text()).includes('townhello-backend-form'));
 const before=await post('/api/projects/'+project+'/backend-state',{});assert.equal(before.status,400);
-await writeFile('.secrets/backend-form-browser.json',JSON.stringify({url:base+'/s/'+project,project,formId,reviewId}),{mode:0o600});
-console.log('Local form HTTP fixture passed: real QuickJS calculator, session/origin review protection, private until confirmed. Browser URL: '+base+'/s/'+project);
+console.log('Local form HTTP fixture passed: real QuickJS calculator, session/origin review protection, private until confirmed. Disposable HTTP fixture; no persistent browser URL.');
+
+} finally {await fixture.dispose();}

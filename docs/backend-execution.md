@@ -73,7 +73,7 @@ The database serializes admission: 25 versions/project, 1,000 versions/platform;
 
 An invocation is reserved before service dispatch. A retry with the same ID and request returns its saved result, or a pending/unknown receipt. It never executes again automatically. Lost reservation acknowledgments deliberately leave an unknown receipt without dispatch. Provider errors, non-JSON bodies, invalid envelopes and oversized results become a fixed unavailable result. There is a five-second client deadline. No cookies or provider credentials reach the service.
 
-`test:backend-versions` exercises real local D1, quota races, ownership, immutability, replay and lost acknowledgments. `test:backend-http` runs against local multi-Worker development and checks the HTTP auth/origin boundary and actual bound QuickJS execution, including recovery after a runaway function. Chat generation, inspection/test controls, durable application state, publication and rollback remain next integration gates.
+`test:backend-versions` exercises real local D1, quota races, ownership, immutability, replay and lost acknowledgments. `test:backend-http` now provisions disposable local state and checks the HTTP auth/origin boundary and actual bound QuickJS execution, including recovery after a runaway function. Later sections cover Chat generation, inspection/test controls, durable application state, publication and recovery.
 
 ## Chat integration
 
@@ -176,7 +176,7 @@ Owner HTTP: `GET /api/projects/:project/backend-form`, `POST` with `{id,config}`
 
 Health checks now snapshot the active form review and hash the fully served page. A changed/hidden form invalidates the previous result; checks still do not submit visitor inputs. Existing five-minute cooldown and platform budgets apply.
 
-Verification: local D1/chat tests cover owner denial, immutable reviews, stale website/backend targets, competing confirmations, removal/replay, rendering escapes, pinned endpoint rejection before invocation and health identity. The HTTP fixture verifies session/origin enforcement and real QuickJS computation. Browser acceptance verified numeric/boolean/text types, result 30, literal script-tag text, and a `querySelector` input name. The local browser proxy only substitutes the loopback origin in the data attribute and connect-src policy; the application script and hash remain unchanged. These are synthetic local fixtures, not published customer content. Run `test:backend-forms` standalone; `test:backend-form-http` requires the local platform/runtime/public-host proxy and writes an ignored browser fixture URL.
+Verification: local D1/chat tests cover owner denial, immutable reviews, stale website/backend targets, competing confirmations, removal/replay, rendering escapes, pinned endpoint rejection before invocation and health identity. The HTTP fixture verifies session/origin enforcement and real QuickJS computation. Browser acceptance verified numeric/boolean/text types, result 30, literal script-tag text, and a `querySelector` input name. The local browser proxy only substitutes the loopback origin in the data attribute and connect-src policy; the application script and hash remain unchanged. These are synthetic local fixtures, not published customer content. Run `test:backend-forms` standalone; `test:backend-form-http` now provisions a disposable loopback HTTP fixture and cleans it up; it does not leave a browser fixture URL. Historical browser evidence above is separate from the current HTTP suite.
 
 Deployment: migration 0049 applied remotely; public host `fb0c3657-d9bc-42f2-b3e0-030e169446dc` and platform `ad1539e6-1dce-4f1f-a92e-531085a508ea` verified. Production checks returned health 200, anonymous form-management API 401 and unavailable pinned endpoint 404. An initial client connection timed out; a bounded retry with a longer connection-attempt window passed. No production customer form or function was created for acceptance.
 
@@ -204,3 +204,20 @@ A mismatch sets `ok:false`, `error:"expectation_failed"`, and `check.status:"fai
 Source comparisons now identify whether the latest receipt verified expected output or only completed execution. Existing execution-only successful receipts remain valid under the existing review policy; expected-output checking is not a new mandatory publication gate for every historical version.
 
 Verification: `npm run test:backend-checks` covers JSON equality semantics (including deep nesting and special property names), payload bounds, immutable replay/conflicts, concurrent execution once, lost reservation acknowledgment, ownership, model/chat routing, and database rejection of failed assertions for publication/activation. `tests/backend-http.mjs` checks the actual bound QuickJS runtime through the authenticated API and deterministic chat, including correct and wrong answers, preserved AI balance, and failed publication review.
+
+## Quarantine-aware HTTP acceptance — September 30, 2026
+
+`tests/backend-http-fixture.mjs` creates fresh local D1/R2, bundles the actual QuickJS Worker and exposes platform/site request handlers through an ephemeral loopback-only HTTP server. It does not use a shared development database, fixed port, supplied external test URL or live account. The platform handlers run under Node through the HTTP adapter; the QuickJS service runs in local workerd. This is not a claim that the entire platform is tested under workerd or that browser interaction was reaccepted.
+
+Before each executable fixture, the helper uploads a separate source ID through the authenticated API, checks 202 quarantine and 404 execution denial, and confirms no executable version exists for that import. Only then does it seed a distinct trusted synthetic version into the disposable database. No customer upload is promoted, scanned or approved. Ordinary review/publication/activation gates still run over HTTP. Temporary files, database, runtime and server are disposed on completion/failure.
+
+Current suites:
+
+- `node tests/backend-http.mjs`: sessions/ownership/origin checks, actual QuickJS execution and runaway recovery, immutable replay/conflicts, state review/confirmation/history/restore, expected-output checks, failed-test publication denial, anonymous public invocation and reviewed withdrawal. Public-host acceptance now always runs.
+- `node tests/backend-form-http.mjs`: calculator execution, form publication review and origin boundaries, and public HTML before/after confirmation. No persistent browser fixture is created.
+- `node tests/app-activation-http.mjs`: transition receipt, private activation review, owner/origin enforcement, guided enable/disable and historical confirmation without unintended reactivation.
+- `node tests/backend-diff-http.mjs`: source comparison, anonymous/foreign denial, Chat inspection and unchanged usage allowance.
+
+No deployment, provider inference, customer publication or CMS acceptance is performed by these tests.
+
+All four commands above passed on September 30, 2026 after fixture migration. The form/activation fixtures also assert Chat is unavailable before onboarding and available after profile/project completion. Evidence logs: `.secrets/backend-http-quarantine.log`, `.secrets/backend-form-http-quarantine.log`, `.secrets/app-activation-http-quarantine.log`, `.secrets/backend-diff-http-quarantine.log`. No product source or schema changed in this test/docs update.
