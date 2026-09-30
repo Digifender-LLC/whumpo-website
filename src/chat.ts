@@ -1,3 +1,4 @@
+import {describeConnections} from './connection-chat';
 import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
 import {appRecoveryChatActions} from './app-recovery-chat-actions';
@@ -228,7 +229,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     reply='Open Dashboard → Photos to upload a private photo or view existing files. Uploads use no AI units. Photos are not published automatically.';
 
   } else if (['/connections', 'show connections'].includes(command)) {
-    reply = 'Open Settings → External connections, or type connect github or connect cloudflare, to manage optional provider authorization. The panel shows whether each integration is configured. GitHub supports reviewed source backups; Cloudflare supports authorized zone selection and reviewed domain TXT proofs once configured. Website-routing changes are still being built. Do not paste API keys or passwords into chat.';
+    reply = await describeConnections(db,userId,dnsOptions);
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Profile → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
   } else if (help) {
