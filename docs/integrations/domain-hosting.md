@@ -8,11 +8,11 @@ Before activation, the operator must:
 
 1. Verify the zone's included Cloudflare for SaaS allowance and enable only the included/free hostname feature. No paid add-ons, custom origins, custom metadata, apex proxying, dedicated certificates or Workers for Platforms are used.
 2. Install the previously requested zone-limited SSL and Certificates Edit token as `CLOUDFLARE_DOMAINS_TOKEN`. Do not reuse Wrangler's interactive OAuth token.
-3. Configure `hosting.digifender.com` as an originless proxied AAAA record (`100::`) and the zone's fallback origin. Confirm its provider state is active.
-4. Configure the customer-hostname route to `tellumo-sites`, with explicit more-specific exclusions for `digifender.com/*`, `sites.digifender.com/*` and other existing platform hostnames as appropriate. Test custom-domain/route precedence before enabling customer traffic. Do not install a blanket route that intercepts workspace traffic. Current Wrangler configuration deliberately does not add this wildcard route yet.
+3. Configure `hosting.whumpo.site` as an originless proxied AAAA record (`100::`) and the zone's fallback origin. Confirm its provider state is active.
+4. Review customer-hostname routing to `tellumo-sites` on the `whumpo.site` zone. The existing `*.whumpo.site/*` route serves project subdomains; it does not prove custom-hostname fallback routing works. Keep `whumpo.com` workspace traffic separate and verify route precedence before enabling customer traffic. Do not install an account-wide blanket route.
 5. Verify the actual domain and certificate with a controlled customer hostname, including photo assets, HTTPS, root path, unknown paths, publish/restore/unpublish, workspace exclusion and disconnect. Check the hourly job and its request budget under the existing account allowance. Then set the activation flag only after the infrastructure prerequisites have been confirmed; finish live customer acceptance before claiming the feature delivered.
 
-The current connection check requires a direct, publicly visible DNS-only CNAME to `hosting.digifender.com`. Flattened apex records, proxied customer DNS, and nameserver delegation are not supported by this first connection verifier. These remain follow-up work, not silently accepted routing configurations.
+The current connection check requires a direct, publicly visible DNS-only CNAME to `hosting.whumpo.site`. Flattened apex records, proxied customer DNS, and nameserver delegation are not supported by this first connection verifier. These remain follow-up work, not silently accepted routing configurations.
 
 ## Review and provisioning
 
@@ -26,7 +26,7 @@ A create request is sent at most once per review. A timeout or lost response wit
 
 ## Serving and maintenance
 
-A known resource is rechecked by its exact ID and hostname. Both hostname and certificate must be active, the current TellUmo TXT proof must match, and a direct CNAME must match the configured target. Only then is local routing granted for at most two hours, capped by the proof expiry. The hourly cron at minute 47 checks up to eighty connections in batches of four. With activation absent it returns without provider calls. Failed checks immediately remove local serving permission; missing scheduled checks allow leases to expire. Seven-day ownership proofs must currently be renewed manually; that test limitation needs a longer-lived ownership lifecycle before a broad rollout.
+A known resource is rechecked by its exact ID and hostname. Both hostname and certificate must be active, the current Whumpo TXT proof must match, and a direct CNAME must match the configured target. Only then is local routing granted for at most two hours, capped by the proof expiry. The hourly cron at minute 47 checks up to eighty connections in batches of four. With activation absent it returns without provider calls. Failed checks immediately remove local serving permission; missing scheduled checks allow leases to expire. Seven-day ownership proofs must currently be renewed manually; that test limitation needs a longer-lived ownership lifecycle before a broad rollout.
 
 The public Worker maps the incoming URL hostname to exactly one currently authorized project. It serves only `/` and that project's current published JPEG dependencies under `/assets/`. It rejects API routes, foreign site-ID paths and unknown hosts. Publish/restore changes follow the existing publication pointer; unpublishing immediately removes content. Workspace sessions and configuration are unavailable to this Worker. A hosting connection alone never makes a private draft public.
 
@@ -60,7 +60,7 @@ First inspect the exact resource from Cloudflare audit records:
 node tools/reconcile-domain-hosting.mjs inspect CONNECTION_ID PROVIDER_ID resume --remote
 ```
 
-Use `cleanup` instead of `resume` to preserve or request disconnect. The tool reads the connection and the exact provider ID, checks hostname/zone/creation time and saves a ten-minute review in `.secrets/hosting-recovery-UUID.json` with mode 0600. It prints a digest and the resource summary. This inspection makes no provider or database mutation. **Matching name and timestamp do not prove that TellUmo created the resource.** The operator must establish ownership from independent request/audit evidence; never adopt another application's hostname.
+Use `cleanup` instead of `resume` to preserve or request disconnect. The tool reads the connection and the exact provider ID, checks hostname/zone/creation time and saves a ten-minute review in `.secrets/hosting-recovery-UUID.json` with mode 0600. It prints a digest and the resource summary. This inspection makes no provider or database mutation. **Matching name and timestamp do not prove that Whumpo created the resource.** The operator must establish ownership from independent request/audit evidence; never adopt another application's hostname.
 
 After reviewing that evidence and the saved file:
 

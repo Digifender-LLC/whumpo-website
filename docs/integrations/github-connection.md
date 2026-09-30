@@ -8,7 +8,7 @@ A separate [reviewed backup flow](github-backups.md) now selects repositories an
 
 ## Authorization boundary
 
-Start requires a recent authenticated TellUmo session and the normal same-origin POST check. A fresh random state and PKCE verifier are created. D1 stores only the state hash, the session-token hash and an encrypted verifier, expiring in ten minutes. Starting again replaces the old flow. The callback must match the current user, session, state and expiry; it atomically claims the flow before any provider exchange. A replay never exchanges the code twice.
+Start requires a recent authenticated Whumpo session and the normal same-origin POST check. A fresh random state and PKCE verifier are created. D1 stores only the state hash, the session-token hash and an encrypted verifier, expiring in ten minutes. Starting again replaces the old flow. The callback must match the current user, session, state and expiry; it atomically claims the flow before any provider exchange. A replay never exchanges the code twice.
 
 The callback URL is fixed to the test workspace origin, independent of incoming host headers or browser-supplied redirect destinations. All provider requests use fixed GitHub hosts, redirects disabled, a ten-second timeout and bounded JSON reads (512 KiB). Codes, secrets and tokens are sent in request bodies/headers, never appended to provider URLs. Callback responses use no-store and no-referrer, then redirect to a fixed workspace route. The browser clears the completion marker. Callback URLs necessarily contain GitHub's one-use code/state; infrastructure request logs must be treated as sensitive operational data.
 

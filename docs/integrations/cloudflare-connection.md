@@ -2,7 +2,7 @@
 
 ## Delivered boundary
 
-Customers can open Connected accounts from Details, `/connections`, “connect cloudflare” or “disconnect cloudflare”. The implemented OAuth Authorization Code flow uses a confidential client, S256 PKCE, a ten-minute state bound to the current TellUmo session, and an exact callback URL. A recent login and matching Origin are required to start. Codes can be exchanged once. Cancellation, a different session/user, expired state and replay cannot authorize access.
+Customers can open Connected accounts from Details, `/connections`, “connect cloudflare” or “disconnect cloudflare”. The implemented OAuth Authorization Code flow uses a confidential client, S256 PKCE, a ten-minute state bound to the current Whumpo session, and an exact callback URL. A recent login and matching Origin are required to start. Codes can be exchanged once. Cancellation, a different session/user, expired state and replay cannot authorize access.
 
 This release can connect/disconnect and list authorized zones, fifty per page. It requests `zone.read`, `dns.read`, and `dns.write` for the intended reviewed DNS workflow. Reviewed ownership TXT creation and fixed-target routing CNAME creation are implemented separately in [DNS controls](cloudflare-dns.md); general DNS editing remains unfinished. Connection alone changes no records and does not connect a domain to hosting. A valid access token is not proof that all domains in an account are authorized; each subsequent resource API operation must respect provider authorization and local ownership/review checks. No registrar or purchase scopes are requested.
 
@@ -16,7 +16,7 @@ Only Bearer tokens with positive, explicit lifetimes of at most eight hours and 
 
 New credentials enter a staged state that maintenance cannot immediately revoke. Activation checks the still-current, claimed, uncancelled flow atomically. Disconnect marks pending flows cancelled and immediately disables staged/active local access. A callback already in progress may still receive a credential, but cannot activate after cancellation. It queues that credential for revocation. Unfinished staged rows older than two minutes become revocation work. Lost storage/activation acknowledgements recover using the exact server-generated token ID without another code exchange.
 
-There is one active token per TellUmo user. Connecting while any unexpired token exists is refused: disconnect and finish revocation first. Claimed authorization flows also block replacement until completion or ten-minute expiry. This avoids overlapping replacement grants while old credentials are being revoked. Unclaimed flows can be superseded; their old callbacks fail. The vault has a database-enforced ten-row per-user cap.
+There is one active token per Whumpo user. Connecting while any unexpired token exists is refused: disconnect and finish revocation first. Claimed authorization flows also block replacement until completion or ten-minute expiry. This avoids overlapping replacement grants while old credentials are being revoked. Unclaimed flows can be superseded; their old callbacks fail. The vault has a database-enforced ten-row per-user cap.
 
 ## Disconnect and maintenance
 
@@ -28,17 +28,17 @@ Locally stored connection status is not a continuous provider-side validation. Z
 
 `test:cloudflare-connection` uses disposable D1 and controlled responses for PKCE, binding/replay, encryption isolation, scope/lifetime validation, malformed and redirected responses, cancellation and disconnect races, staged-token cleanup, leased revocation, lost activation acknowledgement and zone filtering/pagination. This is not live provider consent or DNS-change acceptance.
 
-Still needed: registered client and consenting real tester; real token/zone/revocation acceptance; real reviewed TXT/CNAME creation acceptance; exact-record update/removal; domain setup through the customer's own account; final-domain OAuth migration. Domain purchases remain a separate unfinished requirement. Public client promotion is irreversible and requires verified publisher-domain ownership, so private test setup is the first step.
+Still needed: registered client and consenting real tester; real token/zone/revocation acceptance; real reviewed TXT/CNAME creation acceptance; exact-record update/removal; domain setup through the customer's own account; registered Whumpo callback verification. Domain purchases remain a separate unfinished requirement. Public client promotion is irreversible and requires verified publisher-domain ownership, so private test setup is the first step.
 
 ## Operator setup
 
 In Cloudflare → Manage Account → OAuth clients, register a **private** test client:
 
-- Client name: TellUmo test (placeholder).
-- Client URL: `https://digifender.com`.
+- Client name: Whumpo test.
+- Client URL: `https://whumpo.com`.
 - Grant type: Authorization Code; response type: code.
 - Token authentication: `client_secret_basic`.
-- Redirect URI: `https://digifender.com/api/connections/cloudflare/callback`.
+- Redirect URI: `https://whumpo.com/api/connections/cloudflare/callback`.
 - Required scopes: `zone.read`, `dns.read`, `dns.write`.
 - No offline/refresh, registrar, billing, Workers or account-administration permissions.
 
@@ -65,3 +65,9 @@ Sources checked September 29, 2026:
 Migration 0022 applied locally and remotely before the Workers deployed. Main version `e62105fd-a60d-4d1c-bdff-dc2e48c02748`; public version `4ea34b3a-4fba-451a-b1b5-5cd59587f2a4`. TypeScript, the Cloudflare OAuth suite (including expiry reconnect, unexpected refresh rejection and HTTP route gates), and the GitHub authorization regression passed. A local UI fixture verified opening from chat, retaining disconnect controls after a zone-read failure, and rendering the disconnected state.
 
 A temporary production passkey account verified disabled Cloudflare status, 503 for unconfigured start/zone requests, anonymous 401, cross-origin 403, the fixed no-referrer callback redirect, idempotent local disconnect and zero AI usage. It was removed after the check. No real customer authorization, revocation, DNS change, OAuth client creation or new service activation was tested or performed. Callback URLs necessarily contain a one-use code and state; infrastructure request logs must be treated as sensitive operational data even though application errors omit provider bodies.
+
+## Configuration readiness
+
+Run `pnpm report:connections` with the operator’s existing authorization to inspect deployed secret names and aggregate credential/revocation counts. Exit 0 means required names are present, **not** that credentials or customer consent work; exit 2 identifies incomplete configuration, and exit 1 means the inspection failed. No credentials, identities or ciphertext are printed, and nothing is changed. If encrypted rows exist without the vault key, recover the original key before proceeding. Never generate a replacement to bypass this condition.
+
+Registration and a real customer consent/disconnect check remain required. Current callbacks use only `https://whumpo.com`; do not register the retired domain.
