@@ -34,7 +34,7 @@ pnpm db:local
 pnpm dev
 ```
 
-The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http://localhost:8787` for passkey development. Deployment uses `ENVIRONMENT=test` and keeps invitation/security checks enabled. Run `pnpm check` for backend/frontend types, and the focused `test:*` scripts listed in `package.json` for the feature being changed. Some HTTP tests require a running local server; inspect their documented setup.
+The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http://localhost:8787` for passkey development. Deployment uses `ENVIRONMENT=test` and keeps invitation/security checks enabled. Run `pnpm check` for backend/frontend types, and the focused `test:*` scripts listed in `package.json` for the feature being changed. For credential-free local checks, use `pnpm verify` (fast), `pnpm verify site`, or `pnpm verify app`; see [verification profiles](docs/verification.md) for coverage and limitations. Some other HTTP tests require a running local server; inspect their documented setup.
 
 | Area | Authoritative source |
 | --- | --- |
