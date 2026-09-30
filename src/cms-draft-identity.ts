@@ -34,7 +34,7 @@ export function matchesIdentifiedDraft(payload:any,body:string,id:string){
  const item=payload?.data?.item,expected=JSON.parse(body).data;
  return payload?.success===true&&cmsItemId.test(item?.id??'')&&item.status==='draft'&&item.version===1&&!item.deletedAt&&!item.draftRevisionId&&!item.liveRevisionId&&!item.publishedAt&&!item.scheduledAt&&item.slug===slug(id)&&typeof payload.data._rev==='string'&&/^[A-Za-z0-9+/=_-]{4,256}$/.test(payload.data._rev)&&item.data?.title===expected.title&&sameData(item.data?.content,expected.content)&&(expected.excerpt===undefined?(item.data?.excerpt===undefined||item.data?.excerpt===null||item.data?.excerpt===''):item.data?.excerpt===expected.excerpt);
 }
-async function boundedJSON(response:Response){
+export async function boundedCMSJSON(response:Response){
  if(!response.ok||!response.headers.get('content-type')?.startsWith('application/json')){await response.body?.cancel();return null;}
  const reader=response.body?.getReader();if(!reader)return null;const parts:Uint8Array[]=[];let size=0;
  for(;;){const r=await reader.read();if(r.done)break;size+=r.value.length;if(size>65536){await reader.cancel();return null;}parts.push(r.value);}
@@ -45,5 +45,5 @@ export async function recoverIdentifiedDraft(db:D1Database,config:CMSBridgeConfi
  const collection=identifiedDraftPath.exec(path)?.[1];if(!collection||!validCMSDraft(body))return;
  const identity=await db.prepare('SELECT collection,slug FROM _whumpo_draft_identities WHERE request_id=?').bind(id).first<{collection:string;slug:string}>();
  if(!identity||identity.collection!==collection||identity.slug!==slug(id))return;
- try{const text=await boundedJSON(await dispatch(await identityRequest(config,path+'/'+identity.slug,id)));if(text&&matchesIdentifiedDraft(JSON.parse(text),body,id))await db.prepare('UPDATE _whumpo_requests SET status=201,response=? WHERE id=? AND request_hash=? AND status IS NULL').bind(text,id,hash).run();}catch{/* Missing, changed or unavailable drafts remain unresolved. */}
+ try{const text=await boundedCMSJSON(await dispatch(await identityRequest(config,path+'/'+identity.slug,id)));if(text&&matchesIdentifiedDraft(JSON.parse(text),body,id))await db.prepare('UPDATE _whumpo_requests SET status=201,response=? WHERE id=? AND request_hash=? AND status IS NULL').bind(text,id,hash).run();}catch{/* Missing, changed or unavailable drafts remain unresolved. */}
 }

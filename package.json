@@ -66,6 +66,7 @@
     "test:backend-chat-live": "node tests/backend-chat-live.mjs",
     "test:backend-state": "node tests/backend-state.mjs",
     "test:cms-draft-identity": "node tests/cms-draft-identity.mjs",
+    "test:cms-taxonomy-recovery": "node tests/cms-taxonomy-recovery.mjs",
     "test:cms-taxonomy": "node tests/cms-taxonomy-shape.mjs",
     "test:cms-bridge": "node tests/cms-bridge.mjs",
     "test:emdash-bridge-live": "node tests/emdash-bridge-live.mjs",

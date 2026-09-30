@@ -53,6 +53,15 @@ try{
   if(recovered.item.id!==original.item.id||recovered._rev!==original._rev||recovered.item.slug!=='whumpo-draft-'+recoveryId)throw Error('Native draft identity recovery differs');
   if((await proxy.env.DB.prepare('SELECT count(*) n FROM ec_posts WHERE slug=?').bind('whumpo-draft-'+recoveryId).first()).n!==1)throw Error('Native recovery duplicated the article');
   console.log('Actual native draft identity recovered the existing article and revision without another creation.');
+  const taxonomyCode=await bundle({entryPoints:['src/cms-taxonomy-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsTaxonomyDefinition,cmsTaxonomyTerm}=await import('data:text/javascript;base64,'+Buffer.from(taxonomyCode.outputFiles[0].text).toString('base64'));
+  for(const name of ['categories','tags'])for(const kind of ['definition','term']){
+   const path=kind==='definition'?'/_emdash/api/taxonomies':'/_emdash/api/taxonomies/'+name+'/terms',readPath=kind==='definition'?path+'/'+name:path+'/studio-notes',body=kind==='definition'?cmsTaxonomyDefinition(name):cmsTaxonomyTerm('studio-notes','Studio notes');
+   const intent=await proxy.env.DB.prepare('SELECT request_id FROM _whumpo_taxonomy_intents WHERE read_path=?').bind(readPath).first();if(!intent)throw Error('Native taxonomy recovery fixture has no reserved intent');
+   const before=await callCMS(service,identity,readPath,randomUUID());await proxy.env.DB.prepare('UPDATE _whumpo_requests SET status=NULL,response=NULL WHERE id=?').bind(intent.request_id).run();
+   const recovered=await callCMS(service,identity,path,intent.request_id,body),key=kind==='definition'?'taxonomy':'term';
+   if(recovered.reconciled!==true||recovered[key].id!==before[key].id)throw Error('Native taxonomy reconciliation changed identity');
+  }
+  console.log('Actual native categories/tags and definitions recovered by exact reads; no repeated creation.');
   const captured=await stableCMSDatabase(async sql=>(await proxy.env.DB.prepare(sql).all()).results);restoreCapturedCMSDatabase(restored,captured.snapshot);
   const roundtrip=await captureCMSDatabase(async sql=>restored.prepare(sql).all());if(roundtrip.digest!==captured.digest)throw Error('Native CMS restore differs from source');
   const expected=['posts','pages'].flatMap(collection=>restored.prepare('SELECT id,title,status,content FROM ec_'+collection).all().map(row=>({...row,collection})));
