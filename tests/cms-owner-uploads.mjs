@@ -84,6 +84,33 @@ try{
  const unpublish=id();await db.prepare("INSERT INTO cms_unpublish_reviews(id,publication_id,user_id,revision) VALUES(?,?,?,'revision')").bind(unpublish,review,a.user).run();await db.prepare("UPDATE cms_unpublish_reviews SET status='approved' WHERE id=?").bind(unpublish).run();
  let reads=0;assert.equal((await fetchImage(a.project,'GET',{get(){reads++;throw Error('must not read private object');}})).status,404);assert.equal(reads,0);
  console.log('Frozen CMS media passed: atomic manifest/content/receipt admission, approval gate, actual R2 lost-ack recovery, immutable manifests, public membership, checksum corruption refusal and unpublish revocation before bucket access.');
+ // Full prepare/recover/review/confirm/replacement path with native state replies and actual D1/R2.
+ const {prepareCMSPublication,confirmCMSPublication,cmsPublicationPage,cmsPublicationCommand}=await module('src/cms-publication.ts');
+ const {default:siteHost}=await module('src/site-host.ts');
+ await db.prepare("UPDATE cms_unpublish_reviews SET status='complete' WHERE id=?").bind(unpublish).run();
+ let article={id:image.asset._ref,status:'draft',data:{title:'Image story',content:[{_type:'block',style:'normal',markDefs:[],children:[{_type:'span',text:'An illustrated story.',marks:[]}]},image]}},articleRev='rev-one',publishes=0;
+ const articleEnv={CMS_BRIDGE_MASTER_KEY:master,FILES:files,['CMS_'+a.project.replaceAll('-','')]:{fetch:async request=>{
+  const verified=await verifyCMSRequest(request,a.config);
+  if(verified.path.endsWith('/preview'))return new Response(photo.bytes,{headers:{'content-type':'image/jpeg'}});
+  return cmsGateway(request,nativeEnv,async request=>{if(request.method!=='GET'){assert.ok(request.url.endsWith('/publish'));assert.equal((await request.json())._rev,articleRev);publishes++;article={id:article.id,status:'published',data:article.data};}return Response.json({success:true,data:{item:article,_rev:articleRev}});});
+ }}};
+ const integrated=id();let loseImage=true;const interrupted={...articleEnv,FILES:{get:files.get.bind(files),put:async(...args)=>{const result=await files.put(...args);if(loseImage){loseImage=false;throw Error('lost image receipt');}return result;}}};
+ await assert.rejects(prepareCMSPublication(db,a.user,a.project,draft,integrated,interrupted),e=>e.status===503);
+ const recovered=await cmsPublicationCommand(db,a.user,id(),'/recover-cms-publish '+integrated,articleEnv)();assert.match(recovered,/Frozen images: 1/);assert.equal(publishes,0);
+ const {readChat,sendChat}=await module('src/chat.ts');const recoverState=await readChat(db,a.user),recoverTurn=id();
+ assert.equal((await sendChat(db,a.user,{id:recoverTurn,revision:recoverState.state.revision,content:'/recover-cms-publish '+integrated},undefined,{cmsPublication:(turn,content)=>cmsPublicationCommand(db,a.user,turn,content,articleEnv)})).status,200);
+ assert.equal((await readChat(db,a.user)).turns.find(t=>t.id===recoverTurn).cms_publication_confirmation_id,integrated);
+ const reviewPage=await cmsPublicationPage(db,a.user,integrated,files),reviewHTML=await reviewPage.text();assert.ok(reviewHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!reviewHTML.includes('src="/cms/media/'));assert.match(reviewPage.headers.get('content-security-policy'),/img-src data:/);
+ await assert.rejects(cmsPublicationPage(db,id(),integrated,files),e=>e.status===404);
+ const imageURL=reviewId=>`https://${a.project}.whumpo.site/cms/media/${reviewId}/${captured[0].digest}.jpg`;
+ const hosted=reviewId=>siteHost.fetch(new Request(imageURL(reviewId)),{DB:db,FILES:files});
+ assert.equal((await hosted(integrated)).status,404);await confirmCMSPublication(db,a.user,integrated,articleEnv);assert.equal(publishes,1);assert.equal((await hosted(integrated)).status,200);
+ const servedArticle=await siteHost.fetch(new Request(`https://${a.project}.whumpo.site/cms/posts/${article.id}`),{DB:db,FILES:files});assert.match(servedArticle.headers.get('content-security-policy'),/img-src 'self'/);assert.ok((await servedArticle.text()).includes(`/cms/media/${integrated}/`));
+ article={...article,draftRevisionId:'staged',liveData:structuredClone(article.data),data:{...article.data,title:'Updated image story'}};articleRev='rev-two';
+ const replacement=await prepareCMSPublication(db,a.user,a.project,draft,id(),articleEnv);assert.equal(replacement.replaces_publication_id,integrated);assert.equal((await hosted(replacement.id)).status,404);assert.equal((await hosted(integrated)).status,200);
+ await confirmCMSPublication(db,a.user,replacement.id,articleEnv);assert.equal(publishes,2);assert.equal((await hosted(integrated)).status,404);assert.equal((await hosted(replacement.id)).status,200);
+ await confirmCMSPublication(db,a.user,replacement.id,articleEnv);assert.equal(publishes,2);
+ console.log('Image publication integration passed: exact interrupted-review recovery, authenticated inline review, explicit native publish, routed public images and replacement revocation with replay.');
  const worker=(await module('src/index.ts')).default,{hashToken}=await module('src/security.ts');
  const session='c'.repeat(64);await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(session),a.user,new Date(Date.now()+3600000).toISOString(),new Date().toISOString()).run();
  const http=(suffix,method='GET',body,headers={})=>worker.fetch(new Request('https://whumpo.com/api/cms/'+a.project+'/media/uploads'+suffix,{method,headers:{origin:'https://whumpo.com',cookie:'tellumo_session='+session,'content-type':'image/jpeg','x-photo-name':'studio.jpg',...headers},body}),{...env,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});

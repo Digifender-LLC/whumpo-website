@@ -249,7 +249,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   }
 
   const cmsPublicationRoute=pathname.match(/^\/api\/cms-publication-reviews\/([0-9a-f-]{36})\/preview$/);
-  if(method==='GET'&&cmsPublicationRoute)return cmsPublicationPage(env.DB,user.id,cmsPublicationRoute[1]);
+  if(method==='GET'&&cmsPublicationRoute)return cmsPublicationPage(env.DB,user.id,cmsPublicationRoute[1],env.FILES);
   const cmsExportRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content\/([0-9a-f-]{36})\/export$/);
   if(method==='GET'&&cmsExportRoute)return cmsExport(env.DB,user.id,cmsExportRoute[1],cmsExportRoute[2],env as unknown as Record<string,unknown>);
   const cmsPreviewRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/content\/([0-9a-f-]{36})\/preview$/);

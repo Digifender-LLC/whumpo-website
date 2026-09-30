@@ -34,3 +34,15 @@ export async function publicCMSPublicationImage(request:Request,db:D1Database,fi
  if(!row)return new Response(null,{status:404,headers});
  try{const bytes=await verifiedObject(db,files,row);if(!bytes)return new Response(null,{status:503,headers});return new Response(request.method==='HEAD'?null:new Uint8Array(bytes),{headers:{...headers,'content-length':String(bytes.length)}});}catch{return new Response(null,{status:503,headers});}
 }
+
+/** Inline only verified frozen JPEGs into an authenticated review; no public access is granted. */
+export async function inlineCMSPublicationImages(db:D1Database,files:R2Bucket,user:string,review:string,html:string){
+ const rows=(await db.prepare("SELECT m.* FROM cms_publication_media m JOIN cms_publication_reviews r ON r.id=m.review_id JOIN projects p ON p.id=m.project_id WHERE m.review_id=? AND m.user_id=? AND r.user_id=m.user_id AND p.owner_user_id=m.user_id ORDER BY m.media_id").bind(review,user).all<Media>()).results;
+ for(const row of rows){
+  if(row.state!=='ready')throw new CMSProjectError(409,'Publication images need recovery before preview');
+  const bytes=await verifiedObject(db,files,row);if(!bytes)throw new CMSProjectError(503,'Frozen article image is unavailable');
+  let binary='';for(let offset=0;offset<bytes.length;offset+=8192)binary+=String.fromCharCode(...bytes.subarray(offset,offset+8192));
+  html=html.replaceAll(`src="/cms/media/${review}/${row.digest}.jpg"`,`src="data:image/jpeg;base64,${btoa(binary)}"`);
+ }
+ return html;
+}
