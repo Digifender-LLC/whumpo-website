@@ -6,7 +6,7 @@ const guides:Record<string,string>={
 Tell me what you want to put online, or describe a change to an existing site. /ask YOUR_QUESTION asks the agent a question.
 
 Start: /new begins a project; /skip skips optional brief questions; /brief shows your preferences; /cancel exits setup.
-After welcome: Build my first draft in Chat uses your saved brief and AI allowance for a private website draft. /first-draft PROJECT_ID is the same action for your original welcome project. It requires connected AI and disappears once that first draft exists. Nothing is published or purchased.
+After welcome: Build my first draft in Chat uses your saved brief and standard AI for a private website draft. /first-draft PROJECT_ID is the same action for your original welcome project. It requires connected AI and disappears once that first draft exists. Nothing is published or purchased.
 Find: /projects lists services; /project PROJECT_ID shows details; /versions lists saved versions; /inspect VERSION_ID shows saved content.
 Build: /build creates a private preview from a reusable layout. /build clay or /build forest changes its theme. AI edits use ordinary language or /edit YOUR_REQUEST.
 Review: /diff VERSION_ID compares with the live version; add BASELINE_ID to compare two saved versions.
@@ -83,8 +83,9 @@ Never paste passwords, API keys or recovery codes into chat.
 GitHub backups: /help backups`,
  billing:`Plans and usage
 /plans shows available plan information; /usage shows usage and allowances.
-/usage-history [PAGE] or “show my usage history” lists request charges and holds without AI usage. These preview units/test credits are not dollars or premium-model pricing.
-/credits shows credit settings. /credits on opts into spending available credits beyond your plan allowance; /credits off disables that choice.
+/ai-history [PAGE] or “show my AI requests” lists standard requests without using the model. /ai-request REQUEST_ID shows one saved status. These reads never retry work or spend credits.
+/usage-history [PAGE] lists historical test-unit charges and holds separately.
+/credits shows historical credit balances. /credits on and /credits off save the legacy overage preference; neither enables advanced models or charges standard assistance.
 /activity shows recorded workspace activity. /traffic shows recorded public-page requests.
 
 Payments and credit purchases are not enabled yet. Help and guided commands do not consume AI units. Some operations, such as private backend tests, have separate limits.`,

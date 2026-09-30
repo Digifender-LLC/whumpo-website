@@ -1,3 +1,5 @@
+> September 30 update: standard Chat activation is now deployed at `be22062c-8178-40eb-90d0-64858af27411`. All 96 migrations are applied; current standard requests spend no customer units/credits. Historical billing records remain intact. The older version/schema observations below are point-in-time evidence, superseded by [current readiness](acceptance.md) and [standard AI accounting](standard-ai-accounting.md). The Word design has not yet been regenerated for this activation.
+
 # Documentation and code reconciliation
 
 September 30, 2026. Compared the current checkout (source through `a8906af` plus existing local edits), feature contracts, numbered migrations, scripts, maintained Word design and fresh read-only Cloudflare state. This is a documentation/status audit, not a new security audit or proof of every customer journey. No runtime code, account, billing, DNS or deployment was changed for this sync.

@@ -1,3 +1,4 @@
+import {readStandardAIHistory,describeStandardAIHistory} from './standard-ai-history';
 import {readProjectDetails} from './project-details';
 import {readTraffic,trafficDescription} from './site-traffic';
 import {savedPage} from './photo-versions';
@@ -12,7 +13,7 @@ export async function inspectWorkspace(db:D1Database,userId:string,scope:Inspect
  if(scope==='traffic')return trafficDescription(await readTraffic(db,userId));
  if(scope==='usage'){
   const b=await getBilling(db,userId);
-  return `${b.plan.name} · ${b.period}\nStandard AI assistance uses no monthly test units or credits, under fair use. Advanced-model spending is not enabled.\nHistorical test accounting: ${b.quota.spent} monthly units used; ${b.quota.reserved} held; ${b.credits.available} test credits available; ${b.credits.reserved} held. These balances do not limit new standard assistance. Never suggest buying or enabling credits to continue standard work.\nTesting capacity and provider availability can interrupt service. Paid purchases and upgrades are disabled.`;
+  return `${b.plan.name} · ${b.period}\nStandard AI assistance uses no monthly test units or credits, under fair use. Advanced-model spending is not enabled.\nHistorical test accounting: ${b.quota.spent} monthly units used; ${b.quota.reserved} held; ${b.credits.available} test credits available; ${b.credits.reserved} held. These balances do not limit new standard assistance. Never suggest buying or enabling credits to continue standard work.\nTesting capacity and provider availability can interrupt service. Paid purchases and upgrades are disabled.\n\n${describeStandardAIHistory(await readStandardAIHistory(db,userId))}`;
  }
  if(scope==='domains')return (await domainCommand(db,userId,'', '/domains'))!.reply;
  if(scope==='versions')return (await publicationCommand(db,userId,'', '/versions'+(targetId?' '+targetId:'')))!.reply;
