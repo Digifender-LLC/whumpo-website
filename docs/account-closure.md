@@ -1,0 +1,30 @@
+# Platform account closure
+
+## Status — September 30, 2026
+
+**Implemented:** read-only operator inventory in `tools/account-closure-inventory.mjs`.
+**Not implemented:** customer platform-account closure, external-resource teardown, legal-hold decisions, or deletion reconciliation after recovery. Visitor-account deletion is a separate feature documented in [app-data.md](app-data.md).
+
+Run `node tools/account-closure-inventory.mjs` from the repository root with existing operator Cloudflare authorization. The CLI accepts no arguments and returns platform aggregate counts. Its internal function also accepts an exact account ID as a bound SQL parameter; an unknown account fails rather than returning a reassuring empty report. There is no customer HTTP route or agent action.
+
+One SELECT reads the control-database inventory at one query snapshot. It counts projects/live service records, sessions, Chat turns, provider credentials/revocations and authorization attempts, domains, CMS resource registrations, file references, profile photos, imported source, safety records, pending scan tickets, unresolved usage, checkout/ledger records and redeemed invitations. No credentials, identities, source code, Chat text, filenames, object keys or provider identifiers are returned. CMS rows are inspected as lifecycle metadata only; this does not provision or test a CMS.
+
+Missing schema, failed queries and invalid counts fail the report. Even an empty inventory returns `readyForDeletion: false`. Counts describe database records, not confirmed provider resources. This is not an exhaustive personal-data export, dependency graph, or authorization to delete.
+
+## Required closure sequence
+
+1. Authenticate a recent owner session and present an explicit, concrete closure review. Establish a durable closure state and stop new work/authorizations/publication before capturing the final inventory. A model cannot approve closure.
+2. Resolve restricted preservation and retention requirements before destructive cleanup. Existing safety records cascade with accounts and are not a legal-hold system. A blocked verdict is a review signal, not a legal determination; zero blocked rows is not clearance.
+3. Reconcile dispatched/uncertain AI, usage, checkout and provider operations using their existing immutable receipts. Never release an uncertain reservation merely because closure was requested. Document handling of remaining credits before paid plans become available; see [plan-lifecycle.md](plan-lifecycle.md).
+4. Withdraw public services and reconcile external domain/CMS resources and pending creation jobs. Database cascades do not remove provider resources. Do not delete customer-owned repositories, zones or other infrastructure by implication; review the exact ownership and cleanup scope.
+5. Revoke connected credentials while encrypted tokens and the original encryption key remain available. Resolve in-flight OAuth attempts and sessions so delayed callbacks cannot reconnect the account. Retain unresolved revocation authority until provider confirmation.
+6. Inventory and remove eligible private object storage, database content and account records in an idempotent, resumable workflow. Reconcile cleanup queues and orphaned objects. Domain and invitation foreign keys, retained CMS records and other references mean raw `DELETE users` is not a closure implementation.
+7. Maintain deletion receipts outside the deleted account's cascade. Reapply them on restores and reconcile external backups and their retention. Define and verify the customer-facing deletion promise before claiming completion.
+
+No new paid services or provider writes are performed by the inventory.
+
+## Verification
+
+`node tests/account-closure-inventory.mjs` applies all 104 migrations to an in-memory SQLite database, enforces SQLite query-only mode, checks platform and tenant scopes against separate synthetic owners, verifies pending-revocation counts, rejects nonexistent/injected scopes and invalid results, and checks that sensitive fixture values do not enter the report. It exercises the actual SQL, not a mock substitute for its predicates.
+
+A read-only query of the private test D1 database succeeded at **2026-09-30 17:45:41 UTC**: one account, one project, no live project service records, no connected provider credentials or registered CMS/domain resources, and **one unresolved metered usage operation**. This operation requires reconciliation before closure; the inventory did not change it. Local evidence is `.secrets/account-closure-inventory.json` (ignored). External provider resources, R2 orphans, backups and actual deletion remain unverified. No Worker deployment or migration was needed for this operator tool.
