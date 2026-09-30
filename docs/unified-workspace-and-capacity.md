@@ -6,7 +6,7 @@ The three September 29 proposals are product context. The final proposal superse
 
 A plan will provide a flexible infrastructure cost envelope across object storage, compute, databases and ordinary processing. Remove prominent fixed storage inclusions. Preserve per-resource safety ceilings separately, including the preview's existing photo, request and execution limits. AI inference accounting remains a distinct internal budget. Do not mislabel AI build units as infrastructure capacity or display a fabricated overall percentage. Containers, GPU, dedicated servers and managed database clusters remain unavailable here; a dashboard card never provisions these services.
 
-Infrastructure budgets, customer overage tariffs, normalization, tax treatment and provider reconciliation are **not yet specified**. Example amounts in the proposals are not tariffs. Consequently, the product saves draft preferences only; no additional paid capacity, subscriptions or overage charges are authorized or activated by these settings. Existing opt-in use of already-granted AI test credits is a different control.
+A versioned offline [shared-pool economics proposal](resource-pool-economics.md) now models budgets, tariffs, top-ups and rollover. These are not enabled billing terms. Whether standard AI joins the pool is unresolved; tax treatment, authoritative metering and provider reconciliation remain unfinished. Consequently, the product saves draft preferences only; no additional paid capacity, subscriptions or overage charges are authorized or activated by these settings. Existing opt-in use of already-granted AI test credits is a different control.
 
 ## Plan and spending rules
 

@@ -4,13 +4,13 @@ Current launch catalogue and model-cost policy: [pricing-and-model-policy.md](pr
 
 ## Implemented fulfillment boundary; checkout still disabled
 
-`grantPlan` is an internal fulfillment function, not an HTTP endpoint or model action. It accepts only Launch or Studio and a specific UTC calendar month. A future payment adapter must establish the paid invoice, customer ownership, calendar period and product before calling it. The platform has no Stripe account configured, does not sell subscriptions, and has made no real subscription charge. This implementation alone is not a subscription system.
+`grantPlan` is an internal fulfillment function, not an HTTP endpoint or model action. It accepts Starter, Personal, Business and Business Pro plus the historical Launch/Studio identities, for a specific UTC calendar month (`src/billing.ts`, `src/plans.ts`, migration 0052). A future payment adapter must establish the paid invoice, customer ownership, calendar period and product before calling it. The platform has no Stripe account configured, does not sell subscriptions, and has made no real subscription charge. This implementation alone is not a subscription system.
 
 A unique grant ID and globally unique payment/reference ID identify an immutable receipt. Identical retries recover the same result; changes to owner, plan, month or reference are rejected. The receipt, existing-period allowance adjustment and ledger entry commit in one SQLite statement/trigger transaction. A lost acknowledgement is recovered by reading the exact receipt. A browser redirect, cached account plan or model output cannot create an entitlement.
 
 ## Monthly behavior
 
-Explore supplies 50 units in each UTC month. A confirmed Launch receipt supplies 250 units for its specified month, and Studio supplies 800. The highest confirmed tier in a month wins. Receiving the same or a lower tier later does not reset usage or add a second allowance. Upgrading changes the allowance ceiling, preserving spent units, reservations and credit balances. For example, moving from Launch to Studio after using 40 units leaves 760 monthly units, not a fresh 800.
+Explore supplies 50 test units in each UTC month. Current confirmed receipts grant Starter 250, Personal 800, Business 1,600 and Business Pro 3,200 test units; legacy Launch and Studio remain 250 and 800. These are existing test entitlements, not the proposed Whumpo resource pool. The highest confirmed tier in a month wins. Receiving the same or a lower tier later does not reset usage or add a second allowance. Upgrading changes the allowance ceiling, preserving spent units, reservations and credit balances. For example, moving from Launch to Studio after using 40 units leaves 760 monthly units, not a fresh 800.
 
 An invoice/renewal must grant each new paid month explicitly. Without a grant for the next month, that month uses Explore. A downgrade can take effect by granting the lower tier for the next month. The current month's paid entitlement is preserved. Current-month refunds, entitlement revocation, proration, renewal grace periods and payment dispute policy are not implemented and must be settled before subscriptions are enabled. No automatic plan-cancellation or billing-provider action is implied by the absence of a grant.
 
@@ -20,7 +20,7 @@ If an entitlement arrives before that month's first use, creating its usage peri
 
 ## Published sites after a downgrade
 
-Publication confirmation reads current-month receipts directly: Explore allows one site, Launch three, Studio ten. `billing_accounts.plan_id` is a legacy field and is no longer authorization for paid allowance or publication slots. A stale paid cache cannot authorize another site after the entitlement month ends.
+Publication confirmation reads current-month receipts directly: Explore allows one site; Starter one, Personal five, Business ten and Business Pro twenty-five. Legacy Launch allows three and Studio ten. `billing_accounts.plan_id` is a legacy field and is no longer authorization for paid allowance or publication slots. A stale paid cache cannot authorize another site after the entitlement month ends.
 
 Existing published sites are not automatically taken offline by a downgrade or failed renewal. They remain editable/restorable, even when their count exceeds the new tier. The account cannot publish another site while over its current limit; unpublishing frees slots. This is an explicit grandfathering policy for the test platform, not strict automatic enforcement of a lower live-site count. Before sales, decide whether to keep this policy or introduce a communicated grace period and user-selected sites. Never silently choose and delete a user's live sites.
 
