@@ -89,6 +89,7 @@ GitHub backups: /help backups`,
 
 Payments and credit purchases are not enabled yet. Help and guided commands do not consume AI units. Some operations, such as private backend tests, have separate limits.`,
  backends:`Private backend functions and data
+/app-maintenance [PROJECT_ID or all] [PAGE] lists unfinished app access, visitor page, upgrade and recovery reviews. “Show unfinished app work” opens the same free read. Opening the list never runs or approves anything.
 Ask the agent to create a pure JavaScript function for an existing project.
 /backend-library lists reusable platform-authored helpers. /backend-component NAME@VERSION shows exact source and a synthetic check. /use-backend PROJECT_ID NAME@VERSION copies an untested private version without AI usage.
 /backends PROJECT_ID lists private drafts; /backend-diff NEW_VERSION_ID ORIGINAL_VERSION_ID compares saved source and reports the latest test status without executing or publishing.

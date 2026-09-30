@@ -1,3 +1,4 @@
+import {listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appUpgradeCommand,appUpgradeAction} from './app-upgrade-chat';
 import {appRecoveryCommand} from './app-recovery-chat';
 import {readAppStatus,describeAppStatus} from './app-status';
@@ -110,6 +111,11 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
 export async function backendAction(db:D1Database,user:string,turnId:string,action:Record<string,unknown>,service?:Fetcher,pageExpectation?:AppPageExpectation){
  const maintenance=appUpgradeAction(db,user,turnId,action,service);if(maintenance)return {reply:await maintenance(),statements:[] as D1PreparedStatement[]};
  const operation=action.operation;
+ if(operation==='appMaintenance'){
+  if(Object.keys(action).some(k=>!['kind','operation','projectId','page'].includes(k))||action.projectId!==undefined&&typeof action.projectId!=='string')throw new BackendError(400,'Choose an application maintenance filter');
+  return {reply:describeAppMaintenance(await listAppMaintenance(db,user,action.projectId as string|undefined,action.page===undefined?1:action.page as number),action.projectId as string|undefined),statements:[] as D1PreparedStatement[]};
+ }
+
  if(operation==='buildApplication')return {reply:await buildApplication(db,user,turnId,action,service),statements:[] as D1PreparedStatement[]};
  if(['library','component','useComponent'].includes(String(operation))){
   const allowed=operation==='library'?['kind','operation']:operation==='component'?['kind','operation','reference']:['kind','operation','reference','projectId'];

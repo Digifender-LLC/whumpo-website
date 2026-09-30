@@ -1,3 +1,4 @@
+import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
 import {appRecoveryChatActions} from './app-recovery-chat-actions';
 import {appPageDesignProjectId} from './app-page-design';
@@ -107,6 +108,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   let version: { projectId: string; config: LaunchConfig; html: string; digest: string } | undefined;
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
   const navigation=workspaceNavigation(content);
+  const maintenance=appMaintenanceRequest(content);
+  if(maintenance&&'error' in maintenance)return {status:400,error:maintenance.error};
   const pendingCMS=cmsPendingRequest(content);
   if(pendingCMS&&'error' in pendingCMS)return {status:400,error:pendingCMS.error};
   const help=chatHelp(command,!!ai);
@@ -121,7 +124,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
   }
   const known = ['/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','show usage history','show my usage history','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
-  if (ai && !help && !navigation && !pendingCMS && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
+  if (ai && !help && !navigation && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
   const backup=backupChatCommand(db,userId,input.id,command,dnsOptions);
@@ -139,6 +142,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
   if(navigation){const pages=(navigation.view==='pages'||navigation.view==='page')?(await readLayout(db,userId)).layout.tabs:[];reply=workspaceNavigationHelp+(navigation.view==='pages'||navigation.view==='page'?'\n'+(pages.length?'Your pages: '+pages.map(p=>p.label).join(', '):'No custom pages yet. Ask Whumpo to create one for your workflow.'):'');}
+  else if(maintenance){try{reply=describeAppMaintenance(await listAppMaintenance(db,userId,maintenance.projectId,maintenance.page),maintenance.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Application maintenance could not be read. Try again; nothing was executed.'};}}
   else if(pendingCMS){try{reply=describePendingCMS(await pendingCMSWork(db,userId,pendingCMS.projectId,pendingCMS.page),pendingCMS.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Publishing work could not be read. Try again; no operation was retried.'};}}
   else if(cms)reply='CMS command recorded. Inspect /cms or /cms-review '+input.id+' to recover its saved state.';
   else if(backend)reply='Backend command recorded. Its result is not saved yet. Use /backend-result '+input.id+' to inspect a test receipt. Replaying this message will not execute again.';
