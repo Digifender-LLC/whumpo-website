@@ -11,7 +11,7 @@ export type Completion = { text: string; inputTokens: number; outputTokens: numb
 
 export class ProviderError extends Error {
   readonly kind: "configuration" | "unavailable" | "invalid_response" | "rejected" | "output_limit";
-  constructor(kind: "configuration" | "unavailable" | "invalid_response" | "rejected" | "output_limit", readonly reason?: RejectionReason | "timeout" | "invalid_header" | "redirect_mode" | "fetch_receiver" | "transport_type_error") {
+  constructor(kind: "configuration" | "unavailable" | "invalid_response" | "rejected" | "output_limit", readonly reason?: RejectionReason | "timeout" | "invalid_header" | "redirect_mode" | "fetch_receiver" | "transport_type_error" | "missing_session" | "invalid_session") {
     super(`AI provider ${kind}`);
     this.kind = kind;
   }
@@ -49,6 +49,12 @@ export async function complete(config: AIConfig, messages: ChatMessage[], transp
   catch { throw new ProviderError("configuration"); }
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || !config.apiKey || !config.model)
     throw new ProviderError("configuration");
+  // OpenCode Go requires a stable caller-owned conversation identifier. Never
+  // invent one per request/retry or forward provider-specific metadata elsewhere.
+  if(url.hostname==='opencode.ai'){
+    if(url.pathname.startsWith('/zen/go/')&&!config.sessionId)throw new ProviderError('configuration','missing_session');
+    if(config.sessionId!==undefined&&(typeof config.sessionId!=='string'||!/^[a-zA-Z0-9_.:-]{1,128}$/.test(config.sessionId)))throw new ProviderError('configuration','invalid_session');
+  }
   if (!messages.length || messages.length > 50 || messages.some(message => message.content.length > 16000)) throw new ProviderError("configuration");
   const outputLimit = config.maxOutputTokens ?? 2048;
   if (!Number.isSafeInteger(outputLimit) || outputLimit < 64 || outputLimit > 4096) throw new ProviderError("configuration");
