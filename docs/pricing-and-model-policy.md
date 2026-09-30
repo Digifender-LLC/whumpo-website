@@ -131,3 +131,25 @@ Keep one auditable customer credit ledger, with immutable receipts recording the
 - Benchmarks on Whumpo tasks (acknowledgment, orchestration, edits, coding and review) measuring successful outcomes, latency and total cost—not token price alone.
 - Durable premium entitlement, quote/approval, reservation/settlement and replay tests; payment integration remains deferred because no Stripe account exists.
 - A small explicitly approved live canary before wider beta; no claim that the gateway or Workers AI models are provisioned from this plan alone.
+
+## Route selection implementation — September 29, 2026
+
+`src/inference-routing.ts` implements the deterministic **offline planner** for the gateway policy. It is not wired into live dispatch, paid admission, gateway configuration or customer billing. Every result says `dispatchReady: false`; an eligible result is a reviewable proposal, never spending authority. Muse-only runtime checks remain unchanged.
+
+The planner accepts a trusted versioned candidate catalogue and task requirements. It filters by standard/premium tier, role, protocol, required capabilities, all possible processing regions, full input-plus-output context, maximum output, verified dated rates, matching/current benchmark suite and tested token bounds, minimum samples/success rate and p95 latency. Missing or malformed numeric evidence is rejected. Current rates reprice a bounded histogram of observed billable per-call token usage; each call rounds up using the existing integer microdollar cost function. The histogram must account for every benchmark call, including failed and repair attempts. All billable reasoning must be included in output usage, and additional per-call charges must be covered by the reviewed extra-cost bound before marking charges verified. Nonlinear/provider tool billing requires a compatible verified adapter before a candidate can be used.
+
+Among qualifying candidates, selection minimizes observed cost per successful benchmark task using exact integer cross-products. Workers AI wins an exact cost tie; a cheaper qualifying external candidate wins otherwise. This conservative definition of “competitive” adds no unapproved percentage premium for choosing Workers AI. Benchmark results are evidence for the represented task suite, not a guarantee of future success. Rate/benchmark times are epoch milliseconds, with exclusive expiry.
+
+A candidate must fit all three supplied operator spending bounds: task, account and platform. Premium planning additionally requires an unexpired approval matching owner, task, policy, catalogue and candidate, plus a tariff snapshot, customer spending cap and remaining customer credit balance. Retail and operator reservations are separate fields. A saved premium approval cannot upgrade standard work, and an explicit premium request cannot silently substitute a standard candidate. The retail multiplier in this planner is a **testable tariff mechanism**, not an approved public selling price; paid launch pricing is still undecided.
+
+The selected projection contains only the candidate/provider/model identity, policy/catalogue/benchmark/rate references, token and cost bounds, owner/task, approval/tariff references and selection reason. Arbitrary catalogue metadata and credentials are excluded. It does not persist receipts or atomically reserve balances; the future runner must revalidate authoritative snapshots and commit reservations before dispatch, enforce subagent/evaluator gates, and bind the exact gateway/model/version to that reservation. No planner result bypasses the existing advanced-role gate.
+
+Operator review command:
+
+```sh
+pnpm plan:inference tests/fixtures/inference-routing-scenario.json
+```
+
+The bundled scenario uses synthetic names, prices, timestamps and measurements. It selects the synthetic external candidate at 1,100 provider microdollars for its bounded attempt, compared with 2,100 for the synthetic Workers AI candidate. It performs no network requests and requires no API key. Supply only trusted planning data; do not put credentials in scenario files. The command limits input to 256 KiB and returns generic errors instead of echoing invalid input.
+
+Verification: `test:inference-routing` covers cheaper external selection, Workers AI tie preference, repair costs changing the winner, no assumed cache savings, protocol/capability/region/context and rate/benchmark gates, all operator budgets, premium owner/task/policy/catalogue/expiry/candidate/cap/balance isolation, explicit tier selection, credential projection exclusion and unchanged input snapshots. `test:model-policy` preserves Muse pinning and existing escalation/concurrency rules. The CLI example and TypeScript checks pass. Durable paid reservations, gateway provisioning and real provider evaluations remain activation work.
