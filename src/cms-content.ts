@@ -1,3 +1,4 @@
+import {pendingCMSWork,describePendingCMS} from './cms-pending';
 import {cmsImageReferences} from './cms-image-block';
 import {captureCMSArticleImages} from './cms-article-images';
 import {listCMSMedia} from './cms-media';
@@ -56,8 +57,9 @@ export async function readCMSDraft(db:D1Database,user:string,project:string,id:s
 export async function cmsContentAction(db:D1Database,user:string,action:Record<string,unknown>,id:string,env:Environment){
  if(['editDraft','editStructuredDraft','listEdits','retryEdit'].includes(String(action.operation)))return cmsEditAction(db,user,action,id,env);
  const project=action.projectId;if(typeof project!=='string'||!uuid.test(project))throw new CMSProjectError(400,'Choose an owned CMS project ID');
- const allowed=action.operation==='media'?['kind','operation','projectId','page']:['draft','structuredDraft'].includes(String(action.operation))?['kind','operation','projectId','collection','title',action.operation==='structuredDraft'?'content':'text']:['listDrafts','listPublications'].includes(String(action.operation))?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
+ const allowed=action.operation==='media'?['kind','operation','projectId','page']:['draft','structuredDraft'].includes(String(action.operation))?['kind','operation','projectId','collection','title',action.operation==='structuredDraft'?'content':'text']:['listDrafts','listPublications','pendingWork'].includes(String(action.operation))?['kind','operation','projectId']:['kind','operation','projectId','requestId'];
  if(Object.keys(action).some(k=>!allowed.includes(k)))throw new CMSProjectError(400,'Unsupported CMS draft fields');
+ if(action.operation==='pendingWork')return describePendingCMS(await pendingCMSWork(db,user,project),project);
  if(action.operation==='media')return listCMSMedia(db,user,project,action.page??1,env);
  if(action.operation==='structuredDraft')return createCMSDraft(db,user,project,id,String(action.collection),action.title,action.content,env,'structured');
  if(action.operation==='draft')return createCMSDraft(db,user,project,id,String(action.collection),action.title,action.text,env);

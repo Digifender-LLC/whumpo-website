@@ -17,6 +17,7 @@ function provider(a){let tag=null,version=null,initialized=false,setupId=null;co
  else if(verified.path==='/_emdash/api/schema/collections')data={items:p.missingPages?[{slug:'posts'}]:[{slug:'posts'},{slug:'pages'}]};
  else throw Error('unexpected path');return Response.json({success:true,data});}}};return p;}
 const {prepareCMSImport,confirmCMSImport,readCMSImport,cmsImportPage}=await module('src/cms-imports.ts'),{cmsGateway}=await module('src/cms-gateway.ts');
+ const {pendingCMSWork}=await module('src/cms-pending.ts');
  const {prepareCMSWordPressImport}=await module('src/cms-wordpress-import.ts'),{analyzeWordPress}=await module('src/cms-wordpress-analysis.ts'),{uploadCMSWordPressSource}=await module('src/cms-wordpress-sources.ts'),{listCMSDrafts,readCMSDraft,createCMSDraft}=await module('src/cms-content.ts'),{signCMSRequest,callCMS}=await module('src/cms-bridge.ts');
  try{
   const beforePosts=native?.db?(await native.db.prepare('SELECT count(*) n FROM ec_posts').first()).n:null;
@@ -63,12 +64,12 @@ const {prepareCMSImport,confirmCMSImport,readCMSImport,cmsImportPage}=await modu
   await assert.rejects(db.prepare("UPDATE cms_import_reviews SET taxonomy_plan='[]' WHERE id=?").bind(first.id).run());
   unsupported=true;await assert.rejects(confirmCMSImport(db,a.user,first.id,env),e=>e.status===409);assert.equal((await readCMSImport(db,a.user,first.id)).status,'pending');unsupported=false;
   dropAssignment=true;await assert.rejects(confirmCMSImport(db,a.user,first.id,env),e=>e.status===503);
-  const job=await db.prepare('SELECT * FROM cms_import_taxonomy_jobs WHERE review_id=?').bind(first.id).first();assert.equal(job.state,'prepared');const nativeId=JSON.parse(job.body).itemId;
+  const job=await db.prepare('SELECT * FROM cms_import_taxonomy_jobs WHERE review_id=?').bind(first.id).first();assert.equal(job.state,'prepared');assert.equal((await pendingCMSWork(db,a.user)).rows.filter(r=>r.id===first.id&&r.kind==='import').length,1);const nativeId=JSON.parse(job.body).itemId;
   assert.equal((await listCMSDrafts(db,a.user,a.project,env)).length,0);await assert.rejects(readCMSDraft(db,a.user,a.project,first.id,env),e=>e.status===404);
   const data=JSON.parse(first.body).data;await assert.rejects(createCMSDraft(db,a.user,a.project,first.id,'posts',data.title,data.content,env,'structured'),e=>e.status===409);
   await assert.rejects(db.prepare('UPDATE cms_draft_requests SET item_id=? WHERE id=?').bind(nativeId,first.id).run());
   await assert.rejects(db.prepare("UPDATE cms_import_taxonomy_jobs SET body='{}' WHERE review_id=?").bind(first.id).run());
-  assert.equal((await confirmCMSImport(db,a.user,first.id,env)).status,'imported');assert.equal((await listCMSDrafts(db,a.user,a.project,env)).length,1);assert.equal((await readCMSDraft(db,a.user,a.project,first.id,env)).item.id,nativeId);
+  assert.equal((await confirmCMSImport(db,a.user,first.id,env)).status,'imported');assert.equal((await listCMSDrafts(db,a.user,a.project,env)).length,1);assert.ok(!(await pendingCMSWork(db,a.user)).rows.some(r=>r.id===first.id));assert.equal((await readCMSDraft(db,a.user,a.project,first.id,env)).item.id,nativeId);
   assert.equal((await confirmCMSImport(db,a.user,first.id,env)).status,'imported');
   const conflict=await prepare(2,'Renamed source category');await assert.rejects(confirmCMSImport(db,a.user,conflict.id,env),e=>e.status===503);assert.equal((await readCMSImport(db,a.user,conflict.id)).status,'approved');assert.equal(await db.prepare('SELECT * FROM cms_import_taxonomy_jobs WHERE review_id=?').bind(conflict.id).first(),null);
   const lost=await prepare(3);let dropped=false;const lostDB=new Proxy(db,{get(target,key){if(key==='batch')return async statements=>{const result=await target.batch(statements);if(!dropped){dropped=true;throw Error('Lost completion acknowledgement');}return result;};const v=target[key];return typeof v==='function'?v.bind(target):v;}});
