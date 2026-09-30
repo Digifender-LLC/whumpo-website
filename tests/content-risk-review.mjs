@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFile,readdir} from 'node:fs/promises';
+import {build} from 'esbuild';
+import {contentRiskReviewInput as parse,runContentRiskReview as run} from '../tools/content-risk-review-input.mjs';
+const code=await build({entryPoints:['src/content-risk-evidence.ts','src/content-risk.ts'],bundle:true,format:'esm',platform:'node',outdir:'unused',write:false});
+const [service,{assessContentRisk:assess}]=await Promise.all(code.outputFiles.map(f=>import('data:text/javascript;base64,'+Buffer.from(f.text).toString('base64'))));
+const sql=new DatabaseSync(':memory:');
+try{
+ for(const name of (await readdir('migrations')).filter(n=>n.endsWith('.sql')).sort())sql.exec(await readFile(`migrations/${name}`,'utf8'));
+ const account=crypto.randomUUID(),other=crypto.randomUUID();
+ for(const id of [account,other])sql.prepare("INSERT INTO users VALUES(?,?,'fixture','fixture','2026-09-30')").run(id,id+'@example.invalid');
+ const db={prepare:q=>({bind:(...p)=>({first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({success:true,results:sql.prepare(q).all(...p)}),run:async()=>sql.prepare(q).run(...p)})})};
+ const input={action:'record',account,id:'finding-1',incident:'incident-1',kind:'confirmed_evasion',occurredAt:Date.now()-1000,evidenceRef:'case-1',reviewerRef:'operator-1',reviewed:true};
+ for(const value of [null,[],{...input,reviewed:false},{...input,secret:'x'},{...input,evidenceRef:'raw private text'},{...input,account:"' OR 1=1 --"},{...input,kind:'model_refusal'},{...input,occurredAt:Date.now()+60000}])assert.throws(()=>parse(JSON.stringify(value)));
+ assert.throws(()=>parse(' '.repeat(4097)));
+ const preview=await run(service,assess,db,input);
+ assert.equal(preview.current.evidenceCount,0);assert.equal(preview.preview,true);
+ assert.equal(sql.prepare('SELECT count(*) n FROM content_risk_evidence').get().n,0);
+ await assert.rejects(()=>run(service,assess,db,input,'f'.repeat(64)));
+ await assert.rejects(()=>run(service,assess,db,{...input,kind:'critical_incident'},preview.applyDigest));
+ const saved=await run(service,assess,db,input,preview.applyDigest);assert.equal(saved.risk.score,25);assert.equal(saved.enforcementEnabled,false);
+ assert.equal((await run(service,assess,db,input,preview.applyDigest)).evidenceCount,1);
+ const read=await run(service,assess,db,{action:'read',account:other});assert.equal(read.risk.score,0);
+ await assert.rejects(()=>run(service,assess,db,{action:'read',account},preview.applyDigest));
+ const foreign={...input,account:other},foreignPreview=await run(service,assess,db,foreign);
+ await assert.rejects(()=>run(service,assess,db,foreign,foreignPreview.applyDigest));
+ const correction={action:'reverse',account,incident:input.incident,evidenceRef:'correction-1',reviewerRef:'operator-2',reviewed:true};
+ const correctPreview=await run(service,assess,db,correction);
+ assert.equal(correctPreview.current.risk.score,25);
+ const corrected=await run(service,assess,db,correction,correctPreview.applyDigest);assert.equal(corrected.risk.score,0);assert.equal(corrected.risk.historyComplete,false);
+ assert.equal((await run(service,assess,db,correction,correctPreview.applyDigest)).evidenceCount,1);
+ const changed={...correction,evidenceRef:'different'},changedPreview=await run(service,assess,db,changed);
+ await assert.rejects(()=>run(service,assess,db,changed,changedPreview.applyDigest));
+ assert.doesNotMatch(JSON.stringify(await run(service,assess,db,{action:'read',account})),/case-1|operator-1|incident-1|example.invalid/);
+ console.log('Safety review workflow passed: strict input, no-write preview, exact digest, read-only reporting, ledger replay/conflict, cross-account refusal, correction and private report.');
+}finally{sql.close();}
