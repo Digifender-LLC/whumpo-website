@@ -8,7 +8,7 @@ const {prepareBackendPublication:prepare,confirmBackendPublication:confirm,readB
 const {saveBackend,testBackend}=await module('src/backend-versions.ts');
 const {backendChatCommand,backendAction}=await module('src/backend-chat.ts');
 const {default:host}=await module('src/site-host.ts');
-const dir=await mkdtemp('/tmp/whumpo-public-backend-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/whumpo-public-backend-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();let calls=0;
 const service={fetch:async(url,init)=>{calls++;assert.deepEqual(Object.keys(init.headers),['content-type']);const body=JSON.parse(init.body);assert.deepEqual(Object.keys(body),['version','source','input']);return Response.json({ok:true,value:body.input});}};

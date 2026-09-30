@@ -14,7 +14,7 @@ const bundle=await build({stdin:{resolveDir:process.cwd(),contents:[
 const api=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const dir=await mkdtemp('/tmp/whumpo-native-publication-'),id=()=>crypto.randomUUID();let control,server,logs='';
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',join(dir,'control')],{stdio:'pipe'});
+ execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',join(dir,'control')],{stdio:'pipe',maxBuffer:16*1024*1024});
  control=await wrangler.getPlatformProxy({persist:{path:join(dir,'control','v3')},remoteBindings:false});
  const db=control.env.DB,files=control.env.FILES,user=id(),project=id(),now=new Date().toISOString(),master='local-publication-master-'.repeat(4),account='a'.repeat(32);
  await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();

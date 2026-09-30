@@ -8,7 +8,7 @@ const {readAcknowledgment}=await module('src/acknowledgment.ts');
 const {sendAIChat,configuredAI}=await module('src/ai-chat.ts'),{readChat}=await module('src/chat.ts');
 const {ensureBilling,usageReservationStatement,dispatchUsage}=await module('src/billing.ts');
 const {ensureInferenceBudget,inferenceReservation,dispatchInference,observeInference,uncertainInference}=await module('src/model-costs.ts');
-const dir=await mkdtemp('/tmp/whumpo-model-costs-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/whumpo-model-costs-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic',protocol:'responses'};
 const environment={ENVIRONMENT:'test',AI_API_KEY:config.apiKey,AI_BASE_URL:config.baseURL,AI_MODEL:config.model,AI_PROTOCOL:'responses'};

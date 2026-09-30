@@ -9,7 +9,7 @@ const {seal}=await module('src/connection-vault.ts');
 const {reviewHosting}=await module('src/domain-hosting.ts');
 const {sendChat,readChat}=await module('src/chat.ts'),{sendAIChat}=await module('src/ai-chat.ts'),{getBilling}=await module('src/billing.ts');
 const dir=await mkdtemp('/tmp/whumpo-routing-');
-execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const config={clientId:'fixture',clientSecret:'fixture-secret',key:'a'.repeat(64)},zone='b'.repeat(32),target='hosting.whumpo.site',now=()=>new Date().toISOString();
 async function account(apex=false){

@@ -4,7 +4,7 @@ const {planInferenceRoute,inferenceRoutingPolicy,reserveGatewaySpend,dispatchGat
 const scenario=JSON.parse(await readFile('tests/fixtures/inference-routing-scenario.json','utf8'));
 const dir=await mkdtemp('/tmp/whumpo-gateway-spend-');let proxy;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+ execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
  proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
  const owner=crypto.randomUUID(),other=crypto.randomUUID();for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'test','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
  const task=crypto.randomUUID(),now=Date.now(),expires=now+3600000;

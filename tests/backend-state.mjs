@@ -7,7 +7,7 @@ async function module(path){const code=await build({entryPoints:[path],bundle:tr
 const {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState}=await module('src/backend-state.ts');
 const {saveBackend}=await module('src/backend-versions.ts');
 const {backendAction,backendChatCommand}=await module('src/backend-chat.ts');
-const dir=await mkdtemp('/tmp/whumpo-state-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/whumpo-state-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID();
 async function account(){const user=id(),project=id(),version=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.com',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Counter','','draft',?,?)").bind(project,user,now,now).run();await saveBackend(db,user,project,version,'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:"Prepared"})');return {user,project,version};}
 let calls=0;const service={fetch:async(_url,init)=>{calls++;const {input:{state,input}}=JSON.parse(init.body);return Response.json({ok:true,value:{state:{count:(state.count??0)+input.add},result:'Prepared'}});}};

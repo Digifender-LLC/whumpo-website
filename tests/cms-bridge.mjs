@@ -5,7 +5,7 @@ import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const result=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));}
 const {signCMSRequest,verifyCMSRequest,cmsRequestAllowed}=await module('src/cms-bridge.ts'),{cmsGateway}=await module('src/cms-gateway.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-bridge-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/whumpo-cms-bridge-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID();
 const config={projectId:id(),ownerId:id(),secret:'local-fixture-key-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
 let dispatches=0;const dispatch=async()=>{dispatches++;return Response.json({ok:true},{headers:{'set-cookie':'must-not-leave-gateway=1'}});},setup={title:'Fixture',tagline:'CMS test',includeContent:false},path='/_emdash/api/setup';

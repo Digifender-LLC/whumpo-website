@@ -6,7 +6,7 @@ import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {prepareCMS,confirmCMS,readCMSReview,listCMS,cmsAction}=await module('src/cms-projects.ts'),{sendChat,readChat}=await module('src/chat.ts');
 const {sendAIChat}=await module('src/ai-chat.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-projects-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+const dir=await mkdtemp('/tmp/whumpo-cms-projects-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID();
 async function project(user){user??=id();const now=new Date().toISOString(),p=id();await db.prepare("INSERT OR IGNORE INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'CMS fixture','','draft',?,?)").bind(p,user,now,now).run();return {user,project:p};}
 async function guided(a,content){const request={id:id(),revision:(await readChat(db,a.user)).state.revision,content};assert.equal((await sendChat(db,a.user,request)).status,200);return {request,turn:(await readChat(db,a.user)).turns.at(-1)};}

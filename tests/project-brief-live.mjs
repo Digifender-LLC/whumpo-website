@@ -8,7 +8,7 @@ if(process.env.RUN_LIVE_MUSE!=='1')throw Error('Set RUN_LIVE_MUSE=1 to run the l
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {sendAIChat}=await module('src/ai-chat.ts'),{getBilling}=await module('src/billing.ts');
 const dir=await mkdtemp('/tmp/whumpo-brief-live-');
-execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 try{
  const user=crypto.randomUUID(),project=crypto.randomUUID(),other=crypto.randomUUID(),turn=crypto.randomUUID(),now=new Date().toISOString();

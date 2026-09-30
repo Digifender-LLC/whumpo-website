@@ -14,7 +14,7 @@ const {backendAction}=await module('src/backend-chat.ts');
 const {hashToken}=await module('src/security.ts');
 const {replacementAppRecoveryCode}=await module('src/app-recovery.ts');
 const dir=await mkdtemp('/tmp/whumpo-app-auth-');
-execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe'});
+execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 async function app(){
