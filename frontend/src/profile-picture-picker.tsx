@@ -1,0 +1,22 @@
+import {useId,useRef,useState} from 'react';
+import {api,send,message,queryClient,type Profile} from './lib/api';
+import {Button} from './components/ui/button';
+export const avatarChoices=[['cloud','Cloud'],['sun','Sunshine'],['moon','Moonbeam'],['leaf','Little leaf'],['star','Spark'],['planet','Explorer']] as const;
+export const profilePicture=(profile:Profile)=>profile.hasPhoto?'/api/profile/photo?v='+profile.revision:'/brand/avatars/'+(avatarChoices.some(([id])=>id===profile.avatar_id)?profile.avatar_id:'cloud')+'.svg';
+export function ProfilePicturePicker({profile,disabled=false,onBusy}:{profile:Profile;disabled?:boolean;onBusy?:(busy:boolean)=>void}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),lock=useRef(false),input=useRef<HTMLInputElement>(null),inputId=useId();
+ async function change(work:()=>Promise<Profile>){if(lock.current)return;lock.current=true;setBusy(true);onBusy?.(true);setError('');setNotice('');try{queryClient.setQueryData(['session'],await work());setNotice('Your picture is saved.');}catch(e){setError(message(e));await queryClient.invalidateQueries({queryKey:['session']});}finally{lock.current=false;setBusy(false);onBusy?.(false);}}
+ async function photo(file:File){
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw Error('Choose a JPEG, PNG or WebP under 10 MB');
+  const bitmap=await createImageBitmap(file);try{
+   const canvas=document.createElement('canvas');canvas.width=canvas.height=256;const ctx=canvas.getContext('2d');if(!ctx)throw Error('Photo preparation unavailable');ctx.fillStyle='#e5f3ff';ctx.fillRect(0,0,256,256);const side=Math.min(bitmap.width,bitmap.height);ctx.drawImage(bitmap,(bitmap.width-side)/2,(bitmap.height-side)/2,side,side,0,0,256,256);
+   let blob:Blob|null=null;for(const quality of [.85,.65,.45,.25]){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));if(blob&&blob.size<=32768)break;}if(!blob||blob.size>32768)throw Error('Choose a less detailed photo');
+   return api<Profile>('/profile/photo',{method:'PUT',headers:{'content-type':'image/jpeg','if-match':String(profile.revision)},body:blob});
+  }finally{bitmap.close();}
+ }
+ return <fieldset disabled={busy||disabled} className="space-y-4"><legend className="mb-3 text-sm font-semibold">Pick your little companion</legend>
+  <div className="flex items-center gap-4"><img src={profilePicture(profile)} alt="Your selected profile picture" className="size-20 rounded-full object-cover border border-border"/><div><Button type="button" variant="outline" onClick={()=>input.current?.click()}>Upload a photo</Button><label htmlFor={inputId} className="sr-only">Upload your profile picture</label><input ref={input} id={inputId} type="file" className="sr-only" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void change(()=>photo(file));}}/><p className="mt-2 text-xs text-muted-foreground">Private · cropped to a square · up to 10 MB</p></div></div>
+  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">{avatarChoices.map(([id,label])=><button type="button" key={id} aria-label={'Choose '+label} aria-pressed={!profile.hasPhoto&&profile.avatar_id===id} onClick={()=>void change(()=>send<Profile>('/profile',{revision:profile.revision,avatar_id:id},'PATCH'))} className={'rounded-2xl border-2 p-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-ring '+(!profile.hasPhoto&&profile.avatar_id===id?'border-primary bg-secondary':'border-transparent hover:bg-secondary')}><img src={'/brand/avatars/'+id+'.svg'} alt="" className="mx-auto size-12 rounded-full"/><span className="block mt-2">{label}</span></button>)}</div>
+  {error&&<p role="alert" className="text-sm text-destructive">{error}</p>}{(busy||notice)&&<p role="status" className="text-xs text-muted-foreground">{busy?'Saving your picture…':notice}</p>}
+ </fieldset>;
+}

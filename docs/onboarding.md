@@ -1,6 +1,20 @@
-# Conversational onboarding
+# Customer welcome and project setup
 
-The default workspace remains a chat. New setup collects an idea and project name, creates the project, then asks who the site is for and its visual direction. The audience and style questions are optional (`/skip`). Finishing style selection saves a private immutable launch-page version with preview and source-export links. Nothing is published.
+## First entry — September 29, 2026
+
+New customers complete a three-step welcome before the workspace renders or requests Chat/dashboard data. Direct workspace links show the same welcome. Existing customers with an owned project skip it; completed welcome remains complete if that project is later deleted. Chat remains the default workspace tab after entry.
+
+1. **Your profile:** required name, optional bio and an explicit choice to share that context with the agent. Choose Cloud, Sun, Moon, Leaf, Star or Planet artwork, or upload a photo. Photos are cropped to a square, reduced to a bounded JPEG and served privately through the existing authenticated profile route. Selecting artwork removes the uploaded photo. These controls also remain available in Profile.
+2. **Your first project:** required working name and idea, optional intended audience, and an initial Ocean, Clay or Forest theme. Suggestion chips help customers get started. Each step saves when they continue; a refresh resumes saved progress.
+3. **Review and start:** check the details, return to edit, then create a private draft project. No inference, publication, domain purchase or paid service is triggered. Chat opens after the project exists and offers the next build step.
+
+Migration 0073 stores owner-scoped welcome progress and an immutable reserved project ID. Revision checks reject stale changes. A database trigger creates the project, workspace state, Chat receipt and activity atomically with completion. Retrying a lost completion response returns the recorded result without creating another project. Completion requires a saved nonblank name and reviewed project idea. Profile email/photo are excluded from agent context; bio/name use the existing explicit opt-in.
+
+Local verification: `pnpm check`, `pnpm test:onboarding-welcome`, `pnpm test:profile`, `pnpm build` and diff checks passed. Disposable D1/HTTP tests cover tenant and origin boundaries, stale edits, strict fields/limits, concurrent completion and lost-commit recovery. A connected local browser session chose artwork, uploaded a photo, saved/reloaded the review and recovered a deliberately lost completion response: one project, no early workspace reads. The 390px layout had no horizontal document overflow. Physical-device passkeys and touch acceptance remain unverified.
+
+## Additional projects through Chat
+
+The existing conversational flow collects an idea and project name, creates another project, then asks for its audience and visual direction. Those questions are optional (`/skip`). Finishing style selection saves a private immutable launch-page version with preview and source-export links. Nothing is published.
 
 ## Persistence and boundaries
 
