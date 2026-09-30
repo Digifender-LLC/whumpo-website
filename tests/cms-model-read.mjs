@@ -5,3 +5,6 @@ assert.equal(JSON.parse(cmsModelRead({...v,item:{...v.item,data:{...v.item.data,
 assert.equal(inspectionRequest(JSON.stringify({reply:'Read',action:{kind:'cms',operation:'readDraft',projectId,requestId}})),true);
 for(const operation of ['structuredDraft','editStructuredDraft','retryDraft','retryEdit','reviewPublication','confirmPublication'])assert.equal(inspectionRequest(JSON.stringify({reply:'Read',action:{kind:'cms',operation,projectId,requestId}})),false);
 assert.equal(inspectionRequest(JSON.stringify({reply:'Read',action:{kind:'cms',operation:'readDraft',projectId,requestId,content}})),false);console.log('CMS model reads passed: bounded lossless projection, private metadata exclusion, unsupported-content refusal and read-only follow-up allowlist.');
+
+const illustrated={...v,capabilities:{structuredContent:true,imageContent:true},item:{...v.item,data:{...v.item.data,content:[...content,{_type:'image',_key:'image',asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAV'},alt:'Description',caption:'Caption'}]}}};
+assert.deepEqual(JSON.parse(cmsModelRead(illustrated)).content,illustrated.item.data.content);assert.equal(JSON.parse(cmsModelRead(illustrated)).imageEditing,true);assert.equal(JSON.parse(cmsModelRead({...illustrated,capabilities:{structuredContent:true}})).structuredEditing,false);assert.ok(!cmsModelRead(illustrated).includes('private-native-data'));

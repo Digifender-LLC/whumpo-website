@@ -19,8 +19,8 @@ assert.throws(()=>cmsImageReferences([image,image]));assert.throws(()=>cmsImageR
 for(const src of ['https://evil.test/image.jpg','//evil.test','data:image/jpeg;base64,x','/api/cms/'+project+'/media/'+media+'/preview?auth=x',frozen.src+'#x',frozen.src.replace('.jpg','.svg'),'/cms/media/../x.jpg'])assert.throws(()=>renderCMSRichText([image],()=>({...preview,src})));
 for(const size of [0,-1,1601,NaN,Infinity,1.5])assert.throws(()=>renderCMSRichText([image],()=>({...preview,width:size})));
 assert.throws(()=>renderCMSRichText([image],()=>undefined));
-// No caller can accidentally broaden today's draft/publication surface before media resolution is wired.
+// Rendering still needs a resolver; write bodies validate only structure, with ownership checked by the owner API.
 assert.throws(()=>renderCMSRichText([image]));
-assert.equal(validCMSDraft(JSON.stringify({status:'draft',data:{title:'Image',content:[paragraph,image]}})),false);
-assert.equal(validCMSEdit(JSON.stringify({data:{title:'Image',content:[paragraph,image]},_rev:'revision'})),false);
-console.log('CMS image rendering passed: native local references, explicit resolver requirement, balanced mixed lists, escaping, fixed Whumpo routes, bounded dimensions/count, extension refusal and unchanged write admission.');
+assert.equal(validCMSDraft(JSON.stringify({status:'draft',data:{title:'Image',content:[paragraph,image]}})),true);
+assert.equal(validCMSEdit(JSON.stringify({data:{title:'Image',content:[paragraph,image]},_rev:'revision'})),true);
+console.log('CMS image rendering passed: native local references, explicit resolver requirement, balanced mixed lists, escaping, fixed Whumpo routes, bounded dimensions/count, extension refusal and structured image write admission.');

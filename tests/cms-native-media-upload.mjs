@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';import {mkdtemp,readFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';
 export async function verifyNativeMediaUpload(env,vars){
- const b=await build({stdin:{contents:"export * from './src/cms-media-upload-bridge';export * from './src/cms-bridge';export {cleanPhoto} from './src/files';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
- const {signCMSMediaUpload,signCMSRequest,cleanPhoto}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
- const config={projectId:vars.TOWNHELLO_CMS_PROJECT_ID,ownerId:vars.TOWNHELLO_CMS_OWNER_ID,origin:vars.TOWNHELLO_CMS_ORIGIN,secret:vars.TOWNHELLO_CMS_BRIDGE_KEY},id=crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-native-upload-');let item;
+ const b=await build({stdin:{contents:"export * from './src/cms-media-upload-bridge';export * from './src/cms-bridge';export {cleanPhoto} from './src/files';export {cmsRichDraftBody,cmsRichEditBody} from './src/cms-content-shape';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const {signCMSMediaUpload,signCMSRequest,cleanPhoto,cmsRichDraftBody,cmsRichEditBody}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+ const config={projectId:vars.TOWNHELLO_CMS_PROJECT_ID,ownerId:vars.TOWNHELLO_CMS_OWNER_ID,origin:vars.TOWNHELLO_CMS_ORIGIN,secret:vars.TOWNHELLO_CMS_BRIDGE_KEY},id=crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-native-upload-');let item,retain=false;
  try{
   execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1])",dir+'/photo.jpg']);const bytes=new Uint8Array(await readFile(dir+'/photo.jpg'));
   const send=async(name='studio.jpg')=>{const request=await signCMSMediaUpload(config,id,bytes,name);return fetch('http://localhost:8799/_emdash/api/media',{method:'POST',headers:request.headers,body:await request.arrayBuffer()});};
@@ -12,6 +12,15 @@ export async function verifyNativeMediaUpload(env,vars){
   const path='/_emdash/api/whumpo/media/'+item.id+'/preview',signed=await signCMSRequest(config,path,crypto.randomUUID()),preview=await fetch('http://localhost:8799'+path,{headers:signed.headers});assert.equal(preview.status,200);assert.deepEqual(new Uint8Array(await preview.arrayBuffer()),cleanPhoto(bytes).bytes);
   assert.equal((await fetch('http://localhost:8799/_emdash/api/media',{method:'POST',body:'unsigned'})).status,403);
   assert.equal((await fetch('http://localhost:8799/_emdash/api/media/file/'+item.storageKey)).status,403);
+  const call=async(path,body,requestId=crypto.randomUUID(),verb)=>{const req=await signCMSRequest(config,path,requestId,body,Date.now(),verb);return fetch('http://localhost:8799'+path,{method:req.method,headers:req.headers,...(req.method==='GET'?{}:{body:await req.arrayBuffer()})});};
+  const content=[{_type:'block',_key:'intro',style:'normal',markDefs:[],children:[{_type:'span',_key:'text',text:'A native image article.',marks:[]}]},{_type:'image',_key:'photo',asset:{_ref:item.id},alt:'A green studio',caption:'Original caption'}],draftBody=cmsRichDraftBody('Image article',content),draftId=crypto.randomUUID();
+  const created=await call('/_emdash/api/content/posts',draftBody,draftId),createdData=await created.json();assert.equal(created.status,201,JSON.stringify(createdData));retain=true;assert.deepEqual(createdData.data.item.data.content,content);assert.deepEqual(await(await call('/_emdash/api/content/posts',draftBody,draftId)).json(),createdData);
+  const articlePath='/_emdash/api/content/posts/'+createdData.data.item.id,read=(await(await call(articlePath)).json()).data;
+  const published=await call(articlePath+'/publish',{_rev:read._rev}),publishedData=await published.json();assert.equal(published.status,200);assert.deepEqual(publishedData.data.item.data.content,content);
+  const changed=structuredClone(content);changed[1].caption='Revised caption';const editId=crypto.randomUUID(),editBody=cmsRichEditBody('Image article',changed,publishedData.data._rev),edited=await call(articlePath,editBody,editId,'PUT'),editedData=await edited.json();assert.equal(edited.status,200,JSON.stringify(editedData));assert.deepEqual(editedData.data.item.data.content,changed);assert.deepEqual(editedData.data.item.liveData.content,content);assert.deepEqual(await(await call(articlePath,editBody,editId,'PUT')).json(),editedData);
+  const replacement=await call(articlePath+'/publish',{_rev:editedData.data._rev}),replacementData=await replacement.json();assert.equal(replacement.status,200);assert.deepEqual(replacementData.data.item.data.content,changed);
+  const withdrawn=await call(articlePath+'/unpublish',{_rev:replacementData.data._rev});assert.equal(withdrawn.status,200);assert.equal((await withdrawn.json()).data.item.status,'draft');
+  console.log('Actual native image article passed: exact image/alt/caption round trip, draft replay, reviewed native publication, staged caption edit preserving live data, edit replay, replacement and unpublish.');
   console.log('Actual native CMS upload passed: signed bounded JPEG, ready media record, private R2 preview, exact retry without duplication, conflicting retry denial and no public file route.');
- }finally{if(item){await env.DB.prepare('DELETE FROM media WHERE id=?').bind(item.id).run();await env.MEDIA.delete(item.storageKey);}await rm(dir,{recursive:true,force:true});}
+ }finally{if(item&&!retain){await env.DB.prepare('DELETE FROM media WHERE id=?').bind(item.id).run();await env.MEDIA.delete(item.storageKey);}await rm(dir,{recursive:true,force:true});}
 }

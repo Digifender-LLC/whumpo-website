@@ -1,6 +1,8 @@
-import {renderCMSRichText} from './cms-rich-text';
+import {cmsImageReferences} from './cms-image-block';
+import {captureCMSArticleImages} from './cms-article-images';
+import {validateCMSRichContent} from './cms-rich-text';
 import {editableCMS} from './cms-plain-text';
-import {cmsConnection,requireStructuredCMS} from './cms-status';
+import {cmsConnection,requireStructuredCMS,requireCMSImages} from './cms-status';
 import {callCMS,CMSBridgeError} from './cms-bridge';
 import {cmsEditBody,cmsStagedEditBody,cmsRichEditBody} from './cms-content-shape';
 import {readCMSDraft,type ContentFormat} from './cms-content';
@@ -15,22 +17,24 @@ export async function editCMSDraft(db:D1Database,user:string,project:string,id:s
  // Preserve pre-staging operation bodies exactly when recovering historical receipts.
  let body:string;try{body=JSON.stringify((format==='structured'?cmsRichEditBody:row&&JSON.parse(row.body).status==='draft'?cmsEditBody:cmsStagedEditBody)(title,text,revision));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
  if(!row){
+  if(format==='structured'&&cmsImageReferences(text).length){await requireCMSImages(db,user,project,env);await captureCMSArticleImages(db,user,project,text,env);}
   if(format==='structured')await requireStructuredCMS(db,user,project,env);
   const current=await readCMSDraft(db,user,project,draftId,env);
   if(!['draft','published'].includes(current.item.status)||current.revision!==revision)throw new CMSProjectError(409,'Content changed or cannot be edited. Read it again before preparing an edit.');
-  if(format==='structured'){try{renderCMSRichText(current.item.data?.content);}catch{throw new CMSProjectError(409,'This article contains unsupported formatting. Download it before editing; no content was changed.');}}
+  if(format==='structured'){try{validateCMSRichContent(current.item.data?.content);}catch{throw new CMSProjectError(409,'This article contains unsupported formatting. Download it before editing; no content was changed.');}}
   if(format==='plain'&&!editableCMS(current))throw new CMSProjectError(409,'This article has formatting or content that a plain-text edit would remove. Its saved content is unchanged. Preview or download it in the publishing desk; a rich-text editor is needed to change it safely.');
   try{await db.prepare('INSERT INTO cms_edit_requests(id,draft_request_id,body,content_format) VALUES(?,?,?,?)').bind(id,draftId,body,format).run();}catch{}row=await read();
  }
  if(!row)throw new CMSProjectError(409,'CMS edit request capacity is full or unavailable');
  if(row.draft_request_id!==draftId||row.body!==body||row.content_format!==format)throw new CMSProjectError(409,'CMS edit request ID already used');
  if(!row.result){
+  if(format==='structured'&&cmsImageReferences(text).length)await requireCMSImages(db,user,project,env);
   if(format==='structured')await requireStructuredCMS(db,user,project,env);
   // A historical unresolved request can still be undispatched. Do not flatten a
   // rich revision that is still current; changed revisions can only recover
   // their original native receipt or fail the existing revision precondition.
   if(recovering){const current=await readCMSDraft(db,user,project,draftId,env);
-  if(current.revision===revision&&format==='structured'){try{renderCMSRichText(current.item.data?.content);}catch{throw new CMSProjectError(409,'Current content has unsupported formatting; this saved request cannot replace it safely.');}}
+  if(current.revision===revision&&format==='structured'){try{validateCMSRichContent(current.item.data?.content);}catch{throw new CMSProjectError(409,'Current content has unsupported formatting; this saved request cannot replace it safely.');}}
   if(current.revision===revision&&format==='plain'&&!editableCMS(current))throw new CMSProjectError(409,'This saved plain-text request would remove current article formatting. Content is unchanged; use the publishing desk to preview or download it.');}
   try{const data=await callCMS(service,config,'/_emdash/api/content/'+draft.collection+'/'+draft.item_id,id,JSON.parse(body),'PUT');
    if(data?.item?.id!==draft.item_id||!['draft','published'].includes(data.item.status)||(data.item.status==='published'&&(!data.item.draftRevisionId||!data.item.liveData))||typeof data._rev!=='string'||data._rev.length>256)throw Error('Invalid edit receipt');

@@ -111,6 +111,23 @@ try{
  await confirmCMSPublication(db,a.user,replacement.id,articleEnv);assert.equal(publishes,2);assert.equal((await hosted(integrated)).status,404);assert.equal((await hosted(replacement.id)).status,200);
  await confirmCMSPublication(db,a.user,replacement.id,articleEnv);assert.equal(publishes,2);
  console.log('Image publication integration passed: exact interrupted-review recovery, authenticated inline review, explicit native publish, routed public images and replacement revocation with replay.');
+ const {createCMSDraft}=await module('src/cms-content.ts'),{editCMSDraft}=await module('src/cms-edits.ts'),{cmsPreview}=await module('src/cms-preview.ts'),{cmsCapabilities}=await module('src/cms-capability-contract.ts');
+ let imageCapability=true,imageWrites=0,imageRevision='image-rev1',imageArticle;
+ const writeEnv={...articleEnv,['CMS_'+a.project.replaceAll('-','')]:{fetch:async request=>{
+  const verified=await verifyCMSRequest(request,a.config);
+  if(verified.path.endsWith('/capabilities')&&!imageCapability)return Response.json({success:true,data:{...cmsCapabilities,structuredContent:{...cmsCapabilities.structuredContent,imageVersion:undefined}}});
+  if(verified.path.endsWith('/preview'))return new Response(photo.bytes,{headers:{'content-type':'image/jpeg'}});
+  return cmsGateway(request,nativeEnv,async request=>{if(request.method!=='GET'){const body=await request.json();if(request.method==='PUT'&&body._rev!==imageRevision)return Response.json({error:'stale'},{status:409});imageWrites++;imageRevision='image-rev'+(imageWrites+1);imageArticle={id:'01ARZ3NDEKTSV4RRFFQ69G5FAB',status:'draft',data:body.data};}return Response.json({success:true,data:{item:imageArticle,_rev:imageRevision}});});
+ }}};
+ const imageContent=article.data.content,imageDraft=id();imageCapability=false;
+ await assert.rejects(createCMSDraft(db,a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured'),e=>e.status===409);assert.equal(await db.prepare('SELECT id FROM cms_draft_requests WHERE id=?').bind(imageDraft).first(),null);
+ imageCapability=true;await assert.rejects(createCMSDraft(db,a.user,a.project,id(),'posts','Missing image',[imageContent[0],{...image,asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}}],writeEnv,'structured'),e=>e.status===409);assert.equal(imageWrites,0);
+ await createCMSDraft(db,a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured');assert.equal(imageWrites,1);
+ imageCapability=false;await createCMSDraft(db,a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured');assert.equal(imageWrites,1);imageCapability=true;
+ const revised=structuredClone(imageContent);revised[1].caption='Owner revised caption';await editCMSDraft(db,a.user,a.project,id(),imageDraft,'Illustrated',revised,imageRevision,writeEnv,'structured');assert.equal(imageWrites,2);assert.deepEqual(imageArticle.data.content,revised);
+ await assert.rejects(editCMSDraft(db,a.user,a.project,id(),imageDraft,'Flatten','Plain replacement',imageRevision,writeEnv),e=>e.status===409);assert.equal(imageWrites,2);
+ const illustratedPreview=await cmsPreview(db,a.user,a.project,imageDraft,writeEnv);assert.match(illustratedPreview.headers.get('content-security-policy'),/img-src data:/);const illustratedHTML=await illustratedPreview.text();assert.ok(illustratedHTML.includes('src="data:image/jpeg;base64,'));assert.ok(illustratedHTML.includes('Owner revised caption'));
+ console.log('Owner image writing passed: capability refusal before reservation, missing-media refusal, exact completed replay, image-preserving edits, plain flattening denial and private inline image previews.');
  const worker=(await module('src/index.ts')).default,{hashToken}=await module('src/security.ts');
  const session='c'.repeat(64);await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(session),a.user,new Date(Date.now()+3600000).toISOString(),new Date().toISOString()).run();
  const http=(suffix,method='GET',body,headers={})=>worker.fetch(new Request('https://whumpo.com/api/cms/'+a.project+'/media/uploads'+suffix,{method,headers:{origin:'https://whumpo.com',cookie:'tellumo_session='+session,'content-type':'image/jpeg','x-photo-name':'studio.jpg',...headers},body}),{...env,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});

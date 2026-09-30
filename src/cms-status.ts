@@ -1,4 +1,4 @@
-import {cmsCapabilitiesPath,supportsStructuredCMS} from './cms-capability-contract';
+import {cmsCapabilitiesPath,supportsStructuredCMS,supportsCMSImages} from './cms-capability-contract';
 import {callCMS,deriveCMSSecret,verifyCMSInitialization} from './cms-bridge';
 import {CMSProjectError} from './cms-projects';
 export async function cmsConnection(db:D1Database,user:string,project:string,environment:Record<string,unknown>){
@@ -20,10 +20,12 @@ export async function readCMSCapabilities(db:D1Database,user:string,project:stri
  try{
   const value=await callCMS(service,config,cmsCapabilitiesPath,crypto.randomUUID());
   const supported=supportsStructuredCMS(value);
-  return {projectId:project,status:supported?'supported':'unsupported',structuredContent:supported};
- }catch{return {projectId:project,status:'unavailable',structuredContent:false};}
+  return {projectId:project,status:supported?'supported':'unsupported',structuredContent:supported,imageContent:supportsCMSImages(value)};
+ }catch{return {projectId:project,status:'unavailable',structuredContent:false,imageContent:false};}
 }
 
 export async function requireStructuredCMS(db:D1Database,user:string,project:string,env:Record<string,unknown>){
  if(!(await readCMSCapabilities(db,user,project,env)).structuredContent)throw new CMSProjectError(409,'Formatted editing could not be confirmed for this publishing space. No write was attempted by this call. If recovering a saved request, its earlier outcome is unchanged; retry that same request after its CMS connection is updated.');
 }
+
+export async function requireCMSImages(db:D1Database,user:string,project:string,env:Record<string,unknown>){if(!(await readCMSCapabilities(db,user,project,env)).imageContent)throw new CMSProjectError(409,'Article images require an updated publishing space. No new image write was attempted.');}
