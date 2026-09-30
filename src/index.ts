@@ -558,7 +558,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (method === "POST" && pathname === "/api/chat") {
     const data = await body(request);
     if (!data) return error(400, "A JSON message is required");
-    if(typeof data.content==='string'&&/^\/(?:confirm-app-restore|remove-app-recovery|confirm-app-upgrade|confirm-app-rollback)(?:\s|$)/i.test(data.content.trim())){
+    if(typeof data.content==='string'&&/^\/(?:confirm-app-restore|remove-app-recovery|confirm-app-upgrade|confirm-app-rollback|cancel-app-upgrade)(?:\s|$)/i.test(data.content.trim())){
       if(!await recentSession(request,env))return error(401,'Sign in again before changing application code or recovery data');
       if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)return error(429,'Too many recovery changes. Try again in a minute.');
     }

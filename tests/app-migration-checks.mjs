@@ -4,6 +4,7 @@ import {mkdtemp,rm,readdir} from 'node:fs/promises';import {execFileSync} from '
 async function mod(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {appRecoveryChatActions}=await mod('src/app-recovery-chat-actions.ts'),{describeAppRestore}=await mod('src/app-recovery-chat.ts');
 const {default:platform}=await mod('src/index.ts'),{hashToken}=await mod('src/security.ts'),{backendAction}=await mod('src/backend-chat.ts');
+const {cleanupAppLifecycle}=await mod('src/app-lifecycle.ts');
 const rollback=await mod('src/app-program-rollback.ts');
 const approvals=await mod('src/app-migration-approval.ts');
 const migration=await mod('src/app-migration-checks.ts'),backend=await mod('src/backend-versions.ts'),activation=await mod('src/app-activation.ts'),recovery=await mod('src/app-document-recovery.ts');
@@ -25,14 +26,14 @@ try{
  const env={DB:db,FILES:proxy.env.FILES,BACKEND_RUNTIME:service,ENVIRONMENT:'local',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
  const call=(body,cookie=token,origin='http://localhost')=>platform.fetch(new Request('http://localhost/api/chat',{method:body?'POST':'GET',headers:{origin,cookie:'tellumo_session='+cookie,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,{waitUntil(){throw Error('No inference expected');}});
  async function chat(content,request=id()){const state=await(await call()).json(),response=await call({id:request,revision:state.state.revision,content});assert.equal(response.status,200,await response.clone().text());return (await response.json()).turns.find(t=>t.id===request).assistant_text;}
- for(const verb of ['confirm-app-upgrade','confirm-app-rollback']){
-  const request={id:id(),revision:0,content:`/${verb} ${id()} ${verb.endsWith('upgrade')?'UPGRADE':'ROLLBACK'}`};
+ for(const verb of ['confirm-app-upgrade','confirm-app-rollback','cancel-app-upgrade']){
+  const request={id:id(),revision:0,content:`/${verb} ${id()} ${verb==='cancel-app-upgrade'?'CANCEL':verb.endsWith('upgrade')?'UPGRADE':'ROLLBACK'}`};
   assert.equal((await call(request,'')).status,401);assert.equal((await call(request,token,'https://foreign.test')).status,403);
   await db.prepare("UPDATE sessions SET created_at='2000-01-01T00:00:00.000Z' WHERE token_hash=?").bind(tokenHash).run();assert.equal((await call(request)).status,401);
   await db.prepare('UPDATE sessions SET created_at=? WHERE token_hash=?').bind(now(),tokenHash).run();
   env.AUTH_LIMITER.limit=async()=>({success:false});assert.equal((await call(request)).status,429);env.AUTH_LIMITER.limit=async()=>({success:true});
  }
- for(const operation of ['confirmAppUpgrade','confirmAppRollback'])await assert.rejects(backendAction(db,user,id(),{kind:'backend',operation,reviewId:id()}),e=>e.status===400);
+ for(const operation of ['confirmAppUpgrade','confirmAppRollback','cancelAppUpgrade'])await assert.rejects(backendAction(db,user,id(),{kind:'backend',operation,reviewId:id()}),e=>e.status===400);
  await assert.rejects(backendAction(db,user,id(),{kind:'backend',operation:'appUpgrade',reviewId:id(),confirmation:'UPGRADE'}),e=>e.status===400);
  const start=(request,version=transform,database=db)=>migration.beginMigrationCheck(database,user,project,request,v2,version,run2);
  await assert.rejects(start(id()),e=>e.status===409);
@@ -81,6 +82,7 @@ try{
  assert.equal((await db.prepare('SELECT version_id FROM app_spaces WHERE project_id=?').bind(up).first()).version_id,old);assert.equal(await db.prepare('SELECT id FROM app_migration_approvals WHERE id=?').bind(upgrade).first(),null);await db.exec('DROP TRIGGER upgrade_fixture_fail');
  const lostApproval=new Proxy(db,{get(t,k){if(k==='prepare')return sql=>{const stmt=t.prepare(sql);if(!sql.startsWith('INSERT INTO app_migration_approvals'))return stmt;return {bind(...args){const bound=stmt.bind(...args);return {async run(){await bound.run();throw Error('Lost approval response');}}}};};const v=t[k];return typeof v==='function'?v.bind(t):v;}});
  const preApplyCalls=calls;assert.ok((await Promise.all([approvals.confirmMigration(lostApproval,user,upgrade,'UPGRADE'),chat(`/confirm-app-upgrade ${upgrade} UPGRADE`).then(reply=>{assert.match(reply,/Status: applied/);return {state:'applied'};})])).every(r=>r.state==='applied'));assert.equal(calls,preApplyCalls,'Approval never executes guest code');assert.match(await chat(`/confirm-app-upgrade ${upgrade} UPGRADE`),/Status: applied/);
+ assert.equal((await db.prepare('SELECT count(*) n FROM app_migration_documents WHERE migration_id=?').bind(upgrade).first()).n,0,'Successful approval removes staging atomically');await assert.rejects(migration.cancelMigrationCheck(db,user,upgrade,'CANCEL'),e=>e.status===409);
  const upgraded=await db.prepare('SELECT * FROM app_spaces WHERE project_id=?').bind(up).first();assert.equal(upgraded.version_id,target);assert.equal(upgraded.enabled,0);assert.equal(upgraded.revision,3);assert.equal(upgraded.migration_id,upgrade);
  for(const visitor of people){const document=await db.prepare('SELECT * FROM app_documents WHERE visitor_id=?').bind(visitor).first();assert.equal(document.revision,2);assert.equal(JSON.parse(document.state_json).schema,2);assert.equal(JSON.parse(document.state_json).note,'upgrade-private-'+visitor);const backup=await db.prepare('SELECT state_json FROM app_recovery_documents WHERE point_id=? AND visitor_id=?').bind(upgrade,visitor).first();assert.ok(!Object.hasOwn(JSON.parse(backup.state_json),'schema'));}
  await assert.rejects(db.prepare('UPDATE app_spaces SET version_id=?,revision=revision+1 WHERE project_id=?').bind(old,up).run());
@@ -111,5 +113,29 @@ try{
  await recovery.removeRecoveryPoint(db,user,up,upgrade,'REMOVE');const afterRemoval=await approvals.confirmMigration(db,user,upgrade,'UPGRADE');assert.equal(afterRemoval.state,'applied');assert.equal(afterRemoval.changedDocuments,2);assert.equal((await db.prepare('SELECT revision FROM app_documents WHERE visitor_id=?').bind(people[0]).first()).revision,4);
  assert.equal((await db.prepare('SELECT count(*) n FROM app_live_pages WHERE project_id=?').bind(up).first()).n,0);
  console.log('Atomic migration approval passed: exact source review, ready-only and typed confirmation, owner isolation, whole-transaction rollback, concurrent/lost-response retry, stable changed-count receipt, monotonic data/program revisions, retained pre-upgrade recovery, no runtime dispatch or automatic activation/publication, separate reactivation and no replay after point removal.');
+ // Active capacity is reusable; retained audit IDs cannot recreate discarded outputs.
+ for(const point of await recovery.listRecoveryPoints(db,user,project))await recovery.removeRecoveryPoint(db,user,project,point.id,'REMOVE');
+ const active=[];for(let i=0;i<5;i++){const check=id();await start(check);active.push(check);}
+ const excess=id();await assert.rejects(start(excess),e=>e.status===409);assert.equal(await db.prepare('SELECT id FROM app_recovery_points WHERE id=?').bind(excess).first(),null);
+ await assert.rejects(migration.cancelMigrationCheck(db,other,active[0],'CANCEL'),e=>e.status===404);await assert.rejects(migration.cancelMigrationCheck(db,user,active[0],'cancel'),e=>e.status===400);
+ const lossyCancel=new Proxy(db,{get(t,k){if(k==='prepare')return sql=>{const stmt=t.prepare(sql);if(!sql.startsWith('INSERT INTO app_migration_cancellations'))return stmt;return {bind(...args){const bound=stmt.bind(...args);return {async run(){await bound.run();throw Error('Lost cancel acknowledgment');}}}};};const v=t[k];return typeof v==='function'?v.bind(t):v;}});
+ assert.equal((await migration.cancelMigrationCheck(lossyCancel,user,active[0],'CANCEL')).state,'cancelled');assert.match(await chat(`/cancel-app-upgrade ${active[0]} CANCEL`),/Status: cancelled/);
+ assert.equal((await start(active[0])).state,'cancelled');const noReplay=calls;assert.equal((await migration.advanceMigrationCheck(db,service,user,active[0])).state,'cancelled');assert.equal(calls,noReplay);
+ assert.equal((await db.prepare('SELECT count(*) n FROM app_migration_documents WHERE migration_id=?').bind(active[0]).first()).n,0);
+ assert.equal((await db.prepare('SELECT removed FROM app_recovery_points WHERE id=?').bind(active[0]).first()).removed,0);assert.ok((await db.prepare('SELECT count(*) n FROM app_recovery_documents WHERE point_id=?').bind(active[0]).first()).n>0);
+ await assert.rejects(approvals.confirmMigration(db,user,active[0],'UPGRADE'),e=>e.status===409);await assert.rejects(db.prepare('DELETE FROM app_migration_cancellations WHERE id=?').bind(active[0]).run());
+ await start(excess); // Cancellation releases active capacity without erasing its request receipt.
+ await cleanupAppLifecycle(db);assert.ok((await db.prepare('SELECT count(*) n FROM app_migration_documents WHERE migration_id=?').bind(excess).first()).n>0,'Current pending staging survives cleanup');
+ // Move only the fixture clock boundary; restore the production immutability guard immediately.
+ const immutable=(await db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='app_migration_check_immutable'").first()).sql;await db.exec('DROP TRIGGER app_migration_check_immutable');await db.prepare("UPDATE app_migration_checks SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?").bind(active[1]).run();await db.exec(immutable);
+ await cleanupAppLifecycle(db);assert.equal((await db.prepare('SELECT count(*) n FROM app_migration_documents WHERE migration_id=?').bind(active[1]).first()).n,0);assert.equal((await migration.readMigrationCheck(db,user,active[1])).state,'changed');assert.ok((await db.prepare('SELECT count(*) n FROM app_recovery_documents WHERE point_id=?').bind(active[1]).first()).n>0);
+ let cancelledDuringRun=false;const cancelling={fetch:async(url,init)=>{if(!cancelledDuringRun){cancelledDuringRun=true;assert.match(await chat(`/cancel-app-upgrade ${active[2]} CANCEL`),/Status: cancelled/);}return service.fetch(url,init);}};
+ assert.equal((await migration.advanceMigrationCheck(db,cancelling,user,active[2])).state,'cancelled');assert.equal((await db.prepare('SELECT count(*) n FROM app_migration_documents WHERE migration_id=?').bind(active[2]).first()).n,0,'Late runtime result cannot restore discarded staging');
+ const documents=(await db.prepare('SELECT state_json FROM app_documents WHERE visitor_id IN (SELECT id FROM app_visitors WHERE project_id=?)').bind(project).all()).results;assert.ok(documents.every(d=>!Object.hasOwn(JSON.parse(d.state_json),'schema')));
+ await cleanupAppLifecycle(db);await cleanupAppLifecycle(db);assert.equal((await migration.readMigrationCheck(db,user,active[0])).state,'cancelled');
+ // An empty roster must not accidentally make a cancelled check approvable.
+ await db.prepare('DELETE FROM app_visitors WHERE project_id=?').bind(project).run();const emptyCheck=id();assert.equal((await start(emptyCheck)).state,'ready');await migration.cancelMigrationCheck(db,user,emptyCheck,'CANCEL');await assert.rejects(approvals.confirmMigration(db,user,emptyCheck,'UPGRADE'),e=>e.status===409);
+ assert.equal((await db.prepare('SELECT version_id FROM app_spaces WHERE project_id=?').bind(project).first()).version_id,v1);
+ console.log('Migration lifecycle passed: atomic applied cleanup, typed/owned cancellation, immutable cancel receipts, lost-response recovery, no restart, preserved recovery points, active-capacity reuse, expiry cleanup, pending retention, idempotent scheduled cleanup and in-flight cancellation fencing.');
  console.log('Migration checks passed with actual QuickJS: atomic recovery capture, successful target-test gate, owned aggregate reads, bounded claimed executions, concurrent/replay safety, lost capture and claim recovery, invalid-output refusal, unchanged live documents/program, erasure fencing, point-removal cleanup and zero inference.');
 }finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

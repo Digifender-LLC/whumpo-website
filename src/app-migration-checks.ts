@@ -9,9 +9,9 @@ async function owned(db:D1Database,user:string,id:string){
 }
 export async function readMigrationCheck(db:D1Database,user:string,id:string){
  const m=await owned(db,user,id);
- const row=await db.prepare("SELECT EXISTS(SELECT 1 FROM app_migration_approvals WHERE id=? AND status='applied') applied,EXISTS(SELECT 1 FROM app_migration_current WHERE id=?) current,count(*) retained,coalesce(sum(state='pending'),0) pending,coalesce(sum(state='running'),0) running,coalesce(sum(state='ready'),0) ready,coalesce(sum(state='failed'),0) failed FROM app_migration_documents WHERE migration_id=?").bind(id,id,id).first<{applied:number;current:number;retained:number;pending:number;running:number;ready:number;failed:number}>();
+ const row=await db.prepare("SELECT EXISTS(SELECT 1 FROM app_migration_cancellations WHERE id=?) cancelled,EXISTS(SELECT 1 FROM app_migration_approvals WHERE id=? AND status='applied') applied,EXISTS(SELECT 1 FROM app_migration_current WHERE id=?) current,count(*) retained,coalesce(sum(state='pending'),0) pending,coalesce(sum(state='running'),0) running,coalesce(sum(state='ready'),0) ready,coalesce(sum(state='failed'),0) failed FROM app_migration_documents WHERE migration_id=?").bind(id,id,id,id).first<{cancelled:number;applied:number;current:number;retained:number;pending:number;running:number;ready:number;failed:number}>();
  const expected=JSON.parse(m.roster_json).length as number;
- return {id,projectId:m.project_id,fromVersion:m.from_version,toVersion:m.to_version,transformVersion:m.transform_version,testId:m.test_id,expiresAt:m.expires_at,documents:expected,pending:row!.pending,running:row!.running,ready:row!.ready,failed:row!.failed,state:row!.applied?'applied':!row!.current||row!.retained!==expected?'changed':row!.failed?'failed':row!.running?'uncertain':row!.pending?'preparing':'ready'};
+ return {id,projectId:m.project_id,fromVersion:m.from_version,toVersion:m.to_version,transformVersion:m.transform_version,testId:m.test_id,expiresAt:m.expires_at,documents:expected,pending:row!.pending,running:row!.running,ready:row!.ready,failed:row!.failed,state:row!.applied?'applied':row!.cancelled?'cancelled':!row!.current||row!.retained!==expected?'changed':row!.failed?'failed':row!.running?'uncertain':row!.pending?'preparing':'ready'};
 }
 /** Preparation only; Chat/model actions may prepare checks but cannot apply them. */
 export async function beginMigrationCheck(db:D1Database,user:string,project:string,id:string,target:string,transform:string,test:string){
@@ -44,5 +44,16 @@ export async function advanceMigrationCheck(db:D1Database,service:Fetcher,user:s
   try{await db.prepare("UPDATE app_migration_documents SET state=?,next_json=?,error=? WHERE migration_id=? AND visitor_id=? AND state='running'").bind(encoded===null?'failed':'ready',encoded,encoded===null?(result.ok?'invalid_output':result.error):null,id,doc.visitor_id).run();}catch{return readMigrationCheck(db,user,id); /* Lost write or changed roster: never rerun. */}
   if(encoded===null)return readMigrationCheck(db,user,id);
  }
+ return readMigrationCheck(db,user,id);
+}
+
+/** Stop future claims/results and delete staged outputs, retaining the recovery point. */
+export async function cancelMigrationCheck(db:D1Database,user:string,id:string,confirmation:unknown){
+ if(confirmation!=='CANCEL')throw new BackendError(400,'Type CANCEL to discard this upgrade check');
+ const before=await readMigrationCheck(db,user,id);
+ if(before.state==='applied')throw new BackendError(409,'This upgrade was already applied. Prepare a separate rollback review instead');
+ if(before.state==='cancelled')return before;
+ try{await db.prepare('INSERT INTO app_migration_cancellations(id,user_id) VALUES(?,?)').bind(id,user).run();}
+ catch{const saved=await readMigrationCheck(db,user,id);if(saved.state==='cancelled')return saved;throw new BackendError(409,'Cancellation was not confirmed. Read this exact check before trying again');}
  return readMigrationCheck(db,user,id);
 }
