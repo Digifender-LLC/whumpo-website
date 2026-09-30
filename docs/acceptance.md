@@ -21,6 +21,8 @@ Latest app-maintenance release (September 30): platform `5a273511-43ce-45af-8b65
 
 Latest connected website journey (September 30): `SITE_AI=1 pnpm test:customer-site-journey` now exercises the actual authenticated platform HTTP handlers, configured Muse-only Responses transport/parser, ledger and public site host against disposable D1 and synthetic provider replies. It covers project-first welcome, a first private draft, source export/preview, one AI edit, publication review/confirmation, discarded-response replay, stale review refusal, byte-exact restore and unpublish. Two main-model calls and two background acknowledgment calls were observed; six test units settled and all inference holds resolved. Unshared profile text was excluded. The default guided journey passed separately with zero inference. This is connected local acceptance, not real provider quality, live customer publication, native passkey enrollment or physical-device acceptance. See [repeatable website journey](mvp.md#connected-ai-website-journey--september-30-2026).
 
+Latest fair-use review foundation (September 30): migration 0091 and the account-scoped internal service record immutable review context and a single final decision with exact replay. Disposable D1 concurrency, ownership, SQL immutability and deletion checks passed, as did both TypeScript checks. This is local-only and has no notice, appeal, enforcement or operator-UI mount. Monitor remains unchanged. See [review records and remaining gates](fair-use-reviews.md).
+
 ## Requirement map and proof still needed
 
 | Requirement | Current evidence and scope | Remaining proof/work |
