@@ -1,6 +1,7 @@
 import {photoRemovalCommand} from './photo-removal';
 import {capabilityNeedIds} from './capability-catalog';
 import {prepareCompositionPlan} from './composition-plans';
+import {specificationAction} from './project-specification/store';
 import {knowledgeRequest,readAgentKnowledge,describeAgentKnowledge} from './agent-knowledge';
 import type {AppPageExpectation} from './app-page-design';
 import {cmsModelRead} from './cms-model-read';
@@ -34,7 +35,7 @@ export type AgentContext={profile?:Awaited<ReturnType<typeof agentProfile>>;work
 export async function siteContext(db:D1Database,userId:string):Promise<AgentContext>{
  const {results:projectIndex}=await db.prepare('SELECT id,name,details_revision,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id=? ORDER BY updated_at DESC,id DESC LIMIT 20').bind(userId).all<AgentContext['projectIndex'][number]>();
  const {results:projects}=await db.prepare('SELECT id,name,purpose,details_revision,service_status AS status,site_live,backend_live,cms_articles,audience,style_notes,preferred_theme FROM project_service_status WHERE owner_user_id=? ORDER BY updated_at DESC,id DESC LIMIT 5').bind(userId).all<ProjectContext>();
- const latest=await db.prepare('SELECT v.id,v.project_id,v.component_id,v.config_json FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE p.owner_user_id=? ORDER BY v.created_at DESC,v.id DESC LIMIT 1').bind(userId).first<AgentContext['latest']>();
+ const latest=await db.prepare('SELECT v.id,v.project_id,v.component_id,v.config_json FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE p.owner_user_id=? AND NOT EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=v.id) ORDER BY v.created_at DESC,v.id DESC LIMIT 1').bind(userId).first<AgentContext['latest']>();
  const {results:photos}=await db.prepare("SELECT f.id,f.project_id,f.name,f.width,f.height FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND f.status='ready' ORDER BY f.created_at DESC LIMIT 20").bind(userId).all<AgentContext['photos'][number]>();
  const {results:domains}=await db.prepare('SELECT d.id,d.project_id,d.hostname,d.expires_at,d.verified_at FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE p.owner_user_id=? ORDER BY d.created_at DESC LIMIT 10').bind(userId).all<NonNullable<AgentContext['domains']>[number]>();
  const {results:backends}=await db.prepare('SELECT v.id,v.project_id,v.digest FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE p.owner_user_id=? ORDER BY v.created_at DESC,v.id DESC LIMIT 10').bind(userId).all<NonNullable<AgentContext['backends']>[number]>();
@@ -67,6 +68,7 @@ Read actions:
 - {"kind":"health","operation":"list|check","projectId":ID}: list allows omitted projectId; check requires it. Fixed shared-page HTTP/photo metadata check, no arbitrary URLs/rollback. Timestamped observation, not continuous uptime, custom-domain or form proof.
 Reviews:
 - {"kind":"photoRemovalReview","fileId":ID}: prepare removal of an unused owned photo. Explicit user confirmation is required. Retained versions or live references can prevent deletion.
+- {"kind":"specification","operation":"read","projectId":ID} reads the saved website specification, exact revision and content IDs (one lookup follow-up). For repeatable text/theme edits use operation:"change", projectId, expectedRevision and operations:[{type:"content.replace",contentId:ID,text:"..."}|{type:"design.setTheme",theme:"ocean|clay|forest"}], at most8. First import an owned site-page@1 with operation:"import", projectId, expectedRevision, versionId. Restore a saved specification with operation:"restore" and those same fields; it creates a NEW PRIVATE version after approval. operation:"review",reviewId reopens an exact pending review. These tools prepare private previews/diffs; ONLY the user approves through its review button. No generated source, staff access, general records/forms, extra routes, or activation. Inspect before editing; a stale base needs a fresh review. Never use full preview/edit to bypass an existing specification.
 - {"kind":"review","operation":"publish|restore|unpublish","targetId":ID}: version ID for publish/restore; project ID for unpublish. The user confirms using the review button.
 - {"kind":"versionRemovalReview","versionId":ID}: explicit permanent removal request; explicit user approval of that review. Live, pending-publication and backed-up versions retained; original photos/newer versions remain.
 - {"kind":"contactReview","projectId":ID,"enabled":true}: true/false; explicit user approval of that review. Requires published site to enable; republication disables intake. Collects name/email/message in owner inbox for30 days, no email. Never read visitor messages into AI; Dashboard → Contact inbox opens the private panel.
@@ -104,6 +106,7 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
  if(data.action===null)return {reply:data.reply,statements:[] as D1PreparedStatement[]};
  if(!data.action||typeof data.action!=='object'||Array.isArray(data.action))throw new ProposalError();
  const action=data.action as Record<string,unknown>;
+ if(action.kind==='specification'){try{return await specificationAction(db,userId,turnId,action);}catch(error){if(error instanceof BackendError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}
  if(action.kind==='capabilities'){try{return await prepareCompositionPlan(db,userId,turnId,action);}catch(error){if(error instanceof BackendError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}
  if(action.kind==='knowledge'){if(!knowledgeRequest(action))throw new ProposalError();return {reply:describeAgentKnowledge(action.topic),inspection:readAgentKnowledge(action.topic),statements:[] as D1PreparedStatement[]};}
  if(action.kind==='workspace'){try{return await workspaceAction(db,userId,action);}catch(error){if(error instanceof BillingError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}
@@ -251,5 +254,6 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
   try{config=parsePage(action.config);}catch{throw new ProposalError();}
   base=context.latest?.project_id===projectId?context.latest.id:null;
  }
+ if(await db.prepare('SELECT project_id FROM project_spec_heads WHERE project_id=?').bind(projectId).first())return {reply:'This website uses saved configuration. Read its specification and prepare a focused change review.',statements:[] as D1PreparedStatement[]};
  try{return await pageDraft(db,userId,turnId,projectId,config,base,'ai');}catch{throw new ProposalError();}
 }

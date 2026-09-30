@@ -1,6 +1,6 @@
 # Saved-version retention and reviewed removal
 
-Projects retain up to 25 complete immutable site versions. `/versions [PROJECT_ID]` lists them. `/delete-version VERSION_ID` prepares a ten-minute review of an exact owned version; `/confirm-version-delete REVIEW_ID` or the chat button permanently removes it. A natural-language request can prepare the same review through `versionRemovalReview`, but the model cannot confirm it. Guided commands use no AI units; model interpretation uses the normal allowance.
+Projects retain up to 25 complete immutable site versions. Ask the agent to list saved versions or prepare removal of a specific version. A ten-minute review names the exact owned version; the user confirms through its typed Chat control. The model cannot confirm it. Confirmation uses no inference, and standard AI interpretation remains unlimited fair use with zero customer-unit debits. Internal slash adapters are not public Chat commands; see [natural-language Chat](natural-language-chat.md).
 
 The review identifies the project, exact version and creation time; the server also pins its component and digest. It explains that the saved HTML/configuration and preview, download and restore links will be removed. Copies already downloaded are outside this deletion. Original project photos remain; removing the version only releases its `version_photos` references. Photos with no remaining version references can then be removed through the separate photo-review flow. Independently saved child versions contain full artifacts and remain usable. Their `base_version_id` remains a provenance identifier even when that ancestor no longer exists.
 
@@ -9,6 +9,7 @@ The review identifies the project, exact version and creation time; the server a
 Migration 0024 adds immutable version-removal reviews. The confirmation turn, state revision, applied review, version deletion and activity event commit in one D1 batch. The database checks exact owner, project, version digest/component/creation time and review expiry. A `BEFORE DELETE` guard rechecks dependencies at deletion time, including ones added after review:
 
 - A currently published version cannot be removed.
+- A [saved specification](project-specification-storage.md) head and any version needed as a base/target by an unexpired unapplied specification review are retained (migration 0110). Removing an eligible version also removes its full specification snapshot and associated proposal/diff copies. Independent later snapshots remain; metadata-only apply receipts prevent resurrection through retries.
 - An unexpired pending publication/restore review retains its version until expiry.
 - Any GitHub backup record retains its source version to preserve external-operation recovery and receipts. Removing backed-up versions requires a future receipt-retention design; it is not currently supported.
 - Direct deletion without an applied exact removal review is rejected while the parent project exists.

@@ -1,6 +1,7 @@
 import {runMaintenance} from './maintenance';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
+import {specificationPreview} from './project-specification/store';
 import {acceptsCustomerEligibility,customerEligibilityMessage,customerEligibilityStatement} from './content-policy';
 import {eraseRevokedVisitor} from './app-owner-erasure';
 import {chatHistory} from './chat-history';
@@ -453,6 +454,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const photoMatch=pathname.match(/^\/api\/files\/([0-9a-f-]{36})$/);
   if (photoMatch && method === 'GET') return readPhoto(env,user.id,photoMatch[1]);
   const diffMatch=pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/diff$/);
+  const specificationReview=pathname.match(/^\/api\/specification-reviews\/([0-9a-f-]{36})\/(preview|diff)$/);
+  if(method==='GET'&&specificationReview){if(new URL(request.url).search)return error(400,'Use the exact website review link.');return specificationPreview(env.DB,user.id,specificationReview[1],specificationReview[2]==='diff');}
   if(method==='GET'&&diffMatch){const params=new URL(request.url).searchParams;if([...params.keys()].some(k=>k!=='base')||params.getAll('base').length>1)return error(400,'Choose a single baseline.');return diffPage(await compareVersions(env.DB,user.id,diffMatch[1],params.get('base')??undefined));}
   const reviewDiff=pathname.match(/^\/api\/publication-reviews\/([0-9a-f-]{36})\/diff$/);
   if(method==='GET'&&reviewDiff)return diffPage(await compareReview(env.DB,user.id,reviewDiff[1]));
@@ -575,7 +578,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const control=explicitAction?chatControl(data.action):undefined;
     if(explicitAction&&!control)return error(400,'Choose a valid reviewed action.');
     if(control?.recentAuth){
-      if(!await recentSession(request,env))return error(401,'Sign in again before changing application code or recovery data');
+      if(!await recentSession(request,env))return error(401,'Sign in again before applying this reviewed change');
       if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)return error(429,'Too many recovery changes. Try again in a minute.');
     }
     const result = await (explicitAction?sendChatControl:sendConversation)(env.DB, user.id, data, configuredAI(env),{background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});

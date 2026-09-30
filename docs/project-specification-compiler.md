@@ -4,6 +4,10 @@
 
 The [WH-064 specification ADR](project-specification.md) owns the schema and operation contract. The [capability planner](capability-planner.md) selects capabilities before source generation. This compiler turns supported configuration into exact private artifacts without inference. It does not grant publication, identity, storage or provider authority.
 
+## Connected storage follow-up
+
+WH-066B now mounts the single-homepage compiler through authenticated Chat tools, saved proposals, private preview/diff and exact typed apply/forward restore. See [saved configuration storage](project-specification-storage.md) for implementation, limits, verification and deployment status. The original WH-066A evidence below remains a source-only historical claim; forms/API and broader runtime delivery remain #17.
+
 ## Implemented scope
 
 | Layer | Implementation | Boundary |

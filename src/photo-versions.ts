@@ -1,4 +1,5 @@
 import {approvedPhotoSQL} from './photo-safety';
+import {requireSpecificationAvailable} from './specification-safety';
 import {launchConfig,siteConfig,photoConfig,renderSite,renderPhotoPage,previewHeaders,type SiteConfig,type PhotoConfig} from './components';
 import {hashToken} from './security';
 import {FileError} from './files';
@@ -48,7 +49,7 @@ export async function versionPhotos(env:Pick<Env,'DB'|'FILES'>,versionId:string,
 }
 export async function ownedPreview(env:Pick<Env,'DB'|'FILES'>,userId:string,id:string){
  const row=await env.DB.prepare('SELECT v.id,v.html,v.component_id,v.config_json FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(id,userId).first<{id:string;html:string;component_id:string;config_json:string}>();
- if(!row)return null;let html=row.html;
+ if(!row)return null;await requireSpecificationAvailable(env.DB,row.id);let html=row.html;
  if(row.component_id==='photo-page@1'){
   const photos=await versionPhotos(env,row.id,photoConfig(JSON.parse(row.config_json)));
   for(const photo of photos){let binary='';for(let n=0;n<photo.bytes.length;n+=8192)binary+=String.fromCharCode(...photo.bytes.subarray(n,n+8192));html=html.replace(`src="assets/${photo.id}.jpg"`,`src="data:image/jpeg;base64,${btoa(binary)}"`);}

@@ -12,6 +12,15 @@ assert.equal(render('Ordinary response'), 'Ordinary response');
 console.log('Chat reply passed: fixed internal project links, multiple links, touch target, plain text preservation and escaping; arbitrary URLs, action paths and suffixes remain text.');
 
 const review='11111111-1111-4111-8111-111111111111',actions=turn=>renderToStaticMarkup(createElement(TurnActions,{turn:{id:review,user_text:'',assistant_text:'',status:'completed',...turn},onAction:async()=>{throw Error('Rendering must never confirm');}}));
+const specificationCommand='/confirm-specification '+review+' '+'a'.repeat(64)+' 2';
+assert.equal(displayChatRequest(specificationCommand),'Save the exact reviewed private website version.');
+assert.equal(displayChatRequest(specificationCommand+' extra'),specificationCommand+' extra');
+assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:specificationCommand,literal:true})),specificationCommand);
+const specificationReview={id:review,proposalDigest:'a'.repeat(64),expectedRevision:2};
+assert.ok(actions({specification_review:specificationReview}).includes('Save reviewed private version'));
+assert.ok(actions({specification_review:specificationReview}).includes('/api/specification-reviews/'+review+'/diff'));
+assert.ok(!actions({specification_review:{...specificationReview,proposalDigest:'wrong'}}).includes('<button'));
+assert.ok(!actions({assistant_text:specificationCommand}).includes('<button'));
 for(const [field,operation,label]of [['application','enable','Authorize reviewed application'],['application','disable','Disable reviewed application'],['app_page','publish','Publish reviewed application page'],['app_page','unpublish','Take reviewed application offline']]){const html=actions({[field+'_confirmation_id']:review,[field+'_operation']:operation});assert.ok(html.includes(label));assert.ok(html.includes('min-h-11'));}
 assert.ok(!actions({assistant_text:'Only you can apply this exact review: /confirm-application '+review}).includes('<button'));
 assert.ok(!actions({application_confirmation_id:'bad-id'}).includes('<button'));

@@ -167,6 +167,11 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='The project changed while I was preparing the custom draft. No draft was saved. Ask me to inspect it and prepare a fresh plan.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
     }
+    if(/specification_(changed|expired|quota|held)/.test(String(cause))){
+      await closeStandardAIAttempt(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='The website changed, its review storage is full, or the content is held for safety checks. No configuration was applied. Read the saved website and ask for a fresh review.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      return {status:200};
+    }
     if(String(cause).includes('comparison_changed')){
       await closeStandardAIAttempt(db,userId,id);
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='A compared version was removed before the comparison could be saved. Request a fresh comparison. Your credits were not used.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();

@@ -10,6 +10,7 @@ import {hashToken} from './security';
 import {publicDirectory} from './directory';
 import {directoryPage} from './directory-page';
 import {publishedHTML} from './published-html';
+import {requireSpecificationAvailable} from './specification-safety';
 import { previewHeaders } from './components';
 import {reserveStorage,StorageLimitError} from './storage-budget';
 /** Public serving boundary: only current published HTML and its exact photo dependencies. */
@@ -47,8 +48,9 @@ const serving = {
     return new Response(request.method==='HEAD'?null:bytes,{headers:{...headers,'content-type':'image/jpeg','content-length':String(photo.size),'content-disposition':'inline; filename="photo.jpg"','cross-origin-resource-policy':'cross-origin'}});
    }
    const match=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/?$/);if(!match)return new Response('Site not found',{status:404,headers});
-   const site=await env.DB.prepare('SELECT v.html,v.component_id,EXISTS(SELECT 1 FROM contact_settings c WHERE c.project_id=s.project_id AND c.enabled=1 AND c.publication_revision=s.revision) AS contact_enabled FROM publications s JOIN site_versions v ON v.id=s.version_id AND v.project_id=s.project_id WHERE s.project_id=?').bind(match[1]).first<{html:string;component_id:string;contact_enabled:number}>();
+   const site=await env.DB.prepare('SELECT v.id,v.html,v.component_id,EXISTS(SELECT 1 FROM contact_settings c WHERE c.project_id=s.project_id AND c.enabled=1 AND c.publication_revision=s.revision) AS contact_enabled FROM publications s JOIN site_versions v ON v.id=s.version_id AND v.project_id=s.project_id WHERE s.project_id=?').bind(match[1]).first<{id:string;html:string;component_id:string;contact_enabled:number}>();
    if(!site)return new Response('Site not found',{status:404,headers});
+   await requireSpecificationAvailable(env.DB,site.id);
    if(site.component_id==='photo-page@1'&&!url.pathname.endsWith('/'))return new Response(null,{status:308,headers:{...headers,location:new URL(request.url).pathname+'/'}});
    const contact=site.contact_enabled===1;
    const form=await activeBackendForm(env.DB,match[1]);

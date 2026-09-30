@@ -1,3 +1,4 @@
+import {requireSpecificationAvailable} from './specification-safety';
 import {launchConfig,siteConfig,photoConfig,previewHeaders,componentCatalog} from './components';
 import {hashToken} from './security';
 export class DiffError extends Error {constructor(public status:number,message:string){super(message);}}
@@ -21,10 +22,10 @@ function fields(v:Version|null){
  }catch{throw new DiffError(503,'This saved component cannot be compared.');}
  return result;
 }
-async function version(raw:string):Promise<Version|null>{const parsed=JSON.parse(raw) as Version;if(parsed.id===null)return null;if(await hashToken(parsed.html)!==parsed.digest)throw new DiffError(503,'Saved content failed its integrity check.');return parsed;}
+async function version(db:D1Database,raw:string):Promise<Version|null>{const parsed=JSON.parse(raw) as Version;if(parsed.id===null)return null;await requireSpecificationAvailable(db,parsed.id);if(await hashToken(parsed.html)!==parsed.digest)throw new DiffError(503,'Saved content failed its integrity check.');return parsed;}
 const metadata=(v:Version|null):Metadata|null=>v?{id:v.id,component_id:v.component_id,digest:v.digest,created_at:v.created_at}:null;
-async function compare(row:Snapshot):Promise<VersionDiff>{
- const [before,after]=await Promise.all([version(row.before_json),version(row.after_json)]);
+async function compare(db:D1Database,row:Snapshot):Promise<VersionDiff>{
+ const [before,after]=await Promise.all([version(db,row.before_json),version(db,row.after_json)]);
  const old=fields(before),next=fields(after),changes:Change[]=[];
  for(const label of new Set([...old.keys(),...next.keys()])){const previous=old.get(label)??null,current=next.get(label)??null;if(previous!==current)changes.push({label,before:previous,after:current});}
  return {project:{id:row.project_id,name:row.name},kind:row.kind,baseline:row.baseline,before:metadata(before),after:metadata(after),changes,htmlChanged:before?.digest!==after?.digest,publicationRevision:row.current_revision,...(row.review_id?{reviewId:row.review_id,expiresAt:row.expires_at}: {})};
@@ -33,7 +34,7 @@ export async function compareVersions(db:D1Database,userId:string,targetId:strin
  if(!uuid.test(targetId)||(baseId!==undefined&&baseId!=='none'&&!uuid.test(baseId)))throw new DiffError(400,'Use /diff VERSION_ID, optionally followed by a baseline version ID or none.');
  const row=await db.prepare(`WITH chosen AS(SELECT t.project_id,p.name,t.id AS target_id,CASE WHEN ?='none' THEN NULL WHEN ? IS NOT NULL THEN ? ELSE s.version_id END AS baseline_id,CASE WHEN ?='none' THEN 'empty' WHEN ? IS NOT NULL THEN 'selected' ELSE 'live' END AS baseline,'comparison' AS kind,s.revision AS current_revision FROM site_versions t JOIN projects p ON p.id=t.project_id LEFT JOIN publications s ON s.project_id=p.id WHERE t.id=? AND p.owner_user_id=?) ${artifacts}`).bind(baseId??null,baseId??null,baseId??null,baseId??null,baseId??null,targetId,userId).first<Snapshot&{baseline_id:string|null}>();
  if(!row||row.baseline_id&&JSON.parse(row.before_json).id===null)throw new DiffError(404,'Choose saved versions belonging to the same project in your account.');
- return compare(row);
+ return compare(db,row);
 }
 export async function compareReview(db:D1Database,userId:string,reviewId:string):Promise<VersionDiff>{
  if(!uuid.test(reviewId))throw new DiffError(404,'Publication review not found.');
@@ -41,7 +42,7 @@ export async function compareReview(db:D1Database,userId:string,reviewId:string)
  if(!row)throw new DiffError(404,'Publication review not found.');
  if(row.status!=='pending'||row.expires_at!<=new Date().toISOString()||row.current_revision!==row.expected_revision)throw new DiffError(409,'This review changed or expired. Prepare a fresh publication review.');
  if(row.kind!=='unpublish'&&JSON.parse(row.after_json).id===null)throw new DiffError(409,'The reviewed version is no longer available.');
- return compare(row);
+ return compare(db,row);
 }
 /** Bounded server-derived chat receipt, not a model-written claim about what changed. */
 export function describeDiff(diff:VersionDiff){
