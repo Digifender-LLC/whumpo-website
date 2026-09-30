@@ -1,5 +1,15 @@
 # Application visitor identity and persistent data
 
+## Readable visitor-page review — September 30, 2026
+
+Implemented: Chat displays the exact saved visitor-page form as a disabled preview with its title, description, text/number/checkbox fields and submit label. The card explains which copy becomes public, invitation/passkey requirements, private data processing, visitor sign-out, and unfinished retention/recovery. Withdrawal has a separate offline summary. The proposed address is plain text, not a claim that the app is online. This preview does not execute the backend, save input or establish form correctness. Exact field keys and revision IDs remain available in a closed details section.
+
+Server-derived metadata requires current project ownership and an exact complete server receipt. Pending, applied, expired and changed reviews have distinct presentation. Both the original pending receipt and an explicit confirmation receipt can show historical approval after application; neither gains a confirmation button. A model-written assurance, partial/pending response, foreign review or corrupt form cannot supply this presentation. Confirmation continues to recheck the current database revisions.
+
+Verification: `pnpm check`, `pnpm test:chat-reply`, `pnpm test:customer-app-journey`, isolated release TypeScript checks, production build and frontend loading checks passed. Tests cover all form input types, escaped copy, no execution/navigation in the preview, owner/receipt boundaries, expiry, historical receipts and a program change that invalidates a pending page review. The connected journey retains actual QuickJS execution and signed synthetic visitor passkeys. A standalone component preview at 390px had no horizontal overflow and verified disabled inputs plus keyboard expansion/collapse of exact configuration. Screenshot: `.secrets/visitor-page-review-mobile.png`. This visual fixture is not live customer publication or physical-device passkey acceptance.
+
+Deployed September 30, 2026 to test platform `b42a9774-ca87-48f7-9922-7eabed1149f2`. Independent readback verified the active version, health 200, anonymous Chat/onboarding 401 and all 16 live JS/CSS/font assets matching the isolated release. No migration, provider call or customer publication was needed. Evidence: `.secrets/visitor-page-card-release.json`.
+
 ## Design a visitor page from Chat — September 30, 2026
 
 Implemented: the current approved application receipt offers **Design visitor page · uses AI** when the program is enabled and there is no live page or current pending page review. The action prepares a review; the existing separate owner confirmation publishes it. Historical or superseded program approvals do not offer the action.

@@ -1,5 +1,6 @@
 import {BackendError} from './backend-versions';
-export type BackendForm={title:string;description:string;buttonLabel:string;fields:{key:string;label:string;type:'number'|'text'|'boolean'}[]};
+import type {BackendForm} from './backend-form-shape';
+export type {BackendForm} from './backend-form-shape';
 export function backendFormConfig(value:unknown):BackendForm{
  if(!value||typeof value!=='object'||Array.isArray(value))throw new BackendError(400,'Provide a form configuration');
  const c=value as Record<string,unknown>;
