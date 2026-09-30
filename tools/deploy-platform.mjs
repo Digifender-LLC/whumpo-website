@@ -1,9 +1,11 @@
+import {verifyBuildSnapshot} from './build-snapshot.mjs';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {build} from 'esbuild';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 import {cmsMasterKey,runWrangler,activeWorker} from './cms-release.mjs';
 export async function deployPlatform(){
+ await verifyBuildSnapshot();
  const base=JSON.parse(await readFile('wrangler.jsonc','utf8')),api=cloudflareClient(base.account_id),db=remoteD1(api,base.d1_databases.find(x=>x.binding==='DB').database_id),token=crypto.randomUUID();
  await db.prepare("UPDATE cms_platform_deploy_lock SET token=?,expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+15 minutes') WHERE id=1 AND expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(token).run();
  if((await db.prepare('SELECT token FROM cms_platform_deploy_lock WHERE id=1').first())?.token!==token)throw Error('Another platform deployment is active; inspect its process before retrying');
