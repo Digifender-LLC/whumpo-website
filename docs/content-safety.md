@@ -92,3 +92,42 @@ Deployed September 30, 2026 as platform `2aa7f348-b078-4a73-885a-03cbff9d1510`. 
 ## Project photo gate — deployed to private test
 
 [Project-photo safety](photos.md) now separates storage completion from approval. Migration 0100 backfills existing images into pending and prevents unapproved image references/publication at the database boundary. Exact-byte, owner/policy/coverage/expiry checks protect private reads, previews, downloads, public image URLs and custom-domain delivery. The scanner remains unconfigured, so this is a fail-closed hold, not CSAM detection. CMS image paths and general generated-content screening remain outstanding.
+
+## Adaptive customer risk — calculated policy, not live enforcement
+
+September 30, 2026: `src/content-risk.ts` implements an internal risk calculation and proposed supplemental scanning schedule. **It is not connected to a durable event ledger, moderation provider, sampling dispatcher or customer restrictions yet.** Existing upload/import quarantine remains unchanged. Neither a low score nor the output of this helper is an approval receipt.
+
+Risk is based on trusted, tenant-scoped safety findings, not raw keyword matches, plan price, demographics, or a customer's description of their business. A landscaping brief alone does not establish trust. Count confirmed requests to create prohibited material and confirmed attempts to evade safeguards; legitimate reporting, removal, discussion and educational work are not violations. Model refusals, cost limits, technical failures and preliminary code-scan matches do not automatically qualify as confirmed violations. A detector flag is uncertain until appropriately adjudicated. Do not give the general building agent authority to write or overturn these records.
+
+Initial internal scoring defaults (subject to calibration before activation):
+
+| Evidence | Points |
+|---|---:|
+| Verified benign interaction | 0; contributes to established history |
+| Uncertain safety flag | 3; all uncertain flags together capped at 10 |
+| Confirmed policy violation | 15 |
+| Confirmed safeguard evasion | 25 |
+| Unresolved critical safety incident | 100 until explicit resolution |
+
+Ordinary adverse points halve every 30 days and leave the calculation after 90 days. Two or more separate confirmed incidents in seven days add 10 points per incident after the first, capped at 20. Scores cap at 100. Retries and multiple detectors for the same incident count once using its strongest active finding and earliest timestamp for that finding. An adjudicated reversal excludes the entire incident. Benign activity never subtracts adverse points, and critical unresolved incidents do not decay. The score is an operational signal, **not a probability of wrongdoing**.
+
+| Score / history | Supplemental chat-text screening | Supplemental generated-artifact screening | Response |
+|---|---:|---:|---|
+| Established, score 0 | 5% | 10% | Baseline checks plus unpredictable sampling |
+| New/unestablished, score 0–19 | 25% | 100% | Build verified history |
+| Elevated, score 20–49 | 100% | 100% | Additional scrutiny |
+| High, score 50–79 | 100% | 100% | Additional scrutiny; inspect repeated patterns |
+| Review, score 80–100 | 100% | 100% | Restricted operator review; score alone does not ban an account |
+| Missing/incomplete history | 100% | 100% | Fail conservative; do not infer trust from missing records |
+
+Established requires a complete trusted history, score zero, and at least 20 independently verified benign interactions across seven distinct UTC days in the last 30 days. A successful model response or absence of a block is not verification. These percentages apply only to **additional** screening. Every request retains the agent policy and action authorization; every uploaded media item and imported code item retains the relevant mandatory scans and quarantine. Existing publication, isolation and serving checks always apply. Specific current-content risk overrides history and sampling; a previously harmless customer may upload unsafe material or have a compromised account. An unchanged exact artifact can reuse a valid, owner-bound, unexpired receipt under the current policy; account reputation cannot create or extend that receipt.
+
+Remaining activation work:
+
+- A restricted durable evidence ledger with provenance, stable incident IDs, authoritative occurrence times, audit history and explicit reversal decisions. No raw suspected illegal media or full conversations in score records. Account deletion and legal preservation require separate restricted procedures.
+- Trusted classification/adjudication and event producers. Do not mine existing chat with crude keyword rules or treat existing model refusals as proven violations. Retrospective scoring must respect corrections, ownership and retention.
+- Server-controlled, unpredictable sampling bound to immutable request/artifact IDs so retries cannot reroll a check. Selected checks complete before the applicable action; unavailable or inconclusive scanners hold that action. Current suspicious content triggers checks regardless of sample selection.
+- Bounded history aggregation that includes unresolved critical cases even outside the ordinary 90-day window. A truncated or failed query marks history incomplete. All tenants/plans follow the same content-safety policy, independent of financial Monitor mode.
+- Calibrate false positives and sampling rates in shadow evaluation before activating lighter paths. Measure sampled violation rates, scanner failures and missed coverage. Provide an independent correction/appeal path. Restrict the offending action based on its evidence, rather than automatically removing unrelated sites based solely on a numeric score.
+
+Verification: `node tests/content-risk.mjs` covers tenant separation, deduplication, time decay, repeated evasion, uncertainty caps, reversals, critical-case persistence, missing history, established-history requirements and mandatory baseline checks. This is local policy verification, not live detection or acceptance evidence.
