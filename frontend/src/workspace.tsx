@@ -17,7 +17,7 @@ import {Textarea} from './components/ui/textarea';
 import {Brand} from './components/brand';
 import {Auth} from './auth';
 import {workspaceNavigation} from '../../src/workspace-navigation';
-import {resolveWorkspaceNavigation} from './lib/workspace-navigation';
+import {resolveWorkspaceNavigation,providerReturn} from './lib/workspace-navigation';
 import {DashboardPage,SettingsPage,ProfilePage,ControlPage} from './workspace-pages';
 const Context=createContext<{profile:Profile;dashboard?:Dashboard;sendMessage:(content:string)=>Promise<void>;notify:(message:string)=>void}>({profile:null!,sendMessage:async()=>{},notify:()=>{}});
 export const useWorkspace=()=>useContext(Context);
@@ -29,7 +29,7 @@ export function Workspace(){useMobileViewport();const location=useRouterState({s
  const visitor=visitorAccessCommand(content);if(visitor){if(visitor.error){setNotice(visitor.error);return;}await open('visitors',visitor.projectId);setDraft('');return;}
  const controls:Record<string,string>={'/inbox':'inbox','show inbox':'inbox','my inbox':'inbox','/connections':'connections','show connections':'connections','connect github':'connections','disconnect github':'connections','connect cloudflare':'connections','disconnect cloudflare':'connections','/backup':'connections','/domains':'domains','show domains':'domains','connect my domain':'domains','/files':'photos','show photos':'photos','upload a photo':'photos','/security':'security','/passkeys':'security','visitor access':'visitors','manage visitor access':'visitors'};const target=controls[content.toLowerCase()];if(target){await open(target);setDraft('');return;}
  if(!chat.data)return;if(pending.current){setNotice('Resolve the previous message with Retry before sending another.');await open('chat');return;}setDeliveryError('');await open('chat');chatScroll.latest();pending.current={id:crypto.randomUUID(),revision:chat.data.state.revision,content};setPendingText(content);await mutation.mutateAsync(pending.current).catch(()=>{});}
- useEffect(()=>{const params=new URLSearchParams(location.searchStr);if(params.has('connection')||params.has('checkout')){setNotice(params.has('error')?'The connection was not completed. You can try again here.':'Checking the latest status…');void navigate({to:'/workspace/$view',params:{view:params.has('connection')?'connections':'billing'},replace:true});}},[location.searchStr,navigate]);
+ useEffect(()=>{const result=providerReturn(location.searchStr);if(result){setNotice(result.notice);void queryClient.invalidateQueries({queryKey:[result.view]});void queryClient.invalidateQueries({queryKey:['dashboard']});void navigate({to:'/workspace/$view',params:{view:result.view},search:{},replace:true});}},[location.searchStr,navigate]);
  useEffect(()=>{if(view!=='chat')document.querySelector('.workspace-main')?.scrollTo({top:0,behavior:'instant'});},[view,location.search.project]);
  useEffect(()=>{const field=composer.current;if(field){field.style.height='auto';field.style.height=Math.min(field.scrollHeight,160)+'px';}},[draft,view,profile.data]);
  useEffect(()=>{const theme=profile.data?.theme??'system',media=matchMedia('(prefers-color-scheme: dark)'),apply=()=>document.documentElement.classList.toggle('dark',theme==='dark'||theme==='system'&&media.matches);apply();media.addEventListener('change',apply);return()=>media.removeEventListener('change',apply);},[profile.data?.theme]);
