@@ -57,4 +57,22 @@ Local verification on September 30, 2026:
 - `node tests/chat-reply.mjs` passed, including server-metadata-only specification actions and plain-language presentation of the typed approval receipt. Literal human messages remain unchanged.
 - Browser fixture at 390×844: document width 390, all three review controls 44px high, no horizontal overflow. Keyboard activation sent only the exact typed `specificationApply` payload to `/api/chat/actions`. An observed raw internal receipt was corrected in the shared presentation adapter; final browser readback is recorded with the release evidence.
 
-This is local scripted acceptance, not real-model interpretation or authenticated live-customer acceptance. CMS functional testing and Stripe/provider activation remain deferred. Test deployment is pending the reviewed migration and Worker release; it is not implied by these checks.
+This is local scripted acceptance, not real-model interpretation or authenticated live-customer acceptance. CMS functional testing and Stripe/provider activation remain deferred. The reviewed test deployment and its readback are recorded below.
+
+
+### Test deployment and recovery
+
+At **2026-09-30T23:39:24.886Z**, release `1ac986dc-5062-4e60-834d-44ba99ab7195` completed all four service steps: platform `3f52ab8c-8c74-43a6-b4ba-9d12ab5cb0e3`, sites `eaaa5061-b7b4-49eb-a47f-ef5d42726a7d`, apps `7983185c-ee37-4cf1-bb28-64b842559ab2`, runtime `d9f2de1d-2a11-4515-a582-43d5925c48a8`. Migration 0110 had been applied in the preceding partial release; the final release had no pending SQL. Source commits: `bbf4469` (feature), `928878a` (release expectation fix). All artifacts, migration hashes and service bindings are pinned in private archives. Build input digest: `dee8fee128dc7721450a52423d78d9716c1f6d9e87191844f405fc08c0615131`; the dirty-source flag preserves the concurrent development-tool configuration in that exact build.
+
+The first release stopped on app service readback: Cloudflare explicitly reported its default environment while the expected inventory omitted it. CLI completion, exact live candidate/tag and unchanged before/after service/secret identities were confirmed; the original journal was retained. A fresh release with the corrected expectation completed from that verified baseline. See [release recovery evidence](releases.md#live-binding-readback-correction--september-30-2026). This was not an uncertain-operation retry or archive rewrite.
+
+Live readback at **2026-09-30T23:40:54.703Z** confirmed all four versions, all 110 migrations, 17 new guards, workspace HTML and all 16 frontend asset hashes against the archive. Landing/workspace/health returned 200; anonymous Chat and specification preview requests returned 401. Browser readback after rebuilding confirmed the friendly approval receipt. Private evidence: `.secrets/specification-release-verification.json` and `.secrets/specification-release-reconciliation.json`.
+
+Migration 0110 is additive and begins with empty specification tables, so old Workers can coexist during rollout. Sites deploy before the platform starts creating specification versions. **After use of saved specifications, do not roll back to a platform/site Worker that lacks their safety gates**; use an archived forward repair preserving those checks. Worker rollback never removes the D1 snapshots/receipts. No provider activation, new paid service or customer publication is part of this release.
+
+
+### Live acceptance repairs
+
+The first signed synthetic account successfully prepared and applied the import, but a requested content edit stopped at a status-only read. The new lookup returned an object while the existing inspection pipeline requires a string; scripted responses had not asserted the actual lookup delivered to the second model call. The read now emits compact serialized editable content/reference data, without growing version history. The connected fixture explicitly checks that the second call receives the exact revision/content IDs/text.
+
+That run also exposed operator whole-account cleanup ordering: the account's receipt cascade can execute before its project cascade. Additive migration `0111_specification_account_cleanup.sql` retains receipt rows while both owner and project exist, and permits their cleanup after either parent has been removed. Direct receipt deletion is still rejected for a live account/project. The connected fixture now covers account cleanup as well as project cleanup. No customer account-delete route is added. The first fixture's identity is retained privately until this migration is applied and cleanup is verified; the live test now preserves cleanup failure evidence instead of masking the original outcome.
