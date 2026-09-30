@@ -10,7 +10,7 @@ const built=spawnSync(process.execPath,['tools/build-emdash.mjs'],{stdio:'inheri
 try{await fetch('http://localhost:8798');throw Error('Port 8798 is already in use');}catch(e){if(e.message.includes('already in use'))throw e;}
 const bundle=await build({stdin:{resolveDir:process.cwd(),contents:[
  'cms-bridge','cms-projects','cms-provision','cms-deploy','cms-media-uploads','cms-content','cms-edits','cms-publication','cms-unpublish','cms-imports','cms-wordpress-sources','cms-wordpress-import',
-].map(n=>`export * from './src/${n}';`).join('\n')+"\nexport {cleanPhoto} from './src/files'; export {default as siteHost} from './src/site-host';"},bundle:true,format:'esm',platform:'node',write:false});
+].map(n=>`export * from './src/${n}';`).join('\n')+"\nexport {default as platform} from './src/index'; export {hashToken} from './src/security'; export {cleanPhoto} from './src/files'; export {default as siteHost} from './src/site-host';"},bundle:true,format:'esm',platform:'node',write:false});
 const api=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const dir=await mkdtemp('/tmp/whumpo-native-publication-'),id=()=>crypto.randomUUID();let control,server,logs='';
 try{
@@ -31,8 +31,8 @@ try{
  server=spawn(process.execPath,['node_modules/wrangler/bin/wrangler.js','dev','--config',join(dir,'probe.json'),'--config',join(dir,'cms.json'),'--local','--port','8798','--persist-to',join(dir,'native')],{stdio:['ignore','pipe','pipe']});
  for(const stream of [server.stdout,server.stderr])stream.on('data',d=>{logs=(logs+d.toString()).slice(-12000);});
  let ready=false;for(let i=0;i<120;i++){if(server.exitCode!==null)throw Error('Local CMS exited: '+logs);try{if((await fetch('http://localhost:8798/_emdash/api/setup/status')).status===403){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}if(!ready)throw Error('Local CMS failed to start: '+logs);
- let dropPublish=false,publishDispatches=0;
- const service={fetch:async request=>{const path=new URL(request.url).pathname;const response=await fetch('http://localhost:8798'+path+new URL(request.url).search,{method:request.method,headers:request.headers,...(request.method==='GET'?{}:{body:await request.arrayBuffer()}),redirect:'error'});if(path.endsWith('/publish')){publishDispatches++;if(dropPublish){dropPublish=false;throw Error('Synthetic lost native publication acknowledgement');}}return response;}};
+ let dropPublish=false,publishDispatches=0,dropImport=false,importDispatches=0;
+ const service={fetch:async request=>{const path=new URL(request.url).pathname;const response=await fetch('http://localhost:8798'+path+new URL(request.url).search,{method:request.method,headers:request.headers,...(request.method==='GET'?{}:{body:await request.arrayBuffer()}),redirect:'error'});if(path.endsWith('/content/posts')&&request.method==='POST'){importDispatches++;if(dropImport){dropImport=false;throw Error('Synthetic lost native import acknowledgement');}}if(path.endsWith('/publish')){publishDispatches++;if(dropPublish){dropPublish=false;throw Error('Synthetic lost native publication acknowledgement');}}return response;}};
  let version=null;const provider={accountId:account,exists:async()=>false,deploy:async()=>{version=id();},activeVersion:async()=>version,service};
  await api.deployCMS(db,project,'b'.repeat(64),identity,provider);await api.connectCMS(db,project,id());
  const env={CMS_BRIDGE_MASTER_KEY:master,FILES:files,['CMS_'+project.replaceAll('-','')]:service};
@@ -65,14 +65,30 @@ try{
  assert.equal((await api.readCMSDraft(db,user,project,draft,env)).item.status,'draft');
  const wxr=`<rss version="2.0" xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><wp:wxr_version>1.2</wp:wxr_version><item><title>Imported studio story</title><dc:creator>Original writer</dc:creator><wp:post_id>42</wp:post_id><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>A <strong>WordPress</strong> story.</p>]]></content:encoded></item></channel></rss>`;
  const stage=await analyzeWordPress(new TextEncoder().encode(wxr)),sourceArticle=stage.articles[0];assert.ok(sourceArticle.candidate);
- const sourceUpload=id();await api.uploadCMSWordPressSource(db,files,user,project,sourceUpload,'wordpress.xml',new TextEncoder().encode(wxr),env);
- const importReview=await api.prepareCMSWordPressImport(db,files,user,project,sourceUpload,sourceArticle.sourceId,id(),env,analyzeWordPress);assert.equal(importReview.status,'pending');assert.equal(importReview.source_upload_id,sourceUpload);
- await assert.rejects(api.readCMSDraft(db,user,project,importReview.id,env),e=>e.status===404);
- assert.equal((await api.confirmCMSImport(db,user,importReview.id,env)).status,'imported');
- const imported=await api.readCMSDraft(db,user,project,importReview.id,env);assert.equal(imported.item.status,'draft');assert.deepEqual(imported.item.data.content,sourceArticle.candidate.data.content);
- assert.equal((await api.prepareCMSWordPressImport(db,files,user,project,sourceUpload,sourceArticle.sourceId,id(),env,analyzeWordPress)).id,importReview.id);assert.equal((await api.confirmCMSImport(db,user,importReview.id,env)).status,'imported');
+ const session=id().replaceAll('-','')+id().replaceAll('-','');await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await api.hashToken(session),user,new Date(Date.now()+3600000).toISOString(),now).run();
+ const httpEnv={...env,DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})}};
+ const request=(path,method='GET',body,headers={})=>api.platform.fetch(new Request('http://localhost'+path,{method,headers:{origin:'http://localhost',cookie:'tellumo_session='+session,'content-type':'application/json',...headers},...(body===undefined?{}:{body:typeof body==='string'?body:JSON.stringify(body)})}),httpEnv,{waitUntil(){throw Error('Unexpected background task');}});
+ const sourceUpload=id(),sourcePath=`/api/cms/${project}/wordpress/sources/${sourceUpload}`;
+ const sourceResponse=await request(sourcePath,'PUT',wxr,{'content-type':'application/xml','x-source-name':'wordpress.xml'});assert.equal(sourceResponse.status,200,await sourceResponse.clone().text());assert.equal((await sourceResponse.json()).state,'ready');
+ const inspection=await request(sourcePath);assert.equal(inspection.status,200);assert.equal((await inspection.json()).report.summary.reviewable,1);
+ assert.equal(await(await request(sourcePath+'/download')).text(),wxr);
+ const chat=async(content,turn=id())=>{const snapshot=await(await request('/api/chat')).json();const response=await request('/api/chat','POST',{content,id:turn,revision:snapshot.state.revision});assert.equal(response.status,200,await response.clone().text());return (await(await request('/api/chat')).json()).turns.find(row=>row.id===turn);};
+ const prepared=await chat(`/import-wordpress ${project} ${sourceUpload} ${sourceArticle.sourceId}`),reviewId=prepared.cms_import_review_id;
+ assert.ok(reviewId);assert.equal(prepared.cms_import_confirmation_id,reviewId);
+ const importReview=await api.readCMSImport(db,user,reviewId);assert.equal(importReview.status,'pending');assert.equal(importReview.source_upload_id,sourceUpload);
+ await assert.rejects(api.readCMSDraft(db,user,project,reviewId,env),e=>e.status===404);
+ const comparison=await request(`/api/cms-import-reviews/${reviewId}/preview`);assert.equal(comparison.status,200);assert.match(await comparison.text(),/Original writer/);
+ const priorDispatches=importDispatches;dropImport=true;
+ await chat('/confirm-cms-import '+reviewId);
+ assert.equal((await api.readCMSImport(db,user,reviewId)).status,'approved');
+ const recovered=await chat('/confirm-cms-import '+reviewId);assert.equal(recovered.cms_preview_request_id,reviewId);assert.equal((await api.readCMSImport(db,user,reviewId)).status,'imported');
+ const imported=await api.readCMSDraft(db,user,project,reviewId,env);assert.equal(imported.item.status,'draft');assert.deepEqual(imported.item.data.content,sourceArticle.candidate.data.content);
+ const recoveredDispatches=importDispatches;assert.ok(recoveredDispatches>priorDispatches);
+ await chat('/confirm-cms-import '+reviewId);assert.equal(importDispatches,recoveredDispatches);
+ assert.equal((await api.prepareCMSWordPressImport(db,files,user,project,sourceUpload,sourceArticle.sourceId,id(),env,analyzeWordPress)).id,reviewId);
  assert.equal((await hosted(`https://${project}.whumpo.site/cms/posts/${imported.item.id}`)).status,404);
- console.log('Connected WordPress import passed: retained hashed source, upstream WXR conversion, immutable owner review, explicit approval, actual native private draft, exact replay and no publication.');
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM cms_draft_requests WHERE id=?').bind(reviewId).first()).n,1);
+ console.log('Connected HTTP/Chat WordPress import passed: authenticated upload/download/analysis, source-derived comparison, explicit approval, lost native response recovery, actual native private draft, replay without dispatch and no publication.');
  console.log('Connected actual-native acceptance passed: owner upload/draft, frozen private review, lost publication acknowledgement recovery, public article/image, staged edit, replacement/replay and unpublish revocation.');
 }finally{
  if(server&&server.exitCode===null){server.kill('SIGTERM');await new Promise(r=>{const timer=setTimeout(()=>{server.kill('SIGKILL');r();},4000);server.once('exit',()=>{clearTimeout(timer);r();});});}
