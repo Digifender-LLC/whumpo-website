@@ -106,6 +106,7 @@
     "test:app-data": "node tests/app-data.mjs",
     "test:fair-use-reviews": "node tests/fair-use-reviews.mjs",
     "test:fair-use-finance": "node tests/fair-use-finance.mjs",
+    "review:fair-use": "node tools/review-fair-use.mjs",
     "report:fair-use": "node tools/report-fair-use.mjs",
     "test:fair-use": "node tests/fair-use-policy.mjs && node tests/fair-use-observation.mjs",
     "test:gateway-spend": "node tests/gateway-spend.mjs",

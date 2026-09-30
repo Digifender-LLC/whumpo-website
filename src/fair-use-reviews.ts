@@ -32,3 +32,11 @@ export async function resolveFairUseReview(db:D1Database,user:string,id:string,i
  if(row.outcome!==input.outcome||row.resolution!==resolution||row.resolved_by!==reviewer)throw new FairUseReviewError(409,'Review was resolved differently; read the saved decision');
  return {review:row,replayed:result.meta.changes===0,enforcementEnabled:false as const};
 }
+export async function listFairUseReviews(db:D1Database,user:string,before?:{createdAt:string;id:string}){
+ identifier(user);
+ if(before&&(typeof before.createdAt!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt)||!Number.isFinite(Date.parse(before.createdAt))))throw new FairUseReviewError(400,'Invalid review cursor');
+ if(before)identifier(before.id);
+ const {results}=await db.prepare(`SELECT * FROM fair_use_reviews WHERE user_id=? AND (? IS NULL OR created_at<? OR (created_at=? AND id<?)) ORDER BY created_at DESC,id DESC LIMIT 26`).bind(user,before?.createdAt??null,before?.createdAt??null,before?.createdAt??null,before?.id??null).all<FairUseReview>();
+ const reviews=results.slice(0,25),last=reviews.at(-1);
+ return {reviews,nextBefore:results.length>25&&last?{createdAt:last.created_at,id:last.id}:null,enforcementEnabled:false as const};
+}
