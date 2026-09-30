@@ -1,3 +1,4 @@
+import {linkMaintenanceReply} from './app-maintenance-chat-actions';
 import {BackendError} from './backend-versions';
 import {beginMigrationCheck,advanceMigrationCheck,cancelMigrationCheck} from './app-migration-checks';
 import {readMigrationReview,confirmMigration} from './app-migration-approval';
@@ -16,7 +17,7 @@ export function appUpgradeCommand(db:D1Database,user:string,turn:string,content:
  if(!Object.hasOwn(lengths,verb))return;
  const confirming=verb.startsWith('/confirm-')||verb==='/cancel-app-upgrade',ids=parts.slice(1,confirming?-1:undefined);
  if(parts.length!==lengths[verb]||!ids.every(v=>uuid.test(v))||confirming&&parts[2]!== (verb==='/cancel-app-upgrade'?'CANCEL':verb==='/confirm-app-upgrade'?'UPGRADE':'ROLLBACK'))throw new BackendError(400,'Choose exact saved review IDs. Upgrade and rollback require UPGRADE and ROLLBACK; cancellation requires CANCEL. See /help backends.');
- return async()=>{try{
+ return async()=>{const reply=await(async()=>{try{
   if(verb==='/cancel-app-upgrade'){await cancelMigrationCheck(db,user,parts[1],parts[2]);return describeUpgrade(await readMigrationReview(db,user,parts[1]));}
   if(verb==='/review-app-upgrade'){await beginMigrationCheck(db,user,parts[1],turn,parts[2],parts[3],parts[4]);return describeUpgrade(await readMigrationReview(db,user,turn));}
   if(verb==='/check-app-upgrade'){if(!service)throw new BackendError(503,'Application runtime is unavailable. No migration check was run.');await advanceMigrationCheck(db,service,user,parts[1]);return describeUpgrade(await readMigrationReview(db,user,parts[1]));}
@@ -25,7 +26,9 @@ export function appUpgradeCommand(db:D1Database,user:string,turn:string,content:
   if(verb==='/review-app-rollback')return describeRollback(await prepareProgramRollback(db,user,parts[1],parts[2],turn));
   if(verb==='/app-rollback')return describeRollback(await readProgramRollback(db,user,parts[1]));
   return describeRollback(await confirmProgramRollback(db,user,parts[1],parts[2]));
- }catch(e){return e instanceof BackendError?e.message:'Application maintenance result unavailable. Retry the same request to recover its receipt; do not assume a change succeeded.';}};
+ }catch(e){return e instanceof BackendError?e.message:'Application maintenance result unavailable. Retry the same request to recover its receipt; do not assume a change succeeded.';}})();
+ const kind=verb.includes('rollback')?'rollback':'upgrade',id=verb.startsWith('/review-')?turn:parts[1];
+ await linkMaintenanceReply(db,user,turn,kind,id,reply);return reply;};
 }
 /** The model can prepare/check/read only. Confirmation is absent from this allowlist. */
 export function appUpgradeAction(db:D1Database,user:string,turn:string,action:Record<string,unknown>,service?:Fetcher){
