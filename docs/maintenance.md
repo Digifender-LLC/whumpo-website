@@ -2,6 +2,8 @@
 
 WH-006, September 30, 2026. The platform records bounded per-job scheduler telemetry and provides `node tools/report-maintenance.mjs` for an authenticated operator. The CLI uses the existing Cloudflare/D1 operator credentials. There is no customer HTTP endpoint, model tool or public dashboard for this report.
 
+The [WH-052 background-job decision](background-jobs.md) retains this scheduler for current maintenance and specifies D1-owned receipts for future scan/closure work. Pass telemetry is not an item lease or resumable job journal. The new SQLite prototype is local only; no schedule or runtime behavior changes.
+
 ## Scheduled inventory
 
 | Job | Schedule (UTC) | Existing operation |

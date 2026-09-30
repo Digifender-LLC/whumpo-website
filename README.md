@@ -58,6 +58,7 @@ For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.js
 ## Feature references
 
 - [Private maintenance diagnostics](docs/maintenance.md) — scheduled run status and read-only backlog inspection
+- [Data lifecycle proposal](docs/data-lifecycle.md) and [background-job decision](docs/background-jobs.md) — retention/export/closure boundaries and durable recovery design
 - [Content safety and US customer eligibility](docs/content-safety.md) — policy foundations; scanning and enforcement remain launch gates
 - [Chat tools and navigation](docs/workspace-agent.md)
 - [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)
