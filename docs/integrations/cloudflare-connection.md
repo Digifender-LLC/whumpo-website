@@ -93,3 +93,5 @@ External connections explains that active Cloudflare access must be disconnected
 GitHub continues to permit reviewed reconnection. When a prior GitHub token is awaiting cleanup while the new connection is active, Settings and Chat accurately preserve the current connected state. Provider status remains a local authorization snapshot, not a live account-health test. No new scope, credential handling, automatic reconnection or DNS mutation is introduced.
 
 Verification: both TypeScript projects, the production build and the disposable-D1 Cloudflare OAuth suite passed. Connection Chat tests cover owner isolation, no credential/provider disclosure, retained expired authorization, active connection plus old revocation, immutable historical replies and refreshed zero-inference status. Live customer consent remains a separate setup/acceptance gate.
+
+Deployed September 30 as platform `4712f560-b629-4860-b0a0-fe30eae0953e`. Independent live checks confirm the version, all 16 frontend JS/CSS/font assets, health 200 and anonymous connections 401. This verifies release/configuration boundaries, not a customer provider consent flow.
