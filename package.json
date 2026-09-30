@@ -22,6 +22,7 @@
     "test:directory-history": "node tests/directory-history.mjs",
     "test:directories": "node tests/directories.mjs",
     "test:site-health": "node tests/site-health.mjs",
+    "test:customer-site-journey": "node tests/customer-site-journey.mjs",
     "test:publications": "node tests/publications.mjs",
     "deploy:sites": "wrangler deploy --config wrangler.sites.jsonc",
     "dev:sites": "wrangler dev --config wrangler.sites.jsonc --port 8788",

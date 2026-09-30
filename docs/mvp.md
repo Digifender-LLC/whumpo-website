@@ -255,3 +255,9 @@ A reusable directory backend supports private listing create/read/update/delete 
 ## Directory data recovery
 
 Applied directory snapshots can now be listed, exported privately as JSON, and restored to the private draft through an exact current-versus-replacement review. Restoration preserves listing IDs and records immutable source ancestry; public data requires a separate publication confirmation. This supplies data recovery for the supported directory schema. General application migrations/rollback, arbitrary schemas and portable backend export remain incomplete. See [directory recovery contract](directories.md).
+
+## Connected website delivery acceptance
+
+Chat now links “Review website changes” to the exact pending publication review, including restore and unpublish reviews. The separate general version comparison remains available, but only the review-specific endpoint checks the pending action, expiry and expected live revision. Reading either page never confirms an action.
+
+`test:customer-site-journey` exercises actual platform HTTP handlers and the separate visitor-host handler with disposable local D1: profile/welcome, first project, private draft, authenticated preview/source export, publication review, origin rejection, confirmation retry after discarding its response, a private second version, stale review rejection, exact saved-version restoration and unpublication. It also checks that foreign accounts cannot read previews/exports/comparisons/reviews and that previews survive unpublication. This fixture bypasses native passkey enrollment with synthetic sessions and uses guided builds without inference; live Muse onboarding-to-draft acceptance is separately recorded in [onboarding](onboarding.md). It does not publish a real customer site or prove physical mobile behavior.
