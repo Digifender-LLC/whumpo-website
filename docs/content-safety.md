@@ -1,5 +1,7 @@
 # Content safety and US customer eligibility
 
+The [WH-010 safety coverage map](safety-coverage.md) traces mounted intake, model, execution, preview/export, publication and serving paths. It distinguishes the existing photo/import holds from unconnected detector/risk foundations and the remaining CMS/generated-content/visitor-data gaps. It is a design and source inventory; no scanner or CMS feature acceptance is implied.
+
 ## Product decisions — September 30, 2026
 
 Whumpo initially accepts **US-based customers only**, including organizations based in the US. This is customer eligibility, not a promise to restrict every visitor of a customer website to the US. Foreign travel is not evidence that an existing customer is ineligible. US-only customers do not remove federal/state obligations or settle every jurisdiction question.
