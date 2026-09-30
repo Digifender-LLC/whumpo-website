@@ -1,3 +1,4 @@
+import {fairUseMode,type FairUseMode,type FairUseEconomics} from './fair-use-mode';
 /** Proposed launch thresholds. Shadow assessment only; not a customer quota or live blocker. */
 export const fairUsePolicyVersion='site-maintenance-fair-use-v1';
 export const fairUseThresholds={
@@ -15,7 +16,8 @@ export type FairUseEvidence={
  createdProjects7d:number;completedExportDeleteCycles7d:number;
  review:{unrelatedConfirmed:boolean;churnConfirmed:boolean;noticeDelivered:boolean;unrelatedAfterNotice:number;churnAfterNotice:number};
 };
-export function assessFairUse(plan:FairUsePlan,e:FairUseEvidence){
+export function assessFairUse(plan:FairUsePlan,e:FairUseEvidence,control:{mode:FairUseMode;economics?:FairUseEconomics;now?:number}={mode:'monitor'}){
+ const mode=fairUseMode(control.mode,control.economics,control.now);
  const t=fairUseThresholds[plan];if(!t)throw Error('Fair-use plan is not configured');
  for(const n of [e.cost30dMicros,e.turns7d,e.classifiedTurns7d,e.unrelatedTurns7d,e.createdProjects7d,e.completedExportDeleteCycles7d,e.review.unrelatedAfterNotice,e.review.churnAfterNotice])if(!Number.isSafeInteger(n)||n<0)throw Error('Invalid fair-use evidence');
  for(const v of [e.review.unrelatedConfirmed,e.review.churnConfirmed,e.review.noticeDelivered])if(typeof v!=='boolean')throw Error('Invalid fair-use review');
@@ -34,7 +36,7 @@ export function assessFairUse(plan:FairUsePlan,e:FairUseEvidence){
   if(confirmedChurn&&e.review.churnAfterNotice>=2)restrictions.push('new_project_generation');
  }
  const suggestedAction=restrictions.length?'restrict_flagged_requests':confirmedUnrelated||confirmedChurn?'explain_and_warn':signals.length?'review_behavior':reviewSpend?'review_legitimate_capacity':monitored?'observe':'none';
- return {policy:fairUsePolicyVersion,enforcementEnabled:false as const,plan,suggestedAction,signals,restrictions,
+ return {policy:fairUsePolicyVersion,enforcementEnabled:false as const,mode:mode.mode,modeDecision:mode,plan,suggestedAction,signals,restrictions,activeRestrictions:[] as string[],
   preserve:['existing_site_maintenance','hosting','account_access','source_export','backups','deletion','appeal'],
   reason:restrictions.length?'confirmed_pattern_continued_after_notice':signals.length?'pattern_needs_context':reviewSpend?'cost_alone_is_not_abuse':monitored?'internal_monitoring_only':'light_usage',
  };

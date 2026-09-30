@@ -77,7 +77,7 @@
     "test:backend-forms": "node tests/backend-forms.mjs",
     "test:backend-form-http": "node tests/backend-form-http.mjs",
     "test:app-data": "node tests/app-data.mjs",
-    "test:fair-use": "node tests/fair-use-policy.mjs",
+    "test:fair-use": "node tests/fair-use-policy.mjs && node tests/fair-use-observation.mjs",
     "test:gateway-spend": "node tests/gateway-spend.mjs",
     "test:inference-routing": "node tests/inference-routing.mjs",
     "plan:inference": "node tools/plan-inference-route.mjs",
