@@ -3,11 +3,11 @@
 
 ## Current deployment status and release caveat
 
-September 30, 2026 readback: platform `b21f6da7-9703-41bd-963b-bf5dd4665aa8`; sites `d1208b4c-f49b-496a-b659-ad6d84f9566e`; apps `9bee8593-ee7f-4dd3-8934-2b41f43d692e`; runtime `662ea586-726d-4a00-ad22-d84024a7c0b2`. The platform is **whumpo.com**, customer content is on **whumpo.site**, and the private repository is **zemdregon/whumpo**. Digifender addresses below are historical and have no product fallback. Workers Paid ($5/month) is owner-authorized. Private R2 and the separate QuickJS runtime are in use; customer Containers/Stream/Gateway inference are not enabled by the platform's plan.
+September 30, 2026 readback: platform `cb34d460-4938-45c1-8447-fbcc254ebbd2`; sites `d1208b4c-f49b-496a-b659-ad6d84f9566e`; apps `9bee8593-ee7f-4dd3-8934-2b41f43d692e`; runtime `662ea586-726d-4a00-ad22-d84024a7c0b2`. The platform is **whumpo.com**, customer content is on **whumpo.site**, and the private repository is **zemdregon/whumpo**. Digifender addresses below are historical and have no product fallback. Workers Paid ($5/month) is owner-authorized. Private R2 and the separate QuickJS runtime are in use; customer Containers/Stream/Gateway inference are not enabled by the platform's plan.
 
 Owner decision September 30: apply all pending migrations in the private test environment. At 14:21 UTC, `pnpm db:remote` applied 0075/0076; independent readback confirms all 93 migrations with no pending files and both Gateway receipt tables empty. No Worker or provider route changed. Private evidence: `.secrets/test-migrations-2026-09-30.json`. `pnpm deploy` and `pnpm db:remote` now match this release policy. Keep the CMS-binding-preserving platform wrapper. Database changes are not reverted by Worker rollback.
 
-Use [current readiness](acceptance.md), [domain configuration](whumpo-migration.md) and [reconciliation decisions](docs-code-sync.md) for current status. Existing local owner-recovery changes have not been included in the active release. The sections below are chronological evidence, including past resource inventories and deferred features subsequently delivered.
+Use [current readiness](acceptance.md), [domain configuration](whumpo-migration.md) and [reconciliation decisions](docs-code-sync.md) for current status. Owner recovery is now included in the active release; see [recovery acceptance](owner-recovery.md). The sections below are chronological evidence, including past resource inventories and deferred features subsequently delivered.
 
 Current domain/frontend configuration: see [Whumpo migration](whumpo-migration.md). Older entries below are historical release evidence and do not describe the current hostname.
 
@@ -349,3 +349,7 @@ TypeScript, D1 ownership/immutability/race/expiry/capacity tests, guided chat co
 Migration 0037 applied remotely. Main Worker `64d74b3e-a861-433f-bf00-e4e4daaeff75` deployed with resource-receipt progress in CMS chat status. The operator command `npm run cms:provision -- PROJECT_ID` now consumes an approved request and allocates/records dedicated D1/R2/KV resources with immutable creation intents. It does not yet deploy or initialize the CMS Worker and never sets ready merely because storage exists. No paid-only feature, upgrade or public route is enabled.
 
 TypeScript, real-D1 allocator/concurrency/recovery tests and CMS chat regression passed. Live read-only operator queue returned no unfinished requests; inventory lookup found the existing preview D1 and R2. No customer resource creation occurred. The deployed main health endpoint returned 200. Per-instance Worker deployment, credential installation, service binding and signed bootstrap verification remain next.
+
+## Owner recovery release — September 30, 2026
+
+Platform `cb34d460-4938-45c1-8447-fbcc254ebbd2` includes the reviewed lost-passkey flow, save-before-rotation, competing-attempt isolation and mobile-sized controls. Connected local browser/D1 acceptance exercised a lost response followed by recovery with the saved replacement code. Release checks and limitations are in [owner recovery](owner-recovery.md). No schema, provider, price, customer publication or live customer credential changed.
