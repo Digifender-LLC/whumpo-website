@@ -1,3 +1,5 @@
+> Current reconciliation: the [September 30 WH-001 capability matrix](capability-matrix.md) supersedes the deployment/configuration and undeployed-recovery observations below. All 107 migrations are applied; enhanced owner recovery and build snapshots are committed/deployed. Historical records remain for provenance. The Word v0.9 snapshot still needs a later revision.
+
 > September 30 update: standard Chat activation is now deployed at `be22062c-8178-40eb-90d0-64858af27411`. All 96 migrations are applied; current standard requests spend no customer units/credits. Historical billing records remain intact. The older version/schema observations below are point-in-time evidence, superseded by [current readiness](acceptance.md) and [standard AI accounting](standard-ai-accounting.md). The Word design has not yet been regenerated for this activation.
 
 # Documentation and code reconciliation

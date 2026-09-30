@@ -161,7 +161,8 @@
     "test:provider-return": "node tests/provider-return.mjs",
     "setup:github": "node tools/configure-github-app.mjs",
     "test:connection-history-ui": "node tests/connection-history-ui.mjs",
-    "test:github-app-setup": "node tests/github-app-setup.mjs"
+    "test:github-app-setup": "node tests/github-app-setup.mjs",
+    "verify": "node tools/verify.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -199,5 +200,10 @@
     "react-dom": "19.2.4",
     "sax": "1.6.1",
     "tailwind-merge": "^3.7.0"
-  }
+  },
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=11 <12"
+  },
+  "packageManager": "pnpm@11.19.0"
 }

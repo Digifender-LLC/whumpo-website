@@ -2,7 +2,7 @@
 
 Whumpo is an invitation-only AI website and application platform in private testing at **https://whumpo.com**. The signed-in workspace is `/workspace/`; customer sites use project subdomains of **whumpo.site**. Source: private **zemdregon/whumpo** repository. Historical `tellumo-*` service names remain internal infrastructure identifiers.
 
-**MVP is not complete.** Start with the [current readiness assessment](docs/acceptance.md) and [delivery contract](docs/mvp.md). Detailed feature documents distinguish implemented code, configured services and verified customer journeys; an implemented integration is not automatically available to customers.
+**MVP is not complete.** Start with the [dated capability matrix](docs/capability-matrix.md), [current readiness assessment](docs/acceptance.md) and [delivery contract](docs/mvp.md). Detailed feature documents distinguish implemented code, configured services and verified customer journeys; an implemented integration is not automatically available to customers.
 
 For future work, use the [product and delivery roadmap](docs/roadmap/README.md), its [prioritized task backlog](docs/roadmap/backlog.md), and [agent execution guide](docs/roadmap/execution.md). Run `node tools/roadmap.mjs next` for planning candidates, then check their linked GitHub issues for current ownership and completion evidence.
 
@@ -34,7 +34,7 @@ pnpm db:local
 pnpm dev
 ```
 
-The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http://localhost:8787` for passkey development. Deployment uses `ENVIRONMENT=test` and keeps invitation/security checks enabled. Run `pnpm check` for backend/frontend types, and the focused `test:*` scripts listed in `package.json` for the feature being changed. Some HTTP tests require a running local server; inspect their documented setup.
+The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http://localhost:8787` for passkey development. Deployment uses `ENVIRONMENT=test` and keeps invitation/security checks enabled. Run `pnpm check` for backend/frontend types, and the focused `test:*` scripts listed in `package.json` for the feature being changed. For credential-free local checks, use `pnpm verify` (fast), `pnpm verify site`, or `pnpm verify app`; see [verification profiles](docs/verification.md) for coverage and limitations. Some other HTTP tests require a running local server; inspect their documented setup.
 
 | Area | Authoritative source |
 | --- | --- |
@@ -51,12 +51,14 @@ Run `pnpm build` to generate assets. Never hand-edit bundles. The older owner UI
 
 The owner authorized Workers Paid ($5/month) resources, with GitHub restricted to free-tier use. New paid services, purchases and customer deployments still require the applicable review. R2 `FILES` remains private; customer credentials never enter generated source or model context. Scope resource access by owner and preserve publication/activation confirmations.
 
-`pnpm deploy` currently applies **every pending migration**, builds assets, deploys runtime/visitor/site Workers and then deploys the platform with its registered CMS service bindings. The owner authorizes applying all pending migrations in this private test environment. All migrations through 0104, including 0075/0076, are now applied; provider activation remains separate. For a platform-only update, apply required migrations, run `pnpm build`, then `node tools/deploy-platform.mjs`. Do not bypass that platform wrapper: it preserves per-project CMS bindings. Check the active Worker version and appropriate live behavior after deployment. See [deployment notes](docs/deployment.md) and [domain boundaries](docs/whumpo-migration.md).
+For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.json`, inspect the private archive, and use `pnpm deploy apply RELEASE_ID`. Preparation pins compiled bundles/assets, SQL, four previous versions and CMS registrations before mutation; application journals migrations and each Worker step for recovery. See the [release and recovery protocol](docs/releases.md), including the required compatibility review and uncertain-operation holds. The owner authorizes all pending migrations in this private test environment; all through 0107 are applied. Provider activation remains separate. The standalone `node tools/deploy-platform.mjs` retains its build guard and registered CMS bindings but does not create a four-Worker journal. Verify live behavior after deployment. See [deployment evidence](docs/deployment.md) and [domain boundaries](docs/whumpo-migration.md).
 
 `pnpm invite` creates a one-use invitation in ignored `.secrets/`. Share it privately. Never commit keys, session cookies, recovery codes or provider credentials. The supplied key files and `.secrets/` remain ignored.
 
 ## Feature references
 
+- [Private maintenance diagnostics](docs/maintenance.md) — scheduled run status and read-only backlog inspection
+- [Data lifecycle proposal](docs/data-lifecycle.md) and [background-job decision](docs/background-jobs.md) — retention/export/closure boundaries and durable recovery design
 - [Content safety and US customer eligibility](docs/content-safety.md) — policy foundations; scanning and enforcement remain launch gates
 - [Chat tools and navigation](docs/workspace-agent.md)
 - [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)

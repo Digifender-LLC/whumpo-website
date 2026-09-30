@@ -326,6 +326,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/content-safety.md](../../docs/content-safety.md)
 - [docs/account-closure.md](../../docs/account-closure.md)
 - [src/index.ts](../../src/index.ts)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
+- [tools/prototypes/job-journal.mjs](../../tools/prototypes/job-journal.mjs)
+- [tests/job-journal-prototype.mjs](../../tests/job-journal-prototype.mjs)
 
 ### Execution coordination
 
@@ -333,7 +336,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/11. Planning owner: Unassigned
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-09-30 source/local evidence: docs/background-jobs.md selects D1-owned receipts and bounded scheduled passes initially, with dated provider cost/retry/retention comparison. File-backed SQLite prototype tests pass for uncertain scans and resumable cleanup; production D1 integration, connected load evidence and provider/operator activation remain separate gates. No new service or schedule enabled.
 
 # F1 — Safe customer beta
 
@@ -540,6 +543,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/version-retention.md](../../docs/version-retention.md)
 - [docs/content-safety.md](../../docs/content-safety.md)
 - [tools/account-closure-inventory.mjs](../../tools/account-closure-inventory.mjs)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
+- [tools/lifecycle-catalog.mjs](../../tools/lifecycle-catalog.mjs)
+- [tests/lifecycle-catalog.mjs](../../tests/lifecycle-catalog.mjs)
 
 ### Execution coordination
 
@@ -547,7 +554,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/7. Planning owner: Unassigned.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.
 
 ## WH-010 — Map safety coverage and specify the remaining fail-closed boundaries
 
