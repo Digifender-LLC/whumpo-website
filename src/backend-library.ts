@@ -1,3 +1,4 @@
+import {taskListSource} from './backend-task-list';
 import {BackendError,listBackends} from './backend-versions';
 import {hashToken} from './security';
 /** Platform-authored source only. Never populate this catalog from tenant artifacts. */
@@ -22,6 +23,10 @@ const entries=[{
  return {characters:Array.from(text).length,words:text.trim()?text.trim().split(/\\s+/u).length:0,lines:text?text.split(/\\r\\n|\\r|\\n/u).length:0};
 };`,
  example:{input:{text:'Hello world\nNew idea'},expected:{characters:20,words:4,lines:2}}
+},{
+ id:'private-task-list',artifactDigest:'d123cb3f7d4bdaf5459ffc17ae75da077cd5299e756d52acd43624ff041d1eea',version:1,title:'Private task list',description:'A reusable per-visitor task document: add, list, complete, reopen and remove up to 12 tasks of 80 characters. Requires separate reviewed application authority and a visitor page.',usage:'application-transition',
+ source:taskListSource,
+ example:{input:{state:{},input:{action:'add',text:'Plan the first page'}},expected:{state:{nextId:2,items:[{id:1,text:'Plan the first page',done:false}]},result:{items:[{id:1,text:'Plan the first page',done:false}]}}}
 }] as const;
 export const backendLibrary=entries.map(entry=>({...entry,reference:entry.id+'@'+entry.version,provenance:'Whumpo platform-authored',license:'MIT',runtime:'bounded-quickjs-v1',verification:'tests/backend-library.mjs (automated synthetic checks)',capabilities:[] as string[],dependencies:[] as string[],state:'available' as 'available'|'withdrawn'}));
 export async function readBackendComponent(reference:string){
@@ -29,7 +34,7 @@ export async function readBackendComponent(reference:string){
  const digest=await hashToken(entry.source);if(digest!==entry.artifactDigest)throw new BackendError(503,'Component integrity check failed');return {...entry,digest};
 }
 export function describeBackendLibrary(){return 'Reusable backend helpers\n'+backendLibrary.filter(e=>e.state==='available').map(e=>`${e.reference} — ${e.title}\n${e.description}`).join('\n\n')+'\n\nPlatform-authored code with synthetic examples only. /backend-component NAME@VERSION shows source and a test example. /use-backend PROJECT_ID NAME@VERSION copies it into a private untested version without AI usage. Existing sign-in and visitor access use Whumpo’s shared authentication; these helpers never handle credentials.';}
-export async function describeBackendComponent(reference:string){const e=await readBackendComponent(reference);return `${e.title} (${e.reference})\n${e.description}\nSource: ${e.provenance} · ${e.license}\nRuntime: ${e.runtime}; no network, secrets, authentication or storage access.\nSHA-256: ${e.digest}\nStatus: ${e.state}\nSynthetic check: ${JSON.stringify(e.example)}\n\n${e.source}`;}
+export async function describeBackendComponent(reference:string){const e=await readBackendComponent(reference);return `${e.title} (${e.reference})\n${e.description}\nSource: ${e.provenance} · ${e.license}\nRuntime: ${e.runtime}; no network, secrets, authentication or storage access.\nSHA-256: ${e.digest}\nStatus: ${e.state}\n${'usage' in e&&e.usage==='application-transition'?'Application transition: receives {state,input} and returns {state,result}. Whumpo supplies the isolated visitor document only after owner review; this code has no direct storage access.\n':''}Synthetic check: ${JSON.stringify(e.example)}\n\n${e.source}`;}
 export async function installBackendComponent(db:D1Database,user:string,project:string,id:string,reference:string){
  await listBackends(db,user,project);
  if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(id))throw new BackendError(400,'Provide a request UUID');
