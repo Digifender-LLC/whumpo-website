@@ -2,7 +2,7 @@ import {readUsageHistory,describeUsageHistory} from './billing';
 import {applicationChatActions} from './app-chat-actions';
 import {cmsPendingRequest,pendingCMSWork,describePendingCMS} from './cms-pending';
 import {cmsWordPressLinks} from './cms-wordpress-chat';
-import {firstDraftProjectId,welcomeDraftProject} from './first-draft';
+import {firstDraftProjectId,firstAppProjectId,welcomeDraftProject} from './first-draft';
 import {visitorAccessCommand} from './visitor-navigation';
 import {cmsExportLinks} from './cms-export';
 import {workspaceNavigation,workspaceNavigationHelp} from './workspace-navigation';
@@ -105,8 +105,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const pendingCMS=cmsPendingRequest(content);
   if(pendingCMS&&'error' in pendingCMS)return {status:400,error:pendingCMS.error};
   const help=chatHelp(command,!!ai);
-  if(/^\/first-draft(?:\s|$)/.test(command)){
-    if(!firstDraftProjectId(content))return {status:400,error:'Choose your saved first project from Chat.'};
+  if(/^\/first-(?:draft|app)(?:\s|$)/.test(command)){
+    if(!firstDraftProjectId(content)&&!firstAppProjectId(content))return {status:400,error:'Choose your saved first project from Chat.'};
     if(!ai)return {status:503,error:'AI drafting is not connected. You can still create a free starter preview from Chat.'};
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
   }

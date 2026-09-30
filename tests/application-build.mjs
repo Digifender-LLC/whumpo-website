@@ -12,8 +12,8 @@ try{
  const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
  runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
  proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
- const bundle=await build({stdin:{contents:"export * from './src/backend-chat';export * from './src/app-chat-actions';export * from './src/app-activation';export {prepareSiteAction} from './src/site-agent';export {sendAIChat} from './src/ai-chat';export {readChat,sendChat} from './src/chat';export {getBilling} from './src/billing';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
- const {backendAction,backendChatCommand,applicationChatActions,confirmApplication,prepareApplication,sendAIChat,readChat,sendChat,getBilling}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+ const bundle=await build({stdin:{contents:"export * from './src/backend-chat';export * from './src/app-chat-actions';export * from './src/app-activation';export {prepareSiteAction} from './src/site-agent';export {sendAIChat} from './src/ai-chat';export {readChat,sendChat} from './src/chat';export {getBilling} from './src/billing';export * from './src/onboarding';export {updateProfile} from './src/profile';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const {backendAction,backendChatCommand,applicationChatActions,confirmApplication,prepareApplication,sendAIChat,readChat,sendChat,getBilling,readOnboarding,saveOnboarding,completeOnboarding,updateProfile}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
  const id=()=>crypto.randomUUID(),user=id(),foreign=id(),now=new Date().toISOString();let revision=0,calls=0;
  for(const u of [user,foreign])await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(u,u+'@example.test',now).run();
  const service={fetch:async(url,init)=>{calls++;assert.deepEqual(Object.keys(JSON.parse(init.body)),['version','source','input']);assert.equal(new Headers(init.headers).has('cookie'),false);return runtime.dispatchFetch(url,init);}};
@@ -61,16 +61,25 @@ try{
   await sendChat(db,chatUser,{id:id(),revision:history.state.revision,content:'/application-build '+chatTurn});assert.equal((await readChat(db,chatUser)).turns.at(-1).application_confirmation_id,chatTurn);assert.equal(calls-before,1);
  }
  if(process.env.RUN_LIVE_MUSE==='1'){
-  const liveUser=id(),liveProject=id(),liveTurn=id();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(liveUser,liveUser+'@example.test',now).run();
+  const liveUser=id(),liveTurn=id();let liveProject=id();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(liveUser,liveUser+'@example.test',now).run();
   await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Private notebook','A private note per visitor','draft',?,?)").bind(liveProject,liveUser,now,now).run();
+  if(process.env.WELCOME_APP==='1'){
+   await updateProfile(db,liveUser,{revision:0,name:'River',about_me:'Unshared lavender telescope',share_context:false});
+   // Remove the setup fixture before welcome so it cannot bypass onboarding.
+   await db.prepare('DELETE FROM projects WHERE id=?').bind(liveProject).run();
+   const welcome=await readOnboarding(db,liveUser);liveProject=welcome.state.project_id;
+   await saveOnboarding(db,liveUser,{revision:0,stage:'review',project_name:'Private notebook',idea:'A small private notebook app. Each invited visitor keeps a note that only they can read. It should be simple and friendly to use. The visitor writes their note and saves it, and can come back to see it later. This is a minimal first version of the app. Each visitor starts with an empty document. On submitting a note, replace their document with {note: the submitted text} and return the result string "Saved". Use synthetic sample text to test this behavior. Do not publish it yet.',audience:'Invited team members',preferred_theme:'ocean'});
+   await completeOnboarding(db,liveUser,{revision:1});
+  }
   const state=(await readChat(db,liveUser)).state,config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:(await readFile('opencode.key','utf8')).trim(),protocol:'responses'};
-  let providerCalls=0;const transport=(url,init)=>{providerCalls++;return fetch(url,init)},before=calls;
-  const content='Build a small private notebook app for my existing Private notebook project. Each visitor starts with an empty document. When they submit a note, replace their document with {note: the submitted text} and return "Saved". Generate the backend and check it with the synthetic note "Hello notebook", then show me the approval review. Keep it disabled and unpublished.';
+  let providerCalls=0;const transport=(url,init)=>{providerCalls++;if(process.env.WELCOME_APP==='1'){assert.ok(!init.body.includes('lavender telescope'));assert.ok(init.body.includes('return the result string'));}return fetch(url,init)},before=calls;
+  const content=process.env.WELCOME_APP==='1'?'/first-app '+liveProject:'Build a small private notebook app for my existing Private notebook project. Each visitor starts with an empty document. When they submit a note, replace their document with {note: the submitted text} and return "Saved". Generate the backend and check it with the synthetic note "Hello notebook", then show me the approval review. Keep it disabled and unpublished.';
   const response=await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});
   const history=await readChat(db,liveUser),last=history.turns.at(-1),billing=await getBilling(db,liveUser);
   console.log(JSON.stringify({live:true,status:response.status,turnStatus:last?.status,providerCalls,runtimeCalls:calls-before,spent:billing.quota.spent,reserved:billing.quota.reserved,hasApproval:!!last?.application_confirmation_id}));
   assert.equal(response.status,200);assert.equal(last?.status,'completed');assert.equal(last?.application_confirmation_id,liveTurn,'Natural app request should finish with exact owner review');assert.equal(providerCalls,1);assert.equal(calls-before,1);assert.ok(billing.quota.spent>0&&billing.quota.spent<=50);assert.equal(billing.quota.reserved,0);
   assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(liveProject).first()).enabled,0);
+  if(process.env.WELCOME_APP==='1'){assert.equal(history.firstDraft,null);assert.equal((await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE project_id=?').bind(liveProject).first()).turn_id,liveTurn);}
   await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});assert.equal(providerCalls,1);assert.equal(calls-before,1);
   const recovered=await sendChat(db,liveUser,{id:id(),revision:history.state.revision,content:'/application-build '+liveTurn});assert.equal(recovered.status,200);assert.equal((await readChat(db,liveUser)).turns.at(-1).application_confirmation_id,liveTurn);assert.equal((await getBilling(db,liveUser)).quota.spent,billing.quota.spent);
  }
