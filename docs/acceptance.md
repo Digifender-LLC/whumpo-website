@@ -274,3 +274,7 @@ Implemented internal invitation-only application passkeys, recovery, owner revoc
 Passed `npm run test:app-auth`, `npm run test:app-data`, `npm run check` and `git diff --check`. Authentication uses independently signed ES256 responses and actual D1 transactions. Tests cover competing invitations, credential rollback, lost acknowledgment, counterless sign-in races, changed application authority, recovery racing with sign-in, cross-project isolation, cookie-bound challenges, exact session binding when adding a passkey, request limits, private receipt recovery and logout. The gateway test calls the handler directly; it does not claim a deployed visitor origin, real-browser authenticator or actual QuickJS acceptance.
 
 Remaining: controlled visitor page/host, owner invitation and revocation UI, live cookie/passkey and runtime acceptance, visitor data export/deletion and retention. See `docs/app-data.md` for the implemented boundaries and next gates.
+
+## WordPress source taxonomy analysis — September 30, 2026
+
+The shared source analyzer and private offline report now produce exact category/tag mapping proposals and identify unsupported or ambiguous source metadata. Type checks, focused source mapping/staging suites, and actual workerd parity tests passed. No native terms are written or attached by this change; the owner-reviewed, resumable native import coordinator remains incomplete. This source/tooling increment has not been deployed. See [source mapping contract](emdash.md#source-taxonomy-mapping-analysis--september-30-2026).
