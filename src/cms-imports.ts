@@ -1,3 +1,4 @@
+import {captureCMSWordPressSource} from './cms-wordpress-sources';
 import {cmsRichDraftBody} from './cms-content-shape';
 import {cmsImageReferences} from './cms-image-block';
 import {cmsConnection,requireStructuredCMS} from './cms-status';
@@ -6,7 +7,7 @@ import {CMSProjectError} from './cms-error';
 import {renderCMSRichText} from './cms-rich-text';
 import {previewHeaders} from './components';
 import {escapeCMS as escapeHTML} from './cms-rich-text';
-type Review={id:string;user_id:string;project_id:string;source_digest:string;source_id:number;collection:string;body:string;provenance:string;status:'pending'|'approved'|'imported'|'superseded';created_at:string;expires_at:string};
+type Review={source_upload_id:string|null;id:string;user_id:string;project_id:string;source_digest:string;source_id:number;collection:string;body:string;provenance:string;status:'pending'|'approved'|'imported'|'superseded';created_at:string;expires_at:string};
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 export type CMSImportCandidate={sourceDigest:string;sourceId:number;collection:'posts'|'pages';title:string;content:unknown;provenance:{sourceHTML:string;author:string;sourceURL:string;sourceStatus:string;sourceDate:string;sourceSlug:string}};
 function canonical(candidate:CMSImportCandidate){
@@ -18,19 +19,21 @@ function canonical(candidate:CMSImportCandidate){
  return {body,provenance};
 }
 export async function readCMSImport(db:D1Database,user:string,id:string){const row=await db.prepare('SELECT r.* FROM cms_import_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Review>();if(!row)throw new CMSProjectError(404,'Import review not found');return row;}
-export async function prepareCMSImport(db:D1Database,user:string,project:string,id:string,candidate:CMSImportCandidate,env:Record<string,unknown>){
+export async function prepareCMSImport(db:D1Database,user:string,project:string,id:string,candidate:CMSImportCandidate,env:Record<string,unknown>,sourceUploadId?:string){
  if(!uuid.test(id))throw new CMSProjectError(400,'Choose a valid import request ID');
  await cmsConnection(db,user,project,env);const {body,provenance}=canonical(candidate);
+ if(sourceUploadId){const files=env.FILES as R2Bucket|undefined;if(!files)throw new CMSProjectError(503,'Source storage is unavailable');const {source}=await captureCMSWordPressSource(db,files,user,sourceUploadId);if(source.projectId!==project||source.digest!==candidate.sourceDigest)throw new CMSProjectError(409,'Import source does not match this review');}
  let row=await db.prepare(`SELECT id FROM cms_import_reviews WHERE id=? OR (project_id=? AND source_digest=? AND source_id=? AND status<>'superseded') ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END LIMIT 1`).bind(id,project,candidate.sourceDigest,candidate.sourceId,id).first<{id:string}>();
  if(row&&row.id!==id){const existing=await readCMSImport(db,user,row.id);if(existing.status==='pending'&&existing.expires_at<=new Date().toISOString())row=null;}
- if(!row){await requireStructuredCMS(db,user,project,env);try{await db.prepare('INSERT INTO cms_import_reviews(id,user_id,project_id,source_digest,source_id,collection,body,provenance) VALUES(?,?,?,?,?,?,?,?)').bind(id,user,project,candidate.sourceDigest,candidate.sourceId,candidate.collection,body,provenance).run();}catch{/* Resolve exact or competing source reservations. */}row=await db.prepare("SELECT id FROM cms_import_reviews WHERE project_id=? AND source_digest=? AND source_id=? AND status<>'superseded'").bind(project,candidate.sourceDigest,candidate.sourceId).first<{id:string}>();}
+ if(!row){await requireStructuredCMS(db,user,project,env);try{await db.prepare('INSERT INTO cms_import_reviews(id,user_id,project_id,source_digest,source_id,collection,body,provenance,source_upload_id) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,user,project,candidate.sourceDigest,candidate.sourceId,candidate.collection,body,provenance,sourceUploadId??null).run();}catch{/* Resolve exact or competing source reservations. */}row=await db.prepare("SELECT id FROM cms_import_reviews WHERE project_id=? AND source_digest=? AND source_id=? AND status<>'superseded'").bind(project,candidate.sourceDigest,candidate.sourceId).first<{id:string}>();}
  if(!row)throw new CMSProjectError(409,'Import review capacity is full or unavailable');
- const saved=await readCMSImport(db,user,row.id);if(saved.project_id!==project||saved.source_digest!==candidate.sourceDigest||saved.source_id!==candidate.sourceId||saved.collection!==candidate.collection||saved.body!==body||saved.provenance!==provenance)throw new CMSProjectError(409,'This source article already has a different saved review. Inspect it before changing the import.');return saved;
+ const saved=await readCMSImport(db,user,row.id);if(saved.source_upload_id!==(sourceUploadId??null)||saved.project_id!==project||saved.source_digest!==candidate.sourceDigest||saved.source_id!==candidate.sourceId||saved.collection!==candidate.collection||saved.body!==body||saved.provenance!==provenance)throw new CMSProjectError(409,'This source article already has a different saved review. Inspect it before changing the import.');return saved;
 }
 /** Only an explicit owner confirmation may call this; never model-produced approval. */
 export async function confirmCMSImport(db:D1Database,user:string,id:string,env:Record<string,unknown>){
  let row=await readCMSImport(db,user,id);if(row.status==='imported')return row;if(row.status==='superseded')throw new CMSProjectError(409,'This expired review was replaced. Open the current import review.');
  await cmsConnection(db,user,row.project_id,env);
+ if(row.status==='pending'&&row.source_upload_id){const files=env.FILES as R2Bucket|undefined;if(!files)throw new CMSProjectError(503,'Source storage is unavailable');await captureCMSWordPressSource(db,files,user,row.source_upload_id);}
  if(row.status==='pending'){await requireStructuredCMS(db,user,row.project_id,env);try{await db.prepare("UPDATE cms_import_reviews SET status='approved' WHERE id=? AND status='pending'").bind(id).run();}catch{}row=await readCMSImport(db,user,id);if(row.status==='pending')throw new CMSProjectError(409,'Import review expired or draft capacity is unavailable; no import was started');}
  const {data}=JSON.parse(row.body);await createCMSDraft(db,user,row.project_id,row.id,row.collection,data.title,data.content,env,'structured');
  try{await db.prepare("UPDATE cms_import_reviews SET status='imported' WHERE id=? AND status='approved'").bind(id).run();}catch{}
