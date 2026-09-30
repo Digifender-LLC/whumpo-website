@@ -9,7 +9,7 @@ const dir=await mkdtemp('/tmp/whumpo-wxr-stage-');
 try{
  const xml=wxr(item(1)+item(2,'<p>Image</p><img src="http://169.254.169.254/latest/meta-data/">')+item(3,'','attachment','<wp:attachment_url>https://old.example/photo.jpg</wp:attachment_url>'));
  const report=await analyzeWordPress(encode(xml));assert.deepEqual(report.summary,{articles:2,reviewable:1,needsChanges:1,attachments:1});
- assert.equal(report.articles[0].candidate.status,'draft');assert.equal(report.articles[0].sourceAuthor,'Writer Name');assert.match(JSON.stringify(report.articles[0].candidate),/strong/);
+ assert.deepEqual((await analyzeWordPress(encode(xml))).articles[0].candidate,report.articles[0].candidate);assert.equal(report.articles[0].candidate.status,'draft');assert.equal(report.articles[0].sourceAuthor,'Writer Name');assert.match(JSON.stringify(report.articles[0].candidate),/strong/);
  assert.deepEqual(report.articles[1].reasons,['media_requires_reviewed_local_import']);assert.equal(report.attachments[0].url,'https://old.example/photo.jpg');assert.equal(fetches,0);
  for(const [html,reason] of [['<script>alert(1)</script>','active_content_requires_manual_conversion'],['[gallery ids="1"]','shortcode_requires_manual_conversion'],['<!-- wp:image --><p>Photo</p><!-- /wp:image -->','media_requires_reviewed_local_import']]){const r=await analyzeWordPress(encode(wxr(item(1,html))));assert.equal(r.articles[0].candidate,null);assert.ok(r.articles[0].reasons.includes(reason));}
  assert.equal((await analyzeWordPress(encode(wxr(item(1,'<p>Secret</p>','post','<wp:post_password>secret-value</wp:post_password>'))))).articles[0].reasons[0],'password_protected_content');
