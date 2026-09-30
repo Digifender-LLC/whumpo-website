@@ -28,7 +28,7 @@ BYOC/BYOI is contact-based. The agent may help draft requirements; delivery to a
 1. **Acknowledgment:** latest message only, no history, project data, tools or authority; chooses a small intent category. Platform-owned 8–20-word text prevents arbitrary promises or invented progress.
 2. **Orchestrator:** conversation and compact workspace summary, plans work and invokes supported tools.
 3. **Normal subagent:** future task runner, task-specific context and bounded code/search/test tools.
-4. **Advanced subagent:** future evaluator-approved escalation after normal work fails; never user-selectable.
+4. **Advanced subagent:** future evaluator-approved managed escalation after normal work fails. Optional customer-approved premium access is specified in the newer AI Gateway decision below.
 
 Every route resolves to `muse-spark-1.3-contributor` on OpenCode Go for owner testing. Runtime configuration fails closed for another model or endpoint. There is no paid-model fallback or beta API selection yet. Chat Completions and Responses transport remain supported.
 
@@ -92,3 +92,42 @@ The fixed empty-context prompt fixture shrank from 21,658 to 8,575 UTF-8 bytes. 
 Live acceptance: `RUN_LIVE_MUSE=1 pnpm test:cms-chat-live --explore` passed with the unchanged 50-unit allowance. Muse reported 4,277 input and 2,113 output tokens across two calls, settling 13 test units. It changed only the requested heading, retained the other article fields/formatting, produced no publication review, and replayed without extra inference, charge or native write. Compared with the preceding full-prompt sample (9,541 input tokens / 17 units), this is one measured improvement, not a guarantee for every request. The native content handler remains synthetic/local in this acceptance. Prompt-selection guard tests, generic inspection/budget/replay regressions, TypeScript and build also passed.
 
 Deployed platform version `4357d288-38b1-4b55-9ad0-e262e4e0ddd6`. Live landing availability and anonymous Chat denial verified. No plan allowance, paid service, API rate or customer content changed in this deployment.
+
+## AI Gateway and cost-aware provider routing — September 29, 2026 decision
+
+**Planned, not activated.** The owner's latest direction makes Cloudflare AI Gateway the inference entry point for beta. Whumpo will prefer Workers AI when it is competitive for the task, and use external providers through the gateway when their measured quality-adjusted cost is better. Muse on OpenCode Go remains the only enabled owner-test route today. This decision does not enable billing, purchase gateway credits, change account settings or authorize automatic paid fallbacks.
+
+### Delivery architecture
+
+Whumpo admission and reservations → a versioned route decision → authenticated AI Gateway → the chosen Workers AI or external model → normalized result and usage → immutable settlement. Whumpo retains the provider-independent OpenAI-compatible conversation contract and existing Chat Completions/Responses adapters; each provider must pass protocol/tool/usage conformance before admission. A model's support for one protocol must not imply support for the other.
+
+Cloudflare now documents a shared REST model entry point and AI binding, including third-party models. For OpenAI-compatible single-model chat requests, follow the documented `/ai/v1/chat/completions` route and explicitly select the configured gateway. The older `/compat/chat/completions` remains the documented path for dynamic routes. Pin the exact endpoint, model ID, authentication mode and gateway in reviewed configuration rather than guessing from provider/model marketing names. References: [unified model access](https://developers.cloudflare.com/ai-gateway/changelog/), [OpenAI-compatible gateway endpoint and dynamic-route distinction](https://developers.cloudflare.com/ai-gateway/usage/chat-completion/).
+
+Initially, Whumpo chooses one explicit model per admitted attempt. Gateway-side retries and hidden fallbacks must be disabled until every possible attempt has its own reservation and reconcilable usage receipt. Future gateway dynamic routing must be versioned and bounded to an approved candidate set; an outcome with unknown provider consumption retains its hold. Do not stack SDK, application and gateway retries. Require provider credentials where using BYOK so an absent key cannot silently switch to Cloudflare-managed paid credentials. See [gateway settings, retry and billing controls](https://developers.cloudflare.com/ai-gateway/configuration/manage-gateway/).
+
+### Choosing a route
+
+1. Filter candidates by role, required context length, tools/structured output, privacy/region requirements, observed reliability and task evaluation thresholds.
+2. Compare total expected cost per successful task: input/output, billable reasoning, provider tools, gateway charges if any, and measured repair/retry frequency. Cache discounts count only when verified; reservations assume no savings.
+3. Prefer Workers AI when competitive within those constraints. Choose a cheaper external route when it meets the same quality floor. Keep latency a separate role-specific bound, especially for acknowledgment.
+4. Store provider, exact model/version, gateway/route version, rate snapshot/effective date, selection reason, estimated bound, attempt identity and reported usage. Reconcile receipts with provider/gateway totals; gateway cost dashboards do not replace the tenant ledger.
+5. Enforce per-task, per-account and platform aggregate spending limits before dispatch. A shared platform free allocation is not a guaranteed free allowance for every customer.
+
+Workers Paid does not mean unlimited included inference. As documented on this decision date, Workers AI has a daily free allocation, usage charges above it, and model-specific rates; some models require paid billing. The eventual route catalogue must use current prices and account entitlement checks, not this document's frozen examples. [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/). Gateway features, retention and any recurring/minimum charges also require account-specific verification before activation. No new recurring fee is accepted by this plan.
+
+### Premium models and customer credits
+
+Opus, Sol, Astra and Fable are the owner's future premium candidates, not configured API model IDs or verified availability/prices. Add candidates only after their API access, gateway path, exact identifiers, rates and task quality have been verified. Do not assume a model available in a coding subscription is available through a production API.
+
+Offer premium capacity through an optional add-on and/or prepaid credit loading. This supersedes the earlier blanket “never user-selectable” rule: a customer may explicitly request premium help, or consent to an agent's recommendation, within an approved per-task spending cap. Automatic managed escalation within the included budget remains a separate policy and still needs evaluator evidence. Ordinary work must remain usable without buying premium capacity.
+
+Keep one auditable customer credit ledger, with immutable receipts recording the approved premium entitlement and spend source. Included allowance, purchased credit balance, operator inference cost and the Cloudflare prepaid gateway balance are distinct concepts. The old test build-unit pack is not a currency conversion. Before checkout launches, define the retail conversion/margin, expiry/refund treatment, add-on allowance and what happens when either allowance runs out; show an estimated range and maximum charge before a premium task. Reserve that maximum atomically, settle actual metered consumption under the disclosed tariff, and release unused holds only when the outcome is known. No automatic reload, plan upgrade or credit purchase without explicit opt-in.
+
+### Beta activation gates
+
+- Reviewed gateway configuration and scoped credentials; metadata-only observability by default, with private prompt/response logging and shared response caching disabled unless separately designed and consented to.
+- Versioned candidate catalogue, dated rate cards, paid-provider admission, aggregate limits and approved rollback to the previous route.
+- Contract tests for each enabled protocol/provider, tool outputs, token/reasoning accounting, streaming cancellation, timeouts, unknown outcomes and no hidden fallback/retry.
+- Benchmarks on Whumpo tasks (acknowledgment, orchestration, edits, coding and review) measuring successful outcomes, latency and total cost—not token price alone.
+- Durable premium entitlement, quote/approval, reservation/settlement and replay tests; payment integration remains deferred because no Stripe account exists.
+- A small explicitly approved live canary before wider beta; no claim that the gateway or Workers AI models are provisioned from this plan alone.
