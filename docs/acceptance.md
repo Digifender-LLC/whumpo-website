@@ -6,6 +6,8 @@ Source reviewed through `3d44a21`: root Worker configs, deployment/build scripts
 
 Latest incremental acceptance: platform `29d865c5-3447-4819-9ffe-c6ab1e596046`, site host `5797ee48-d71b-4311-974b-726fde56c1f1`, and migrations through `0071_cms_wordpress_sources.sql` are live in test. CMS image editing/publication and bounded WordPress retained-source upload, analysis, review and private import are deployed. Connected local HTTP/Chat-to-native acceptance passed lost-response recovery and exact private draft creation. Remote readback confirms zero registered CMS instances, zero import sources/reviews and Monitor mode; anonymous private import endpoints return 401. Physical mobile and first live customer CMS acceptance remain open. See [connected CMS evidence](emdash.md).
 
+Latest welcome release: platform `8a20122e-1ce5-48e8-850f-8ff84ceb979f`, migrations through `0073_welcome_onboarding.sql`. Project-first welcome and default/uploaded profile pictures are deployed with the existing pricing panel preserved. Local connected browser recovery created exactly one project and issued no early Chat/dashboard reads; live assets and anonymous access denial passed. The versioned private backend helper library from migration 0072 is also deployed; its D1/QuickJS acceptance remains local. See [welcome evidence](onboarding.md).
+
 ## Requirement map and proof still needed
 
 | Requirement | Current evidence and scope | Remaining proof/work |

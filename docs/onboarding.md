@@ -12,6 +12,8 @@ Migration 0073 stores owner-scoped welcome progress and an immutable reserved pr
 
 Local verification: `pnpm check`, `pnpm test:onboarding-welcome`, `pnpm test:profile`, `pnpm build` and diff checks passed. Disposable D1/HTTP tests cover tenant and origin boundaries, stale edits, strict fields/limits, concurrent completion and lost-commit recovery. A connected local browser session chose artwork, uploaded a photo, saved/reloaded the review and recovered a deliberately lost completion response: one project, no early workspace reads. The 390px layout had no horizontal document overflow. Physical-device passkeys and touch acceptance remain unverified.
 
+Deployed to the test platform September 29, 2026: migration `0073_welcome_onboarding.sql`, Worker version `8a20122e-1ce5-48e8-850f-8ff84ceb979f`. Release preserved the independently deployed pricing panel. Live health returned 200, all six avatar assets and built frontend JS/CSS matched the release bytes, and anonymous onboarding/private-photo reads returned 401. The isolated release also passed both TypeScript checks and the production build. Preview: `.secrets/welcome-profile-preview.png`.
+
 ## Additional projects through Chat
 
 The existing conversational flow collects an idea and project name, creates another project, then asks for its audience and visual direction. Those questions are optional (`/skip`). Finishing style selection saves a private immutable launch-page version with preview and source-export links. Nothing is published.
