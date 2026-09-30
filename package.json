@@ -131,7 +131,8 @@
     "test:cms-rich-text": "node tests/cms-rich-text.mjs",
     "test:project-brief-live": "node tests/project-brief-live.mjs",
     "report:connections": "node tools/report-connections.mjs",
-    "test:connection-readiness": "node tests/connection-readiness.mjs"
+    "test:connection-readiness": "node tests/connection-readiness.mjs",
+    "test:chat-history": "node tests/chat-history.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
