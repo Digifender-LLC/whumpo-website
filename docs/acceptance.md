@@ -4,6 +4,8 @@
 
 Source reviewed through `3d44a21`: root Worker configs, deployment/build scripts, React entry point, pricing catalogue, chat/navigation, provider-connection gates and the feature contracts linked below. Fresh read-only deployment inspection found platform version `02416110-7913-44a6-a19e-fdbca3a0ed96`, migrations through `0067_fair_use_lifecycle.sql`, persisted Monitor mode, and **zero registered native CMS instances**. Required binding sets for customer GitHub authorization, customer Cloudflare OAuth, custom-domain hosting and Stripe were absent. These are distinct from the operator's authenticated GitHub/Wrangler tools; operator credentials do not configure customer consent flows.
 
+Latest incremental acceptance: platform `e6bd1a77-e993-4317-a442-de0c7a55c357` and migration `0068_cms_media_uploads.sql` are live in test. The owner CMS image-upload API, capability-gated mobile picker and recovery receipts are implemented; synthetic browser recovery and actual local native EmDash upload passed. Zero registered customer CMS instances and Monitor mode were rechecked. Live landing returned 200; unauthenticated upload inventory returned 401. This does not establish live customer uploads or image insertion/publication. See [media delivery evidence](emdash.md#workspace-image-picker--september-29-2026).
+
 ## Requirement map and proof still needed
 
 | Requirement | Current evidence and scope | Remaining proof/work |
