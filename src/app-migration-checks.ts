@@ -9,9 +9,9 @@ async function owned(db:D1Database,user:string,id:string){
 }
 export async function readMigrationCheck(db:D1Database,user:string,id:string){
  const m=await owned(db,user,id);
- const row=await db.prepare("SELECT EXISTS(SELECT 1 FROM app_migration_current WHERE id=?) current,count(*) retained,coalesce(sum(state='pending'),0) pending,coalesce(sum(state='running'),0) running,coalesce(sum(state='ready'),0) ready,coalesce(sum(state='failed'),0) failed FROM app_migration_documents WHERE migration_id=?").bind(id,id).first<{current:number;retained:number;pending:number;running:number;ready:number;failed:number}>();
+ const row=await db.prepare("SELECT EXISTS(SELECT 1 FROM app_migration_approvals WHERE id=? AND status='applied') applied,EXISTS(SELECT 1 FROM app_migration_current WHERE id=?) current,count(*) retained,coalesce(sum(state='pending'),0) pending,coalesce(sum(state='running'),0) running,coalesce(sum(state='ready'),0) ready,coalesce(sum(state='failed'),0) failed FROM app_migration_documents WHERE migration_id=?").bind(id,id,id).first<{applied:number;current:number;retained:number;pending:number;running:number;ready:number;failed:number}>();
  const expected=JSON.parse(m.roster_json).length as number;
- return {id,projectId:m.project_id,fromVersion:m.from_version,toVersion:m.to_version,transformVersion:m.transform_version,testId:m.test_id,expiresAt:m.expires_at,documents:expected,pending:row!.pending,running:row!.running,ready:row!.ready,failed:row!.failed,state:!row!.current||row!.retained!==expected?'changed':row!.failed?'failed':row!.running?'uncertain':row!.pending?'preparing':'ready'};
+ return {id,projectId:m.project_id,fromVersion:m.from_version,toVersion:m.to_version,transformVersion:m.transform_version,testId:m.test_id,expiresAt:m.expires_at,documents:expected,pending:row!.pending,running:row!.running,ready:row!.ready,failed:row!.failed,state:row!.applied?'applied':!row!.current||row!.retained!==expected?'changed':row!.failed?'failed':row!.running?'uncertain':row!.pending?'preparing':'ready'};
 }
 /** Internal only: no route/model action or apply authority until the full reviewed workflow is connected. */
 export async function beginMigrationCheck(db:D1Database,user:string,project:string,id:string,target:string,transform:string,test:string){
