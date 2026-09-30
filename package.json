@@ -10,6 +10,7 @@
     "test:smoke": "node tests/smoke.mjs",
     "test:ai": "node tests/ai.mjs",
     "test:ai-gateway": "node tests/ai-gateway.mjs",
+    "test:gateway-inference": "node tests/gateway-inference.mjs",
     "deploy": "node tools/deploy.mjs",
     "db:remote": "wrangler d1 migrations apply whumpo-control --remote",
     "invite": "node tools/create-invite.mjs",

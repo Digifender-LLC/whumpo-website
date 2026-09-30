@@ -2,7 +2,7 @@
 
 ## Status — September 29, 2026
 
-Implemented and locally contract-tested in `src/ai-gateway.ts`. This is the network adapter for the [gateway routing and spending design](pricing-and-model-policy.md#delivery-architecture). It is **not connected to live Chat, the route planner, or spending dispatch**. Muse remains the only live owner-test model. No gateway was provisioned, API token installed, paid call made, or billing setting changed by this increment.
+Implemented and locally contract-tested in `src/ai-gateway.ts`. This is the network adapter for the [gateway routing and spending design](pricing-and-model-policy.md#delivery-architecture). The server-only dispatch service now connects an existing planner-derived spending reservation to this adapter. It is **not connected to live Chat or a funded production route**. Muse remains the only live owner-test model. No gateway was provisioned, API token installed, paid call made, or billing setting changed by this increment.
 
 ## Contract and Whumpo fit
 
@@ -14,7 +14,7 @@ The existing parser bounds response bytes/text, rejects unexpected model identit
 
 ## Delivery and prerequisites
 
-Before enabling this adapter in Chat, connect it to an immutable admitted attempt: reserve operator/customer funds, atomically claim dispatch, use that receipt's exact model/rates/bounds, then settle observed usage. Record unknown outcomes for reconciliation without automatically replaying the provider call. The present adapter is intentionally not a funding or authorization boundary by itself.
+The dispatch service described below consumes an existing immutable admitted attempt. Live Chat still needs authoritative route configuration, funding admission and an approved model-specific input counter. The low-level adapter alone is not a funding or authorization boundary.
 
 Activation requires a scoped Workers AI Read token, a configured gateway whose billing/logging/cache/attempt settings have been reviewed, an explicit versioned model catalogue with verified prices and protocol conformance, gateway/provider receipt linkage, and a reviewed canary. Third-party BYOK credentials must be present on the gateway when using this adapter's required-credentials policy. It does not purchase gateway credits or use the owner's broad Cloudflare management key for inference. Gateway configuration, provider retention, effective header behavior and model-specific reasoning/token costs remain live acceptance requirements.
 
@@ -31,3 +31,18 @@ Workers Paid is not an unlimited inference entitlement. Usage can create Workers
 ## Verification
 
 `pnpm test:ai-gateway` exercises both actual adapter paths with an injected transport: fixed endpoint, headers, request payload, usage normalization, configuration rejection before any call, redirects/429/500 without retry, timeout redaction, credential-echo rejection, missing usage rejection and native fetch binding. `pnpm test:ai`, `pnpm test:model-policy`, `pnpm check`, and diff checks also pass. These are local contract checks, not live Cloudflare inference or provider-cost acceptance.
+
+
+## Durable dispatch and recovery — September 29, 2026
+
+`src/gateway-inference.ts` consumes an existing owner-scoped reservation created by `reserveGatewaySpend`. It verifies the configured model, protocol, hosting class and output ceiling against that immutable receipt. A trusted server input counter must be approved for the exact model/protocol; unverified client estimates must never be passed as that counter. Invalid or over-bound input cannot dispatch. Configuration and messages are copied before asynchronous work to prevent mutation during admission.
+
+Migration `0075_gateway_inference_requests.sql` binds the reservation to a hash of its exact messages, account/gateway, model, protocol, output ceiling, timeout and measured input bound. Prompts and credentials are not stored in this table. Different request content or routing cannot reuse the same attempt. API token rotation does not change request identity. The record does store the validated private answer and usage for owner-scoped recovery; it is not a shared cache, public API or model context source.
+
+The existing database transition claims dispatch once. Concurrent duplicates may observe an in-progress status but cannot call the provider again. A lost claim response or crash after claiming leaves a retained hold, even if no provider call occurred. This is deliberate at-most-once dispatch, not a guarantee that every admitted attempt completes. Such attempts need reconciliation rather than blind retries or release.
+
+After a validated response, the service stores it before settling through the existing ledger. These are recoverable stages, not one database transaction. If the response is durable but settlement or its acknowledgment is lost, an identical retry uses the saved answer/usage to finish or replay settlement without inference. If the provider answer is lost before durable storage, the attempt remains uncertain with its hold. A response exceeding the reservation is retained for investigation but cannot settle above the approved amount. No error path automatically calls another provider, releases a dispatched hold or raises a cap.
+
+The request/result identity is immutable and deletion is denied. Retention/anonymization, provider event/invoice linkage, orphan reconciliation, cancellation, model-counter version management, funding/approval endpoints and live route activation remain required before real customer use. No new public endpoint exposes this service. Migration 0075 has not been applied remotely; no gateway spending was enabled or deployed by this change.
+
+Verification: `pnpm test:gateway-inference` uses disposable actual D1 with all migrations and an injected provider transport. It verifies identical and conflicting concurrent requests, one provider call, owner/model/gateway/content isolation, saved-answer replay, immutable request/result records, lost insert/dispatch/result/settlement responses, failed result persistence, timeout holds, usage-overrun denial and exact final bucket balances. `pnpm test:gateway-spend`, `pnpm test:ai-gateway`, `pnpm check`, and diff checks pass. These tests incur no inference charges and do not establish live gateway behavior.
