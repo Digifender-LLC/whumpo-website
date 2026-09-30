@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {agentContentPolicy} from '../src/content-policy.ts';
 import { build } from 'esbuild';
 const bundle = await build({entryPoints:['src/ai.ts'],bundle:true,platform:'node',format:'esm',write:false});
 const { complete } = await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
@@ -18,12 +19,13 @@ const chat = await complete(config, messages, async (url, init) => {
   assert.equal(url.href, 'https://example.test/v1/chat/completions');
   assert.equal(init.headers.authorization, 'Bearer test-secret');
   assert.equal(init.redirect, 'manual');
-  assert.deepEqual(JSON.parse(init.body).messages, messages);
+  assert.deepEqual(JSON.parse(init.body).messages, [{role:'system',content:agentContentPolicy},...messages]);
   return Response.json({ choices: [{ finish_reason: 'stop', message: { content: 'A bakery site' } }], usage: { prompt_tokens: 10, completion_tokens: 20 } });
 });
 assert.deepEqual(chat, { text: 'A bakery site', inputTokens: 10, outputTokens: 20 });
 const responses = await complete({ ...config, protocol: 'responses' }, messages, async (url, init) => {
   assert.equal(url.pathname, '/v1/responses');
+  assert.deepEqual(JSON.parse(init.body).input,[{role:'system',content:agentContentPolicy},...messages]);
   assert.equal(JSON.parse(init.body).store, false);
   return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello' }] }], usage: { input_tokens: 3, output_tokens: 4 } });
 });

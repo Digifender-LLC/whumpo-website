@@ -1,3 +1,4 @@
+import {acceptsCustomerEligibility,customerEligibilityMessage} from './content-policy';
 import {eraseRevokedVisitor} from './app-owner-erasure';
 import {chatHistory} from './chat-history';
 import {readOnboarding,saveOnboarding,completeOnboarding,onboardingComplete} from './onboarding';
@@ -172,6 +173,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
   if (method === "POST" && pathname === "/api/auth/register") {
     const data = await body(request);
+    if (!localMode(request, env) && !acceptsCustomerEligibility(data)) return error(403, customerEligibilityMessage);
     const email = typeof data?.email === "string" ? data.email.trim().toLowerCase() : "";
     const password = data?.password;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || typeof password !== "string" || password.length < 12 || password.length > 128)

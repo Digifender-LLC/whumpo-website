@@ -55,6 +55,7 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 
 ## Feature references
 
+- [Content safety and US customer eligibility](docs/content-safety.md) — policy foundations; scanning and enforcement remain launch gates
 - [Chat tools and navigation](docs/workspace-agent.md)
 - [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)
 - [GitHub authorization](docs/integrations/github-connection.md) and [reviewed backups](docs/integrations/github-backups.md)

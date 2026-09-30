@@ -1,3 +1,4 @@
+import {acceptsCustomerEligibility,customerEligibilityMessage} from './content-policy';
 import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse, type AuthenticationResponseJSON, type RegistrationResponseJSON } from '@simplewebauthn/server';
 import { hashToken, newSessionToken } from './security';
 
@@ -37,6 +38,7 @@ async function consume(env: Env, request: Request, kind: Challenge['kind']) {
   return challenge;
 }
 async function invitation(env: Env, request: Request, data: Record<string, unknown>) {
+  if (String(env.ENVIRONMENT) !== 'local' && !acceptsCustomerEligibility(data)) throw new AuthError(403, customerEligibilityMessage);
   const email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AuthError(400, 'Enter a valid email');
   const inviteHash = typeof data.inviteCode === 'string' ? await hashToken(data.inviteCode.trim()) : '';
@@ -68,6 +70,7 @@ export async function passkeyOptions(request: Request, env: Env, kind: Challenge
 }
 
 export async function passkeyVerify(request: Request, env: Env, kind: Challenge['kind'], data: Record<string, unknown>, signedIn: User | null): Promise<{ user: User; recoveryCode?: string; credentialId?: string }> {
+  if (kind === 'signup' && String(env.ENVIRONMENT) !== 'local' && !acceptsCustomerEligibility(data)) throw new AuthError(403, customerEligibilityMessage);
   const challenge = await consume(env, request, kind);
   const { origin, rpID } = rp(request, env);
   if (kind === 'add' && (!signedIn || signedIn.id !== challenge.user_id)) throw new AuthError(401, 'Sign in again before adding a passkey');
