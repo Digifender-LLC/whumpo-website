@@ -169,12 +169,12 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if (/^\/project-details(?:\s|$)/.test(command)) {const parts=command.split(/\s+/);if(parts.length!==2||! /^[0-9a-f-]{36}$/.test(parts[1]))return {status:400,error:'Use /project-details PROJECT_ID'};reply=await inspectWorkspace(db,userId,'project',parts[1]);}
   else if (['/traffic','show traffic','my traffic'].includes(command)) reply=await inspectWorkspace(db,userId,'traffic');
   else if (['/inbox','show inbox','my inbox'].includes(command)) reply='Open your private inbox from Dashboard → Contact inbox or type /inbox in the workspace. Visitor messages are not copied into chat history or AI prompts. Use /contact-on PROJECT_ID or /contact-off PROJECT_ID to review form settings.';
-  else if (/^\/photos(?:\s|$)/.test(command)) {
-    const [,id,...extra]=command.split(/\s+/);
-    if(extra.length||(id&&!/^[0-9a-f-]{36}$/.test(id)))return {status:400,error:'Use /photos, optionally followed by a project ID.'};
+  else if (/^\/(?:photos|files)(?:\s|$)/.test(command)||['show files','show photos'].includes(command)) {
+    const [,id,...extra]=command.startsWith('/')?command.split(/\s+/):['/photos'];
+    if(extra.length||(id&&!/^[0-9a-f-]{36}$/.test(id)))return {status:400,error:'Use /files or /photos, optionally followed by a project ID.'};
     const target=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,id??null,id??null).first<{id:string;name:string}>();
     if(!target)reply='No matching project found. Use /projects to choose a project.';
-    else {const {files}=await listPhotos(db,userId,target.id);reply=`Photos for “${target.name}”:\n\n`+(files.length?files.map(f=>`${f.name} · ${f.status} · ${f.saved_versions} saved version(s)\nPhoto: ${f.id}`).join('\n\n')+'\n\nUse /delete-photo PHOTO_ID to review removal of an unused photo.':'No photos yet. Open /files to upload one.');}
+    else {const {files}=await listPhotos(db,userId,target.id);reply=`Saved photo inventory for ${JSON.stringify(target.name)} when this message was requested:\n\n`+(files.length?files.map(f=>`${JSON.stringify(f.name)} · ${f.status}\n${f.width} × ${f.height} pixels · ${f.size} bytes · retained by ${f.saved_versions} saved version(s)\nPhoto: ${f.id}`).join('\n\n'):'No photos uploaded for this project yet.')+'\n\nType open project photos to preview or upload a photo. Use /files PROJECT_ID to inspect another project; /projects lists your IDs. Use /delete-photo PHOTO_ID to review removal of an unused photo.\n\nThis reads saved metadata only, not image bytes, current publication or storage availability. Sending /files again refreshes this snapshot. No AI units were used.';}
   }
   else if (/^\/(?:inspect|project)(?:\s|$)/.test(command)) {
     const [verb,id,...extra]=command.split(/\s+/);
@@ -225,7 +225,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/activity', 'show activity'].includes(command)) {
     const { results } = await db.prepare('SELECT summary, created_at FROM activity_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').bind(userId).all<{ summary: string; created_at: string }>();
     reply = results.map(event => `${event.created_at.slice(0, 10)}: ${event.summary}`).join('\n') || 'No activity yet.';
-  } else if (['/files','show files','show photos','upload a photo'].includes(command)) {
+  } else if (command==='upload a photo') {
     reply='Open Dashboard → Photos to upload a private photo or view existing files. Uploads use no AI units. Photos are not published automatically.';
 
   } else if (['/connections', 'show connections'].includes(command)) {
