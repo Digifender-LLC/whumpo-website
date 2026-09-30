@@ -2,6 +2,8 @@
 
 **Current reconciliation:** source through `ca401f6` plus the existing local working-tree changes. Connection-guidance release September 30: platform `4712f560-b629-4860-b0a0-fe30eae0953e`, sites `d1208b4c-f49b-496a-b659-ad6d84f9566e`, apps `9bee8593-ee7f-4dd3-8934-2b41f43d692e`, runtime `662ea586-726d-4a00-ad22-d84024a7c0b2`. Migration readback at 14:21 UTC confirms **all 93 migrations applied**, including 0075/0076. Monitor is persisted; registered CMS instances remain zero. Cloudflare OAuth/encryption bindings exist; customer GitHub App, Stripe and custom-hostname activation bindings are absent. Binding presence is not proof of a successful customer consent flow.
 
+Latest migration readback: September 30 15:21 UTC, all **94 migrations applied**, none pending. Standard-AI non-billable receipts are implemented and their table is configured, but Chat integration remains incomplete; existing test-unit limits remain active. See [standard AI accounting](standard-ai-accounting.md).
+
 Current active platform: `a30b9af5-9d51-4fe7-81b0-fe4e5ff28aa1`. Requested shortcut pages passed connected local browser/D1 acceptance; custom browser titles use saved labels. September 30 15:17 UTC live version, 16 asset hashes and access-boundary checks passed.
 
 Latest active platform: `e62fdedc-3a47-4f61-8f9c-1c08ba4fc49b` adds plain-language shortcut requests. The live testing-model shortcut journey passed against disposable local storage; connected local browser acceptance now passes; physical-device acceptance remains open.

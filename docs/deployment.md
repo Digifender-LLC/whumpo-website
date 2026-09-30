@@ -389,3 +389,8 @@ At 15:08 UTC, independent verification succeeded: active version, all 16 fronten
 Platform `a30b9af5-9d51-4fe7-81b0-fe4e5ff28aa1` displays a custom page's saved label in the browser title rather than its internal tab ID. Local browser acceptance verified the title and both shortcut-to-Chat actions with disposable actual D1; final assertions found exactly two guided shortcut requests, zero inference and zero publications. The mobile pages sheet and 390 CSS-pixel layout were checked separately. Physical-device acceptance remains open.
 
 Both TypeScript projects, build and asset-loading checks pass. Independent live verification at 15:17 UTC confirmed the active version, all 16 frontend assets, health 200, anonymous private-route denial and recovery origin checks. Evidence: `.secrets/workflow-title-release-verification.json`. No schema, customer data, CMS resources or provider permissions changed.
+
+
+## Standard AI accounting schema — September 30, 2026
+
+Migration 0094 applied to the private test database under the owner’s all-pending-migrations authorization. Readback at 15:21 UTC confirms all 94 files applied, both standard-AI receipt triggers and zero requests. Disposable-D1 receipt race/isolation/replay/non-charging tests and both TypeScript projects passed. No Worker deployment or inference routing changed. The runtime receipt module still needs integration with Chat and internal cost receipts before unlimited standard assistance is active. Private evidence: `.secrets/standard-ai-migration.json`.
