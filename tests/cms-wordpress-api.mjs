@@ -34,7 +34,22 @@ try{
  assert.equal((await call(base+'/'+source+'/import-reviews',{method:'POST',body:{id:id(),sourceItemId:9,title:'Forged replacement'}})).status,400);
  const reviewPath='/api/cms-import-reviews/'+review;assert.equal((await call(reviewPath,{cookie:otherToken})).status,404);assert.equal((await call(reviewPath+'/confirm',{method:'POST',body:{},origin:'https://foreign.test'})).status,403);assert.equal(nativeWrites,0);
  const page=await call(reviewPath+'/preview');assert.equal(page.status,200);assert.match(page.headers.get('content-security-policy'),/sandbox/);assert.match(await page.text(),/Original/);
+ const chat=async(content,cookie=token,requestId=id())=>{const state=await (await call('/api/chat',{cookie})).json();const response=await call('/api/chat',{method:'POST',cookie,body:{content,revision:state.state.revision,id:requestId}});assert.equal(response.status,200,await response.clone().text());return (await (await call('/api/chat',{cookie})).json()).turns.find(t=>t.id===requestId);};
+ const inventory=await chat('/wordpress-sources '+a.project);assert.match(inventory.assistant_text,/wordpress.xml/);
+ const reportTurn=await chat('/wordpress-inspect '+a.project+' '+source);assert.match(reportTurn.assistant_text,/Item 9/);assert.ok(!reportTurn.assistant_text.includes('<strong>'));assert.ok(!reportTurn.assistant_text.includes('Original story'));
+ const forbidden=await chat('/wordpress-inspect '+a.project+' '+source,otherToken);assert.ok(!forbidden.assistant_text.includes('Private import'));
+ const reviewTurn=await chat('/cms-import-review '+review);assert.equal(reviewTurn.cms_import_review_id,review);assert.equal(reviewTurn.cms_import_confirmation_id,review);assert.equal(nativeWrites,0);
+ await db.prepare("UPDATE chat_turns SET assistant_text='Interrupted before review presentation' WHERE id=?").bind(reviewTurn.id).run();
+ const interrupted=(await (await call('/api/chat')).json()).turns.find(t=>t.id===reviewTurn.id);assert.equal(interrupted.cms_import_confirmation_id,undefined);
+ await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(reviewTurn.assistant_text,reviewTurn.id).run();
+ const {cmsWordPressAction}=await module('src/cms-wordpress-chat.ts');
+ assert.equal(cmsWordPressAction(db,a.user,{kind:'cms',operation:'confirmWordPressImport',reviewId:review},id(),env),undefined);
+ await assert.rejects(cmsWordPressAction(db,a.user,{kind:'cms',operation:'reviewWordPressImport',projectId:a.project,sourceId:source,sourceItemId:9,title:'Replacement'},id(),env),/Unsupported/);
+ const dedup=await chat('/import-wordpress '+a.project+' '+source+' 9');assert.match(dedup.assistant_text,new RegExp(review));assert.equal(nativeWrites,0);
+ const imported=await chat('/confirm-cms-import '+review);assert.match(imported.assistant_text,/imported as a private draft/);assert.equal(imported.cms_import_confirmation_id,undefined);assert.equal(imported.cms_preview_request_id,review);assert.equal(nativeWrites,1);
+ const recovered=await chat('/confirm-cms-import '+review);assert.equal(recovered.cms_preview_request_id,review);assert.equal(nativeWrites,1);
+ const help=await chat('/help cms');assert.match(help.assistant_text,/wordpress-inspect/);
  const confirmed=await call(reviewPath+'/confirm',{method:'POST',body:{}});assert.equal(confirmed.status,200,await confirmed.clone().text());assert.equal((await confirmed.json()).status,'imported');assert.equal(nativeWrites,1);assert.equal((await call(reviewPath+'/confirm',{method:'POST',body:{}})).status,200);assert.equal(nativeWrites,1);
  const reviews=await call('/api/cms/'+a.project+'/wordpress/import-reviews');assert.equal((await reviews.json()).reviews[0].status,'imported');assert.equal((await db.prepare('SELECT count(*) n FROM cms_publication_reviews').first()).n,0);
- console.log('Mounted WordPress API passed: session/origin checks, invalid-file rejection before storage, retained-source inspection/download, owner isolation, source-derived review, forged-field denial, private preview, explicit confirmation/replay and no publication.');
+ console.log('Mounted WordPress API and Chat passed: guided inspection/review/confirmation/recovery, model approval exclusion, forged-action rejection, help discovery,  session/origin checks, invalid-file rejection before storage, retained-source inspection/download, owner isolation, source-derived review, forged-field denial, private preview, explicit confirmation/replay and no publication.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
