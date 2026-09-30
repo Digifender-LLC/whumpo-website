@@ -1,3 +1,4 @@
+import {verifyNativeMediaPreview} from '../tests/cms-native-media-preview.mjs';
 import {randomUUID} from 'node:crypto';
 import {build as bundle} from 'esbuild';
 import wrangler from 'wrangler';
@@ -38,6 +39,7 @@ try{
  const proxy=await wrangler.getPlatformProxy({configPath:join(dir,'cms.json'),persist:{path:join(dir,'state','v3')},remoteBindings:false});
  const restored=new DatabaseSync(':memory:');
  try{
+  await verifyNativeMediaPreview(proxy.env,config.vars);
   const captured=await stableCMSDatabase(async sql=>(await proxy.env.DB.prepare(sql).all()).results);restoreCapturedCMSDatabase(restored,captured.snapshot);
   const roundtrip=await captureCMSDatabase(async sql=>restored.prepare(sql).all());if(roundtrip.digest!==captured.digest)throw Error('Native CMS restore differs from source');
   const expected=['posts','pages'].flatMap(collection=>restored.prepare('SELECT id,title,status,content FROM ec_'+collection).all().map(row=>({...row,collection})));

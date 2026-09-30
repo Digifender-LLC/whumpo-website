@@ -1,3 +1,5 @@
+import {nativeCMSPreview} from './cms-native-media-preview';
+import {cmsMediaPreviewPath} from './cms-media-preview-shape';
 import {cmsCapabilities,cmsCapabilitiesPath} from './cms-capability-contract';
 import {cmsBridgeConfig,verifyCMSRequest,cmsRequestAllowed,CMSBridgeError} from './cms-bridge';
 const reply=(status:number,message:string)=>Response.json({error:message},{status,headers:{'cache-control':'no-store'}});
@@ -7,6 +9,8 @@ export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:
   const config=cmsBridgeConfig(env),verified=await verifyCMSRequest(request,config);
   if(!cmsRequestAllowed(request.method,verified.path,verified.body))return reply(403,'CMS operation not available');
   if(verified.path===cmsCapabilitiesPath)return Response.json({success:true,data:cmsCapabilities},{headers:{'cache-control':'no-store'}});
+  const preview=verified.path.match(cmsMediaPreviewPath);
+  if(preview)return nativeCMSPreview(preview[1],config,env.MEDIA as R2Bucket|undefined,dispatch);
   const headers=new Headers({'content-type':'application/json','origin':config.origin,'x-emdash-request':'1'});
   for(const name of ['x-whumpo-cms-id','x-whumpo-cms-expires','x-whumpo-cms-signature'])headers.set(name,request.headers.get(name)!);
   const internal=new Request(request.url,{method:request.method,headers,...(request.method!=='GET'?{body:verified.body}:{})});

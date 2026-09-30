@@ -1,3 +1,4 @@
+import {cmsMediaItemPath,cmsMediaPreviewPath} from './cms-media-preview-shape';
 import {cmsMediaListPath} from './cms-media-path';
 import {cmsCapabilitiesPath} from './cms-capability-contract';
 import {cmsItemId,validCMSDraft,validCMSEdit} from './cms-content-shape';
@@ -42,7 +43,7 @@ export async function verifyCMSRequest(request:Request,config:CMSBridgeConfig,no
  return {id,path:url.pathname+url.search,body,requestHash:await digest(JSON.stringify([config.projectId,config.ownerId,config.origin,request.method,url.pathname+url.search,bodyHash]))};
 }
 export function cmsRequestAllowed(method:string,path:string,body:string){
- if(method==='GET'&&body===''&&cmsMediaListPath.test(path))return true;
+ if(method==='GET'&&body===''&&(cmsMediaListPath.test(path)||cmsMediaItemPath.test(path)||cmsMediaPreviewPath.test(path)))return true;
  if(method==='GET'&&[cmsCapabilitiesPath,'/_emdash/api/setup/status','/_emdash/api/auth/me','/_emdash/api/schema/collections'].includes(path)&&body==='')return true;
  const item=path.match(/^\/_emdash\/api\/content\/(posts|pages)\/([^/]+)$/);
  if(method==='GET'&&item&&cmsItemId.test(item[2])&&body==='')return true;
@@ -63,7 +64,8 @@ export async function callCMS(service:Fetcher,config:CMSBridgeConfig,path:string
  let timer:ReturnType<typeof setTimeout>;
  const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new CMSBridgeError(503,'CMS response timed out; check state before retrying a write'));},45000);});
  try{
-  const response=await Promise.race([service.fetch(new Request(request,{signal:controller.signal,redirect:'error'})),deadline]);
+  const response=await Promise.race([service.fetch(new Request(request,{signal:controller.signal,redirect:'manual'})),deadline]);
+  if(response.status>=300&&response.status<400){void response.body?.cancel().catch(()=>{});throw new CMSBridgeError(502,'CMS redirects are not allowed');}
   if(!response.headers.get('content-type')?.startsWith('application/json'))throw new CMSBridgeError(502,'CMS returned an invalid response');
   const reader=response.body?.getReader();if(!reader)throw new CMSBridgeError(502,'CMS response unavailable');
   const parts:Uint8Array[]=[];let length=0;

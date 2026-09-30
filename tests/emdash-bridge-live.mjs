@@ -11,7 +11,7 @@ assert.equal((await fetch(base+capabilityPath)).status,403);
 assert.equal((await call(capabilityPath,undefined,id(),{...config,ownerId:id()})).status,403);
 assert.equal((await call(capabilityPath,{})).status,403);
 const capability=await call(capabilityPath);assert.equal(capability.status,200);assert.equal(capability.headers.get('cache-control'),'no-store');
-assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,media:{metadataVersion:1,pageSize:20},structuredContent:{version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
+assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabilities',version:1,media:{metadataVersion:1,pageSize:20,previewVersion:1,previewMaxBytes:5242880},structuredContent:{version:1,collections:['posts','pages'],maxRequestBytes:4096,revisionRequired:true,stagedEdits:true}});
 assert.equal((await fetch(base+'/_emdash/api/setup/status')).status,403);
 assert.equal((await call('/_emdash/api/setup/status',undefined,id(),{...config,ownerId:id()})).status,403);
 const before=await call('/_emdash/api/setup/status');assert.equal(before.status,200);const initial=await before.json();assert.equal(initial.data.needsSetup,true,JSON.stringify(initial));

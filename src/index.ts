@@ -1,3 +1,4 @@
+import {readCMSMediaPreview} from './cms-media-preview';
 import {listCMSMedia} from './cms-media';
 import {cmsExport} from './cms-export';
 import {readProjectDetails,saveProjectDetails} from './project-details';
@@ -262,6 +263,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     }
     return error(405,'Method not allowed');
   }
+  const cmsImagePreviewRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/media\/([0-9A-HJKMNP-TV-Z]{26})\/preview$/);
+  if(method==='GET'&&cmsImagePreviewRoute)return await readCMSMediaPreview(env.DB,user.id,cmsImagePreviewRoute[1],cmsImagePreviewRoute[2],env as unknown as Record<string,unknown>);
   const cmsMediaRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/media$/);
   if(method==='GET'&&cmsMediaRoute){const page=new URL(request.url).searchParams.get('page')??'1';if(!/^(?:[1-9]\d{0,2}|1000)$/.test(page))return error(400,'Choose a valid media page');return json(await listCMSMedia(env.DB,user.id,cmsMediaRoute[1],Number(page),env as unknown as Record<string,unknown>));}
   const cmsCapabilitiesRoute=pathname.match(/^\/api\/cms\/([0-9a-f-]{36})\/capabilities$/);
