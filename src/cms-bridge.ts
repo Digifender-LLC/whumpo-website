@@ -1,3 +1,4 @@
+import {initialTaxonomyPath,validInitialTaxonomies} from './cms-initial-taxonomy-shape';
 import {cmsTaxonomyRequestAllowed} from './cms-taxonomy-shape';
 import {cmsMediaItemPath,cmsMediaPreviewPath} from './cms-media-preview-shape';
 import {cmsMediaListPath} from './cms-media-path';
@@ -44,6 +45,7 @@ export async function verifyCMSRequest(request:Request,config:CMSBridgeConfig,no
  return {id,path:url.pathname+url.search,body,requestHash:await digest(JSON.stringify([config.projectId,config.ownerId,config.origin,request.method,url.pathname+url.search,bodyHash]))};
 }
 export function cmsRequestAllowed(method:string,path:string,body:string){
+ if(method==='POST'&&path===initialTaxonomyPath)return validInitialTaxonomies(body);
  if(cmsTaxonomyRequestAllowed(method,path,body))return true;
  if(method==='GET'&&body===''&&(cmsMediaListPath.test(path)||cmsMediaItemPath.test(path)||cmsMediaPreviewPath.test(path)))return true;
  if(method==='GET'&&[cmsCapabilitiesPath,'/_emdash/api/setup/status','/_emdash/api/auth/me','/_emdash/api/schema/collections'].includes(path)&&body==='')return true;

@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {build} from 'esbuild';
+import wrangler from 'wrangler';
+execFileSync(process.execPath,['tools/generate-cms-native-schema.mjs','--check']);
+const b=await build({stdin:{contents:"export * from './src/cms-bridge';export * from './src/cms-gateway';export * from './src/cms-initial-taxonomy-shape';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const {signCMSRequest,cmsGateway,initialTaxonomies,initialTaxonomyPath}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+const dir=await mkdtemp('/tmp/whumpo-initial-taxonomies-');let proxy;
+try{
+ execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,id=()=>crypto.randomUUID(),config={projectId:id(),ownerId:id(),secret:'local-initial-taxonomy-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
+ // Minimal pinned-schema fixture. The separate built-native suite verifies real compatibility.
+ for(const sql of [
+  'CREATE TABLE _whumpo_requests(id TEXT PRIMARY KEY,request_hash TEXT,status INTEGER,response TEXT)',
+  'CREATE TABLE _whumpo_draft_identities(request_id TEXT PRIMARY KEY,collection TEXT,slug TEXT)',
+  'CREATE TABLE ec_posts(id TEXT PRIMARY KEY,slug TEXT,status TEXT,version INTEGER,locale TEXT,translation_group TEXT,deleted_at TEXT,draft_revision_id TEXT,live_revision_id TEXT,published_at TEXT,scheduled_at TEXT,updated_at TEXT)',
+  'CREATE TABLE content_taxonomies(collection TEXT,entry_id TEXT,taxonomy_id TEXT,PRIMARY KEY(collection,entry_id,taxonomy_id))',
+  'CREATE TABLE taxonomies(id TEXT PRIMARY KEY,name TEXT,slug TEXT,label TEXT,locale TEXT,translation_group TEXT,parent_id TEXT,data TEXT)',
+  'CREATE TABLE _emdash_taxonomy_defs(name TEXT,locale TEXT,translation_group TEXT,label TEXT,label_singular TEXT)',
+  'CREATE TABLE _emdash_taxonomy_def_groups(id TEXT,name TEXT,collections TEXT,hierarchical INTEGER)',
+ ])await db.prepare(sql).run();
+ const terms=[{taxonomy:'categories',id:'01ARZ3NDEKTSV4RRFFQ69G5FAV',slug:'studio',label:'Studio'},{taxonomy:'tags',id:'01ARZ3NDEKTSV4RRFFQ69G5FAW',slug:'notes',label:'Notes'}];
+ for(const t of terms){await db.prepare("INSERT INTO taxonomies VALUES(?,?,?,?,'en',?,NULL,NULL)").bind(t.id,t.taxonomy,t.slug,t.label,t.id).run();await db.prepare("INSERT INTO _emdash_taxonomy_defs VALUES(?,'en',?,?,?)").bind(t.taxonomy,t.id,t.taxonomy==='categories'?'Categories':'Tags',t.taxonomy==='categories'?'Category':'Tag').run();await db.prepare("INSERT INTO _emdash_taxonomy_def_groups VALUES(?,?, '[\"posts\"]',?)").bind(t.id,t.taxonomy,t.taxonomy==='categories'?1:0).run();}
+ let seq=0,invalidations=0;
+ async function fresh(){const draftRequestId=id(),itemId=String(++seq).padStart(26,'0'),slug='whumpo-draft-'+draftRequestId;await db.prepare('INSERT INTO _whumpo_requests VALUES(?,?,201,?)').bind(draftRequestId,'creation',JSON.stringify({success:true,data:{item:{id:itemId}}})).run();await db.prepare("INSERT INTO _whumpo_draft_identities VALUES(?,'posts',?)").bind(draftRequestId,slug).run();await db.prepare("INSERT INTO ec_posts VALUES(?,?,'draft',1,'en',?,NULL,NULL,NULL,NULL,NULL,'original')").bind(itemId,slug,itemId).run();return initialTaxonomies({draftRequestId,itemId,terms});}
+ const run=async(body,request=id(),environment=env)=>cmsGateway(await signCMSRequest(config,initialTaxonomyPath,request,body),environment,()=>{throw Error('Assignment must not dispatch upstream writes');},()=>{invalidations++;});
+ const body=await fresh(),request=id();const done=await run(body,request);assert.equal(done.status,200);const saved=await done.json();assert.deepEqual(await(await run(body,request)).json(),saved);assert.equal(invalidations,2);assert.equal((await db.prepare('SELECT count(*) n FROM content_taxonomies WHERE entry_id=?').bind(body.itemId).first()).n,2);assert.equal((await db.prepare('SELECT version FROM ec_posts WHERE id=?').bind(body.itemId).first()).version,2);
+ assert.equal((await run({...body,terms:[{...terms[0],label:'Other'},terms[1]]},request)).status,409);assert.equal((await run(body)).status,409);
+ for(const changed of [{status:'published'},{version:2},{locale:'fr'},{deleted_at:'now'},{draft_revision_id:'draft'},{live_revision_id:'live'},{scheduled_at:'later'},{published_at:'before'},{translation_group:'other'}]){const freshBody=await fresh();const [field,value]=Object.entries(changed)[0];await db.prepare('UPDATE ec_posts SET '+field+'=? WHERE id=?').bind(value,freshBody.itemId).run();assert.equal((await run(freshBody)).status,409);assert.equal((await db.prepare('SELECT count(*) n FROM content_taxonomies WHERE entry_id=?').bind(freshBody.itemId).first()).n,0);}
+ const wrong=await fresh();for(const changed of [{label:'Changed'},{slug:'changed'},{taxonomy:'tags'},{id:'01ARZ3NDEKTSV4RRFFQ69G5FAX'}])assert.equal((await run(initialTaxonomies({...wrong,terms:[{...terms[0],...changed},terms[1]]}))).status,409);
+ await db.prepare("UPDATE taxonomies SET parent_id='parent' WHERE id=?").bind(terms[0].id).run();assert.equal((await run(wrong)).status,409);await db.prepare('UPDATE taxonomies SET parent_id=NULL WHERE id=?').bind(terms[0].id).run();
+ // Force failure while writing the second assignment: the first row, version and receipt all roll back.
+ await db.prepare("CREATE TRIGGER fail_second_term BEFORE INSERT ON content_taxonomies WHEN NEW.taxonomy_id='01ARZ3NDEKTSV4RRFFQ69G5FAW' BEGIN SELECT RAISE(ABORT,'fixture failure'); END").run();const atomic=await fresh(),atomicId=id();assert.equal((await run(atomic,atomicId)).status,409);assert.equal((await db.prepare('SELECT count(*) n FROM content_taxonomies WHERE entry_id=?').bind(atomic.itemId).first()).n,0);assert.equal((await db.prepare('SELECT version FROM ec_posts WHERE id=?').bind(atomic.itemId).first()).version,1);assert.equal(await db.prepare('SELECT id FROM _whumpo_requests WHERE id=?').bind(atomicId).first(),null);await db.prepare('DROP TRIGGER fail_second_term').run();assert.equal((await run(atomic,atomicId)).status,200);
+ const lostBatch=new Proxy(db,{get(target,key){if(key==='batch')return async statements=>{const result=await target.batch(statements);if(statements.length===2)throw Error('Lost commit acknowledgement');return result;};const value=target[key];return typeof value==='function'?value.bind(target):value;}});const lost=await fresh(),lostId=id();assert.equal((await run(lost,lostId,{...env,DB:lostBatch})).status,200);assert.equal((await run(lost,lostId)).status,200);
+ const race=await fresh(),raceId=id();const results=await Promise.all(Array.from({length:4},()=>run(race,raceId)));assert.ok(results.every(r=>r.status===200));assert.equal((await db.prepare('SELECT count(*) n FROM content_taxonomies WHERE entry_id=?').bind(race.itemId).first()).n,2);
+ assert.equal((await run(await fresh(),id(),{...env,WHUMPO_CMS_OWNER_ID:id()})).status,403);
+ for(const malformed of [{...body,terms:[]},{...body,terms:[terms[0],terms[0]]},{...body,extra:true},{...body,terms:Array(21).fill(terms[0])}])assert.equal((await run(malformed)).status,403);
+ console.log('Initial taxonomy assignment passed: owner/shape gates, pinned native state, exact term revalidation, all-or-nothing mapping/version/receipt, lost commit recovery, concurrent replay, fresh-draft enforcement and cache invalidation.');
+}finally{if(proxy)await proxy.dispose();await rm(dir,{recursive:true,force:true});}
