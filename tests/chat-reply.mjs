@@ -1,8 +1,8 @@
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-const {outputFiles}=await build({tsconfig:'tsconfig.frontend.json',stdin:{resolveDir:process.cwd(),contents:"export {AppMaintenanceCard} from './frontend/src/app-maintenance-card';export {AppRestoreReviewCard} from './frontend/src/app-restore-review-card';export {AppPageReviewCard} from './frontend/src/app-page-review-card';export {ApplicationReviewCard} from './frontend/src/application-review-card';export {FirstDraftCard} from './frontend/src/first-draft-card';export {ChatReply} from './frontend/src/chat-reply';export {TurnActions} from './frontend/src/chat-turn-actions';export {renderToStaticMarkup} from 'react-dom/server';export {createElement} from 'react';"},banner:{js:"import {createRequire as moduleRequire} from 'node:module';const require=moduleRequire(process.cwd()+'/package.json');"},bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic'});
-const {AppMaintenanceCard,AppRestoreReviewCard,AppPageReviewCard,ApplicationReviewCard,FirstDraftCard,ChatReply,TurnActions,renderToStaticMarkup,createElement}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({tsconfig:'tsconfig.frontend.json',stdin:{resolveDir:process.cwd(),contents:"export {ChatRequest} from './frontend/src/chat-request';export {displayChatRequest} from './src/first-draft-command';export {AppMaintenanceCard} from './frontend/src/app-maintenance-card';export {AppRestoreReviewCard} from './frontend/src/app-restore-review-card';export {AppPageReviewCard} from './frontend/src/app-page-review-card';export {ApplicationReviewCard} from './frontend/src/application-review-card';export {FirstDraftCard} from './frontend/src/first-draft-card';export {ChatReply} from './frontend/src/chat-reply';export {TurnActions} from './frontend/src/chat-turn-actions';export {renderToStaticMarkup} from 'react-dom/server';export {createElement} from 'react';"},banner:{js:"import {createRequire as moduleRequire} from 'node:module';const require=moduleRequire(process.cwd()+'/package.json');"},bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic'});
+const {ChatRequest,displayChatRequest,AppMaintenanceCard,AppRestoreReviewCard,AppPageReviewCard,ApplicationReviewCard,FirstDraftCard,ChatReply,TurnActions,renderToStaticMarkup,createElement}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const path='/workspace/cms?project=11111111-1111-4111-8111-111111111111',render=text=>renderToStaticMarkup(createElement(ChatReply,{text}));
 const html=render('First upload\n'+path+'\nSecond upload\n'+path+'\nDone');
 assert.equal((html.match(/<a /g)||[]).length,2);assert.ok(html.includes('href="'+path+'"'));assert.ok(html.includes('Open publishing desk'));assert.ok(html.includes('min-h-11'));assert.ok(html.includes('Second upload'));
@@ -52,3 +52,18 @@ for(const kind of ['upgrade','rollback'])for(const state of ['preparing','ready'
  assert.equal(html.includes(kind==='upgrade'?'Review app upgrade':'Review app rollback'),state==='ready');assert.equal(html.includes('Check next documents'),kind==='upgrade'&&state==='preparing');assert.equal(html.includes('Discard this check'),kind==='upgrade'&&!['applied','cancelled'].includes(state));
 }
 console.log('Maintenance cards passed: escaped content, current-state controls, historical/cancelled refusal, closed source details, offline effects and no rendering mutations.');
+
+const cmsId='11111111-1111-4111-8111-111111111111',mediaId='01M3S3AJKQDK0Y86TGE4ATXCBA';
+const importRequest='/import-wordpress '+cmsId+' '+cmsId+' 184';
+for(const text of [importRequest,importRequest+' | '+mediaId,importRequest+' | '+Array(4).fill(mediaId).join(' '),'/confirm-cms-import '+cmsId,'/cms-import-review '+cmsId,'/wordpress-sources '+cmsId,'/wordpress-inspect '+cmsId+' '+cmsId]){
+ assert.notEqual(displayChatRequest(text),text);
+ const rendered=renderToStaticMarkup(createElement(ChatRequest,{text}));
+ assert.ok(rendered.includes('Request details'));assert.ok(rendered.includes('<details'));assert.ok(!rendered.includes('<details open'));assert.ok(rendered.includes(text));assert.ok(!rendered.includes('<button'));assert.ok(!rendered.includes('<a '));
+}
+assert.match(displayChatRequest(importRequest+' | '+mediaId),/images I selected/);
+assert.match(displayChatRequest('/confirm-cms-import '+cmsId),/Import or recover/);
+for(const text of [importRequest+' |',importRequest+' | '+Array(5).fill(mediaId).join(' '),importRequest+' | invalid',importRequest+' extra',importRequest.replace(' 184',' 0'),importRequest.replace(' 184',' 9999999999999999'),'/confirm-cms-import '+cmsId+' and publish','Explain '+importRequest,'<script>alert(1)</script>']){
+ assert.equal(displayChatRequest(text),text);
+ const rendered=renderToStaticMarkup(createElement(ChatRequest,{text}));assert.ok(!rendered.includes('<details'));assert.ok(!rendered.includes('<script>'));
+}
+console.log('Request presentation passed: bounded complete WordPress commands, private review versus confirmation wording, unchanged exact request disclosure, malformed/prose preservation and no action authority.');
