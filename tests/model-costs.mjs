@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const {fairUseReport}=await module('src/fair-use-report.ts');
 const {readAcknowledgment}=await module('src/acknowledgment.ts');
 const {sendAIChat,configuredAI}=await module('src/ai-chat.ts'),{readChat}=await module('src/chat.ts');
 const {ensureBilling,usageReservationStatement,dispatchUsage}=await module('src/billing.ts');
@@ -69,5 +70,16 @@ try{
  mainRelease();assert.equal((await request).status,200);
  assert.equal((await readAcknowledgment(db,ackUser,ackTurn)).ack,null);
  assert.equal((await db.prepare('SELECT SUM(estimated_micros) total FROM inference_calls WHERE turn_id=?').bind(ackTurn).first()).total,6);
+ // Operator diagnostics include consumed resources behind unsuccessful Chat turns.
+ const diagnosticUser=await account(),heldId=crypto.randomUUID();await reserve(diagnosticUser,heldId);await dispatchUsage(db,diagnosticUser,heldId);await dispatchInference(db,diagnosticUser,heldId);await uncertainInference(db,diagnosticUser,heldId);
+ const reservedId=crypto.randomUUID();await reserve(diagnosticUser,reservedId);
+ const readOnly={prepare(sql){assert.match(sql,/^(SELECT|WITH)\b/);return db.prepare(sql);}};
+ const report=await fairUseReport(readOnly),ops=report.inferenceOperations30d;assert.equal(report.mode.mode,'monitor');assert.deepEqual(report.activeRestrictions,[]);assert.equal(ops.actualProviderExpenseMicros,null);
+ assert.ok(ops.groups.some(r=>r.role==='ack'&&r.providerState==='observed'));assert.ok(ops.groups.some(r=>r.providerState==='observed'&&r.chatState==='failed'&&r.observedShadowMicros>0));assert.ok(ops.groups.some(r=>r.providerState==='uncertain'&&r.heldShadowMicros>0));assert.ok(ops.groups.some(r=>r.providerState==='released'&&r.heldShadowMicros===0));
+ const ownerOps=(await fairUseReport(readOnly,diagnosticUser)).inferenceOperations30d;assert.equal(ownerOps.totals.calls,2);assert.equal(ownerOps.totals.observedShadowMicros,0);assert.ok(ownerOps.totals.heldShadowMicros>0);assert.deepEqual(ownerOps.groups.map(r=>r.providerState).sort(),['reserved','uncertain']);
+ const raw=JSON.stringify(ops);for(const value of [diagnosticUser,heldId,config.model,config.baseURL,'Say hello','Here are the next steps.'])assert.ok(!raw.includes(value));
+ const future=await fairUseReport(readOnly,diagnosticUser,Date.now()+32*86400000);assert.equal(future.inferenceOperations30d.totals.calls,0);
+ const held=await db.prepare('SELECT status FROM inference_calls WHERE id=?').bind(heldId).first();assert.equal(held.status,'uncertain');
+ console.log('Inference operations report passed: failed/ack usage, reserved/unknown/released states, account scope, time window, no content/identity/provider configuration, no writes and no enforcement.');
  console.log('Model cost receipts passed: runtime Muse pin, shadow budget, chat/ack concurrency, minimal ack context, receipt ownership, hidden late ack, unknown holds, replay, atomic budget admission, immutable identity and undispatched release.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
