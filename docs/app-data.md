@@ -1,5 +1,15 @@
 # Application visitor identity and persistent data
 
+## After publication — September 30, 2026
+
+Implemented: the latest exact receipt for the currently live visitor-page review offers **Open visitor app** and **Manage visitor access**. The first opens the fixed `app-PROJECT_ID.whumpo.site` address; the second uses the existing project-specific visitor-access navigation without an AI request. Opening controls never generates invitations or changes access. Invitation creation, recovery and revocation remain explicit operations in the visitor panel.
+
+The server derives this handoff from current ownership and `app_live_pages`, not model prose or historical approval alone. Only one matching receipt per current review receives the controls. Pending, foreign, withdrawn, replaced and disabled pages do not receive them; a refresh or subsequent Chat response recomputes availability. A page changed after the read remains subject to the visitor host's current access checks. No invitation code or credential is embedded in the links or Chat.
+
+Verification: `pnpm check`, `pnpm test:chat-reply`, `pnpm test:workspace-navigation`, `pnpm test:customer-app-journey`, isolated release TypeScript checks, build and frontend loading checks passed. The connected application journey verifies a single handoff after publication, no handoff before approval or for a foreign owner, removal after withdrawal, replacement of the old receipt's controls after republishing, and removal after program disablement. It retains the real isolated QuickJS and signed synthetic passkey checks. This change creates no invitation and adds no provider request, migration or service.
+
+Deployed September 30, 2026 as test platform `dedaf6a9-cc25-457b-90b4-e4e7080eaae6`. Independent readback verified the active version, health 200, anonymous Chat/onboarding 401 and all 16 live JS/CSS/font assets matching the tested release. Evidence: `.secrets/app-handoff-release.json`. Customer publication and visitor enrollment in the journey were disposable local fixtures, not live customer actions.
+
 ## Readable visitor-page review — September 30, 2026
 
 Implemented: Chat displays the exact saved visitor-page form as a disabled preview with its title, description, text/number/checkbox fields and submit label. The card explains which copy becomes public, invitation/passkey requirements, private data processing, visitor sign-out, and unfinished retention/recovery. Withdrawal has a separate offline summary. The proposed address is plain text, not a claim that the app is online. This preview does not execute the backend, save input or establish form correctness. Exact field keys and revision IDs remain available in a closed details section.
