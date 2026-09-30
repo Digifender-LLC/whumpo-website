@@ -1,3 +1,4 @@
+import {chatHistory} from './chat-history';
 import {readOnboarding,saveOnboarding,completeOnboarding} from './onboarding';
 import {cmsWordPressAction,cmsWordPressCommand} from './cms-wordpress-chat';
 import {analyzeCMSWordPress,inspectCMSWordPress,uploadCMSWordPressRequest} from './cms-wordpress-api';
@@ -547,6 +548,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (method === "GET" && pathname === "/api/me") return json({ user });
   const ackMatch=pathname.match(/^\/api\/chat\/([0-9a-f-]{36})\/ack$/);
   if(method==='GET' && ackMatch)return json(await readAcknowledgment(env.DB,user.id,ackMatch[1]));
+  if (method === "GET" && pathname === "/api/chat/history") return chatHistory(request,env.DB,user.id);
   if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id, !!configuredAI(env)));
   if (method === "POST" && pathname === "/api/chat") {
     const data = await body(request);
