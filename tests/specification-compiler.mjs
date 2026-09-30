@@ -6,6 +6,7 @@ import {build} from 'esbuild';
 import {createHash} from 'node:crypto';
 import {specificationContract} from '../tools/prototypes/project-specification.mjs';
 import {checkSpecificationCompiler} from '../tools/check-specification-compiler.mjs';
+Error.stackTraceLimit=0;
 
 const checked=await checkSpecificationCompiler();
 const bundle=await build({stdin:{contents:`export * from './src/project-specification/compiler';export * from './src/project-specification/v1/schema';export * from './src/project-specification/v1/json';export {siteConfig,renderSite} from './src/components';export {backendFormConfig} from './src/backend-form-config';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false});
@@ -121,6 +122,12 @@ try{
  }
  const reversed=clone(four);reversed.pages.reverse();assert.notEqual((await m.compileProjectSpecification(reversed,lock)).manifestDigest,(await m.compileProjectSpecification(four,lock)).manifestDigest);
  const hostile=clone(content);hostile.content[0].text='<script>maintainer()</script>';const escaped=await m.compileProjectSpecification(hostile,lock);assert.ok(escaped.artifacts[0].html.includes('&lt;script&gt;maintainer()&lt;/script&gt;'));assert.ok(!escaped.artifacts[0].html.includes('<script>'));
+ // Exercise escaping expansion near the supported configuration/output ceilings.
+ const dense=clone(content);dense.name='&'.repeat(100);
+ for(const [index,length] of [160,1000,100,1000,100,800,100,800].entries())dense.content[index].text='&'.repeat(length);
+ for(const suffix of ['one','two']){dense.content.push({id:'extra-title-'+suffix,text:'&'.repeat(100)},{id:'extra-copy-'+suffix,text:'&'.repeat(suffix==='one'?800:450)});dense.pages[0].sections.push({heading:'extra-title-'+suffix,text:'extra-copy-'+suffix});}
+ m.validateSpecification(dense);
+ const denseOutput=await m.compileProjectSpecification(dense,lock);assert.ok(denseOutput.artifacts[0].bytes>30000&&denseOutput.artifacts[0].bytes<=32768);
  const change=await m.compileSpecificationChange(content,operationBatches[0],lock);assert.equal(change.baseDigest,output.specificationDigest);assert.notEqual(change.nextDigest,change.baseDigest);assert.deepEqual(change.requiredReviews,[]);assert.ok(change.compiled.artifacts[0].html.includes('Monday to Saturday'));assert.equal(change.diff[0].path,'/content');assert.deepEqual(content,unchangedContent());
  function unchangedContent(){return {...clone(detailing),modules:[{id:'content',version:1}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};}
 
