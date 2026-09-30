@@ -27,7 +27,9 @@ try{
  await json('/profile',{revision:0,name:'App owner',avatar_id:'planet'},200,'PATCH');await json('/onboarding');await json('/onboarding',{revision:0,stage:'review',project_name:'Private notebook',idea:'A private note for each invited member',audience:'Our team',preferred_theme:'ocean'},200,'PUT');await json('/onboarding/complete',{revision:1});
  const {id:project}=await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(owner.user).first(),path='/projects/'+project,version=id(),run=id();
  assert.equal((await readAppStatus(db,owner.user,project)).configured,0);await assert.rejects(readAppStatus(db,foreign.user,project),e=>e.status===404);
- await json(path+'/backends',{id:version,source:'export default ({state,input})=>({state:{note:input.note,edits:(state.edits??0)+1},result:"Saved"})'},201);
+ // Trusted synthetic fixture for runtime acceptance; external uploads now quarantine.
+ const source='export default ({state,input})=>({state:{note:input.note,edits:(state.edits??0)+1},result:"Saved"})';
+ await db.prepare('INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,?,?,?)').bind(version,project,source,await hashToken(source),new Date().toISOString()).run();
  const tested=await json(path+'/backends/'+version+'/test',{id:run,input:{state:{},input:{note:'Test note'}}});assert.deepEqual(tested.result,{ok:true,value:{state:{note:'Test note',edits:1},result:'Saved'}});assert.equal(executions,1);
  const initialStatus=(await chat('/app-status '+project)).turns.at(-1);assert.match(initialStatus.assistant_text,/No application configured/);
  const origin='https://app-'+project+'.whumpo.site';
