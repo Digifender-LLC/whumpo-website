@@ -12,13 +12,13 @@ function linkURL(value:unknown){
  return value;
 }
 /** Render the supported native Portable Text subset without accepting customer HTML. */
-export function renderCMSRichText(value:unknown,resolveImage?: (image:CMSImageBlock)=>CMSResolvedImage){
+function render(value:unknown,resolveImage?: (image:CMSImageBlock)=>CMSResolvedImage|null){
  if(!Array.isArray(value)||value.length>30||new TextEncoder().encode(JSON.stringify(value)).length>12000)throw unsupported();
  if(resolveImage)cmsImageReferences(value);
  let textBytes=0;
  const blocks=value.map(raw=>{
   const b=record(raw);
-  if(b?._type==='image'&&resolveImage){const image=cmsImageBlock(b),asset=cmsResolvedImage(resolveImage(image));const caption=image.caption?`<figcaption>${escapeCMS(image.caption)}</figcaption>`:'';return {html:`<img src="${escapeCMS(asset.src)}" alt="${escapeCMS(image.alt)}" width="${asset.width}" height="${asset.height}" loading="lazy" decoding="async">${caption}`,list:'',level:0,tag:'figure'};}
+  if(b?._type==='image'&&resolveImage){const image=cmsImageBlock(b),resolved=resolveImage(image);if(resolved===null)return {html:'',list:'',level:0,tag:'figure'};const asset=cmsResolvedImage(resolved);const caption=image.caption?`<figcaption>${escapeCMS(image.caption)}</figcaption>`:'';return {html:`<img src="${escapeCMS(asset.src)}" alt="${escapeCMS(image.alt)}" width="${asset.width}" height="${asset.height}" loading="lazy" decoding="async">${caption}`,list:'',level:0,tag:'figure'};}
   if(b?._type!=='block'||!Array.isArray(b.children)||b.children.length>100||!Array.isArray(b.markDefs)||b.markDefs.length>20)throw unsupported();
   const style=b.style??'normal';if(typeof style!=='string'||!['normal','h1','h2','h3','h4','h5','h6','blockquote'].includes(style))throw unsupported();
   // Alignment and other extensions need explicit rendering support, never silent removal.
@@ -50,3 +50,7 @@ export function renderCMSRichText(value:unknown,resolveImage?: (image:CMSImageBl
  if(new TextEncoder().encode(html).length>24000)throw new CMSProjectError(409,'This draft exceeds the current preview profile');
  return html;
 }
+
+export function renderCMSRichText(value:unknown,resolveImage?:(image:CMSImageBlock)=>CMSResolvedImage){return render(value,resolveImage);}
+/** Structural validation only. Callers must separately verify media ownership and bytes. */
+export function validateCMSRichContent(value:unknown){render(value,()=>null);}

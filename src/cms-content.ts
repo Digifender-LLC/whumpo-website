@@ -1,3 +1,5 @@
+import {cmsImageReferences} from './cms-image-block';
+import {captureCMSArticleImages} from './cms-article-images';
 import {listCMSMedia} from './cms-media';
 import {prepareCMSExport} from './cms-export';
 import {describeCMSContent} from './cms-content-description';
@@ -7,7 +9,7 @@ import {prepareCMSUnpublish,describeCMSUnpublish} from './cms-unpublish';
 import {prepareCMSPublication,describeCMSPublication,readCMSPublication,listCMSPublications} from './cms-publication';
 import {prepareCMSPreview} from './cms-preview';
 import {cmsEditAction} from './cms-edits';
-import {cmsConnection,requireStructuredCMS,readCMSCapabilities} from './cms-status';
+import {cmsConnection,requireStructuredCMS,requireCMSImages,readCMSCapabilities} from './cms-status';
 import {callCMS} from './cms-bridge';
 import {cmsDraftBody,cmsRichDraftBody,cmsItemId} from './cms-content-shape';
 import {CMSProjectError} from './cms-projects';
@@ -25,10 +27,11 @@ export async function createCMSDraft(db:D1Database,user:string,project:string,id
  let body:string;try{body=JSON.stringify((format==='structured'?cmsRichDraftBody:cmsDraftBody)(title,text));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
  const read=()=>db.prepare('SELECT * FROM cms_draft_requests WHERE id=?').bind(id).first<Draft>();
  let row=await read();
- if(!row){if(format==='structured')await requireStructuredCMS(db,user,project,env);try{await db.prepare('INSERT INTO cms_draft_requests(id,project_id,user_id,collection,body,content_format) VALUES(?,?,?,?,?,?)').bind(id,project,user,collection,body,format).run();}catch{}row=await read();}
+ if(!row){if(format==='structured'&&cmsImageReferences(text).length){await requireCMSImages(db,user,project,env);await captureCMSArticleImages(db,user,project,text,env);}if(format==='structured')await requireStructuredCMS(db,user,project,env);try{await db.prepare('INSERT INTO cms_draft_requests(id,project_id,user_id,collection,body,content_format) VALUES(?,?,?,?,?,?)').bind(id,project,user,collection,body,format).run();}catch{}row=await read();}
  if(!row)throw new CMSProjectError(409,'CMS draft request capacity is full or unavailable');
  if(row.user_id!==user||row.project_id!==project||row.collection!==collection||row.body!==body||row.content_format!==format)throw new CMSProjectError(409,'CMS draft request ID already used');
  if(!row.item_id){
+  if(format==='structured'&&cmsImageReferences(text).length)await requireCMSImages(db,user,project,env);
   if(format==='structured')await requireStructuredCMS(db,user,project,env);
   // Exact retries use the same CMS gateway reservation; an unknown write is never dispatched twice.
   try{const result=await callCMS(service,config,'/_emdash/api/content/'+collection,id,JSON.parse(body));

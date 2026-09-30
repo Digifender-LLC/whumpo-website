@@ -56,11 +56,11 @@ try{
   const service={fetch:async request=>fetch('http://localhost:8799'+new URL(request.url).pathname,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),redirect:'error'})};
   await verifyCMSInitialization(service,identity);
   for(const row of expected){const data=await callCMS(service,identity,'/_emdash/api/content/'+row.collection+'/'+row.id,randomUUID());if(data.item.id!==row.id||data.item.status!==row.status||data.item.data.title!==row.title||JSON.stringify(data.item.data.content)!==JSON.stringify(JSON.parse(row.content)))throw Error('Restored native article differs from source');}
-  if(expected.length!==2)throw Error('Restored fixture must include a post and a page');
-  const first=expected[0],path='/_emdash/api/content/'+first.collection+'/'+first.id,current=await callCMS(service,identity,path,randomUUID());
+  if(expected.length!==3||expected.filter(row=>row.collection==='posts').length!==2||expected.filter(row=>row.collection==='pages').length!==1)throw Error('Restored fixture must include two posts and one page');
+  const first=expected.find(row=>row.collection==='pages'),path='/_emdash/api/content/'+first.collection+'/'+first.id,current=await callCMS(service,identity,path,randomUUID());
   const shapeCode=await bundle({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsStagedEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeCode.outputFiles[0].text).toString('base64'));
   const edit=await callCMS(service,identity,path,randomUUID(),cmsStagedEditBody('Recovered article edit','Native write after isolated restore',current._rev),'PUT');if(edit.item.data.title!=='Recovered article edit'||edit._rev===current._rev)throw Error('Restored native CMS could not save a revision');
-  console.log('Restored native EmDash boots on isolated local D1: closed setup, pinned owner, schemas and both post/page bodies and post-restore native editing verified.');
+  console.log('Restored native EmDash boots on isolated local D1: closed setup, pinned owner, schemas, text/image article bodies and post-restore native text editing verified (database restoration only; media bytes excluded).');
  }finally{restored.close();await proxy.dispose();}
 
 }finally{

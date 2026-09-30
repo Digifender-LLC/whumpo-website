@@ -1,4 +1,4 @@
-import {renderCMSRichText} from './cms-rich-text';
+import {validateCMSRichContent} from './cms-rich-text';
 // Bounded native Portable Text writes; legacy plain-text bodies retain exact replay compatibility.
 export const cmsItemId=/^[0-9A-HJKMNP-TV-Z]{26}$/;
 export function cmsDraftBody(title:unknown,text:unknown){
@@ -25,8 +25,8 @@ export function validCMSEdit(body:string){
 /** Explicit complete Portable Text replacement; callers must preserve unrequested content. */
 export function cmsRichDraftBody(title:unknown,content:unknown){
  if(typeof title!=='string'||!title.trim()||title.length>100)throw new Error('Use a title of 1–100 characters');
- renderCMSRichText(content);
- if(!(content as {children:{text:string}[]}[]).some(block=>block.children.some(span=>span.text.trim())))throw new Error('Provide article text');
+ validateCMSRichContent(content);
+ if(!(content as {_type:string;children?:{text:string}[]}[]).some(block=>block._type==='block'&&block.children?.some(span=>span.text.trim())))throw new Error('Provide article text');
  const body={status:'draft',data:{title,content}};
  if(new TextEncoder().encode(JSON.stringify(body)).length>4096)throw new Error('Encoded CMS draft exceeds 4096 bytes');
  return body;
