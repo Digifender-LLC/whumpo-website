@@ -1,3 +1,4 @@
+import './generate-cms-native-schema.mjs';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const root=new URL('../integrations/emdash/',import.meta.url);

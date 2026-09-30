@@ -1,3 +1,5 @@
+import {initialTaxonomyPath} from './cms-initial-taxonomy-shape';
+import {assignInitialTaxonomies} from './cms-initial-taxonomies';
 import {taxonomyIntent,ensureTaxonomyIntents,reserveTaxonomyIntent,recoverTaxonomyIntent,matchesTaxonomyIntent} from './cms-taxonomy-recovery';
 import {identifiedDraftPath,ensureDraftIdentities,reserveIdentifiedDraft,identityRequest,recoverIdentifiedDraft,matchesIdentifiedDraft} from './cms-draft-identity';
 import {isCMSMediaUpload,verifyCMSMediaUpload} from './cms-media-upload-bridge';
@@ -7,7 +9,7 @@ import {cmsCapabilities,cmsCapabilitiesPath} from './cms-capability-contract';
 import {cmsBridgeConfig,verifyCMSRequest,cmsRequestAllowed,CMSBridgeError} from './cms-bridge';
 const reply=(status:number,message:string)=>Response.json({error:message},{status,headers:{'cache-control':'no-store'}});
 // Reserved namespace in each isolated CMS database; never the platform account DB.
-export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:D1Database},dispatch:(request:Request)=>Promise<Response>){
+export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:D1Database},dispatch:(request:Request)=>Promise<Response>,invalidateTaxonomies:()=>void=()=>{}){
  try{
   const config=cmsBridgeConfig(env),upload=isCMSMediaUpload(request),verified=upload?await verifyCMSMediaUpload(request,config):await verifyCMSRequest(request,config);
   if(!upload&&!(typeof verified.body==='string'&&cmsRequestAllowed(request.method,verified.path,verified.body)))return reply(403,'CMS operation not available');
@@ -19,6 +21,7 @@ export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:
   const internal=new Request(request.url,{method:request.method,headers,...(request.method!=='GET'?{body:verified.body}:{})});
   if(request.method==='GET')return await dispatch(internal);
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS _townhello_requests(id TEXT PRIMARY KEY,request_hash TEXT NOT NULL,status INTEGER,response TEXT,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))").run();
+  if(verified.path===initialTaxonomyPath){const response=await assignInitialTaxonomies(env.DB,verified.id,verified.requestHash,verified.body as string);if(response.ok)invalidateTaxonomies();return response;}
   type Receipt={request_hash:string;status:number|null;response:string|null};
   const read=()=>env.DB.prepare('SELECT request_hash,status,response FROM _townhello_requests WHERE id=?').bind(verified.id).first<Receipt>();
   const receipt=(row:Receipt)=>row.request_hash!==verified.requestHash?reply(409,'CMS request ID already used'):row.status===null?reply(409,'CMS outcome unknown; inspect the existing request receipt before preparing another request'):new Response(row.response,{status:row.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
