@@ -33,7 +33,7 @@ export async function siteContext(db:D1Database,userId:string):Promise<AgentCont
  const {results:photos}=await db.prepare("SELECT f.id,f.project_id,f.name,f.width,f.height FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND f.status='ready' ORDER BY f.created_at DESC LIMIT 20").bind(userId).all<AgentContext['photos'][number]>();
  const {results:domains}=await db.prepare('SELECT d.id,d.project_id,d.hostname,d.expires_at,d.verified_at FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE p.owner_user_id=? ORDER BY d.created_at DESC LIMIT 10').bind(userId).all<NonNullable<AgentContext['domains']>[number]>();
  const {results:backends}=await db.prepare('SELECT v.id,v.project_id,v.digest FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE p.owner_user_id=? ORDER BY v.created_at DESC,v.id DESC LIMIT 10').bind(userId).all<NonNullable<AgentContext['backends']>[number]>();
- return {profile:await agentProfile(db,userId),workspace:await readLayout(db,userId),backends,domains,projectIndex,projects:projects.map(p=>({...p,purpose:p.purpose.slice(0,240)})),photos,latest};
+ return {profile:await agentProfile(db,userId),workspace:await readLayout(db,userId),backends,domains,projectIndex,projects:projects.map(p=>({...p,purpose:p.purpose.slice(0,1000)})),photos,latest};
 }
 export type AgentPromptFocus='all'|'cms';
 // Focus only explicit CMS requests without signals for another service family.
