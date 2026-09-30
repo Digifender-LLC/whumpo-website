@@ -21,7 +21,7 @@ export async function listRecoveryPoints(db:D1Database,user:string,project:strin
 type Review={id:string;user_id:string;project_id:string;point_id:string;base_revision:number;roster_json:string;status:string;expires_at:string;point_created_at:string;version_id:string;project_name:string};
 async function readReview(db:D1Database,user:string,project:string,id:string){
  await owner(db,user,project);
- const row=await db.prepare('SELECT r.*,p.created_at AS point_created_at,p.version_id,project.name AS project_name FROM app_restore_reviews r JOIN app_recovery_points p ON p.id=r.point_id JOIN projects project ON project.id=r.project_id WHERE r.id=? AND r.user_id=? AND r.project_id=?').bind(id,user,project).first<Review>();
+ const row=await db.prepare('SELECT r.*,p.created_at AS point_created_at,p.version_id,project.name AS project_name FROM app_restore_reviews r JOIN app_recovery_points p ON p.id=r.point_id JOIN projects project ON project.id=r.project_id WHERE r.id=? AND r.user_id=? AND r.project_id=? AND r.restore_program=0').bind(id,user,project).first<Review>();
  if(!row)throw new BackendError(404,'Restore review not found');return row;
 }
 const summary=(r:Review)=>({id:r.id,projectId:r.project_id,pointId:r.point_id,status:r.status,documents:JSON.parse(r.roster_json).length as number,expiresAt:r.expires_at,pointCreatedAt:r.point_created_at,versionId:r.version_id,projectName:r.project_name});
