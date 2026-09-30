@@ -30,6 +30,7 @@
     "test:exports": "node tests/exports.mjs",
     "test:files": "node tests/files.mjs",
     "test:photo-versions": "node tests/photo-versions.mjs",
+    "test:domain-proof-removal": "node tests/domain-proof-removal.mjs",
     "test:domains": "node tests/domains.mjs",
     "test:onboarding": "node tests/onboarding.mjs",
     "test:workspace-agent": "node tests/workspace-agent.mjs",

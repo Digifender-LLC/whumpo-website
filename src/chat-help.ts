@@ -61,7 +61,7 @@ Reuse the saved request or review ID after an interrupted operation. Do not crea
 Set up a CMS
 /setup-cms PROJECT_ID | title | optional tagline prepares an isolated EmDash request. /cms-review REVIEW_ID reads it; /confirm-cms REVIEW_ID queues approved provisioning. /check-cms PROJECT_ID checks an initialized instance. Provisioning still requires an operator; setup does not publish a website.`,
  domains:`Domains and hosting
-/domains shows domain ownership requests. /domain HOSTNAME PROJECT_ID prepares a TXT ownership proof; /verify-domain CLAIM_ID checks it. Ownership verification does not change hosting. /hosting shows hosting connections.
+/domains shows domain ownership requests. /domain HOSTNAME PROJECT_ID prepares a TXT ownership proof; /verify-domain CLAIM_ID checks it. Ownership verification does not change hosting. /remove-domain-proof CLAIM_ID reviews removing an unused proof; only /confirm-domain-proof-remove REVIEW_ID applies it. DNS and hosting recovery records are retained. /hosting shows hosting connections.
 /review-hosting CLAIM_ID prepares hosting; /confirm-hosting CONNECTION_ID authorizes it; /check-hosting CONNECTION_ID checks DNS and TLS; /disconnect-hosting CONNECTION_ID stops routing and removes the provider hostname.
 
 With a connected Cloudflare account:
