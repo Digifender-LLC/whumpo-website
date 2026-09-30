@@ -16,10 +16,17 @@ function current(t:Pick<Ticket,'kind'>){return t.kind==='profile'?"EXISTS(SELECT
 /** Internal-only capability. Never put ticket authority in model context or customer responses. */
 export async function reservePhotoScan(db:D1Database,kind:Kind,user:string,subject:string){
  if(!['profile','project'].includes(kind)||!uuid.test(user)||!uuid.test(subject))throw new PhotoScanError(400,'Invalid scan target');
- const source=kind==='profile'?await db.prepare("SELECT s.digest FROM profile_photo_safety s JOIN user_profiles p ON p.user_id=s.user_id AND p.photo_digest=s.digest WHERE s.user_id=? AND s.user_id=? AND s.policy_version=? AND s.state='pending'").bind(user,subject,contentPolicyVersion).first<{digest:string}>():await db.prepare("SELECT s.digest FROM project_photo_safety s JOIN project_files f ON f.id=s.file_id AND f.digest=s.digest JOIN projects p ON p.id=f.project_id AND p.owner_user_id=s.user_id WHERE s.user_id=? AND s.file_id=? AND s.policy_version=? AND s.state='pending'").bind(user,subject,contentPolicyVersion).first<{digest:string}>();
+ const source=kind==='profile'?await db.prepare("SELECT s.digest FROM profile_photo_safety s JOIN user_profiles p ON p.user_id=s.user_id AND p.photo_digest=s.digest WHERE s.user_id=? AND s.user_id=? AND s.policy_version=? AND (s.state='pending' OR (s.state='approved' AND julianday(s.expires_at)<=julianday('now')))").bind(user,subject,contentPolicyVersion).first<{digest:string}>():await db.prepare("SELECT s.digest FROM project_photo_safety s JOIN project_files f ON f.id=s.file_id AND f.digest=s.digest JOIN projects p ON p.id=f.project_id AND p.owner_user_id=s.user_id WHERE s.user_id=? AND s.file_id=? AND s.policy_version=? AND (s.state='pending' OR (s.state='approved' AND julianday(s.expires_at)<=julianday('now')))").bind(user,subject,contentPolicyVersion).first<{digest:string}>();
  if(!source)throw new PhotoScanError(404,'Pending scan target not found');
  const id=crypto.randomUUID(),authority=newSessionToken(),authorityHash=await hashToken(authority),expiresAt=new Date(Date.now()+15*60000).toISOString();
- try{await db.prepare('INSERT INTO photo_scan_tickets(id,kind,subject_id,user_id,digest,policy_version,authority_hash,expires_at) VALUES(?,?,?,?,?,?,?,?)').bind(id,kind,subject,user,source.digest,contentPolicyVersion,authorityHash,expiresAt).run();}
+ const target=kind==='profile'?'profile_photo_safety':'project_photo_safety',key=kind==='profile'?'user_id':'file_id';
+ // Reset expired clearance and retire expired attempts in the same transaction as reservation.
+ // A concurrent insertion failure rolls every reset back.
+ try{await db.batch([
+  db.prepare(`UPDATE ${target} SET state='pending',csam_check='unknown',sexual_check='unknown',scanner_reference=NULL,expires_at=NULL WHERE ${key}=? AND user_id=? AND digest=? AND policy_version=? AND state='approved' AND julianday(expires_at)<=julianday('now')`).bind(subject,user,source.digest,contentPolicyVersion),
+  db.prepare("UPDATE photo_scan_tickets SET state='stale',result_hash=?,outcome='held',completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE kind=? AND subject_id=? AND user_id=? AND digest=? AND policy_version=? AND state='reserved' AND julianday(expires_at)<=julianday('now')").bind(await hashToken('reservation-expired'),kind,subject,user,source.digest,contentPolicyVersion),
+  db.prepare('INSERT INTO photo_scan_tickets(id,kind,subject_id,user_id,digest,policy_version,authority_hash,expires_at) VALUES(?,?,?,?,?,?,?,?)').bind(id,kind,subject,user,source.digest,contentPolicyVersion,authorityHash,expiresAt),
+ ]);}
  catch{const saved=await db.prepare('SELECT id FROM photo_scan_tickets WHERE id=? AND authority_hash=?').bind(id,authorityHash).first();if(!saved)throw new PhotoScanError(409,'Scan is already reserved, changed, or unavailable');}
  return {id,authority,digest:source.digest,policyVersion:contentPolicyVersion,expiresAt};
 }

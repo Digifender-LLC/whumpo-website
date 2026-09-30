@@ -26,7 +26,7 @@ try{
  assert.equal((await recordPhotoScan(db,ticket.id,ticket.authority,payload(ticket))).replayed,true);
  await assert.rejects(()=>recordPhotoScan(db,ticket.id,ticket.authority,payload(ticket,'matched')),e=>e.status===409);
  for(const [csam,sexual,state] of [['matched','clear','blocked'],['clear','matched','blocked'],['inconclusive','clear','held']]){
-  const user=await fixture(),t=await reservePhotoScan(db,'profile',user,user),result=await recordPhotoScan(db,t.id,t.authority,payload(t,csam,sexual));assert.equal(result.outcome,state);assert.equal(result.applied,state!=='held');await assert.rejects(()=>profilePhoto(db,user),e=>e.status===423);
+  const user=await fixture(),t=await reservePhotoScan(db,'profile',user,user),result=await recordPhotoScan(db,t.id,t.authority,payload(t,csam,sexual));assert.equal(result.outcome,state);assert.equal(result.applied,state!=='held');if(state==='held'){const retry=await reservePhotoScan(db,'profile',user,user);assert.notEqual(retry.id,t.id);assert.equal((await recordPhotoScan(db,retry.id,retry.authority,payload(retry))).outcome,'approved');continue;}await assert.rejects(()=>reservePhotoScan(db,'profile',user,user),err=>err.status===404);await assert.rejects(()=>profilePhoto(db,user),e=>e.status===423);
  }
  const changed=await fixture(),old=await reservePhotoScan(db,'profile',changed,changed);
  await updateProfilePhoto(db,changed,new Request('https://whumpo.com/api/profile/photo',{method:'DELETE',headers:{'if-match':'2'}}));
@@ -48,10 +48,30 @@ try{
  assert.equal((await recordPhotoScan(db,projectTicket.id,projectTicket.authority,payload(projectTicket))).applied,true);
  assert.equal((await readPhoto(proxy.env,owner,file)).status,200);
  await assert.rejects(()=>db.prepare("UPDATE photo_scan_tickets SET state='reserved' WHERE id=?").bind(projectTicket.id).run());
+ // Expired clearance can be rescanned; live clearance and blocked states cannot be reset.
+ for(const kind of ['profile','project']){
+  const u=await fixture(),subject=kind==='profile'?u:crypto.randomUUID();
+  if(kind==='project')await uploadPhoto(new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':'Rescan'},body:jpeg}),proxy.env,owner,project,subject);
+  const uid=kind==='profile'?u:owner,table=kind==='profile'?'profile_photo_safety':'project_photo_safety',key=kind==='profile'?'user_id':'file_id';
+  await db.prepare(`UPDATE ${table} SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic-expired',expires_at='2000-01-01T00:00:00Z' WHERE ${key}=?`).bind(subject).run();
+  const reservations=await Promise.allSettled([reservePhotoScan(db,kind,uid,subject),reservePhotoScan(db,kind,uid,subject)]);
+  assert.equal(reservations.filter(x=>x.status==='fulfilled').length,1);
+  const retry=reservations.find(x=>x.status==='fulfilled').value;
+  assert.equal((await db.prepare(`SELECT state FROM ${table} WHERE ${key}=?`).bind(subject).first()).state,'pending');
+  assert.equal((await recordPhotoScan(db,retry.id,retry.authority,payload(retry))).outcome,'approved');
+  await assert.rejects(()=>reservePhotoScan(db,kind,uid,subject),err=>err.status===404);
+  await assert.rejects(()=>db.prepare(`UPDATE ${table} SET state='pending',csam_check='unknown',sexual_check='unknown',scanner_reference=NULL,expires_at=NULL WHERE ${key}=?`).bind(subject).run());
+ }
+ const reserveLostUser=await fixture(),recoveredReservation=await reservePhotoScan(lostDB,'profile',reserveLostUser,reserveLostUser);
+ assert.equal((await recordPhotoScan(db,recoveredReservation.id,recoveredReservation.authority,payload(recoveredReservation))).applied,true);
  // Check a genuinely expired ticket without changing production immutable trigger rules.
  const expiredUser=await fixture(),e=await reservePhotoScan(db,'profile',expiredUser,expiredUser);
  await db.prepare('DROP TRIGGER photo_scan_ticket_immutable').run();
  await db.prepare("UPDATE photo_scan_tickets SET expires_at='2000-01-01T00:00:00Z' WHERE id=?").bind(e.id).run();
- const expired=await recordPhotoScan(db,e.id,e.authority,payload(e));assert.equal(expired.state,'stale');assert.equal(expired.applied,false);await assert.rejects(()=>profilePhoto(db,expiredUser),err=>err.status===423);
- console.log('Photo scan results passed: exact ownership/digest/policy, strict coverage, authority hashing, duplicate/conflicting results, concurrent decisions, held/blocked/stale outcomes, lost acknowledgement recovery, and private delivery gate. Synthetic fixtures only.');
+ const retry=await reservePhotoScan(db,'profile',expiredUser,expiredUser);
+ assert.equal((await db.prepare('SELECT state FROM photo_scan_tickets WHERE id=?').bind(e.id).first()).state,'stale');
+ await assert.rejects(()=>recordPhotoScan(db,e.id,e.authority,payload(e)),err=>err.status===409);
+ await assert.rejects(()=>profilePhoto(db,expiredUser),err=>err.status===423);
+ assert.equal((await recordPhotoScan(db,retry.id,retry.authority,payload(retry))).applied,true);
+ console.log('Photo scan results passed: exact ownership/digest/policy, strict coverage, authority hashing, duplicate/conflicting results, concurrent decisions, held/blocked/stale outcomes, lost acknowledgement recovery, expired-approval rescans, inconclusive/expired retries, concurrent reservations, and private delivery gate. Synthetic fixtures only.');
 }finally{if(proxy)await proxy.dispose();await rm(dir,{recursive:true,force:true});}
