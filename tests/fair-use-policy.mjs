@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';import {assessFairUse,fairUseThresholds} from '../src/fair-use-policy.ts';
+const light={cost30dMicros:100000,turns7d:10,classifiedTurns7d:10,unrelatedTurns7d:10,createdProjects7d:3,completedExportDeleteCycles7d:3,review:{unrelatedConfirmed:false,churnConfirmed:false,noticeDelivered:false,unrelatedAfterNotice:0,churnAfterNotice:0}};
+assert.equal(assessFairUse('starter',light).suggestedAction,'none');
+const heavy={...light,cost30dMicros:11000000,turns7d:100,classifiedTurns7d:100,unrelatedTurns7d:80,createdProjects7d:5,completedExportDeleteCycles7d:4};
+assert.equal(assessFairUse('starter',heavy).suggestedAction,'review_behavior');assert.equal(assessFairUse('business-pro',heavy).suggestedAction,'none');
+const legitimate={...heavy,unrelatedTurns7d:0,completedExportDeleteCycles7d:0,cost30dMicros:100000000};assert.equal(assessFairUse('starter',legitimate).suggestedAction,'review_legitimate_capacity');assert.deepEqual(assessFairUse('starter',legitimate).restrictions,[]);
+const confirmed={...heavy,review:{...heavy.review,unrelatedConfirmed:true,churnConfirmed:true}};assert.equal(assessFairUse('starter',confirmed).suggestedAction,'explain_and_warn');
+const notice={...confirmed,review:{...confirmed.review,noticeDelivered:true,unrelatedAfterNotice:9,churnAfterNotice:1}};assert.equal(assessFairUse('starter',notice).suggestedAction,'explain_and_warn');
+const continued={...notice,review:{...notice.review,unrelatedAfterNotice:10,churnAfterNotice:2}};const result=assessFairUse('starter',continued);assert.equal(result.suggestedAction,'restrict_flagged_requests');assert.equal(result.enforcementEnabled,false);assert.deepEqual(result.restrictions,['unrelated_chat','new_project_generation']);assert.ok(result.preserve.includes('source_export'));assert.ok(result.preserve.includes('deletion'));assert.ok(result.preserve.includes('existing_site_maintenance'));
+assert.deepEqual(assessFairUse('starter',{...continued,cost30dMicros:100000,turns7d:10,classifiedTurns7d:10,unrelatedTurns7d:10}).restrictions,[]);
+assert.equal(assessFairUse('starter',{...heavy,classifiedTurns7d:19,unrelatedTurns7d:19,completedExportDeleteCycles7d:0}).suggestedAction,'review_legitimate_capacity');
+assert.equal(assessFairUse('starter',{...heavy,unrelatedTurns7d:69,completedExportDeleteCycles7d:0}).signals.length,0);
+assert.throws(()=>assessFairUse('explore',light));assert.throws(()=>assessFairUse('starter',{...light,unrelatedTurns7d:11}));assert.throws(()=>assessFairUse('starter',{...light,cost30dMicros:NaN}));
+for(const [plan,t] of Object.entries(fairUseThresholds)){assert.ok(t.monitorCostMicros<t.reviewCostMicros&&t.reviewCostMicros<t.heavyCostMicros);assert.equal(assessFairUse(plan,{...light,cost30dMicros:t.monitorCostMicros,classifiedTurns7d:0,unrelatedTurns7d:0,completedExportDeleteCycles7d:0}).suggestedAction,'observe');}
+console.log('Fair-use shadow policy passed: tier sensitivity, light-user bypass, cost-only non-abuse review, sampled behavior evidence, contextual confirmation, notice/continuation gates and protected ownership/maintenance actions.');
