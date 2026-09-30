@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "name": "Example Detailing",
+  "design": {"theme": "ocean"},
+  "modules": [
+    {"id": "content", "version": 1},
+    {"id": "records", "version": 1},
+    {"id": "files", "version": 1},
+    {"id": "access", "version": 1},
+    {"id": "notifications", "version": 1},
+    {"id": "automation", "version": 1}
+  ],
+  "content": [
+    {"id": "headline", "text": "A fresh start for your car."},
+    {"id": "introduction", "text": "A synthetic mobile-detailing business for contract verification."},
+    {"id": "about-title", "text": "Care, wherever you park."},
+    {"id": "about-text", "text": "Explore our example service packages and request an appointment."},
+    {"id": "hours-title", "text": "Business hours"},
+    {"id": "hours", "text": "Monday to Friday, 9am to 5pm."},
+    {"id": "services-title", "text": "Our services"},
+    {"id": "services", "text": "Interior refresh. Exterior detail. Full vehicle care."}
+  ],
+  "pages": [{
+    "id": "home", "path": "/", "component": "site-page@1", "audience": "public",
+    "headline": "headline", "description": "introduction",
+    "aboutTitle": "about-title", "aboutText": "about-text",
+    "sections": [{"heading": "hours-title", "text": "hours"}, {"heading": "services-title", "text": "services"}]
+  }],
+  "records": [{
+    "id": "appointments", "schemaVersion": 1, "read": "staff", "write": "staff",
+    "fields": [
+      {"key": "name", "label": "Your name", "type": "text"},
+      {"key": "service", "label": "Service", "type": "choice", "options": [{"value": "inside", "label": "Interior refresh"}, {"value": "outside", "label": "Exterior detail"}]},
+      {"key": "details", "label": "Anything we should know?", "type": "text", "optional": true}
+    ]
+  }],
+  "forms": [{"id": "appointment-request", "recordId": "appointments", "title": "Request an appointment", "description": "Send a request; this does not reserve a timeslot.", "buttonLabel": "Send request", "submit": "visitor", "uploadCollectionId": "vehicle-photos"}],
+  "files": [{"id": "vehicle-photos", "read": "owner", "upload": "visitor", "maxBytes": 1048576, "mimeTypes": ["image/jpeg", "image/png"]}],
+  "access": {"roles": ["staff"]},
+  "integrations": [{"id": "team-email", "capability": "email.staff"}],
+  "rules": []
+}
