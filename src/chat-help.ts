@@ -17,7 +17,7 @@ Check: /health reads saved checks; /check-site PROJECT_ID checks a published pag
 
 Photos: /help photos · Articles: /help cms · Domains: /help domains`,
  photos:`Photos
-/files opens private project photos. /photos lists photo IDs in chat.
+/files or /photos [PROJECT_ID] lists saved photo metadata in Chat. Say open project photos to preview or upload.
 /photo PHOTO_ID adds a photo to a private website draft without AI units.
 /delete-photo PHOTO_ID prepares removal of an unused photo. Use the confirmation offered in its review.
 
