@@ -39,3 +39,5 @@ console.log('Visitor page card passed: disabled text/number/checkbox preview, es
 const publishedActions=actions({app_page_live_project_id:review});assert.ok(publishedActions.includes('href="https://app-'+review+'.whumpo.site/"'));assert.ok(publishedActions.includes('Open visitor app'));assert.ok(publishedActions.includes('Manage visitor access'));assert.ok(publishedActions.includes('rel="noopener noreferrer"'));
 assert.ok(!actions({assistant_text:'Published app '+review}).includes('Open visitor app'));assert.ok(!actions({app_page_live_project_id:'invalid'}).includes('Manage visitor access'));
 console.log('Published app handoff passed: fixed customer host, explicit access control, no prose-derived actions and no automatic navigation or invitation.');
+
+assert.ok(actions({app_page_live_project_id:review}).includes('Check app status · free'));

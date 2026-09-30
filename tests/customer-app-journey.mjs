@@ -14,8 +14,8 @@ try{
  const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
  runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
  proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
- const b=await build({stdin:{contents:"export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken} from './src/security';export {applicationChatActions} from './src/app-chat-actions';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
- const {platform,host,hashToken,applicationChatActions}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+ const b=await build({stdin:{contents:"export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken} from './src/security';export {applicationChatActions} from './src/app-chat-actions';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const {readAppStatus,describeAppStatus,backendAction,platform,host,hashToken,applicationChatActions}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
  let executions=0;
  const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:async(request,init)=>{executions++;return runtime.dispatchFetch(request,init);}},ASSETS:{fetch:async()=>new Response(await readFile('public-app/index.html'),{headers:{'content-type':'text/html'}})}},ctx={waitUntil(){throw Error('Unexpected external work');}};
  async function account(){const user=id(),token=(id()+id()).replaceAll('-',''),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(token),user,new Date(Date.now()+3600000).toISOString(),now).run();return {user,token};}
@@ -25,8 +25,10 @@ try{
  async function chat(content){const state=await json('/chat'),request={id:id(),revision:state.state.revision,content};return json('/chat',request);}
  await json('/profile',{revision:0,name:'App owner',avatar_id:'planet'},200,'PATCH');await json('/onboarding');await json('/onboarding',{revision:0,stage:'review',project_name:'Private notebook',idea:'A private note for each invited member',audience:'Our team',preferred_theme:'ocean'},200,'PUT');await json('/onboarding/complete',{revision:1});
  const {id:project}=await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(owner.user).first(),path='/projects/'+project,version=id(),run=id();
+ assert.equal((await readAppStatus(db,owner.user,project)).configured,0);await assert.rejects(readAppStatus(db,foreign.user,project),e=>e.status===404);
  await json(path+'/backends',{id:version,source:'export default ({state,input})=>({state:{note:input.note,edits:(state.edits??0)+1},result:"Saved"})'},201);
  const tested=await json(path+'/backends/'+version+'/test',{id:run,input:{state:{},input:{note:'Test note'}}});assert.deepEqual(tested.result,{ok:true,value:{state:{note:'Test note',edits:1},result:'Saved'}});assert.equal(executions,1);
+ const initialStatus=(await chat('/app-status '+project)).turns.at(-1);assert.match(initialStatus.assistant_text,/No application configured/);
  const origin='https://app-'+project+'.whumpo.site';
  const visit=(url,init)=>host.fetch(new Request(url,init),env);
  assert.equal((await visit(origin+'/')).status,404);
@@ -41,6 +43,7 @@ try{
  assert.equal((await call(foreign,'/application-reviews/'+enable+'/confirm',{})).status,404);
  const competing=await chat('/enable-application '+version+' '+run);assert.ok(competing.turns.at(-1).application_confirmation_id);
  const applied=await chat('/confirm-application '+enable);assert.ok(applied.turns.every(t=>!t.application_confirmation_id));assert.equal(applied.turns.at(-1).application_review.state,'applied');assert.equal(applied.turns.at(-1).application_page_design_project_id,project);assert.equal(applied.turns.filter(t=>t.application_page_design_project_id).length,1);assert.equal(applied.turns.find(t=>t.id===enable).application_review.state,'applied');assert.equal(applied.turns.find(t=>t.id===competing.turns.at(-1).id).application_review.state,'changed');assert.equal((await visit(origin+'/')).status,404,'Program approval must not publish a page');
+ assert.equal((await readAppStatus(db,owner.user,project)).published,0);assert.equal((await readAppStatus(db,owner.user,project)).enabled,1);
  const page=id(),form={title:'Private notebook',description:'A note only you can read',buttonLabel:'Save note',fields:[{key:'note',label:'Your note',type:'text'}]};
  await json(path+'/application-page',{id:page,form});const pageRead=await chat('/app-page-review '+page);assert.ok(pageRead.turns.every(t=>!t.application_page_design_project_id));assert.equal(pageRead.turns.at(-1).app_page_confirmation_id,page);assert.equal(pageRead.turns.at(-1).app_page_operation,'publish');assert.equal((await visit(origin+'/')).status,404);
 
@@ -60,9 +63,18 @@ try{
  const result=await first.request('/data',op);assert.equal(result.status,200,JSON.stringify(result.data));assert.equal(result.data.state,'complete');assert.equal(executions,2);
  assert.deepEqual((await first.request('/data',op)).data,result.data);assert.equal(executions,2,'Lost-response retry must not execute again');
  assert.deepEqual((await first.request('/data')).data,{revision:1,state:{note:'Private visitor note',edits:1}});assert.deepEqual((await second.request('/data')).data,{revision:0,state:{}});assert.equal((await second.request('/receipts/'+op.id)).status,404);
+ // Controlled retained-outcome fixtures exercise counts without exposing private result bodies.
+ for(const [state,revision] of [['failed',1],['conflict',1],['running',1],['failed',0]]){
+  const receipt=id();await db.prepare(`INSERT INTO app_runs(id,visitor_id,project_id,version_id,session_hash,request_hash,base_revision,program_revision) SELECT ?,v.id,v.project_id,a.version_id,s.token_hash,?,d.revision,a.revision FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.project_id=? AND d.revision=? LIMIT 1`).bind(receipt,'a'.repeat(64),project,revision).run();
+  if(state!=='running')await db.prepare('UPDATE app_runs SET state=?,result_json=? WHERE id=?').bind(state,JSON.stringify({error:'PRIVATE_OUTCOME_CANARY'}),receipt).run();
+ }
+ const aggregate=await readAppStatus(db,owner.user,project);assert.equal(aggregate.published,1);assert.equal(aggregate.visitors,2);assert.equal(aggregate.attempts,5);assert.equal(aggregate.complete,1);assert.equal(aggregate.failed,2);assert.equal(aggregate.conflict,1);assert.equal(aggregate.unresolved,1);
+ const statusChat=(await chat('/app-status '+project)).turns.at(-1).assistant_text;assert.match(statusChat,/5\/100/);assert.match(statusChat,/1 running or outcome unknown/);assert.ok(!statusChat.includes('Private visitor note'));assert.ok(!statusChat.includes('PRIVATE_OUTCOME_CANARY'));assert.ok(!JSON.stringify(aggregate).includes(op.id));
+ const agentStatus=await backendAction(db,owner.user,id(),{kind:'backend',operation:'appStatus',projectId:project});assert.match(agentStatus.reply,/Visitor page is published/);assert.equal(agentStatus.statements.length,0);await assert.rejects(backendAction(db,owner.user,id(),{kind:'backend',operation:'appStatus',projectId:project,input:{}}),e=>e.status===400);
  const recovery=await first.request('/auth/recover',{code:registration.recoveryCode,nonce:'7'.repeat(64)});assert.equal(recovery.status,200);assert.notEqual(recovery.data.recoveryCode,registration.recoveryCode);assert.equal((await first.request('/data')).data.state.edits,1);
  const copy=await first.request('/export');assert.equal(copy.status,200);assert.match(copy.headers.get('content-disposition'),/^attachment/);assert.equal(copy.data.document.value.note,op.input.note);
  const deletion={id:id(),revision:0,confirmation:'DELETE'};assert.equal((await second.request('/account/delete',deletion)).status,200);assert.equal((await second.request('/account/delete',deletion)).status,200);assert.equal((await second.request('/data')).status,401);assert.equal((await first.request('/data')).status,200);
+ const afterErasure=await readAppStatus(db,owner.user,project);assert.equal(afterErasure.visitors,1);assert.equal(afterErasure.attempts,5);assert.equal(afterErasure.failed,1);
  const off=id();await json(path+'/application-page',{id:off,form:null});const offRead=await chat('/app-page-review '+off);assert.equal(offRead.turns.at(-1).app_page_operation,'unpublish');assert.equal(offRead.turns.at(-1).app_page_review.form,null);assert.equal(offRead.turns.at(-1).app_page_confirmation_id,off);await chat('/confirm-app-page '+off);assert.equal((await visit(origin+'/')).status,404);assert.equal((await first.request('/data')).status,404);assert.ok((await json('/chat')).turns.every(t=>!t.app_page_live_project_id));
  await json('/application-page-reviews/'+page+'/confirm',{});assert.equal((await visit(origin+'/')).status,404,'Historical approval cannot republish');
  assert.equal((await second.request('/account/delete',deletion)).status,200,'Exact erasure receipt survives withdrawal');
@@ -71,6 +83,7 @@ try{
  const laterPage=id();await json(path+'/application-page',{id:laterPage,form});const laterRead=await chat('/app-page-review '+laterPage);assert.equal(laterRead.turns.at(-1).app_page_confirmation_id,laterPage);
  const disabled=await chat('/disable-application '+project),disable=disabled.turns.at(-1).id;assert.equal(disabled.turns.at(-1).application_confirmation_id,disable);assert.equal(disabled.turns.at(-1).application_operation,'disable');await chat('/confirm-application '+disable);assert.ok((await json('/chat')).turns.every(t=>!t.application_confirmation_id&&!t.app_page_confirmation_id&&!t.app_page_live_project_id));
  assert.equal((await json('/chat')).turns.find(t=>t.id===laterRead.turns.at(-1).id).app_page_review.state,'changed');
+ const disabledStatus=await readAppStatus(db,owner.user,project);assert.equal(disabledStatus.enabled,0);assert.equal(disabledStatus.published,0);assert.match(describeAppStatus(disabledStatus),/data access is disabled/);
  assert.equal(executions,2);assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
  console.log('Customer app journey passed: welcome, actual QuickJS test, separate program/page reviews, public host, signed passkeys, isolated visitors, exact transition replay, recovery/export/deletion, withdrawal and historical approval safety. No live deployment or AI call.');
 }finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
