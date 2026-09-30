@@ -1,0 +1,48 @@
+{
+  "formatVersion": 1,
+  "compiler": "project-content@1",
+  "schemaVersion": 1,
+  "esbuildVersion": "0.28.2",
+  "target": "es2022",
+  "content": "29f5db75d2ad1945b4b04b677e7af19bce168b290f2c97bceda753be70bf8f05",
+  "component": "5572df66fa1d0f9507f642ac1b369f714da622469efdcb98813cef71c07e8754",
+  "sources": [
+    {
+      "path": "src/backend-error.ts",
+      "digest": "808c17694679ca7756d6b3a82f602a0157e6798f74b9dad73abd97b1770ea8e4"
+    },
+    {
+      "path": "src/backend-form-config.ts",
+      "digest": "77023ba3b85ce57c89ed3dc7f3ca5345fc7a89cb3b2a240c05f97195d5498a68"
+    },
+    {
+      "path": "src/backend-form-shape.ts",
+      "digest": "52b86170fea9f2a671bfe7e92eac7322618830ee889d596d7ffd53951cbc5288"
+    },
+    {
+      "path": "src/components.ts",
+      "digest": "5572df66fa1d0f9507f642ac1b369f714da622469efdcb98813cef71c07e8754"
+    },
+    {
+      "path": "src/project-specification/compiler.ts",
+      "digest": "4c9d04a459711b057aa50b971a9f994498d0041723338de2ed0cabb78e4a7ee9"
+    },
+    {
+      "path": "src/project-specification/v1/content.ts",
+      "digest": "7e39243295a91dc805390fac5f932cc8a685ca96532fc2d18220bf1f75bf17f0"
+    },
+    {
+      "path": "src/project-specification/v1/json.ts",
+      "digest": "0e5cbf8aba1687fbf8a921a669cb9e5e64152fc32a341277fe216467a041732a"
+    },
+    {
+      "path": "src/project-specification/v1/schema.ts",
+      "digest": "eba15184198f5a0c6b1b310735d1bc92950d7fce8bf9198ac9d4a44d0a1e155e"
+    },
+    {
+      "path": "src/project-specification/v1/types.ts",
+      "digest": "60cb643a028f070d60f7262d27dba645c159bf5afb94c41229ed9abc08d648b8"
+    }
+  ],
+  "compilerDigest": "25a73c88b1a51e9ec9512ca72c22bd515d835403b659c34fc3bc9b96780c3d2b"
+}

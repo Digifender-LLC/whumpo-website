@@ -1,5 +1,6 @@
 import {hashToken} from './security';
-export class BackendError extends Error {constructor(readonly status:number,message:string){super(message);}}
+import {BackendError} from './backend-error';
+export {BackendError} from './backend-error';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const size=(text:string)=>new TextEncoder().encode(text).length;
 const categories=new Set(['invalid_request','invalid_code','execution_failed','work_limit','unresolved_promise','invalid_output','unavailable','busy']);

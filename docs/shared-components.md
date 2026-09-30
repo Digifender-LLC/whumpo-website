@@ -2,6 +2,8 @@
 
 Current planning interface: the [versioned capability planner](capability-planner.md) selects supported configuration and shared helpers before custom source. Its library application handoff records pinned provenance and uses the existing synthetic-check/review lifecycle. Historical slash-command examples below are internal adapters; customer Chat uses natural language.
 
+The [specification compiler](project-specification-compiler.md) now adds a locally verified content compilation library, pinned artifact identities and a build gate. It has no mounted API or persistent apply flow yet; those remain part of WH-066.
+
 ## Decision
 
 Whumpo should assemble the first site from reviewed, versioned components before asking a model to generate new code. A sign-in flow, contact form or pricing page should normally select an existing component and fill validated configuration. AI handles layout composition, requirements that are not covered, and later customization.
