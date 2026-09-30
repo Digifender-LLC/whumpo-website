@@ -31,6 +31,8 @@ try{
  assert.equal(strFromU8(unzipSync(new Uint8Array(await(await request('/site-versions/'+version+'/export',owner)).arrayBuffer()))['public/index.html']),original.html);
  assert.equal((await getBilling(db,owner.id)).quota.spent,0);assert.equal((await getBilling(db,owner.id)).quota.reserved,0);
  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM publications WHERE version_id IS NOT NULL').first()).n,0);
- await db.prepare('DELETE FROM site_versions WHERE id=?').bind(version).run();assert.equal((await request('/site-versions/'+version+'/export',owner)).status,404);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM chat_exports WHERE version_id=?').bind(version).first()).n,0);
+ // Follow the version review contract introduced after this export regression test.
+ await db.prepare('INSERT INTO version_removals(id,user_id,project_id,version_id,digest,component_id,version_created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)').bind(version,owner.id,original.project_id,version,original.digest,original.component_id,original.created_at,new Date(Date.now()+60000).toISOString()).run();
+ await db.prepare("UPDATE version_removals SET status='applied',confirmed_by=? WHERE id=?").bind(newer,version).run();assert.equal((await request('/site-versions/'+version+'/export',owner)).status,404);assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM chat_exports WHERE version_id=?').bind(version).first()).n,0);
  console.log('Export checks passed: exact ZIP contents, independent CRC validation, deterministic downloads, metadata/secret exclusion, ownership, chat replay, historical versions, zero AI billing and deletion.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

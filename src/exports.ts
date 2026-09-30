@@ -1,3 +1,4 @@
+import {noteSourceExport} from './fair-use-observation';
 import { versionPhotos, type PhotoAsset } from './photo-versions';
 import { FileError } from './files';
 import { strToU8, zipSync } from 'fflate';
@@ -21,6 +22,9 @@ export async function siteArchive(version:ExportVersion,photos:PhotoAsset[]=[]) 
 export async function ownedExport(db:D1Database,userId:string,id:string,bucket?:R2Bucket) {
  const version=await db.prepare('SELECT v.id,v.component_id,v.config_json,v.html,v.digest,v.created_at FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(id,userId).first<ExportVersion>();
  if(!version)return null;
- if(version.component_id==='photo-page@1'){if(!bucket)throw new FileError(503,'Photo storage is unavailable');const photos=await versionPhotos({DB:db,FILES:bucket},version.id,photoConfig(JSON.parse(version.config_json)));return siteArchive(version,photos);}
- return siteArchive(version);
+ let photos:PhotoAsset[]=[];
+ if(version.component_id==='photo-page@1'){if(!bucket)throw new FileError(503,'Photo storage is unavailable');photos=await versionPhotos({DB:db,FILES:bucket},version.id,photoConfig(JSON.parse(version.config_json)));}
+ const archive=await siteArchive(version,photos);
+ try{await noteSourceExport(db,userId,id);}catch{console.warn(JSON.stringify({event:'fair_use.export_observation_unavailable'}));}
+ return archive;
 }
