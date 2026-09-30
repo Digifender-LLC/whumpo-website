@@ -1,3 +1,4 @@
+import {wordpressMediaPlan} from './cms-wordpress-media';
 import {wordpressTaxonomyPlan,type WordPressTaxonomyEvidence} from './cms-wordpress-taxonomies';
 import {canonicalImportProvenance} from './cms-import-provenance';
 import sax from 'sax';
@@ -53,7 +54,7 @@ export async function analyzeWordPress(bytes:Uint8Array){
   if(post.postPassword)reasons.push('password_protected_content');
   if(!['publish','draft','pending','private','future'].includes(post.status??''))reasons.push('unsupported_source_status');
   const taxonomyPlan=wordpressTaxonomyPlan(data,post,evidence);reasons.push(...taxonomyPlan.issues);
-  const html=post.content??'';
+  const html=post.content??'',mediaPlan=wordpressMediaPlan(post.content??'',data.attachments);
   const provenance={sourceHTML:html,author:post.creator??'',sourceURL:post.link??'',sourceStatus:post.status??'',sourceDate:post.postDate??'',sourceSlug:post.postName??'',excerpt:post.excerpt??'',categories:post.categories,tags:post.tags};
   try{canonicalImportProvenance(provenance);}catch{reasons.push('source_provenance_exceeds_review_limit');}
   if(/<(?:img|video|audio|source|iframe|embed|object)\b|<!--\s*wp:(?:image|gallery|media-text|cover|video|audio|embed)\b/i.test(html))reasons.push('media_requires_reviewed_local_import');
@@ -61,7 +62,7 @@ export async function analyzeWordPress(bytes:Uint8Array){
   if(/\[[a-z][a-z0-9_-]*(?:\s[^\]]*)?\]/i.test(html))reasons.push('shortcode_requires_manual_conversion');
   let candidate=null;
   if(!reasons.length){try{const converted=gutenbergToPortableText(html,{mediaMap:new Map()}).map((block,i)=>{if(block._type!=='block')return block;const definitions=block.markDefs??[],keys=new Map(definitions.map((d,j)=>[d._key,'wp-link-'+j]));return {...block,_key:'wp-block-'+i,markDefs:definitions.map(d=>({...d,_key:keys.get(d._key)})),children:block.children.map((span,j)=>({...span,_key:'wp-text-'+j,marks:(span.marks??[]).map(mark=>keys.get(mark)??mark)}))};});candidate=cmsRichDraftBody(post.title,converted,post.postType==='post'?wordpressExcerpt(post.excerpt??''):undefined);}catch{reasons.push('converted_content_outside_supported_article_shape');}}
-  return {sourceId:post.id!,collection:post.postType==='page'?'pages' as const:post.postType==='post'?'posts' as const:null,title:post.title??'',sourceStatus:post.status??'',sourceHTML:html,sourceAuthor:post.creator??null,sourceURL:post.link??null,sourceDate:post.postDate??null,sourceSlug:post.postName??null,sourceExcerpt:post.excerpt??'',taxonomyPlan,categories:post.categories,tags:post.tags,customFieldCount:post.meta.size,translationGroup:post.translationGroup??null,locale:post.locale??null,status:candidate?'needs_review':'needs_changes',reasons,warnings,candidate};
+  return {sourceId:post.id!,collection:post.postType==='page'?'pages' as const:post.postType==='post'?'posts' as const:null,title:post.title??'',sourceStatus:post.status??'',sourceHTML:html,sourceAuthor:post.creator??null,sourceURL:post.link??null,sourceDate:post.postDate??null,sourceSlug:post.postName??null,sourceExcerpt:post.excerpt??'',taxonomyPlan,mediaPlan,categories:post.categories,tags:post.tags,customFieldCount:post.meta.size,translationGroup:post.translationGroup??null,locale:post.locale??null,status:candidate?'needs_review':'needs_changes',reasons,warnings,candidate};
  });
  return {contract:'whumpo-wordpress-stage',version:1,converter:{name:'emdash',version},source:{digest:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),v=>v.toString(16).padStart(2,'0')).join(''),bytes:bytes.length,items:itemCount},site:{title:data.site.title??'',url:data.site.baseSiteUrl??data.site.link??null},articles,attachments:data.attachments.map(a=>({sourceId:a.id,title:a.title??'',url:a.url??null,status:'not_fetched'})),summary:{articles:articles.length,reviewable:articles.filter(a=>a.candidate).length,needsChanges:articles.filter(a=>!a.candidate).length,attachments:data.attachments.length},exclusions:['No CMS writes or publication','No media fetched','No themes or plugins executed','No authors or accounts provisioned','No redirects created'],sourceRetained:false};
 }
