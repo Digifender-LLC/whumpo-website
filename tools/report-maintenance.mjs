@@ -3,14 +3,8 @@ import {pathToFileURL} from 'node:url';
 import {maintenanceJobs} from '../src/maintenance.ts';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 
-const queues={
- imports:["backend_imports","state='pending'",'created_at',3600000],
- photos:['file_cleanup','1=1','created_at',90000000],
- github:['github_token_vault',"state='revoking'",null,90000000],
- cloudflare:['cloudflare_token_vault',"state='revoking'",'created_at',90000000],
- legacy_ai:['usage_operations',"status IN ('reserved','dispatched','uncertain')",'updated_at',600000],
- standard_ai:['standard_ai_requests',"state IN ('reserved','dispatched','uncertain')",'updated_at',600000],
-};
+import {backlogInventory,operationInventory} from './maintenance-inventory.mjs';
+
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 export async function maintenanceReport(db,now=Date.now()){
  if(!integer(now))throw Error('Invalid observation time');
@@ -24,21 +18,22 @@ export async function maintenanceReport(db,now=Date.now()){
    return {job,state:stalled?'stalled':overdue?'overdue':row.status,startedAt:row.started_at,finishedAt:row.finished_at,lastSuccessAt:row.last_success_at,durationMs:row.duration_ms,failureCategory:row.status==='failed'?'job_failed':null};
   }catch{return {job,state:'unavailable'};}
  }));
- const backlogs=await Promise.all(Object.entries(queues).map(async([queue,[table,predicate,column,threshold]])=>{
+ const backlogs=await Promise.all(Object.entries(backlogInventory).map(async([queue,{sql,threshold}])=>{
   try{
-   const row=await db.prepare(`SELECT COUNT(*) AS count,MIN(${column??'NULL'}) AS oldest FROM ${table} WHERE ${predicate}`).first();
-   if(!row||!integer(row.count)||(row.count>0&&column!==null&&(typeof row.oldest!=='string'||!Number.isFinite(Date.parse(row.oldest)))))throw Error('Invalid backlog');
-   const age=row.count&&column!==null?Math.max(0,now-Date.parse(row.oldest)):null;
-   return {queue,state:row.count===0?'empty':age===null||age>=threshold?'attention':'pending',count:row.count,oldestAgeMs:age,ageBasis:column};
+   const query=sql.replaceAll('?1','(SELECT instant FROM observation)');
+   const row=await db.prepare(`WITH observation AS (SELECT ? AS instant) SELECT COUNT(*) AS count,MIN(due_at) AS oldest,COUNT(*)-COUNT(due_at) AS unknown_age FROM (${query})`).bind(new Date(now).toISOString()).first();
+   if(!row||!integer(row.count)||!integer(row.unknown_age)||row.unknown_age>row.count||(row.count>row.unknown_age&&(typeof row.oldest!=='string'||!Number.isFinite(Date.parse(row.oldest)))))throw Error('Invalid backlog');
+   const age=row.oldest===null?null:Math.max(0,now-Date.parse(row.oldest));
+   return {queue,state:row.count===0?'empty':row.unknown_age>0||age>=threshold?'attention':'pending',count:row.count,oldestAgeMs:age,unknownAgeCount:row.unknown_age};
   }catch{return {queue,state:'unavailable'};}
  }));
- // Identifiers only, bounded, and never an authorization to retry inference.
- const operations=await Promise.all(['legacy_ai','standard_ai'].map(async kind=>{
-  const table=kind==='legacy_ai'?'usage_operations':'standard_ai_requests',state=kind==='legacy_ai'?'status':'state';
+ // Identifiers only, bounded, and never an authorization to retry a provider.
+ const operations=await Promise.all(Object.entries(operationInventory).map(async([kind,{table,state,states,time,guide}])=>{
   try{
-   const {results}=await db.prepare(`SELECT id,${state} AS state,updated_at FROM ${table} WHERE ${state} IN ('reserved','dispatched','uncertain') ORDER BY updated_at,id LIMIT 100`).all();
-   if(!Array.isArray(results)||results.some(r=>typeof r.id!=='string'||!/^[0-9a-f-]{36}$/.test(r.id)||!['reserved','dispatched','uncertain'].includes(r.state)||typeof r.updated_at!=='string'||!Number.isFinite(Date.parse(r.updated_at))))throw Error('Invalid operations');
-   return {kind,state:'available',limit:100,items:results.map(r=>({id:r.id,state:r.state,updatedAt:r.updated_at})),recoveryGuide:kind==='legacy_ai'?'docs/usage-recovery.md':'docs/standard-ai-accounting.md'};
+   const predicate=states.map(s=>"'"+s+"'").join(',');
+   const {results}=await db.prepare(`SELECT id,${state} AS state,${time} AS observed_at FROM ${table} WHERE ${state} IN (${predicate}) ORDER BY ${time},id LIMIT 100`).all();
+   if(!Array.isArray(results)||results.some(r=>typeof r.id!=='string'||!/^[0-9a-f-]{36}$/.test(r.id)||!states.includes(r.state)||(r.observed_at!==null&&(typeof r.observed_at!=='string'||!Number.isFinite(Date.parse(r.observed_at))))))throw Error('Invalid operations');
+   return {kind,state:'available',limit:100,items:results.map(r=>({id:r.id,state:r.state,observedAt:r.observed_at})),timeBasis:time,recoveryGuide:guide};
   }catch{return {kind,state:'unavailable'};}
  }));
  return {observedAt:new Date(now).toISOString(),jobs,backlogs,operations,attention:jobs.some(j=>!['completed','skipped','running'].includes(j.state))||backlogs.some(q=>['attention','unavailable'].includes(q.state))||operations.some(o=>o.state==='unavailable'),scope:'Operator-only read; completion is a scheduler pass, not proof every item succeeded. No repairs, billing changes or provider dispatch.'};

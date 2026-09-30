@@ -3,7 +3,7 @@
 
 ## Current deployment status and release caveat
 
-September 30, 2026 at 18:36 UTC platform readback: `53df6f0f-d048-404b-9bb1-bd049215d4ef`, with all 16 frontend assets matching and health/auth checks passing. All 106 migrations were confirmed applied at 18:34 UTC, none pending. [Maintenance diagnostics](maintenance.md) records the deployment and remaining natural-cron acceptance. Private evidence: `.secrets/maintenance-migration.json` and `.secrets/maintenance-release-verification.json`.
+September 30, 2026 at 18:36 UTC platform readback: `53df6f0f-d048-404b-9bb1-bd049215d4ef`, with all 16 frontend assets matching and health/auth checks passing. All 107 migrations were confirmed applied at 18:42 UTC, none pending. [Maintenance diagnostics](maintenance.md) records the deployment and remaining natural-cron acceptance. Private evidence: `.secrets/revocation-health-migration.json` and `.secrets/maintenance-release-verification.json`.
 
 Other Workers were last independently read at 18:07 UTC: sites `ba9b4c29-0566-4541-8747-0834183c1197`; apps `9bee8593-ee7f-4dd3-8934-2b41f43d692e`; runtime `662ea586-726d-4a00-ad22-d84024a7c0b2`. Monitor was enabled in that readback. None was changed by this platform release. The platform is **whumpo.com**, customer content is on **whumpo.site**, and the private repository is **zemdregon/whumpo**. Digifender addresses below are historical and have no product fallback. Workers Paid ($5/month) is owner-authorized. Private R2 and the separate QuickJS runtime are in use; customer Containers/Stream/Gateway inference are not enabled by the platform's plan.
 
