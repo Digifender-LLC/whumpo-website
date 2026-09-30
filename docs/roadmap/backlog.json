@@ -2734,7 +2734,7 @@
         "src/site-agent.ts",
         "src/ai-chat.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/12",
       "owner": null,
       "evidence": []
     },
@@ -3426,8 +3426,7 @@
         "WH-070",
         "WH-073",
         "WH-075",
-        "WH-078",
-        "WH-017"
+        "WH-078"
       ],
       "blockers": [],
       "outcome": "A representative customer outcome proves reuse, visual flexibility and independent deterministic visitor operation.",
@@ -3442,7 +3441,8 @@
         "Visitor submission, file access and confirmation flow use zero Whumpo maintainer model calls and remain functional during its outage",
         "Two differently styled synthetic customers have isolated records/files/jobs and reuse the same maintained API implementations",
         "Custom visual work is bounded to the missing component; module/version provenance and fallback reason are recorded",
-        "Media safety, real sender/provider, devices, live customer publication and payments remain their separate activation/acceptance gates"
+        "Media safety, real sender/provider, devices, live customer publication and payments remain their separate activation/acceptance gates",
+        "This packet accepts the local synthetic composition pilot only; any live pilot requires WH-017 safety acceptance plus separately reviewed media/provider/device/customer-publication scope"
       ],
       "verification": [
         "Connected loopback two-tenant pilot with maintainer transport disabled for visitor flows",

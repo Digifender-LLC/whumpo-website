@@ -3451,7 +3451,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/12. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3822,6 +3822,7 @@ A representative customer outcome proves reuse, visual flexibility and independe
 - [ ] Two differently styled synthetic customers have isolated records/files/jobs and reuse the same maintained API implementations
 - [ ] Custom visual work is bounded to the missing component; module/version provenance and fallback reason are recorded
 - [ ] Media safety, real sender/provider, devices, live customer publication and payments remain their separate activation/acceptance gates
+- [ ] This packet accepts the local synthetic composition pilot only; any live pilot requires WH-017 safety acceptance plus separately reviewed media/provider/device/customer-publication scope
 
 ### Verification
 
@@ -3831,7 +3832,7 @@ A representative customer outcome proves reuse, visual flexibility and independe
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-066, WH-067, WH-068, WH-069, WH-070, WH-073, WH-075, WH-078, WH-017. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-066, WH-067, WH-068, WH-069, WH-070, WH-073, WH-075, WH-078. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
