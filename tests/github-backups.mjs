@@ -67,6 +67,11 @@ try{
  assert.equal((await request('/github/backups','GET',false)).status,401);assert.deepEqual(await(await request('/github/backups')).json(),{backups:[]});
  assert.equal((await request('/github/backups/'+r.id+'/confirm','POST')).status,404);assert.equal((await request('/github/backups/review','POST',true,'https://evil.test')).status,403);assert.equal((await request('/github/backups/review','POST')).status,400);
  reset();const expiry=await review();await db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE id=?").bind(token).run();await assert.rejects(()=>confirm(expiry.id));assert.equal(writes,5);
+ // Local history remains readable when provider authorization has expired/disconnected.
+ await db.prepare('UPDATE github_connections SET active_token_id=NULL WHERE user_id=?').bind(user).run();
+ const ownerSession=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');await db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)').bind(await hashToken(ownerSession),user,now,new Date(Date.now()+600000).toISOString()).run();
+ const history=await worker.fetch(new Request('https://whumpo.com/api/github/backups',{headers:{cookie:'whumpo_session='+ownerSession}}),env);
+ assert.equal(history.status,200);const retained=await history.json();assert.ok(retained.backups.some(b=>b.id===r.id&&b.state==='complete'));assert.ok(retained.backups.some(b=>b.id===before.id&&b.state==='uncertain'));assert.ok(!JSON.stringify(retained).includes('ghu_'));assert.equal(writes,5);
  await assert.rejects(()=>db.prepare("UPDATE github_backups SET path='elsewhere' WHERE id=?").bind(r.id).run(),/immutable/);
  console.log('GitHub backups passed: independent Git tree hash, exact readable files, ownership, review replay, concurrent confirmation, visibility/identity/head/path conflicts, malformed responses, prior exact copy, lost provider/database acknowledgements, no retry writes, token expiry and immutable reviews. No real GitHub writes.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
