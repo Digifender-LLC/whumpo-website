@@ -46,6 +46,7 @@ export async function exportAppAccount(db:D1Database,token:string,project:string
 
 export async function cleanupAppLifecycle(db:D1Database){
  await db.batch([
+  db.prepare("DELETE FROM app_migration_documents WHERE NOT EXISTS(SELECT 1 FROM app_migration_current c WHERE c.id=migration_id)"),
   db.prepare(`DELETE FROM app_owner_erasures WHERE expires_at<=${nowSQL}`),
   db.prepare(`DELETE FROM app_deletion_receipts WHERE expires_at<=${nowSQL}`),
   db.prepare("DELETE FROM app_daily_usage WHERE day<strftime('%Y-%m-%d','now','-35 days')")
