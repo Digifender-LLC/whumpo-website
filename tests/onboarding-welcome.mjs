@@ -10,6 +10,7 @@ try{
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,id=()=>crypto.randomUUID(),user=id(),other=id(),now=new Date().toISOString();
  for(const u of [user,other])await db.prepare("INSERT INTO users VALUES(?,?,'00','passkey-only',?)").bind(u,u+'@example.test',now).run();
  const first=await readOnboarding(db,user);assert.equal(first.complete,false);assert.equal(first.state.stage,'profile');assert.equal((await readProfile(db,user)).onboardingComplete,false);assert.equal((await readProfile(db,user)).avatar_id,'cloud');
+ assert.equal(first.state.prompt,'name','Existing/new three-stage rows receive a usable starting question');
  await assert.rejects(completeOnboarding(db,user,{revision:0}),e=>e.status===409);
  await updateProfile(db,user,{revision:0,name:'  River  ',about_me:'Private biography',avatar_id:'moon',share_context:false});assert.equal(await agentProfile(db,user),null);assert.equal((await readProfile(db,user)).avatar_id,'moon');
  await assert.rejects(updateProfile(db,user,{revision:1,avatar_id:'../../secret'}),e=>e.status===400);
@@ -41,5 +42,27 @@ try{
  assert.equal((await call('/api/onboarding','GET',undefined,'')).status,401);assert.equal((await call('/api/onboarding','PUT',draft,token,'https://foreign.test')).status,403);assert.equal((await call('/api/onboarding')).status,200);
  assert.equal((await call('/api/profile','PATCH',{revision:0,name:'Welcome tester',avatar_id:'sun'})).status,200);assert.equal((await call('/api/onboarding','PUT',draft)).status,200);assert.equal((await call('/api/onboarding/complete','POST',{revision:1})).status,200);assert.equal((await(await call('/api/profile')).json()).onboardingComplete,true);
  for(const table of ['publications','inference_calls'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
+ // Questions resume from server state, including on a different browser/device.
+ const conversational=id();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(conversational,conversational+'@example.test',now).run();
+ const empty={revision:0,stage:'profile',project_name:'',idea:'',audience:'',preferred_theme:'ocean'};
+ await saveOnboarding(db,conversational,{...empty,prompt:'picture'});
+ assert.equal((await readOnboarding(db,conversational)).state.prompt,'picture');
+ await assert.rejects(saveOnboarding(db,conversational,{...empty,revision:1,prompt:'idea'}),e=>e.status===400);
+ await assert.rejects(saveOnboarding(db,conversational,{...empty,revision:1,prompt:'not-a-question'}),e=>e.status===400);
+ await assert.rejects(saveOnboarding(db,conversational,{...empty,revision:1,prompt:null}),e=>e.status===400);
+ await assert.rejects(saveOnboarding(db,conversational,{...empty,prompt:'bio'}),e=>e.status===409);
+ await saveOnboarding(db,conversational,{...empty,revision:1,prompt:'bio'});
+ assert.equal((await readOnboarding(db,conversational)).state.prompt,'bio');
+ await saveOnboarding(db,conversational,{...empty,revision:2,stage:'project',prompt:'project-name',idea:'A community garden site'});
+ assert.equal((await readOnboarding(db,conversational)).state.idea,'A community garden site');
+ assert.equal((await readOnboarding(db,conversational)).state.prompt,'project-name');
+ await assert.rejects(completeOnboarding(db,conversational,{revision:3}),e=>e.status===409);
+ // Older clients omit prompt. Older Workers leave it unchanged; both resume safely.
+ await saveOnboarding(db,conversational,{...empty,revision:3});
+ assert.equal((await readOnboarding(db,conversational)).state.prompt,'name');
+ await db.prepare("UPDATE welcome_onboarding SET revision=revision+1,stage='project' WHERE user_id=?").bind(conversational).run();
+ assert.equal((await readOnboarding(db,conversational)).state.prompt,'idea');
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM projects WHERE owner_user_id=?').bind(conversational).first()).n,0);
  console.log('Welcome passed: persisted private profile/project steps, avatar allowlist, opt-in context, owned reads, validation, atomic single-project creation, concurrent/lost-response recovery, historical completion, session/origin checks and no inference/publication.');
+ console.log('Conversation checkpoints passed: exact question resume, strict stage/question validation, stale-tab rejection, old client/Worker compatibility and no early project creation.');
 }finally{if(proxy)await proxy.dispose();await rm(dir,{recursive:true,force:true});}
