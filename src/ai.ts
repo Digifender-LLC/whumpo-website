@@ -1,8 +1,12 @@
+import {agentContentPolicy} from './content-policy';
 import { answerRejection, responseRejection, type RejectionReason } from './provider-response';
 
 /** Server-only OpenAI-compatible transport. Never accepts endpoint/key from a user prompt. */
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 export type AIConfig = { baseURL: string; apiKey: string; model: string; protocol?: "chat" | "responses"; sessionId?: string; maxOutputTokens?: number; timeoutMs?: number };
+export function policyInputBound(messages: ChatMessage[]): number {
+  return new TextEncoder().encode(JSON.stringify([{role:'system',content:agentContentPolicy},...messages])).length + 512;
+}
 export type Completion = { text: string; inputTokens: number; outputTokens: number };
 
 export class ProviderError extends Error {
@@ -50,9 +54,10 @@ export async function complete(config: AIConfig, messages: ChatMessage[], transp
   if (!Number.isSafeInteger(outputLimit) || outputLimit < 64 || outputLimit > 4096) throw new ProviderError("configuration");
   const timeoutMs=config.timeoutMs??60000;
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>60000)throw new ProviderError('configuration');
+  const policyMessages: ChatMessage[] = [{role: 'system', content: agentContentPolicy}, ...messages];
   const payload = config.protocol === "responses"
-    ? { model: config.model, input: messages, max_output_tokens: outputLimit, store: false, stream: false }
-    : { model: config.model, messages, max_tokens: outputLimit, stream: false };
+    ? { model: config.model, input: policyMessages, max_output_tokens: outputLimit, store: false, stream: false }
+    : { model: config.model, messages: policyMessages, max_tokens: outputLimit, stream: false };
   let result: Record<string, unknown>;
   try {
     const response = await transport(url, {

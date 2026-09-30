@@ -1,3 +1,4 @@
+import {policyInputBound} from './ai';
 import {standardAIReservationStatement,dispatchStandardAI,markStandardAIUncertain,closeStandardAIAttempt} from './standard-ai-usage';
 import {reconcileStandardChat} from './standard-ai-recovery';
 import {appPageDesignProjectId,readAppPageDesign,appPageDesignPrompt,appPageDesignProposalAllowed} from './app-page-design';
@@ -78,7 +79,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const billing = await ensureBilling(db, userId,budgetDate);
   await ensureInferenceBudget(db,userId,billing.period,billing.plan.id);
   // Standard work has bounded calls, not a customer-unit admission threshold.
-  const boundInput = () => new TextEncoder().encode(JSON.stringify(messages)).length + 512;
+  const boundInput = () => policyInputBound(messages);
   const outputLimit = 2048;
   async function noReservation(){
     const prior=await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id=? AND user_id=?').bind(id,userId).first<{user_text:string;revision:number}>();

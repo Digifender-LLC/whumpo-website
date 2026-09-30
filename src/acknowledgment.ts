@@ -1,3 +1,4 @@
+import {policyInputBound} from './ai';
 import { complete, type AIConfig, type ChatMessage } from './ai';
 import { inferenceReservation, dispatchInference, observeInference, uncertainInference } from './model-costs';
 
@@ -24,7 +25,7 @@ export async function startAcknowledgment(db:D1Database,user:string,turn:string,
     {role:'user',content:content.slice(0,1000)}
   ];
   try{
-    await inferenceReservation(db,user,turn,period,config,new TextEncoder().encode(JSON.stringify(messages)).length+512,256,'ack').run();
+    await inferenceReservation(db,user,turn,period,config,policyInputBound(messages),256,'ack').run();
     if(!await dispatchInference(db,user,id))return;
     const result=await complete({...config,maxOutputTokens:256,timeoutMs:5000,sessionId:`whumpo-ack-${user}`},messages,transport);
     await observeInference(db,user,id,result,parseAcknowledgment(result.text));
