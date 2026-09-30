@@ -1,5 +1,17 @@
 # Optional GitHub connection
 
+## Disconnect and in-flight replies — September 30, 2026
+
+GitHub capabilities now recheck the exact captured user/token identity, active pointer, vault state and expiry after receiving a provider response. If local authorization was disconnected, replaced or expired, the response body is cancelled and the result is refused. Installation discovery uses the same capability and rechecks again after consuming the complete bounded JSON body, preventing an in-flight stream from returning stale installation metadata after disconnect. No additional permissions, refresh tokens or provider endpoints are introduced.
+
+A provider write already dispatched cannot be recalled by disconnect. Its response may now be refused, but the capability never automatically retries it. The existing backup coordinator retains its claimed request and uncertain-outcome recovery rules; disconnect does not establish that a remote commit was undone or never occurred. Customers reconnect and inspect the original backup receipt rather than creating another write request.
+
+Read-only live setup inspection on September 30 confirmed all four customer GitHub App bindings are still absent, the shared vault key is present, and GitHub/Cloudflare vault and revocation counts are zero. Cloudflare OAuth binding names are present but this alone does not validate real consent or provider operations. Customer GitHub authorization remains disabled pending the existing [App setup](github-app-setup.md); the operator CLI login is not reused.
+
+Verification: `pnpm check`, `pnpm test:github-connection` and `pnpm test:github-backups` passed. New disposable-D1 cases cover disconnect before headers, disconnect during streamed JSON, token replacement during lookup, refusal by an already captured capability, stale-body cancellation and one dispatch of a possibly accepted write. Existing backup tests retain exact files, expected-head checks, immutable reviews, concurrent confirmation and lost-response reconciliation. No real GitHub credentials or repository writes were used.
+
+Deployed as test platform `3b13242b-35fc-4d3b-befa-fab0340ac12c`, with the isolated backend TypeScript check passing. Live readback verified the exact active version, health 200 and anonymous Chat/connection/installation requests returning 401. No schema, frontend, customer grant or repository changed. Evidence: `.secrets/github-disconnect-release.json`.
+
 ## Current delivery
 
 The workspace has a Connected accounts panel, accessible through Details, `/connections`, `connect github` and `disconnect github`. GitHub App authorization, encrypted expiring user-token storage, installation discovery and disconnect/revocation are implemented. Until all operator configuration exists, the Connect button is disabled and API start returns 503. The operator's `gh` credential is never reused.

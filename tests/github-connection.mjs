@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
-const {startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,githubInstallations,cleanupGitHub}=await module('src/github-connection.ts');const {seal,unseal}=await module('src/connection-vault.ts');
+const {startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,githubInstallations,githubAccess,cleanupGitHub}=await module('src/github-connection.ts');const {seal,unseal}=await module('src/connection-vault.ts');
 const dir=await mkdtemp('/tmp/tellumo-github-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
 const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'tellumo-test',key:'ab'.repeat(32)};
@@ -42,6 +42,20 @@ try{
  const acknowledged=await start(user);let lost=false;
  const lossy=new Proxy(db,{get(target,key){if(key==='batch')return async statements=>{const result=await target.batch(statements);if(!lost&&statements.length===4){lost=true;throw Error('Lost commit acknowledgement');}return result;};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
  const beforeLost=exchanges;await finishGitHub(lossy,user,'session-a',new URL(acknowledged.url).searchParams.get('state'),'test-code',config,provider(acknowledged,{token:'ghu_acknowledged'}));assert.equal(lost,true);assert.equal(exchanges,beforeLost+1);assert.equal((await connectionStatus(db,user,config)).github.connected,true);
+ // Provider replies cannot outlive the exact local authorization that sent them.
+ let cancelledBody=false;
+ await assert.rejects(githubInstallations(db,user,config,async()=>{await disconnectGitHub(db,user,undefined);return new Response(new ReadableStream({cancel(){cancelledBody=true;}}));}),e=>e.status===401);assert.equal(cancelledBody,true);
+ const bodyFlow=await start(user);await finish(user,bodyFlow,provider(bodyFlow,{token:'ghu_body_race'}));
+ let chunks=0;const encoder=new TextEncoder();
+ await assert.rejects(githubInstallations(db,user,config,async()=>new Response(new ReadableStream({async pull(controller){
+  if(chunks++===0){controller.enqueue(encoder.encode('{"total_count":1,"installations":['));return;}
+  await disconnectGitHub(db,user,undefined);controller.enqueue(encoder.encode('{"id":1,"app_id":123,"account":{"login":"private-stale-org"}}]}'));controller.close();
+ }}))),e=>e.status===401);
+ const replacementFlow=await start(user);await finish(user,replacementFlow,provider(replacementFlow,{token:'ghu_before_replace'}));
+ await assert.rejects(githubInstallations(db,user,config,async()=>{const newer=await start(user);await finish(user,newer,provider(newer,{token:'ghu_after_replace'}));return Response.json({total_count:1,installations:[{id:1,app_id:123,account:{login:'stale-replaced-org'}}]});}),e=>e.status===401);assert.equal((await connectionStatus(db,user,config)).github.connected,true);
+ const staleAccess=await githubAccess(db,user,config,denied);await disconnectGitHub(db,user,undefined);await assert.rejects(staleAccess.assertCurrent(),e=>e.status===401);await assert.rejects(staleAccess.send('/user/installations?per_page=100'),e=>e.status===401);
+ const writeFlow=await start(user);await finish(user,writeFlow,provider(writeFlow,{token:'ghu_write_race'}));let writes=0;
+ const writing=await githubAccess(db,user,config,async()=>{writes++;await disconnectGitHub(db,user,undefined);return Response.json({data:{alreadyAccepted:true}});});await assert.rejects(writing.send('/graphql',{method:'POST',body:'{}'}),e=>e.status===401);assert.equal(writes,1,'No automatic retry after a possibly accepted write');
  const final=await start(user);await finish(user,final,provider(final,{token:'ghu_expiring'}));await db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE user_id=?").bind(user).run();assert.equal((await connectionStatus(db,user,config)).github.connected,false);await assert.rejects(()=>githubInstallations(db,user,config,denied));await cleanupGitHub(db,config,denied);assert.equal((await db.prepare('SELECT COUNT(*) n FROM github_token_vault WHERE user_id=?').bind(user).first()).n,0);
  console.log('GitHub connection checks passed: PKCE, one-time session state, encrypted user-bound tokens, owner isolation, installation filtering, replacement, cancellation race, immediate disconnect, queued revocation, expiry and bounded provider failures. No real GitHub credentials were used.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

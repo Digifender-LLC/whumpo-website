@@ -76,11 +76,10 @@ export async function disconnectGitHub(db:D1Database,userId:string,configuration
 }
 
 export async function githubInstallations(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){
- const config=required(configuration);
- const token=await db.prepare("SELECT t.id,t.ciphertext FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.state='active' AND t.expires_at>?").bind(userId,new Date().toISOString()).first<{id:string;ciphertext:string}>();
- if(!token)throw new ConnectionError(401,'Connect GitHub again to view its installations.');
- const access=await unseal(config.key,aad(userId,token.id,'token'),token.ciphertext);
- const data=await readJSON(await request(API+'/user/installations?per_page=100',{headers:{...apiHeaders,authorization:'Bearer '+access}},transport));
+ const config=required(configuration),access=await githubAccess(db,userId,config,transport);
+ const data=await readJSON(await access.send('/user/installations?per_page=100'));
+ // Recheck after the entire bounded body, not just after receiving headers.
+ await access.assertCurrent();
  if(!Array.isArray(data.installations)||data.installations.length>100)throw new ConnectionError(503,'GitHub returned invalid installation data.');
  const installations=data.installations.flatMap((entry:unknown)=>{
   if(!entry||typeof entry!=='object')return [];const i=entry as Record<string,unknown>,account=i.account as Record<string,unknown>|null;
@@ -95,12 +94,17 @@ export async function githubAccess(db:D1Database,userId:string,configuration:Git
  const config=required(configuration);
  const current=await db.prepare("SELECT c.github_user_id,t.id FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.state='active' AND t.expires_at>?").bind(userId,new Date().toISOString()).first<{github_user_id:string;id:string}>();
  if(!current)throw new ConnectionError(401,'Connect GitHub again before using repository backups.');
- return {tokenId:current.id,githubUserId:current.github_user_id,async send(path:string,options:RequestInit={}){
+ async function assertCurrent(){
+  if(!await db.prepare("SELECT c.user_id FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND c.github_user_id=? AND t.id=? AND t.state='active' AND t.expires_at>?").bind(userId,current!.github_user_id,current!.id,new Date().toISOString()).first())throw new ConnectionError(401,'GitHub access changed. Reconnect and prepare a new review.');
+ }
+ return {tokenId:current.id,githubUserId:current.github_user_id,assertCurrent,async send(path:string,options:RequestInit={}){
   if(!path.startsWith('/')||path.startsWith('//'))throw new ConnectionError(400,'Invalid GitHub API path.');
   const row=await db.prepare("SELECT t.ciphertext FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.id=? AND t.state='active' AND t.expires_at>?").bind(userId,current.id,new Date().toISOString()).first<{ciphertext:string}>();
   if(!row)throw new ConnectionError(401,'GitHub access changed. Reconnect and prepare a new review.');
   const token=await unseal(config.key,aad(userId,current.id,'token'),row.ciphertext);
-  return request(API+path,{...options,headers:{...apiHeaders,'content-type':'application/json',authorization:'Bearer '+token}},transport);
+  const response=await request(API+path,{...options,headers:{...apiHeaders,'content-type':'application/json',authorization:'Bearer '+token}},transport);
+  try{await assertCurrent();}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
+  return response;
  }};
 }
 export {readJSON as readGitHubJSON};
