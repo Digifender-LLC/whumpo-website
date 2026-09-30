@@ -1,9 +1,11 @@
+import {confirmationControls} from './chat-controls';
 export const firstAppProjectId=(content:string)=>/^\/first-app ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(content)?.[1];
 export const firstDraftProjectId=(content:string)=>/^\/first-draft ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(content)?.[1];
 export function displayChatRequest(content:string){
  if(firstAppProjectId(content))return 'Build and test my first private app using my saved brief.';
  if(firstDraftProjectId(content))return 'Build my first private website draft using my saved brief.';
  if(/^\/design-app-page [0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(content))return 'Design the visitor page for my approved app and show me the review.';
+ for(const control of Object.values(confirmationControls))if(new RegExp('^/'+control.verb+' [0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$').test(content))return control.label+'.';
  const id='[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}';
  const shortcutLabels:Record<string,string>={project:'Show my project status.',versions:'Show my saved website versions.',health:'Show the saved health report for my website.','check-site':'Check whether my published website is responding.'};
  for(const [verb,label] of Object.entries(shortcutLabels))if(new RegExp('^/'+verb+' '+id+'$').test(content))return label;
@@ -21,5 +23,15 @@ export function displayChatRequest(content:string){
  if(new RegExp('^/confirm-cms-import '+id+'$').test(content))return 'Import or recover this exact reviewed WordPress article as a private draft.';
  if(new RegExp('^/wordpress-inspect '+id+' '+id+'$').test(content))return 'Check the articles in my saved WordPress export.';
  if(new RegExp('^/wordpress-sources '+id+'$').test(content))return 'Show my saved WordPress exports.';
+ if(new RegExp('^/confirm-app-restore '+id+' '+id+' RESTORE$').test(content))return 'Restore the exact reviewed application data.';
+ if(new RegExp('^/confirm-app-upgrade '+id+' UPGRADE$').test(content))return 'Apply the exact reviewed app upgrade.';
+ if(new RegExp('^/confirm-app-rollback '+id+' ROLLBACK$').test(content))return 'Apply the exact reviewed app rollback.';
+ if(new RegExp('^/cancel-app-upgrade '+id+' CANCEL$').test(content))return 'Discard this reviewed upgrade check.';
+ if(new RegExp('^/backend '+id+'$').test(content))return 'Read the saved program for this review.';
+ if(new RegExp('^/backend-result '+id+'$').test(content))return 'Read the saved test result for this review.';
+ if(new RegExp('^/verify-domain '+id+'$').test(content))return 'Check the saved domain ownership proof.';
+ const domain=new RegExp('^/domain ([a-zA-Z0-9.-]{1,253}) '+id+'$').exec(content);
+ if(domain)return 'Prepare ownership verification for '+domain[1]+'.';
+ if(new RegExp('^/unpublish(?: '+id+')?$').test(content))return 'Prepare a review to take my website offline.';
  return content;
 }

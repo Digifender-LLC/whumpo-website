@@ -15,8 +15,8 @@ export async function backendHttpFixture(){
   const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
   runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
   proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});
-  const bundle=await build({stdin:{resolveDir:process.cwd(),contents:"export {default as platform} from './src/index';export {default as sites} from './src/site-host';export {hashToken} from './src/security';"},bundle:true,format:'esm',platform:'node',write:false});
-  const {platform,sites,hashToken}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+  const bundle=await build({stdin:{resolveDir:process.cwd(),contents:"export {default as platform} from './src/index';export {default as sites} from './src/site-host';export {hashToken} from './src/security';export {sendChat,readChat} from './src/chat';"},bundle:true,format:'esm',platform:'node',write:false});
+  const {platform,sites,hashToken,sendChat,readChat}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
   const env={...proxy.env,ENVIRONMENT:'local',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:(request,init)=>runtime.dispatchFetch(request,init)}};
   let base;
   server=createServer(async(req,res)=>{try{
@@ -47,6 +47,7 @@ export async function backendHttpFixture(){
    await call('/chat');
    return (await call('/projects')).projects[0].id;
   }
-  return {base,seedBackend,firstProject,dispose};
+  async function seedChat(cookie,content){const token=cookie.split('=')[1],user=(await proxy.env.DB.prepare('SELECT user_id FROM sessions WHERE token_hash=?').bind(await hashToken(token)).first()).user_id;const state=await readChat(proxy.env.DB,user),id=crypto.randomUUID();const result=await sendChat(proxy.env.DB,user,{id,revision:state.state.revision,content});assert.equal(result.status,200);return id;}
+  return {base,seedBackend,firstProject,seedChat,dispose};
  }catch(error){await dispose();throw error;}
 }

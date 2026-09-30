@@ -36,7 +36,15 @@ try{
  assert.equal((await call(base+'/'+source+'/import-reviews',{method:'POST',body:{id:id(),sourceItemId:9,title:'Forged replacement'}})).status,400);
  const reviewPath='/api/cms-import-reviews/'+review;assert.equal((await call(reviewPath,{cookie:otherToken})).status,404);assert.equal((await call(reviewPath+'/confirm',{method:'POST',body:{},origin:'https://foreign.test'})).status,403);assert.equal(nativeWrites,0);
  const page=await call(reviewPath+'/preview');assert.equal(page.status,200);assert.match(page.headers.get('content-security-policy'),/sandbox/);const reviewHTML=await page.text();assert.match(reviewHTML,/Original/);assert.match(reviewHTML,/Source excerpt marker/);assert.match(reviewHTML,/Categories: none retained/);assert.match(reviewHTML,/Tags: none retained/);
- const chat=async(content,cookie=token,requestId=id())=>{const stateResponse=await call('/api/chat',{cookie});assert.equal(stateResponse.status,200,await stateResponse.clone().text());const state=await stateResponse.json();const response=await call('/api/chat',{method:'POST',cookie,body:{content,revision:state.state.revision,id:requestId}});assert.equal(response.status,200,await response.clone().text());return (await (await call('/api/chat',{cookie})).json()).turns.find(t=>t.id===requestId);};
+ // Internal fixture adapters prepare/read records; only typed approval goes through public Chat.
+ const {sendChat,readChat}=await module('src/chat.ts'),{cmsWordPressCommand}=await module('src/cms-wordpress-chat.ts');
+ const chat=async(content,cookie=token,requestId=id())=>{
+  const owner=cookie===token?a.user:other,state=await readChat(db,owner);
+  if(content.startsWith('/confirm-cms-import ')){
+   const response=await call('/api/chat/actions',{method:'POST',cookie,body:{id:requestId,revision:state.state.revision,action:{type:'confirm',kind:'cmsImport',reviewId:content.split(' ')[1]}}});assert.equal(response.status,200,await response.clone().text());
+  }else assert.equal((await sendChat(db,owner,{content,revision:state.state.revision,id:requestId},undefined,{cmsPublication:(turn,text)=>cmsWordPressCommand(db,owner,turn,text,env)})).status,200);
+  return (await readChat(db,owner)).turns.find(t=>t.id===requestId);
+ };
  const inventory=await chat('/wordpress-sources '+a.project);assert.match(inventory.assistant_text,/wordpress.xml/);
  const reportTurn=await chat('/wordpress-inspect '+a.project+' '+source);assert.match(reportTurn.assistant_text,/Item 9/);assert.ok(!reportTurn.assistant_text.includes('<strong>'));assert.ok(!reportTurn.assistant_text.includes('Original story'));assert.ok(!reportTurn.assistant_text.includes('Source excerpt marker'));
  const forbidden=await chat('/wordpress-inspect '+a.project+' '+source,otherToken);assert.ok(!forbidden.assistant_text.includes('Private import'));

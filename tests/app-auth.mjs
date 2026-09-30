@@ -176,7 +176,7 @@ try {
  const chatHeaders={cookie:'whumpo_session='+ownerToken,origin:'https://whumpo.com','content-type':'application/json'};
  const chatState=await(await platform.fetch(new Request('https://whumpo.com/api/chat',{headers:chatHeaders}),env,{waitUntil(){}})).json();
  const chatReply=await platform.fetch(new Request('https://whumpo.com/api/chat',{method:'POST',headers:chatHeaders,body:JSON.stringify({id:id(),revision:chatState.state.revision,content:'/visitor-access '+c.project})}),env,{waitUntil(){}});
- assert.equal(chatReply.status,200);const transcript=await chatReply.json();assert.ok(JSON.stringify(transcript).includes('active visitor(s)'));assert.ok(!JSON.stringify(transcript).includes(createdInvite.code));
+ assert.equal(chatReply.status,503);const transcript=await chatReply.json();assert.ok(!JSON.stringify(transcript).includes('active visitor(s)'));assert.ok(!JSON.stringify(transcript).includes(createdInvite.code));
  const invitationId=await hashToken('whumpo-app-invite:'+createdInvite.code),cancel='/invitations/'+invitationId+'/cancel';
  assert.equal((await ownerRequest(cancel,'POST',foreignToken)).status,404);assert.equal((await ownerRequest(cancel,'POST')).status,200);
  await denied(begin(c,'signup',createdInvite.code),403);

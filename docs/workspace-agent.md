@@ -1,6 +1,8 @@
 # AI project and export actions
 
-The model can now propose a new project with a private first website, or attach a source download for an existing owned version. Natural-language requests after onboarding use these capabilities. During guided setup, `/ask` explicitly invokes AI. Guided `/new` and `/export` remain available without inference.
+**Current Chat contract (September 30, 2026):** [Natural-language Chat and agent knowledge](natural-language-chat.md). Public messages no longer execute slash commands or browser navigation shortcuts. Older command examples and guided-mode evidence below describe the internal adapters and historical behavior; they are not current customer instructions. The owned action, immutable review and replay invariants remain in force.
+
+The model can now propose a new project with a private first website, or attach a source download for an existing owned version. Natural-language requests after onboarding use these capabilities through validated agent tools. Explicit review controls have a separate structured endpoint.
 
 ## New project
 

@@ -5,7 +5,9 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
 const bundled=await build({stdin:{contents:"export * from './src/onboarding';export * from './src/profile';export * from './src/ai-chat';export * from './src/chat';export * from './src/billing';export * from './src/first-draft';export * from './src/first-draft-command';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const {readOnboarding,saveOnboarding,completeOnboarding,updateProfile,sendAIChat,readChat,sendChat,getBilling,welcomeDraftProject,displayChatRequest}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+const {readOnboarding,saveOnboarding,completeOnboarding,updateProfile,sendAIChat:sendInternalAIChat,readChat,sendChat,getBilling,welcomeDraftProject,displayChatRequest}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+// Exercise the internal constrained-build adapter; public Chat uses natural messages.
+const sendAIChat=(db,user,id,revision,content,config,transport,options)=>sendInternalAIChat(db,user,id,revision,content,config,transport,options,true);
 const dir=await mkdtemp('/tmp/whumpo-first-draft-');let proxy;
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic',protocol:'responses'};
 const page={name:'Copper Oven',headline:'Fresh bread for our neighbors',description:'Sourdough and pastries.',theme:'clay',aboutTitle:'Our bakery',aboutText:'A friendly neighborhood bakery.',sections:[]};

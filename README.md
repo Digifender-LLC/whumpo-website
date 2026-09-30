@@ -62,6 +62,7 @@ For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.js
 - [Customer benchmarks and inference privacy](docs/customer-benchmarks.md) — synthetic outcome checks, cost evidence and real-model evaluation gates
 - [Content safety and US customer eligibility](docs/content-safety.md) — policy foundations; scanning and enforcement remain launch gates
 - [Chat tools and navigation](docs/workspace-agent.md)
+- [Natural-language Chat and agent knowledge](docs/natural-language-chat.md): messages, explicit approvals, scoped lookups and the retrieval decision.
 - [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)
 - [GitHub authorization](docs/integrations/github-connection.md) and [reviewed backups](docs/integrations/github-backups.md)
 - [Cloudflare authorization](docs/integrations/cloudflare-connection.md) and [reviewed DNS](docs/integrations/cloudflare-dns.md)

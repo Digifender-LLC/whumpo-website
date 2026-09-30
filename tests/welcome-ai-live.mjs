@@ -6,7 +6,9 @@ import {build} from 'esbuild';
 import wrangler from 'wrangler';
 if(process.env.RUN_LIVE_MUSE!=='1')throw Error('Set RUN_LIVE_MUSE=1 for the live welcome handoff check');
 const bundled=await build({stdin:{contents:"export * from './src/onboarding';export * from './src/profile';export * from './src/ai-chat';export * from './src/chat';export * from './src/billing';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const {readOnboarding,saveOnboarding,completeOnboarding,updateProfile,sendAIChat,readChat,getBilling}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+const {readOnboarding,saveOnboarding,completeOnboarding,updateProfile,sendAIChat:sendInternalAIChat,readChat,getBilling}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+// Exercise the internal constrained-build adapter; public Chat uses natural messages.
+const sendAIChat=(db,user,id,revision,content,config,transport,options)=>sendInternalAIChat(db,user,id,revision,content,config,transport,options,true);
 const dir=await mkdtemp('/tmp/whumpo-welcome-ai-');
 execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;

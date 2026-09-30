@@ -8,7 +8,7 @@ async function register(){const response=await fetch(base+'/api/auth/register',{
 const cookie=await register(),other=await register();
 const post=(path,data,origin=base,session=cookie)=>fetch(base+path,{method:'POST',headers:{origin,cookie:session,'content-type':'application/json'},body:JSON.stringify(data)});
 const get=path=>fetch(base+path,{headers:{cookie}});
-async function chat(content){const state=await(await get('/api/chat')).json(),id=crypto.randomUUID(),response=await post('/api/chat',{id,revision:state.state.revision,content});assert.equal(response.status,200,await response.text());return id;}
+
 const project=await fixture.firstProject(cookie,'Counter application','A simple private counter');
 const version=crypto.randomUUID(),run=crypto.randomUUID();const path='/api/projects/'+project;
 await fixture.seedBackend(project,version,'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:"Count saved"})',cookie);
@@ -23,9 +23,9 @@ assert.equal((await post(review+'/confirm',{},base,other)).status,404);
 assert.equal((await post(review+'/confirm',{},'https://evil.test')).status,403);
 assert.equal((await post(review+'/confirm',{})).status,200);
 const active=await(await get(path+'/application')).json();assert.equal(active.configuration.enabled,1);assert.equal(active.publicAccessReady,false);
-const off=await chat('/disable-application '+project);await chat('/confirm-application '+off);assert.equal((await(await get(path+'/application')).json()).configuration.enabled,0);
+const off=crypto.randomUUID();assert.equal((await post(path+'/application',{id:off,operation:'disable'})).status,200);assert.equal((await post('/api/application-reviews/'+off+'/confirm',{})).status,200);assert.equal((await(await get(path+'/application')).json()).configuration.enabled,0);
 assert.equal((await post(review+'/confirm',{})).status,200);assert.equal((await(await get(path+'/application')).json()).configuration.enabled,0);
-const guided=await chat('/enable-application '+version+' '+run);await chat('/confirm-application '+guided);assert.equal((await(await get(path+'/application')).json()).configuration.enabled,1);
-console.log('Application HTTP acceptance passed: real QuickJS transition test, authenticated review/confirmation, cross-owner isolation, CSRF denial, guided disable and historical confirmation replay. Visitor access remains gated.');
+const enabled=crypto.randomUUID();assert.equal((await post(path+'/application',{id:enabled,operation:'enable',versionId:version,runId:run})).status,200);assert.equal((await post('/api/application-reviews/'+enabled+'/confirm',{})).status,200);assert.equal((await(await get(path+'/application')).json()).configuration.enabled,1);
+console.log('Application HTTP acceptance passed: real QuickJS transition test, authenticated review/confirmation, cross-owner isolation, CSRF denial, explicit disable and historical confirmation replay. Visitor access remains gated.');
 
 } finally {await fixture.dispose();}

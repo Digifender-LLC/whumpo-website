@@ -6,7 +6,9 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
 const bundle=await build({stdin:{contents:"export * from './src/app-page-design';export * from './src/backend-versions';export * from './src/app-activation';export * from './src/app-pages';export * from './src/ai-chat';export * from './src/chat';export * from './src/billing';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const {readAppPageDesign,appPageDesignPrompt,appPageDesignData,saveBackend,testBackend,prepareApplication,confirmApplication,prepareAppPage,confirmAppPage,readAppPage,sendAIChat,readChat,sendChat,getBilling}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const {readAppPageDesign,appPageDesignPrompt,appPageDesignData,saveBackend,testBackend,prepareApplication,confirmApplication,prepareAppPage,confirmAppPage,readAppPage,sendAIChat:sendInternalAIChat,readChat,sendChat,getBilling}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+// Exercise the internal constrained-build adapter; public Chat uses natural messages.
+const sendAIChat=(db,user,id,revision,content,config,transport,options)=>sendInternalAIChat(db,user,id,revision,content,config,transport,options,true);
 const dir=await mkdtemp('/tmp/whumpo-page-design-');let proxy;
 const id=()=>crypto.randomUUID(),source='export default ({input})=>({state:{note:input.note},result:"Saved"})';
 const form={title:'Private notebook',description:'A private note for each invited member',buttonLabel:'Save note',fields:[{key:'note',label:'Your note',type:'text'}]};

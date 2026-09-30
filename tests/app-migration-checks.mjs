@@ -26,10 +26,17 @@ try{
  const visitors=[];for(let i=0;i<4;i++){const visitor=id();visitors.push(visitor);await db.prepare('INSERT INTO app_visitors(id,project_id) VALUES(?,?)').bind(visitor,project).run();await db.prepare('UPDATE app_documents SET revision=revision+1,state_json=? WHERE visitor_id=?').bind(JSON.stringify({note:'private-'+i}),visitor).run();}
  const token='b'.repeat(64),tokenHash=await hashToken(token);await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(tokenHash,user,new Date(Date.now()+3600000).toISOString(),now()).run();
  const env={DB:db,FILES:proxy.env.FILES,BACKEND_RUNTIME:service,ENVIRONMENT:'local',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
- const call=(body,cookie=token,origin='http://localhost')=>platform.fetch(new Request('http://localhost/api/chat',{method:body?'POST':'GET',headers:{origin,cookie:'whumpo_session='+cookie,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,{waitUntil(){throw Error('No inference expected');}});
- async function chat(content,request=id()){const state=await(await call()).json(),response=await call({id:request,revision:state.state.revision,content});assert.equal(response.status,200,await response.clone().text());return (await response.json()).turns.find(t=>t.id===request).assistant_text;}
+ const call=(body,cookie=token,origin='http://localhost')=>platform.fetch(new Request('http://localhost/api/chat'+(body?'/actions':''),{method:body?'POST':'GET',headers:{origin,cookie:'whumpo_session='+cookie,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,{waitUntil(){throw Error('No inference expected');}});
+ // Fixture setup/read adapters stay internal; exact maintenance approvals exercise the mounted route.
+ async function chat(content,request=id()){
+  const state=await readChat(db,user),[verb,reviewId,confirmation]=content.split(' '),kind=maintenanceKind[verb];
+  if(kind){const response=await call({id:request,revision:state.state.revision,action:{type:'appMaintenance',kind,reviewId,confirmation}});assert.equal(response.status,200,await response.clone().text());}
+  else assert.equal((await sendChat(db,user,{id:request,revision:state.state.revision,content},undefined,{backendRuntime:service})).status,200);
+  return (await readChat(db,user)).turns.find(t=>t.id===request).assistant_text;
+ }
+ const maintenanceKind={'/confirm-app-upgrade':'upgrade','/confirm-app-rollback':'rollback','/cancel-app-upgrade':'cancel'};
  for(const verb of ['confirm-app-upgrade','confirm-app-rollback','cancel-app-upgrade']){
-  const request={id:id(),revision:0,content:`/${verb} ${id()} ${verb==='cancel-app-upgrade'?'CANCEL':verb.endsWith('upgrade')?'UPGRADE':'ROLLBACK'}`};
+  const request={id:id(),revision:0,action:{type:'appMaintenance',kind:maintenanceKind['/'+verb],reviewId:id(),confirmation:verb==='cancel-app-upgrade'?'CANCEL':verb.endsWith('upgrade')?'UPGRADE':'ROLLBACK'}};
   assert.equal((await call(request,'')).status,401);assert.equal((await call(request,token,'https://foreign.test')).status,403);
   await db.prepare("UPDATE sessions SET created_at='2000-01-01T00:00:00.000Z' WHERE token_hash=?").bind(tokenHash).run();assert.equal((await call(request)).status,401);
   await db.prepare('UPDATE sessions SET created_at=? WHERE token_hash=?').bind(now(),tokenHash).run();

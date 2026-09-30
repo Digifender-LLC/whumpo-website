@@ -1,3 +1,5 @@
+import {linkChatReviewReply,readChatReviewReceipts,backendReviewChatActions} from './chat-review-receipts';
+import {chatControl} from './chat-controls';
 import {transcriptRequests,transcriptReply,isTranscriptRequest} from './chat-transcript';
 import {usageReviewCommand,prepareUsageReviewChat} from './usage-review-requests';
 import {readStandardAIHistory,readStandardAIRequest,describeStandardAIHistory,describeStandardAIRequest} from './standard-ai-history';
@@ -77,15 +79,32 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   const cmsRemovals=await cmsUnpublishLinks(db,userId);
   for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsRemovals.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_unpublish_confirmation_id=r.id;turn.cms_unpublish_recovery=r.status==='approved';}}
   for(const turn of result[1].results as Record<string,unknown>[]){if(turn.status==='completed'&&typeof turn.user_text==='string'&&isTranscriptRequest(turn.user_text)&&turn.assistant_text===transcriptReply)turn.chat_transcript_download=true;}
-  await applicationChatActions(db,userId,result[1].results as Record<string,unknown>[]);
-  await appRecoveryChatActions(db,userId,result[1].results as Record<string,unknown>[]);
+  const reviewReceipts=await readChatReviewReceipts(db,userId,result[1].results as Record<string,unknown>[]);
+  await backendReviewChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
+  await applicationChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
+  await appRecoveryChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await appMaintenanceChatActions(db,userId,result[1].results as Record<string,unknown>[]);
   const billing = await getBilling(db, userId);
   const firstDraft=await welcomeDraftProject(db,userId);
-  return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : aiEnabled ? greeting + ' After we save your brief, we can discuss your website with AI. Use /ask followed by a question at any time.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };
+  return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };
 }
 
-export async function sendChat(db: D1Database, userId: string, input: Record<string, unknown>, ai?: AIConfig, dnsOptions?: DNSChatOptions) {
+/** Public messages have no command interpreter, including slash-prefixed text. */
+export function sendConversation(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+  if(Object.keys(input).some(k=>!['id','revision','content'].includes(k)))return Promise.resolve({status:400,error:'Send a plain chat message.'});
+  // Private operator statements and transcript exports must never enter inference.
+  const content=typeof input.content==='string'?input.content.trim():'';
+  const privateRequest=!content.startsWith('/')&&(isTranscriptRequest(content)||usageReviewCommand(content));
+  return sendChat(db,userId,input,ai,options,!privateRequest);
+}
+/** Only authenticated UI actions may reach the internal receipt adapters. */
+export function sendChatControl(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+  const control=chatControl(input.action);
+  if(!control||Object.keys(input).some(k=>!['id','revision','action'].includes(k)))return Promise.resolve({status:400,error:'Choose a valid reviewed action.'});
+  return sendChat(db,userId,{id:input.id,revision:input.revision,content:control.command},ai,options);
+}
+/** Internal action adapter retained for existing validated handlers and offline fixtures. */
+export async function sendChat(db: D1Database, userId: string, input: Record<string, unknown>, ai?: AIConfig, dnsOptions?: DNSChatOptions, conversationOnly=false) {
   const content = typeof input.content === 'string' ? input.content.trim() : '';
   if (!content || content.length > 1000 || !Number.isSafeInteger(input.revision) || typeof input.id !== 'string' || !/^[0-9a-f-]{36}$/.test(input.id))
     return { status: 400, error: 'Send a message of 1 to 1,000 characters with a valid request ID.' };
@@ -101,6 +120,10 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     return { status: 409, error: 'Your conversation changed in another tab. Review the latest messages and send again.' };
   }
   if (state.revision >= 2000) return { status: 409, error: 'This test workspace has reached its conversation limit.' };
+  if(conversationOnly){
+    if(!ai)return {status:503,error:'Whumpo’s assistant is temporarily unavailable. Your saved work and Dashboard controls are still available. Please try again later.'};
+    return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
+  }
   let step = state.step;
   let idea = state.idea;
   let briefProject = state.brief_project_id;
@@ -124,12 +147,12 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if(/^\/design-app-page(?:\s|$)/.test(command)){
     if(!appPageDesignProjectId(content))return {status:400,error:'Choose the approved application from Chat.'};
     if(!ai)return {status:503,error:'AI page design is not connected in this environment.'};
-    return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
+    return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions,true);
   }
   if(/^\/first-(?:draft|app)(?:\s|$)/.test(command)){
     if(!firstDraftProjectId(content)&&!firstAppProjectId(content))return {status:400,error:'Choose your saved first project from Chat.'};
-    if(!ai)return {status:503,error:'AI drafting is not connected. You can still create a free starter preview from Chat.'};
-    return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
+    if(!ai)return {status:503,error:'AI drafting is not connected. Please try again later.'};
+    return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions,true);
   }
   const known = [...transcriptRequests,'show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','show usage history','show my usage history','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && !usageReview && !help && !navigation && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
@@ -349,6 +372,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   if(external){
     const result=await external();
+    if(backend)await linkChatReviewReply(db,userId,input.id,result);
     await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=? AND user_id=?').bind(result,input.id,userId).run();
   }
   if(dnsOptions?.healthChecks&&publication&&command.startsWith('/confirm ')){
