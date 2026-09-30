@@ -10,6 +10,15 @@ const sourceTrees=['src','frontend','web','tools'];
 const sourceFiles=['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json',...Object.values(configFiles)];
 const supportedKeys=['$schema','name','account_id','main','compatibility_date','compatibility_flags','workers_dev','preview_urls','routes','vars','assets','d1_databases','services','r2_buckets','ratelimits','observability','triggers'];
 
+export function expectedServiceBindings(services){
+ return services.map(({binding,service,entrypoint,...extra})=>{
+  if(Object.keys(extra).length)throw Error('New service binding fields require release archive support');
+  // The version API reports the script's default environment explicitly, even
+  // when Wrangler config omits it. This is not Whumpo's ENVIRONMENT variable.
+  return {binding,service,environment:'production',...(entrypoint?{entrypoint}:{})};
+ }).sort((a,b)=>a.binding.localeCompare(b.binding));
+}
+
 export function archivedConfig(role,base,entry,cms){
  for(const key of Object.keys(base))if(!supportedKeys.includes(key))throw Error('New Worker configuration requires release archive support: '+key);
  if(base.name!=='whumpo-'+role||base.workers_dev!==false||base.preview_urls!==false)throw Error('Unexpected release destination');
@@ -52,9 +61,10 @@ export async function prepareRelease(root,driver,review,{git=()=>({commit:execFi
   if(base.account_id!==driver.configs.platform.account_id)throw Error('Cross-account release refused');
   const entry=await driver.compile(role,base,join(payload,'workers',role),directory);
   const config=archivedConfig(role,base,entry,before.cms);
+  const services=expectedServiceBindings(config.services);
   if(!(await lstat(join(payload,'workers',role,entry))).isFile())throw Error('Worker bundle entry missing');
   await writeFile(join(payload,'config',role+'.json'),JSON.stringify(config,null,2)+'\n',{mode:0o600});
-  workers[role]={name:base.name,config:'payload/config/'+role+'.json',tag:'whumpo-'+id.replaceAll('-','')+'-'+role,services:config.services};
+  workers[role]={name:base.name,config:'payload/config/'+role+'.json',tag:'whumpo-'+id.replaceAll('-','')+'-'+role,services};
  }
  if(!same(build,await verifyBuildSnapshot(root))||!same(before,await driver.observe()))throw Error('Build or remote baseline changed during preparation');
  // The older build guard does not cover all release tooling or migrations.
