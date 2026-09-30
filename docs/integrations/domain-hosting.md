@@ -2,7 +2,7 @@
 
 ## Activation is still disabled
 
-The provisioning, checking, disconnect and public-routing code is implemented. It is not a claim that a real customer hostname works. The zone-scoped token is absent, the fallback origin and wildcard route have not been configured, and real certificate/routing acceptance remains outstanding. Never set `DOMAIN_HOSTING_READY=verified` merely because the code deploys.
+The provisioning, checking, disconnect and public-routing code is implemented. It is not a claim that a real customer hostname works. The runtime zone-scoped token and activation flag remain unconfigured. A hosting DNS record exists, but Cloudflare for SaaS has no allocated quota for this zone; fallback-origin access and actual custom-hostname routing are not verified. Real certificate/routing acceptance remains outstanding. Never set `DOMAIN_HOSTING_READY=verified` merely because the code deploys. See the September 30 read-only preflight below.
 
 Before activation, the operator must:
 
@@ -100,3 +100,19 @@ The AI accepts only `hosting/list` and `hosting/review` with strict fields. It c
 `test:hosting-chat` covers the full controlled lifecycle, owner isolation, stale revision, concurrent/replayed confirmation, a check that cannot create/delete, free guided usage, lost chat acknowledgement, AI action restrictions and absence of provider tokens from model input. These are controlled-provider tests; real Cloudflare setup and DNS/TLS acceptance remain pending.
 
 Chat deployment evidence (September 29): platform `9f9694c5-d4ce-4e49-9e4b-5ea66233a488`, public-site Worker `f5f4206e-7c63-4c79-95e9-30b3d9c372cc`. TypeScript, build, hosting-chat tests and the existing hosting regression suite passed. Live signed-passkey checks verified connection discovery, disabled review, foreign check/disconnect rejection, no provider resource creation and zero units for guided commands. Muse returned the authoritative hosting-list receipt; usage settled at 6 units with zero reserved and no replay charge. Logout and fixture cleanup passed. No real DNS or custom-hostname operation occurred.
+
+
+## Live activation preflight — September 30, 2026
+
+Using the owner's local management credential for GET requests only confirmed:
+
+- The code's zone ID resolves to active **whumpo.site**, on the Free Website plan.
+- Custom Hostnames listing returns HTTP 403, code 1404: no quota allocated for this zone/account. Fallback-origin reading returns HTTP 401, code 1456: the zone has not been granted SSL for SaaS access. These responses establish a feature-enrollment prerequisite; replacing the runtime token alone cannot establish readiness.
+- `hosting.whumpo.site` already has a proxied A record pointing to `192.0.2.1`. It is not proof of a configured/active fallback origin and has not been changed by this check.
+- The zone has one Worker route, `*.whumpo.site/*` → `tellumo-sites`. This proves project-subdomain routing configuration only, not custom-hostname fallback routing or TLS issuance.
+
+The [Cloudflare enablement instructions](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/enable/) require the operator to enable Custom Hostnames and provide payment information on non-enterprise plans. The [published plans](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/plans/) list 100 included hostnames and $0.10 for each additional hostname, checked September 30, 2026. The actual enrollment screen and account terms still need review. Workers Paid is a separate entitlement and has not enabled this feature automatically. Whumpo's admission cap is 80; that is not a provider-wide billing cap or protection against unrelated provisioning.
+
+Next operator step: in the Cloudflare dashboard for **whumpo.site**, open Custom Hostnames and review the enrollment/Enable step. Confirm the included allowance and any billing terms before completing enrollment. No paid add-on, purchase or plan upgrade is authorized by this preflight. After enrollment, re-read quota/access, configure the scoped runtime credential, review the fallback DNS/Worker routing changes and run the controlled-hostname acceptance steps above before enabling customers. Do not publish the broad local management credential into a Worker.
+
+Evidence: `.secrets/domain-hosting-readiness.json` records projected status, route and the one requested DNS record without credentials or customer hostname listings. No DNS, provider feature, token, Worker, database or billing setting was changed. Customer custom-domain hosting and registrar purchasing remain unavailable.
