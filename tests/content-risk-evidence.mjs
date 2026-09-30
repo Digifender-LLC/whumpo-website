@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFile,readdir} from 'node:fs/promises';
+import {build} from 'esbuild';
+const built=await build({entryPoints:['src/content-risk-evidence.ts','src/content-risk.ts'],bundle:true,format:'esm',platform:'node',outdir:'unused',write:false});
+const modules=await Promise.all(built.outputFiles.map(f=>import('data:text/javascript;base64,'+Buffer.from(f.text).toString('base64'))));
+const {recordContentRiskEvidence:record,reverseContentRiskIncident:reverse,readContentRiskHistory:history}=modules[0];
+const {assessContentRisk:assess}=modules[1];
+const sql=new DatabaseSync(':memory:');
+try{
+ for(const name of (await readdir('migrations')).filter(n=>n.endsWith('.sql')).sort())sql.exec(await readFile(`migrations/${name}`,'utf8'));
+ sql.exec("INSERT INTO users VALUES('a','a@example.invalid','fixture','fixture','2026-09-30'),('b','b@example.invalid','fixture','fixture','2026-09-30')");
+ const db={prepare:q=>({bind:(...p)=>({first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({success:true,results:sql.prepare(q).all(...p)}),run:async()=>sql.prepare(q).run(...p)})})};
+ const event={id:'event-1',userId:'a',incidentId:'incident-1',kind:'confirmed_evasion',occurredAt:Date.now()-1000,evidenceRef:'case-1',reviewerRef:'reviewer-1'};
+ await Promise.all([record(db,event),record(db,event)]);
+ assert.equal((await history(db,'a')).events.length,1);
+ await record(db,{...event,id:'event-2'}); // Multiple receipts, still one incident in risk calculation.
+ assert.equal(assess(await history(db,'a')).score,25);
+ assert.equal(assess(await history(db,'b')).score,0);
+ assert.equal((await history(db,'a')).complete,false);
+ await assert.rejects(()=>record(db,{...event,kind:'verified_benign'}));
+ await assert.rejects(()=>record(db,{...event,userId:'b'}));
+ await assert.rejects(()=>reverse(db,'b','incident-1','case-2','reviewer-2'));
+ await reverse(db,'a','incident-1','case-2','reviewer-2');
+ await reverse(db,'a','incident-1','case-2','reviewer-2');
+ await assert.rejects(()=>reverse(db,'a','incident-1','different','reviewer-2'));
+ assert.equal(assess(await history(db,'a')).score,0);
+ await record(db,{...event,id:'critical',incidentId:'old-critical',kind:'critical_incident',occurredAt:Date.now()-400*86400000});
+ assert.equal(assess(await history(db,'a')).score,100);
+ const lost={prepare:q=>({bind:(...p)=>{const s=db.prepare(q).bind(...p);return {...s,run:async()=>{await s.run();throw Error('lost acknowledgement');}};}})};
+ await record(lost,{...event,id:'lost',incidentId:'lost'});
+ await reverse(lost,'a','lost','case-3','reviewer-2');
+ assert.equal((await history(db,'a')).events.filter(e=>e.incidentId==='lost')[0].disposition,'overturned');
+ for(const q of ["UPDATE content_risk_evidence SET kind='verified_benign'","DELETE FROM content_risk_evidence","UPDATE content_risk_reversals SET evidence_ref='changed'","DELETE FROM content_risk_reversals"])assert.throws(()=>sql.exec(q));
+ await assert.rejects(()=>record(db,{...event,id:'future',occurredAt:Date.now()+60000}));
+ await assert.rejects(()=>history(db,'missing'));
+ await assert.rejects(()=>history({prepare(){throw Error('unavailable');}},'a'));
+ assert.equal(JSON.stringify(await history(db,'a')).includes('reviewer-1'),false);
+ assert.equal(JSON.stringify(await history(db,'a')).includes('case-1'),false);
+ sql.exec("DELETE FROM users WHERE id='a'");
+ assert.equal(sql.prepare('SELECT count(*) n FROM content_risk_evidence').get().n,0);
+ assert.equal(sql.prepare('SELECT count(*) n FROM content_risk_reversals').get().n,0);
+ console.log('Risk evidence passed: migrated schema, owner isolation, replay/conflict, correction, incident deduplication, old critical cases, lost acknowledgements, immutable records, safe history and account cascade.');
+}finally{sql.close();}
