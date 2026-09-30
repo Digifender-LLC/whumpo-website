@@ -42,11 +42,19 @@ try{
  try{
   await verifyNativeMediaPreview(proxy.env,config.vars);
   await verifyNativeMediaUpload(proxy.env,config.vars);
-  const captured=await stableCMSDatabase(async sql=>(await proxy.env.DB.prepare(sql).all()).results);restoreCapturedCMSDatabase(restored,captured.snapshot);
-  const roundtrip=await captureCMSDatabase(async sql=>restored.prepare(sql).all());if(roundtrip.digest!==captured.digest)throw Error('Native CMS restore differs from source');
   const code=await bundle({entryPoints:['src/cms-bridge.ts'],bundle:true,format:'esm',platform:'node',write:false});const {verifyCMSInitialization,callCMS}=await import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));
   const identity={projectId:config.vars.TOWNHELLO_CMS_PROJECT_ID,ownerId:config.vars.TOWNHELLO_CMS_OWNER_ID,secret:config.vars.TOWNHELLO_CMS_BRIDGE_KEY,origin:config.vars.TOWNHELLO_CMS_ORIGIN};
   const service={fetch:async request=>fetch('http://localhost:8799'+new URL(request.url).pathname,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),redirect:'error'})};
+  const recoveryId=randomUUID(),recoveryBody={status:'draft',data:{title:'Native identity recovery',content:[{_type:'block',style:'normal',markDefs:[],children:[{_type:'span',text:'Recover this exact private draft.',marks:[]}]}]}};
+  const original=await callCMS(service,identity,'/_emdash/api/content/posts',recoveryId,recoveryBody);
+  // Simulate a persisted article whose native response receipt was lost.
+  await proxy.env.DB.prepare('UPDATE _townhello_requests SET status=NULL,response=NULL WHERE id=?').bind(recoveryId).run();
+  const recovered=await callCMS(service,identity,'/_emdash/api/content/posts',recoveryId,recoveryBody);
+  if(recovered.item.id!==original.item.id||recovered._rev!==original._rev||recovered.item.slug!=='whumpo-draft-'+recoveryId)throw Error('Native draft identity recovery differs');
+  if((await proxy.env.DB.prepare('SELECT count(*) n FROM ec_posts WHERE slug=?').bind('whumpo-draft-'+recoveryId).first()).n!==1)throw Error('Native recovery duplicated the article');
+  console.log('Actual native draft identity recovered the existing article and revision without another creation.');
+  const captured=await stableCMSDatabase(async sql=>(await proxy.env.DB.prepare(sql).all()).results);restoreCapturedCMSDatabase(restored,captured.snapshot);
+  const roundtrip=await captureCMSDatabase(async sql=>restored.prepare(sql).all());if(roundtrip.digest!==captured.digest)throw Error('Native CMS restore differs from source');
   const expected=['posts','pages'].flatMap(collection=>restored.prepare('SELECT id,title,status,content FROM ec_'+collection).all().map(row=>({...row,collection})));
   const expectedNative=new Map();for(const row of expected)expectedNative.set(row.id,await callCMS(service,identity,'/_emdash/api/content/'+row.collection+'/'+row.id,randomUUID()));
   console.log('Actual EmDash database snapshot restored with identical logical digest ('+captured.snapshot.tables.length+' tables, '+captured.rows+' rows).');
@@ -57,7 +65,7 @@ try{
   await stopServer();await startServer(targetPath);
   await verifyCMSInitialization(service,identity);
   for(const row of expected){const data=await callCMS(service,identity,'/_emdash/api/content/'+row.collection+'/'+row.id,randomUUID());const before=expectedNative.get(row.id);if(data.item.id!==row.id||data.item.status!==before.item.status||JSON.stringify(data.item.data)!==JSON.stringify(before.item.data)||data._rev!==before._rev)throw Error('Restored native article differs from its pre-restore native snapshot');}
-  if(expected.length!==3||expected.filter(row=>row.collection==='posts').length!==2||expected.filter(row=>row.collection==='pages').length!==1)throw Error('Restored fixture must include two posts and one page; rejected taxonomy writes must leave no extra article');
+  if(expected.length!==4||expected.filter(row=>row.collection==='posts').length!==3||expected.filter(row=>row.collection==='pages').length!==1)throw Error('Restored fixture must include three posts and one page; neither taxonomy refusal nor identity recovery may add extra articles');
   for(const name of ['categories','tags']){const term=await callCMS(service,identity,'/_emdash/api/taxonomies/'+name+'/terms/studio-notes',randomUUID());if(!JSON.stringify(term).includes('Studio notes'))throw Error('Restored native taxonomy term differs');}
   const first=expected.find(row=>row.collection==='pages'),path='/_emdash/api/content/'+first.collection+'/'+first.id,current=await callCMS(service,identity,path,randomUUID());
   const shapeCode=await bundle({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsStagedEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeCode.outputFiles[0].text).toString('base64'));

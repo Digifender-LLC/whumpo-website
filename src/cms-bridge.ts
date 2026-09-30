@@ -21,7 +21,7 @@ async function key(config:CMSBridgeConfig){return crypto.subtle.importKey('raw',
 async function boundedBody(request:Request){
  const reader=request.body?.getReader();if(!reader)return '';
  const parts:Uint8Array[]=[];let length=0;
- for(;;){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>4096){await reader.cancel();throw new CMSBridgeError(413,'CMS request exceeds its bound');}parts.push(value);}
+ for(;;){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>4352){await reader.cancel();throw new CMSBridgeError(413,'CMS request exceeds its bound');}parts.push(value);}
  const all=new Uint8Array(length);let offset=0;for(const part of parts){all.set(part,offset);offset+=part.length;}
  try{return new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(all);}catch{throw new CMSBridgeError(400,'Invalid CMS request encoding');}
 }
@@ -29,7 +29,7 @@ function canonical(config:CMSBridgeConfig,method:string,path:string,id:string,ex
 export async function signCMSRequest(config:CMSBridgeConfig,path:string,id:string,body?:unknown,now=Date.now(),verb?:'PUT'){
  if(!uuid.test(id)||!path.startsWith('/_emdash/api/')||(/[?#%\\]/.test(path)&&!cmsMediaListPath.test(path)))throw new CMSBridgeError(400,'Invalid CMS request');
  const method=verb??(body===undefined?'GET':'POST'),serialized=body===undefined?'':JSON.stringify(body),expires=Math.floor(now/1000)+60;
- if(encoder.encode(serialized).length>4096)throw new CMSBridgeError(413,'CMS request exceeds its bound');
+ if(encoder.encode(serialized).length>4352)throw new CMSBridgeError(413,'CMS request exceeds its bound');
  const signature=hex(await crypto.subtle.sign('HMAC',await key(config),encoder.encode(canonical(config,method,path,id,expires,await digest(serialized)))));
  return new Request(config.origin+path,{method,headers:{'content-type':'application/json','x-townhello-cms-id':id,'x-townhello-cms-expires':String(expires),'x-townhello-cms-signature':signature},...(body===undefined?{}:{body:serialized})});
 }

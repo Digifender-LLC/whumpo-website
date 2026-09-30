@@ -25,7 +25,7 @@ try{
   if(request.method==='GET')return Response.json({success:true,data:{item,_rev:revision}});
   const body=await request.json();
   if(request.method==='PUT'&&body._rev!==revision)return Response.json({error:'conflict'},{status:409});
-  writes++;revision='rev'+(writes+1);item={id:itemId,status:'draft',data:body.data};return Response.json({success:true,data:{item,_rev:revision}});
+  writes++;revision='rev'+(writes+1);item={id:itemId,slug:body.slug??item?.slug,status:'draft',version:1,data:body.data};return Response.json({success:true,data:{item,_rev:revision}});
  };
  const env={CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:{fetch:async request=>{
   if(!capable&&new URL(request.url).pathname.endsWith('/capabilities'))return Response.json({error:'old gateway'},{status:403});

@@ -281,3 +281,7 @@ The server now has an OpenAI-compatible Cloudflare gateway adapter for explicit 
 ## WordPress excerpt mapping — September 30, 2026
 
 Native post excerpt mapping is deployed to the test platform (`92cb02d0-cbc8-4817-8f66-8df6f2615e99`) with an explicit capability gate, immutable review, bounded conversion and escaped preview/publication rendering. Actual built EmDash preserves excerpts during later edits. No customer artifact has been deployed for this change. Categories/tags remain private migration provenance; whole-site migration and first live CMS acceptance remain open. See [EmDash details](emdash.md#native-post-excerpts--september-30-2026).
+
+## CMS creation recovery — September 30, 2026
+
+The next native CMS artifact reserves a stable draft identity before creation and can reconcile a lost response by reading the exact unchanged initial draft. Actual EmDash tests prove the same article/revision is recovered without duplication and survives backup/restore. Legacy uncertain receipts stay unresolved. This is implemented locally and requires a reviewed native artifact deployment; customer category/tag mapping remains unfinished. See [native draft recovery](emdash.md#recoverable-native-draft-identity--september-30-2026).

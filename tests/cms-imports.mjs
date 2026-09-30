@@ -21,7 +21,7 @@ try{
  const nativeEnv={DB:db,TOWNHELLO_CMS_PROJECT_ID:a.project,TOWNHELLO_CMS_OWNER_ID:a.user,TOWNHELLO_CMS_ORIGIN:a.config.origin,TOWNHELLO_CMS_BRIDGE_KEY:a.config.secret};
  const env={CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:{fetch:async request=>{
   if(!capable&&new URL(request.url).pathname.endsWith('/capabilities'))return Response.json({error:'old'},{status:403});
-  const response=await cmsGateway(request,nativeEnv,async request=>{assert.equal(request.method,'POST');assert.ok(request.url.endsWith('/content/posts'));writes++;const body=await request.json();return Response.json({success:true,data:{item:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAV',status:'draft',data:body.data}}},{status:201});});
+  const response=await cmsGateway(request,nativeEnv,async request=>{assert.equal(request.method,'POST');assert.ok(request.url.endsWith('/content/posts'));writes++;const body=await request.json();return Response.json({success:true,data:{_rev:'rev1',item:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAV',slug:body.slug,status:'draft',version:1,data:body.data}}},{status:201});});
   if(!excerptCapable&&new URL(request.url).pathname.endsWith('/capabilities')){const payload=await response.json();delete payload.data.structuredContent.excerptVersion;return Response.json(payload);}
   if(drop&&request.method==='POST'){drop=false;throw Error('Lost native receipt');}return response;
  }}};
