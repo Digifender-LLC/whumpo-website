@@ -609,6 +609,16 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/content-risk-evidence.ts](../../src/content-risk-evidence.ts)
 - [src/site-host.ts](../../src/site-host.ts)
 - [src/cms-media.ts](../../src/cms-media.ts)
+- [docs/safety-coverage.md](../../docs/safety-coverage.md)
+- [docs/project-specification.md](../../docs/project-specification.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/project-service-clients.md](../../docs/project-service-clients.md)
+- [src/specification-safety.ts](../../src/specification-safety.ts)
+- [src/project-specification/service-clients/activation.ts](../../src/project-specification/service-clients/activation.ts)
+- [src/agent-knowledge.ts](../../src/agent-knowledge.ts)
+- [tests/specification-journey.mjs](../../tests/specification-journey.mjs)
+- [tests/service-client-activation.mjs](../../tests/service-client-activation.mjs)
+- [tests/natural-chat.mjs](../../tests/natural-chat.mjs)
 
 ### Execution coordination
 
@@ -616,7 +626,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/8. Planning owner: Unassigned.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001–0113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011–017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 67 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.
 
 ## WH-011 — Select and authorize moderation providers and response operations
 

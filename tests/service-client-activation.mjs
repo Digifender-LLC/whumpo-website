@@ -116,6 +116,17 @@ try{
  await db.prepare("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-hold',1,1,'risk_or_missing_history',100,90)").bind(owner.id,specDigest).run();
  await assert.rejects(db.batch([db.prepare('INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) VALUES(?,?,?,?,?,?)').bind(lateTurn,owner.id,lateRevision+1,lateCommand,latePrepared.reply,now()),...latePrepared.statements]),/service_client_activation_changed/);assert.equal(await db.prepare('SELECT id FROM chat_turns WHERE id=?').bind(lateTurn).first(),null);
  assert.equal(await m.activeContact(db,owner.project),null);assert.equal(await m.activeBackendForm(db,owner.project),null);assert.doesNotMatch(await(await served(owner)).text(),/whumpo-tool-title|https:\/\/whumpo.com\/contact/);
+ const heldCalls=calls,heldExecutions=executions;
+ for(const url of [`https://${owner.project}.whumpo.site/`,`http://localhost/s/${owner.project}/`])for(const method of ['GET','HEAD']){
+  const page=await m.host.fetch(new Request(url,{method}),env);assert.equal(page.status,200);assert.doesNotMatch(await page.text(),/whumpo-tool-title|https:\/\/whumpo.com\/contact/);
+ }
+ for(const path of [`/api/service-client-versions/${v3}/preview`,`/api/service-client-activations/${lateContact.input.id}/preview`,`/api/service-client-activations/${lateContact.input.id}/diff`])assert.equal((await call(owner,path)).status,423);
+ // Supply inert Turnstile bindings so this reaches the recorded-hold guard, not missing-provider configuration.
+ for(const method of ['GET','HEAD','POST']){
+  const response=await m.platform.fetch(new Request(`https://whumpo.com/contact/${owner.project}`,{method,headers:{origin:'https://whumpo.com'}}),{...env,TURNSTILE_SECRET:'synthetic-unused',TURNSTILE_SITE_KEY:'synthetic-unused'},ctx);
+  assert.equal(response.status,404);assert.doesNotMatch(await response.text(),/<form|Example Garden/);
+ }
+ assert.equal(calls,heldCalls);assert.equal(executions,heldExecutions);
  const contactState=await db.prepare('SELECT revision FROM contact_settings WHERE project_id=?').bind(owner.project).first();await assert.rejects(m.saveContact(db,owner.project,contactState.revision,{id:id(),name:'Synthetic visitor',email:'synthetic@example.test',message:'A harmless local fixture'}),e=>e.status===409);
  // Critical legacy disable reviews remain available even when linked configuration is held.
  const contactOff=await chat(owner,{kind:'contactReview',projectId:owner.project,enabled:false});await confirm(owner,'contact',contactOff.input.id);

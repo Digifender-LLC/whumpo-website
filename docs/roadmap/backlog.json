@@ -397,7 +397,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.",
-        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001–0113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7."
+        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001\u20130113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7."
       ]
     },
     {
@@ -435,11 +435,23 @@
         "src/content-screening-decisions.ts",
         "src/content-risk-evidence.ts",
         "src/site-host.ts",
-        "src/cms-media.ts"
+        "src/cms-media.ts",
+        "docs/safety-coverage.md",
+        "docs/project-specification.md",
+        "docs/project-specification-storage.md",
+        "docs/project-service-clients.md",
+        "src/specification-safety.ts",
+        "src/project-specification/service-clients/activation.ts",
+        "src/agent-knowledge.ts",
+        "tests/specification-journey.mjs",
+        "tests/service-client-activation.mjs",
+        "tests/natural-chat.mjs"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/8",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001\u20130113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011\u2013017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 67 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document."
+      ]
     },
     {
       "id": "WH-011",
