@@ -1,6 +1,6 @@
 # Tenant and privileged-action authority audit
 
-**WH-004 · October 1, 2026 · source audit complete; A1 fixed, locally verified and deployed to private test; A2 fixed, locally verified and deployed to private test; A3 fixed and locally verified including browser account-switch recovery; test deployment pending.**
+**WH-004 · October 1, 2026 · source audit complete; A1 fixed, locally verified and deployed to private test; A2 fixed, locally verified and deployed to private test; A3 fixed, locally/browser verified and deployed to private test; WH-004 acceptance complete.**
 
 This is the consolidated authority map for source commit `a34a13171a768097b6bb80a548363dd7ab7e8659`. It complements the [security decision register](security-risk-actions.md), [acceptance gates](acceptance.md) and [roadmap issue](https://github.com/zemdregon/whumpo/issues/5). It is not a claim of exhaustive security or live acceptance.
 
@@ -73,7 +73,7 @@ Severity is calibrated to the concrete prerequisites, including private testing.
 
 ## Follow-up and verification
 
-WH-004 remains open until the focused negative checks and regressions for A1–A3 are delivered. A passing historical or current suite cannot close a scenario the suite does not exercise. New code/deployment acceptance will be recorded separately from this immutable source snapshot.
+At the sealed audit checkpoint, WH-004 remained open until the focused negative checks and regressions for A1–A3 were delivered. A passing historical or current suite cannot close a scenario the suite does not exercise. New code/deployment acceptance will be recorded separately from this immutable source snapshot.
 
 ### Post-scan local checks — October 1, 2026
 
@@ -108,7 +108,7 @@ A1 deployment is now verified: [PR #33](https://github.com/zemdregon/whumpo/pull
 
 ## A2 remediation — October 1, 2026
 
-Four targeted failures were reproduced on `858845e`: another owner's disconnect and global cleanup during validation, loss of the old connection when replacement admission fails, and duplicate concurrent revocation dispatch. The correction separates one-minute staging metadata from queued revocation, guards the atomic connection-pointer replacement before retiring prior usable tokens, scopes interactive cleanup to its owner and uses expiring claim identities to fence scheduled cleanup and late acknowledgments. Migration 0115 preserves vault format, encrypted ownership context, quota and existing capabilities. [Lifecycle and compatibility contract](integrations/github-connection.md#staging-isolation-and-cleanup-claims--october-1-2026). The 13-case regression and existing connection/backup/inventory suites now pass locally. [Deployment is now verified](integrations/github-connection.md#a2-test-release); A3 remains open.
+Four targeted failures were reproduced on `858845e`: another owner's disconnect and global cleanup during validation, loss of the old connection when replacement admission fails, and duplicate concurrent revocation dispatch. The correction separates one-minute staging metadata from queued revocation, guards the atomic connection-pointer replacement before retiring prior usable tokens, scopes interactive cleanup to its owner and uses expiring claim identities to fence scheduled cleanup and late acknowledgments. Migration 0115 preserves vault format, encrypted ownership context, quota and existing capabilities. [Lifecycle and compatibility contract](integrations/github-connection.md#staging-isolation-and-cleanup-claims--october-1-2026). The 13-case regression and existing connection/backup/inventory suites now pass locally. [Deployment is now verified](integrations/github-connection.md#a2-test-release); at that checkpoint A3 remained open.
 
 Local acceptance passed: all **13** cases in `tests/github-token-lifecycle.mjs`, existing `github-connection.mjs` and `github-backups.mjs`, plus `maintenance-inventory.mjs` and `account-closure-inventory.mjs`. The expanded regression covers cross-owner/scheduled cleanup during validation, absent/expired/superseded replacement, no capability from staging, concurrent claims, rollback of retirement/staging failures and late acknowledgments after claim takeover. Fixtures use Node 24, allowlisted environments, temporary homes, disposable D1/SQLite and synthetic providers. Both TypeScript projects and the build passed via `pnpm --config.verify-deps-before-run=false run check` / `run build`; roadmap validation/render and whitespace checks passed. No real GitHub credential or repository operation was used.
 
@@ -117,4 +117,18 @@ Local acceptance passed: all **13** cases in `tests/github-token-lifecycle.mjs`,
 
 The A→B first-dispatch failure was reproduced against `f35940c`. Migration 0116 and the visitor lifecycle now issue a review bound to the exact actor/project/session/revision before confirmation. Admission rechecks current authority and expiry atomically with receipt creation and erasure. Browser recovery uses read-only status; page load and “Check” cannot first-dispatch deletion. Historical committed receipts remain recoverable. [Contract and focused verification](app-data.md#actor-bound-visitor-deletion-review-0116--october-1-2026).
 
-Seventeen targeted regressions, existing visitor lifecycle checks, maintenance inventory, both TypeScript projects and build pass. The connected customer-app journey and app-auth suites also pass. Built-browser checks verify two-tab switching, undispatched request reload, and committed lost-response recovery without re-POST. Test deployment is still pending. This updates remediation evidence, not the sealed source audit or its historical coverage. WH-004 remains open until A3 acceptance and the final audit criteria are checked.
+Seventeen targeted regressions, existing visitor lifecycle checks, maintenance inventory, both TypeScript projects and build pass. The connected customer-app journey and app-auth suites also pass. Built-browser checks verify two-tab switching, undispatched request reload, and committed lost-response recovery without re-POST. [Test deployment is verified](app-data.md#a3-test-release). This updates remediation evidence, not the sealed source audit or its historical coverage. The final WH-004 criteria are checked below.
+
+
+## WH-004 acceptance audit — October 1, 2026
+
+| Original criterion | Inspected evidence | Result |
+| --- | --- | --- |
+| Every reviewed privileged path identifies entry, authority, immutable target, replay and stale state | Authority matrix above, sealed scan’s 101 surface records and reviewed source inventory; A1/A2/A3 contract amendments | Complete for the defined source scope; not a new exhaustive scan of later features |
+| Cross-owner/project/visitor and model-confirmation bypass attempts covered | Eleven selected post-scan suites; 21 A1, 13 A2 and 17 A3 focused regression cases; connected application journey and two-tab visitor recovery | Complete to local synthetic execution scope; CMS functional testing remains deferred |
+| Reportable findings have reproduction and remediation ownership | Three sealed findings, owners/reproduction above; implementation PRs #33, #35, #37 and linked deployment evidence | All three corrected, locally verified and deployed to private test |
+| No exhaustive-security claim based only on old passing tests | Static scope/exclusions, fixture/provider/device limitations and separate release acceptance are explicit | Satisfied; no launch, provider, device or disaster-recovery certification |
+
+The sealed scan remains `completed` at `2026-10-01T12:07:25.955734Z`, with three findings and coverage labeled `partial` for the stated exclusions. It was neither restarted nor edited to mark fixes. The missing race/account-switch scenarios were reproduced and added after the audit; passing historical suites alone did not establish their correction. Subsequent Stripe sandbox scope and tests remain separately documented in [stripe-sandbox.md](stripe-sandbox.md), rather than attributed to the earlier static scan.
+
+WH-004’s defined audit and remediation deliverables are complete. Outstanding native-device/passkey/provider consent, inference privacy/quality, backup-aware deletion and recovery drills remain separate roadmap gates. The known build-snapshot fixture defect remains verification-tooling follow-up; CMS inventory UI testing, CSAM and Daybreak remain deferred. [A3 deployment and verification limits](app-data.md#a3-test-release).
