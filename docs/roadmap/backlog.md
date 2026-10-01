@@ -165,6 +165,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/customer-app-journey.mjs](../../tests/customer-app-journey.mjs)
 - [docs/acceptance.md](../../docs/acceptance.md)
 - [AGENTS.md](../../AGENTS.md)
+- [docs/verification.md](../../docs/verification.md)
+- [tools/verify.mjs](../../tools/verify.mjs)
+- [tests/verification-profiles.mjs](../../tests/verification-profiles.mjs)
+- [tests/prompt-data-boundaries.mjs](../../tests/prompt-data-boundaries.mjs)
 
 ### Execution coordination
 
@@ -172,7 +176,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/4. Planning owner: Unassigned.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001–0113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services.
 
 ## WH-004 — Audit current tenant and privileged-action boundaries
 
