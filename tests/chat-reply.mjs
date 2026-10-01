@@ -17,6 +17,13 @@ assert.equal(displayChatRequest(specificationCommand),'Save the exact reviewed p
 assert.equal(displayChatRequest(specificationCommand+' extra'),specificationCommand+' extra');
 assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:specificationCommand,literal:true})),specificationCommand);
 const specificationReview={id:review,proposalDigest:'a'.repeat(64),expectedRevision:2};
+for(const service of ['contact','statelessForm'])for(const enabled of [true,false]){
+ const html=actions({service_client_activation:{id:review,service,enabled}});
+ assert.ok(html.includes((enabled?'Enable':'Disable')+' reviewed '+(service==='contact'?'contact intake':'website tool')));
+ assert.ok(html.includes('/api/service-client-activations/'+review+'/diff'));assert.ok(html.includes('min-h-11'));
+}
+assert.ok(!actions({service_client_activation:{id:review,service:'all',enabled:true}}).includes('<button'));
+assert.ok(!actions({assistant_text:'Enable reviewed contact intake'}).includes('<button'));
 const serviceCommand='/confirm-service-clients '+review+' '+'a'.repeat(64)+' 2';
 assert.equal(displayChatRequest(serviceCommand),'Save the exact reviewed private service settings.');
 assert.equal(displayChatRequest(serviceCommand+' extra'),serviceCommand+' extra');

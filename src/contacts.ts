@@ -1,3 +1,4 @@
+import {requireServiceClientActivation} from './project-specification/service-clients/activation';
 import {hashToken} from './security';
 export class ContactError extends Error {constructor(public status:number,message:string){super(message);}}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -11,6 +12,7 @@ export async function contactCommand(db:D1Database,userId:string,turnId:string,c
   if(!r)return result('Contact form review not found.');
   if(r.status==='applied')return result('That contact form review was already applied. Use /inbox to see current status.');
   if(r.expires_at<=new Date().toISOString())return result('That review expired. Request a fresh contact form review.');
+  await requireServiceClientActivation(db,userId,'contact',id);
   return result(r.enabled?'Contact form enabled for this published version. Visitors can use the Contact link on your live site. Use /inbox to read messages privately. Publishing or restoring another version will disable the form until you review it again.':'Contact form disabled. Existing messages remain private and expire after 30 days.',[
    db.prepare("UPDATE contact_reviews SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending'").bind(turnId,id,userId)
   ]);
@@ -25,7 +27,7 @@ export async function contactCommand(db:D1Database,userId:string,turnId:string,c
  ]);
 }
 export async function activeContact(db:D1Database,projectId:string){
- return db.prepare('SELECT p.name,c.revision FROM contact_settings c JOIN publications s ON s.project_id=c.project_id JOIN projects p ON p.id=c.project_id WHERE c.project_id=? AND c.enabled=1 AND s.version_id IS NOT NULL AND s.revision=c.publication_revision').bind(projectId).first<{name:string;revision:number}>();
+ return db.prepare('SELECT p.name,c.revision FROM contact_settings c JOIN publications s ON s.project_id=c.project_id JOIN projects p ON p.id=c.project_id WHERE c.project_id=? AND c.enabled=1 AND s.version_id IS NOT NULL AND s.revision=c.publication_revision AND NOT EXISTS(SELECT 1 FROM service_client_blocked_contacts WHERE project_id=c.project_id)').bind(projectId).first<{name:string;revision:number}>();
 }
 /** Call only after Origin, bounded body, rate limit and server-side bot verification. */
 export async function saveContact(db:D1Database,projectId:string,revision:number,data:Record<string,unknown>){
@@ -45,7 +47,7 @@ export async function contactInbox(db:D1Database,userId:string,projectId:string)
  const project=await db.prepare('SELECT p.name,c.enabled,c.publication_revision,s.revision,s.version_id FROM projects p LEFT JOIN contact_settings c ON c.project_id=p.id LEFT JOIN publications s ON s.project_id=p.id WHERE p.id=? AND p.owner_user_id=?').bind(projectId,userId).first<{name:string;enabled:number|null;publication_revision:number|null;revision:number|null;version_id:string|null}>();
  if(!project)throw new ContactError(404,'Project not found.');
  const {results}=await db.prepare('SELECT m.id,m.name,m.email,m.message,m.created_at,m.expires_at FROM contact_submissions m JOIN projects p ON p.id=m.project_id WHERE p.id=? AND p.owner_user_id=? AND m.expires_at>? ORDER BY m.created_at DESC,m.id DESC LIMIT 100').bind(projectId,userId,new Date().toISOString()).all();
- return {project:{id:projectId,name:project.name},enabled:!!project.enabled&&!!project.version_id&&project.publication_revision===project.revision,messages:results};
+ return {project:{id:projectId,name:project.name},enabled:!!await activeContact(db,projectId),messages:results};
 }
 export async function deleteContact(db:D1Database,userId:string,id:string){
  await db.prepare('DELETE FROM contact_submissions WHERE id=? AND project_id IN(SELECT id FROM projects WHERE owner_user_id=?)').bind(id,userId).run();

@@ -1,3 +1,4 @@
+import {serviceClientActivationChatLinks} from './project-specification/service-clients/activation';
 import {linkChatReviewReply,readChatReviewReceipts,backendReviewChatActions} from './chat-review-receipts';
 import {chatControl} from './chat-controls';
 import {transcriptRequests,transcriptReply,isTranscriptRequest} from './chat-transcript';
@@ -87,6 +88,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await appRecoveryChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await appMaintenanceChatActions(db,userId,result[1].results as Record<string,unknown>[]);
   await serviceClientChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
+  await serviceClientActivationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   await specificationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   const billing = await getBilling(db, userId);
   const firstDraft=await welcomeDraftProject(db,userId);

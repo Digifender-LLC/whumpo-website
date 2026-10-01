@@ -147,3 +147,5 @@ export async function serviceClientPreview(db:D1Database,user:string,review:stri
 export async function savedServiceClientPreview(db:D1Database,user:string,version:string){
  try{id(version);const row=await db.prepare('SELECT v.project_id FROM service_client_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(version,user).first<{project_id:string}>();if(!row)throw new BackendError(404,'Saved service configuration not found.');const saved=await savedVersion(db,user,row.project_id,version);return new Response(saved.preview_html,{headers:previewHeaders});}catch(e){return safe(e);}
 }
+// Shared owned reads for the separate activation handoff; never permission to activate.
+export {savedVersion as readSavedServiceClientVersion,head as readServiceClientHead};
