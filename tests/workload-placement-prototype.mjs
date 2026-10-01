@@ -11,8 +11,7 @@ function descriptor(kind='records',n=1){
  const schema=pin(`${kind}-data`);
  return {contractVersion:1,ref:{projectId:project,resourceId:resource(n)},kind,module:pin(kind),schema,
   ownership:{data:[{id:'primary',classId:'project-data',subject:'project',export:'eligible'}],assets:[]},dependencies:[],
-  lifecycle:{exportFormat:1,exportHook:'export-v1',deleteHook:'delete-v1',restoreHook:'restore-v1',migrateHook:'migrate-v1',portability:'not-verified'},
-  compatibility:{readSchemas:[schema],restoreSchemas:[schema]}};
+  lifecycle:{exportFormat:1,exportHook:'export-v1',deleteHook:'delete-v1',restoreHook:'restore-v1',migrateHook:'migrate-v1',portability:'not-verified'}};
 }
 const copy=x=>structuredClone(x);
 const offer=(d,adapter='shared-d1-v1')=>({ref:copy(d.ref),adapter,kinds:[d.kind],module:copy(d.module),schema:copy(d.schema)});
@@ -42,17 +41,16 @@ invalid('exportable data needs a hook',d=>d.lifecycle.exportHook=null,'MISSING_E
 invalid('portability cannot claim untested standalone',d=>d.lifecycle.portability='standalone','UNVERIFIED_PORTABILITY');
 invalid('visitor data requires separate approval',d=>d.ownership.data[0].subject='visitor','INVALID_EXPORT');
 invalid('duplicate data set',d=>d.ownership.data.push(copy(d.ownership.data[0])),'DUPLICATE');
-invalid('write schema missing in read set',d=>d.compatibility.readSchemas=[pin('records-data',2)],'INCOMPATIBLE_SCHEMA');
-invalid('same version with different digest',d=>d.compatibility.readSchemas.push(pin('records-data',1,'b'.repeat(64))),'DUPLICATE');
-invalid('restore schema cannot be unreadable',d=>d.compatibility.restoreSchemas.push(pin('records-data',2)),'INCOMPATIBLE_SCHEMA');
-invalid('foreign schema family',d=>d.compatibility.readSchemas.push(pin('other',2)),'INCOMPATIBLE_SCHEMA');
+invalid('retired schema compatibility descriptor rejected',d=>d.compatibility={readSchemas:[d.schema],restoreSchemas:[d.schema]},'UNKNOWN_FIELD');
+invalid('old read schema list rejected',d=>d.readSchemas=[pin('records-data',1),pin('records-data',2)],'UNKNOWN_FIELD');
+invalid('old restore schema list rejected',d=>d.restoreSchemas=[pin('records-data',1)],'UNKNOWN_FIELD');
 invalid('foreign asset reference',d=>d.ownership.assets.push({projectId:otherProject,resourceId:resource(2)}),'CROSS_PROJECT');
 invalid('foreign dependency',d=>d.dependencies.push({ref:{projectId:otherProject,resourceId:resource(2)},module:pin('files')}),'CROSS_PROJECT');
 invalid('self dependency',d=>d.dependencies.push({ref:copy(d.ref),module:copy(d.module)}),'SELF_REFERENCE');
 invalid('oversized descriptor',d=>d.extra='x'.repeat(32768),'TOO_LARGE');
-test('private visitor export and explicit compatible versions',()=>{
+test('private visitor export with one pinned current schema',()=>{
  const d=descriptor();d.ownership.data[0].subject='visitor';d.ownership.data[0].export='separate-approval';
- d.schema=pin('records-data',2);d.compatibility.readSchemas.push(d.schema);d.compatibility.restoreSchemas.push(d.schema);
+ d.schema=pin('records-data',2);
  assert.equal(validateDescriptor(d).schema.version,2);
 });
 test('excluded data needs no export hook',()=>{
@@ -85,9 +83,12 @@ test('cross-project adapter rejected',()=>{const d=descriptor(),o=offer(d);o.ref
 test('same project wrong resource rejected',()=>{const d=descriptor(),o=offer(d);o.ref.resourceId=resource(9);rejects(()=>adapterCompatibility(d,o),'CROSS_PROJECT');});
 test('adapter capability rejected',()=>{const d=descriptor(),o=offer(d);o.kinds=['files'];rejects(()=>adapterCompatibility(d,o),'INCOMPATIBLE_ADAPTER');});
 test('module replacement is not placement',()=>{const d=descriptor(),o=offer(d);o.module.digest='b'.repeat(64);rejects(()=>adapterCompatibility(d,o),'MODULE_MISMATCH');});
-test('schema upgrade requires reviewed migration even when readable',()=>{
- const d=descriptor(),o=offer(d);o.schema=pin('records-data',2);d.compatibility.readSchemas.push(o.schema);
- rejects(()=>adapterCompatibility(d,o),'SCHEMA_MISMATCH');
+test('both older and newer adapter schemas reject',()=>{
+ const d=descriptor();d.schema=pin('records-data',2);
+ for(const version of [1,3]){const o=offer(d);o.schema=pin('records-data',version);rejects(()=>adapterCompatibility(d,o),'SCHEMA_MISMATCH');}
+});
+test('same schema version with changed bytes rejects',()=>{
+ const d=descriptor(),o=offer(d);o.schema.digest='b'.repeat(64);rejects(()=>adapterCompatibility(d,o),'SCHEMA_MISMATCH');
 });
 test('physical locator not part of public adapter offer',()=>{const d=descriptor(),o=offer(d);o.connection='synthetic';rejects(()=>adapterCompatibility(d,o),'UNKNOWN_FIELD');});
 
