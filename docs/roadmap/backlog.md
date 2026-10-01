@@ -2951,7 +2951,7 @@ Implementers have one bounded contract for owner Chat forms, task context, agent
 - Inventory supported routine journeys and current controls; specify Chat as the primary surface and infrequent authentication, consent, preview and recovery handoffs
 - Freeze versioned interaction IDs, definition digests, field and binding schemas, templates, presentation hints, answer states, request identities and client negotiation
 - Define short predesigned forms and bounded custom composition; distinguish owner intake from WH-066/067 visitor forms and WH-070 customer app presentation
-- Specify retention/model-context rules, target-project changes, cancel/resume/correction, view revisions and deterministic fallback paths
+- Specify retention/model-context rules, target-project changes, cancel/resume/correction, view revisions and deterministic current-version recovery
 - Use an existing-project content-change brief, private preview and exact review as the first complete slice
 - Freeze actor/project/feature eligibility and binding IDs using WH-113/089, including future membership and denied/read-only states; share these contracts across web, native and feature adapters.
 
@@ -2960,7 +2960,7 @@ Implementers have one bounded contract for owner Chat forms, task context, agent
 - [ ] Concrete examples map each field/control to a registered handler or read binding, with explicit size/depth/count bounds and rejected unknown fields
 - [ ] Collecting answers, preparing a private change and approving consequential effects have separate authority and receipt states
 - [ ] Agent-managed presentation preserves user correction/dismissal, essential direct controls and current publication/provider/spending gates
-- [ ] Web/native compatibility includes readable historical elements and a safe unsupported-version fallback without inferred action authority
+- [ ] Web/native use the current interaction schema only; stale clients/schemas fail explicitly without downgrade rendering or inferred action authority
 - [ ] Source inventory names delivered foundations and missing work; live issue/dependency evidence is refreshed before claims
 
 ### Verification
@@ -2989,14 +2989,19 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 - [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [tools/prototypes/chat-interactions.mjs](../../tools/prototypes/chat-interactions.mjs)
+- [tests/chat-interaction-contract.mjs](../../tests/chat-interaction-contract.mjs)
+- [tests/fixtures/chat-interactions.json](../../tests/fixtures/chat-interactions.json)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/51. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
+- 2026-10-01: WH-105 source-grounded interaction v1 decision and offline reference/fixtures prepared against 26b9fa4 under issue #51. WH-113/#42 and WH-089/#44 completion evidence refreshed before claim. Owner amendment removes legacy/unsupported-client fallback; current-version-only rejection replaces downgrade rendering. 63 offline contract/compiler/control cases pass. Production storage/admission/rendering remain WH-106–112; no runtime or deployment change.
 
 ## WH-106 — Persist and submit typed Chat interactions with exact readback
 
@@ -3050,6 +3055,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/chat-transcript.ts](../../src/chat-transcript.ts)
 - [frontend/src/lib/chat-delivery.ts](../../frontend/src/lib/chat-delivery.ts)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -3085,7 +3091,7 @@ The agent can present useful predesigned forms and review/status elements direct
 - [ ] Validated answers prepare the intended change; existing server review metadata remains the only source of approval controls
 - [ ] Reload, navigation and dialog dismissal retain eligible answers and never resubmit an action or force a dismissed popup open
 - [ ] Keyboard/screen-reader focus, error association, dialog close/return, mobile keyboard and 360/390px behavior have inspected evidence
-- [ ] Existing review disclosures, request recovery and legacy transcript text remain accurate; rendering cannot execute model HTML or code
+- [ ] Current review disclosures, request recovery and current-format retained history remain accurate; no older-schema decoder or model HTML/code rendering
 
 ### Verification
 
@@ -3107,6 +3113,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/chat-history-dialog.tsx](../../frontend/src/chat-history-dialog.tsx)
 - [frontend/src/components/ui/dialog.tsx](../../frontend/src/components/ui/dialog.tsx)
 - [docs/verification.md](../../docs/verification.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -3167,6 +3174,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/ai-chat.ts](../../src/ai-chat.ts)
 - [src/agent-inspection.ts](../../src/agent-inspection.ts)
 - [tests/agent-prompt-focus.mjs](../../tests/agent-prompt-focus.mjs)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -3209,7 +3217,7 @@ Dashboards and custom views are supporting surfaces the agent builds around the 
 
 - Extend tests/workspace-dashboard.mjs with shared bindings, stale revisions, isolation, restore and zero-inference rendering cases
 - Run pnpm check and connected Chat-to-view-to-Chat browser fixtures through the quality manager; inspect narrow-screen images
-- Exercise legacy layouts, project removal, inaccessible metrics and user-requested layout correction
+- Exercise current layouts, explicit forward data conversion, project removal, inaccessible metrics and user-requested layout correction
 
 ### Dependencies and blockers
 
@@ -3225,6 +3233,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/workspace-shortcuts.ts](../../src/workspace-shortcuts.ts)
 - [frontend/src/workspace-pages.tsx](../../frontend/src/workspace-pages.tsx)
 - [tests/workspace-dashboard.mjs](../../tests/workspace-dashboard.mjs)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -3287,6 +3296,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/workspace-controls.tsx](../../frontend/src/workspace-controls.tsx)
 - [tests/customer-site-journey.mjs](../../tests/customer-site-journey.mjs)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -3314,7 +3324,7 @@ The workspace opens on the current conversation and needs little navigation, whi
 - Preserve composer drafts, selected project, open interactions and pending review/result links across reload and browser/provider returns
 - Offer bounded account-scoped recovery of saved work without automatic inference, form submission or approval on reconnect
 - Keep discoverable deterministic paths for account/security/sign-out/support, urgent takedown and pending operation/review state
-- Retain compatible old routes and safe redirects/return points without dropping drafts or submitted receipt identity
+- Remove superseded routes and adapters; use current return points and explicit forward data conversion preserving current drafts and submitted receipt identity
 
 ### Acceptance criteria
 
@@ -3347,6 +3357,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/lib/chat-delivery.ts](../../frontend/src/lib/chat-delivery.ts)
 - [frontend/src/lib/workspace-navigation.ts](../../frontend/src/lib/workspace-navigation.ts)
 - [tests/chat-delivery.mjs](../../tests/chat-delivery.mjs)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -3408,6 +3419,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/natural-chat.mjs](../../tests/natural-chat.mjs)
 - [tests/customer-site-journey.mjs](../../tests/customer-site-journey.mjs)
 - [docs/verification.md](../../docs/verification.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -5562,6 +5574,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/photo-safety.ts](../../src/photo-safety.ts)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -6459,7 +6472,7 @@ Android implementers have a source-grounded v1 operation contract and a bounded 
 - Freeze /api/mobile/v1 routes, typed requests/responses, sanitized fixtures, error/pagination/revision behavior, supported review controls and installed-client compatibility
 - Specify Credential Manager identity, bearer-session lifecycle, PKCE browser returns, onboarding and preview handoffs while preserving web Origin protections
 - Define Kotlin/Compose Android 9/API 28+ support, Chat-first surfaces, photos/sharing/push, protected retry state and the beta evidence matrix
-- Adopt WH-105 interaction version negotiation and Chat-primary navigation; define the native template subset and authenticated browser fallback for unsupported forms/views
+- Adopt WH-105 current-version-only interactions and Chat-primary navigation; unsupported versions/forms/views reject explicitly, with no browser downgrade
 - Consume the shared workspace identity policy, two-key completion state and restricted recovery authority; remove password fallback from the native/browser contract
 
 ### Acceptance criteria
@@ -6496,6 +6509,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/roadmap/chat-first-experience.md](../../docs/roadmap/chat-first-experience.md)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
@@ -6650,7 +6664,7 @@ An owner completes a supported project change and explicit review from Android, 
 - [ ] Unknown review types, unavailable inference and interrupted server execution show actionable incomplete states rather than fabricated success
 - [ ] Browser previews retain ownership and safety checks; missing browser authentication prompts sign-in and generated customer code never runs in the native app
 - [ ] Onboarding/support/recovery remain reachable when workspace admission fails; backgrounding or a notification never grants approval
-- [ ] Unknown interaction schemas use a readable summary and authenticated browser fallback; browser return reloads current state without a duplicate submit or approval
+- [ ] Unknown/noncurrent interaction schemas reject explicitly without a compatibility summary or browser downgrade; current trusted handoff returns read state without duplicate submission or approval
 
 ### Verification
 
@@ -6675,6 +6689,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/lib/chat-delivery.ts](../../frontend/src/lib/chat-delivery.ts)
 - [src/project-details.ts](../../src/project-details.ts)
 - [docs/roadmap/chat-first-experience.md](../../docs/roadmap/chat-first-experience.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
 
 ### Execution coordination
 
