@@ -159,7 +159,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/4",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001–0113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
+        "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001\u20130113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
       ]
     },
     {
@@ -415,7 +415,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.",
-        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001–0113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7."
+        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001\u20130113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7."
       ]
     },
     {
@@ -468,7 +468,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/8",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001–0113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011–017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
+        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001\u20130113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011\u2013017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
         "2026-10-01 UTC test release 20d37ba0-fca6-4003-a9c8-280f2b23edff from source 3417ea2 deploys the corrected agent knowledge. Readback verified four candidate versions, unchanged service/secret-binding names and CMS registry, 113 applied migrations / none pending, 16 matching platform assets, home/health 200 and anonymous Chat/profile 401. See docs/safety-coverage.md and docs/releases.md. No real-model moderation evaluation, detector connection, CMS functional test or customer publication."
       ]
     },
@@ -1769,7 +1769,7 @@
         "WH-009"
       ],
       "blockers": [
-        "Owner explicitly deferred Stripe setup; payment activation and commercial/legal decisions require resumption."
+        "Real-money activation, commercial/tax/refund/dispute terms and cost evidence remain undecided. Sandbox setup was resumed explicitly by the owner on October 1, 2026."
       ],
       "outcome": "Commercial engineering has explicit owner-approved provider, pricing, supported features and transaction/retention terms.",
       "scope": [
@@ -1797,7 +1797,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-01: owner authorized Stripe sandbox signup/invoice/billing work and supplied a verified sk_test key. No real-money activation. Sandbox contract: docs/stripe-sandbox.md."
+      ]
     },
     {
       "id": "WH-042",
@@ -1822,25 +1824,29 @@
       "acceptance": [
         "Only verified server events grant entitlements; browser success pages do not",
         "Duplicate/reordered events cannot double-grant or silently regress paid state",
-        "Annual purchase issues monthly grants by recorded periods",
+        "Annual purchase records exact service-interval coverage; future resource allowances reset by recorded periods without adding an extra month",
         "Sandbox proof precedes separately approved real payments"
       ],
       "verification": [
         "pnpm test:checkout",
         "pnpm test:billing",
         "pnpm test:plan-periods",
-        "Synthetic provider lifecycle and missed-event reconciliation tests"
+        "Synthetic provider lifecycle and missed-event reconciliation tests",
+        "pnpm test:subscriptions"
       ],
       "references": [
         "docs/payments.md",
         "docs/plan-lifecycle.md",
         "src/checkout.ts",
         "src/plans.ts",
-        "src/billing.ts"
+        "src/billing.ts",
+        "docs/stripe-sandbox.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/30",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "Sandbox slice authorized independently of commercial cost-period gates: optional onboarding Checkout, exact paid invoice coverage, renewal reconciliation and restricted billing portal. WH-022/023 remain prerequisites for real-money activation. Proration, refunds/disputes and resource-wallet funding remain open."
+      ]
     },
     {
       "id": "WH-043",

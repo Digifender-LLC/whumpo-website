@@ -55,7 +55,7 @@ export function Pricing() {
   const [audience,setAudience]=useState<Audience>('personal');
   const byId=(id:string)=>publicPlans.find(plan=>plan.id===id)!;
   return <section id="pricing" className="landing-container py-24" aria-labelledby="pricing-heading">
-    <div className="text-center"><p className="text-xs font-bold tracking-[.18em] text-[#338cdf]">ROOM FOR YOUR NEXT CHAPTER</p><h2 id="pricing-heading" className="mt-4 text-4xl font-extrabold sm:text-5xl">Start small. Dream bigger.</h2><p className="mt-4 text-[#526780]">Planned launch pricing. The invite-only preview is free; paid plans are not available yet.</p></div>
+    <div className="text-center"><p className="text-xs font-bold tracking-[.18em] text-[#338cdf]">ROOM FOR YOUR NEXT CHAPTER</p><h2 id="pricing-heading" className="mt-4 text-4xl font-extrabold sm:text-5xl">Start small. Dream bigger.</h2><p className="mt-4 text-[#526780]">Planned launch pricing. The invite-only preview is free. Sandbox subscriptions are available for testing with no real charges.</p></div>
     <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-4">
       <Switch label="Billing" value={interval} options={[{value:'month',label:'Monthly'},{value:'year',label:'Annual'}]} onChange={setInterval}/>
       <Switch label="Plans for" value={audience} options={[{value:'personal',label:'Personal'},{value:'business',label:'Business'}]} onChange={setAudience}/>
