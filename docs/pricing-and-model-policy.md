@@ -10,16 +10,28 @@ Supersedes the old Launch/Studio public proposal. Source: the owner's “AI VPS 
 
 ## Subscription catalogue
 
-| Plan | Monthly USD | Annual USD | Annual domain allowances | Target projects | Target file storage |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Starter | 17 | 170 | 1 | 1 | 10 GB |
-| Personal | 30 | 300 | 1 | 5 | 50 GB |
-| Business | 79 | 790 | 1 | 10 | 200 GB |
-| Business Pro | 139 | 1,390 | 2 | 25 | 500 GB |
+| Plan | Monthly USD | Annual USD | Annual domain allowances | Target projects | Target file storage | External account connections at launch |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Starter | 17 | 170 | 1 | 1 | 10 GB | Not included |
+| Creator | 30 | 300 | 1 | 5 | 50 GB | Not included |
+| Business | 79 | 790 | 1 | 10 | 200 GB | Included, subject to provider readiness |
+| Business Pro | 139 | 1,390 | 2 | 25 | 500 GB | Included, subject to provider readiness |
 
 Monthly prices are the owner's explicit choices. Annual prices follow the final discussion's proposed ten-month equivalent. Annual benefit: up to $20 wholesale per eligible standard registration or renewal, premium domains excluded. The quote helper shows the uncovered wholesale amount; it is not a retail invoice, transfer workflow, payment, inventory reservation or benefit redemption. No domain purchase is enabled. Renewal/transfer fulfillment, benefit ledger, customer ownership and transfer-out controls still need implementation before advertising an available benefit.
 
 The public landing page, API and `/plans` use the same catalogue. Resource amounts are labeled launch targets. They do not override current upload, project, domain, CMS, backend or platform safety caps. Explore remains the free invite-only test. Sandbox subscriptions are implemented for owner testing; [configuration and acceptance](stripe-sandbox.md) are recorded separately. Real payments remain unavailable. Sandbox annual coverage follows exact paid service dates; domain redemption and resource/premium funds remain unavailable.
+
+The accepted launch name is **Creator**, retaining the `personal` identifier, provider mappings and historical receipts. Current committed code still displays Personal until WH-089 completes the display rollout.
+
+### Accepted external-connections decision — September 30, 2026
+
+External account connections are a planned **Business and Business Pro** benefit; Starter and Creator (currently displayed as Personal) do not include them. The accepted first-paid-launch set is GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot. GitHub covers customer authorization and reviewed source backups; Cloudflare covers customer OAuth and reviewed DNS operations. The five new adapters support explicitly requested reads and reviewed actions under the bounded contracts below. Each connector requires separate implementation, configuration and real consent/revocation acceptance; inclusion does not promise arbitrary provider support.
+
+This changes the launch catalogue and presentation only. **There is no plan-based connection enforcement today.** The private Explore preview and current connection configuration, consent, ownership and explicit-action reviews are unchanged. GitHub setup and real provider acceptance remain open; configured Cloudflare OAuth bindings alone do not establish accepted customer consent. Real-money subscriptions remain disabled; existing sandbox subscriptions are for testing only. See the [GitHub](integrations/github-connection.md) and [Cloudflare](integrations/cloudflare-connection.md) contracts for actual availability.
+
+Ordinary custom-domain eligibility, manual DNS instructions, annual domain benefits, downloadable source exports and owner sign-in are separate from external account connections; their existing rules remain unchanged. Whumpo-hosted infrastructure does not require the customer to connect a Cloudflare account. Plan recommendations should consider required features as well as capacity: a customer who needs an external account connection needs at least Business under this launch proposal.
+
+Before paid launch, add authoritative server entitlement checks at connection start, callback activation and provider capability use; cover background/in-flight work, renewal expiry and downgrade behavior. Define how customers resolve pending external operations and preserve access to status, disconnect/revocation and recovery after eligibility ends. Verify provider setup and real consent/revocation, explain any provider charges, and reconcile catalogue/UI/Chat with those accepted journeys. This policy update neither implements those gates nor authorizes provider activation, DNS changes, repository writes or purchases.
 
 ### Public pricing panel with planned trial and Enterprise flows — September 29, 2026
 
@@ -32,6 +44,61 @@ New monthly entitlement receipts recognize all four tiers. Old Launch/Studio rec
 Provisional **test** build-unit limits remain separate from product economics: Explore 50, Starter 250, Personal 800, Business 1,600, Business Pro 3,200. These are not dollars, provider costs, or advertised launch AI allocations. The legacy $5/100 test-credit pack is not a dollar wallet. Existing unit reservations, uncertainty holds and credit opt-in continue working. Before real beta, replace the test-facing usage vocabulary and calibrate allowances from measurements.
 
 BYOC/BYOI is contact-based. The agent may help draft requirements; delivery to a sales/support queue is not connected and it cannot claim a request was sent. Existing optional GitHub source-backup and Cloudflare domain-DNS authorizations do not provision customer-owned infrastructure. Managed resource add-ons require a future exact cost review and approval; no automatic paid upgrade is enabled.
+
+## Accepted tier roadmap and paid-launch gate — September 30, 2026
+
+**Owner-approved roadmap requirements; feature implementation and customer acceptance remain planned.** This supersedes the earlier additive suggestions and staged-rollout recommendation. The complete set below, including all seven connections, must pass WH-104 before WH-047/049 can approve the first paid launch. The free, explicitly scoped WH-048 beta can proceed independently. Stripe sandbox setup was separately resumed and accepted on October 1; real-money activation and CMS testing remain gated. Their original MVP requirements remain.
+
+Prices remain Starter **$17/$170**, Creator **$30/$300**, Business **$79/$790**, Business Pro **$139/$1,390** monthly/annual. The Creator rename is display-only: keep `personal` in stored preferences, API identifiers, grants and historical receipts, and do not relabel historical evidence. Higher tiers inherit lower-tier capabilities. WH-089 implements the display rollout and feature identifiers; WH-090 implements shared server enforcement. No subscription or feature is activated by this roadmap update.
+
+### Cumulative launch matrix
+
+| Plan | Required launch experience | Delivery and current boundary |
+| --- | --- | --- |
+| **Starter — one useful site or small app** | Complete core editing, supported forms/apps, publishing, basic traffic/health information, security, recovery, export and standard owner AI under fair use. | Existing implementations and WH-026–029/035/037 provide the foundation; their complete customer acceptance remains required. Core security, exact reviews, basic recovery and supported export remain common across tiers. |
+| **Creator — a reusable personal brand** | Starter plus versioned brand kits, saved supported page sections, shared styles, and private preview feedback/comments through expiring, revocable accountless guest links. | WH-091/092, using WH-066/070. Kits and shared styles produce explicit per-project previews/apply reviews and recoverable versions; no silent changes to published sites. Guest feedback confers no workspace membership, edit, publication or spending authority. |
+| **Business — connected business operations** | Creator plus the seven external connections; lead stages, notes and due dates; follow-up reminders; configured form-to-record-to-notification workflows; conversion summaries. | WH-031/032/056/093–100, building on WH-036/037/067–069. Basic contact handling stays part of the common foundation; the higher-tier additions are lead management and configured workflows. Business can notify approved staff destinations without granting collaborative workspace access. |
+| **Business Pro — a team and project portfolio** | Business plus workspace memberships/roles and approval workflows, private staging and exact release promotion, portfolio reports, and reviewed brand/content changes across selected projects. | Promote WH-054 to prelaunch commercial work; deliver WH-101–103 using WH-066/075/076. Shared editing and release authority are server-checked; every bulk candidate has a per-project diff, outcome and recovery path. |
+
+Existing contacts expire after 30 days; new lead records need an explicit lifecycle contract rather than silently inheriting permanent CRM retention. Existing traffic measures best-effort successful HTML requests, including repeats/bots/checks. WH-095 must define accepted-submission and lead-stage outcomes, periods and denominators; it must not rename those counts as unique visitors or infer individual attribution. Staging uses isolated synthetic data and suppresses real external effects; dedicated infrastructure is not an included promise.
+
+### Feature entitlement and loss of eligibility
+
+WH-089 defines stable feature identifiers and the cumulative catalogue. WH-090 exposes one shared server feature-entitlement result for the UI, Chat, direct APIs and background jobs. Distinguish **plan inclusion**, **provider configuration/consent**, and **actual feature readiness**; neither a pricing card nor an OAuth token grants all three. Planned `launchFeatures` packaging metadata must not become an authorization check.
+
+Resolve inclusion from authoritative grants/current subscription state, not `billing_accounts.plan_id`, client-supplied flags or model output. Extend the existing WH-042 sandbox subscription/coverage resolver, preserving paid service intervals and historical receipts; use controlled preview grants for unavailable features. WH-090 must not create a parallel subscription truth. Check current actor, tenant, feature and resource authority when admitting work and again at OAuth activation, review confirmation and dispatch. Numbered migrations preserve immutable receipts and revision/ownership checks.
+
+On downgrade, renewal expiry or revocation, stop newly ineligible actions and unsent automation. Retain owner access to saved history, supported export, disconnect/revocation and narrowly scoped reconciliation of uncertain effects. Do not delete customer data, silently withdraw published sites, resend an uncertain operation or misreport an existing provider credential as disconnected merely because its plan is ineligible. Reconciliation cannot authorize a new mutation. The exact grace/retention/seat/usage contract must be calibrated and verified before commercial publication; recommendations must not propose a cheaper tier that lacks required features.
+
+### Bounded connection contracts
+
+All seven connections require Business or Business Pro. The five new adapters reuse WH-056's encrypted credential, consent, current entitlement, request-bound lookup, review and durable-operation interfaces. The accounts remain customer-authorized; operator logins and platform delivery credentials never substitute for that consent.
+
+| Adapter | Initial supported behavior | Scope and acceptance boundary |
+| --- | --- | --- |
+| **Gmail — WH-096** | Explicit bounded searches and selected-message/body reads; exact reviewed send/reply. | Plan for `gmail.readonly` plus `gmail.send`, with required identity/refresh access only. No general mailbox modification/deletion, bulk campaigns, background polling or indexing. Restricted-scope verification and applicable independent security assessment are launch prerequisites. |
+| **Google Calendar — WH-097** | Select owned calendars, read requested bounded date ranges, and review exact event creation/update/deletion. | Plan for calendar-list read and owned-event scopes, not calendar administration or arbitrary shared calendars. App-created-calendar-only scope is insufficient for existing-calendar lookups. Review timezones, recurrence, attendee notifications and cancellation effects. |
+| **Outlook email — WH-098** | Explicit bounded searches and selected-message/body reads; exact reviewed send/reply. | Delegated `Mail.Read` and `Mail.Send`, with required identity/refresh access only; no application-wide/shared-mailbox access or general mailbox modification/deletion. Test personal and work/school account eligibility and tenant-consent denial. |
+| **Microsoft Calendar — WH-099** | Read requested bounded ranges and review exact event changes within selected user calendars. | Delegated `Calendars.ReadWrite`; enforce selected resources inside Whumpo because provider consent is broader. No tenant-wide/shared-calendar synchronization. Disclose invitations, recurrence and other external effects. |
+| **HubSpot — WH-100** | Explicit contact search/read, selected Whumpo-lead/contact matching, and reviewed creation or selected-field updates. | Contacts read/write only; preserve unmapped fields and surface conflicts before linking/updating. No deal pipelines, marketing workflows, general CRM imports or continuous synchronization. Validate installation/distribution eligibility. |
+
+Reads occur only for the explicit bounded owner request. OAuth consent alone does not authorize copying the mailbox, calendar or CRM into Chat history or model context. Obtain in-context consent for the requested use/sharing, minimize the data and apply the lifecycle contract. Retrieved content is untrusted and cannot authorize more tools. Credentials never enter model context. Real connected-account content must use the accepted production privacy route from WH-020/021 and must not enter the current contributor/training-enabled test model; synthetic fixtures allow independent implementation before that route is accepted.
+
+Writes retain exact resource/content/recipient reviews, immutable operation identities and current-authority checks. A provider's accepted response is not proof of delivered email. A timeout is not proof that nothing happened: recover targeted evidence or retain uncertainty, never blindly resend. Approved deterministic recipes may invoke narrowly configured actions after their rule, destination, template and limits are reviewed. Incoming messages, visitor events and schedules never invoke Whumpo's maintainer AI. No continuous sync, unattended read-and-reply loop or webhook-driven maintainer call is included.
+
+WH-036 remains the separate platform transactional/contact-delivery foundation; customer Gmail/Outlook OAuth does not replace it. Keep that dependency direction so platform notifications and the connector foundation do not depend on each other cyclically.
+
+### Provider readiness, costs and sequencing
+
+Official provider requirements reviewed September 30, 2026: Gmail's read scope is restricted and its send scope sensitive. Server-mediated restricted-data handling requires the applicable verification/security assessment; document any verified exception, assessment scope, initial/recurring quote and renewal owner. The Google data-use contract must permit the exact requested processing and prohibit general model training with this connected data. References: [Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes), [restricted-scope verification](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification), [Workspace data policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy), [Calendar scopes](https://developers.google.com/workspace/calendar/api/auth).
+
+Microsoft acceptance includes delegated permissions, publisher/tenant consent and account-type restrictions; HubSpot acceptance includes authorized installation, distribution capacity and contact scopes. References: [Graph permissions](https://learn.microsoft.com/en-us/graph/permissions-reference), [publisher verification](https://learn.microsoft.com/en-us/entra/identity-platform/publisher-verification-overview), [HubSpot OAuth](https://developers.hubspot.com/docs/apps/developer-platform/build-apps/authentication/oauth/working-with-oauth). Reverify current terms, quotas, customer licenses, app distribution limits and prices at activation; none are assumed unlimited or free. Provider registration, public approval, real consenting test accounts and concrete cost review are external acceptance blockers, not reasons to prevent isolated implementation. Split each L provider packet into contract, implementation and separately blocked live-acceptance children; keep the parent open until all evidence is accepted.
+
+The execution order is tier contract/entitlements and existing composition foundations, then Creator tools, Business workflows and connector adapters, then Pro collaboration/release/portfolio tooling. Independent slices can proceed together. This is development sequencing, not staged paid availability: **every selected feature/provider must pass before the first paid launch**. WH-054/056 no longer wait for WH-049; WH-104 feeds WH-047/049. WH-042 sandbox implementation remains independent of paid activation. Provider approval delays therefore hold paid launch, while the existing bounded free beta remains independent.
+
+WH-022 instruments the new workloads; WH-023's final two-period validation includes implemented creator, delivery, lookup/action, lead, collaboration, staging and bulk/reporting costs, plus support, provider minimums and assessment renewals. Measurement can begin early, but the current smaller workload cannot establish the expanded launch economics. No seats, message volumes, retention guarantees, support response times or recurring add-on prices are promised here. Calibrate those through WH-009/023/041 before WH-047 publishes commercial terms. Prices remain proposals until those financial gates pass; no price changes, services or purchases are authorized by this roadmap.
+
+Roadmap delivery: [WH-089–104 and promoted foundations](roadmap/README.md#accepted-tier-expansion--creator-business-and-business-pro), [canonical task packets](roadmap/backlog.md), and [execution rules](roadmap/execution.md). Configure maintained capabilities first and preserve the [composition architecture](roadmap/composition-architecture.md).
 
 ## Four model roles, one customer-facing agent
 
@@ -140,7 +207,7 @@ Keep one auditable customer credit ledger, with immutable receipts recording the
 - Versioned candidate catalogue, dated rate cards, paid-provider admission, aggregate limits and approved rollback to the previous route.
 - Contract tests for each enabled protocol/provider, tool outputs, token/reasoning accounting, streaming cancellation, timeouts, unknown outcomes and no hidden fallback/retry.
 - Benchmarks on Whumpo tasks (acknowledgment, orchestration, edits, coding and review) measuring successful outcomes, latency and total cost—not token price alone.
-- Durable premium entitlement, quote/approval, reservation/settlement and replay tests; payment integration remains deferred because no Stripe account exists.
+- Durable premium entitlement, quote/approval, reservation/settlement and replay tests; premium funding remains unimplemented; existing subscription sandbox evidence does not grant premium funds.
 - A small explicitly approved live canary before wider beta; no claim that the gateway or Workers AI models are provisioned from this plan alone.
 
 ## Route selection implementation — September 29, 2026
@@ -261,3 +328,7 @@ See [shared capacity economics](resource-pool-economics.md) for the versioned of
 
 
 The non-billable standard-AI receipt foundation is documented in [standard AI accounting](standard-ai-accounting.md). It does not yet replace the active legacy test-unit Chat path.
+
+## Roadmap alignment — October 1, 2026
+
+Sandbox/ledger implementation (WH-042/043) can proceed after shared entitlement and metering contracts without waiting for two completed finance periods. WH-041 still approves terms for each commercial behavior and WH-023 still supplies final cost evidence before WH-047/049 activation. Sandbox transactions never count as revenue. Before revenue exists, price-based revenue and margin are explicitly forecasts; measured cost periods cannot establish actual operating profit. Existing standard assistance remains unlimited fair use with zero customer-unit debits. [Cross-feature sequence](roadmap/alignment.md).

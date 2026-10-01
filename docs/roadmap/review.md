@@ -1,5 +1,7 @@
 # Whumpo baseline review
 
+**Historical review.** The October 1 [alignment](alignment.md), current feature contracts and linked live issues supersede its original execution queue, Stripe deferral and unfinished-compiler assumptions. Preserve the dated evidence below; it is not a current deployment or completion summary.
+
 Reviewed September 30, 2026 against source commit `05443262a88b658c8d72460a75b28facacabec4f` and the repository evidence available at that point. This is a product and implementation review, not a fresh live-environment audit, security scan, accessibility certification or completion declaration. No customer data, credentials, provider settings or public content were changed for this review.
 
 Whumpo has a substantial private-test foundation: a recoverable Chat workspace, conservative publication controls, usable static-site workflows, private content tooling and a separate bounded application runtime. Its main delivery problem is converting those foundations into a small number of dependable customer outcomes. Adding more Cloudflare capabilities before resolving activation, safety, recovery and real-device acceptance would increase the support surface faster than the proven customer value.

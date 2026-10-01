@@ -22,6 +22,9 @@ Whumpo is a private test-stage, Cloudflare-hosted AI website and application pla
 
 ## Roadmap execution
 
+- Follow `docs/roadmap/alignment.md` for shared contract ownership and cross-workstream ordering. Task/phase numbers are not build order. Reuse the delivered compiler, billing, credential and receipt foundations; register new features with shared Chat/view/native adapters rather than creating parallel authority or storage implementations.
+- Follow `docs/roadmap/composition-architecture.md`: configure/compose maintained capabilities first. Visitors, deterministic jobs and view rendering must not invoke owner-maintenance AI or borrow its credentials/context/funding.
+
 - Start planned work from `docs/roadmap/README.md` and `docs/roadmap/execution.md`. `docs/roadmap/backlog.json` owns task scope, dependencies and planning readiness; mapped GitHub issues own current execution state and claims.
 - Use `node tools/roadmap.mjs validate`, `next`, and `show WH-001` to inspect tasks. Check live issue/dependency evidence and current source before claiming work; a planning-ready task may already be assigned or completed.
 - Edit the JSON backlog, then run `node tools/roadmap.mjs render` and `render --check`; do not hand-edit generated `docs/roadmap/backlog.md`. Stripe sandbox setup is owner-authorized; preserve the real-money activation gate, owner-deferred CMS testing and CSAM scanner implementation, and distinguish implementation from activation/customer acceptance when closing work.

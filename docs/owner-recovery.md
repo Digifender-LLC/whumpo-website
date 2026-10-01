@@ -1,5 +1,11 @@
 # Owner recovery and lost passkeys
 
+## Accepted policy amendment — October 1, 2026
+
+**Planned; the deployed recovery journey below is unchanged.** The [identity and data protection contract](roadmap/identity-and-data-protection.md), WH-113–115, replaces ordinary password sign-in with passkeys and requires two distinct verified passkeys at workspace signup. A downloadable text recovery key and accessible Print / Save as PDF view encourage an independent printed backup with one save acknowledgment. Recovery-key use will grant only restricted replacement enrollment; lost-all-keys recovery requires two verified replacement passkeys, a saved rotated kit and a fresh replacement-passkey assertion before workspace access. Preserve save-before-rotation, lost-response recovery, selected-credential revocation and concurrent-attempt protections. Emergency revocation must not be blocked by a two-key minimum. Account recovery does not itself recover future client-encrypted content; visitor identity retains its separate contract.
+
+## Current implementation and evidence
+
 **Status: deployed to the private test platform September 30, 2026; connected local browser acceptance passed. Physical-device and live authenticated recovery acceptance remain open.** This extends the original passkey/recovery milestone in [mvp.md](mvp.md). The platform owner account is separate from controlled application visitor accounts; visitor recovery is described in [app-data.md](app-data.md).
 
 ## Recovery journey
