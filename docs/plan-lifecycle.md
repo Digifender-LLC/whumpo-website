@@ -1,3 +1,5 @@
+> October 1, 2026 catalogue update: `personal` now displays as **Creator**. The [feature catalogue](plan-feature-contract.md) adds cumulative launch packaging only; stored IDs, prices, provider mappings, historical receipts and grants below are unchanged. WH-090 owns future feature enforcement.
+
 > October 1, 2026: [Stripe sandbox subscriptions](stripe-sandbox.md) add immutable paid invoice coverage for exact service intervals. `plan_entitlements` combines those intervals with legacy calendar-month receipts for current plan selection, publication slots and fair-use tier observations. This does not mint historical test units, advanced credits or the future resource pool. The month-grant descriptions below remain the legacy accounting contract. Real payments, plan switching/proration and refunds/disputes remain unavailable.
 
 # Monthly plan entitlements

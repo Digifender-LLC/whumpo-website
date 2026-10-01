@@ -17,7 +17,7 @@ For future work, use the [product and delivery roadmap](docs/roadmap/README.md),
 
 ## Plans and inference
 
-Proposed monthly/annual prices: **Starter $17/$170**, **Personal $30/$300**, **Business $79/$790**, **Business Pro $139/$1,390**. Standard AI remains unlimited under fair use; explicitly approved advanced-model work consumes credits. New standard Chat requests use no customer test units or credits. See [resolved decisions](docs/docs-code-sync.md). Annual domain benefits, infrastructure allowances and premium model funding have separate rules; none imply an enabled purchase. [Pricing and model policy](docs/pricing-and-model-policy.md) is authoritative.
+Proposed monthly/annual prices: **Starter $17/$170**, **Creator $30/$300**, **Business $79/$790**, **Business Pro $139/$1,390**. Standard AI remains unlimited under fair use; explicitly approved advanced-model work consumes credits. New standard Chat requests use no customer test units or credits. See [resolved decisions](docs/docs-code-sync.md). Annual domain benefits, infrastructure allowances and premium model funding have separate rules; none imply an enabled purchase. [Pricing and model policy](docs/pricing-and-model-policy.md) is authoritative. [Cumulative feature packaging](docs/plan-feature-contract.md) uses Creator as the display name for the unchanged `personal` identity; new tier features remain planned.
 
 Owner testing uses `muse-spark-1.3-contributor` on OpenCode Go via the OpenAI-compatible Responses adapter. Chat Completions is also supported by the transport. There is no automatic paid fallback. Contributor prompts/replies may be used for training; the UI displays the testing notice. Keep credentials and sensitive customer data out of model context.
 

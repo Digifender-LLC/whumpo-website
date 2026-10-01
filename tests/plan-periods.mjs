@@ -39,9 +39,21 @@ try{
  await db.prepare("INSERT INTO publications(project_id,version_id,revision) VALUES(?,?,1) ON CONFLICT(project_id) DO UPDATE SET version_id=excluded.version_id").bind(two.project,two.version).run();assert.equal((await publish(noReceipt,two.version)).result.status,200);const three=await project(noReceipt,'Three');assert.equal((await publish(noReceipt,three.version)).result.status,409);
  // New catalogue entitlements are authoritative; historic plans remain unchanged.
  const modern=await account();
+ const {saveCapacity,readCapacity}=await module('src/workspace-dashboard.ts');
+ await saveCapacity(db,modern,{revision:0,preferred_plan:'personal',billing_interval:'year',draft_overage_cents:0});
+ assert.equal((await readCapacity(db,modern)).preferences.preferred_plan,'personal');
+ assert.equal((await getBilling(db,modern,stamp)).plan.id,'explore','draft preference must not grant Creator');
  for (const [tier,units,slots] of [['starter',250,1],['personal',800,5],['business',1600,10],['business-pro',3200,25]]) {
   await grantPlan(db,modern,'new-'+tier,period,tier,'new-invoice-'+tier);
   const bill=await getBilling(db,modern,stamp);assert.equal(bill.plan.id,tier);assert.equal(bill.quota.allowance,units);assert.equal(bill.plan.publishedSites,slots);
+  if(tier==='personal'){
+   assert.equal(bill.plan.name,'Creator');
+   const receipt=await db.prepare("SELECT * FROM plan_grants WHERE id='new-personal'").first();
+   const ledger=await db.prepare('SELECT * FROM billing_ledger WHERE user_id=? ORDER BY id').bind(modern).all();
+   await grantPlan(db,modern,'new-personal',period,'personal','new-invoice-personal');
+   assert.deepEqual(await db.prepare("SELECT * FROM plan_grants WHERE id='new-personal'").first(),receipt);
+   assert.deepEqual((await db.prepare('SELECT * FROM billing_ledger WHERE user_id=? ORDER BY id').bind(modern).all()).results,ledger.results);
+  }
  }
  await grantPlan(db,modern,'late-starter',period,'starter','late-starter-invoice');assert.equal((await getBilling(db,modern,stamp)).plan.id,'business-pro');
  assert.equal((await getBilling(db,modern,next)).plan.id,'explore');
