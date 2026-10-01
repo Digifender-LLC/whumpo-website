@@ -1,3 +1,4 @@
+import {requireServiceClientActivation} from './project-specification/service-clients/activation';
 import {BackendError,listBackends} from './backend-versions';
 import {backendFormConfig} from './backend-form-render';
 type FormReview={id:string;user_id:string;project_id:string;enabled:number;config_json:string|null;site_revision:number;backend_publication_id:string|null;base_revision:number;status:string;expires_at:string};
@@ -25,6 +26,7 @@ export async function prepareBackendForm(db:D1Database,user:string,project:strin
 }
 export async function confirmBackendForm(db:D1Database,user:string,id:string){
  const row=await readBackendFormReview(db,user,id);if(row.status==='applied')return row;
+ await requireServiceClientActivation(db,user,'statelessForm',id);
  try{await db.prepare("UPDATE backend_form_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'").bind(id,user).run();}catch{const saved=await readBackendFormReview(db,user,id);if(saved.status==='applied')return saved;throw new BackendError(409,'Form review expired or the website, backend or settings changed; prepare a new review');}
  return readBackendFormReview(db,user,id);
 }

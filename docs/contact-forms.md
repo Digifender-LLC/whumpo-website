@@ -21,6 +21,8 @@ Publishing, restoring or unpublishing advances the publication revision and disa
 
 The public host joins the active setting into its existing publication read. The only injected markup is a fixed platform-authored link. Its sandbox permits opening that link in a separate browsing context; generated scripts and forms remain disabled. The destination has its own restrictive CSP and denies framing. Both the link and form require an active setting matching the current publication. The database rechecks this relationship at submission insertion, protecting against publication/disable races after bot verification.
 
+[Saved service settings](project-service-clients.md) can also prepare this same independent contact review from the current saved configuration. Migration 0113 adds immutable provenance, full current-target checks at confirmation and submission-time blocking for later known holds on the linked configuration. Critical direct disable reviews remain available. This continuation is deployed in test release `03b74965-16b8-4a41-8848-33cb1e21867f`; see the linked evidence for its local and live scope.
+
 ## Submission boundary
 
 The public form accepts only name (1–100 characters), email (up to 254) and message (1–2,000), plus a random submission ID, settings revision and Turnstile token. POST requires exact Origin, URL-encoded input, unique allowlisted fields and a streaming 32 KiB body bound. The existing Workers rate limiter uses a separate contact/IP key. Production fails closed without Turnstile configuration.

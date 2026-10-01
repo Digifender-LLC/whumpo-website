@@ -2,6 +2,8 @@
 
 **WH-001 — September 30, 2026. Source baseline: `30e6b3628f7d955fc8d6b91d5fa17f49fc04c0d9`.** This matrix covers all 14 entries in the [MVP checklist](mvp.md#acceptance-checklist), plus the later safety, lifecycle and platform commitments. It separates source support, configuration, fixture acceptance and actual availability. It does not declare the MVP or the 63-task roadmap complete.
 
+Latest targeted deployment is [service-settings release](project-service-clients.md#test-release--september-30-2026) `03b74965-16b8-4a41-8848-33cb1e21867f` with 113 migrations. Its feature evidence supersedes this baseline’s Worker/schema inventory; it does not rerun every capability in this matrix.
+
 ## Evidence rules
 
 - **Source:** relevant implementation exists at the stated baseline; feature contracts below describe its bounds.

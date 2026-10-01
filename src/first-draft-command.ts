@@ -7,6 +7,7 @@ export function displayChatRequest(content:string){
  if(/^\/design-app-page [0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(content))return 'Design the visitor page for my approved app and show me the review.';
  for(const control of Object.values(confirmationControls))if(new RegExp('^/'+control.verb+' [0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$').test(content))return control.label+'.';
  const id='[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}';
+ if(new RegExp('^/confirm-service-clients '+id+' [0-9a-f]{64} [0-9]{1,15}$').test(content))return 'Save the exact reviewed private service settings.';
  if(new RegExp('^/confirm-specification '+id+' [0-9a-f]{64} [0-9]{1,15}$').test(content))return 'Save the exact reviewed private website version.';
  const shortcutLabels:Record<string,string>={project:'Show my project status.',versions:'Show my saved website versions.',health:'Show the saved health report for my website.','check-site':'Check whether my published website is responding.'};
  for(const [verb,label] of Object.entries(shortcutLabels))if(new RegExp('^/'+verb+' '+id+'$').test(content))return label;
