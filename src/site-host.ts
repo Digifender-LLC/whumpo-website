@@ -39,8 +39,9 @@ const serving = {
    if(directory){const data=await publicDirectory(env.DB,directory[1]);if(!data)return new Response('Directory not found',{status:404,headers});const json=!!directory[2];return new Response(request.method==='HEAD'?null:json?JSON.stringify(data):directoryPage(data),{headers:{...headers,...(json?{'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin'}:{})}});}
    const asset=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/assets\/([0-9a-f-]{36})\.jpg$/);
    if(asset){
-    const photo=await env.DB.prepare(`SELECT f.object_key,f.size,f.digest FROM publications s JOIN version_photos v ON v.version_id=s.version_id JOIN project_files f ON f.id=v.file_id AND f.project_id=s.project_id WHERE s.project_id=? AND f.id=? AND f.status='ready' AND ${approvedPhotoSQL}`).bind(asset[1],asset[2]).first<{object_key:string;size:number;digest:string}>();
+    const photo=await env.DB.prepare(`SELECT s.version_id,f.object_key,f.size,f.digest FROM publications s JOIN version_photos v ON v.version_id=s.version_id JOIN project_files f ON f.id=v.file_id AND f.project_id=s.project_id WHERE s.project_id=? AND f.id=? AND f.status='ready' AND ${approvedPhotoSQL}`).bind(asset[1],asset[2]).first<{version_id:string;object_key:string;size:number;digest:string}>();
     if(!photo)return new Response('Photo not found',{status:404,headers});
+    await requireSpecificationAvailable(env.DB,photo.version_id);
     await reserveStorage(env.DB,'read');
     const object=await env.FILES.get(photo.object_key);
     if(!object||object.size!==photo.size||object.customMetadata?.sha256!==photo.digest){await object?.body.cancel();return new Response('Photo unavailable',{status:503,headers});}

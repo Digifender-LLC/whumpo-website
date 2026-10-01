@@ -32,7 +32,7 @@ Implemented: the welcome project's Chat card now offers **Draft a website**, **B
 
 `/first-app PROJECT_ID` resolves the completed welcome project through current ownership and supplies its entire bounded brief, even if it is outside the normal recent-project window. Exactly one model response may propose `backend / buildApplication` for that project or ask a clarification. Website/CMS substitutions, other projects, generic code creation, inspection and service actions are rejected before dispatch. Unsupported or ambiguous briefs should produce a question. The response appears in the transcript as a plain-language app request.
 
-Migration 0081 extends the immutable first-build claim to the application path. The app claim, private backend version, exact build intent and activity commit together before its synthetic test. A website, backend or CMS project that has already started hides both shortcuts. A competing build invalidates a stale first-build proposal at commit time; a rejected claim rolls back without execution and refunds customer build units. A lost acknowledgment retains the existing recoverable app-build behavior, and the shared claim prevents another initial build even if its artifact is later removed. Ordinary subsequent edits remain available. Test success prepares the exact owner review; program activation and visitor-page publication remain separate confirmations.
+Migration 0081 extends the immutable first-build claim to the application path. The app claim, private backend version, exact build intent and activity commit together before its synthetic test. A website, backend or CMS project that has already started hides both shortcuts. A competing build invalidates a stale first-build proposal at commit time; a rejected claim rolls back without execution without charging customer credits; actual inference receipts remain recorded. A lost acknowledgment retains the existing recoverable app-build behavior, and the shared claim prevents another initial build even if its artifact is later removed. Ordinary subsequent edits remain available. Test success prepares the exact owner review; program activation and visitor-page publication remain separate confirmations.
 
 Verification: `pnpm check`, `pnpm test:welcome-first-draft`, `pnpm test:chat-reply` and `pnpm test:agent-prompt-focus` passed. Expanded disposable-D1 tests cover both website and app paths, the complete brief, unshared profile exclusion, current ownership, forbidden action classes, exact replay, website/app races, ordinary backend suppression of the starter card, missing AI and no automatic activation/publication. The UI rendering checks cover both options, disabled actions, responsive wrapping and the guided-only fallback.
 
@@ -82,25 +82,11 @@ Deployed to the test platform September 29, 2026: migration `0073_welcome_onboar
 
 ## Additional projects through Chat
 
-The existing conversational flow collects an idea and project name, creates another project, then asks for its audience and visual direction. Those questions are optional (`/skip`). Finishing style selection saves a private immutable launch-page version with preview and source-export links. Nothing is published.
+Current source creates additional projects through the agent's bounded `project` action. Project, first schema-2 website specification, rendered snapshot and creation receipt commit together. Further changes use exact specification reviews; publication remains separate. The retired idea/name/style Chat state machine, `/new`, `/skip`, `/build` and direct photo writers are removed. Guided welcome remains the first-project entry flow.
 
-## Persistence and boundaries
+Private audience/style notes remain planning context and never enter source exports automatically. The current draft compiler requires an explicit supported theme and `photos` array. Saved versions must carry the current compiler identity; no old page importer or downgrade renderer is available.
 
-Migration 0015 adds bounded audience/style fields and an allowlisted preferred theme to projects, plus a pending project/stage to workspace state. Existing accounts and projects keep their current setup state and receive empty notes with an ocean default. No existing version is rewritten.
-
-Every transition, chat receipt, preference update and automatic preview uses the conversation revision transaction. A failed preview quota rolls back the preference and transition so the user can recover. Replayed message IDs cannot create duplicate versions. Each target project is checked against the authenticated owner; the pending project pointer is never authority by itself. Foreign or deleted pointers clear the pending question without exposing the project.
-
-Normal setup messages stay guided even with AI configured. Explicit `/ask` or `/edit` can invoke AI during setup and leave the pending question intact. Other account commands also preserve progress. `/new` resets unfinished setup; `/cancel` leaves existing projects and already saved preferences intact. Audience, style and starting-theme preferences can be revised in Dashboard → Details or through the agent. Later website edits use the normal AI draft workflow.
-
-## Preferences and rendering
-
-Exact ocean, clay and forest responses choose the first preview theme. Other style descriptions are saved verbatim as bounded plain text, with ocean as the initial fallback. The reply explains that fallback. `/build` with no theme uses the stored preference; explicit `/build clay` overrides it for that version only. `/brief` optionally accepts an owned project ID; without one it shows the most recently created project.
-
-Audience and style notes are private project planning data. They are included in later model context for up to five owned projects and covered by the existing Contributor-model notice. They are not added to deterministic preview text or source-export metadata. The model is instructed to use them as guidance, not copy them into public copy; this instruction is not a guarantee of model behavior. All AI output remains a private draft until the user reviews and confirms publication.
-
-## Verification
-
-`test:onboarding` uses disposable local D1 and an unusable provider endpoint, proving ordinary setup does not invoke AI. It covers saved stages, command interruption, simultaneous replay, automatic preview, no automatic publication, note exclusion, owner isolation, malformed pending ownership, skip, free-form style notes, cancellation, remembered themes and atomic version-quota rollback. Existing chat and site-agent regression suites also pass. Browser verification covers reload at the style question and the resulting preview link.
+`welcome-first-draft`, `customer-site-journey`, `site-agent`, `first-ai-journey` and `current-website-specifications` cover the current first-save path, scope/replay/concurrency, exact private edit reviews, publication separation and quota rollback. The obsolete `onboarding` and `previews` suites for the removed guided builder are retired; `onboarding-welcome` remains the current deterministic welcome suite. Source verification is separate from deployment acceptance.
 
 ## Editing existing project details
 
@@ -116,11 +102,11 @@ Deployed September 29, 2026: migration 0062 and platform version `da6c7981-2e45-
 
 ## Revising the private brief
 
-Migration 0063 extends the details revision and atomic activity trigger to audience, style notes and starting theme, including writes from guided onboarding. The details API accepts partial updates: revision plus at least one supported field. Omitted fields are preserved; explicit empty audience/style notes clear those preferences. Text remains bounded at 1,000 characters per field, with an allowlist of ocean/clay/forest themes. Every field update is guarded by ownership and the exact revision. A no-op save does not increment the revision or add activity.
+Migration 0063 extends the details revision and atomic activity trigger to audience, style notes and starting theme, including the current welcome preferences. The details API accepts partial updates: revision plus at least one supported field. Omitted fields are preserved; explicit empty audience/style notes clear those preferences. Text remains bounded at 1,000 characters per field, with an allowlist of ocean/clay/forest themes. Every field update is guarded by ownership and the exact revision. A no-op save does not increment the revision or add activity.
 
 Dashboard → Details presents the brief controls as a grouped, phone-friendly form with the existing unsaved-edit guard. The agent may change only requested fields using `projectDetails`; stale revisions, invalid fields and unknown/foreign projects produce server-authored failure replies. Provider interpretation is still metered, but a known rejected edit is no longer treated as an uncertain provider operation. Actual persistence failures retain existing uncertainty handling.
 
-Audience and style notes stay private planning context. The existing model context includes them, and `/brief` and project inspection read them. The starting theme affects subsequent guided builds when no theme is supplied. Saving preferences does not generate or publish a new version, restyle existing pages, change CMS content, or authorize extra inference. The editor explains this scope and warns against entering secrets.
+Audience and style notes stay private planning context. The existing model context includes them, and `/brief` and project inspection read them. The starting theme is private guidance for subsequent agent drafts; current draft actions include their explicit supported theme. Saving preferences does not generate or publish a new version, restyle existing pages, change CMS content, or authorize extra inference. The editor explains this scope and warns against entering secrets.
 
 Local checks cover partial preservation, explicit validation, no-op behavior, stale conflicts caused by onboarding writes, authoritative agent failure/success replies, and propagation into the model context. Existing ownership, concurrency, HTTP and activity tests remain in the same suite.
 

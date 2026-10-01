@@ -1,3 +1,4 @@
+import {createFixtureProject} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -21,7 +22,7 @@ const transport=async(input,init)=>{const u=new URL(input);assert.equal(init.red
  return Response.json({success:true,result:existing?[{}]:[],result_info:{total_count:u.searchParams.has('hostname')?existing:total}});
 };
 try{
- const user=username=await account(),other=await account();await chat(user,'A garden website');const project=await chat(user,'Garden');const version=await chat(user,'/build forest');const claimId=await chat(user,'/domain www.example.com '+project);claim=await db.prepare('SELECT * FROM domain_claims WHERE id=?').bind(claimId).first();
+ const user=username=await account(),other=await account();const {project,version}=await createFixtureProject(db,user,'Garden','A garden website','forest');const claimId=await chat(user,'/domain www.example.com '+project);claim=await db.prepare('SELECT * FROM domain_claims WHERE id=?').bind(claimId).first();
  const review=()=>reviewHosting(db,user,crypto.randomUUID(),claimId,config);
  await assert.rejects(()=>reviewHosting(db,user,crypto.randomUUID(),claimId,undefined));await assert.rejects(()=>reviewHosting(db,other,crypto.randomUUID(),claimId,config));
  const r=await review();assert.equal(r.state,'review');assert.equal(writes,0);assert.deepEqual(await reviewHosting(db,user,r.id,claimId,config),r);await assert.rejects(()=>confirmHosting(db,other,r.id,config,transport));

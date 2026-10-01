@@ -367,6 +367,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/53. Planning owner: Unassigned
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 - 2026-10-01 18:20 UTC: PR #55 current billing reset accepted in test, release 438cdaa6-4ef5-46b8-a8c1-ea3115ef61af source 75e41ff. Four Worker readbacks, 117 schema files, eight retired tables absent, authenticated API checks and 18 exact frontend assets passed. Remaining inventory stays open; see docs/current-version-policy.md.
 - 2026-10-01: offline logical-resource current-only contract verified with 60 checks. Identity/native/module/data plans and this reference are aligned; Chat producer/presentation, website specification creation and CMS shape cleanup remain open.
+- 2026-10-01: current website source replaces legacy import, launch/full-page writers and guided creation with atomic schema-2 first saves plus exact reviewed changes/restores, including photos. Current compiler identities replace old implementations; stale snapshots reject. Schema 0119 and the client/platform/site cutover await deployment/reset. Parent stays open for remaining CMS shape inventory and deployment acceptance; see docs/project-specification-storage.md.
 
 ## WH-052 — Choose durable job orchestration from current requirements
 

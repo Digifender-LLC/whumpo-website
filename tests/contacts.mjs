@@ -1,3 +1,4 @@
+import {createFixtureWebsite,changeFixtureWebsite} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -10,7 +11,7 @@ const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBind
 const now=()=>new Date().toISOString();
 async function account(){const id=crypto.randomUUID(),project=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'fixture',?)").bind(id,id+'@example.com','00',now()).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Garden fixture','Testing','draft',?,?)").bind(project,id,now(),now()).run();await readChat(db,id);return {id,project};}
 async function chat(a,content,database=db){const state=await readChat(db,a.id),input={id:crypto.randomUUID(),revision:state.state.revision,content};return {id:input.id,input,result:await sendChat(database,a.id,input)};}
-async function publish(a){const v=await chat(a,'/build ocean '+a.project),r=await chat(a,'/publish '+v.id);assert.equal((await chat(a,'/confirm '+r.id)).result.status,200);return v.id;}
+async function publish(a){const head=await db.prepare('SELECT revision FROM project_spec_heads WHERE project_id=?').bind(a.project).first();const v={id:head?await changeFixtureWebsite(db,a.id,a.project,[{type:'content.replace',contentId:'headline',text:'Garden revision '+(head.revision+1)}]):await createFixtureWebsite(db,a.id,a.project,{name:'Garden',headline:'Garden',description:'Testing',theme:'ocean',aboutTitle:'About',aboutText:'Testing',sections:[],photos:[]})},r=await chat(a,'/publish '+v.id);assert.equal((await chat(a,'/confirm '+r.id)).result.status,200);return v.id;}
 async function enable(a){const r=await chat(a,'/contact-on '+a.project);assert.equal((await chat(a,'/confirm-contact '+r.id)).result.status,200);return (await activeContact(db,a.project)).revision;}
 const msg=()=>({id:crypto.randomUUID(),name:'Visitor <script>',email:'visitor@example.com',message:'Private message: do not send this to AI.'});
 try{

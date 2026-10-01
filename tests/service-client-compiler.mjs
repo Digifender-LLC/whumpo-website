@@ -10,8 +10,8 @@ import {checkServiceClientCompiler} from '../tools/check-service-client-compiler
 const root=process.cwd(),temp=await mkdtemp('/tmp/whumpo-client-compiler-'),hash=value=>createHash('sha256').update(value).digest('hex');
 const oldFetch=globalThis.fetch;let network=0;
 try{
- const originalCompiler=await checkSpecificationCompiler(),checked=await checkServiceClientCompiler();assert.equal(originalCompiler.compilerDigest,'25a73c88b1a51e9ec9512ca72c22bd515d835403b659c34fc3bc9b96780c3d2b');
- const bundle=await build({stdin:{contents:"export * from './src/project-specification/service-clients/compiler';export * from './src/project-specification/v1/json';export {siteConfig,renderSite} from './src/components';export {publishedHTML} from './src/published-html';",resolveDir:root},bundle:true,format:'esm',platform:'neutral',write:false});
+ const originalCompiler=await checkSpecificationCompiler(),checked=await checkServiceClientCompiler();assert.match(originalCompiler.compilerDigest,/^[0-9a-f]{64}$/);
+ const bundle=await build({stdin:{contents:"export * from './src/project-specification/service-clients/compiler';export * from './src/project-specification/v2/json';export {siteConfig,renderSite,renderPhotoPage} from './src/components';export {publishedHTML} from './src/published-html';",resolveDir:root},bundle:true,format:'esm',platform:'neutral',write:false});
  await writeFile(join(temp,'module.mjs'),bundle.outputFiles[0].contents);const m=await import(pathToFileURL(join(temp,'module.mjs')));
  globalThis.fetch=async()=>{network++;throw Error('Compiler attempted inference/network.');};
  const id=n=>`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`;
@@ -49,16 +49,20 @@ try{
  for(const key of ['projectId','publication','contact','form','website','backend']){const changed=clone(target);if(key==='projectId')changed[key]=id(6);else if(key==='website')changed[key].versionId=id(6);else changed[key].revision++;assert.notEqual((await compile(spec,changed)).manifestDigest,output.manifestDigest);}
  await reject(()=>compile(spec,target,{...website,html:html+'tampered'}),'ARTIFACT_MISMATCH');
  const forgedHTML=html.replace('</main>','<script>synthetic_sensitive_marker()</script></main>');await reject(()=>compile(spec,{...target,website:{...target.website,digest:hash(forgedHTML)}},{...website,html:forgedHTML}),'ARTIFACT_MISMATCH');
- await reject(()=>compile(spec,target,{...website,componentId:'photo-page@1'}),'UNSUPPORTED_DELIVERY');
+ await reject(()=>compile(spec,target,{...website,componentId:'launch-page@1'}),'UNSUPPORTED_DELIVERY');
  await reject(()=>compile(spec,target,{...website,config:{...config,headline:'Different'}}),'ARTIFACT_MISMATCH');
  const empty={schemaVersion:1,contact:null,statelessForm:null};const inactive=await compile(empty,{...target,backend:null});assert.equal(inactive.artifacts[1].html,html);assert.equal(inactive.services.length,0);
  const removal=await compile(empty,{...target,contact:{revision:1,active:true},form:{revision:1,reviewId:id(5),active:true}});assert.deepEqual(removal.requiredReviews,['website-publication','contact-settings','backend-form-settings']);
  const wrong=clone(lock);wrong.compiler.digest='0'.repeat(64);await reject(()=>compile(spec,target,website,wrong),'COMPILER_LOCK_MISMATCH');
  const available=[lock.compiler,...lock.modules].map(x=>({...x,state:'available'}));for(let n=0;n<available.length;n++){const withdrawn=clone(available);withdrawn[n].state='withdrawn';assert.throws(()=>m.assertServiceClientCompilerAvailable(lock,withdrawn),e=>e.code==='COMPILER_UNAVAILABLE');}
+ const photoConfig={...config,photos:[{id:id(20),alt:'Garden'}]},photoHTML=m.renderPhotoPage(photoConfig);
+ const photoOutput=await compile(spec,{...target,website:{...target.website,digest:hash(photoHTML)}},{componentId:'photo-page@1',config:photoConfig,html:photoHTML});
+ assert.ok(photoOutput.artifacts[0].html.includes('assets/'+id(20)+'.jpg'));
+ const retired=clone(lock);retired.compiler.version=1;await reject(()=>compile(spec,target,website,retired),'COMPILER_LOCK_MISMATCH');
  assert.equal(network,0);
  // New process and copied source tree prove reproduction independently of module cache/timezone.
  const isolated=join(temp,'independent');await mkdir(isolated);
- const paths=[...checked.sources.map(s=>s.path),'src/project-specification/service-clients/catalog.ts','src/project-specification/service-clients/artifacts.generated.ts','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v1.json'];
+ const paths=[...checked.sources.map(s=>s.path),'src/project-specification/service-clients/catalog.ts','src/project-specification/service-clients/artifacts.generated.ts','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v2.json'];
  for(const path of new Set(paths)){await mkdir(dirname(join(isolated,path)),{recursive:true});await copyFile(join(root,path),join(isolated,path));}
  await writeFile(join(isolated,'package.json'),'{"type":"module"}');await symlink(resolve('node_modules'),join(isolated,'node_modules'),'dir');await writeFile(join(isolated,'fixture.json'),JSON.stringify({spec,target,website}));
  await writeFile(join(isolated,'run.mjs'),`import {build} from 'esbuild';import {readFile,writeFile} from 'node:fs/promises';globalThis.fetch=async()=>{throw Error('No network');};const b=await build({entryPoints:['src/project-specification/service-clients/compiler.ts'],bundle:true,format:'esm',platform:'neutral',write:false});await writeFile('bundle.mjs',b.outputFiles[0].contents);const m=await import('./bundle.mjs'),f=JSON.parse(await readFile('fixture.json','utf8'));try{console.log((await m.compileServiceClientArtifacts(f.spec,f.target,f.website,m.currentServiceClientLock())).manifestDigest);}catch(e){console.error(e.code);process.exitCode=1;}`);
@@ -67,7 +71,7 @@ try{
  const repeated=run(['run.mjs']);assert.equal(repeated.status,0,repeated.stderr);assert.equal(repeated.stdout.trim(),output.manifestDigest);
  const catalog=join(isolated,'src/project-specification/service-clients/catalog.ts'),catalogSource=await readFile(catalog,'utf8');await writeFile(catalog,catalogSource.replaceAll("state:'available'","state:'withdrawn'"));assert.equal(check().status,0);assert.match(run(['run.mjs']).stderr,/COMPILER_UNAVAILABLE/);await writeFile(catalog,catalogSource);
  assert.notEqual(run(['tools/check-service-client-compiler.mjs','--init']).status,0);
- const core=join(isolated,'src/project-specification/service-clients/v1/core.ts'),source=await readFile(core,'utf8');await writeFile(core,source+'\n// drift\n');assert.notEqual(check().status,0);assert.notEqual(run(['tools/check-service-client-compiler.mjs','--generate']).status,0);await writeFile(core,source);
+ const core=join(isolated,'src/project-specification/service-clients/v2/core.ts'),source=await readFile(core,'utf8');await writeFile(core,source+'\n// drift\n');assert.notEqual(check().status,0);assert.notEqual(run(['tools/check-service-client-compiler.mjs','--generate']).status,0);await writeFile(core,source);
  const constants=join(isolated,'src/project-specification/service-clients/artifacts.generated.ts');await writeFile(constants,'export const serviceClientArtifacts={};');assert.notEqual(check().status,0);assert.equal(run(['tools/check-service-client-compiler.mjs','--generate']).status,0);assert.equal(check().status,0);
  console.log('Service client compiler passed: exact current renderer bytes, no active preview actions, fixed destinations, strict contracts, independent reproduction, immutable locks and withdrawal. No network/inference or activation.');
 }finally{globalThis.fetch=oldFetch;await rm(temp,{recursive:true,force:true});}

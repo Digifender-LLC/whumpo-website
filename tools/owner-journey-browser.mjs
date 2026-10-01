@@ -23,8 +23,8 @@ try{
   assert.ok(!init.body.includes('PRIVATE_BIO_FIXTURE'));
   if(ack)ackCalls++;else{
    providerCalls++;const project=await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(user).first();assert.ok(project);
-   if(providerCalls===1)action={kind:'preview',projectId:project.id,config:{name:'River Garden',headline:'A greener neighborhood',description:'Friendly local garden care.',theme:'forest',aboutTitle:'Our garden studio',aboutText:'Landscaping for our neighbors.',sections:[]}};
-   else if(providerCalls===2){const version=await db.prepare('SELECT id FROM site_versions WHERE project_id=? ORDER BY created_at DESC,id DESC LIMIT 1').bind(project.id).first();action={kind:'edit',baseVersionId:version.id,changes:{headline:'Thoughtful gardens, happy neighbors'}};}
+   if(providerCalls===1)action={kind:'specification',operation:'create',projectId:project.id,config:{name:'River Garden',headline:'A greener neighborhood',description:'Friendly local garden care.',theme:'forest',aboutTitle:'Our garden studio',aboutText:'Landscaping for our neighbors.',sections:[],photos:[]}};
+   else if(providerCalls===2)action={kind:'specification',operation:'change',projectId:project.id,expectedRevision:1,operations:[{type:'content.replace',contentId:'headline',text:'Thoughtful gardens, happy neighbors'}]};
    else if(providerCalls===3||providerCalls===4){const version=await db.prepare('SELECT id FROM site_versions WHERE project_id=? ORDER BY created_at DESC,id DESC LIMIT 1').bind(project.id).first();action={kind:'review',operation:'publish',targetId:version.id};}
    else assert.fail('Unexpected model request');
   }
@@ -64,14 +64,14 @@ try{
  }catch(e){if(e.code==='ENOENT'){res.writeHead(404).end();return;}console.error('Fixture request failed:',e.message);if(!res.headersSent)json(res,500,{error:'Local fixture failed'});else res.end();}});
  await new Promise((done,reject)=>{server.once('error',reject);server.listen(8175,'127.0.0.1',done);});
  input=createInterface({input:process.stdin});input.on('line',line=>{if(line.trim()==='finish')finish();});
- console.log('Owner journey ready at '+origin+' and /_fixture. Sign in through the synthetic-session fixture control, complete welcome, draft/edit/review/preview with natural Chat and keyboard. No real credentials or inference. Let the first review expire naturally before reloading it and requesting a fresh review.');
+ console.log('Owner journey ready at '+origin+' and /_fixture. Sign in through the synthetic-session fixture control, complete welcome, draft/edit/review/preview with natural Chat and keyboard. Approve the private website edit before requesting publication review. No real credentials or inference. Let the first review expire naturally before reloading it and requesting a fresh review.');
  await finished;await Promise.all(background);
  const count=async table=>Number((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n);
  assert.equal(earlyWorkspaceReads,0);assert.equal(await count('projects'),1);assert.equal(await count('site_versions'),2);assert.equal(providerCalls,4);
  assert.equal((await db.prepare('SELECT version_id FROM publications LIMIT 1').first())?.version_id,null,'Journey stops at review; nothing published');
  assert.ok(requests.some(r=>r.lost&&r.path==='/api/profile'));assert.ok(requests.some(r=>r.lost&&r.path==='/api/onboarding'));assert.ok(requests.some(r=>r.lost&&r.path==='/api/onboarding/complete'));
  assert.ok(requests.some(r=>r.path.startsWith('/api/publication-reviews/')&&r.status===409));assert.ok(requests.some(r=>r.path.startsWith('/api/publication-reviews/')&&r.status===200));
- assert.equal(requests.filter(r=>r.path==='/api/chat/actions').length,0);
+ assert.equal(requests.filter(r=>r.path==='/api/chat/actions').length,1);assert.equal(requests.find(r=>r.path==='/api/chat/actions').action.type,'specificationApply');
  await mkdir('.secrets',{recursive:true});await writeFile('.secrets/owner-journey-browser.json',JSON.stringify({checkedAt:new Date().toISOString(),scope:'Actual local platform handlers and disposable D1; scripted inference, synthetic signed-in account; no real authentication ceremony/customer publication',earlyWorkspaceReads,projects:1,versions:2,providerCalls,ackCalls,requests},null,2),{mode:0o600});
  console.log('Owner journey passed: welcome recovery, one private project, two private versions, four scripted calls, fresh/expired reviews, no publication or early workspace reads.');
 }finally{input?.close();if(server?.listening)await new Promise(done=>server.close(done));await Promise.allSettled(background);globalThis.fetch=originalFetch;await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

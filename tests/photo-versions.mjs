@@ -1,3 +1,4 @@
+import {createFixtureProject,changeFixtureWebsite} from './current-site-fixture.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
@@ -6,12 +7,13 @@ import {build} from 'esbuild';
 import {unzipSync,strFromU8} from 'fflate';
 import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
-const {sendChat,readChat}=await module('src/chat.ts');const {uploadPhoto,readPhoto,listPhotos}=await module('src/files.ts');const {ownedPreview,pageDraft}=await module('src/photo-versions.ts');const {ownedExport}=await module('src/exports.ts');const {getBilling}=await module('src/billing.ts');const {reserveStorage}=await module('src/storage-budget.ts');const host=(await module('src/site-host.ts')).default;
+const {sendChat,readChat}=await module('src/chat.ts');const {uploadPhoto,readPhoto,listPhotos}=await module('src/files.ts');const {ownedPreview}=await module('src/photo-versions.ts');const {ownedExport}=await module('src/exports.ts');const {getBilling}=await module('src/billing.ts');const {reserveStorage}=await module('src/storage-budget.ts');const host=(await module('src/site-host.ts')).default;
 const dir=await mkdtemp('/tmp/tellumo-photo-versions-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1])",dir+'/photo.jpg']);const jpeg=new Uint8Array(await readFile(dir+'/photo.jpg'));
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,env=proxy.env;
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
 async function chat(user,content,id=crypto.randomUUID(),revision){const state=await readChat(db,user);return {id,result:await sendChat(db,user,{id,content,revision:revision??state.state.revision})};}
-async function project(user,name){await chat(user,'/new');await chat(user,'A neighborhood website');const p=await chat(user,name);const v=await chat(user,'/build clay '+p.id);return {project:p.id,version:v.id};}
+async function project(user,name){return createFixtureProject(db,user,name,'A neighborhood website','clay');}
+async function attach(user,project,photos){return {id:await changeFixtureWebsite(db,user,project,[{type:'pages.setPhotos',pageId:'home',photos}]),result:{status:200}};}
 async function photo(user,project,name){const id=crypto.randomUUID();await uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(name)},body:jpeg}),env,user,project,id);return id;}
 const url=id=>'https://'+id+'.whumpo.site';
 const get=(path,method='GET')=>host.fetch(new Request('https://'+path.split('/')[2]+'.whumpo.site/'+path.split('/').slice(3).join('/'),{method}),env);
@@ -20,7 +22,7 @@ try{
  const owner=await account(),other=await account();const a=await project(owner,'Alpha'),b=await project(owner,'Beta'),c=await project(other,'Other');
  const first=await photo(owner,a.project,'Garden <script>'),second=await photo(owner,a.project,'Flowers'),wrongProject=await photo(owner,b.project,'Other project'),foreign=await photo(other,c.project,'Private other owner');
  assert.equal((await listPhotos(db,owner,a.project)).files[0].safetyStatus,'pending');
- await assert.rejects(()=>readPhoto(env,owner,first),{status:423});await assert.rejects(()=>chat(owner,'/photo '+first),{status:404});
+ await assert.rejects(()=>readPhoto(env,owner,first),{status:423});await assert.rejects(()=>attach(owner,a.project,[{id:first,alt:'Garden <script>'}]),{status:423});
  await assert.rejects(()=>db.prepare('INSERT INTO version_photos(version_id,file_id,position,alt) VALUES(?,?,0,?)').bind(a.version,first,'Synthetic').run(),/photo_safety_required/);
  // Synthetic trusted results only: no real detection provider is configured.
  await assert.rejects(()=>db.prepare("UPDATE project_photo_safety SET state='approved',csam_check='clear',scanner_reference='synthetic',expires_at=? WHERE file_id=?").bind(new Date(Date.now()+3600000).toISOString(),first).run());
@@ -29,9 +31,8 @@ try{
  await assert.rejects(()=>db.prepare("UPDATE project_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic',expires_at='not-a-date' WHERE file_id=?").bind(expired).run());
  await db.prepare("UPDATE project_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic',expires_at='2000-01-01T00:00:00.000Z' WHERE file_id=?").bind(expired).run();
  await assert.rejects(()=>readPhoto(env,owner,expired),{status:423});assert.equal((await listPhotos(db,owner,a.project)).files.find(f=>f.id===expired).safetyStatus,'pending');
- const action=await chat(owner,'/photo '+first);assert.equal(action.result.status,200);let version=await db.prepare('SELECT * FROM site_versions WHERE id=?').bind(action.id).first();assert.equal(version.component_id,'photo-page@1');assert.equal(version.base_version_id,a.version);assert.ok(version.html.includes('assets/'+first+'.jpg'));assert.ok(version.html.includes('Garden &lt;script&gt;'));assert.ok(!version.html.includes('<script>'));
- const revision=(await readChat(db,owner)).state.revision;await chat(owner,'/photo '+first,action.id,revision-1);assert.equal((await readChat(db,owner)).state.revision,revision);
- await assert.rejects(chat(owner,'/photo '+foreign),{status:404});await assert.rejects(pageDraft(db,owner,crypto.randomUUID(),a.project,{...JSON.parse(version.config_json),photos:[{id:wrongProject,alt:'wrong'}]},action.id,'guided'),{status:400});
+ const action=await attach(owner,a.project,[{id:first,alt:'Garden <script>'}]);assert.equal(action.result.status,200);let version=await db.prepare('SELECT * FROM site_versions WHERE id=?').bind(action.id).first();assert.equal(version.component_id,'photo-page@1');assert.equal(version.base_version_id,a.version);assert.ok(version.html.includes('assets/'+first+'.jpg'));assert.ok(version.html.includes('Garden &lt;script&gt;'));assert.ok(!version.html.includes('<script>'));
+ for(const id of [foreign,wrongProject])await assert.rejects(attach(owner,a.project,[{id,alt:'Wrong owner or project'}]),{status:423});
  const preview=await ownedPreview(env,owner,action.id);assert.equal(preview.status,200);const privateHTML=await preview.text();assert.ok(privateHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!privateHTML.includes('src="assets/'));assert.ok(preview.headers.get('content-security-policy').includes('img-src data:'));assert.equal(await ownedPreview(env,other,action.id),null);
  assert.equal((await get('/s/'+a.project+'/assets/'+first+'.jpg')).status,404);
  await publish(owner,action.id);assert.equal((await get('/s/'+a.project)).status,200);const page=await get('/s/'+a.project+'/');assert.equal(page.status,200);assert.equal(await page.text(),version.html);
@@ -47,7 +48,7 @@ try{
  await env.FILES.put(objectKey,corrupt,{customMetadata:{sha256:digest}});
  assert.equal((await get('/s/'+a.project+'/assets/'+first+'.jpg')).status,503);await assert.rejects(()=>readPhoto(env,owner,first),{status:503});
  await env.FILES.put(objectKey,photoBytes,{customMetadata:{sha256:digest}});
- const expanded=await chat(owner,'/photo '+second);assert.equal((await get('/s/'+a.project+'/assets/'+second+'.jpg')).status,404);await publish(owner,expanded.id);assert.equal((await get('/s/'+a.project+'/assets/'+second+'.jpg')).status,200);
+ const expanded=await attach(owner,a.project,[{id:first,alt:'Garden <script>'},{id:second,alt:'Flowers'}]);assert.equal((await get('/s/'+a.project+'/assets/'+second+'.jpg')).status,404);await publish(owner,expanded.id);assert.equal((await get('/s/'+a.project+'/assets/'+second+'.jpg')).status,200);
  const archive=await ownedExport(db,owner,expanded.id,env.FILES);const files=unzipSync(archive);assert.equal(Object.keys(files).length,6);assert.deepEqual(files['public/assets/'+first+'.jpg'],photoBytes);const exportedHTML=strFromU8(files['public/index.html']);assert.ok(exportedHTML.includes('src="assets/'+second+'.jpg"'));const manifest=JSON.parse(strFromU8(files['tellumo/site.json']));assert.equal(manifest.photos.length,2);assert.ok(!JSON.stringify(manifest).includes('object_key'));assert.equal(await ownedExport(db,other,expanded.id,env.FILES),null);
  await writeFile(dir+'/site.zip',archive);execFileSync('python3',['-c',"import zipfile,sys,io; from PIL import Image; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; photos=[p for p in z.namelist() if p.endswith('.jpg')]; assert len(photos)==2; [Image.open(io.BytesIO(z.read(p))).load() for p in photos]",dir+'/site.zip']);
  const restored=await chat(owner,'/restore '+action.id);await chat(owner,'/confirm '+restored.id);assert.equal((await get('/s/'+a.project+'/assets/'+first+'.jpg')).status,200);assert.equal((await get('/s/'+a.project+'/assets/'+second+'.jpg')).status,404);

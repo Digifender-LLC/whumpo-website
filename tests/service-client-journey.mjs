@@ -48,13 +48,13 @@ try{
  async function preparedConfirmation(a,q){const turn=id(),command=`/confirm-service-clients ${q.id} ${q.proposalDigest} ${q.expectedRevision}`,prepared=await m.applyServiceClientsCommand(db,a.id,turn,command),revision=(await json(a,'/api/chat')).state.revision;return {turn,statements:[db.prepare('INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,?,?,?,?)').bind(turn,a.id,revision+1,m.chatControl({type:'serviceClientApply',reviewId:q.id,proposalDigest:q.proposalDigest,expectedRevision:q.expectedRevision}).label,prepared.reply,now(),JSON.stringify({type:'serviceClientApply',reviewId:q.id,proposalDigest:q.proposalDigest,expectedRevision:q.expectedRevision})),...prepared.statements]};}
  const count=async(table,project)=>Number((await db.prepare(`SELECT count(*) n FROM ${table} WHERE project_id=?`).bind(project).first()).n);
  const served=a=>m.host.fetch(new Request('https://'+a.project+'.whumpo.site/'),env);
- const config={name:'Example Garden',description:'Landscaping for neighbors.',headline:'A greener neighborhood',theme:'forest',aboutTitle:'Our work',aboutText:'Local garden care.',sections:[]};
+ const config={name:'Example Garden',description:'Landscaping for neighbors.',headline:'A greener neighborhood',theme:'forest',aboutTitle:'Our work',aboutText:'Local garden care.',sections:[],photos:[]};
  const empty={schemaVersion:1,contact:null,statelessForm:null},contact={...empty,contact:{component:'contact-link@1'}};
  const form={title:'Garden estimate',description:'Choose hours and extras.',buttonLabel:'Calculate',fields:[{key:'hours',label:'Hours',type:'number'},{key:'extra',label:'Extra care',type:'boolean'}]},both={...contact,statelessForm:{component:'stateless-form@1',config:form}};
  async function backend(a,source='export default ({hours,extra})=>({estimate:hours*30+(extra?10:0)})'){a.backend=id();a.run=id();a.backendReview=id();await m.saveBackend(db,a.id,a.project,a.backend,source);await m.testBackend(db,service,a.id,a.project,a.backend,a.run,{hours:2,extra:true},{expected:{estimate:70}});await m.prepareBackendPublication(db,a.id,a.project,a.backendReview,'publish',a.backend,a.run);await m.confirmBackendPublication(db,a.id,a.backendReview);}
  const owner=await account(),foreign=await account();
- const first=await chat(owner,{kind:'preview',projectId:owner.project,config});owner.site=first.turn.version_id;assert.ok(owner.site);
- const foreignFirst=await chat(foreign,{kind:'preview',projectId:foreign.project,config});foreign.site=foreignFirst.turn.version_id;
+ const first=await chat(owner,{kind:'specification',operation:'create',projectId:owner.project,config});owner.site=first.turn.version_id;assert.ok(owner.site);
+ const foreignFirst=await chat(foreign,{kind:'specification',operation:'create',projectId:foreign.project,config});foreign.site=foreignFirst.turn.version_id;
  const prepare=(a,expectedRevision,configuration=contact,websiteVersionId=a.site)=>sc(a,'prepare',{expectedRevision,websiteVersionId,configuration});
  // Ownership, strict model schema and exact current target are prerequisites, not prompt promises.
  await assert.rejects(m.prepareServiceClients(db,foreign.id,id(),prepare(owner,0)),e=>e.status===404);
@@ -108,7 +108,7 @@ try{
  await assert.rejects(db.prepare('UPDATE service_client_versions SET spec_json=? WHERE id=?').bind('{}',v1).run(),/service_client_immutable/);await assert.rejects(db.prepare('UPDATE service_client_proposals SET preview_html=? WHERE id=?').bind('changed',withForm.input.id).run(),/service_client_immutable/);await assert.rejects(db.prepare('DELETE FROM service_client_applies WHERE id=?').bind(v1).run(),/service_client_receipt_retained/);await assert.rejects(db.prepare('DELETE FROM service_client_heads WHERE project_id=?').bind(owner.project).run(),/service_client_head_retained/);
  const retained=await chat(owner,{kind:'versionRemovalReview',versionId:owner.site});assert.equal(retained.turn.version_confirmation_id,null);assert.match(retained.turn.assistant_text,/retained by saved service/);await assert.rejects(db.prepare('DELETE FROM site_versions WHERE id=?').bind(owner.site).run(),/version_removal_service_client/);
  // Move to another site, then remove the old site through the actual owner review. Full old copies disappear; receipts remain.
- const nextSite=await chat(owner,{kind:'preview',projectId:owner.project,config:{...config,theme:'clay'}}),nextId=nextSite.turn.version_id;
+ const nextSite=await chat(owner,{kind:'specification',operation:'change',projectId:owner.project,expectedRevision:1,operations:[{type:'design.setTheme',theme:'clay'}]}),siteReview=nextSite.turn.specification_review,nextId=id();assert.ok(siteReview);await json(owner,'/api/chat/actions','POST',{id:nextId,revision:(await json(owner,'/api/chat')).state.revision,action:{type:'specificationApply',reviewId:siteReview.id,proposalDigest:siteReview.proposalDigest,expectedRevision:siteReview.expectedRevision}});
  // Remove synthetic stale pending reviews to isolate eligible deletion; timed expiry/cleanup is exercised above.
  await db.prepare('DELETE FROM service_client_proposals WHERE project_id=? AND NOT EXISTS(SELECT 1 FROM service_client_applies WHERE proposal_id=service_client_proposals.id)').bind(owner.project).run();
  const nextSettings=await chat(owner,prepare(owner,4,contact,nextId)),nextSaved=await approve(owner,nextSettings.turn.service_client_review);
@@ -118,7 +118,7 @@ try{
  await json(owner,'/api/chat/actions','POST',saved.request);assert.equal(await count('service_client_versions',owner.project),1);assert.equal(await count('service_client_applies',owner.project),5);
  assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  if(process.env.WHUMPO_SERVICE_BROWSER==='1'){
-  const browserAccount=await account(),draft=await chat(browserAccount,{kind:'preview',projectId:browserAccount.project,config});browserAccount.site=draft.turn.version_id;await backend(browserAccount);
+  const browserAccount=await account(),draft=await chat(browserAccount,{kind:'specification',operation:'create',projectId:browserAccount.project,config});browserAccount.site=draft.turn.version_id;await backend(browserAccount);
   const review=await chat(browserAccount,prepare(browserAccount,0,both));const before={calls,executions};inference=false;
   const {serviceClientBrowser}=await import('../tools/service-client-browser-fixture.mjs');await serviceClientBrowser({platform:m.platform,env,db,account:browserAccount,review:review.turn.service_client_review,ctx});
   assert.deepEqual({calls,executions},before);inference=true;
@@ -126,7 +126,7 @@ try{
  // Existing backend review retention still requires separate operator cleanup; do not relax it.
  await assert.rejects(db.prepare('DELETE FROM projects WHERE id=?').bind(owner.project).run(),/FOREIGN KEY/);
  // An otherwise eligible parent cascade removes the new private snapshots and metadata receipts.
- const cascade=await account(),cascadeDraft=await chat(cascade,{kind:'preview',projectId:cascade.project,config});cascade.site=cascadeDraft.turn.version_id;
+ const cascade=await account(),cascadeDraft=await chat(cascade,{kind:'specification',operation:'create',projectId:cascade.project,config});cascade.site=cascadeDraft.turn.version_id;
  const cascadeReview=await chat(cascade,prepare(cascade,0));await approve(cascade,cascadeReview.turn.service_client_review);
  await db.prepare('DELETE FROM projects WHERE id=?').bind(cascade.project).run();for(const table of ['service_client_proposals','service_client_versions','service_client_applies','service_client_heads'])assert.equal(await count(table,cascade.project),0);
  await db.prepare('DELETE FROM users WHERE id=?').bind(foreign.id).run();assert.equal(await count('service_client_applies',foreign.project),0);assert.equal(await db.prepare('SELECT id FROM projects WHERE id=?').bind(foreign.project).first(),null);
