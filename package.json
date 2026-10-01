@@ -20,7 +20,7 @@
     "test:chat": "node tests/chat.mjs",
     "build": "node tools/build.mjs",
     "test:passkeys": "node tests/passkeys.mjs",
-    "test:owner-recovery": "node tests/owner-recovery-concurrency.mjs && node tests/owner-passkeys-http.mjs",
+    "test:owner-recovery": "node tests/owner-recovery-concurrency.mjs && node tests/owner-passkeys-http.mjs && node tests/owner-credential-authority.mjs",
     "test:usage-recovery": "node tests/usage-recovery.mjs",
     "test:usage-history-ui": "node tests/usage-history-ui.mjs",
     "test:usage-history": "node tests/usage-history.mjs",

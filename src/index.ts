@@ -506,19 +506,27 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if (!(await recentSession(request, env))) return error(401, "Sign in again before removing a passkey");
     const data = await body(request);
     if (typeof data?.id !== "string") return error(400, "Passkey ID required");
-    const eventId = crypto.randomUUID();
+    const eventId = crypto.randomUUID(), tokenHash = await hashToken(sessionToken(request)!);
+    // The receipt admits the entire transaction. Recheck this exact session at
+    // database time so a paused request cannot outlive recovery or sign-out.
     const removed = await env.DB.batch([
-      env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, user_id, 'passkey.removed', 'Passkey removed; all sessions signed out', ? FROM passkeys WHERE id = ? AND user_id = ? AND ((SELECT COUNT(*) FROM passkeys WHERE user_id = ?) > 1 OR EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash != 'passkey-only'))").bind(eventId, new Date().toISOString(), data.id, user.id, user.id, user.id),
+      env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, user_id, 'passkey.removed', 'Passkey removed; all sessions signed out', strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM passkeys WHERE id = ? AND user_id = ? AND ((SELECT COUNT(*) FROM passkeys WHERE user_id = ?) > 1 OR EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash != 'passkey-only')) AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ? AND user_id = passkeys.user_id AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ','now','-10 minutes'))").bind(eventId, data.id, user.id, user.id, user.id, tokenHash),
       env.DB.prepare("DELETE FROM passkeys WHERE id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM activity_events WHERE id = ?)").bind(data.id, user.id, eventId),
       env.DB.prepare("DELETE FROM sessions WHERE user_id = ? AND EXISTS (SELECT 1 FROM activity_events WHERE id = ?)").bind(user.id, eventId)
     ]);
-    if (removed[0].meta.changes !== 1) return error(409, "Add another passkey before removing your last one, or refresh if it was already removed");
+    if (removed[0].meta.changes !== 1) {
+      if (!(await recentSession(request, env))) return error(401, "Sign in again before removing a passkey");
+      return error(409, "Add another passkey before removing your last one, or refresh if it was already removed");
+    }
     return json({ ok: true, signedOut: true }, 200, { "set-cookie": clearCookie(request) });
   }
   if (method === "POST" && pathname === "/api/auth/recovery-code") {
     if (!(await recentSession(request, env))) return error(401, "Sign in again before replacing a recovery code");
     const recoveryCode = newSessionToken();
-    await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, created_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, created_at = excluded.created_at").bind(user.id, await hashToken(recoveryCode), new Date().toISOString()).run();
+    // The SELECT gates both insertion and replacement; no plaintext code is
+    // returned unless the same recent session still authorizes the write.
+    const replaced = await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, created_at) SELECT user_id, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM sessions WHERE token_hash = ? AND user_id = ? AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ','now','-10 minutes') ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, created_at = excluded.created_at").bind(await hashToken(recoveryCode), await hashToken(sessionToken(request)!), user.id).run();
+    if (replaced.meta.changes !== 1) return error(401, "Sign in again before replacing a recovery code");
     return json({ recoveryCode });
   }
   if (method === "GET" && pathname === "/api/connections") return json({...await connectionStatus(env.DB,user.id,githubConfig(env)),cloudflare:await cloudflareStatus(env.DB,user.id,cloudflareConfig(env))});
