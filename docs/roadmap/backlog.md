@@ -412,6 +412,7 @@ Planning dependencies: WH-001, WH-115. Verify completion in current issue eviden
 - [docs/app-data.md](../../docs/app-data.md)
 - [tools/owner-recovery-browser.mjs](../../tools/owner-recovery-browser.mjs)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -1426,14 +1427,15 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/passkeys.ts](../../src/passkeys.ts)
 - [src/index.ts](../../src/index.ts)
 - [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/42. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01: docs/workspace-identity.md freezes the protocol against d415398: separate restricted grants/current account epochs, invitation-safe two-key signup/resume, shared kit prepare/save/commit, reviewed partial/all-loss recovery, fresh replacement assertion, emergency revocation and staged existing-account retirement with compatible rollback. Source and failure-transition review completed; WH-114/115 implementation and physical/live/native acceptance remain separate. No runtime, schema, credential or deployment change. Issue #42 records verification and delivery.
 
 ## WH-114 — Implement passkey-only access and resumable two-passkey enrollment
 
@@ -1486,6 +1488,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/passkeys.ts](../../src/passkeys.ts)
 - [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
 - [migrations](../../migrations)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -1547,6 +1550,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
 - [tests/owner-recovery-concurrency.mjs](../../tests/owner-recovery-concurrency.mjs)
 - [tools/owner-recovery-browser.mjs](../../tools/owner-recovery-browser.mjs)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -1688,6 +1692,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
 - [docs/integrations/github-connection.md](../../docs/integrations/github-connection.md)
 - [src/connection-vault.ts](../../src/connection-vault.ts)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -2974,6 +2979,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/workspace-dashboard.ts](../../src/workspace-dashboard.ts)
 - [frontend/src/workspace.tsx](../../frontend/src/workspace.tsx)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -4123,6 +4129,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -4304,6 +4311,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
 - [docs/background-jobs.md](../../docs/background-jobs.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -5224,6 +5232,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [src/passkeys.ts](../../src/passkeys.ts)
 - [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -6386,6 +6395,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/chat-controls.ts](../../src/chat-controls.ts)
 - [docs/roadmap/chat-first-experience.md](../../docs/roadmap/chat-first-experience.md)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 
@@ -6502,6 +6512,7 @@ Planning dependencies: WH-081, WH-115. Verify completion in current issue eviden
 - [src/security.ts](../../src/security.ts)
 - [migrations](../../migrations)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
 

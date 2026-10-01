@@ -133,14 +133,14 @@ Recovery-key possession opens only restricted replacement enrollment. Lost-all-k
 
 | Packets | Priority / phase | Delivery and ordering |
 | --- | --- | --- |
-| WH-113 | P0 / F1; ready | Freeze shared identity, restricted authority, migration and usability contracts. |
+| WH-113 | P0 / F1; ready | [Protocol decision delivered](../workspace-identity.md), tracked in [#42](https://github.com/zemdregon/whumpo/issues/42); implementation/activation remain separate. |
 | WH-114 / WH-115 | P0 / F1; planned | Passkey-only/two-key enrollment after WH-113/004, then recovery-kit download/print and restricted replacement flow. |
 | WH-116 / WH-117 | P1 / F1; planned | Classify data/readers/key custody after WH-113/009/020, then justified transparent protection after WH-116/004. |
 | WH-118 | P2 / F4; planned | Evaluate passkey-backed encryption after WH-115/116 against compatibility, normal-sign-in, content-recovery and no-recurring-unlock criteria. |
 
 Distinguish Cloudflare encryption at rest, server-managed encryption and candidate client-side protection. Minimize authorized processing and exposure while preserving AI, safety, publication, search and background operations; never describe readable processing as end-to-end encrypted. WH-118 is a bounded feasibility decision with separate later implementation if viable, outside beta prerequisites.
 
-WH-005 adds WH-115 for owner device acceptance and retains visitor tests. Extend WH-024/025 usability/measurements and WH-007/008/009/063 incident/lifecycle/key recovery work. WH-081 consumes WH-113 and WH-083 consumes WH-115; remove planned Android password fallback. WH-048 requires WH-117 plus identity through WH-005; WH-049 inherits both. All six new packets remain unclaimed with no execution issues or completion evidence. Preserve existing mappings, historical implementation evidence, real-money activation and CMS testing gates; refresh live issue state before execution.
+WH-005 adds WH-115 for owner device acceptance and retains visitor tests. Extend WH-024/025 usability/measurements and WH-007/008/009/063 incident/lifecycle/key recovery work. WH-081 consumes WH-113 and WH-083 consumes WH-115; remove planned Android password fallback. WH-048 requires WH-117 plus identity through WH-005; WH-049 inherits both. WH-113 now has the source-grounded protocol decision and issue #42 evidence; WH-114–118 remain unimplemented/unclaimed at this checkpoint. Preserve existing mappings, historical implementation evidence, real-money activation and CMS testing gates; refresh live issue state before execution.
 
 ## Current execution queue — October 1, 2026
 
@@ -150,7 +150,7 @@ The original nine-task foundation queue is historical: WH-001/003/004/006/009/01
 | --- | --- | --- |
 | Completed release foundation | WH-002 / issue #39 | Reuse the verified archive/partial-recovery tooling; [October 1 correction and evidence](../releases.md#archive-input-correction-and-wh-002-acceptance--october-1-2026). Full disaster recovery remains separate. |
 | Evidence and reliability | WH-020 / #9, WH-024 / #10, WH-052 / #11 | Reconcile existing benchmarks, usability and job architecture with their remaining acceptance. |
-| Early shared contracts | WH-113 identity, WH-089 tier identifiers, WH-071 logical placement | Prevent new clients, roles and modules from choosing incompatible foundations. |
+| Early shared contracts | WH-113 identity decision delivered; WH-089 tier identifiers and WH-071 logical placement next | Consume the [shared identity contract](../workspace-identity.md); prevent new clients, roles and modules from choosing incompatible foundations. |
 | Contract consumers | WH-105 Chat bindings after WH-113/089; WH-116 data classification after WH-113/009/020 | Define shared client and storage boundaries before implementation. |
 | Implementations | WH-090, WH-114/115/117, WH-106/107, WH-067, WH-056 | Follow the exact dependency graph and [cross-workstream sequence](alignment.md). |
 
