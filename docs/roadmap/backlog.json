@@ -5735,6 +5735,56 @@
         "2026-10-01 local/source: installable workspace manifest, elephant 192/512px icons, Settings install/manual guidance and public-only offline worker implemented. Type/build, PWA cache/routing/version checks, build/release snapshot and lazy-loading checks pass. Disposable Chromium with actual local platform/D1 reports zero manifest/installability errors and verifies mobile layout, install dismissal, offline/reconnect and worker updates preserving an unsent draft. Deployment evidence follows in docs/dashboard-pwa.md and issue #49; physical-phone OS install remains unverified.",
         "2026-10-01T16:55:49.916Z test acceptance: corrected release e6edca89-4021-494c-a4b0-0875531e3132, source aa8b2c38b4c69e1a4dba76fb01b0fe0bea544778, deployed and reconciled. Twenty selected assets match archive bytes; live Chromium reports zero manifest/installability errors, active worker, four public cached files and successful offline/reconnect to sign-in. Health 200, anonymous session 401/no-store. No new migration/service/paid activation. Physical-phone OS installation remains unverified. See docs/dashboard-pwa.md and issue #49."
       ]
+    },
+    {
+      "id": "WH-120",
+      "title": "Remove existing legacy compatibility paths",
+      "phase": "F0",
+      "priority": "P0",
+      "readiness": "ready",
+      "kind": "implementation",
+      "size": "L",
+      "dependsOn": [],
+      "blockers": [],
+      "outcome": "Whumpo has one current runtime/API/client path with retired versions, aliases and plan modes removed.",
+      "scope": [
+        "Require the current authenticated account UUID and remove email/missing-account compatibility behavior",
+        "Remove obsolete DNS aliases and update callers to current handlers",
+        "Retire legacy Launch/Studio admission, test-credit interfaces and silent unknown-plan substitution with explicit forward data/receipt treatment",
+        "Replace historical-command presentation and page-conversion dependencies with current typed action and specification paths",
+        "Consolidate CMS shapes and active release/identity/native plans under current-version-only rules; preserve the separate owner-deferred CMS functional-testing boundary",
+        "Split implementation into concrete reviewed slices while keeping this parent open until the full removal inventory and required test deployment are verified"
+      ],
+      "acceptance": [
+        "No retained runtime path supports an obsolete schema/client/route/alias or retired entitlement; unknown and stale inputs reject explicitly",
+        "Current project creation/editing, typed approvals, tenant ownership, accounting and uncertain-operation identity remain correct through forward changes",
+        "Documentation and roadmap describe current-only rollout; historical evidence is not interpreted as an active compatibility obligation",
+        "Focused actual-handler checks cover removed branches and current behavior, and required test deployment is separately verified"
+      ],
+      "verification": [
+        "Run focused current interface, billing, Chat and compiler/adapter tests for each touched path; do not run deferred CMS functional tests",
+        "Run pnpm check/build for TypeScript/UI changes and roadmap validate/alignment/render/render --check/diff checks",
+        "Inspect current source and test deployment for each inventory entry; keep partial/local completion distinct from complete/deployed cleanup"
+      ],
+      "references": [
+        "docs/current-version-policy.md",
+        "docs/chat-interactions.md",
+        "docs/roadmap/alignment.md",
+        "src/plans.ts",
+        "src/billing.ts",
+        "src/chat-language.ts",
+        "src/cloudflare-dns.ts",
+        "src/project-specification/store.ts",
+        "src/cms-content-shape.ts",
+        "frontend/src/lib/api.ts",
+        "frontend/src/workspace.tsx",
+        "tests/current-interfaces.mjs"
+      ],
+      "issue": "https://github.com/zemdregon/whumpo/issues/53",
+      "owner": null,
+      "evidence": [
+        "2026-10-01 owner amendment: remove existing legacy fallbacks and assume current clients/schemas only. WH-105 strict client contract merged in PR #52. Runtime inventory and staged removal tracked in issue #53; full cleanup remains in progress."
+      ]
     }
   ]
 }

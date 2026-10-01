@@ -26,6 +26,8 @@ A versioned offline [shared-pool economics proposal](resource-pool-economics.md)
 
 ## Workspace
 
+Under [current-version-only cleanup](current-version-policy.md), the authenticated profile must supply its current account UUID before entry. Email is no longer an alternative workspace/cache identity; an older/malformed response fails explicitly.
+
 The [WH-105 interaction contract](chat-interactions.md) now defines the shared form/view vocabulary and receipt handoffs. Future saved views extend the existing layout revision and scoped readers; they do not create another permission system or remove direct recovery controls. Its offline contract checks do not establish a delivered renderer or durable form state.
 
 **Accepted next direction — October 1, 2026:** [WH-105–112](roadmap/chat-first-experience.md) make Chat the primary routine surface, including agent-presented predesigned/custom forms. The agent composes and maintains supporting dashboards/custom views; customers rarely need to leave Chat. This planned extension reuses the current layout and review boundaries below, preserves essential direct controls, and changes navigation only after replacement journeys and outage recovery are accepted.

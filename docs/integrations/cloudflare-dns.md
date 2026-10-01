@@ -2,6 +2,8 @@
 
 ## Implemented scope
 
+Current source uses `confirmDNS` for both reviewed TXT proofs and routing CNAMEs. The obsolete `confirmTXT` alias is removed under [WH-120](../current-version-policy.md); fixture imports now use the current handler. This changes no review/dispatch rule or provider resource.
+
 An authenticated customer with an active Cloudflare OAuth connection can choose an authorized zone in Domains, review an existing owned Whumpo domain claim, and explicitly confirm adding its TXT proof. Chat phrases such as “connect my domain” open the same Domains controls. No model action can confirm DNS changes. Panel actions and guided commands are free of AI usage; natural-language model requests use the normal AI allowance.
 
 This release creates **ownership TXT proofs and reviewed DNS-only routing CNAMEs**. It never patches/deletes existing DNS records, changes nameservers, purchases domains, or marks a domain connected merely because DNS creation succeeded. Exact-record update/removal, apex routing and long-lived proof renewal remain unfinished. Live OAuth consent and DNS mutation acceptance require the separately requested client setup.
