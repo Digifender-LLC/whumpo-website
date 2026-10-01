@@ -17,6 +17,19 @@ assert.equal(displayChatRequest(specificationCommand),'Save the exact reviewed p
 assert.equal(displayChatRequest(specificationCommand+' extra'),specificationCommand+' extra');
 assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:specificationCommand,literal:true})),specificationCommand);
 const specificationReview={id:review,proposalDigest:'a'.repeat(64),expectedRevision:2};
+const serviceCommand='/confirm-service-clients '+review+' '+'a'.repeat(64)+' 2';
+assert.equal(displayChatRequest(serviceCommand),'Save the exact reviewed private service settings.');
+assert.equal(displayChatRequest(serviceCommand+' extra'),serviceCommand+' extra');
+const serviceActions=actions({service_client_review:specificationReview});
+assert.ok(serviceActions.includes('Save reviewed service settings'));
+assert.ok(serviceActions.includes('/api/service-client-reviews/'+review+'/diff'));
+assert.ok(serviceActions.includes('/api/service-client-reviews/'+review+'/preview'));
+assert.ok(serviceActions.includes('min-h-11'));
+assert.ok(!actions({service_client_review:{...specificationReview,proposalDigest:'invalid'}}).includes('<button'));
+assert.ok(!actions({assistant_text:serviceCommand}).includes('<button'));
+assert.ok(actions({service_client_version_id:review}).includes('/api/service-client-versions/'+review+'/preview'));
+assert.ok(!actions({service_client_version_id:'invalid'}).includes('/api/service-client-versions/'));
+
 assert.ok(actions({specification_review:specificationReview}).includes('Save reviewed private version'));
 assert.ok(actions({specification_review:specificationReview}).includes('/api/specification-reviews/'+review+'/diff'));
 assert.ok(!actions({specification_review:{...specificationReview,proposalDigest:'wrong'}}).includes('<button'));

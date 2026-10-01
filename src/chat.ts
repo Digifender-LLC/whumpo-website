@@ -36,6 +36,7 @@ import {hostingChatCommand} from './hosting-chat';
 import {dnsChatCommand,type DNSChatOptions} from './dns-chat';
 import {listPhotos} from './files';
 import {photoRemovalCommand} from './photo-removal';
+import {applyServiceClientsCommand,serviceClientChatLinks} from './project-specification/service-clients/store';
 import {applySpecificationCommand,specificationChatLinks} from './project-specification/store';
 import {inspectWorkspace} from './workspace-read';
 import {domainCommand} from './domains';
@@ -85,6 +86,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await applicationChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await appRecoveryChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await appMaintenanceChatActions(db,userId,result[1].results as Record<string,unknown>[]);
+  await serviceClientChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   await specificationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   const billing = await getBilling(db, userId);
   const firstDraft=await welcomeDraftProject(db,userId);
@@ -169,6 +171,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const directory=await directoryCommand(db,userId,input.id,content);
   const contact=await contactCommand(db,userId,input.id,command);
   const versionRemoval=await versionRemovalCommand(db,userId,input.id,command);
+  const serviceClients=await applyServiceClientsCommand(db,userId,input.id,command);
   const specification=await applySpecificationCommand(db,userId,input.id,command);
   const removal = await photoRemovalCommand(db,userId,input.id,command);
   const domain = await domainCommand(db,userId,input.id,command);
@@ -189,6 +192,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if(directory)reply=directory.reply;
   else if(comparison)reply=comparison.reply;
   else if(contact)reply=contact.reply;
+  else if(serviceClients)reply=serviceClients.reply;
   else if(specification)reply=specification.reply;
   else if(versionRemoval)reply=versionRemoval.reply;
   else if (removal) reply = removal.reply;
@@ -325,6 +329,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if(directory)statements.push(...directory.statements);
   if(contact)statements.push(...contact.statements);
   if(versionRemoval)statements.push(...versionRemoval.statements);
+  if(serviceClients)statements.push(...serviceClients.statements);
   if(specification)statements.push(...specification.statements);
   if (removal) statements.push(...removal.statements);
   if (domain) statements.push(...domain.statements);
@@ -351,6 +356,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };
     }
   } catch (cause) {
+    if(/service_client_|version_removal_service_client/.test(String(cause))){
+      const recovered=await db.prepare('SELECT user_text FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string}>();
+      if(recovered?.user_text===content)return {status:200};
+      return {status:409,error:String(cause).includes('quota')?'Service configuration history has reached its test capacity.':String(cause).includes('version_removal_service_client')?'This website version is retained by saved service settings or a pending review.':'The service settings, references or review changed, expired or are held. Ask for a fresh review.'};
+    }
     if(/specification_(changed|expired|quota|held)|version_removal_specification/.test(String(cause))){
       const recovered=await db.prepare('SELECT user_text FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string}>();
       if(recovered?.user_text===content)return {status:200};
