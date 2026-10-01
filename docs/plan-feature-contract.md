@@ -1,6 +1,6 @@
 # Cumulative plan and feature contract
 
-**WH-089, October 1, 2026. Catalogue/presentation implemented in source; deployment and commercial feature activation are separate.** [Pricing policy](pricing-and-model-policy.md) owns the approved product scope. [Issue #44](https://github.com/zemdregon/whumpo/issues/44) records verification. WH-090 implements runtime enforcement; this catalogue grants no authority.
+**WH-089, October 1, 2026. Catalogue/presentation implemented and deployed to private testing; commercial feature activation remains separate.** [Pricing policy](pricing-and-model-policy.md) owns the approved product scope. [Issue #44](https://github.com/zemdregon/whumpo/issues/44) records verification. WH-090 implements runtime enforcement; this catalogue grants no authority.
 
 ## One catalogue, stable identities
 
@@ -84,3 +84,16 @@ No provider purchase, app registration, customer consent, DNS operation, real ch
 Private connected evidence is `.secrets/plan-catalogue-browser.json` and `.secrets/plan-catalogue-settings-mobile.png`. The fixture independently checks the saved preference and verifies zero inference, publication, usage operations, plan grants or Stripe invoices. No real account preference or customer/provider state changed. Standalone browser screenshot capture was unavailable; the documented combined accessibility/screenshot capture supplied the visual evidence.
 
 This completes WH-089's catalogue/local-acceptance scope. Runtime feature admission remains WH-090, and feature delivery/customer acceptance remains with the individual packets and full paid-launch gates. The source has not been deployed by this checkpoint.
+
+## Private test deployment — October 1, 2026
+
+Release `37497b4a-0b2d-4004-94cf-12838eff9e96` deployed archived source `fe5e5db63b0da5cc455c89af69febc4c318d4b3c`. Independent readback at **2026-10-01 15:54:10 UTC** verified all four candidate versions, unchanged bindings and CMS registration inventory, all 116 existing migrations with none pending, and all 18 archived platform assets. No schema migration was required.
+
+| Worker | Verified version |
+| --- | --- |
+| Runtime | `516c2056-ff32-4d1e-b8fd-2e8e3a77fad2` |
+| Apps | `c548f969-7bcd-4b00-9c42-a0fc6badec80` |
+| Sites | `157ee3b4-cd78-4e5f-8109-55cf163d005e` |
+| Platform | `728fce77-a0b8-4489-83c0-f82e1de4a797` |
+
+The public catalogue exactly matched the source definitions and retained Creator's `personal` identity. Landing/workspace assets and health returned 200; anonymous profile/Chat/capacity/subscription requests returned 401 and a foreign-origin capacity mutation returned 403. Stripe remained in test mode and domain redemption disabled. Private evidence: `.secrets/tier-release-verification.json` and the matching release archive. These readbacks verify the deployment and entry boundaries; they do not add authenticated live customer acceptance, provider/billing mutations, feature activation, CMS functional testing or customer publication.

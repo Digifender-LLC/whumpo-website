@@ -4267,6 +4267,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/44. Planning owner: Unassigned
 ### Evidence
 
 - 2026-10-01: cumulative version-1 launch feature catalogue and Creator display rollout implemented against 9cb2a62. personal IDs/prices/preferences/provider mappings and immutable receipts preserved. API/pricing/Settings/Chat distinguish planned inclusions, existing foundations, required provider consent and pending launch acceptance; all seven Business/Pro connections named and common security/recovery/export/standard AI retained. Catalogue, plan-period and synthetic subscription regressions, TypeScript/build/loading and connected loopback mobile/keyboard preference checks passed. No runtime feature enforcement, real billing/provider action, schema or deployment; WH-090 and feature/launch acceptance remain separate. See docs/plan-feature-contract.md and issue #44.
+- 2026-10-01 15:54:10 UTC: archived fe5e5db deployed as release 37497b4a-0b2d-4004-94cf-12838eff9e96. Independent readback verified all four Worker versions, 116 migrations with none pending, unchanged bindings/CMS inventory, 18 exact assets and the complete public catalogue; Creator remains personal. Anonymous/foreign-origin denials and sandbox-only billing remain correct. No customer/provider mutation or new feature activation. See docs/plan-feature-contract.md.
 
 ## WH-090 — Enforce shared server feature entitlements independently of billing activation
 
