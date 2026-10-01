@@ -319,3 +319,7 @@ Keep full offline synchronization, iOS, customer Android-app generation, full wo
 ### Cumulative catalogue delivery — October 1, 2026
 
 WH-089 implements the [shared feature catalogue and Creator display rollout](../plan-feature-contract.md), tracked in [issue #44](https://github.com/zemdregon/whumpo/issues/44). Current source/API/UI/Chat use stable feature IDs and cumulative packaging; `personal`, prices, receipts and Stripe mappings remain compatible. Catalogue presentation has source, local acceptance and private-test deployment readback; runtime feature enforcement remains separate. WH-090 consumes this catalogue and existing subscription coverage; WH-105 can now use the shared identity and feature contracts. All individual features/providers and full paid-launch gates retain their acceptance requirements.
+
+## Dashboard PWA — October 1, 2026
+
+Owner-requested WH-119 adds [home-screen installation](../dashboard-pwa.md) for the existing workspace. This extends the original 118-task alignment with one independent F2 packet; it does not replace native Android acceptance or add offline account synchronization.

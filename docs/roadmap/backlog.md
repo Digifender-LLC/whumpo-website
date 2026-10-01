@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 118 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 119 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -3416,6 +3416,66 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
+
+## WH-119 — Make the dashboard an installable PWA
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Customers can add the existing mobile workspace to their phone home screen and open it as an app.
+
+### Scope
+
+- Stable workspace manifest and elephant app/touch icons
+- User-triggered Settings installation with iPhone/manual browser guidance
+- Public-only offline navigation screen with explicit reconnect; preserve existing account and Chat recovery authority
+- Fingerprint worker/cache assets and verify installability, mobile layout and safe worker updates
+
+### Acceptance criteria
+
+- [ ] Installed app starts at the Chat-first workspace and preserves authentication/onboarding and mobile navigation
+- [ ] Browser installability criteria pass; manifest and 192/512px icons are served on the test domain
+- [ ] Service worker never caches private/API/auth/chat responses or queues mutations; network failures get a public reconnect screen
+- [ ] Worker updates preserve the current document and unsent draft
+- [ ] Installation is user-triggered; standalone state and manual guidance are usable; physical-device acceptance remains explicitly distinct from Chromium emulation
+
+### Verification
+
+- Type/build and focused PWA cache/routing/update checks
+- Build snapshot/release manifest and lazy-loading regressions
+- Disposable Chromium plus actual local D1/platform journey; no model/provider calls
+- Deployed asset/readback and browser manifest/worker checks; report physical-device limits honestly
+
+### Dependencies and blockers
+
+Planning dependencies: WH-001, WH-003. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/dashboard-pwa.md](../../docs/dashboard-pwa.md)
+- [docs/unified-workspace-and-capacity.md](../../docs/unified-workspace-and-capacity.md)
+- [frontend/public/manifest.webmanifest](../../frontend/public/manifest.webmanifest)
+- [frontend/public/workspace-sw.js](../../frontend/public/workspace-sw.js)
+- [frontend/src/install-app.tsx](../../frontend/src/install-app.tsx)
+- [tools/build-pwa.mjs](../../tools/build-pwa.mjs)
+- [tests/dashboard-pwa.mjs](../../tests/dashboard-pwa.mjs)
+- [tests/dashboard-pwa-browser.mjs](../../tests/dashboard-pwa-browser.mjs)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/49. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-01 local/source: installable workspace manifest, elephant 192/512px icons, Settings install/manual guidance and public-only offline worker implemented. Type/build, PWA cache/routing/version checks, build/release snapshot and lazy-loading checks pass. Disposable Chromium with actual local platform/D1 reports zero manifest/installability errors and verifies mobile layout, install dismissal, offline/reconnect and worker updates preserving an unsent draft. Deployment evidence follows in docs/dashboard-pwa.md and issue #49; physical-phone OS install remains unverified.
+- 2026-10-01T16:55:49.916Z test acceptance: corrected release e6edca89-4021-494c-a4b0-0875531e3132, source aa8b2c38b4c69e1a4dba76fb01b0fe0bea544778, deployed and reconciled. Twenty selected assets match archive bytes; live Chromium reports zero manifest/installability errors, active worker, four public cached files and successful offline/reconnect to sign-in. Health 200, anonymous session 401/no-store. No new migration/service/paid activation. Physical-phone OS installation remains unverified. See docs/dashboard-pwa.md and issue #49.
 
 # F3 — Commercial MVP
 
