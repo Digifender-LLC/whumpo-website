@@ -61,6 +61,8 @@ No new product choice was needed to repair the ordering. Existing scope choices 
 
 The separate shared-workspace/quality-tooling changes in the primary checkout are not imported as implemented dependencies. Until merged, packets use the committed verification workflow. The unfinished release-archive correction remains on `codex/release-verification` under #39; this alignment does not claim its tests passed.
 
+**Subsequent October 1 update:** WH-002's archive correction and all four focused release checks now pass; see [the release evidence](../releases.md#archive-input-correction-and-wh-002-acceptance--october-1-2026). The preceding paragraph records the state when alignment merged, before that follow-up. Full disaster recovery remains unaccepted.
+
 ## Verification
 
 Run roadmap validation, regenerate the Markdown backlog, confirm exact rendering, inspect local Markdown links and check the diff. Review dependency reachability as well as cycles: early contract/implementation packets must not inherit their own release, finance-period, optional PRF or Android distribution gates. Preserve all 118 IDs, historical evidence and existing issue mappings. This documentation-only change requires no application tests or deployment.

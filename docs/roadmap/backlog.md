@@ -73,7 +73,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/3. Planning owner: Unassigned.
 
 ## WH-002 — Extend release manifests and rehearse partial deployment recovery
 
-Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **ready**. Kind: implementation. Size: M.
 
 Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
 
@@ -117,6 +117,11 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tools/deploy-platform.mjs](../../tools/deploy-platform.mjs)
 - [tests/build-snapshot.mjs](../../tests/build-snapshot.mjs)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/releases.md](../../docs/releases.md)
+- [tools/prepare-release.mjs](../../tools/prepare-release.mjs)
+- [tests/release-manifest.mjs](../../tests/release-manifest.mjs)
+- [tests/release-lock.mjs](../../tests/release-lock.mjs)
+- [tests/release-bundles.mjs](../../tests/release-bundles.mjs)
 
 ### Execution coordination
 
@@ -125,6 +130,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/39. Planning owner: Unassigned
 ### Evidence
 
 - 2026-10-01: issue #39 holds active release verification work on codex/release-verification. Existing release protocol is implemented; archive/compiler-lock correction and remaining focused checks are unfinished. Alignment does not close or redeploy this work.
+- 2026-10-01: archive/compiler-lock correction and WH-002 focused acceptance completed against aca1bc3. New archives retain both compiler locks; build/checker drift and removal refuse; recovered source/assets match the original snapshot; nonempty synthetic registrations/bindings survive all four interrupted Worker steps without duplicate deployment. Build-snapshot, manifest, lease and actual Wrangler bundle round-trip suites passed (all five executable modules, including Wasm). Exact migration/destructive-restore review gates retained. Historical archives remain immutable; no runtime/schema/deployment, CMS functional test or live fault injection. Full recovery drills remain separate. Detailed evidence: docs/releases.md and issue #39.
 
 ## WH-003 — Define focused verification profiles and optional free-tier CI
 

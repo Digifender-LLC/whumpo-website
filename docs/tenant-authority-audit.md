@@ -92,6 +92,8 @@ Documentation checks also passed: `node tools/roadmap.mjs validate`, `node tools
 
 Non-security observations retained for later work: the build-snapshot test fixture omits newly required compiler checker/lock inputs; the CMS panel inventory request uses a prose string instead of the inventory path (CMS testing remains deferred). Hosting creation could bind its current proof in the final admission statement; separate proof/routing/TLS checks still prevent serving stale authority. These are not additional reportable vulnerabilities.
 
+October 1 follow-up: the build-snapshot fixture and release compiler-lock archive gap are corrected and locally verified under [WH-002](releases.md#archive-input-correction-and-wh-002-acceptance--october-1-2026). This later tooling work does not alter the sealed audit's original evidence or scope.
+
 
 ## A1 remediation — October 1, 2026
 
@@ -131,4 +133,4 @@ Seventeen targeted regressions, existing visitor lifecycle checks, maintenance i
 
 The sealed scan remains `completed` at `2026-10-01T12:07:25.955734Z`, with three findings and coverage labeled `partial` for the stated exclusions. It was neither restarted nor edited to mark fixes. The missing race/account-switch scenarios were reproduced and added after the audit; passing historical suites alone did not establish their correction. Subsequent Stripe sandbox scope and tests remain separately documented in [stripe-sandbox.md](stripe-sandbox.md), rather than attributed to the earlier static scan.
 
-WH-004’s defined audit and remediation deliverables are complete. Outstanding native-device/passkey/provider consent, inference privacy/quality, backup-aware deletion and recovery drills remain separate roadmap gates. The known build-snapshot fixture defect remains verification-tooling follow-up; CMS inventory UI testing, CSAM and Daybreak remain deferred. [A3 deployment and verification limits](app-data.md#a3-test-release).
+WH-004’s defined audit and remediation deliverables are complete. Outstanding native-device/passkey/provider consent, inference privacy/quality, backup-aware deletion and recovery drills remain separate roadmap gates. The build-snapshot fixture follow-up is resolved by the later WH-002 checks above; CMS inventory UI testing, CSAM and Daybreak remain deferred. [A3 deployment and verification limits](app-data.md#a3-test-release).

@@ -1,6 +1,6 @@
 # Four-Worker releases and partial recovery
 
-**WH-002 implementation, September 30, 2026.** This is operator tooling for the private test platform. It does not publish customer code, provision a CMS, activate a provider or replace application acceptance. The archive/journal protocol is implemented; synthetic failure recovery and real local Wrangler bundle round trips are verified. The first completed live four-Worker release and a real interrupted-release reconciliation are recorded below and in [WH-066B deployment evidence](project-specification-storage.md#test-deployment-and-recovery). A deliberate fault-injection or complete disaster-recovery drill remains unverified.
+**WH-002 implemented September 30; archive inputs and acceptance reverified October 1, 2026.** This is operator tooling for the private test platform. It does not publish customer code, provision a CMS, activate a provider or replace application acceptance. The archive/journal protocol is implemented; synthetic failure recovery and real local Wrangler bundle round trips are verified. The first completed live four-Worker release and a real interrupted-release reconciliation are recorded below and in [WH-066B deployment evidence](project-specification-storage.md#test-deployment-and-recovery). A deliberate live fault-injection or complete disaster-recovery drill remains unverified.
 
 ## Prepare before changing anything
 
@@ -36,7 +36,7 @@ The existing standalone platform wrapper remains available for narrowly reviewed
 - Source commit and dirty-checkout flag, source/build digests, Node and Wrangler versions.
 - All four **before** Worker version IDs and secret **binding names**, with service targets; no secret values.
 - All four prepared Worker configurations and unique candidate tags. Candidate version IDs are assigned by Cloudflare later and are recorded in the journal.
-- Every archived file's byte length and SHA-256: actual compiled JavaScript/Wasm modules, platform and visitor static assets, migration SQL, source/configuration/lock files and release tooling.
+- Every archived file's byte length and SHA-256: actual compiled JavaScript/Wasm modules, platform and visitor static assets, migration SQL, source/configuration/lock files (including `compiler-locks/` since the October 1 correction) and release tooling.
 - Exact applied/pending migration names and SQL hashes; the remote applied set must be a prefix of the archive. Unknown migrations or a hole stop preparation.
 - CMS instance and deployment registration metadata, including owner/project/resource/version identities and existing source/secret **digests**. It contains no master key, derived secret, vault token, customer document or R2 object. This metadata is private operational data and stays out of GitHub.
 - The reviewed mixed-version/schema/recovery declarations.
@@ -84,6 +84,26 @@ Already-deployed versions from **before** this protocol have provider version ID
 - `pnpm build` plus `node tests/release-bundles.mjs`: actual Wrangler 4.143.0 dry-run compilation and archived `--no-bundle` re-ingestion for all four Workers. Exact executable-module byte equality, including runtime Wasm. Empty temporary HOME and allowlisted environment; no account/deployment/model call or functional CMS test.
 
 No TypeScript behavior changed; no `pnpm check` was needed for this tooling change. That original local verification performed no live Worker/schema/customer-content mutation, CMS test or paid service activation. The subsequent WH-066B live release and application evidence are recorded separately below; broader recovery drills remain separate. Wrangler's [dry-run, output and no-bundle commands](https://developers.cloudflare.com/workers/wrangler/commands/workers/) are the provider interface used here (checked September 30, 2026).
+
+## Archive input correction and WH-002 acceptance — October 1, 2026
+
+Reconciliation against source `aca1bc3` reproduced two gaps: `tests/build-snapshot.mjs` omitted required compiler checker/lock fixture inputs and failed before reaching its drift assertions; release preparation verified those locks during the build but omitted `compiler-locks/` from the archived source tree. The compiled deployment artifacts were already retained. Preparation now includes that directory under the existing byte inventory, copy-stability and tamper checks.
+
+Both compiler checkers and lock files now have change/removal coverage. The release fixture also includes a synthetic nonempty registration inventory, its platform service binding and required master-secret **name**. No secret value or real instance is involved. Interruptions after each Worker command preserve that inventory, settle confirmed steps without redeploying them and continue only the remaining sequence. Unknown command outcomes still refuse replay.
+
+The recovered-checkout test copies archived source and platform/visitor assets into a new directory, then validates them against the **original** manifest build snapshot without creating a replacement baseline. Representative frontend/visitor source files keep the fixture's input trees nonempty, like the repository; empty directories are not archive artifacts. This establishes retained build-input/asset equality, not a fresh dependency installation or full source rebuild.
+
+Passed under Node 24.21.0 and pinned Wrangler 4.143.0:
+
+- `node tests/build-snapshot.mjs`: source, assets, configuration, both compiler checkers/locks, missing inputs, symlinks, secret exclusion and refusal before provider access.
+- `node tests/release-manifest.mjs`: immutable artifacts/SQL, lock tamper refusal, original-snapshot recovery, registration/binding preservation, failure after all four Worker steps, no duplicate completed steps, uncertain-command and external-drift holds, exact migration review and destructive-change restore/compatibility requirements.
+- `node tests/release-lock.mjs`: lease renewal, competing operators, expiry, failure cleanup and ownership-safe release.
+- `node tests/release-bundles.mjs`: real local Wrangler compile → archived `--no-bundle --dry-run` for runtime, apps, sites and platform, including runtime Wasm; all five executable modules retain exact bytes and archives remain unchanged. The fixture uses an empty temporary home and an allowlisted credential-free environment. [Wrangler command semantics](https://developers.cloudflare.com/workers/wrangler/commands/workers/) rechecked October 1.
+- JavaScript syntax checks for the three changed files, roadmap validation/render consistency and diff checks.
+
+WH-002's implementation/verification criteria are satisfied to this scope. No TypeScript/runtime/schema change, new frontend build, cloud deployment, CMS functional testing, provider activation or live fault injection was needed or performed. Whole-platform restoration and application/device acceptance remain their own gates.
+
+**Older archives stay immutable.** Do not add missing locks or regenerate checksums in a sealed historical release. Its compiled-artifact replay retains the existing pinned-toolchain and current-state compatibility requirements. A source rebuild additionally needs the original missing locks from the recorded Git source and any separately retained uncommitted inputs; validate the original build digest. If those inputs cannot be recovered, do not claim reproducible source recovery from that archive alone.
 
 ## Live binding-readback correction — September 30, 2026
 

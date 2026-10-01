@@ -91,7 +91,7 @@
       "title": "Extend release manifests and rehearse partial deployment recovery",
       "phase": "F0",
       "priority": "P0",
-      "readiness": "planned",
+      "readiness": "ready",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -122,12 +122,18 @@
         "tools/deploy.mjs",
         "tools/deploy-platform.mjs",
         "tests/build-snapshot.mjs",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/releases.md",
+        "tools/prepare-release.mjs",
+        "tests/release-manifest.mjs",
+        "tests/release-lock.mjs",
+        "tests/release-bundles.mjs"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/39",
       "owner": null,
       "evidence": [
-        "2026-10-01: issue #39 holds active release verification work on codex/release-verification. Existing release protocol is implemented; archive/compiler-lock correction and remaining focused checks are unfinished. Alignment does not close or redeploy this work."
+        "2026-10-01: issue #39 holds active release verification work on codex/release-verification. Existing release protocol is implemented; archive/compiler-lock correction and remaining focused checks are unfinished. Alignment does not close or redeploy this work.",
+        "2026-10-01: archive/compiler-lock correction and WH-002 focused acceptance completed against aca1bc3. New archives retain both compiler locks; build/checker drift and removal refuse; recovered source/assets match the original snapshot; nonempty synthetic registrations/bindings survive all four interrupted Worker steps without duplicate deployment. Build-snapshot, manifest, lease and actual Wrangler bundle round-trip suites passed (all five executable modules, including Wasm). Exact migration/destructive-restore review gates retained. Historical archives remain immutable; no runtime/schema/deployment, CMS functional test or live fault injection. Full recovery drills remain separate. Detailed evidence: docs/releases.md and issue #39."
       ]
     },
     {
