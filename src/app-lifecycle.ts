@@ -3,10 +3,45 @@ import {BackendError} from './backend-versions';
 import {hashToken} from './security';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const nowSQL="strftime('%Y-%m-%dT%H:%M:%fZ','now')";
+// A review is issued before the destructive confirmation. It never follows an
+// ambient cookie to a different visitor or even a replacement session.
+export async function prepareAppDeletion(db:D1Database,token:string,project:string){
+ const actor=await appIdentity(db,token,project);
+ const doc=await db.prepare('SELECT revision,state_json FROM app_documents WHERE visitor_id=?').bind(actor.visitor_id).first<{revision:number;state_json:string}>();
+ if(!doc)throw new BackendError(409,'Your information changed. Review your account again');
+ const id=crypto.randomUUID();
+ const results=await db.batch([
+  db.prepare(`DELETE FROM app_deletion_reviews WHERE session_hash=? OR expires_at<=${nowSQL}`).bind(actor.token_hash),
+  db.prepare(`INSERT INTO app_deletion_reviews(id,project_id,visitor_id,session_hash,revision)
+   SELECT ?,v.project_id,v.id,s.token_hash,d.revision FROM app_visitors v
+   JOIN app_documents d ON d.visitor_id=v.id JOIN app_spaces a ON a.project_id=v.project_id
+   JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
+   JOIN app_sessions s ON s.visitor_id=v.id
+   WHERE v.id=? AND v.project_id=? AND v.revoked=0 AND a.enabled=1 AND d.revision=?
+    AND s.token_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+23 hours','+50 minutes')`)
+   .bind(id,actor.visitor_id,project,doc.revision,actor.token_hash)
+ ]);
+ if(results[1].meta.changes!==1)throw new BackendError(409,'Your information changed or your sign-in is too old. Sign in again and review the latest information');
+ const review=await db.prepare('SELECT expires_at FROM app_deletion_reviews WHERE id=?').bind(id).first<{expires_at:string}>();
+ if(!review)throw new BackendError(409,'Your sign-in or review changed. Review your account again');
+ return {id,revision:doc.revision,state:JSON.parse(doc.state_json),expiresAt:review.expires_at};
+}
+function deletionProof(token:string,project:string,id:string,revision:number){
+ if(!/^[0-9a-f]{64}$/.test(token))throw new BackendError(401,'Application sign-in required');
+ if(!uuid.test(project)||!uuid.test(id)||!Number.isSafeInteger(revision)||revision<0)throw new BackendError(400,'Provide the deletion request and reviewed revision');
+ return hashToken(JSON.stringify(['whumpo-app-deletion',token,project,id,revision]));
+}
+// Absence is unconfirmed, not evidence that an in-flight deletion cannot commit.
+// No authentication refresh, cleanup, writes or first dispatch occurs here.
+export async function readAppDeletion(db:D1Database,token:string,project:string,id:string,revision:number){
+ const proof=await deletionProof(token,project,id,revision);
+ const found=await db.prepare(`SELECT id FROM app_deletion_receipts WHERE id=? AND project_id=? AND proof_hash=? AND expires_at>${nowSQL}`).bind(id,project,proof).first();
+ return {deleted:!!found,id};
+}
 export async function deleteAppAccount(db:D1Database,token:string,project:string,id:string,revision:number,confirmation:unknown){
  if(!/^[0-9a-f]{64}$/.test(token))throw new BackendError(401,'Application sign-in required');
- if(!uuid.test(project)||!uuid.test(id)||!Number.isSafeInteger(revision)||revision<0||confirmation!=='DELETE')throw new BackendError(400,'Review the current information and confirm account deletion');
- const proof=await hashToken(JSON.stringify(['whumpo-app-deletion',token,project,id,revision]));
+ if(confirmation!=='DELETE')throw new BackendError(400,'Review the current information and confirm account deletion');
+ const proof=await deletionProof(token,project,id,revision);
  const receipt=()=>db.prepare(`SELECT id FROM app_deletion_receipts WHERE id=? AND project_id=? AND proof_hash=? AND expires_at>${nowSQL}`).bind(id,project,proof).first();
  if(await receipt())return {deleted:true,id};
  if(await db.prepare('SELECT id FROM app_deletion_receipts WHERE id=?').bind(id).first()){if(await receipt())return {deleted:true,id};throw new BackendError(409,'Deletion request ID already used. Review your account again');}
@@ -14,11 +49,11 @@ export async function deleteAppAccount(db:D1Database,token:string,project:string
  await db.prepare(`DELETE FROM app_deletion_receipts WHERE expires_at<=${nowSQL}`).run();
  try{
   const results=await db.batch([
-   db.prepare(`INSERT INTO app_deletion_receipts(id,project_id,proof_hash) SELECT ?,v.project_id,? FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=? AND v.project_id=? AND v.revoked=0 AND a.enabled=1 AND d.revision=? AND s.token_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+23 hours','+50 minutes')`).bind(id,proof,actor.visitor_id,project,revision,actor.token_hash),
+   db.prepare(`INSERT INTO app_deletion_receipts(id,project_id,proof_hash) SELECT ?,v.project_id,? FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_sessions s ON s.visitor_id=v.id JOIN app_deletion_reviews r ON r.visitor_id=v.id AND r.project_id=v.project_id AND r.session_hash=s.token_hash AND r.revision=d.revision WHERE r.id=? AND r.expires_at>${nowSQL} AND v.id=? AND v.project_id=? AND v.revoked=0 AND a.enabled=1 AND d.revision=? AND s.token_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+23 hours','+50 minutes')`).bind(id,proof,id,actor.visitor_id,project,revision,actor.token_hash),
    db.prepare('DELETE FROM app_visitors WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM app_deletion_receipts WHERE id=? AND project_id=? AND proof_hash=?)').bind(actor.visitor_id,project,id,project,proof)
   ]);
-  if(results[0].meta.changes!==1)throw new BackendError(409,'Your information changed or your sign-in is too old. Sign in again and review the latest information');
- }catch(error){if(await receipt())return {deleted:true,id};if(error instanceof BackendError)throw error;throw new BackendError(503,'Deletion could not be confirmed. Retry this same request before taking another action');}
+  if(results[0].meta.changes!==1)throw new BackendError(409,'Your account, information or deletion review changed. Sign in again and prepare a new review');
+ }catch(error){if(await receipt())return {deleted:true,id};if(error instanceof BackendError)throw error;throw new BackendError(503,'Deletion could not be confirmed. Check the saved deletion result before taking another action');}
  return {deleted:true,id};
 }
 
@@ -49,6 +84,7 @@ export async function cleanupAppLifecycle(db:D1Database){
   db.prepare("DELETE FROM app_migration_documents WHERE NOT EXISTS(SELECT 1 FROM app_migration_current c WHERE c.id=migration_id)"),
   db.prepare(`DELETE FROM app_owner_erasures WHERE expires_at<=${nowSQL}`),
   db.prepare(`DELETE FROM app_deletion_receipts WHERE expires_at<=${nowSQL}`),
+  db.prepare(`DELETE FROM app_deletion_reviews WHERE expires_at<=${nowSQL}`),
   db.prepare("DELETE FROM app_daily_usage WHERE day<strftime('%Y-%m-%d','now','-35 days')")
  ]);
 }

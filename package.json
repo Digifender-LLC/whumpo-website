@@ -128,6 +128,7 @@
     "test:cloudflare-token-refresh": "node tests/cloudflare-token-refresh.mjs",
     "test:app-migration-checks": "node tests/app-migration-checks.mjs",
     "test:app-document-recovery": "node tests/app-recovery.mjs",
+    "test:visitor-deletion-review": "node tests/visitor-deletion-review.mjs",
     "test:app-lifecycle": "node tests/app-lifecycle.mjs",
     "test:workspace-navigation": "node tests/workspace-navigation.mjs",
     "test:agent-prompt-focus": "node tests/agent-prompt-focus.mjs",

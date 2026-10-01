@@ -17,6 +17,7 @@ export const backlogInventory={
  app_migration_documents:queue('app_migration_documents','NOT EXISTS(SELECT 1 FROM app_migration_current c WHERE c.id=migration_id)',null),
  app_owner_erasures:expiry('app_owner_erasures'),
  app_deletion_receipts:expiry('app_deletion_receipts'),
+ app_deletion_reviews:expiry('app_deletion_reviews'),
  app_usage:aged('app_daily_usage','day','+36 days'),
  contact_submissions:expiry('contact_submissions'),
  contact_receipts:expiry('contact_receipts'),
