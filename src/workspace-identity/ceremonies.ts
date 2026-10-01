@@ -3,7 +3,7 @@ import {customerEligibilityVersion} from '../content-policy';
 import {hashToken,newSessionToken} from '../security';
 import {IdentityError,assertCurrentIdentity,identityPredicate,resolveIdentity,type IdentityPrincipal,type IdentityPolicy} from './authority';
 
-type Environment=Pick<Env,'DB'|'ENVIRONMENT'|'TURNSTILE_SECRET'>;
+import {identityRecord as record,identityRequestContext as context,identityDatabaseError as databaseError,identityChanged as changed,identityUnavailable as unavailable,invalidIdentityRequest as invalid,identityUUID as uuid,type IdentityEnvironment as Environment} from './protocol';
 type Kind='signup'|'login'|'add'|'reauth';
 type Challenge={id:string;kind:Kind;challenge:string;origin:string;rp_id:string;policy_version:number;client:string;account_id:string|null;
  email:string|null;invite_hash:string|null;eligibility_version:string|null;authority_id:string|null;authority_kind:string|null;
@@ -12,25 +12,8 @@ type Challenge={id:string;kind:Kind;challenge:string;origin:string;rp_id:string;
 type Candidate={id:string;account_id:string;public_key:ArrayBuffer|number[];counter:number;stage:IdentityPrincipal['stage'];
  auth_epoch:number;credential_revision:number;kit_generation:number;attempt_id:string|null;attempt_revision:number|null};
 type Receipt={id:string;account_id:string;kind:Kind;request_hash:string;credential_id:string;attempt_id:string|null;created_at:number};
-const encoder=new TextEncoder(),uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const invalid=()=>new IdentityError(400,'invalid_identity_request','Invalid identity request.');
+const encoder=new TextEncoder();
 const proof=()=>new IdentityError(401,'proof_required','Passkey verification failed or expired. Start verification again.');
-const changed=()=>new IdentityError(409,'identity_changed','Your identity or invitation changed. Read your current progress and start again.');
-const unavailable=()=>new IdentityError(503,'identity_unavailable','Identity verification is temporarily unavailable.');
-function record(value:unknown,keys:string[]):Record<string,unknown>{
- if(!value||typeof value!=='object'||Array.isArray(value)||Object.getPrototypeOf(value)!==Object.prototype
-  ||Object.keys(value).length!==keys.length||!keys.every(k=>Object.hasOwn(value,k)))throw invalid();
- const data=value as Record<string,unknown>;
- if(data.version!==1)throw new IdentityError(409,'client_upgrade_required','Update Whumpo to continue.');
- return data;
-}
-function context(request:Request,env:Environment){
- const mode=String(env.ENVIRONMENT);
- if(mode!=='local'&&mode!=='test')throw unavailable();
- const origin=mode==='local'?'http://localhost:8787':'https://whumpo.com',rpID=new URL(origin).hostname;
- if(request.method!=='POST'||request.headers.get('origin')!==origin||new URL(request.url).origin!==origin)throw invalid();
- return {origin,rpID};
-}
 function credential(value:unknown){
  if(!value||typeof value!=='object'||Array.isArray(value))throw proof();
  try{
@@ -45,18 +28,15 @@ function credential(value:unknown){
 }
 function operationPolicy(p:IdentityPrincipal):IdentityPolicy{return {purpose:p.purpose,freshPasskey:p.kind==='session',bindIdentityRevision:true};}
 const receiptGate='EXISTS(SELECT 1 FROM identity_ceremony_receipts WHERE id=? AND execution_nonce=?)';
-function databaseError(error:unknown):never{
- if(error instanceof IdentityError)throw error;
- if(/UNIQUE|FOREIGN KEY|CHECK constraint|identity_.*limit|user_quota/.test(String(error)))throw changed();
- throw unavailable();
-}
 export async function cleanIdentityCeremonies(db:D1Database){
  // Bounded, expired admission only. Verified pending progress is never timed out.
  await db.batch([
   db.prepare('DELETE FROM identity_challenges WHERE id IN (SELECT id FROM identity_challenges WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_grants WHERE id IN (SELECT id FROM identity_grants WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_sessions WHERE id IN (SELECT id FROM identity_sessions WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
-  db.prepare('DELETE FROM identity_ceremony_receipts WHERE id IN (SELECT id FROM identity_ceremony_receipts WHERE created_at<=unixepoch()-604800 ORDER BY created_at LIMIT 500)')
+  db.prepare('DELETE FROM identity_ceremony_receipts WHERE id IN (SELECT id FROM identity_ceremony_receipts WHERE created_at<=unixepoch()-604800 ORDER BY created_at LIMIT 500)'),
+  db.prepare('DELETE FROM identity_kit_offers WHERE id IN (SELECT id FROM identity_kit_offers WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
+  db.prepare('DELETE FROM identity_effect_receipts WHERE id IN (SELECT id FROM identity_effect_receipts WHERE created_at<=unixepoch()-604800 ORDER BY created_at LIMIT 500)')
  ]);
 }
 async function turnstile(request:Request,env:Environment,token:unknown,origin:string){
@@ -162,6 +142,7 @@ export async function addPasskeyOptions(request:Request,env:Environment,p:Identi
   if(receipt.kind!=='add'||receipt.request_hash!==requestHash)throw new IdentityError(409,'request_conflict','This request ID already belongs to a different change.');
   return {completed:{operationId:receipt.id,credentialId:receipt.credential_id}};
  }
+ if(await env.DB.prepare('SELECT 1 FROM identity_effect_receipts WHERE id=?').bind(change.requestId).first())throw new IdentityError(409,'request_conflict','This request ID already belongs to a different change.');
  if(change.attemptId!==(p.attempt?.id??null)||change.expectedRevision!==(p.attempt?.revision??p.credentialRevision))throw changed();
  await assertCurrentIdentity(env.DB,p,operationPolicy(p));
  if(p.purpose==='recovery'&&!await env.DB.prepare("SELECT 1 FROM identity_attempts WHERE id=? AND account_id=? AND status='secured'").bind(p.attempt!.id,p.accountId).first())throw changed();
