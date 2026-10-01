@@ -21,7 +21,8 @@ async function networkFetch(request){
  network.push(request);if(!online)throw TypeError('Synthetic offline');
  const url=new URL(request.url??request,origin);
  if(url.pathname.startsWith('/pwa/')||url.pathname==='/brand/whumpo-mark-96.png'){
-  const content=await readFile('dist'+url.pathname);const type=url.pathname.endsWith('.html')?'text/html':url.pathname.endsWith('.css')?'text/css':url.pathname.endsWith('.js')?'text/javascript':'image/png';
+  const path=url.pathname==='/pwa/offline'?'/pwa/offline.html':url.pathname;
+  const content=await readFile('dist'+path);const type=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':'image/png';
   return new Response(content,{headers:{'content-type':type}});
  }
  return new Response('synthetic-private-network-response',{status:serverStatus,headers:{'cache-control':'no-store'}});
@@ -31,7 +32,7 @@ const lifecycle=async name=>{let work;handlers.get(name)({waitUntil:p=>{work=p;}
 await lifecycle('install');assert(skipped);assert.equal(network.length,4);assert(network.every(r=>r.credentials==='omit'));
 await lifecycle('activate');assert(claimed);assert(stores.has('other-app-cache'));assert(!stores.has('whumpo-dashboard-offline-old'));
 const cacheName=[...stores.keys()].find(k=>k.startsWith('whumpo-dashboard-offline-'));assert.match(cacheName,/^whumpo-dashboard-offline-[a-f0-9]{24}$/);
-assert.deepEqual([...stores.get(cacheName).keys()].sort(),['/pwa/offline.html','/pwa/offline.css','/pwa/offline.js','/brand/whumpo-mark-96.png'].map(p=>origin+p).sort());
+assert.deepEqual([...stores.get(cacheName).keys()].sort(),['/pwa/offline','/pwa/offline.css','/pwa/offline.js','/brand/whumpo-mark-96.png'].map(p=>origin+p).sort());
 function route(path,options={}){let result;handlers.get('fetch')({request:{url:new URL(path,origin).href,method:'GET',mode:'cors',...options},respondWith:p=>{result=p;}});return result;}
 for(const path of ['/api/session','/api/chat','/api/profile/avatar','/api/connections/github/callback?code=synthetic','/','/contact/synthetic','/workspace-extra','https://example.test/workspace'])assert.equal(route(path,{mode:'navigate'}),undefined,path);
 assert.equal(route('/workspace',{method:'POST',mode:'navigate'}),undefined);
@@ -42,7 +43,7 @@ assert.equal(stores.get(cacheName).size,4,'Network HTML must never be cached');
 online=false;
 assert((await (await route('/workspace/settings',{mode:'navigate'})).text()).includes('We couldn’t connect'));
 assert((await route('/pwa/offline.css')).headers.get('content-type').includes('css'));
-stores.get(cacheName).delete(origin+'/pwa/offline.html');assert.equal((await route('/workspace',{mode:'navigate'})).status,503);
+stores.get(cacheName).delete(origin+'/pwa/offline');assert.equal((await route('/workspace',{mode:'navigate'})).status,503);
 
 const temp=await mkdtemp('/tmp/whumpo-pwa-build-');
 try{

@@ -1,7 +1,8 @@
 // Cache only this fixed public offline screen. Auth, APIs, app HTML and bundles stay on the network.
 const CACHE_PREFIX = 'whumpo-dashboard-offline-';
 const CACHE = CACHE_PREFIX + '__OFFLINE_VERSION__';
-const OFFLINE = '/pwa/offline.html';
+// Cloudflare canonicalizes HTML files to extensionless URLs; install refuses redirects.
+const OFFLINE = '/pwa/offline';
 const ASSETS = new Map([
   [OFFLINE, 'text/html'],
   ['/pwa/offline.css', 'text/css'],

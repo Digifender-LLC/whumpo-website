@@ -34,3 +34,7 @@ Deployment and browser acceptance are recorded below after verification. No new 
 ### Local acceptance — October 1, 2026
 
 Type checks/build, focused PWA checks, build-snapshot and release-manifest checks, lazy-loading checks and the disposable Chromium/D1 journey passed. Chromium reported no manifest or installability errors. At 390px there was no horizontal overflow; installation dismissal, day/night browser theme, offline/reconnect, four public cache entries and an unsent draft surviving worker activation were verified. Screenshots were visually inspected. The first browser run correctly reported incognito installation as unavailable; the test now uses an isolated disposable persistent profile. No physical phone installation is claimed.
+
+### Hosting compatibility correction
+
+The first test deployment exposed Cloudflare's automatic `/pwa/offline.html` → `/pwa/offline` redirect. Because worker installation deliberately refuses redirects, its offline cache did not activate. The worker now fetches the canonical extensionless screen URL; the local browser fixture reproduces the redirect to prevent this regression. This changed no account or backend behavior. Final deployed acceptance requires the corrected worker to activate and pass the live offline/reconnect check.

@@ -33,7 +33,9 @@ try{
    const response=await platform.fetch(new Request(url,{method:req.method,headers:req.headers,...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})}),env,ctx);
    res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return;
   }
-  const name=url.pathname==='/'||url.pathname==='/workspace'||url.pathname.startsWith('/workspace/')?'index.html':decodeURIComponent(url.pathname).slice(1),path=resolve(root,name);
+  // Mirror Cloudflare's HTML canonicalization so redirect-sensitive worker install is exercised.
+  if(url.pathname==='/pwa/offline.html'){res.writeHead(307,{location:'/pwa/offline'}).end();return;}
+  const name=url.pathname==='/pwa/offline'?'pwa/offline.html':url.pathname==='/'||url.pathname==='/workspace'||url.pathname.startsWith('/workspace/')?'index.html':decodeURIComponent(url.pathname).slice(1),path=resolve(root,name);
   if(!path.startsWith(root+sep)){res.writeHead(404).end();return;}
   let bytes=await readFile(path);if(name==='workspace-sw.js')bytes=Buffer.concat([bytes,Buffer.from(`\n// Synthetic worker update ${workerRevision}\n`)]);
   const ext=path.split('.').at(-1);res.writeHead(200,{'content-type':{html:'text/html',js:'text/javascript',css:'text/css',svg:'image/svg+xml',png:'image/png',woff2:'font/woff2',webmanifest:'application/manifest+json'}[ext]??'application/octet-stream','cache-control':'no-cache'}).end(bytes);
@@ -44,7 +46,7 @@ try{
  await context.addCookies([{name:'tellumo_session',value:token,url:origin,httpOnly:true,sameSite:'Lax'}]);
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  await page.goto(origin+'/workspace/settings');await page.getByText('Whumpo, a tap away',{exact:true}).waitFor();
- await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+ await page.waitForFunction(()=>!!navigator.serviceWorker.controller,{},{timeout:15000});
  const cdp=await context.newCDPSession(page);const manifest=await cdp.send('Page.getAppManifest'),installability=await cdp.send('Page.getInstallabilityErrors');
  assert.equal(manifest.url,origin+'/manifest.webmanifest');assert.equal(manifest.errors.length,0);assert.equal(installability.installabilityErrors.length,0,JSON.stringify(installability));
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
