@@ -49,11 +49,11 @@ The report lists up to 100 oldest unresolved IDs in each of five families: histo
 
 Exit codes: `0` means the covered observations do not currently require attention; `2` means unobserved, overdue, failed, stalled or unavailable work/backlogs; `1` means invalid invocation or report setup failure. The tool performs SELECTs only. It does not repair anything or install alerts.
 
-## Acceptance and remaining WH-006 work
+## Acceptance and WH-006 completion
 
 `node tests/maintenance.mjs` uses all migrations in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 27 queries against the current schema, five receipt families, exact new revocation clocks, preserved unknown history, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use and health budgets; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
 
-WH-006 remains open for natural daily execution evidence; the first hourly execution is recorded below. The backlog and recovery-pointer coverage listed above is implemented; historical timestamps absent from source records remain explicitly unknown. No CMS functional testing or new activation is authorized by this inventory. Monitoring/alert delivery is not installed.
+The previously outstanding natural daily execution evidence is now recorded below alongside the first hourly run. WH-006 acceptance is complete; wider incident alerting and unresolved-operation remediation remain separate work. The backlog and recovery-pointer coverage listed above is implemented; historical timestamps absent from source records remain explicitly unknown. No CMS functional testing or new activation is authorized by this inventory. Monitoring/alert delivery is not installed.
 
 ## Private-test deployment evidence
 
@@ -70,3 +70,12 @@ Migration 0107 was applied at **18:42:44 UTC** on September 30; independent read
 ### First natural hourly execution
 
 Read-only observation at **18:52:26 UTC** on September 30 found the first natural hourly run, started at **2026-09-30T18:47:47.004000+00:00**. Import triage completed in 596 ms and website health in 718 ms. Hosting was skipped because activation is absent; it did not claim success or call the provider. The inventories were empty, so this proves scheduling/telemetry and empty-pass execution, not processing customer artifacts. Daily jobs remain unobserved; their next configured run is October 1 at 03:17 UTC. No manual scheduler invocation or new automation was used. Private evidence: `.secrets/maintenance-first-hourly.json`. WH-006 remains open for the daily-run evidence.
+
+
+### First verified natural daily execution — October 1, 2026 UTC
+
+The read-only report at **2026-10-01T03:21:25.142Z** observed the daily run beginning **03:17:59.757 UTC**. Imports and fair-use cleanup completed in 412 ms each, traffic 619 ms, applications 409 ms, contacts 736 ms, photo cleanup 1,253 ms, and Cloudflare connection maintenance 770 ms. GitHub cleanup was skipped (407 ms) because it is not configured. The latest hourly website-health pass completed; unconfigured hosting remained skipped. This establishes natural scheduled execution and telemetry, not evidence that every possible customer artifact/provider mutation was exercised. Existing photo cleanup is not CSAM detection or scanner implementation.
+
+All 27 backlog reads and all five operation-family reads were available. Twenty-six queues were empty; the one known historical AI hold remained actionable with its private recovery pointer. Exit code 2 is therefore expected and does not mean the daily pass failed. No operator-triggered cleanup, provider retry, receipt settlement or new alert/automation was performed. Private evidence: `.secrets/maintenance-daily-2026-10-01.json`.
+
+The three offline maintenance suites above passed again against the current 113-migration schema. They cover independent job failures, unknown/overdue work, synthetic redaction and telemetry failures without action authority or external dispatch. Together with natural hourly/daily evidence, this completes WH-006’s acceptance criteria. The existing historical AI hold still requires its separate reconciliation process; completion does not waive it or claim every operation is resolved.

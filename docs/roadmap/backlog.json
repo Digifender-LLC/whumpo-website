@@ -263,11 +263,16 @@
         "src/usage-recovery.ts",
         "src/standard-ai-recovery.ts",
         "docs/deployment.md",
-        "docs/usage-recovery.md"
+        "docs/usage-recovery.md",
+        "docs/maintenance.md",
+        "tools/report-maintenance.mjs",
+        "tools/maintenance-inventory.mjs"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/6",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-01T03:21:25.142Z: read-only live report confirms natural daily run at 03:17:59.757 UTC, all configured daily jobs complete, unconfigured GitHub/hosting skipped, and prior hourly health complete. All 27 queues and five receipt families readable; 26 queues empty, one known historical AI hold still actionable. No manual cleanup/retry or new automation. Three offline maintenance suites pass against 113 migrations. Acceptance complete; see docs/maintenance.md and issue #6. This is scheduler/diagnostic acceptance, not provider activation, scanner detection, or a waiver of unresolved work."
+      ]
     },
     {
       "id": "WH-007",
@@ -397,7 +402,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.",
-        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001–0113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7."
+        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001\u20130113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7."
       ]
     },
     {
@@ -450,7 +455,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/8",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001–0113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011–017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
+        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001\u20130113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011\u2013017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
         "2026-10-01 UTC test release 20d37ba0-fca6-4003-a9c8-280f2b23edff from source 3417ea2 deploys the corrected agent knowledge. Readback verified four candidate versions, unchanged service/secret-binding names and CMS registry, 113 applied migrations / none pending, 16 matching platform assets, home/health 200 and anonymous Chat/profile 401. See docs/safety-coverage.md and docs/releases.md. No real-model moderation evaluation, detector connection, CMS functional test or customer publication."
       ]
     },
@@ -1045,13 +1050,19 @@
         "frontend/src/query-recovery.tsx",
         "frontend/src/lib/chat-announcements.ts",
         "tests/chat-announcements.mjs",
-        "tools/workspace-recovery-browser.mjs"
+        "tools/workspace-recovery-browser.mjs",
+        "frontend/src/lib/chat-recovery.ts",
+        "frontend/src/use-chat-recovery.ts",
+        "tests/chat-recovery.mjs",
+        "tests/chat-recovery-profile.mjs"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/10",
       "owner": null,
       "evidence": [
         "2026-10-01 UTC: initial/refresh error recovery, accessible reply notices, pending-turn presentation, keyboard focus and mobile sheet corrections verified with types/build, delivery/announcement/timing/loading checks and a synthetic loopback browser fixture at desktop/360/390 px. Draft and same-request identity survive workspace navigation; full reload persistence, complete owner journey and real screen-reader/device acceptance remain open. See docs/workspace-refinement-acceptance.md and issue #10. Deployment is recorded separately.",
-        "2026-10-01 UTC test release 02370893-1c87-419d-ad49-9162ddb0f135 from source 524cf00: all four versions, 113 applied migrations / none pending, unchanged bindings/CMS registry, 16 exact assets, home/workspace/health 200 and anonymous Chat/profile 401 verified. Interactive UI checks used synthetic loopback APIs. PR #23 delivers this slice; complete journey, real assistive-technology/device acceptance and full reload persistence remain open in issue #10."
+        "2026-10-01 UTC test release 02370893-1c87-419d-ad49-9162ddb0f135 from source 524cf00: all four versions, 113 applied migrations / none pending, unchanged bindings/CMS registry, 16 exact assets, home/workspace/health 200 and anonymous Chat/profile 401 verified. Interactive UI checks used synthetic loopback APIs. PR #23 delivers this slice; complete journey, real assistive-technology/device acceptance and full reload persistence remain open in issue #10.",
+        "2026-10-01 UTC: account-bound per-tab draft and exact unresolved-request persistence now survives reload. Synthetic browser verifies accepted-response loss without resending, pre-acceptance loss with explicit exact-ID retry, account switching and sign-out cleanup at desktop/390 px; focused storage/API/delivery tests and types/build/loading checks pass. See the superseding reload-recovery section in docs/workspace-refinement-acceptance.md. Complete journey, actual screen-reader/device acceptance remain open. Deployment recorded separately.",
+        "2026-10-01T03:32:00.755Z: test release dfd7f653-d7ec-483d-b54d-ec089f093edc from 272e3d7 verified: four versions/tags, 113 migrations and none pending, unchanged bindings/CMS registry, 16 exact assets, matching workspace HTML, home/workspace/health 200 and anonymous Chat/profile 401. PR #24; interactive recovery acceptance used synthetic APIs. Full journey, actual screen-reader speech and physical phones remain open."
       ]
     },
     {

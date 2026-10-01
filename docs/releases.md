@@ -125,3 +125,19 @@ Managed release `02370893-1c87-419d-ad49-9162ddb0f135` deploys frontend source `
 | platform | `e9f01d13-47cd-4a8b-84ad-3df7e6e43b70` |
 
 Readback at 2026-10-01T03:04:55.347Z confirmed all four candidate tags, unchanged service/secret-binding names and CMS registry, 113 migrations and all 16 exact platform assets. Home/workspace/health returned 200, and anonymous Chat/profile returned 401. [Workspace acceptance](workspace-refinement-acceptance.md#workspace-connection-recovery-and-accessible-replies--october-1-2026-utc) records the synthetic browser and focused test evidence, plus remaining complete-journey/device/screen-reader and reload-persistence work. The archived dirty flag covers the shared dependency symlink and inspected generated visitor path comments; application source was committed. No new paid provider, scanner, CMS functional test or customer publication occurred.
+
+
+## Chat reload recovery release — October 1, 2026 UTC
+
+Managed release `dfd7f653-d7ec-483d-b54d-ec089f093edc` deploys source `272e3d7`. Compared with deployed `524cf00`, the only Worker response change is an additive, read-only authenticated profile `accountId`. Old clients ignore it; new clients without it retain in-memory Chat state and report unavailable browser recovery. Account-scoped workspace instances/caches and bounded tab storage preserve exact request envelopes without automatic submission. Server ownership/review/idempotency gates and all inter-Worker contracts, bindings, routes, schedules, compiler identities and schema are unchanged. The mixed-version review pins these facts and the successful build. All 113 migrations were already applied; no SQL ran.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `20cfc446-5271-45e4-b9bc-5298039fef87` |
+| apps | `fc900b02-5a9d-46ff-b3df-ee0609e0c580` |
+| sites | `8c34c8cd-abd6-42ce-86e3-844ddfa2ed9f` |
+| platform | `390de352-e8eb-447b-ad34-060baba4f1a9` |
+
+Independent readback at **2026-10-01T03:32:00.755Z** confirms all four candidate versions/tags, unchanged service/secret-binding names and CMS registry, 113 migrations with none pending, all 16 exact frontend assets, matching workspace entry HTML, home/workspace/health 200 and anonymous Chat/profile 401. The sequence completed without repair/retry. The private archive and `.secrets/chat-reload-release-verification.json` retain the evidence. Checkout dirtiness was limited to the shared dependency symlink and inspected generated visitor dependency-path comments; application source was committed before preparation.
+
+[Chat reload acceptance](workspace-refinement-acceptance.md#chat-reload-recovery--october-1-2026-utc) records focused storage/API/delivery checks and the synthetic browser journey. Live verification covered deployment/asset/authentication boundaries, not a signed-in real-model journey. Full owner-journey, actual screen-reader speech and physical-device acceptance remain open in WH-024. CSAM implementation, CMS testing and provider activation remain deferred. No customer content was published.

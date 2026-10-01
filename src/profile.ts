@@ -15,7 +15,7 @@ export async function readProfile(db:D1Database,user:string){
  const row=await db.prepare('SELECT revision,name,about_me,share_context,theme,avatar_id,photo IS NOT NULL AS hasPhoto,photo_digest FROM user_profiles WHERE user_id=?').bind(user).first<{revision:number;name:string;about_me:string;share_context:number;theme:string;avatar_id:string;hasPhoto:number;photo_digest:string|null}>();
  const safety=row?.hasPhoto?await photoSafety(db,user,row.photo_digest):'none';
  const {photo_digest:_digest,...profile}=row??{revision:0,name:'',about_me:'',share_context:0,theme:'system',avatar_id:'cloud',hasPhoto:0,photo_digest:null};
- return {...profile,hasPhoto:safety==='approved'?1:0,photoSafety:safety,onboardingComplete:await onboardingComplete(db,user),email:account.email,passwordEnabled:!!account.passwordEnabled};
+ return {...profile,accountId:user,hasPhoto:safety==='approved'?1:0,photoSafety:safety,onboardingComplete:await onboardingComplete(db,user),email:account.email,passwordEnabled:!!account.passwordEnabled};
 }
 async function ensure(db:D1Database,user:string){await db.prepare('INSERT OR IGNORE INTO user_profiles(user_id) VALUES(?)').bind(user).run();}
 export async function updateProfile(db:D1Database,user:string,input:unknown){
