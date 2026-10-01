@@ -2,6 +2,8 @@ import {unzipSync} from 'fflate';
 import {ConnectionError,githubAccess,githubInstallations,readGitHubJSON,type GitHubConfig} from './github-connection';
 import {ownedExport} from './exports';
 import {hashToken} from './security';
+import {connectionFeature,featurePredicate,requireFeature,assertFeature} from './feature-admission';
+import {backupPathsQuery,backupPathsVariables} from './connection-recovery';
 type Access=Awaited<ReturnType<typeof githubAccess>>;
 type Repo={id:number;owner:string;name:string;private:boolean;branch:string;size:number};
 type Backup={id:string;user_id:string;project_id:string;version_id:string;request_hash:string;token_id:string|null;github_user_id:string;repo_id:number;repo_owner:string;repo_name:string;repo_private:number;branch:string;path:string;sha256:string;tree_sha:string;base_head:string;files_json:string;byte_length:number;state:'pending'|'dispatching'|'uncertain'|'complete'|'failed';commit_sha:string|null;detail:string;created_at:string;expires_at:string;dispatched_at:string|null};
@@ -13,11 +15,12 @@ function parseRepo(value:Record<string,unknown>):Repo{
  return {id:Number(value.id),owner:owner.login,name:value.name,private:value.private,branch:value.default_branch,size:typeof value.size==='number'?value.size:-1};
 }
 const prefix=(repo:{owner:string;name:string})=>'/repos/'+encodeURIComponent(repo.owner)+'/'+encodeURIComponent(repo.name);
-async function repository(access:Access,owner:string,name:string){if(!validName(owner,name))throw new ConnectionError(400,'Invalid repository name.');return parseRepo(await readGitHubJSON(await access.send(prefix({owner,name}))));}
+async function repository(access:Access,owner:string,name:string){if(!validName(owner,name))throw new ConnectionError(400,'Invalid repository name.');const value=await readGitHubJSON(await access.send(prefix({owner,name})));await access.assertCurrent();return parseRepo(value);}
 export async function githubRepositories(db:D1Database,userId:string,config:GitHubConfig|undefined,installation:number,page:number,transport:typeof fetch=fetch){
  if(!Number.isSafeInteger(installation)||installation<1||!Number.isSafeInteger(page)||page<1||page>50)throw new ConnectionError(400,'Invalid repository page.');
  if(!(await githubInstallations(db,userId,config,transport)).installations.some(i=>i.id===installation))throw new ConnectionError(404,'Installation not found.');
- const access=await githubAccess(db,userId,config,transport),data=await readGitHubJSON(await access.send(`/user/installations/${installation}/repositories?per_page=20&page=${page}`));
+ const access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'}),data=await readGitHubJSON(await access.send(`/user/installations/${installation}/repositories?per_page=20&page=${page}`));
+ await access.assertCurrent();
  if(!Array.isArray(data.repositories)||data.repositories.length>20)throw new ConnectionError(503,'GitHub returned invalid repositories.');
  const repositories=data.repositories.flatMap(r=>{try{return [parseRepo(r as Record<string,unknown>)];}catch{return [];}});
  return {repositories,page,hasMore:data.repositories.length===20&&page<50};
@@ -41,23 +44,24 @@ export async function listBackups(db:D1Database,userId:string){const {results}=a
 export async function reviewBackup(db:D1Database,bucket:R2Bucket|undefined,userId:string,input:Record<string,unknown>,config:GitHubConfig|undefined,transport:typeof fetch=fetch){
  if(typeof input.id!=='string'||!uuid.test(input.id)||typeof input.versionId!=='string'||!uuid.test(input.versionId)||typeof input.owner!=='string'||typeof input.repo!=='string'||!validName(input.owner,input.repo)||!Number.isSafeInteger(input.repoId))throw new ConnectionError(400,'Choose a saved version and an authorized repository.');
  const requestHash=await hashToken(JSON.stringify([input.versionId,input.owner,input.repo,input.repoId]));
- const prior=await db.prepare('SELECT * FROM github_backups WHERE id=? AND user_id=?').bind(input.id,userId).first<Backup>();if(prior){if(prior.request_hash!==requestHash)throw new ConnectionError(409,'This review request ID was already used.');return view(prior);}
+ const prior=await db.prepare('SELECT * FROM github_backups WHERE id=? AND user_id=?').bind(input.id,userId).first<Backup>();if(prior){if(prior.request_hash!==requestHash)throw new ConnectionError(409,'This review request ID was already used.');return view(await owned(db,userId,prior.id));}
  const version=await db.prepare('SELECT v.project_id FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(input.versionId,userId).first<{project_id:string}>();if(!version)throw new ConnectionError(404,'Saved version not found.');
- const access=await githubAccess(db,userId,config,transport),repo=await repository(access,input.owner,input.repo);if(repo.id!==input.repoId)throw new ConnectionError(409,'The repository identity changed. Select it again.');
+ const scope=connectionFeature(userId,'github',version.project_id,'prepare'),gate=featurePredicate(scope);
+ const access=await githubAccess(db,userId,config,transport,{projectId:version.project_id,operation:'prepare'}),repo=await repository(access,input.owner,input.repo);if(repo.id!==input.repoId)throw new ConnectionError(409,'The repository identity changed. Select it again.');
  const archive=await ownedExport(db,userId,input.versionId,bucket);if(!archive)throw new ConnectionError(404,'Saved version not found.');
  const tree=await sourceTree(archive),baseHead=await branchHead(access,repo);
  const now=new Date().toISOString(),path=`tellumo/${version.project_id}/versions/${input.versionId}`;
- try{await db.prepare('INSERT INTO github_backups(id,user_id,project_id,version_id,request_hash,token_id,github_user_id,repo_id,repo_owner,repo_name,repo_private,branch,path,sha256,tree_sha,base_head,files_json,byte_length,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(input.id,userId,version.project_id,input.versionId,requestHash,access.tokenId,access.githubUserId,repo.id,repo.owner,repo.name,repo.private?1:0,repo.branch,path,await digest(archive),tree.tree,baseHead,JSON.stringify(Object.keys(tree.files).sort()),archive.length,now,new Date(Date.now()+600000).toISOString()).run();}catch(cause){const retry=await db.prepare('SELECT * FROM github_backups WHERE id=? AND user_id=? AND request_hash=?').bind(input.id,userId,requestHash).first<Backup>();if(retry)return view(retry);if(String(cause).includes('github_backup_quota'))throw new ConnectionError(409,'This account reached its 100-backup review test limit.');throw cause;}
+ await access.assertCurrent();
+ try{const inserted=await db.prepare(`INSERT INTO github_backups(id,user_id,project_id,version_id,request_hash,token_id,github_user_id,repo_id,repo_owner,repo_name,repo_private,branch,path,sha256,tree_sha,base_head,files_json,byte_length,created_at,expires_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${gate.sql} AND EXISTS(SELECT 1 FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.id=? AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).bind(input.id,userId,version.project_id,input.versionId,requestHash,access.tokenId,access.githubUserId,repo.id,repo.owner,repo.name,repo.private?1:0,repo.branch,path,await digest(archive),tree.tree,baseHead,JSON.stringify(Object.keys(tree.files).sort()),archive.length,now,new Date(Date.now()+600000).toISOString(),...gate.params,userId,access.tokenId).run();if(inserted.meta.changes!==1){await assertFeature(db,scope);throw new ConnectionError(409,'Backup review changed. Prepare a new review.');}}catch(cause){const retry=await db.prepare('SELECT * FROM github_backups WHERE id=? AND user_id=? AND request_hash=?').bind(input.id,userId,requestHash).first<Backup>();if(retry)return view(await owned(db,userId,retry.id));if(String(cause).includes('github_backup_quota'))throw new ConnectionError(409,'This account reached its 100-backup review test limit.');throw cause;}
  return view(await owned(db,userId,input.id));
 }
 async function branchHead(access:Access,repo:Repo){
  const response=await access.send(prefix(repo)+'/git/ref/heads/'+encodeURIComponent(repo.branch));if(response.status===404||response.status===409){await response.body?.cancel();throw new ConnectionError(409,'Initialize this repository with a README on its default branch before preparing a backup.');}
- const data=await readGitHubJSON(response),object=data.object as Record<string,unknown>|undefined;if(typeof object?.sha!=='string'||!sha.test(object.sha))throw new ConnectionError(503,'GitHub returned an invalid branch head.');return object.sha;
+ const data=await readGitHubJSON(response),object=data.object as Record<string,unknown>|undefined;if(typeof object?.sha!=='string'||!sha.test(object.sha))throw new ConnectionError(503,'GitHub returned an invalid branch head.');await access.assertCurrent();return object.sha;
 }
 async function remoteCopy(access:Access,repo:Repo,b:Backup,head:string){
- const segments=b.path.split('/'),paths=segments.map((_,i)=>head+':'+segments.slice(0,i+1).join('/'));
- const query='query BackupPaths($owner:String!,$name:String!,$p0:String!,$p1:String!,$p2:String!,$p3:String!){repository(owner:$owner,name:$name){p0:object(expression:$p0){__typename oid} p1:object(expression:$p1){__typename oid} p2:object(expression:$p2){__typename oid} p3:object(expression:$p3){__typename oid}}}';
- const response=await readGitHubJSON(await access.send('/graphql',{method:'POST',body:JSON.stringify({query,variables:{owner:repo.owner,name:repo.name,p0:paths[0],p1:paths[1],p2:paths[2],p3:paths[3]}})}));
+ const response=await readGitHubJSON(await access.send('/graphql',{method:'POST',body:JSON.stringify({query:backupPathsQuery,variables:backupPathsVariables(repo.owner,repo.name,b.path,head)})}));
+ await access.assertCurrent();
  const data=response.data as {repository?:Record<string,{__typename?:string;oid?:string}|null>}|undefined;
  if(response.errors||!data?.repository||[0,1,2,3].some(i=>!Object.hasOwn(data.repository!,'p'+i)))throw new ConnectionError(503,'GitHub could not inspect the backup destination.');
  for(let i=0;i<3;i++){const parent=data.repository['p'+i];if(parent&&parent.__typename!=='Tree')throw new ConnectionError(409,'A file occupies a parent backup path. Whumpo will not replace it.');}
@@ -72,7 +76,8 @@ async function completeBackup(db:D1Database,userId:string,b:Backup,commit:string
 export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,userId:string,id:string,config:GitHubConfig|undefined,transport:typeof fetch=fetch){
  const b=await owned(db,userId,id);if(['complete','failed'].includes(b.state))return view(b);
  if(b.state==='pending'&&b.expires_at<=new Date().toISOString())throw new ConnectionError(409,'This backup review expired. Prepare a fresh review.');
- const access=await githubAccess(db,userId,config,transport);if(access.githubUserId!==b.github_user_id||b.state==='pending'&&access.tokenId!==b.token_id)throw new ConnectionError(409,'The GitHub connection changed. Prepare a fresh review.');
+ const scope=connectionFeature(userId,'github',b.project_id,'confirm'),gate=featurePredicate(scope),dispatchScope=connectionFeature(userId,'github',b.project_id,'dispatch'),dispatchGate=featurePredicate(dispatchScope);
+ const access=await githubAccess(db,userId,config,transport,b.state==='pending'?{projectId:b.project_id,operation:'confirm'}:{recoveryId:b.id});if(access.githubUserId!==b.github_user_id||b.state==='pending'&&access.tokenId!==b.token_id)throw new ConnectionError(409,'The GitHub connection changed. Prepare a fresh review.');
  const repo=await repository(access,b.repo_owner,b.repo_name);
  if(repo.id!==b.repo_id||repo.private!==!!b.repo_private||repo.branch!==b.branch)throw new ConnectionError(409,'Repository identity, visibility or default branch changed. Prepare a fresh review.');
  // Rechecks are read-only after a write was dispatched, even when GitHub still reports no file.
@@ -85,13 +90,14 @@ export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,user
  const head=await branchHead(access,repo),existing=await remoteCopy(access,repo,b,head);
  if(!existing&&head!==b.base_head)throw new ConnectionError(409,'The repository branch changed after review. Prepare a fresh review.');
  const tree=await sourceTree(archive);
- const claimed=await db.prepare("UPDATE github_backups SET state='dispatching',dispatched_at=? WHERE id=? AND user_id=? AND state='pending' AND expires_at>? RETURNING id").bind(new Date().toISOString(),id,userId,new Date().toISOString()).first();
- if(!claimed)return view(await owned(db,userId,id));
+ await requireFeature(db,dispatchScope);await access.assertCurrent();
+ const claimed=await db.prepare(`UPDATE github_backups SET state='dispatching',dispatched_at=? WHERE id=? AND user_id=? AND state='pending' AND expires_at>? AND ${gate.sql} AND ${dispatchGate.sql} AND EXISTS(SELECT 1 FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=github_backups.user_id AND t.id=github_backups.token_id AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) RETURNING id`).bind(new Date().toISOString(),id,userId,new Date().toISOString(),...gate.params,...dispatchGate.params).first();
+ if(!claimed){await assertFeature(db,scope);await assertFeature(db,dispatchScope);return view(await owned(db,userId,id));}
  try{
   if(existing)return await completeBackup(db,userId,b,head);
   const query='mutation BackupCommit($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}';
   const input={branch:{repositoryNameWithOwner:repo.owner+'/'+repo.name,branchName:b.branch},expectedHeadOid:b.base_head,clientMutationId:b.id,message:{headline:`[skip ci] Whumpo source backup ${b.version_id}`},fileChanges:{additions:Object.entries(tree.files).map(([path,bytes])=>({path:b.path+'/'+path,contents:encoded(bytes)}))}};
-  const response=await access.send('/graphql',{method:'POST',body:JSON.stringify({query,variables:{input}})});
+  const response=await access.send('/graphql',{method:'POST',body:JSON.stringify({query,variables:{input}})},'dispatch');
   const result=await readGitHubJSON(response),data=result.data as {createCommitOnBranch?:{commit?:{oid?:string}}}|undefined,commit=data?.createCommitOnBranch?.commit?.oid;
   if(result.errors||typeof commit!=='string'||!sha.test(commit))throw new ConnectionError(503,'The GitHub commit response could not be verified.');
   if(!await remoteCopy(access,repo,b,commit))throw new ConnectionError(503,'The committed source files could not be verified.');

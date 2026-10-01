@@ -67,7 +67,7 @@ Adapters must recheck the current interval/grant and principal at OAuth activati
 
 Owner local history, supported export, security, revocation and basic recovery remain reachable under their existing identity/ownership checks. They do not need a paid-feature grant. Previously published sites are not automatically taken down. A revoked collaborator is not an owner with protected historical access. Standard owner assistance remains non-billable; runtime visitor AI and advanced-model funding stay separate.
 
-Packet A does **not** claim the existing connection/Chat/background handlers enforce this interface yet. That work remains in packet B, followed by [packet C / #65](https://github.com/zemdregon/whumpo/issues/65)'s complete entrypoint/race acceptance and controlled test deployment. No fallback reader, legacy plan grant, paid activation, provider operation or CMS testing is introduced.
+The [current connection adapters](feature-admission.md) now enforce inclusion in the existing GitHub/Cloudflare HTTP and Chat handlers. Packet B remains open for the shared restricted-principal handoff from WH-114/115, followed by [packet C / #65](https://github.com/zemdregon/whumpo/issues/65)'s complete entrypoint/race acceptance and controlled test deployment. No fallback reader, legacy plan grant, paid activation, provider operation or CMS testing is introduced.
 
 ## Verification
 
