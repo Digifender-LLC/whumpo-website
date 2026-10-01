@@ -4254,11 +4254,14 @@
         "docs/background-jobs.md",
         "docs/roadmap/alignment.md",
         "docs/workspace-identity.md",
-        "docs/plan-feature-contract.md"
+        "docs/plan-feature-contract.md",
+        "docs/feature-inclusion.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/62",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-01: split into #63 current inclusion/preview-grant interface, #64 enforcement and #65 connected acceptance/test release. The foundation extends current invoice coverage rather than creating paid-plan truth. Parent stays open; inclusion alone is not authorization and no current handler is represented as gated until its adapter acceptance."
+      ]
     },
     {
       "id": "WH-091",
