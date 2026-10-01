@@ -31,7 +31,7 @@ async function compare(db:D1Database,row:Snapshot):Promise<VersionDiff>{
  return {project:{id:row.project_id,name:row.name},kind:row.kind,baseline:row.baseline,before:metadata(before),after:metadata(after),changes,htmlChanged:before?.digest!==after?.digest,publicationRevision:row.current_revision,...(row.review_id?{reviewId:row.review_id,expiresAt:row.expires_at}: {})};
 }
 export async function compareVersions(db:D1Database,userId:string,targetId:string,baseId?:string):Promise<VersionDiff>{
- if(!uuid.test(targetId)||(baseId!==undefined&&baseId!=='none'&&!uuid.test(baseId)))throw new DiffError(400,'Use /diff VERSION_ID, optionally followed by a baseline version ID or none.');
+ if(!uuid.test(targetId)||(baseId!==undefined&&baseId!=='none'&&!uuid.test(baseId)))throw new DiffError(400,"Choose the saved version to compare, with an optional baseline version or no baseline.");
  const row=await db.prepare(`WITH chosen AS(SELECT t.project_id,p.name,t.id AS target_id,CASE WHEN ?='none' THEN NULL WHEN ? IS NOT NULL THEN ? ELSE s.version_id END AS baseline_id,CASE WHEN ?='none' THEN 'empty' WHEN ? IS NOT NULL THEN 'selected' ELSE 'live' END AS baseline,'comparison' AS kind,s.revision AS current_revision FROM site_versions t JOIN projects p ON p.id=t.project_id LEFT JOIN publications s ON s.project_id=p.id WHERE t.id=? AND p.owner_user_id=?) ${artifacts}`).bind(baseId??null,baseId??null,baseId??null,baseId??null,baseId??null,targetId,userId).first<Snapshot&{baseline_id:string|null}>();
  if(!row||row.baseline_id&&JSON.parse(row.before_json).id===null)throw new DiffError(404,'Choose saved versions belonging to the same project in your account.');
  return compare(db,row);
@@ -55,6 +55,6 @@ export function comparisonReceipt(db:D1Database,userId:string,turnId:string,diff
  return {reply:describeDiff(diff),statements:[db.prepare('INSERT INTO chat_comparisons(turn_id,version_id,baseline_id) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turnId,diff.after.id,diff.before?.id??null,turnId,userId)]};
 }
 export async function prepareComparison(db:D1Database,userId:string,turnId:string,id:string,base?:string){try{return comparisonReceipt(db,userId,turnId,await compareVersions(db,userId,id,base));}catch(cause){if(cause instanceof DiffError)return {reply:cause.message,statements:[] as D1PreparedStatement[]};throw cause;}}
-export async function diffCommand(db:D1Database,userId:string,turnId:string,command:string){const [verb,id,base,...extra]=command.split(/\s+/);if(verb!=='/diff')return;if(!id||extra.length)return {reply:'Use /diff VERSION_ID, optionally followed by a baseline version ID or none. Find IDs with /versions.',statements:[] as D1PreparedStatement[]};return prepareComparison(db,userId,turnId,id,base);}
+export async function diffCommand(db:D1Database,userId:string,turnId:string,command:string){const [verb,id,base,...extra]=command.split(/\s+/);if(verb!=='/diff')return;if(!id||extra.length)return {reply:"Choose the saved version to compare, with an optional baseline version or no baseline.",statements:[] as D1PreparedStatement[]};return prepareComparison(db,userId,turnId,id,base);}
 
 export {diffPage,comparisonErrorResponse} from './comparison-page';

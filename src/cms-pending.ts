@@ -6,7 +6,7 @@ export function cmsPendingRequest(content:string){
  const text=content.trim().toLowerCase();
  if(['show unfinished publishing work','show pending cms work'].includes(text))return {page:1};
  if(!/^\/cms-pending(?:\s|$)/.test(text))return;
- const parts=text.split(/\s+/).slice(1);if(parts.length>2||parts[0]&&parts[0]!=='all'&&!uuid.test(parts[0])||parts[1]&&!/^(?:[1-9]\d?|100)$/.test(parts[1]))return {error:'Use /cms-pending [PROJECT_ID or all] [PAGE].'};
+ const parts=text.split(/\s+/).slice(1);if(parts.length>2||parts[0]&&parts[0]!=='all'&&!uuid.test(parts[0])||parts[1]&&!/^(?:[1-9]\d?|100)$/.test(parts[1]))return {error:"Choose a project and a publishing-work page from 1 to 100."};
  return {projectId:parts[0]&&parts[0]!=='all'?parts[0]:undefined,page:Number(parts[1]??1)};
 }
 /** Read-only owner inventory. No provider requests, inference, confirmation or retry. */
@@ -27,15 +27,14 @@ export async function pendingCMSWork(db:Pick<D1Database,'prepare'>,user:string,p
  UNION ALL SELECT 'source-upload',s.id,s.project_id,p.name,'unresolved',s.created_at,0,NULL FROM cms_wordpress_sources s JOIN owned p ON p.id=s.project_id WHERE s.user_id=? AND s.state='pending'
  ), work AS (SELECT * FROM first_work UNION ALL SELECT * FROM later_work UNION ALL SELECT * FROM upload_work) SELECT kind,id,project_id,name,status,created_at,priority FROM work WHERE status<>'pending' OR expires_at>? ORDER BY priority,created_at,kind,id LIMIT 21 OFFSET ?`).bind(user,project??null,project??null,user,user,user,user,user,user,user,user,user,user,user,new Date(now).toISOString(),(page-1)*20).all<Row>();
  const rows=results.slice(0,20).map(row=>{
-  const commands:Record<Kind,string>={setup:'/cms-review '+row.id,import:'/cms-import-review '+row.id,draft:'/cms-retry '+row.project_id+' '+row.id,edit:'/cms-retry-edit '+row.project_id+' '+row.id,publish:'/cms-publication '+row.id,unpublish:'/cms-unpublish-review '+row.id,discard:'/cms-discard-review '+row.id,'image-upload':'/workspace/cms?project='+row.project_id,'source-upload':'/workspace/cms?project='+row.project_id};
   const labels:Record<Kind,string>={setup:'Publishing space setup',import:'WordPress import',draft:'Article creation',edit:'Article edit',publish:'Article publication',unpublish:'Take article offline',discard:'Discard staged edits','image-upload':'Image upload','source-upload':'WordPress export upload'};
-  if(!Object.hasOwn(commands,row.kind)||!uuid.test(row.id)||!uuid.test(row.project_id))throw Error('Invalid publishing work record');
-  return {kind:row.kind,id:row.id,projectId:row.project_id,projectName:row.name.slice(0,80),label:labels[row.kind],state:row.kind.endsWith('-upload')?'Original file needed in the publishing desk':row.status==='pending'?'Awaiting your review':row.kind==='setup'?'Approved; awaiting operator provisioning':'Saved operation; outcome needs checking',command:commands[row.kind]};
+  if(!Object.hasOwn(labels,row.kind)||!uuid.test(row.id)||!uuid.test(row.project_id))throw Error('Invalid publishing work record');
+  return {kind:row.kind,id:row.id,projectId:row.project_id,projectName:row.name.slice(0,80),label:labels[row.kind],state:row.kind.endsWith('-upload')?'Original file needed in the publishing desk':row.status==='pending'?'Awaiting your review':row.kind==='setup'?'Approved; awaiting operator provisioning':'Saved operation; outcome needs checking',publishingPath:row.kind.endsWith('-upload')?'/workspace/cms?project='+row.project_id:null};
  });
  return {rows,page,hasMore:results.length>20};
 }
 export function describePendingCMS(work:Awaited<ReturnType<typeof pendingCMSWork>>,project?:string){
  const heading='Unfinished publishing work';
  if(!work.rows.length)return heading+'\n'+(work.page===1?'No unfinished CMS work was found.':'No more unfinished CMS work was found.')+' Expired, unapproved reviews and completed requests are omitted. This checks saved Whumpo records, not the current provider state.';
- return heading+' — page '+work.page+'\n\n'+work.rows.map(r=>`${r.label} · ${JSON.stringify(r.projectName)}\n${r.state}\n${r.kind.endsWith('-upload')?'Original request: '+r.id+'\n':''}${r.command}`).join('\n\n')+(work.hasMore?'\n\nNext: /cms-pending '+(project??'all')+' '+(work.page+1):'')+'\n\nNothing was retried, approved or published by opening this list. Read a saved review before confirming it. Retry commands recover the existing draft/edit request; do not create a replacement. For uploads, open the publishing desk, find the original request and re-select the same file. Images should use the same browser preparation. Never create a replacement to bypass an unresolved upload. File contents and filenames are not included here. This list covers CMS work only.';
+ return heading+' — page '+work.page+'\n\n'+work.rows.map(r=>`${r.label} · ${JSON.stringify(r.projectName)}\n${r.state}\nSaved request: ${r.id}${r.publishingPath?'\n'+r.publishingPath:''}`).join('\n\n')+(work.hasMore?`\n\nAsk for page ${work.page+1} of unfinished publishing work${project?' for project '+project:''}.`:'')+'\n\nNothing was retried, approved or published by opening this list. Read a saved review before confirming it. Ask to recover the existing draft/edit request; do not create a replacement. For uploads, open the publishing desk, find the original request and re-select the same file. Images should use the same browser preparation. Never create a replacement to bypass an unresolved upload. File contents and filenames are not included here. This list covers CMS work only.';
 }

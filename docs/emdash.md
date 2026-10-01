@@ -1,5 +1,7 @@
 # EmDash CMS support
 
+**Current Chat contract, October 1, 2026:** [Natural-language Chat](natural-language-chat.md) supersedes the historical command/help examples below. Current producers emit plain-language instructions; publishing inventories return saved request IDs and fixed publishing-desk paths for uploads. The old reply rewriter and saved-command selection paths have been removed in source. Current exact review/approval and uncertain-operation recovery boundaries still apply. CMS functional testing remains owner-deferred; this source cleanup does not establish live CMS acceptance.
+
 EmDash is an explicit Whumpo workload, added at the owner's request on September 29, 2026. This is a native Astro/EmDash application, separate from the static website templates and the pure-function QuickJS runtime. Do not attempt to execute EmDash inside QuickJS or represent a static blog export as a functioning CMS.
 
 ## Implementation

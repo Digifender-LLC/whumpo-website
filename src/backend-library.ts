@@ -30,10 +30,10 @@ const entries=[{
 }] as const;
 export const backendLibrary=entries.map(entry=>({...entry,reference:entry.id+'@'+entry.version,provenance:'Whumpo platform-authored',license:'MIT',runtime:'bounded-quickjs-v1',verification:'tests/backend-library.mjs (automated synthetic checks)',capabilities:[] as string[],dependencies:[] as string[],state:'available' as 'available'|'withdrawn'}));
 export async function readBackendComponent(reference:string){
- const entry=backendLibrary.find(e=>e.reference===reference);if(!entry)throw new BackendError(404,'Choose an exact component version from /backend-library');
+ const entry=backendLibrary.find(e=>e.reference===reference);if(!entry)throw new BackendError(404,"Choose an exact component version from the maintained backend library.");
  const digest=await hashToken(entry.source);if(digest!==entry.artifactDigest)throw new BackendError(503,'Component integrity check failed');return {...entry,digest};
 }
-export function describeBackendLibrary(){return 'Reusable backend helpers\n'+backendLibrary.filter(e=>e.state==='available').map(e=>`${e.reference} — ${e.title}\n${e.description}`).join('\n\n')+'\n\nPlatform-authored code with synthetic examples only. /backend-component NAME@VERSION shows source and a test example. /use-backend PROJECT_ID NAME@VERSION copies it into a private untested version without AI usage. Existing sign-in and visitor access use Whumpo’s shared authentication; these helpers never handle credentials.';}
+export function describeBackendLibrary(){return 'Reusable backend helpers\n'+backendLibrary.filter(e=>e.state==='available').map(e=>`${e.reference} — ${e.title}\n${e.description}`).join('\n\n')+"\n\nPlatform-authored code with synthetic examples only. Ask to inspect a library component and its test example, or copy an exact component version into a private untested project version. Existing sign-in and visitor access use Whumpo’s shared authentication; these helpers never handle credentials.";}
 export async function describeBackendComponent(reference:string){const e=await readBackendComponent(reference);return `${e.title} (${e.reference})\n${e.description}\nSource: ${e.provenance} · ${e.license}\nRuntime: ${e.runtime}; no network, secrets, authentication or storage access.\nSHA-256: ${e.digest}\nStatus: ${e.state}\n${'usage' in e&&e.usage==='application-transition'?'Application transition: receives {state,input} and returns {state,result}. Whumpo supplies the isolated visitor document only after owner review; this code has no direct storage access.\n':''}Synthetic check: ${JSON.stringify(e.example)}\n\n${e.source}`;}
 export async function installBackendComponent(db:D1Database,user:string,project:string,id:string,reference:string){
  await listBackends(db,user,project);
@@ -51,7 +51,7 @@ export async function installBackendComponent(db:D1Database,user:string,project:
    if(!saved||saved.project_id!==project||saved.digest!==entry.digest||saved.component_id!==entry.id||saved.component_version!==entry.version)throw new BackendError(409,'The component copy could not be confirmed. Inspect saved backend versions before making a replacement.');
   }
  }
- return `Copied ${entry.reference} into an untested private backend version.\nVersion: ${id}\nProject: ${project}\nSHA-256: ${entry.digest}\nInspect: /backend ${id}\nCheck with synthetic data: /check-backend ${id} ${JSON.stringify(entry.example)}\nNo model call, execution, activation or publication was performed. Customize this private copy after inspecting it; changes never update the shared library.`;
+ return `Copied ${entry.reference} into an untested private backend version.\nVersion: ${id}\nProject: ${project}\nSHA-256: ${entry.digest}\nAsk to inspect this saved source and run its synthetic check.\nSynthetic check: ${JSON.stringify(entry.example)}\nNo model call, execution, activation or publication was performed. Customize this private copy after inspecting it; changes never update the shared library.`;
 }
 export function backendLibraryCommand(db:D1Database,user:string,id:string,content:string){
  const parts=content.trim().split(/\s+/),verb=parts[0].toLowerCase();if(!['/backend-library','/backend-component','/use-backend'].includes(verb))return;
@@ -59,6 +59,6 @@ export function backendLibraryCommand(db:D1Database,user:string,id:string,conten
   if(verb==='/backend-library'&&parts.length===1)return describeBackendLibrary();
   if(verb==='/backend-component'&&parts.length===2)return await describeBackendComponent(parts[1]);
   if(verb==='/use-backend'&&parts.length===3)return await installBackendComponent(db,user,parts[1],id,parts[2]);
-  throw new BackendError(400,'Use /backend-library, /backend-component NAME@VERSION or /use-backend PROJECT_ID NAME@VERSION');
+  throw new BackendError(400,"Choose a backend library component to inspect, or a project and exact component version to copy.");
  }catch(error){return error instanceof BackendError?error.message:'The library request could not finish. Inspect saved versions before preparing a replacement.';}};
 }

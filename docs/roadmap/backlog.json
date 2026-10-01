@@ -5785,7 +5785,7 @@
         "docs/roadmap/alignment.md",
         "src/plans.ts",
         "src/billing.ts",
-        "src/chat-language.ts",
+        "frontend/src/chat-reply.tsx",
         "src/cloudflare-dns.ts",
         "src/project-specification/store.ts",
         "src/cms-content-shape.ts",
