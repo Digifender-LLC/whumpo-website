@@ -87,7 +87,7 @@ An operator can recover from a partial four-Worker release without losing CMS bi
 
 - Build on committed source/build snapshot guards
 - Record four Worker versions, asset/source digests, migration set and CMS binding inventory
-- Define forward/backward schema compatibility and partial-release recovery
+- Define one current test schema/runtime cutover, obsolete-test reset and partial-release forward recovery; retain no backward reader or old-runtime deployment path
 
 ### Acceptance criteria
 
@@ -321,6 +321,7 @@ Whumpo has one current runtime/API/client path with retired versions, aliases an
 - Replace historical-command presentation and page-conversion dependencies with current typed action and specification paths
 - Consolidate CMS shapes and active release/identity/native plans under current-version-only rules; preserve the separate owner-deferred CMS functional-testing boundary
 - Split implementation into concrete reviewed slices while keeping this parent open until the full removal inventory and required test deployment are verified
+- Reconcile offline logical-resource read/restore schema lists and placement contracts with strict current-version admission; historical evidence is not a legacy adapter
 
 ### Acceptance criteria
 
@@ -363,6 +364,8 @@ Issue: https://github.com/zemdregon/whumpo/issues/53. Planning owner: Unassigned
 ### Evidence
 
 - 2026-10-01 owner amendment: remove existing legacy fallbacks and assume current clients/schemas only. WH-105 strict client contract merged in PR #52. Runtime inventory and staged removal tracked in issue #53; full cleanup remains in progress.
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
+- 2026-10-01 18:20 UTC: PR #55 current billing reset accepted in test, release 438cdaa6-4ef5-46b8-a8c1-ea3115ef61af source 75e41ff. Four Worker readbacks, 117 schema files, eight retired tables absent, authenticated API checks and 18 exact frontend assets passed. Remaining inventory stays open; see docs/current-version-policy.md.
 
 ## WH-052 — Choose durable job orchestration from current requirements
 
@@ -445,7 +448,7 @@ Actual customers can enroll, return, recover and revoke credentials across suppo
 - Prepare a desktop/mobile browser matrix and disposable invited identities
 - Exercise native owner and visitor passkeys plus human Turnstile
 - Exercise the new restricted owner recovery flow, reviewed lost-key selections, two replacement passkeys for lost-all-keys recovery and response-loss guidance; preserve separate visitor identity/recovery acceptance
-- Exercise two-passkey signup, existing-account transition, unsupported/cancelled second-key prompts, recovery download/printing and native/browser handoff where supported
+- Exercise two-passkey signup after a reviewed obsolete-test reset, unsupported/cancelled second-key prompts, recovery download/printing and current native/browser handoff where supported
 
 ### Acceptance criteria
 
@@ -559,8 +562,8 @@ Recovery covers the whole platform state needed by supported beta workloads, wit
 - Define proposed RPO/RTO before the drill
 - Inventory D1, private R2, immutable versions, Worker artifacts, vault keys and provider references
 - Restore synthetic control/app/site state to isolated resources and reconcile publication and identity state
-- Include recovery-key verifiers, credential/session revocation, encryption-key versions/custody and interrupted encryption migrations in the isolated restore inventory
-- Accept the integrated restore only after WH-117 storage/key changes. WH-117 can run focused disposable key/migration checks first; those checks do not replace this complete recovery drill.
+- Include recovery-key verifiers, credential/session revocation, encryption-key versions/custody and interrupted current key rotations/cutovers in the isolated restore inventory
+- Accept the integrated restore only after WH-117 storage/key changes. WH-117 can run focused disposable key/reset checks first; those checks do not replace this complete recovery drill.
 
 ### Acceptance criteria
 
@@ -683,7 +686,7 @@ Every intake, model, execution, preview, export, publication and serving path ha
 
 - Inventory profile/project/CMS media, WordPress sources, pasted/generated/imported code, generated pages and visitor inputs
 - Map existing scan tickets, sticky decisions and reviewed risk evidence to callers
-- Specify mandatory versus supplemental checks and legacy artifact handling
+- Specify mandatory versus supplemental checks and explicit rejection/reset of obsolete test artifacts
 
 ### Acceptance criteria
 
@@ -857,7 +860,7 @@ CMS and imported media cannot bypass the safety requirements applied to profile/
 
 - Apply the approved coverage contract to CMS uploads, WordPress assets, previews, export and public/custom-host delivery
 - Keep original/transformed bytes and policy identity linked
-- Design legacy hold/backfill and revocation behavior
+- Design current artifact holds and revocation; reset obsolete test artifacts without a legacy backfill reader
 
 ### Acceptance criteria
 
@@ -1018,7 +1021,7 @@ Customers and operators have a usable reporting/correction route independent of 
 ### Scope
 
 - Publish versioned acceptable-use and privacy documents after owner/legal review
-- Record policy consent and existing-account rollout separately from US declaration
+- Record current policy consent separately from US declaration; reset obsolete test consent fixtures rather than grandfather them
 - Implement private intake, triage, notice and independent correction/appeal with delivery evidence
 
 ### Acceptance criteria
@@ -1304,8 +1307,8 @@ An explicitly scoped invited beta is released only with evidence for safety, pri
 - [ ] Stop conditions and review cadence are recorded before invitations are issued
 - [ ] Support/recovery remains reachable when Chat or onboarding fails, with a responsible operator and tested access path
 - [ ] Supported visitor/service flows continue with Whumpo maintenance inference unavailable and create zero maintainer requests, reservations or conversation changes; any optional customer runtime AI remains separately scoped
-- [ ] Admitted workspace paths enforce passkey-only ordinary login and completed two-key signup/recovery, with staged existing-account migration evidenced and visitor policy kept separate
-- [ ] WH-117 protection and migration/restore evidence covers admitted data/processing paths without claims of end-to-end encryption or a PRF support requirement
+- [ ] Admitted workspace paths enforce passkey-only ordinary login and completed two-key signup/recovery, with one reviewed current-policy cutover and visitor policy kept separate
+- [ ] WH-117 protection and current-key/reset/restore evidence covers admitted data/processing paths without claims of end-to-end encryption or a PRF support requirement
 
 ### Verification
 
@@ -1444,7 +1447,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-## WH-113 — Freeze workspace identity, recovery, migration and usability contracts
+## WH-113 — Freeze current workspace identity, recovery, cutover and usability contracts
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: M.
 
@@ -1454,7 +1457,7 @@ Follow the [agent execution contract](../../docs/roadmap/execution.md) and [cano
 
 ### Outcome
 
-Implementers have a source-grounded contract for passkey-only ordinary workspace access, two-key enrollment, restricted recovery and a safe existing-account transition.
+Implementers have a source-grounded contract for passkey-only ordinary workspace access, two-key enrollment, restricted recovery and a current-only test cutover.
 
 ### Scope
 
@@ -1462,20 +1465,20 @@ Implementers have a source-grounded contract for passkey-only ordinary workspace
 - Freeze resumable restricted signup/recovery authority, server-side completion checks, invitation handling, recent-authentication rules, expiry, concurrency and normal-session issuance
 - Specify two distinct verified signup credentials with optional explanations and independent-storage guidance, without mandatory purchases or proof of provider independence
 - Define recovery-kit download/copy/print, save-before-rotation, lost-all-keys and reviewed partial-loss behavior, rotation and emergency revocation below two keys
-- Freeze staged existing-account enrollment, password-route retirement, incomplete-account treatment and compatible rollout/rollback without reauthorizing revoked credentials
+- Freeze obsolete-test reset, password-route removal, incomplete-current-account treatment and forward recovery without legacy identity stages or reauthorizing revoked credentials
 
 ### Acceptance criteria
 
 - [ ] Two-key signup and lost-all-keys recovery, one kit-save acknowledgment and fresh replacement-passkey verification before ordinary recovery completion are explicit; incomplete flows have no workspace/AI/provider/native-session authority
 - [ ] Passwords are unavailable after activation; recovery-key possession grants only restricted replacement enrollment and email/support is not an alternative factor
-- [ ] Existing-account replacement access is verified before legacy retirement; invitation/resume/recovery failures cannot strand an account or bypass completion
+- [ ] Fresh current enrollment and saved-kit recovery are verified after the reviewed reset; invitation/resume/recovery failures preserve current progress and never bypass completion
 - [ ] A user can revoke a compromised key below the minimum; ordinary valid sessions require no routine extra prompts and essential help/recovery works without AI
 - [ ] Sanitized state/API examples separate account recovery from content-key recovery, include browser/native compatibility and name required real-device evidence; policy acceptance is not implementation acceptance
 
 ### Verification
 
 - Trace src/passkeys.ts, src/index.ts, frontend/src/auth.tsx and existing recovery/onboarding/native contracts using credential-free examples
-- Review duplicate credentials, cancelled second enrollment, competing recovery, lost replies and migration/rollback as state transitions
+- Review duplicate credentials, cancelled second enrollment, competing recovery, lost replies and current-only reset/cutover as state transitions
 - Run roadmap validate/render/render --check, local-reference checks and git diff --check
 
 ### Dependencies and blockers
@@ -1503,6 +1506,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/42. Planning owner: Unassigned
 ### Evidence
 
 - 2026-10-01: docs/workspace-identity.md freezes the protocol against d415398: separate restricted grants/current account epochs, invitation-safe two-key signup/resume, shared kit prepare/save/commit, reviewed partial/all-loss recovery, fresh replacement assertion, emergency revocation and staged existing-account retirement with compatible rollback. Source and failure-transition review completed; WH-114/115 implementation and physical/live/native acceptance remain separate. No runtime, schema, credential or deployment change. Issue #42 records verification and delivery.
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 
 ## WH-114 — Implement passkey-only access and resumable two-passkey enrollment
 
@@ -1521,7 +1525,7 @@ Workspace signup requires two distinct verified passkeys, preserves incomplete p
 - Implement the shared server-enforced enrollment/completion policy for workspace owners and future member admission; keep visitor handlers under their existing policy
 - Add resumable first/second-key setup, optional passkey/backup explanations and actionable provider/device guidance with no required purchase
 - Disable password signup/login/creation in backend and frontend at the reviewed cutover; preserve invitation, eligibility, Turnstile and recent-authentication guards
-- Implement the WH-113 existing-account transition and versioned compatibility; coordinate any additive migrations and retain current signed-in recovery/help access during setup
+- Implement the WH-113 current-only test cutover: reset obsolete identities and remove retired routes; reuse deterministic enrollment/recovery/help, with no legacy stage, migration grant or parallel policy
 - Allow immediate compromised-key revocation below two and guide replacement without adding repeated prompts to ordinary sessions
 
 ### Acceptance criteria
@@ -1529,14 +1533,14 @@ Workspace signup requires two distinct verified passkeys, preserves incomplete p
 - [ ] Duplicate credential IDs and synchronized copies cannot satisfy two-key completion; do not infer independent storage from two registrations
 - [ ] One-key, cancelled, stale and incomplete setup cannot access workspace content, projects, Chat, provider actions or normal mobile sessions through direct APIs or UI
 - [ ] Reload, a cancelled prompt, invitation retry and lost verification response resume owned progress without duplicated accounts/credentials or weaker enrollment requirements
-- [ ] Backend password routes cannot authenticate, register or add a password after activation; current-account migration proves replacement access before retirement
+- [ ] Backend password routes cannot authenticate, register or add a password under the new current policy; fresh enrollment establishes replacement test access
 - [ ] Existing passkey verification, ownership, origin, replay and revocation guards remain effective; ordinary sessions and visitor identity retain their intended behavior
 - [ ] Connected synthetic/browser evidence precedes WH-005 physical-device acceptance; no real user credential is changed by automated fixtures
 
 ### Verification
 
 - Run pnpm check and focused passkey/profile/onboarding/recovery suites after inspecting fixture setup
-- Add meaningful connected D1/handler cases for partial enrollment, direct access bypasses, duplicate credentials, concurrent completion and migration cutover
+- Add meaningful connected D1/handler cases for partial enrollment, direct access bypasses, duplicate credentials, concurrent completion and current-policy test cutover
 - Use quality-managed browser checks and inspect desktop/mobile screenshots with synthetic credentials; leave real passkey/provider acceptance to WH-005
 
 ### Dependencies and blockers
@@ -1563,7 +1567,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 
@@ -1725,7 +1729,7 @@ Each admitted data class has an honest protection and processing-access contract
 - Extend the existing lifecycle inventory for private files/drafts/chat, visitor records, credentials, public artifacts and operational metadata; avoid a second independent catalog
 - Distinguish Cloudflare-managed at-rest protection, server-managed application encryption and candidate client-side/passkey encryption, including transit and key custody
 - Map authorized AI, safety, search, publication, image processing, app execution and background-integration access with data minimization and provider privacy rules
-- Specify retention/export/deletion, backup keys, rotation, missing-key failure, staged migration and restore reconciliation per class
+- Specify retention/export/deletion, backup keys, current key rotation, missing-key failure, obsolete-test reset and current restore reconciliation per class
 - Select required WH-117 encryption/control changes by concrete exposure and usability benefit; document sufficient existing controls, incremental costs and unknown account entitlement/pricing
 - Register extension classes including guest feedback, brand kits, lead/staging/provider data, Chat interactions and incomplete enrollment. The closed WH-009 foundation remains complete only for its recorded inventory; each implementing packet owns its new adapters and evidence.
 
@@ -1734,7 +1738,7 @@ Each admitted data class has an honest protection and processing-access contract
 - [ ] Every admitted class records data purpose, authorized reader/processor, encryption owner, recovery/backup behavior and remaining exposure; no processing path is mislabeled end-to-end encrypted
 - [ ] No new routine prompt, default private vault or PRF-device requirement is introduced; sensitive processing is minimized while current product and safety boundaries remain operable
 - [ ] Account recovery and any future content-key recovery are separate; the recovery kit cannot promise to reconstruct absent keys
-- [ ] The WH-117 implementation list names required changes and acceptance/migration checks; unchanged protection has an explicit sufficiency rationale
+- [ ] The WH-117 implementation list names required changes and current-key/reset acceptance checks; unchanged protection has an explicit sufficiency rationale
 - [ ] Official Cloudflare/product references and changing availability/cost facts are dated; real contributor-model confidentiality and separate service/spending authorization remain explicit
 
 ### Verification
@@ -1767,7 +1771,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 
 ## WH-117 — Implement transparent encryption and complementary protection controls
 
@@ -1779,13 +1783,13 @@ Follow the [agent execution contract](../../docs/roadmap/execution.md) and [cano
 
 ### Outcome
 
-Admitted data paths have the justified WH-116 protections, verified key/migration/restore behavior and no added routine customer unlock burden.
+Admitted data paths have the justified WH-116 protections, verified current-key/reset/restore behavior and no added routine customer unlock burden.
 
 ### Scope
 
 - Implement the bounded WH-116 change list using existing architecture and maintained authenticated-encryption primitives where extra encryption is justified
 - Preserve tenant/purpose isolation, least privilege, private storage, scoped processing, short-lived credentials, retention minimization and redacted diagnostics
-- Version keys and encrypted records, restrict decryption authority and implement staged existing-data migration with interruption/readback and rollback compatibility
+- Version current keys and encrypted records, restrict decryption authority and reset obsolete test encodings; current key rotation retains interruption/readback, without legacy readers or old-runtime rollback
 - Cover key custody/rotation, backup recovery, missing/corrupt keys and restored revocation/deletion reconciliation; keep provider credentials out of exports and model context
 - Measure incremental compute/storage/support effects and verify existing AI/safety/search/publication/background jobs through their permitted data boundaries
 
@@ -1793,16 +1797,16 @@ Admitted data paths have the justified WH-116 protections, verified key/migratio
 
 - [ ] Each WH-116 requirement has implementation or documented existing-control evidence and a truthful statement of who can read the protected data
 - [ ] Cross-tenant/purpose substitution and corrupt/unknown-key ciphertexts fail; cryptographic failure never causes plaintext fallback
-- [ ] Migration interruption, competing updates, key rotation and rollback preserve recoverable data without exposing plaintext or deleting the only usable key
+- [ ] Current cutover interruption, competing updates and key rotation preserve admitted current data without exposing plaintext or deleting a still-required key; obsolete test formats may be reset
 - [ ] Isolated restore retains required key versions and reconciles deletion/revocation before service; absent keys fail visibly and backup limits are disclosed
 - [ ] Ordinary sign-in/work does not gain repeated unlock prompts; AI/safety/background behavior remains authorized and no PRF support or new service is assumed
-- [ ] Candidate-release evidence feeds WH-048; local checks do not claim live migration, provider acceptance or encrypted-content recovery
+- [ ] Candidate-release evidence feeds WH-048; local checks do not claim live cutover, provider acceptance or encrypted-content recovery
 
 ### Verification
 
 - Run pnpm check for TypeScript changes and focused existing vault, authorization, lifecycle and affected feature suites selected by WH-116
 - Use synthetic tenant/purpose/key-version, corruption and interruption fixtures against actual affected storage/handlers
-- Rehearse isolated migration/rotation/restore and inspect sanitized evidence; use quality-managed browser checks if user-facing behavior changes
+- Rehearse isolated current-format reset/rotation/restore and inspect sanitized evidence; use quality-managed browser checks if user-facing behavior changes
 
 ### Dependencies and blockers
 
@@ -1827,7 +1831,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 
 # F2 — Useful websites and applications
 
@@ -2781,7 +2785,7 @@ Owners can change an account email or respond to compromise without mistaking th
 ### Scope
 
 - Define verified address change with fresh authentication, pending expiry and notification
-- Coordinate passkey/session, recovery-kit and provider-connection compromise review; account for retirement of legacy password access during the staged transition
+- Coordinate current passkey/session, recovery-kit and provider-connection compromise review; current-policy repair cannot revive retired password authority
 - Keep ordinary lost-passkey recovery separate from broader compromise actions
 
 ### Acceptance criteria
@@ -3865,7 +3869,7 @@ Customers see authoritative measured capacity and separately funded balances ins
 
 ### Acceptance criteria
 
-- [ ] Legacy test balances preserve original meaning
+- [ ] Retired test-unit balances remain deleted; current capacity/premium accounting cannot translate or revive them
 - [ ] Standard assistance debits zero units; premium funding remains explicit
 - [ ] Concurrent work, rollover expiry and refunds settle exactly once
 - [ ] Unknown telemetry never displays false full capacity; no automatic upgrade or top-up by default
@@ -4436,7 +4440,7 @@ Every admission path uses authoritative current eligibility without confusing pl
 
 ### Acceptance criteria
 
-- [ ] Legacy billing_accounts.plan_id, client flags, model output and launchFeatures are never authorization
+- [ ] Current invoice coverage is the paid-plan source; deleted test balances, client flags, model output and launchFeatures are never authorization
 - [ ] Starter/Creator cannot authorize connections; inheritance and Business Pro collaboration are enforced through every direct/Chat/background entrypoint
 - [ ] Unsent work stops on eligibility loss; reconciliation cannot create new side effects or repeat an uncertain send
 - [ ] History/export/revocation and existing published sites survive entitlement loss without retaining unauthorized collaborator access or leaking another tenant
@@ -5546,7 +5550,7 @@ The same validated specification and pinned module/compiler versions reproduce e
 - [ ] Identical supported inputs and pinned versions yield byte-identical outputs/digests without model generation
 - [ ] Stale/concurrent changes cannot partially apply incompatible config/content/data references
 - [ ] Visibility, permission expansion, publication and destructive/data migration changes keep relevant reviews and safety gates
-- [ ] Rollback selects compatible recorded spec/module/data state and rechecks current safety/deletion rules
+- [ ] Content restoration uses a recorded specification admitted by the current schema/compiler, and rechecks current safety/deletion rules; unsupported historical formats require reset rather than a legacy reader
 - [ ] Configuration-only changes require focused deterministic checks and do not trigger an open-ended coding session
 
 ### Verification
@@ -6233,23 +6237,23 @@ Reuse produces maintained dependencies with predictable upgrades rather than man
 
 ### Scope
 
-- Define module interface/version compatibility, dependency pins, conformance tests and security maintenance ownership
-- Implement reviewed staged rollout, project migration, deprecation and rollback rules
+- Define exact current module interfaces and dependency pins, conformance tests and security maintenance ownership; reject unsupported versions
+- Implement reviewed current-version cutovers, obsolete-test resets, withdrawal and forward repair; no old module reader or runtime rollback
 - Productize repeated missing capabilities deliberately with provenance, rights and privacy review
-- Extend existing immutable compiler/module pins with rollout and deprecation operations; WH-067 first versions must already carry compatible interface/migration metadata, so governance does not retrofit unversioned installs.
+- Extend existing immutable compiler/module pins with current cutover and withdrawal operations; WH-067 first schemas already carry exact version metadata
 
 ### Acceptance criteria
 
 - [ ] Project specification records exact module versions and custom overrides
 - [ ] An upstream release never silently changes customer behavior/permissions/data schema
-- [ ] Rollback declares data compatibility and preserves current safety/deletion requirements
+- [ ] Content restoration uses the current schema/compiler and preserves current safety/deletion requirements; old runtime versions remain unsupported
 - [ ] No automatic copying or model-context sharing of private customer implementations
 - [ ] Promotion considers aggregate development, support and maintenance cost against repeated custom work avoided
 
 ### Verification
 
-- Old/new module conformance and mixed-version fixture matrix
-- Staged upgrade/failure/rollback on two synthetic projects
+- Current module conformance and explicit stale/unknown-version rejection fixtures
+- Reviewed cutover/failure/forward repair on two disposable synthetic projects
 - Existing nomination consent/withdrawal and provenance tests
 
 ### Dependencies and blockers
@@ -6273,7 +6277,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 
 ## WH-077 — Define and verify portable project exports and managed-service adapters
 
@@ -6531,16 +6535,16 @@ Android implementers have a source-grounded v1 operation contract and a bounded 
 ### Scope
 
 - Refine docs/android-app.md against current source and live issue/dependency evidence; map every admitted operation to an existing domain handler or explicit new adapter
-- Freeze /api/mobile/v1 routes, typed requests/responses, sanitized fixtures, error/pagination/revision behavior, supported review controls and installed-client compatibility
+- Freeze /api/mobile/v1 routes, typed requests/responses, sanitized fixtures, error/pagination/revision behavior, supported review controls and strict current-client admission
 - Specify Credential Manager identity, bearer-session lifecycle, PKCE browser returns, onboarding and preview handoffs while preserving web Origin protections
-- Define Kotlin/Compose Android 9/API 28+ support, Chat-first surfaces, photos/sharing/push, protected retry state and the beta evidence matrix
+- Define Kotlin/Compose with a recorded current Android/API matrix, Chat-first surfaces, photos/sharing/push, protected retry state and the beta evidence matrix; no old-platform shims
 - Adopt WH-105 current-version-only interactions and Chat-primary navigation; unsupported versions/forms/views reject explicitly, with no browser downgrade
 - Consume the shared workspace identity policy, two-key completion state and restricted recovery authority; remove password fallback from the native/browser contract
 
 ### Acceptance criteria
 
 - [ ] Each first-beta journey has native/browser ownership, an authoritative server contract, failure/readback behavior and an evidence requirement
-- [ ] Only server-issued typed metadata can expose native approval; unknown controls have a browser path with no native confirmation
+- [ ] Only server-issued typed metadata can expose native approval; unknown controls reject with update-required and no approval or browser downgrade
 - [ ] Session expiry, revocation, recovery and recent-authentication rules cover native and browser clients without granting authority from a package header or absent Origin
 - [ ] WH-048 remains a prerequisite for Android customer admission, not a dependency on Android for the web beta
 - [ ] Full offline sync, iOS, generated customer Android apps, public distribution and full workspace parity remain deferred; real-money and CMS testing gates remain explicit
@@ -6549,7 +6553,7 @@ Android implementers have a source-grounded v1 operation contract and a bounded 
 ### Verification
 
 - Trace the operation matrix against src/index.ts, src/passkeys.ts, src/chat-controls.ts and the current feature contracts
-- Review sanitized API examples for ownership, replay, stale-state and older-client behavior without real credentials or provider calls
+- Review sanitized API examples for ownership, replay, stale-state and unsupported-client rejection without real credentials or provider calls
 - Run roadmap validate, render, render --check and git diff --check; verify local references
 
 ### Dependencies and blockers
@@ -6580,6 +6584,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-09-30: docs/android-app.md records the accepted product/architecture baseline and current service mapping against f90bf5f plus the working tree. Exact v1 wire contracts and native implementation acceptance remain this lane's future work; no Android execution issue or release is claimed.
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 
 ## WH-082 — Build the native Android foundation and reproducible checks
 
@@ -6892,9 +6897,9 @@ Invited owners receive a signed, supported Android beta backed by actual device,
 ### Scope
 
 - Prepare signed AAB distribution through Google Play internal testing with private signing custody and current target-SDK/store checks
-- Exercise older/current supported Android on physical Pixel and Samsung devices, including passkeys, recovery, TalkBack, large text, keyboard, backgrounding and upgrades
+- Exercise the recorded current Android matrix on physical Pixel and Samsung devices, including passkeys, recovery, TalkBack, large text, keyboard, backgrounding and upgrades
 - Bind acceptance to the app artifact/signing identity and backend release/schema; record configured, local, device and customer evidence separately
-- Rehearse native-work halt, session revocation, compatible backend rollback and higher-version app recovery with accessible web support
+- Rehearse native-work halt, session revocation, current backend forward repair and higher-version app recovery with accessible web support
 - Admit only WH-048-approved paths/cohort with current photo-safety, inference privacy, support ownership and measured notification delivery
 - Accept the shared two-key signup/recovery policy through browser handoff, accessible recovery-kit save/print and returning native passkey login without routine extra unlock prompts
 
@@ -6911,7 +6916,7 @@ Invited owners receive a signed, supported Android beta backed by actual device,
 
 - Run the documented Android build/lint/unit/instrumentation checks and the focused backend regression profiles for the candidate release
 - Record real passkey/Turnstile, signed App Link, photo-clearance and FCM journeys with disposable reviewed identities
-- Run an app/backend compatibility and release-recovery drill; compare the evidence matrix with WH-048 before distribution
+- Run current app/backend admission and forward-recovery drills; compare the evidence matrix with WH-048 before distribution
 
 ### Dependencies and blockers
 
@@ -6937,7 +6942,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 
 ## WH-088 — Prioritize native expansion and review public Android distribution
 
@@ -6955,7 +6960,7 @@ Evidence from the private beta determines the next native workflows and whether 
 
 - Review measured completion, recovery, accessibility, support and native/browser handoff friction before selecting broader native coverage
 - Recheck current Play testing, target-SDK, privacy/data safety, account-deletion, content and any applicable billing policies for a concrete public release
-- Create bounded follow-on packets for justified features and required external prerequisites; retain installed-client compatibility and release recovery
+- Create bounded follow-on packets for justified features and required external prerequisites; retain current-client admission and forward release recovery
 - Keep iOS, full offline synchronization, generated customer Android apps and full workspace parity outside automatic expansion
 
 ### Acceptance criteria

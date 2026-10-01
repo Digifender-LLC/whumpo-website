@@ -131,7 +131,7 @@ WH-048 remains an independent bounded free-beta gate; WH-049 additionally requir
 
 **WH-113–118; implementation and activation remain planned.** The [accepted contract](identity-and-data-protection.md) applies low user friction with strong default protection to workspace owners and future members. Ordinary sign-in becomes passkey-only; signup needs two distinct verified credentials and one recovery-kit save acknowledgment. Recommend independent storage, explain passkeys on demand and support text download plus Print / Save as PDF without requiring a purchase or printer. Keep visitor-app identity separate.
 
-Recovery-key possession opens only restricted replacement enrollment. Lost-all-keys recovery requires two replacement passkeys, a saved rotated kit and fresh passkey verification before workspace access, with prior-session/affected-key revocation and safe lost-response handling. Allow emergency compromised-key revocation below two. Stage existing-account enrollment before password retirement so replacement access is verified. Account recovery does not promise recovery of future client-encrypted content.
+Recovery-key possession opens only restricted replacement enrollment. Lost-all-keys recovery requires two replacement passkeys, a saved rotated kit and fresh passkey verification before workspace access, with prior-session/affected-key revocation and safe lost-response handling. Allow emergency compromised-key revocation below two. Replace the old policy in one reviewed test cutover after enrollment/recovery are ready; reset obsolete test identities and verify fresh access without a coexistence layer. Account recovery does not promise recovery of future client-encrypted content.
 
 | Packets | Priority / phase | Delivery and ordering |
 | --- | --- | --- |
@@ -165,7 +165,7 @@ Sizes in the backlog are relative uncertainty: **S** is one narrow decision/chan
 | Gate | Required proof | Stop condition |
 | --- | --- | --- |
 | Current baseline | WH-001/002/003 and candidate source/build/schema manifest. | Unknown current release, stale generated assets, missing test setup or incompatible schema. |
-| Authority and identity | WH-004/005; tenant/model/owner/visitor authority plus real-device entry/recovery; owner WH-113–115 flows through WH-005. | Unresolved boundary failure, incomplete two-key workspace enrollment/recovery, unsafe existing-account cutover or missing proof on an admitted identity path. |
+| Authority and identity | WH-004/005; tenant/model/owner/visitor authority plus real-device entry/recovery; owner WH-113–115 flows through WH-005. | Unresolved boundary failure, incomplete two-key workspace enrollment/recovery, unsafe current-policy cutover or missing proof on an admitted identity path. |
 | Safety and privacy | WH-010–017, WH-020 and WH-116/117 for admitted formats/provider data and transparent protection. | Missing detector coverage, unavailable private scan provider, unoperated reporting/preservation, undisclosed model data use or missing required protection/migration evidence. |
 | Lifecycle and operations | WH-006–009/018/019/050/059. | Unrecoverable unknown operations, unsupported deletion promises, failed restore or insufficient operating capacity. |
 | Customer value | WH-024/025 and the supported site/app benchmark; WH-112 for the primary Chat experience at commercial acceptance. | Users cannot complete the promised journey, must navigate away for migrated routine work, or unsupported work is represented as completed. |
@@ -241,7 +241,7 @@ A customer may later explicitly connect their own model, or a separately exposed
 
 Each project should retain a validated, versioned specification covering pages, presentation, enabled modules, content/data schemas, permissions, integrations and deterministic automation rules. The agent proposes supported operations with explicit inputs/outputs; trusted software validates and compiles them. Configuration cannot invent new fields, embed arbitrary executable expressions or change infrastructure directly.
 
-**Understand → propose specification changes → validate permissions and compatibility → compile/preview → apply the exact reviewed change → record an immutable version.** Existing publication, visibility, permission, data-migration and spending reviews remain in place. Deterministic compilation can produce HTML, forms, API clients and exportable source without model-written equivalents. Every configuration change still needs appropriate checks, a receipt and a compatible rollback plan.
+**Understand → propose specification changes → validate permissions and compatibility → compile/preview → apply the exact reviewed change → record an immutable version.** Existing publication, visibility, permission, data-migration and spending reviews remain in place. Deterministic compilation can produce HTML, forms, API clients and exportable source without model-written equivalents. Every configuration change still needs appropriate checks, a receipt and a current-contract recovery plan.
 
 | Owner request | Preferred change |
 | --- | --- |
@@ -257,7 +257,7 @@ Start with **content, forms/records, files/galleries, accounts/access and notifi
 
 Offer three presentation levels: configure a design, compose existing components differently, or create a bounded custom frontend component using the same shared APIs. Layout, typography, navigation, imagery and interactions can vary without reinventing authentication, upload handling or notification delivery. Later, add deterministic automation, record views, directories and simple portals where demand justifies them. More specialized booking/catalog/membership behavior needs its own supported contract.
 
-Maintained module versions require compatibility tests, controlled upgrades, migrations and rollback. Starter copies remain useful, but a collection of diverged copies is not a maintained shared module. Promote recurring functionality only after deliberate rights, privacy, provenance and security review; never harvest private customer code automatically.
+Maintained module versions require current-contract tests, reviewed cutovers, obsolete-test resets and forward repair. Unsupported historical runtime versions are not retained. Starter copies remain useful, but a collection of diverged copies is not a maintained shared module. Promote recurring functionality only after deliberate rights, privacy, provenance and security review; never harvest private customer code automatically.
 
 ### Match execution, data and capacity to the workload
 
