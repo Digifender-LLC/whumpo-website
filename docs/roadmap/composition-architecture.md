@@ -32,7 +32,7 @@ The proposed change pipeline is:
 4. **Preview:** show the visual result, changed fields/routes, capability/data effects, tests and expected operating cost. Keep drafts private and safety-gated.
 5. **Apply:** commit the exact private specification/version transactionally against its expected revision. A stale base requires a new comparison; retries recover the same operation receipt. Private apply is not publication, resource provisioning or permission to migrate live data.
 6. **Release:** prepare and obtain the existing exact owner publication/activation reviews; separately review destructive data changes, provider writes and spending. Bind the compiled digest, dependencies and relevant current revisions.
-7. **Recover:** retain specification, source, module/compiler versions, manifests and receipts. Restore the exact artifact or rebuild reproducibly; pair code rollback with a compatible schema/data recovery plan. Never imply that code rollback reverses messages already sent or external effects.
+7. **Recover:** retain specification, source, module/compiler versions, manifests and receipts. Restore content through the current schema/compiler and recheck current reviews, safety and deletion state. Retain old bytes as evidence, not as executable legacy runtime support. Repair platform code forward; no restore reverses messages already sent or external effects.
 
 A release manifest must explain whether restoration uses saved bytes or a rebuild and which dependencies must still be available. Failure before publication leaves the current project intact. Unknown provider outcomes remain visible and cannot trigger a new deployment, charge or notification automatically.
 
@@ -48,11 +48,11 @@ The first modules should cover common jobs completely, with typed operations and
 | Access | Reuse reviewed owner/visitor identity and session verification; project roles and policy decisions come from trusted services. Theme changes cannot edit authentication logic. |
 | Notifications | Fixed reviewed provider adapters, versioned templates, verified destinations, consent/preferences, deduplication, delivery receipts and spending limits. A provider timeout stays uncertain. No generative step or Whumpo inference is available. |
 
-Each module version needs source/license provenance, schemas, capabilities, test fixtures, limits, migration compatibility, operational diagnostics and an upgrade/withdrawal policy. Instances keep customer data and configuration private. Shared module code and synthetic fixtures may be cached by immutable digest; completed customer outputs, prompts, records and credentials must not enter a shared cache or catalog.
+Each module version needs source/license provenance, schemas, capabilities, test fixtures, limits, current-schema admission, operational diagnostics and an upgrade/withdrawal policy. Instances keep customer data and configuration private. Shared module code and synthetic fixtures may be cached by immutable digest; completed customer outputs, prompts, records and credentials must not enter a shared cache or catalog.
 
 After the initial modules, evaluate supported directory, booking, membership and catalog rules when repeated customer needs justify maintaining them. A photographer's gallery, a club document library and a customer portal can share the same file-access contract while using distinct interfaces and permissions. An appointment-request form does not establish a complete scheduling/availability engine.
 
-Prefer versioned modules over copying an entire starter into every project. This centralizes tested fixes without silently changing installed behavior. Updates pin a new version, compile/preview the diff, test project compatibility and use reviewed rollout/rollback. A private customization can be an override or patch against its pinned base. If it becomes a fork, record the divergence and maintenance owner; upstream updates need merge/verification rather than blind replacement. Withdrawal blocks new installs and creates a documented response for existing projects.
+Prefer versioned modules over copying an entire starter into every project. This centralizes tested fixes without silently changing installed behavior. Updates pin a new version, compile/preview the diff, test the current project contract and use reviewed cutover/forward repair. A private customization can be an override or patch against its pinned base. If it becomes a fork, record the divergence and maintenance owner; upstream updates need merge/verification rather than blind replacement. Withdrawal blocks new installs and creates a documented response for existing projects.
 
 ## 3. Compose rich interfaces without rewriting the backend
 
@@ -89,7 +89,7 @@ Before provisioning a fleet, prove how trusted data services obtain only the int
 
 If a demonstrated workload needs PostgreSQL, evaluate shared tables with enforced row security or isolated project resources. The ordinary request role must not be a superuser, `BYPASSRLS` role or table owner: those roles bypass row policies by default, with additional owner-specific controls available. Customer code never receives an unrestricted all-tenant connection. [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html).
 
-Use numbered, versioned schema migrations; run compatibility and restore checks on a representative copy, then canary before a bounded rollout. Maintain forward/backward code compatibility where practical; record the approved outage/data transformation when not. Route changes require fencing/revision checks, data verification and a retained rollback target. Restores must reapply deletion suppression and current safety/credential policy rather than resurrect withdrawn authority.
+Use one current schema and reviewed cutover, resetting obsolete test data where needed. Do not implement forward/backward readers, mixed-version operation or old-runtime rollback targets. Route changes require fencing/revision checks and current-state verification; stop affected writes during an incompatible cutover and repair forward. Restores must use the current contract and reapply deletion suppression and current safety/credential policy rather than resurrect withdrawn authority.
 
 ## 6. Make static delivery and private storage economical without weakening policy
 
