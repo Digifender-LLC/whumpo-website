@@ -6,22 +6,22 @@ export async function contactCommand(db:D1Database,userId:string,turnId:string,c
  const [verb,id,...extra]=command.split(/\s+/);
  if(!['/contact-on','/contact-off','/confirm-contact'].includes(verb))return;
  const result=(reply:string,statements:D1PreparedStatement[]=[])=>({reply,statements});
- if(extra.length||!id||!uuid.test(id))return result('Use /contact-on PROJECT_ID or /contact-off PROJECT_ID to review a change, then /confirm-contact REVIEW_ID. Find project IDs with /projects.');
+ if(extra.length||!id||!uuid.test(id))return result("Choose a project and ask to review enabling or disabling its contact form.");
  if(verb==='/confirm-contact'){
   const r=await db.prepare('SELECT r.* FROM contact_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,userId,userId).first<{status:string;enabled:number;expires_at:string}>();
   if(!r)return result('Contact form review not found.');
-  if(r.status==='applied')return result('That contact form review was already applied. Use /inbox to see current status.');
+  if(r.status==='applied')return result("That contact form review was already applied. Open Dashboard → Contact inbox for current status.");
   if(r.expires_at<=new Date().toISOString())return result('That review expired. Request a fresh contact form review.');
   await requireServiceClientActivation(db,userId,'contact',id);
-  return result(r.enabled?'Contact form enabled for this published version. Visitors can use the Contact link on your live site. Use /inbox to read messages privately. Publishing or restoring another version will disable the form until you review it again.':'Contact form disabled. Existing messages remain private and expire after 30 days.',[
+  return result(r.enabled?"Contact form enabled for this published version. Visitors can use the Contact link on your live site. Open Dashboard → Contact inbox to read messages privately. Publishing or restoring another version will disable the form until you review it again.":'Contact form disabled. Existing messages remain private and expire after 30 days.',[
    db.prepare("UPDATE contact_reviews SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending'").bind(turnId,id,userId)
   ]);
  }
  const p=await db.prepare('SELECT p.name,s.version_id,s.revision AS publication_revision,COALESCE(c.revision,0) AS revision FROM projects p LEFT JOIN publications s ON s.project_id=p.id LEFT JOIN contact_settings c ON c.project_id=p.id WHERE p.id=? AND p.owner_user_id=?').bind(id,userId).first<{name:string;version_id:string|null;publication_revision:number|null;revision:number}>();
- if(!p)return result('Project not found. Use /projects to choose your project.');
+ if(!p)return result("Project not found. Ask to list your projects.");
  const enabled=verb==='/contact-on'?1:0;
  if(enabled&&!p.version_id)return result('Publish a website version before enabling its contact form.');
- return result(`${enabled?'Enable':'Disable'} the contact form for “${p.name}”?\n\n${enabled?'A Contact link will appear on this live version. Visitors submit a name, email and message to your private Whumpo inbox. Messages are retained for 30 days, with a maximum of 100 submissions per project per 30 days and 20 per hour. No email is sent and messages are not sent to AI. Publishing or restoring a version disables the form until reviewed again. The source ZIP remains a static export without the hosted form.':'New submissions will stop. Existing messages remain private until their 30-day expiry.'}\n\nNothing changes until you confirm within 10 minutes: /confirm-contact ${turnId}.`,[
+ return result(`${enabled?'Enable':'Disable'} the contact form for “${p.name}”?\n\n${enabled?'A Contact link will appear on this live version. Visitors submit a name, email and message to your private Whumpo inbox. Messages are retained for 30 days, with a maximum of 100 submissions per project per 30 days and 20 per hour. No email is sent and messages are not sent to AI. Publishing or restoring a version disables the form until reviewed again. The source ZIP remains a static export without the hosted form.':'New submissions will stop. Existing messages remain private until their 30-day expiry.'}\n\nNothing changes until you use the confirmation button for review ${turnId} within 10 minutes.`,[
   db.prepare('INSERT OR IGNORE INTO contact_settings(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(id,turnId,userId),
   db.prepare('INSERT INTO contact_reviews(id,user_id,project_id,enabled,expected_revision,publication_revision,expires_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turnId,userId,id,enabled,p.revision,p.publication_revision??-1,new Date(Date.now()+600000).toISOString(),turnId,userId)
  ]);

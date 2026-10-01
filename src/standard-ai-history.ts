@@ -25,5 +25,5 @@ export function describeStandardAIRequest(row:StandardAIHistoryRow){
  return `${row.created_at} · ${standardAIStatus(row)}\nNo units or credits charged.\nRequest: ${row.id}`;
 }
 export function describeStandardAIHistory(history:Awaited<ReturnType<typeof readStandardAIHistory>>){
- return `Standard AI requests — page ${history.page}\n\n`+(history.rows.length?history.rows.map(describeStandardAIRequest).join('\n\n'):'No standard AI requests on this page.')+(history.hasMore?`\n\nNext: /ai-history ${history.page+1}`:history.truncated?'\n\nOlder requests are outside this history window.':'')+'\n\nFor one request, use /ai-request REQUEST_ID. Reading history never retries work. Check the original Chat response and saved work before asking again about an interrupted request.';
+ return `Standard AI requests — page ${history.page}\n\n`+(history.rows.length?history.rows.map(describeStandardAIRequest).join('\n\n'):'No standard AI requests on this page.')+(history.hasMore?`\n\nAsk for AI request history page ${history.page+1}.`:history.truncated?'\n\nOlder requests are outside this history window.':'')+"\n\nAsk to inspect a saved request by its ID. Reading history never retries work. Check the original Chat response and saved work before asking again about an interrupted request.";
 }

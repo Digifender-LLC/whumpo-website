@@ -91,13 +91,13 @@ export function cmsContentCommand(content:string,requestId:string,execute?:CMSCo
    if(!execute)throw new CMSProjectError(503,'CMS content connection is not configured');
    const rest=match[2]?.trim()??'',verb=match[1].toLowerCase();let action:Record<string,unknown>;
    if(verb==='cms-edit'){
-    const parts=rest.split('|').map(s=>s.trim()),head=parts.shift()?.split(/\s+/);if(parts.length!==2||head?.length!==3)throw new CMSProjectError(400,'Use /cms-edit PROJECT_ID DRAFT_REQUEST_ID REVISION | title | full body text');
+    const parts=rest.split('|').map(s=>s.trim()),head=parts.shift()?.split(/\s+/);if(parts.length!==2||head?.length!==3)throw new CMSProjectError(400,"Choose the article, its current revision, the title and full replacement body.");
     action={operation:'editDraft',projectId:head[0],requestId:head[1],revision:head[2],title:parts[0],text:parts[1]};
    }else if(verb==='cms-draft'){
-    const parts=rest.split('|').map(s=>s.trim()),head=parts.shift()?.split(/\s+/);if(parts.length!==2||head?.length!==2)throw new CMSProjectError(400,'Use /cms-draft PROJECT_ID posts|pages | title | body text');
+    const parts=rest.split('|').map(s=>s.trim()),head=parts.shift()?.split(/\s+/);if(parts.length!==2||head?.length!==2)throw new CMSProjectError(400,"Choose the publishing space, article collection, title and body.");
     action={operation:'draft',projectId:head[0],collection:head[1],title:parts[0],text:parts[1]};
-   }else if(verb==='cms-media'){const parts=rest.split(/\s+/);if(parts.length>2||!parts[0]||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))throw new CMSProjectError(400,'Use /cms-media PROJECT_ID [PAGE]');action={operation:'media',projectId:parts[0],page:Number(parts[1]??1)};
-   }else{const parts=rest.split(/\s+/);if(parts.length!==(verb==='cms-drafts'?1:2))throw new CMSProjectError(400,'Use /'+verb+' PROJECT_ID'+(verb==='cms-drafts'?'':' REQUEST_ID'));action={operation:verb==='cms-drafts'?'listDrafts':verb==='cms-export'?'exportDraft':verb==='cms-preview'?'previewDraft':verb==='cms-read'?'readDraft':verb==='cms-edits'?'listEdits':verb==='cms-retry-edit'?'retryEdit':'retryDraft',projectId:parts[0],...(parts[1]?{requestId:parts[1]}:{})};}
+   }else if(verb==='cms-media'){const parts=rest.split(/\s+/);if(parts.length>2||!parts[0]||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))throw new CMSProjectError(400,'Choose the publishing space and saved images page.');action={operation:'media',projectId:parts[0],page:Number(parts[1]??1)};
+   }else{const parts=rest.split(/\s+/);if(parts.length!==(verb==='cms-drafts'?1:2))throw new CMSProjectError(400,'Choose the publishing project and saved article or request.');action={operation:verb==='cms-drafts'?'listDrafts':verb==='cms-export'?'exportDraft':verb==='cms-preview'?'previewDraft':verb==='cms-read'?'readDraft':verb==='cms-edits'?'listEdits':verb==='cms-retry-edit'?'retryEdit':'retryDraft',projectId:parts[0],...(parts[1]?{requestId:parts[1]}:{})};}
    return describeCMSContent(await execute(action,requestId));
   }catch(error){return error instanceof CMSProjectError?error.message:'CMS draft operation could not be confirmed. Inspect the saved request before creating another.';}
  };

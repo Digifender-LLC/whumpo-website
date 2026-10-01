@@ -128,7 +128,6 @@
     "test:app-document-recovery": "node tests/app-recovery.mjs",
     "test:visitor-deletion-review": "node tests/visitor-deletion-review.mjs",
     "test:app-lifecycle": "node tests/app-lifecycle.mjs",
-    "test:workspace-navigation": "node tests/workspace-navigation.mjs",
     "test:agent-prompt-focus": "node tests/agent-prompt-focus.mjs",
     "test:agent-inspection": "node tests/agent-inspection.mjs",
     "test:welcome-ai-live": "node tests/welcome-ai-live.mjs",

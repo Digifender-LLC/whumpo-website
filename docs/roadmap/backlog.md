@@ -349,7 +349,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [src/plans.ts](../../src/plans.ts)
 - [src/billing.ts](../../src/billing.ts)
-- [src/chat-language.ts](../../src/chat-language.ts)
+- [frontend/src/chat-reply.tsx](../../frontend/src/chat-reply.tsx)
 - [src/cloudflare-dns.ts](../../src/cloudflare-dns.ts)
 - [src/project-specification/store.ts](../../src/project-specification/store.ts)
 - [src/cms-content-shape.ts](../../src/cms-content-shape.ts)
