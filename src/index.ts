@@ -43,7 +43,7 @@ import {readBackendState,readBackendReview,prepareBackendState,confirmBackendSta
 import {BackendError,listBackends,testBackend} from './backend-versions';
 import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
-import {DiffError,compareVersions,compareReview,diffPage} from './version-diff';
+import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
@@ -657,12 +657,12 @@ export default {
     try {
       const contactMatch=new URL(request.url).pathname.match(/^\/contact\/([0-9a-f-]{36})$/);
       if(contactMatch)return contactPage(request,env,contactMatch[1]);
-      if (new URL(request.url).pathname.startsWith("/api/")) return await handle(request, env, ctx);
+      if (new URL(request.url).pathname.startsWith("/api/")) return comparisonErrorResponse(request,await handle(request, env, ctx));
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return error(cause.status, cause.message);
+      if (cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
-      return json({ error: "Internal error", requestId }, 500);
+      return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));
     }
   }
 } satisfies ExportedHandler<Env>;
