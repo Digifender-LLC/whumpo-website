@@ -44,7 +44,7 @@ The October 1 [alignment](alignment.md) reconciles live issue state and current 
 
 ## Identity and data protection ordering
 
-The October 1 [identity and data protection contract](identity-and-data-protection.md) adds WH-113–118. Start P0/F1 WH-113 with the accepted product choices and current source; freeze server authority, resumable enrollment/recovery and existing-account transition before implementation. WH-114 uses WH-113/004, and WH-115 follows with downloadable/printable recovery and restricted replacement enrollment. Preserve existing passkey/recovery concurrency safeguards and separate visitor identity. Do not treat the documentation amendment as an activated login policy.
+The October 1 [identity and data protection contract](identity-and-data-protection.md) adds WH-113–118. Start P0/F1 WH-113 with the accepted product choices and current source; freeze server authority, resumable enrollment/recovery and current-only test cutover before implementation. WH-114 uses WH-113/004, and WH-115 follows with downloadable/printable recovery and restricted replacement enrollment. Preserve existing passkey/recovery concurrency safeguards and separate visitor identity. Do not treat the documentation amendment as an activated login policy.
 
 WH-116 uses WH-113/009/020 to classify data, readers, processing, key custody and recovery, then WH-117 implements only justified transparent encryption/control changes using WH-004. WH-118 is P2/F4 feasibility, after WH-115/116, with compatibility, normal-sign-in and content-recovery criteria; it adds no mandatory private vault or beta dependency. Account recovery never implies reconstruction of lost content keys. Avoid routine unlock prompts while preserving explicit review and security boundaries.
 

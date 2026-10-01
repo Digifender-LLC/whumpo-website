@@ -40,7 +40,7 @@ Inline is the default. The agent may present a relevant popup during an active t
 
 ## One bounded interaction contract
 
-WH-105 freezes the current wire contract before implementation. The owner rejects legacy support: use only the current schema/client, reject stale versions explicitly, and forward-migrate retained data before cutover. No compatibility renderer, older route or downgrade adapter is supported. Use a versioned, declarative description rendered by Whumpo-owned components. The agent chooses a maintained template first and composes a custom description only when needed. No new UI generation framework, infrastructure service or arbitrary code renderer is required for the first slice.
+WH-105 freezes the current wire contract before implementation. The owner rejects legacy support: use only the current schema/client, reject stale versions explicitly, and reset obsolete test data before cutover. No compatibility renderer, older route or downgrade adapter is supported. Use a versioned, declarative description rendered by Whumpo-owned components. The agent chooses a maintained template first and composes a custom description only when needed. No new UI generation framework, infrastructure service or arbitrary code renderer is required for the first slice.
 
 The contract must include:
 
