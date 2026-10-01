@@ -13,9 +13,9 @@
 | `business` | Business | $79 / $790 | Creator |
 | `business-pro` | Business Pro | $139 / $1,390 | Business |
 
-There is no `creator` plan ID, schema migration, grant replay, receipt rewrite or price change. Existing `personal` preferences, Stripe price mappings, invoice coverage and historical test entitlements retain their identities. Current presentation resolves Creator from the catalogue; historical documents, stored descriptions and provider-owned invoice/product labels are not rewritten. The Personal/Business audience switch and profile's “Personal details” are categories, not plan names. Legacy `launch`/`studio` receipts keep their original names and rules and receive no inferred modern feature tier.
+There is no `creator` plan ID, schema migration, grant replay, receipt rewrite or price change. Existing `personal` preferences, Stripe price mappings, invoice coverage and historical test entitlements retain their identities. Current presentation resolves Creator from the catalogue; historical documents, stored descriptions and provider-owned invoice/product labels are not rewritten. The Personal/Business audience switch and profile's “Personal details” are categories, not plan names. Retired `launch`/`studio` identities are rejected; their disposable test billing state was removed by the current-only reset.
 
-Explore remains a free invitation-only preview. It is not a paid launch tier and carries no launch feature grant. Private test access is still governed by current configured handlers; future preview grants belong to WH-090. Saving a preference, a configured OAuth credential or a sandbox invoice does not activate the full launch matrix.
+Explore remains a free invitation-only preview. It is not a paid launch tier and carries no launch feature grant. WH-090A implements explicit preview inclusion grants; current handlers still need WH-090B's admission adapters. Saving a preference, a configured OAuth credential or a sandbox invoice does not activate the full launch matrix.
 
 ## Stable feature families
 
@@ -40,7 +40,7 @@ Definitions distinguish `implementation: "private-test"` (existing bounded found
 
 Pricing and Settings label the matrix as planned inclusions and expose a keyboard-accessible disclosure showing inherited features and delivery limitations. Chat states inheritance, all seven provider names, protected common features and preview/sandbox boundaries. No new feature action button is created. Current sandbox subscriptions remain explicitly test-mode; real payments, domain redemption, advanced-model funds and resource-pool activation remain unavailable. The trial and Enterprise contact buttons retain their existing unavailable states.
 
-WH-090 must extend current `plan_entitlements`/Stripe invoice service coverage from [plan lifecycle](plan-lifecycle.md) and [sandbox billing](stripe-sandbox.md). Do not introduce a second paid-plan truth, interpret annual invoice coverage as calendar-month grants, or trust the `billing_accounts.plan_id` cache. Its versioned result must distinguish:
+WH-090 must extend current `plan_entitlements`/Stripe invoice service coverage from [plan lifecycle](plan-lifecycle.md) and [sandbox billing](stripe-sandbox.md). Do not introduce a second paid-plan truth, interpret annual invoice coverage as calendar-month grants, or restore the removed billing cache/test-grant paths. Its versioned result must distinguish:
 
 1. **Actor authority:** current identity/session/purpose, account/tenant, workspace membership, target resource and current revision, under [workspace identity](workspace-identity.md).
 2. **Inclusion:** feature included by authoritative current coverage or an explicit scoped preview grant; source and expiry included.
@@ -97,3 +97,7 @@ Release `37497b4a-0b2d-4004-94cf-12838eff9e96` deployed archived source `fe5e5db
 | Platform | `728fce77-a0b8-4489-83c0-f82e1de4a797` |
 
 The public catalogue exactly matched the source definitions and retained Creator's `personal` identity. Landing/workspace assets and health returned 200; anonymous profile/Chat/capacity/subscription requests returned 401 and a foreign-origin capacity mutation returned 403. Stripe remained in test mode and domain redemption disabled. Private evidence: `.secrets/tier-release-verification.json` and the matching release archive. These readbacks verify the deployment and entry boundaries; they do not add authenticated live customer acceptance, provider/billing mutations, feature activation, CMS functional testing or customer publication.
+
+## WH-090A inclusion interface
+
+The [current inclusion and preview-grant interface](feature-inclusion.md) extends the invoice-only resolver and adds exact operator-owned test scopes. It is an input to authorization, with no `allowed` claim or implicit Explore grant. Packet B must still connect identity, eligibility, consent/readiness and final effect checks across handlers. WH-090 remains open; no planned feature or real billing is activated.

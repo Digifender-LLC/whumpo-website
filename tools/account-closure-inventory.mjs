@@ -4,6 +4,7 @@ import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 
 // Static SQL fragments only. Caller input is bound once in the scope CTE.
 const metrics={
+ featurePreviewGrants:['feature_preview_grants','user_id'],
  accounts:['users','id'], projects:['projects','owner_user_id'],
  liveProjects:['project_service_status','owner_user_id','site_live=1 OR backend_live=1 OR cms_articles>0'],
  sessions:['sessions','user_id'], chatTurns:['chat_turns','user_id'],

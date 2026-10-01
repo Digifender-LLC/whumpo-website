@@ -4475,14 +4475,15 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 - [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/62. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01: split into #63 current inclusion/preview-grant interface, #64 enforcement and #65 connected acceptance/test release. The foundation extends current invoice coverage rather than creating paid-plan truth. Parent stays open; inclusion alone is not authorization and no current handler is represented as gated until its adapter acceptance.
 
 ## WH-096 — Deliver requested Gmail reads and reviewed send or reply actions
 

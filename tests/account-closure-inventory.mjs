@@ -14,8 +14,10 @@ try{
  VALUES('plan-b','owner-b','project-b',printf('%064d',0),printf('%064d',0),'{"purpose":"PRIVATE"}',0,0,0,'none',1);`);
  const db={prepare:query=>({bind:(...params)=>({first:async()=>sql.prepare(query).get(...params)})})};
  sql.exec("INSERT INTO github_token_staging VALUES('token-b','PRIVATE','2027-01-01');");
+ sql.exec("INSERT INTO feature_preview_grants(id,contract_version,user_id,project_id,feature_id,operation,purpose,review_reference,starts_at,ends_at,created_at) VALUES('00000000-0000-4000-8000-000000000001',1,'owner-b','project-b','connections.github','read','private-test-acceptance','PRIVATE',1,2,1)");
  sql.exec('PRAGMA query_only=ON'); // Enforce no writes, including accidental future mutations.
  const all=await accountClosureInventory(db),a=await accountClosureInventory(db,'owner-a'),b=await accountClosureInventory(db,'owner-b');
+ assert.equal(all.counts.featurePreviewGrants,1);assert.equal(a.counts.featurePreviewGrants,0);assert.equal(b.counts.featurePreviewGrants,1);
  assert.equal(all.counts.accounts,2);assert.equal(all.counts.projects,1);
  assert.equal(a.counts.projects,0);assert.equal(a.counts.githubCredentials,0);
  assert.equal(b.counts.projects,1);assert.equal(b.counts.githubCredentials,1);assert.equal(b.counts.githubPendingRevocations,1);assert.equal(b.counts.githubStagedCredentials,1);assert.equal(a.counts.githubStagedCredentials,0);
