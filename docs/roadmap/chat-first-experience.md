@@ -2,6 +2,8 @@
 
 **Product direction accepted October 1, 2026; implementation and customer acceptance remain planned.** Source inspection used `628c16f` and the existing working tree. WH-105–112 add this direction to the canonical backlog. This is the signed-in customer's owner/maintainer experience; it does not put Whumpo AI into customer websites, visitor forms or business automations.
 
+**WH-105 decision handoff:** the source-grounded [interaction contract v1](../chat-interactions.md) now freezes bounded definitions, bindings, receipts, identity/feature admission, lifecycle and current-version web/native rejection, with offline fixtures checked against the actual compiler and existing controls. Production interaction storage, rendering and customer acceptance remain subsequent work; this is not a deployed form feature.
+
 Customers should accomplish routine work by talking to Whumpo and interacting with what it presents in Chat. The agent selects, composes and maintains dashboards and custom views around the customer's work. Customers should rarely need to navigate elsewhere or configure their own workspace. They can still dismiss a view, correct the agent, request changes and use essential account/recovery controls directly.
 
 The October 1 [identity and data protection amendment](identity-and-data-protection.md) makes low user friction with strong default protection a general product rule. Two-passkey signup and recovery-kit handling stay in trusted dedicated flows outside model forms/context; ordinary sessions need no repeated unlock prompts. Encryption must preserve truthful AI/processing disclosures and existing safety/review boundaries. WH-113–118 own that planned work; this Chat contract does not confer enrollment or recovery authority.
@@ -14,7 +16,7 @@ The October 1 [identity and data protection amendment](identity-and-data-protect
 | Exact `ChatControl` actions and server review receipts | Keep authority in the existing handlers. General form submission must not manufacture an approval control or confirm a review. |
 | `frontend/src/workspace.tsx`, specialized review cards and `chat-turn-actions.tsx` | Extend the transcript with a common interactive-element renderer, preserving existing review disclosures and literal historical text. |
 | `src/workspace-dashboard.ts` and requested workflow shortcuts | Extend revisioned declarative layouts and scoped data reads. Current fixed cards/tabs are a foundation, not arbitrary custom views. |
-| `frontend/src/lib/chat-delivery.ts`, saved history and transcript export | Reuse request identities and readback. Current in-memory drafts and text-oriented history do not establish durable form answers, reload recovery or interactive history. |
+| `frontend/src/lib/chat-delivery.ts`, saved history and transcript export | Reuse request identities, readback and the implemented account-scoped session-storage recovery of unsent drafts/interrupted requests. Generic server form drafts, interactive history and cross-device form resumption remain missing. |
 | Specification/compiler and capability-planner work | Reuse supported capability bindings for project changes. Owner information gathering is a separate contract from WH-066/067 visitor-facing forms and WH-070 customer application presentation. |
 
 The October 1 alignment re-read live GitHub evidence: WH-064/065/066 and children #15–17 are closed as completed for the initial supported scope. Reuse the delivered catalog, content/contact/stateless-client compiler and private apply/restore handlers. General records/access/files and notification/rules remain WH-067–069. No Chat-interaction implementation is claimed by those closures.
@@ -38,14 +40,14 @@ Inline is the default. The agent may present a relevant popup during an active t
 
 ## One bounded interaction contract
 
-WH-105 freezes the wire contract before implementation. Use a versioned, declarative description rendered by Whumpo-owned components. The agent chooses a maintained template first and composes a custom description only when needed. No new UI generation framework, infrastructure service or arbitrary code renderer is required for the first slice.
+WH-105 freezes the current wire contract before implementation. The owner rejects legacy support: use only the current schema/client, reject stale versions explicitly, and forward-migrate retained data before cutover. No compatibility renderer, older route or downgrade adapter is supported. Use a versioned, declarative description rendered by Whumpo-owned components. The agent chooses a maintained template first and composes a custom description only when needed. No new UI generation framework, infrastructure service or arbitrary code renderer is required for the first slice.
 
 The contract must include:
 
 - A server-issued interaction ID; authenticated owner and conversation association; an optional verified project; originating turn and task reference; schema/template version and immutable definition digest.
 - Stable field IDs, typed values, labels/help, requiredness, bounded choices, defaults with provenance, supported validation and a small declarative conditional-visibility vocabulary. Set explicit limits for serialized bytes, field/option counts, nesting and open interactions.
 - Server-registered capability/data binding IDs and expected resource revisions. Separate collecting answers, preparing a private change, opening a view and presenting a server review. Labels and model-supplied IDs grant no authority.
-- Presentation hints for inline/panel/dialog, a readable text fallback and client capability/version negotiation. The server and client reject unknown actionable elements; historical or unsupported elements remain readable with a supported recovery path.
+- Presentation hints for inline/panel/dialog, a readable text fallback and client capability/current-version checks. The server and client reject unknown actionable elements; historical or unsupported elements remain readable with a supported recovery path.
 - Separate response and operation identities. Answer drafts, submitted snapshots, validation errors, action receipts and pending/unknown outcomes must remain distinguishable. A submitted form is not proof that its downstream operation completed.
 
 The supported vocabulary begins with text, long text, single/multiple choice, boolean, bounded number, date/time with an explicit timezone where relevant, owned-resource selectors and existing safe attachment controls. Display primitives include summaries, key/value cards, bounded lists/tables, status, comparisons and private preview links. Attachments retain existing upload and safety gates; byte content and arbitrary URLs are not form definitions.
@@ -74,16 +76,16 @@ Give the agent explicit capabilities to request information, present a supported
 
 Saved views reuse the same component/data contracts as Chat. They can show project status, activity, traffic, review queues and later eligible lead or portfolio data when those features exist. Data comes from permission-filtered server queries with source/as-of state; unavailable metrics stay unavailable. Custom labels or filters cannot widen read/write scope. Live render, refresh and background updates make no maintainer calls. An agent can compose a view; the server supplies its data and available actions.
 
-Keep account, security, sign-out, support and urgent takedown/recovery discoverable outside the model path. Simplify the main navigation only after equivalent Chat journeys and deterministic fallback paths pass connected checks. During an inference outage, customers must still reach saved work, pending reviews, operation status and those essential controls. Do not remove working routes before replacement acceptance.
+Keep account, security, sign-out, support and urgent takedown/recovery discoverable outside the model path. Simplify the main navigation only after equivalent Chat journeys and deterministic current recovery paths pass connected checks. During an inference outage, customers must still reach saved work, pending reviews, operation status and those essential controls. Do not remove working routes before replacement acceptance.
 
 ## Delivery order
 
-All eight packets are P1 in F2, concurrent with foundational work rather than a new phase after F6. WH-105 is planning-ready; the others are planned and unclaimed. P0 safety, lifecycle, identity and recovery gates retain priority.
+All eight packets are P1 in F2, concurrent with foundational work rather than a new phase after F6. WH-105's decision is recorded in [issue #51](https://github.com/zemdregon/whumpo/issues/51); refresh live execution for downstream claims. P0 safety, lifecycle, identity and recovery gates retain priority.
 
 | Packet | Deliverable | Dependencies |
 | --- | --- | --- |
-| WH-105 | Inventory priority journeys; freeze interaction, template, binding, lifecycle and compatibility contracts. | Current source/contracts and live execution review before claiming. |
-| WH-106 | Durable interaction/answer storage and authenticated typed submission/readback. | WH-105, WH-004, WH-009. |
+| WH-105 | Inventory priority journeys; freeze interaction, template, binding, lifecycle and compatibility contracts. | WH-113, WH-089; current source/contracts and live execution review before claiming. |
+| WH-106 | Durable interaction/answer storage and authenticated typed submission/readback. | WH-105, WH-004, WH-009, WH-116, WH-090. |
 | WH-107 | Accessible Chat renderer and initial maintained form templates. | WH-106. |
 | WH-108 | Agent template selection, bounded custom forms and task-scoped answer continuation. | WH-107, WH-065. |
 | WH-109 | Agent-managed dashboards/custom views sharing the Chat component and binding vocabulary. | WH-107. |
@@ -95,7 +97,7 @@ The first vertical slice is **an existing-project content-change brief → valid
 
 WH-110 then covers new-project intake, choosing/changing the active project, editing and inspecting saved work, preparing publication/restore, reading status/traffic and supported recovery. Photo selection preserves WH-027/safety gates. Connections open real consent flows; later tier tasks add eligible lead, connector and portfolio elements without duplicating their backends. An owner Chat form is never implicitly published as a visitor form.
 
-Extend WH-009/025/058 for data lifecycle, interaction measurements and action-honesty evaluation. WH-081 uses WH-105's version negotiation; WH-084 depends on WH-106 and implements the admitted native subset with authenticated browser fallback. Web renderer code is not a prerequisite for the Android shell/identity foundation, and full custom-view parity remains deferred. WH-112 feeds both the complete-tier acceptance WH-104 and final commercial WH-049, so new tier dashboards cannot finish against a disposable owner UI. WH-048's bounded free beta remains independent; its advertised paths still require its existing gates. Tier/provider launch, real-money activation and CMS testing gates remain intact.
+Extend WH-009/025/058 for data lifecycle, interaction measurements and action-honesty evaluation. WH-081 uses WH-105's version negotiation; WH-084 depends on WH-106 and implements the admitted native subset with current-version rejection for unsupported elements. Web renderer code is not a prerequisite for the Android shell/identity foundation, and full custom-view parity remains deferred. WH-112 feeds both the complete-tier acceptance WH-104 and final commercial WH-049, so new tier dashboards cannot finish against a disposable owner UI. WH-048's bounded free beta remains independent; its advertised paths still require its existing gates. Tier/provider launch, real-money activation and CMS testing gates remain intact.
 
 ## Acceptance and measurements
 
