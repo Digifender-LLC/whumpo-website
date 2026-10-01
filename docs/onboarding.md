@@ -1,5 +1,9 @@
 # Customer welcome and project setup
 
+## Accepted identity entry policy — October 1, 2026
+
+**Planned; current welcome behavior and evidence below are preserved.** The [identity and data protection contract](roadmap/identity-and-data-protection.md), WH-113–115, adds resumable two-passkey enrollment and one recovery-kit save acknowledgment before workspace access. Two distinct credentials are mandatory; independent storage is recommended without requiring a purchase. Explain passkeys, backup independence and recovery through optional expandable help. Incomplete signup/recovery has restricted setup authority enforced by the server and cannot bypass entry through welcome, direct APIs or a native handoff. Ordinary authenticated sessions remain low friction; signup/recovery work uses trusted deterministic flows and never sends credentials to AI. WH-024/025 measure accessible completion, second-key failures and abandonment without collecting secrets. This is separate from the existing first-project welcome gate and from visitor-app signup.
+
 ## Current customer flow — October 1, 2026 UTC
 
 The guided welcome asks for name, picture, optional bio and sharing choice, then the first project's idea, working name, optional audience and starting style. Review and completion create one private project before Chat/dashboard access. Customers then describe the first build in natural Chat; the starter card shows the saved brief and invites a request. It has no direct website/app build buttons. Public Chat accepts natural text only. The older first-build buttons and slash-command examples below are historical implementation evidence, superseded by [natural-language Chat](natural-language-chat.md). Internal adapters remain for bounded handlers and fixtures, not customer commands. Routine project-detail changes are requested through the agent or a customer-requested workflow.

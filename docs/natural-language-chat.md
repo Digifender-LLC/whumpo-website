@@ -4,6 +4,8 @@
 
 ## Conversation and explicit actions
 
+**Accepted next direction — October 1, 2026:** [Chat as the primary workspace](roadmap/chat-first-experience.md) plans persisted interactive forms, bounded custom composition and agent-managed views in WH-105–112. These additions do not yet exist as a general interaction protocol. The current controls and approval rules below remain authoritative until their implementation is accepted; submitting form answers will not confer review approval.
+
 The composer submits ordinary text to `POST /api/chat`. Slash-prefixed strings, file paths and URLs are literal message content; they cannot dispatch the internal command interpreter. The model may interpret a request, inspect owned state and propose a validated capability action. It cannot approve its own reviews. Normal requests use the configured Muse test route, with standard AI fair use and no customer credit charge. If inference is unavailable, Chat says so and saves no pretend success; Dashboard controls remain available.
 
 Two privacy-sensitive natural-language requests retain a deterministic path: requesting/reading a private usage review, and downloading saved Chat history. Operator statements and their replies remain excluded from later model context. These paths accept the documented natural phrases, not slash syntax, and make no model call. The knowledge catalog explains how to reach them. They do not send external messages or change enforcement/billing.
