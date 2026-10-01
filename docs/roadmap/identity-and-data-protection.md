@@ -2,6 +2,8 @@
 
 **Owner-approved direction, October 1, 2026; implementation, activation and customer acceptance remain planned.** WH-113–118 were added against `628c16f`; the October 1 alignment reconciles them with source `2207186` and current recorded recovery evidence. This contract governs workspace owners and future workspace members. Customer-application visitor identity keeps its separate [application contract](../app-data.md).
 
+The WH-113 [shared workspace identity protocol](../workspace-identity.md) now freezes restricted grants, signup/recovery state, kit rotation, partial loss, transport authority and compatible cutover/rollback against `d415398`. This completes the decision deliverable; WH-114/115 implementation and device/live acceptance remain open.
+
 ## Product principle and current evidence
 
 Prefer low user friction with strong default protection across Whumpo. Automate protections when possible, ask only for necessary information, preserve ordinary authenticated sessions and explain unfamiliar choices on demand. Extra prompts must protect a concrete boundary. This principle preserves tenant isolation, private R2, content-safety controls, recent authentication for sensitive changes and exact human reviews for publication, activation, provider mutations and spending. Authentication, recovery and support stay reachable without AI.
@@ -22,7 +24,7 @@ Use optional expandable explanations: what a passkey is, how the device unlocks 
 
 Ordinary valid sessions continue without repeated passkey prompts. Credential changes use the existing sensitive-action authentication boundary. Never block emergency revocation of a compromised key solely to maintain two keys; prompt for a replacement afterward. If no usable credential remains, use restricted recovery. The two-key completion requirement applies to signup and lost-all-keys recovery, not a reason to keep a compromised key active.
 
-Before disabling legacy access, use a staged existing-account transition. Identify password-only and single-passkey accounts through content-free counts, provide resumable setup while current authorized access remains available, and verify replacement access plus the saved recovery kit before retiring legacy credentials. Freeze the exact transition, pending-account/session treatment and rollback in WH-113. Cutover must not strand an existing account, silently grandfather password login after activation, or make a retired credential authoritative again. The controlled visitor host is unaffected.
+Before disabling legacy access, use a staged existing-account transition. Identify password-only and single-passkey accounts through content-free counts, provide resumable setup while current authorized access remains available, and verify replacement access plus the saved recovery kit before retiring legacy credentials. Follow the [frozen transition, pending-account/session and rollback rules](../workspace-identity.md#existing-account-rollout-and-rollback). Cutover must not strand an existing account, silently grandfather password login after activation, or make a retired credential authoritative again. The controlled visitor host is unaffected.
 
 ## Downloadable recovery kit and restricted recovery
 
@@ -32,7 +34,7 @@ The kit identifies Whumpo and the account, records its generation date, gives th
 
 Store only an appropriate verifier for the account recovery key. Preserve the existing rate limits, same-origin boundary and generic rejection behavior. A successful recovery-key check grants a bounded, short-lived replacement-enrollment authority, **never a normal workspace session**. When all passkeys are lost, require two verified replacement passkeys and a saved replacement recovery kit before workspace access. Verify a fresh replacement-passkey assertion before issuing the ordinary session. Browser/native handoffs cannot upgrade incomplete recovery into workspace access.
 
-Preserve review of which old credentials are lost/compromised, revoke prior sessions and affected credentials, and rotate the recovery key with transactional, concurrent-attempt protection. A user who still has a usable passkey can sign in normally and replace a lost key. For recovery-key use, define the reviewed partial-loss case in WH-113 without restoring the old direct-to-workspace recovery route. Keep save-before-rotation: the replacement kit must be available before its secret becomes the only valid recovery key. Interrupted replies, competing attempts, stale selections and abandoned enrollment must resume safely without duplicate credentials or revived sessions.
+Preserve review of which old credentials are lost/compromised, revoke prior sessions and affected credentials, and rotate the recovery key with transactional, concurrent-attempt protection. A user who still has a usable passkey can sign in normally and replace a lost key. For recovery-key use, the [partial-loss protocol](../workspace-identity.md#recovery-after-losing-passkeys) requires a new replacement plus a retained credential and fresh replacement assertion; it never restores direct-to-workspace recovery-code login. Keep save-before-rotation: the replacement kit must be available before its secret becomes the only valid recovery key. Interrupted replies, competing attempts, stale selections and abandoned enrollment must resume safely without duplicate credentials or revived sessions.
 
 Recovery-kit replacement/rotation needs the same careful save and lost-response behavior. An old kit must stop working after rotation; historical screenshots or downloads cannot become a second valid recovery route. Broader suspected-compromise handling includes integration-grant review under WH-063 and incident work. Email address knowledge or a support conversation never substitutes for the established recovery proof.
 
@@ -61,14 +63,14 @@ The feasibility result must cover supported browsers/devices/providers and nativ
 
 | Packet | Priority / phase / readiness | Deliverable | Dependencies |
 | --- | --- | --- | --- |
-| WH-113 | P0 / F1 / ready | Freeze enrollment, session/recovery authority, existing-account transition and usability contracts. | None |
+| WH-113 | P0 / F1 / ready | [Decision delivered](../workspace-identity.md); implementation/activation are separate. | None |
 | WH-114 | P0 / F1 / planned | Passkey-only access and resumable two-passkey signup. | WH-113, WH-004 |
 | WH-115 | P0 / F1 / planned | Recovery-kit download/printing and restricted replacement enrollment. | WH-114 |
 | WH-116 | P1 / F1 / planned | Data protection, processing access and key/recovery classification. | WH-113, WH-009, WH-020 |
 | WH-117 | P1 / F1 / planned | Required transparent encryption and complementary controls, including migration/restore verification. | WH-116, WH-004 |
 | WH-118 | P2 / F4 / planned | Bounded passkey-backed encryption feasibility and adoption/no-adoption recommendation. | WH-115, WH-116 |
 
-All six packets are unclaimed, with no execution issue or completion evidence. WH-113 is planning-ready because product decisions are accepted; exact protocol/migration contracts remain its deliverable. Refresh live issue/dependency evidence before implementation. The October 1 alignment refreshed existing issue evidence; these six implementation packets remain unclaimed and unaccepted.
+WH-113 decision execution and evidence are in [issue #42](https://github.com/zemdregon/whumpo/issues/42). WH-114–118 remain unimplemented and unclaimed at this checkpoint. Refresh live issue/dependency evidence before implementation; planning readiness is not a completion field. Do not activate global or per-account password retirement before both enrollment and restricted recovery are ready and the required device/cohort evidence is reviewed.
 
 Extend WH-005 with WH-115 as a prerequisite for owner physical-device acceptance, preserving independent visitor tests and historical evidence. WH-024/025 cover accessible enrollment and content-free second-key, save/print, recovery and abandonment measurements. WH-007/008/009/063 cover compromise, key custody, backup restoration and lifecycle. WH-081/083 consume the shared identity policy; native recovery exchange requires completed enrollment, and Android acceptance remains WH-087. WH-048 additionally requires WH-117, while identity flows through WH-005; commercial WH-049 inherits these requirements. WH-118 is outside the beta prerequisite closure.
 

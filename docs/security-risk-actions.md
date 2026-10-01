@@ -6,6 +6,8 @@ Use these labels consistently: **Fix** for a demonstrated boundary failure or a 
 
 **Subsequent October 1 source audit:** [WH-004 authority matrix](tenant-authority-audit.md) records the sealed Standard scan of `a34a131`, with one medium and two low source-supported findings: credential mutation after session revocation, cross-owner GitHub staging cleanup, and visitor deletion across a browser account switch. A1 is now fixed, locally verified with the 21-case credential-authority regression and deployed to private test; A2 is now fixed with 13 passing local regression cases and deployed to private test; A3 is fixed with 17 passing focused regressions, built-browser recovery checks and verified test deployment. WH-004’s defined audit/remediation deliverables are complete. The scan performed no live operations; it is separate from the earlier documentation reconciliation. **CSAM and Daybreak are blocked/deferred by the owner.** Continue independent work without either.
 
+**Identity policy decision:** [WH-113](workspace-identity.md) specifies passkey-only access, restricted two-key recovery, emergency revocation and compatible retirement. WH-114/115 implement it; current recovery evidence below remains historical/runtime evidence, not acceptance of the new protocol.
+
 ## Decisions needed from the owner
 
 1. **Resolved for current testing:** the owner explicitly states they are the sole tester. September 30 18:48 UTC aggregate readback found one account/project and zero currently published sites, active backends or CMS articles. This is a point-in-time inventory, not a guarantee about prior publication. Revisit before inviting real users or admitting customer content.
