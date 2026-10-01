@@ -1,5 +1,7 @@
 # Application visitor identity and persistent data
 
+**Current Chat contract, October 1, 2026:** [Natural-language Chat](natural-language-chat.md) replaces the historical command and guided-navigation examples below. Current app-maintenance inventories return saved review IDs and plain-language guidance. Exact approval controls and their owned immutable receipt checks remain authoritative. The reply cleanup is source-verified separately from test deployment in the [current-version policy](current-version-policy.md).
+
 ## Find unfinished application work — September 30, 2026
 
 `/app-maintenance [PROJECT_ID or all] [PAGE]`, “show unfinished app work”, “show app maintenance” and “show pending app work” read unfinished app-access, visitor-page, upgrade, document-restore and program-rollback reviews. The list is owner-scoped, with an optional exact owned project and 20 results per page. Failed, uncertain and changed upgrade checks appear first, followed by deterministic expiry/family/ID order. Applied, cancelled and expired reviews are omitted; retained recovery points remain separately accessible through `/app-recovery`.

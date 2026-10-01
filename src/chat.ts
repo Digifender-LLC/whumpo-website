@@ -16,10 +16,7 @@ import {cmsWordPressLinks} from './cms-wordpress-chat';
 import {firstDraftProjectId,firstAppProjectId,welcomeDraftProject} from './first-draft';
 import {visitorAccessCommand} from './visitor-navigation';
 import {cmsExportLinks} from './cms-export';
-import {workspaceNavigation,workspaceNavigationHelp} from './workspace-navigation';
-import {readLayout} from './workspace-dashboard';
 import {readAppAccess} from './app-access';
-import {chatHelp} from './chat-help';
 import {cmsDiscardLinks} from './cms-discard';
 import {cmsUnpublishLinks} from './cms-unpublish';
 import {cmsPublicationLinks} from './cms-publication';
@@ -66,7 +63,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   // when its complete server-generated review receipt was saved; /backups can recover it otherwise.
   const result = await db.batch([
     db.prepare('SELECT revision, step, brief_stage FROM workspace_state WHERE user_id = ?').bind(userId),
-    db.prepare("SELECT t.id, t.revision, t.user_text, t.action_json, t.assistant_text, t.created_at, t.mode, t.status, CASE WHEN csr.status='pending' AND t.status='completed' AND csr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM cms_instances WHERE project_id=csr.project_id) AND instr(t.assistant_text,'Send /confirm-cms '||csr.id||' to approve this exact setup request.')>0 THEN csr.id ELSE NULL END AS cms_confirmation_id, CASE WHEN bl.kind='export' AND t.status='completed' AND br.status='applied' THEN br.id ELSE NULL END AS backend_state_export_id, CASE WHEN bl.kind='review' AND t.status='completed' AND br.status='ready' AND br.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND br.base_revision=bs.revision AND br.before_json=bs.state_json AND instr(t.assistant_text,'send /confirm-backend-state '||br.id||'. A newer data revision invalidates this review.')>0 THEN br.id ELSE NULL END AS backend_state_confirmation_id, de.review_id AS directory_export_id, der.project_id AS directory_export_project_id, CASE WHEN dr.status='pending' AND t.status='completed' AND dr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND dr.expected_revision=ds.revision THEN dr.id ELSE NULL END AS directory_confirmation_id, CASE WHEN dc.kind='publish' AND dc.status='applied' AND ds2.live_json=dc.snapshot_json AND ds2.publication_revision=dp.revision AND dp.version_id IS NOT NULL THEN dc.project_id ELSE NULL END AS directory_project_id, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind, e.version_id AS export_version_id, CASE WHEN r.status='pending' AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM project_files WHERE id=r.file_id) THEN r.id ELSE NULL END AS photo_confirmation_id, CASE WHEN vr.status='pending' AND vr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM site_versions WHERE id=vr.version_id) THEN vr.id ELSE NULL END AS version_confirmation_id, CASE WHEN cr.status='pending' AND cr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') THEN cr.id ELSE NULL END AS contact_confirmation_id,CASE WHEN dpr.status='pending' AND dpr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM domain_claims WHERE id=dpr.claim_id AND token=dpr.proof_token AND expires_at=dpr.proof_expires_at) THEN dpr.id ELSE NULL END AS domain_proof_confirmation_id,cmp.version_id AS comparison_version_id,cmp.baseline_id AS comparison_baseline_id, CASE WHEN gb.state='pending' AND gb.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND substr(t.assistant_text,-length('Send /confirm-backup '||gb.id||' to authorize this exact backup.'))='Send /confirm-backup '||gb.id||' to authorize this exact backup.' THEN gb.id ELSE NULL END AS backup_confirmation_id, CASE WHEN gb.state='complete' AND gb.commit_sha IS NOT NULL THEN 'https://github.com/'||gb.repo_owner||'/'||gb.repo_name||'/tree/'||gb.commit_sha||'/'||gb.path ELSE NULL END AS backup_url FROM chat_turns t LEFT JOIN domain_proof_removals dpr ON dpr.id=t.id AND dpr.user_id=t.user_id LEFT JOIN cms_setup_reviews csr ON csr.id=t.id AND csr.user_id=t.user_id LEFT JOIN backend_state_links bl ON bl.turn_id=t.id LEFT JOIN backend_state_reviews br ON br.id=bl.review_id AND br.user_id=t.user_id LEFT JOIN backend_state bs ON bs.project_id=br.project_id LEFT JOIN directory_exports de ON de.turn_id=t.id LEFT JOIN directory_reviews der ON der.id=de.review_id AND der.user_id=t.user_id LEFT JOIN directory_reviews dr ON dr.id=t.id AND dr.user_id=t.user_id LEFT JOIN directories ds ON ds.project_id=dr.project_id LEFT JOIN directory_reviews dc ON dc.confirmed_by=t.id AND dc.user_id=t.user_id LEFT JOIN directories ds2 ON ds2.project_id=dc.project_id LEFT JOIN publications dp ON dp.project_id=dc.project_id LEFT JOIN github_backups gb ON gb.id=t.id AND gb.user_id=t.user_id LEFT JOIN chat_comparisons cmp ON cmp.turn_id=t.id LEFT JOIN contact_reviews cr ON cr.id=t.id AND cr.user_id=t.user_id LEFT JOIN version_removals vr ON vr.id=t.id AND vr.user_id=t.user_id LEFT JOIN photo_removals r ON r.id=t.id AND r.user_id=t.user_id LEFT JOIN chat_exports e ON e.turn_id=t.id LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_actions a ON a.id = t.id AND a.user_id=t.user_id LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100").bind(userId),
+    db.prepare("SELECT t.id, t.revision, t.user_text, t.action_json, t.assistant_text, t.created_at, t.mode, t.status, CASE WHEN csr.status='pending' AND t.status='completed' AND csr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM cms_instances WHERE project_id=csr.project_id) AND instr(t.assistant_text,'Use the confirmation button for setup '||csr.id||' to approve this exact setup request.')>0 THEN csr.id ELSE NULL END AS cms_confirmation_id, CASE WHEN bl.kind='export' AND t.status='completed' AND br.status='applied' THEN br.id ELSE NULL END AS backend_state_export_id, CASE WHEN bl.kind='review' AND t.status='completed' AND br.status='ready' AND br.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND br.base_revision=bs.revision AND br.before_json=bs.state_json AND instr(t.assistant_text,'use the confirmation button for review '||br.id||'. A newer data revision invalidates this review.')>0 THEN br.id ELSE NULL END AS backend_state_confirmation_id, de.review_id AS directory_export_id, der.project_id AS directory_export_project_id, CASE WHEN dr.status='pending' AND t.status='completed' AND dr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND dr.expected_revision=ds.revision THEN dr.id ELSE NULL END AS directory_confirmation_id, CASE WHEN dc.kind='publish' AND dc.status='applied' AND ds2.live_json=dc.snapshot_json AND ds2.publication_revision=dp.revision AND dp.version_id IS NOT NULL THEN dc.project_id ELSE NULL END AS directory_project_id, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind, e.version_id AS export_version_id, CASE WHEN r.status='pending' AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM project_files WHERE id=r.file_id) THEN r.id ELSE NULL END AS photo_confirmation_id, CASE WHEN vr.status='pending' AND vr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM site_versions WHERE id=vr.version_id) THEN vr.id ELSE NULL END AS version_confirmation_id, CASE WHEN cr.status='pending' AND cr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') THEN cr.id ELSE NULL END AS contact_confirmation_id,CASE WHEN dpr.status='pending' AND dpr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM domain_claims WHERE id=dpr.claim_id AND token=dpr.proof_token AND expires_at=dpr.proof_expires_at) THEN dpr.id ELSE NULL END AS domain_proof_confirmation_id,cmp.version_id AS comparison_version_id,cmp.baseline_id AS comparison_baseline_id, CASE WHEN gb.state='pending' AND gb.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND substr(t.assistant_text,-length('Use the confirmation button for backup '||gb.id||' to authorize this exact backup.'))='Use the confirmation button for backup '||gb.id||' to authorize this exact backup.' THEN gb.id ELSE NULL END AS backup_confirmation_id, CASE WHEN gb.state='complete' AND gb.commit_sha IS NOT NULL THEN 'https://github.com/'||gb.repo_owner||'/'||gb.repo_name||'/tree/'||gb.commit_sha||'/'||gb.path ELSE NULL END AS backup_url FROM chat_turns t LEFT JOIN domain_proof_removals dpr ON dpr.id=t.id AND dpr.user_id=t.user_id LEFT JOIN cms_setup_reviews csr ON csr.id=t.id AND csr.user_id=t.user_id LEFT JOIN backend_state_links bl ON bl.turn_id=t.id LEFT JOIN backend_state_reviews br ON br.id=bl.review_id AND br.user_id=t.user_id LEFT JOIN backend_state bs ON bs.project_id=br.project_id LEFT JOIN directory_exports de ON de.turn_id=t.id LEFT JOIN directory_reviews der ON der.id=de.review_id AND der.user_id=t.user_id LEFT JOIN directory_reviews dr ON dr.id=t.id AND dr.user_id=t.user_id LEFT JOIN directories ds ON ds.project_id=dr.project_id LEFT JOIN directory_reviews dc ON dc.confirmed_by=t.id AND dc.user_id=t.user_id LEFT JOIN directories ds2 ON ds2.project_id=dc.project_id LEFT JOIN publications dp ON dp.project_id=dc.project_id LEFT JOIN github_backups gb ON gb.id=t.id AND gb.user_id=t.user_id LEFT JOIN chat_comparisons cmp ON cmp.turn_id=t.id LEFT JOIN contact_reviews cr ON cr.id=t.id AND cr.user_id=t.user_id LEFT JOIN version_removals vr ON vr.id=t.id AND vr.user_id=t.user_id LEFT JOIN photo_removals r ON r.id=t.id AND r.user_id=t.user_id LEFT JOIN chat_exports e ON e.turn_id=t.id LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_actions a ON a.id = t.id AND a.user_id=t.user_id LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100").bind(userId),
     db.prepare("SELECT COUNT(*) AS projects, COALESCE(SUM(CASE WHEN site_live=1 OR backend_live=1 OR cms_articles>0 THEN 1 ELSE 0 END),0) AS live, COALESCE(SUM(cms_articles),0) AS cms_articles FROM project_service_status WHERE owner_user_id = ?").bind(userId)
   ]);
   const exports=await cmsExportLinks(db,userId);
@@ -141,7 +138,6 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   let exportId: string | undefined;
   let version: { projectId: string; config: LaunchConfig; html: string; digest: string } | undefined;
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
-  const navigation=workspaceNavigation(content);
   const maintenance=appMaintenanceRequest(content);
   if(maintenance&&'error' in maintenance)return {status:400,error:maintenance.error};
   const pendingCMS=cmsPendingRequest(content);
@@ -149,7 +145,6 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const usageReview=usageReviewCommand(content);
   let usageReviewReply:Awaited<ReturnType<typeof prepareUsageReviewChat>>|undefined;
   if(usageReview){try{usageReviewReply=await prepareUsageReviewChat(db,userId,input.id,content);}catch(e){return {status:e instanceof BillingError?e.status:503,error:e instanceof BillingError?e.message:'Usage review unavailable. Try again with the same message.'};}}
-  const help=chatHelp(command,!!ai);
   if(/^\/design-app-page(?:\s|$)/.test(command)){
     if(!appPageDesignProjectId(content))return {status:400,error:'Choose the approved application from Chat.'};
     if(!ai)return {status:503,error:'AI page design is not connected in this environment.'};
@@ -160,8 +155,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(!ai)return {status:503,error:'AI drafting is not connected. Please try again later.'};
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions,true);
   }
-  const known = [...transcriptRequests,'show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
-  if (ai && !usageReview && !help && !navigation && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
+  const known = [...transcriptRequests,'show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
+  if (ai && !usageReview && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
   const backup=backupChatCommand(db,userId,input.id,command,dnsOptions);
@@ -182,15 +177,14 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const publication = await publicationCommand(db,userId,input.id,command);
   if(isTranscriptRequest(content))reply=transcriptReply;
   else if(usageReviewReply)reply=usageReviewReply.reply;
-  else if(navigation){const pages=(navigation.view==='pages'||navigation.view==='page')?(await readLayout(db,userId)).layout.tabs:[];reply=workspaceNavigationHelp+(navigation.view==='pages'||navigation.view==='page'?'\n'+(pages.length?'Your pages: '+pages.map(p=>p.label).join(', '):'No custom pages yet. Ask Whumpo to create one for your workflow.'):'');}
   else if(maintenance){try{reply=describeAppMaintenance(await listAppMaintenance(db,userId,maintenance.projectId,maintenance.page),maintenance.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Application maintenance could not be read. Try again; nothing was executed.'};}}
   else if(pendingCMS){try{reply=describePendingCMS(await pendingCMSWork(db,userId,pendingCMS.projectId,pendingCMS.page),pendingCMS.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Publishing work could not be read. Try again; no operation was retried.'};}}
-  else if(cms)reply='CMS command recorded. Inspect /cms or /cms-review '+input.id+' to recover its saved state.';
-  else if(backend)reply='Backend command recorded. Its result is not saved yet. Use /backend-result '+input.id+' to inspect a test receipt. Replaying this message will not execute again.';
-  else if(health)reply='Website check recorded; the result is not saved yet. Use /health for current status.';
-  else if(backup)reply='Backup command recorded; its result has not yet been saved. Use /backups to inspect reviews. Replaying this message will not dispatch it again.';
-  else if(hosting)reply='Hosting command recorded; its result has not yet been saved. Use /hosting to inspect saved connections. Replaying this message will not dispatch it again.';
-  else if (dns) reply = 'DNS command recorded; its result has not yet been saved. Use /dns to inspect saved reviews. Replaying this message will not dispatch it again.';
+  else if(cms)reply="CMS request recorded. Ask to inspect the saved setup or content request "+input.id+' to recover its saved state.';
+  else if(backend)reply="Backend request recorded. Its result is not saved yet. Ask to read test receipt "+input.id+'. Replaying this message will not execute again.';
+  else if(health)reply="Website check recorded; the result is not saved yet. Ask to read its current saved status.";
+  else if(backup)reply="Backup request recorded; its result has not yet been saved. Ask to inspect your saved backup reviews. Replaying this message will not dispatch it again.";
+  else if(hosting)reply="Hosting request recorded; its result has not yet been saved. Ask to inspect your saved hosting connections. Replaying this message will not dispatch it again.";
+  else if (dns) reply = "DNS request recorded; its result has not yet been saved. Ask to inspect your saved DNS reviews. Replaying this message will not dispatch it again.";
   else if(directory)reply=directory.reply;
   else if(comparison)reply=comparison.reply;
   else if(contact)reply=contact.reply;
@@ -205,59 +199,59 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     const access=visitorAccessCommand(command)??{};
     if(access.error)return {status:400,error:access.error};
     const target=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,access.projectId??null,access.projectId??null).first<{id:string;name:string}>();
-    if(!target)reply='No matching project found. Create one with /new first.';
-    else {const access=await readAppAccess(db,userId,target.id);reply=`Visitor access for “${target.name}”: ${access.visitors.filter(v=>!v.revoked).length} active visitor(s). Open Dashboard → Visitor access, or use /visitor-access ${target.id} in the workspace. Create invitations, cancel unused invitations and review revoking a visitor there. Access changes require a recent sign-in. Keep all invitation and recovery codes out of chat. ${access.publicAccessReady?'The reviewed visitor page is published.':'A visitor page still needs to be reviewed and published.'}`;}
+    if(!target)reply="No matching project found. Start a project first.";
+    else {const access=await readAppAccess(db,userId,target.id);reply=`Visitor access for “${target.name}”: ${access.visitors.filter(v=>!v.revoked).length} active visitor(s). Open Dashboard → Visitor access. Create invitations, cancel unused invitations and review revoking a visitor there. Access changes require a recent sign-in. Keep all invitation and recovery codes out of chat. ${access.publicAccessReady?'The reviewed visitor page is published.':'A visitor page still needs to be reviewed and published.'}`;}
   }
-  else if (/^\/project-details(?:\s|$)/.test(command)) {const parts=command.split(/\s+/);if(parts.length!==2||! /^[0-9a-f-]{36}$/.test(parts[1]))return {status:400,error:'Use /project-details PROJECT_ID'};reply=await inspectWorkspace(db,userId,'project',parts[1]);}
+  else if (/^\/project-details(?:\s|$)/.test(command)) {const parts=command.split(/\s+/);if(parts.length!==2||! /^[0-9a-f-]{36}$/.test(parts[1]))return {status:400,error:"Choose a project to inspect."};reply=await inspectWorkspace(db,userId,'project',parts[1]);}
   else if (['/traffic','show traffic','my traffic'].includes(command)) reply=await inspectWorkspace(db,userId,'traffic');
-  else if (['/inbox','show inbox','my inbox'].includes(command)) reply='Open your private inbox from Dashboard → Contact inbox or type /inbox in the workspace. Visitor messages are not copied into chat history or AI prompts. Use /contact-on PROJECT_ID or /contact-off PROJECT_ID to review form settings.';
+  else if (['/inbox','show inbox','my inbox'].includes(command)) reply="Open your private inbox from Dashboard → Contact inbox. Visitor messages are not copied into Chat history or AI prompts. Ask to review enabling or disabling the contact form.";
   else if (/^\/(?:photos|files)(?:\s|$)/.test(command)||['show files','show photos'].includes(command)) {
     const [,id,...extra]=command.startsWith('/')?command.split(/\s+/):['/photos'];
-    if(extra.length||(id&&!/^[0-9a-f-]{36}$/.test(id)))return {status:400,error:'Use /files or /photos, optionally followed by a project ID.'};
+    if(extra.length||(id&&!/^[0-9a-f-]{36}$/.test(id)))return {status:400,error:"Choose the project whose saved photos you want to inspect."};
     const target=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,id??null,id??null).first<{id:string;name:string}>();
-    if(!target)reply='No matching project found. Use /projects to choose a project.';
-    else {const {files}=await listPhotos(db,userId,target.id);reply=`Saved photo inventory for ${JSON.stringify(target.name)} when this message was requested:\n\n`+(files.length?files.map(f=>`${JSON.stringify(f.name)} · ${f.status==='ready'?'saved privately':'upload not confirmed'} · ${f.safetyStatus==='approved'?'checks passed':f.safetyStatus==='blocked'?'unavailable':'waiting for safety checks'}\n${f.width} × ${f.height} pixels · ${f.size} bytes · retained by ${f.saved_versions} saved version(s)\nPhoto: ${f.id}`).join('\n\n'):'No photos uploaded for this project yet.')+'\n\nType open project photos to preview or upload a photo. Use /files PROJECT_ID to inspect another project; /projects lists your IDs. Use /delete-photo PHOTO_ID to review removal of an unused photo.\n\nThis reads saved metadata only, not image bytes, current publication or storage availability. Sending /files again refreshes this snapshot. No AI units were used.';}
+    if(!target)reply="No matching project found. Ask to list your projects.";
+    else {const {files}=await listPhotos(db,userId,target.id);reply=`Saved photo inventory for ${JSON.stringify(target.name)} when this message was requested:\n\n`+(files.length?files.map(f=>`${JSON.stringify(f.name)} · ${f.status==='ready'?'saved privately':'upload not confirmed'} · ${f.safetyStatus==='approved'?'checks passed':f.safetyStatus==='blocked'?'unavailable':'waiting for safety checks'}\n${f.width} × ${f.height} pixels · ${f.size} bytes · retained by ${f.saved_versions} saved version(s)\nPhoto: ${f.id}`).join('\n\n'):'No photos uploaded for this project yet.')+"\n\nOpen Project photos to preview or upload a photo. Ask to inspect another project’s photos or review removing an unused photo.\n\nThis reads saved metadata only, not image bytes, current publication or storage availability. Ask again for a fresh inventory.";}
   }
   else if (/^\/(?:inspect|project)(?:\s|$)/.test(command)) {
     const [verb,id,...extra]=command.split(/\s+/);
-    if(!id||!/^[0-9a-f-]{36}$/.test(id)||extra.length)return {status:400,error:'Use /inspect VERSION_ID or /project PROJECT_ID.'};
+    if(!id||!/^[0-9a-f-]{36}$/.test(id)||extra.length)return {status:400,error:"Choose the saved version or project to inspect."};
     reply=await inspectWorkspace(db,userId,verb==='/inspect'?'version':'project',id);
   }
   else if (/^\/export(?:\s|$)/.test(command) || ['export my website','download my website'].includes(command)) {
     const args=command.startsWith('/export')?command.split(/\s+/):['/export'];
-    if(args.length>2 || (args[1]&&!/^[0-9a-f-]{36}$/.test(args[1])))return {status:400,error:'Use /export, optionally followed by a saved version ID from /versions.'};
+    if(args.length>2 || (args[1]&&!/^[0-9a-f-]{36}$/.test(args[1])))return {status:400,error:"Choose a saved website version to export."};
     const saved=await db.prepare('SELECT v.id,p.name FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE p.owner_user_id=? AND (? IS NULL OR v.id=?) ORDER BY v.created_at DESC,v.id DESC LIMIT 1').bind(userId,args[1]??null,args[1]??null).first<{id:string;name:string}>();
-    if(!saved)reply='No saved version found. Create a private draft first, or choose a version with /versions.';
+    if(!saved)reply="No saved version found. Create a private draft first, or ask to list your saved versions.";
     else {exportId=saved.id;reply=`Download the saved source for “${saved.name}” below. Version: ${saved.id}. The ZIP includes its HTML, styles and configuration. It contains no account credentials or chat history. This uses no AI units and does not change your live site.`;}
   }
   else if (/^\/build(?:\s|$)/.test(command)) {
     const args = command.split(/\s+/);
     let theme = args[1] || 'ocean';
-    if (!['ocean','clay','forest'].includes(theme) || args.length > 3 || (args[2] && !/^[0-9a-f-]{36}$/.test(args[2]))) return {status:400,error:'Use /build ocean, /build clay, or /build forest, optionally followed by a project ID.'};
+    if (!['ocean','clay','forest'].includes(theme) || args.length > 3 || (args[2] && !/^[0-9a-f-]{36}$/.test(args[2]))) return {status:400,error:"Choose an ocean, clay or forest theme and the project for this private draft."};
     const target = await db.prepare('SELECT id,name,purpose,preferred_theme FROM projects WHERE owner_user_id = ? AND (? IS NULL OR id = ?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[2] ?? null,args[2] ?? null).first<{id:string;name:string;purpose:string;preferred_theme:LaunchConfig['theme']}>();
-    if (!target) reply = 'Create a project with /new first, or check its ID with /projects.';
+    if (!target) reply = "Start a project first, or ask to list your projects.";
     else {
       if (!args[1]) theme = target.preferred_theme;
       const config: LaunchConfig = {name:target.name,description:target.purpose,theme:theme as LaunchConfig['theme']};
       const html = renderLaunch(config);
       version = {projectId:target.id,config,html,digest:await hashToken(html)};
-      reply = `I assembled a private first draft for “${target.name}” using the reusable launch-page layout (${theme}). Open the preview below. No AI units were used. This is a saved preview, not a published site. Try another theme with /build clay or /build forest.`;
+      reply = `I assembled a private first draft for “${target.name}” using the reusable launch-page layout (${theme}). Open the preview below. No AI units were used. This is a saved preview, not a published site. Ask to try a different theme.`;
     }
   } else if (/^\/brief(?:\s|$)/.test(command) || command==='show brief') {
     const args=command==='show brief'?['/brief']:command.split(/\s+/);
-    if(args.length>2 || (args[1]&&!/^[0-9a-f-]{36}$/.test(args[1]))) return {status:400,error:'Use /brief, optionally followed by a project ID.'};
+    if(args.length>2 || (args[1]&&!/^[0-9a-f-]{36}$/.test(args[1]))) return {status:400,error:"Choose the project whose brief you want to read."};
     const saved=await db.prepare('SELECT name,purpose,audience,style_notes,preferred_theme FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[1]??null,args[1]??null).first<{name:string;purpose:string;audience:string;style_notes:string;preferred_theme:string}>();
-    reply=saved?`Private brief for “${saved.name}”\nIdea: ${saved.purpose}\nAudience and goal: ${saved.audience||'Not specified'}\nStyle notes: ${saved.style_notes||'Not specified'}\nStarting theme: ${saved.preferred_theme}\n\nAudience and style notes are planning context for AI edits, not page content.`:'No project found. Use /new to start one.';
+    reply=saved?`Private brief for “${saved.name}”\nIdea: ${saved.purpose}\nAudience and goal: ${saved.audience||'Not specified'}\nStyle notes: ${saved.style_notes||'Not specified'}\nStarting theme: ${saved.preferred_theme}\n\nAudience and style notes are planning context for AI edits, not page content.`:"No project found. Start a project first.";
   } else if (['/projects', 'show my projects', 'my projects', 'show services'].includes(command)) {
     const { results } = await db.prepare('SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 20').bind(userId).all<{ id: string; name: string; purpose: string; status: string;site_live:number;backend_live:number;cms_articles:number }>();
-    reply = results.length ? results.map(p => `${p.name} — ${p.site_live||p.cms_articles||p.backend_live?'live':p.status}\n${p.purpose}\nID: ${p.id}${p.site_live ? '\n' + siteURL(p.id) : ''}${p.backend_live?'\nPublic JSON backend · https://'+p.id+'.whumpo.site/backend':''}${p.cms_articles?'\n'+p.cms_articles+' public CMS article(s) · https://'+p.id+'.whumpo.site/cms':''}`).join('\n\n') : 'No projects yet. Tell me your idea, or type /new to start.';
+    reply = results.length ? results.map(p => `${p.name} — ${p.site_live||p.cms_articles||p.backend_live?'live':p.status}\n${p.purpose}\nID: ${p.id}${p.site_live ? '\n' + siteURL(p.id) : ''}${p.backend_live?'\nPublic JSON backend · https://'+p.id+'.whumpo.site/backend':''}${p.cms_articles?'\n'+p.cms_articles+' public CMS article(s) · https://'+p.id+'.whumpo.site/cms':''}`).join('\n\n') : "No projects yet. Tell me what you would like to build.";
   } else if (/^\/ai-history(?:\s|$)/.test(command)||['show my ai requests','show ai history','show recent ai requests'].includes(command)) {
     const parts=command.startsWith('/')?command.split(/\s+/):['/ai-history'];
-    if(parts.length>2||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))return {status:400,error:'Use /ai-history, optionally followed by a page from 1 to 1000.'};
+    if(parts.length>2||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))return {status:400,error:"Choose an AI request history page from 1 to 1000."};
     reply=describeStandardAIHistory(await readStandardAIHistory(db,userId,Number(parts[1]??1)));
   } else if (/^\/ai-request(?:\s|$)/.test(command)) {
     const match=/^\/ai-request ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(command);
-    if(!match)return {status:400,error:'Use /ai-request followed by a request ID from /ai-history.'};
+    if(!match)return {status:400,error:"Choose a saved request from your AI history."};
     const request=await readStandardAIRequest(db,userId,match[1]);
     if(!request)return {status:404,error:'AI request not found.'};
     reply=describeStandardAIRequest(request)+'\n\nThis is a saved status, not a retry. Read the original Chat response for the work result. An interrupted request is not sent again automatically.';
@@ -276,41 +270,40 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     reply = await describeConnections(db,userId,dnsOptions);
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Profile → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
-  } else if (help) {
-    reply = help;
+
   } else if (command === '/new') {
     step = 'idea'; idea = ''; briefProject = null; briefStage = null; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
   } else if (command === '/cancel') {
-    step = 'ready'; idea = ''; briefProject = null; briefStage = null; reply = 'I’ve cleared the unfinished brief. Your existing projects are unchanged. Type /new whenever you’re ready.';
+    step = 'ready'; idea = ''; briefProject = null; briefStage = null; reply = "I’ve cleared the unfinished brief. Your existing projects are unchanged. Tell me when you are ready to start another project.";
   } else if (briefStage && (!content.startsWith('/') || command === '/skip')) {
     const target = await db.prepare('SELECT id,name,purpose FROM projects WHERE id=? AND owner_user_id=?').bind(briefProject,userId).first<{id:string;name:string;purpose:string}>();
-    if (!target) { briefProject=null; briefStage=null; reply='That project is no longer available. Use /new to start another idea.'; }
+    if (!target) { briefProject=null; briefStage=null; reply="That project is no longer available. Start another project to continue."; }
     else if (briefStage === 'audience') {
       preference={projectId:target.id,audience:command==='/skip'?'':content}; briefStage='style';
-      reply='What should it feel like? Choose ocean (crisp blue), clay (warm terracotta), or forest (calm green), or describe your style. I’ll save your preferences and assemble a private first draft. Use /skip for ocean. This uses no AI units.';
+      reply="What should it feel like? Choose ocean (crisp blue), clay (warm terracotta), or forest (calm green), or describe your style. I’ll save your preferences and assemble a private first draft.";
     } else {
       const theme:LaunchConfig['theme'] = ['ocean','clay','forest'].includes(command)?command as LaunchConfig['theme']:'ocean';
       preference={projectId:target.id,style:command==='/skip'?'':content,theme};
       const config:LaunchConfig={name:target.name,description:target.purpose,theme};const html=renderLaunch(config);
       version={projectId:target.id,config,html,digest:await hashToken(html)};
       briefProject=null;briefStage=null;
-      reply=`Your first private draft for “${target.name}” is ready. I used the ${theme} theme${!['ocean','clay','forest','/skip'].includes(command)?' as a starting point and saved your style notes for AI edits':''}. Your audience and style notes stay in the project brief; they are not added to the page. No AI units were used. Open the preview below, then tell me what to change${ai?'': ' once AI is connected'}. Use /publish to review making it public; nothing is published automatically.`;
+      reply=`Your first private draft for “${target.name}” is ready. I used the ${theme} theme${!['ocean','clay','forest','/skip'].includes(command)?' as a starting point and saved your style notes for AI edits':''}. Your audience and style notes stay in the project brief; they are not added to the page. No AI units were used. Open the preview below, then tell me what to change${ai?'': ' once AI is connected'}. Ask for a publication review to make it public; nothing is published automatically.`;
     }
   } else if (command === '/skip') {
-    reply='There is no audience or style question to skip. Use /new to start a project.';
+    reply="There is no audience or style question to skip. Start a project first.";
   } else if (content.startsWith('/')) {
-    reply = 'I don’t recognize that command yet. Type /help to see what I can do.';
+    reply = "This internal action is unsupported. Use the current workspace controls or describe what you need in Chat.";
   } else if (step === 'idea') {
-    idea = content; step = 'name'; reply = 'I’ve saved that brief. What would you like to call the project? You can change direction with /cancel.';
+    idea = content; step = 'name'; reply = "I’ve saved that brief. What would you like to call the project?";
   } else if (step === 'name') {
     if (content.length > 100) reply = 'Let’s use a shorter project name—100 characters or fewer.';
     else {
       project = { id: input.id, name: content, purpose: idea };
       step = 'ready'; idea = ''; briefProject=project.id; briefStage='audience';
-      reply = `Your project “${content}” is saved. Who should this website speak to, and what would you like visitors to do? I’ll keep this as private planning context. Use /skip if you’re not sure yet.`;
+      reply = `Your project “${content}” is saved. Who should this website speak to, and what would you like visitors to do? I’ll keep this as private planning context. It is fine to leave this undecided for now.`;
     }
   } else {
-    reply = 'I’ve kept your message in our conversation. In guided mode, use /new to turn an idea into a project, or /help to see the available actions. AI-generated changes are unavailable in this environment.';
+    reply = "AI-generated changes are unavailable in this environment. Your saved work and Dashboard controls remain available.";
   }
   const now = new Date().toISOString();
   const statements = [
@@ -387,7 +380,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   if(dnsOptions?.healthChecks&&publication&&command.startsWith('/confirm ')){
     const applied=await db.prepare("SELECT project_id FROM publication_actions WHERE confirmed_by=? AND user_id=? AND status='applied' AND kind!='unpublish'").bind(input.id,userId).first<{project_id:string}>();
-    if(applied){let healthReply:string;try{healthReply=describeHealth(await checkHealth(db,userId,applied.project_id,dnsOptions.healthTransport,'publish'));}catch{healthReply='The publication is saved, but its availability check could not finish. Use /health to inspect saved checks or /check-site '+applied.project_id+' to try a new check.';}
+    if(applied){let healthReply:string;try{healthReply=describeHealth(await checkHealth(db,userId,applied.project_id,dnsOptions.healthTransport,'publish'));}catch{healthReply="The publication is saved, but its availability check could not finish. Ask to read saved health checks or check project "+applied.project_id+' to try a new check.';}
       await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=? AND user_id=?').bind(reply.replace('Availability has not been checked yet.','')+'\n\n'+healthReply,input.id,userId).run();}
   }
   return { status: 200 };

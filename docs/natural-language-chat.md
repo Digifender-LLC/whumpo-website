@@ -16,7 +16,7 @@ Browser navigation phrases no longer intercept composer text. The sidebar and Da
 
 Current ownership, expiry, expected revision, exact resource checks and recent-sign-in requirements still apply. Application restore/upgrade/rollback/cancellation requires the existing fresh-session and rate-limit gate before dispatch. UI approval authority comes from server-issued review metadata, never text or model-generated links. Validated backend handlers save immutable owned reply-digest links, so a naturally requested saved review can expose its current approval control. Current owned review state and exact receipt text are rechecked before displaying it; edited, expired, foreign or stale reviews cannot acquire an active control. No natural phrase such as “yes” or pasted confirmation command bypasses the review. Request IDs and original payloads survive disconnects, workspace navigation and reloads through account-bound browser session storage. A restored request waits for a fresh Chat read: an exact saved ID, text, typed action (or null for a human message), and original revision clears the local uncertainty without another send; otherwise only explicit Retry reuses the original ID/revision/payload. Reload never automatically submits a request, and current server ownership/review/expiry gates still apply. Unsent drafts expire after 24 hours since their last edit; unresolved request details persist until resolution, sign-out or browser session-storage removal. Account changes discard the previous account’s record. Storage failure displays a warning and leaves the mounted workspace usable. Browser session restoration can retain the tab’s data; this is not cross-device or guaranteed tab-close recovery. See [browser data lifecycle](data-lifecycle.md#storage-outside-those-148-control-tables). Read retries preserve loaded history and do not resubmit messages. Changed payloads cannot reuse a committed ID.
 
-### Current receipts and remaining reply cleanup
+### Current receipts and plain-language replies
 
 **Current source change, October 1, 2026 — deployment pending.** Typed controls save their plain-language label in `chat_turns.user_text` and their canonical closed action in `action_json`; ordinary human messages have a null action. Internal command strings select the existing domain handler but are not saved as the current control request. Request rendering displays saved text literally. There is no old-command request renderer or command-to-action conversion for persisted receipts.
 
@@ -26,7 +26,9 @@ Application/page and application-data-restore presentation requires an immutable
 
 This schema is a current-only cutover, not a mixed-version rollout: schema and platform/frontend must move together before test traffic resumes. Old command turns are not converted into typed approval receipts. Saved current approvals and uncertainty records retain their existing authorization/reconciliation requirements; the change does not imply approval or redispatch an operation. The owner permits obsolete test-data reset. No paid service or customer publication is required. Permanent recovery-point deletion remains operator/internal until an exact customer review control exists.
 
-**Remaining WH-120 work:** some reply producers still emit command-style instructions and `chat-language.ts` still rewrites those replies for display. Those producers and the reply filter must be replaced together; this slice removes request rendering and review-selection fallbacks only. Do not mark the full Chat cleanup done yet. The internal `sendChat` dispatch and fixture adapters remain private; only `sendConversation` is mounted at the public message endpoint.
+**Current reply cleanup, October 1 — deployment pending:** handlers now produce plain-language review, recovery, inspection and pagination guidance directly. `chat-language.ts` and its compatibility rewrite are removed; the frontend renders saved replies literally and preserves source blocks and URLs. The obsolete help catalogue and server/browser navigation interpreters are deleted. App maintenance and publishing-work inventories expose saved IDs, with the fixed publishing-desk path only where needed, instead of executable command suggestions. Receipt checks use the same current wording as their producers; no older text alternative is accepted. CMS import/publication link selection no longer recognizes commands in saved user text. CMS changes received source/type review only; functional CMS acceptance remains deferred.
+
+The internal `sendChat` domain dispatch and fixture adapters remain private; only `sendConversation` is mounted at the public message endpoint. Its old guided website-creation path still belongs to the pending website-specification replacement in WH-120. This cleanup does not complete the website or CMS shape inventory.
 
 ## Resources available to the agent
 
@@ -52,7 +54,7 @@ The pilot must enforce server-derived tenant/project scope, recheck ownership an
 
 ## Verification and release
 
-The October 1 current typed-receipt slice is locally verified and **not deployed**. [Current-version policy](current-version-policy.md#current-typed-chat-receipts--october-1-2026) records the exact checks and remaining reply-producer cleanup. The dated releases below describe earlier deployed source.
+The October 1 current typed-receipt slice is locally verified and **not deployed**. [Current-version policy](current-version-policy.md#current-typed-chat-receipts--october-1-2026) records the exact checks and source cleanup. The reply producers and renderer have also been updated in source; their deployment is pending. The dated releases below describe earlier deployed source.
 
 Local verification on September 30, 2026:
 

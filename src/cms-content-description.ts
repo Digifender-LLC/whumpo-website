@@ -33,7 +33,7 @@ export function describeCMSContent(result:unknown):string{
   return 'Saved CMS content and requests\n\n'+lines.join('\n\n')+(result.length>100?'\n\nMore entries are available in the publishing desk.':'')+'\n\nOpen the publishing desk to inspect current content. Unconfirmed requests should be recovered before creating replacements.';
  }
  const value=record(result);if(!value)return 'The CMS result could not be displayed. Check the existing request before trying again.';
- if(Array.isArray(value.items)&&typeof value.page==='number'&&typeof value.total==='number')return `CMS media · ${value.total} stored files · Page ${value.page}\n\n`+value.items.map(v=>{const item=record(v);return `${text(item?.filename,255)} · ${text(item?.mimeType,100)}`;}).join('\n')+(value.hasMore?`\n\nNext page: /cms-media ${id(value.projectId)} ${value.page+1}`:'')+'\n\nMetadata only. File upload and article-image insertion are not available yet.';
+ if(Array.isArray(value.items)&&typeof value.page==='number'&&typeof value.total==='number')return `CMS media · ${value.total} stored files · Page ${value.page}\n\n`+value.items.map(v=>{const item=record(v);return `${text(item?.filename,255)} · ${text(item?.mimeType,100)}`;}).join('\n')+(value.hasMore?`\n\nAsk for saved images page ${value.page+1} in project ${id(value.projectId)}.`:'')+'\n\nMetadata only. File upload and article-image insertion are not available yet.';
  const request=id(value.requestId),project=id(value.projectId);
  const references=[project?'Project: '+project:'',request?'Content request: '+request:''].filter(Boolean).join('\n');
  if(typeof value.preview==='string')return 'Private preview is ready. Open the preview button below; signing in is required. It loads the latest saved draft.\n\n'+references;
