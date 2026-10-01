@@ -4,7 +4,7 @@
 
 ## Implemented contract
 
-[schema.sql](../src/workspace-identity/schema.sql) defines five current-policy tables and one authority view. It sits outside `migrations/` until enrollment and recovery are complete and the reviewed test reset is ready. Its only platform dependency is the canonical `users(id)` owner record. It does not inspect password fields or existing session, passkey or recovery-code tables. Merely applying this SQL is not an authentication cutover.
+[schema.sql](../src/workspace-identity/schema.sql) defines the five authority tables below; [verified ceremonies](identity-ceremonies.md) now extend it with challenge/receipt tables and a current-key candidate view. It sits outside `migrations/` until enrollment and recovery are complete and the reviewed test reset is ready. Its owner reference is canonical `users(id)`. It does not inspect password fields or existing session, passkey or recovery-code tables. Merely applying this SQL is not an authentication cutover.
 
 | Records | Current invariant |
 | --- | --- |
@@ -28,7 +28,7 @@ The predicate proves identity only. Callers must also check current resource own
 
 Use the predicate in a conditional write, check the affected row or read the uniquely claimed effect receipt, and gate all dependent writes on that claim. A zero-row conditional write does not automatically abort a batch. Do not assert identity once and then run unconditional effects. Where a successful effect advances its own revision/epoch, subsequent statements must follow the unique winning receipt instead of reusing a now-stale admission predicate. [D1 batches](https://developers.cloudflare.com/d1/worker-api/d1-database/) run sequentially and roll back on statement failure; local SQL and a remote provider effect are not one distributed transaction.
 
-This foundation has no authority issuance API that accepts `verified: true`. Actual cryptographic verification, one-use challenges, invitation consumption and guarded session/grant issuance belong to [WH-114B #71](https://github.com/zemdregon/whumpo/issues/71), using the maintained [SimpleWebAuthn verifier](https://simplewebauthn.dev/docs/packages/server) and [WebAuthn verification requirements](https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion). Test fixture inserts are synthetic database state, not proof of a real authenticator or safe enrollment completion.
+This foundation has no authority issuance API that accepts `verified: true`. [WH-114B #71](https://github.com/zemdregon/whumpo/issues/71) now implements [cryptographic ceremonies](identity-ceremonies.md), one-use challenges, invitation consumption and guarded session/grant issuance using the maintained verifier. Kit-bound completion and connected acceptance remain open. Authority-test fixture inserts remain synthetic database state; ceremony tests separately exercise real signature verification. Neither proves physical-device acceptance or complete enrollment.
 
 ## Lifecycle handoff
 
@@ -42,7 +42,7 @@ The five tables are not in the active schema inventory yet. The current 149-tabl
 | Kit verifier | Authentication secret verifier, not downloadable kit content. New offers/acknowledgments/rotation receipts remain WH-115 work. No plaintext reread or browser persistence. |
 | All five tables | Canonical user deletion cascades owned records, including staged keys. Restore/forward repair must preserve revocation and epoch truth. Later operation receipts are non-secret, retained seven days, and cannot recreate a session. |
 
-There is no account reset, secret transformation, device ceremony, deployment, provider activation or live release in this packet. The schema does not implement the entire identity state machine: signup completion, reviewed loss selection, prepared/saved kits, securing recovery, replay receipts, authenticated cancellation, logout, cleanup and the trusted UI are still the connected WH-114B/115/114C work.
+There is no account reset, secret transformation, physical-device ceremony, deployment, provider activation or live release in this packet. Verified ceremonies now add non-secret ceremony receipts and bounded admission cleanup. The schema does not implement the entire identity state machine: signup completion, reviewed loss selection, prepared/saved kits, securing recovery, final completion receipts, authenticated cancellation, logout and the trusted UI remain connected WH-114B/115/114C work.
 
 ## Verification
 

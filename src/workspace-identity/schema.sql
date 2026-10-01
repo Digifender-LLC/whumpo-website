@@ -86,6 +86,76 @@ CREATE TABLE identity_grants (
 CREATE INDEX identity_grants_account ON identity_grants(account_id);
 CREATE INDEX identity_grants_expiry ON identity_grants(expires_at);
 
+CREATE TABLE identity_challenges (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ token_hash TEXT NOT NULL UNIQUE CHECK(length(token_hash)=64 AND token_hash NOT GLOB '*[^0-9a-f]*'),
+ challenge TEXT NOT NULL CHECK(length(challenge) BETWEEN 32 AND 256),
+ kind TEXT NOT NULL CHECK(kind IN ('signup','login','add','reauth')),
+ policy_version INTEGER NOT NULL CHECK(policy_version=1),
+ client TEXT NOT NULL CHECK(client='web'),
+ origin TEXT NOT NULL CHECK(origin IN ('https://whumpo.com','http://localhost:8787')),
+ rp_id TEXT NOT NULL CHECK((origin='https://whumpo.com' AND rp_id='whumpo.com') OR (origin='http://localhost:8787' AND rp_id='localhost')),
+ account_id TEXT,
+ email TEXT,
+ invite_hash TEXT,
+ eligibility_version TEXT,
+ authority_id TEXT,
+ authority_kind TEXT CHECK(authority_kind IN ('session','grant')),
+ auth_epoch INTEGER,
+ credential_revision INTEGER,
+ attempt_id TEXT,
+ attempt_revision INTEGER,
+ request_id TEXT NOT NULL CHECK(length(request_id)=36),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ credential_name TEXT,
+ created_at INTEGER NOT NULL CHECK(created_at>=0),
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+300),
+ CHECK((kind='signup' AND account_id IS NOT NULL AND email IS NOT NULL AND invite_hash IS NOT NULL AND eligibility_version IS NOT NULL AND authority_id IS NULL)
+  OR (kind='login' AND account_id IS NULL AND authority_id IS NULL)
+  OR (kind IN ('add','reauth') AND account_id IS NOT NULL AND authority_id IS NOT NULL AND authority_kind IS NOT NULL AND auth_epoch IS NOT NULL AND credential_revision IS NOT NULL)),
+ UNIQUE(account_id,request_id)
+) STRICT;
+CREATE INDEX identity_challenges_expiry ON identity_challenges(expires_at);
+CREATE TRIGGER identity_challenge_limit BEFORE INSERT ON identity_challenges
+WHEN (SELECT count(*) FROM identity_challenges)>=5000
+ OR (NEW.account_id IS NOT NULL AND (SELECT count(*) FROM identity_challenges WHERE account_id=NEW.account_id)>=20)
+BEGIN SELECT RAISE(ABORT,'identity_challenge_limit'); END;
+CREATE TRIGGER identity_challenge_immutable BEFORE UPDATE ON identity_challenges
+BEGIN SELECT RAISE(ABORT,'identity_challenge_immutable'); END;
+
+-- An execution nonce fences a losing/replayed commit. No tokens or proof bodies are retained.
+CREATE TABLE identity_ceremony_receipts (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ execution_nonce TEXT NOT NULL CHECK(length(execution_nonce)=36),
+ account_id TEXT NOT NULL REFERENCES identity_accounts(account_id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('signup','login','add','reauth')),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ credential_id TEXT NOT NULL,
+ attempt_id TEXT,
+ created_at INTEGER NOT NULL CHECK(created_at>=0)
+) STRICT;
+CREATE INDEX identity_ceremony_receipts_account ON identity_ceremony_receipts(account_id,created_at);
+CREATE TRIGGER identity_ceremony_receipt_immutable BEFORE UPDATE ON identity_ceremony_receipts
+BEGIN SELECT RAISE(ABORT,'identity_ceremony_receipt_immutable'); END;
+CREATE TRIGGER identity_ceremony_receipt_limit BEFORE INSERT ON identity_ceremony_receipts
+WHEN (SELECT count(*) FROM identity_ceremony_receipts)>=50000
+BEGIN SELECT RAISE(ABORT,'identity_receipt_limit'); END;
+CREATE TRIGGER identity_challenges_account_delete BEFORE DELETE ON users
+BEGIN DELETE FROM identity_challenges WHERE account_id=OLD.id; END;
+
+-- Current keys that may prove returning access; staged keys only resume their own flow.
+CREATE VIEW identity_authentication_candidates AS
+SELECT c.id,c.account_id,c.public_key,c.counter,c.status,c.attempt_id AS credential_attempt_id,
+ a.stage,a.auth_epoch,a.credential_revision,a.kit_generation,t.id AS attempt_id,t.revision AS attempt_revision
+FROM identity_credentials c JOIN identity_accounts a ON a.account_id=c.account_id
+LEFT JOIN identity_attempts t ON t.id=a.current_attempt_id AND t.account_id=a.account_id
+WHERE a.policy_version=1 AND (
+ (a.stage='ready' AND c.status='active' AND a.current_attempt_id IS NULL AND a.kit_generation>0 AND a.completion_receipt_id IS NOT NULL)
+ OR (t.auth_epoch=a.auth_epoch AND t.kit_generation=a.kit_generation AND (
+  (a.stage='enrolling' AND t.kind='enrollment' AND t.status='open' AND c.status='staged' AND c.attempt_id=t.id)
+  OR (a.stage='recovering' AND t.kind='recovery' AND t.status='secured' AND a.kit_generation>0 AND
+   (c.status='active' OR (c.status='staged' AND c.attempt_id=t.id))))));
+
 CREATE TRIGGER identity_account_monotonic BEFORE UPDATE ON identity_accounts
 WHEN NEW.account_id!=OLD.account_id OR NEW.policy_version!=OLD.policy_version
  OR NEW.auth_epoch<OLD.auth_epoch OR NEW.credential_revision<OLD.credential_revision OR NEW.kit_generation<OLD.kit_generation
