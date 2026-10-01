@@ -79,4 +79,8 @@ Observed document width matched 360/390 px with no horizontal overflow. At 390×
 
 WH-024 remains open for the complete invitation → welcome → draft → review/preview/recovery keyboard journey, actual screen-reader output, broader contrast/error-state review and physical iOS/Android checks. Full reload/tab-close persistence is also unresolved: draft and uncertain request state are held in the mounted workspace, not durable browser storage. Navigation and read retries preserve that state; reload still loses an unsent draft or client-only uncertain-request identity. Server-saved turns remain readable. No silent local storage of messages or automatic resubmission was introduced. CMS testing and CSAM implementation remain owner-deferred.
 
-Deployment evidence follows only after release verification.
+### Test deployment
+
+Managed release `02370893-1c87-419d-ad49-9162ddb0f135` deployed source `524cf00`. Independent readback at **2026-10-01T03:04:55.347Z** confirmed all four candidate versions, unchanged service/secret-binding names and CMS registrations, all 113 migrations applied with none pending, and all 16 platform assets matching the archive. Home, workspace and health returned 200; anonymous Chat/profile returned 401. The workspace document references the exact reviewed entry assets. Platform version: `e9f01d13-47cd-4a8b-84ad-3df7e6e43b70`. Private evidence: `.secrets/workspace-release-verification.json`, `.secrets/workspace-entry-verification.json` and the immutable release archive.
+
+This verifies that the tested frontend is deployed. Interactive acceptance was performed against the synthetic loopback API, not a live authenticated owner session. No new schema, service contract, route, schedule or binding change was needed. The checked generated visitor difference was dependency-path comments only. Automated GitHub review bots reported account review quotas exhausted; no automated review approval is claimed.
