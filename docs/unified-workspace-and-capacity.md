@@ -26,6 +26,8 @@ A versioned offline [shared-pool economics proposal](resource-pool-economics.md)
 
 ## Workspace
 
+The [WH-105 interaction contract](chat-interactions.md) now defines the shared form/view vocabulary and receipt handoffs. Future saved views extend the existing layout revision and scoped readers; they do not create another permission system or remove direct recovery controls. Its offline contract checks do not establish a delivered renderer or durable form state.
+
 **Accepted next direction — October 1, 2026:** [WH-105–112](roadmap/chat-first-experience.md) make Chat the primary routine surface, including agent-presented predesigned/custom forms. The agent composes and maintains supporting dashboards/custom views; customers rarely need to leave Chat. This planned extension reuses the current layout and review boundaries below, preserves essential direct controls, and changes navigation only after replacement journeys and outage recovery are accepted.
 
 September 30 refinement: routine project operations belong in Chat. The default Dashboard is a read-only overview, with an explicit site-unpublish entry for urgent takedowns. Removed its control directory, new-project/export/publication/health shortcuts, photo management links and manual layout editor. Layout changes go through the existing validated agent workspace action. First-project guidance is conversational rather than a website/app/brief button group. Account/profile/security and external-consent controls remain available; exact action confirmations remain contextual in Chat. Workflow pages already requested by users remain available. Requested shortcuts now support a bounded catalog described below; arbitrary user code and commands are not supported.

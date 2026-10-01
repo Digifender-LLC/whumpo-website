@@ -13,6 +13,8 @@ Whumpo is a private test-stage, Cloudflare-hosted AI website and application pla
 
 ## Working rules
 
+- Current-version-only product: the owner explicitly rejects legacy support and compatibility fallbacks. Implement one current schema/API/client path, remove superseded adapters/aliases, and reject stale versions explicitly. Use reviewed forward data migrations or deliberate test-fixture resets for cutovers; do not keep old readers, dual protocols or downgrade renderers. Error recovery and current operation receipts must remain accurate. Preserve historical evidence without treating it as an active compatibility requirement.
+
 - Treat the deployed environment as the `test` environment unless explicitly directed otherwise. Local dev sets `ENVIRONMENT=local`; do not expose the local server publicly.
 - Do not enable paid Cloudflare services, upgrade plans, make customer DNS changes, deploy customer code, or perform purchases without explicit authorization and a concrete review step. Explain recurring/minimum charges in feature docs.
 - Keep README concise and link to detailed docs. Mark planned versus implemented versus configured/accepted distinctly; do not infer live acceptance from local tests.

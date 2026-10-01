@@ -70,6 +70,8 @@ The closure inventory reports full proposal/snapshot counts separately from save
 
 ### Planned data classes: decisions required before implementation
 
+[WH-105](chat-interactions.md#data-lifecycle-and-model-context) adds an explicit pending inventory for Chat definitions/defaults, server drafts, immutable answer snapshots, task summaries, view definitions/read results and submission/continuation receipts. WH-106/109 must register their actual schema/copies and WH-116/117 protection before activation. Seven-day form authority and proposed idle-draft cleanup do not prove data deletion; accepted history, unresolved identities, attachment copies and export/restore suppression follow this lifecycle contract. No new retention policy or table is implemented by the interaction decision.
+
 These requirements cover upcoming workflow features, **not additional implemented tables or provisioned services**. Every actual schema addition must receive an explicit catalog entry, including copied payloads and derived indexes.
 
 | Planned class / purpose | Ownership and proposed retention | Export/deletion authority and uncertain operations |

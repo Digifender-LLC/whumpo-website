@@ -8,7 +8,7 @@ The [F6 roadmap lane](roadmap/README.md#f6--native-android-owner-experience) and
 
 **October 1 identity amendment (planned):** Adopt the [shared workspace identity and data protection contract](roadmap/identity-and-data-protection.md). WH-081 consumes WH-113; WH-083 consumes WH-115. Workspace signup requires two distinct verified passkeys and a saved recovery kit, ordinary sign-in uses passkeys only, and recovery grants restricted enrollment before access. Native/browser handoffs cannot bypass completion. The native shell can proceed after its contract while shared identity implementation continues; physical-device acceptance remains separate. Customer-application visitor identity is unaffected.
 
-**October 1 direction amendment:** [Chat is the primary owner surface](roadmap/chat-first-experience.md), with Projects/Activity supporting the conversation and Settings for infrequent account work. WH-081 consumes WH-105's versioned interaction contract; WH-084 uses WH-106's durable definitions, answers and receipts for an admitted native template subset. Unsupported custom forms/views have a readable summary and authenticated browser fallback, with current-state readback on return. Full custom-view parity remains deferred, and the Android shell/identity foundations do not wait for the web renderer.
+**October 1 direction amendment:** [Chat is the primary owner surface](roadmap/chat-first-experience.md), with Projects/Activity supporting the conversation and Settings for infrequent account work. WH-081 consumes WH-105's current-version interaction contract; WH-084 uses WH-106's durable definitions, answers and receipts for an admitted native template subset. Unsupported versions/forms/views fail explicitly with an update-required result; there is no summary renderer or browser downgrade. Full custom-view parity remains deferred, and the Android shell/identity foundations do not wait for the web renderer.
 
 An invited owner can sign in, request a project change, inspect the result, explicitly approve an eligible action, and recover an interrupted connection without duplicate work. The first private beta includes native Chat, projects, activity, review controls, photo intake, Android sharing and push notifications. Native implementation can proceed alongside the web roadmap; admission of real customers depends on WH-048 and the Android-specific WH-087 gate.
 
@@ -26,6 +26,8 @@ Full workspace parity, full offline synchronization, iOS, customer Android-app g
 
 ## Existing services and proposed interface
 
+The [WH-105 v1 interaction decision](chat-interactions.md) is now available for WH-081: bounded definitions, field/binding IDs, answer versus effect receipts, current actor/project admission and strict rejection of noncurrent clients. The offline examples are shared contract evidence, not native endpoints or an accepted Android renderer.
+
 The platform currently authenticates browser requests with cookies and enforces an Origin check on mutations. It does not expose a native bearer API. Add a narrow `/api/mobile/v1` transport boundary during WH-083 and reuse existing domain handlers, ownership checks, receipts, quotas and review gates. Do not create a generic proxy into all platform routes or accept arbitrary internal Chat command strings.
 
 | Android operation | Current service/contract to reuse | Required native adaptation |
@@ -39,7 +41,7 @@ The platform currently authenticates browser requests with cookies and enforces 
 | Photos | `/api/projects/PROJECT_ID/files/UPLOAD_ID`, `/api/projects/PROJECT_ID/files`, `/api/files/FILE_ID`, [photo contract](photos.md). | Native image preparation, protected retry bytes/ID, status display and authorized reads through the existing private service. |
 | Push and preferences | [Background-job ADR](background-jobs.md), `src/maintenance.ts`. | New owner/device registration and preferences, durable event/outbox state, bounded FCM adapter and operational readback. No existing notification-delivery acceptance is implied. |
 
-WH-081 freezes the exact v1 route/request/response inventory and representative sanitized fixtures before implementation; this roadmap does not assert those endpoints already exist. Kotlin DTOs and TypeScript adapters must agree on errors, pagination, revisions, request identity and supported control types. Reuse the domain operation contracts rather than duplicating business logic. Unknown optional response fields may be ignored; unknown action types have no enabled native confirmation. Keep v1 compatible across released app versions, with explicit upgrade-required handling for a retired contract and continued browser recovery access. Additive D1 migrations receive their numbers at implementation time.
+WH-081 freezes the exact v1 route/request/response inventory and representative sanitized fixtures before implementation; this roadmap does not assert those endpoints already exist. Kotlin DTOs and TypeScript adapters must agree on errors, pagination, revisions, request identity and supported control types. Reuse the domain operation contracts rather than duplicating business logic. Reject unknown response/action fields and noncurrent versions. Only the current app/API contract is supported; use explicit update-required handling, with no old DTOs or compatibility adapters. Additive D1 migrations receive their numbers at implementation time.
 
 ## Native identity and browser handoff
 
@@ -98,7 +100,7 @@ Default private distribution is a signed Android App Bundle through [Google Play
 
 Record source commit, APK/AAB digest, app version, signing identity, backend release/schema, device/OS/provider, date, fixture/cohort scope and sanitized evidence for each acceptance. Distinguish a mock, loopback integration, configured service, deployed route, physical device and admitted customer journey. Collect minimal content-free failures/version/latency data through existing diagnostics; do not add a third-party analytics SDK by default.
 
-Release recovery must support a server-side stop to new native work while leaving web account recovery/support reachable, revocable mobile sessions, backward-compatible additive migrations and an app fix with a higher version code. Do not promise that Play can instantly downgrade already installed devices. Retain compatible API behavior for supported installed versions and test upgrade-required handling before withdrawing a contract.
+Release recovery uses a server-side stop to new native work, revocable mobile sessions, reviewed forward schema migration and an app fix with a higher version code. Only the current app/API version is supported. Stale installed apps receive update-required; keep no older API implementation or downgrade adapter. Current web account recovery/support remains available.
 
 ## Verification and admission gates
 
@@ -109,7 +111,7 @@ Release recovery must support a server-side stop to new native work while leavin
 | Photos | Unsupported/oversized/malformed input; lost URI grant; interrupted preparation/upload; same-ID byte conflicts; held/blocked media; quota exhaustion; logout cleanup; zero automatic send or publication from sharing. |
 | Notifications | Permission denial; rotated/invalid/revoked tokens; account change; duplicate/delayed/expired events; uncertain send result; dispatcher outage/restart/fairness; deleted or wrong-owner destination; no private payload or maintainer invocation. |
 | Devices and accessibility | Emulator coverage plus physical Pixel and Samsung; supported older and current Android; TalkBack, large text, contrast, touch targets, keyboard/insets, rotation, backgrounding, relaunch and signed upgrade. |
-| Release | Compatible app/backend combinations, rollback/stop drill, sanitized diagnostic readback, named support owner, signed internal distribution, and WH-048's approved cohort/data/privacy/recovery/safety evidence. |
+| Release | Current app/backend version agreement, forward-fix/stop drill, sanitized diagnostic readback, named support owner, signed internal distribution, and WH-048's approved cohort/data/privacy/recovery/safety evidence. |
 
 During implementation run Android build, lint, unit and instrumentation checks selected for each slice. Run `pnpm check` for backend changes and relevant existing identity, natural Chat, Chat-delivery, history, site/application-journey, publication, onboarding and photo checks after inspecting their fixture/live setup. Do not run real-model/provider or CMS tests by implication. Physical passkeys, Turnstile, configured FCM and customer photo clearance require their real acceptance evidence; mocks cannot close those gates.
 
