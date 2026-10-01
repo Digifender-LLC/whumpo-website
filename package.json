@@ -173,7 +173,9 @@
     "test:identity-authority": "node tests/identity-authority.mjs",
     "test:identity-ceremonies": "node tests/identity-ceremonies.mjs",
     "test:identity-kits": "node tests/identity-kits.mjs",
-    "test:identity-recovery": "node tests/identity-recovery.mjs"
+    "test:identity-recovery": "node tests/identity-recovery.mjs",
+    "test:identity-http": "node tests/identity-http.mjs",
+    "test:identity-browser": "node tests/identity-browser.mjs --d1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
