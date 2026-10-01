@@ -4,12 +4,12 @@ import {hashToken,newSessionToken} from '../security';
 import {IdentityError,assertCurrentIdentity,identityPredicate,resolveIdentity,type IdentityPrincipal,type IdentityPolicy} from './authority';
 
 import {identityRecord as record,identityRequestContext as context,identityDatabaseError as databaseError,identityChanged as changed,identityUnavailable as unavailable,invalidIdentityRequest as invalid,identityUUID as uuid,type IdentityEnvironment as Environment} from './protocol';
-type Kind='signup'|'login'|'add'|'reauth';
+type Kind='signup'|'login'|'add'|'reauth'|'recovery_complete';
 type Challenge={id:string;kind:Kind;challenge:string;origin:string;rp_id:string;policy_version:number;client:string;account_id:string|null;
  email:string|null;invite_hash:string|null;eligibility_version:string|null;authority_id:string|null;authority_kind:string|null;
  auth_epoch:number|null;credential_revision:number|null;attempt_id:string|null;attempt_revision:number|null;
- request_id:string;request_hash:string;credential_name:string|null;expires_at:number;consumed_at:number};
-type Candidate={id:string;account_id:string;public_key:ArrayBuffer|number[];counter:number;stage:IdentityPrincipal['stage'];
+ request_id:string;request_hash:string;credential_name:string|null;created_at:number;expires_at:number;consumed_at:number};
+type Candidate={id:string;account_id:string;public_key:ArrayBuffer|number[];counter:number;status:'active'|'staged';credential_attempt_id:string|null;stage:IdentityPrincipal['stage'];
  auth_epoch:number;credential_revision:number;kit_generation:number;attempt_id:string|null;attempt_revision:number|null};
 type Receipt={id:string;account_id:string;kind:Kind;request_hash:string;credential_id:string;attempt_id:string|null;created_at:number};
 const encoder=new TextEncoder();
@@ -54,16 +54,16 @@ async function turnstile(request:Request,env:Environment,token:unknown,origin:st
   if(result?.success!==true||result.hostname!==new URL(origin).hostname||result.action!=='register')throw proof();
  }catch(error){if(error instanceof IdentityError)throw error;throw unavailable();}
 }
-async function consume(db:D1Database,token:unknown,kind:Kind,rp:ReturnType<typeof context>){
+export async function consumeIdentityChallenge(db:D1Database,token:unknown,kind:Kind,rp:ReturnType<typeof context>){
  if(typeof token!=='string'||!/^[0-9a-f]{64}$/.test(token))throw proof();
  // Invalid responses and wrong-kind attempts burn the presented challenge too.
  const c=await db.prepare('DELETE FROM identity_challenges WHERE token_hash=? RETURNING *,unixepoch() AS consumed_at').bind(await hashToken(token)).first<Challenge>();
  if(!c||c.kind!==kind||c.expires_at<=c.consumed_at||c.policy_version!==1||c.client!=='web'||c.origin!==rp.origin||c.rp_id!==rp.rpID)throw proof();
  return c;
 }
-async function saveChallenge(db:D1Database,rp:ReturnType<typeof context>,kind:Kind,challenge:string,fields:{accountId?:string;email?:string;inviteHash?:string;p?:IdentityPrincipal;requestId:string;requestHash:string;name?:string}){
+export async function saveIdentityChallenge(db:D1Database,rp:ReturnType<typeof context>,kind:Kind,challenge:string,fields:{accountId?:string;email?:string;inviteHash?:string;p?:IdentityPrincipal;requestId:string;requestHash:string;name?:string}){
  const id=crypto.randomUUID(),token=newSessionToken(),p=fields.p;
- const gate=p?identityPredicate(db,p,kind==='reauth'?{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true}:operationPolicy(p)):null;
+ const gate=p?identityPredicate(db,p,(kind==='reauth'||kind==='recovery_complete')?{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true}:operationPolicy(p)):null;
  // INSERT ... SELECT allows the same committing guard as credential changes.
  const query=`INSERT INTO identity_challenges SELECT ?,?,?,?,1,'web',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch(),unixepoch()+300${gate?` WHERE ${gate.sql}`:''}`;
  const statement=db.prepare(query).bind(id,await hashToken(token),challenge,kind,rp.origin,rp.rpID,fields.accountId??p?.accountId??null,fields.email??null,fields.inviteHash??null,kind==='signup'?customerEligibilityVersion:null,
@@ -87,7 +87,7 @@ export async function signupOptions(request:Request,env:Environment,input:unknow
  if(await env.DB.prepare('SELECT 1 FROM users WHERE email=?').bind(email).first())throw changed();
  await cleanIdentityCeremonies(env.DB);
  const accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),options=await registration(env.DB,rp,accountId,email);
- const saved=await saveChallenge(env.DB,rp,'signup',options.challenge,{accountId,email,inviteHash,requestId,requestHash:await hashToken(JSON.stringify(['signup',accountId,email,inviteHash,customerEligibilityVersion]))});
+ const saved=await saveIdentityChallenge(env.DB,rp,'signup',options.challenge,{accountId,email,inviteHash,requestId,requestHash:await hashToken(JSON.stringify(['signup',accountId,email,inviteHash,customerEligibilityVersion]))});
  return {options,...saved};
 }
 async function verifyRegistration(c:Challenge,input:unknown){
@@ -104,7 +104,7 @@ async function issued(db:D1Database,kind:'session'|'grant',token:string){
  return {kind,token,principal};
 }
 export async function signupVerify(request:Request,env:Environment,challengeToken:unknown,input:unknown){
- const rp=context(request,env),c=await consume(env.DB,challengeToken,'signup',rp),data=record(input,['version','credential']);
+ const rp=context(request,env),c=await consumeIdentityChallenge(env.DB,challengeToken,'signup',rp),data=record(input,['version','credential']);
  if(c.eligibility_version!==customerEligibilityVersion)throw changed();
  const key=await verifyRegistration(c,data.credential),attempt=crypto.randomUUID(),nonce=crypto.randomUUID(),grantId=crypto.randomUUID(),token=newSessionToken();
  const db=env.DB,account=c.account_id!;
@@ -149,16 +149,16 @@ export async function addPasskeyOptions(request:Request,env:Environment,p:Identi
  const user=await env.DB.prepare('SELECT email FROM users WHERE id=?').bind(p.accountId).first<{email:string}>();if(!user)throw changed();
  await cleanIdentityCeremonies(env.DB);
  const options=await registration(env.DB,rp,p.accountId,user.email);
- const saved=await saveChallenge(env.DB,rp,'add',options.challenge,{p,requestId:change.requestId,requestHash,name:change.name});
+ const saved=await saveIdentityChallenge(env.DB,rp,'add',options.challenge,{p,requestId:change.requestId,requestHash,name:change.name});
  return {options,...saved};
 }
-function boundPrincipal(c:Challenge,p:IdentityPrincipal){
+export function boundIdentityChallenge(c:Challenge,p:IdentityPrincipal){
  if(c.account_id!==p.accountId||c.authority_id!==p.authorityId||c.authority_kind!==p.kind||c.auth_epoch!==p.authEpoch
   ||c.credential_revision!==p.credentialRevision||c.attempt_id!==(p.attempt?.id??null)||c.attempt_revision!==(p.attempt?.revision??null))throw changed();
 }
 export async function addPasskeyVerify(request:Request,env:Environment,p:IdentityPrincipal,challengeToken:unknown,input:unknown){
- const rp=context(request,env),c=await consume(env.DB,challengeToken,'add',rp),data=record(input,['version','credential']);
- boundPrincipal(c,p);await assertCurrentIdentity(env.DB,p,operationPolicy(p));
+ const rp=context(request,env),c=await consumeIdentityChallenge(env.DB,challengeToken,'add',rp),data=record(input,['version','credential']);
+ boundIdentityChallenge(c,p);await assertCurrentIdentity(env.DB,p,operationPolicy(p));
  const key=await verifyRegistration(c,data.credential),gate=identityPredicate(env.DB,p,operationPolicy(p)),nonce=crypto.randomUUID();
  try{
   const result=await env.DB.batch([
@@ -175,7 +175,7 @@ export async function addPasskeyVerify(request:Request,env:Environment,p:Identit
 export async function loginOptions(request:Request,env:Environment,input:unknown){
  const rp=context(request,env);record(input,['version']);await cleanIdentityCeremonies(env.DB);
  const options=await generateAuthenticationOptions({rpID:rp.rpID,userVerification:'required'}),requestId=crypto.randomUUID();
- return {options,...await saveChallenge(env.DB,rp,'login',options.challenge,{requestId,requestHash:await hashToken(JSON.stringify(['login',requestId]))})};
+ return {options,...await saveIdentityChallenge(env.DB,rp,'login',options.challenge,{requestId,requestHash:await hashToken(JSON.stringify(['login',requestId]))})};
 }
 export async function reauthenticationOptions(request:Request,env:Environment,p:IdentityPrincipal,input:unknown){
  const rp=context(request,env);record(input,['version']);
@@ -184,12 +184,10 @@ export async function reauthenticationOptions(request:Request,env:Environment,p:
  if(!keys.results.length)throw proof();
  await cleanIdentityCeremonies(env.DB);
  const options=await generateAuthenticationOptions({rpID:rp.rpID,userVerification:'required',allowCredentials:keys.results.map(k=>({id:k.id}))}),requestId=crypto.randomUUID();
- return {options,...await saveChallenge(env.DB,rp,'reauth',options.challenge,{p,requestId,requestHash:await hashToken(JSON.stringify(['reauth',p.authorityId,p.authEpoch,p.attempt]))})};
+ return {options,...await saveIdentityChallenge(env.DB,rp,'reauth',options.challenge,{p,requestId,requestHash:await hashToken(JSON.stringify(['reauth',p.authorityId,p.authEpoch,p.attempt]))})};
 }
-async function authenticate(request:Request,env:Environment,challengeToken:unknown,input:unknown,p?:IdentityPrincipal){
- const rp=context(request,env),c=await consume(env.DB,challengeToken,p?'reauth':'login',rp),data=record(input,['version','credential']);
- if(p){boundPrincipal(c,p);await assertCurrentIdentity(env.DB,p,{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true});}
- const response=credential(data.credential) as AuthenticationResponseJSON;
+export async function verifyIdentityAssertion(env:Environment,c:Challenge,input:unknown,p?:IdentityPrincipal){
+ const response=credential(input) as AuthenticationResponseJSON;
  if(typeof response.id!=='string'||!/^[A-Za-z0-9_-]{1,1024}$/.test(response.id))throw proof();
  const key=await env.DB.prepare('SELECT * FROM identity_authentication_candidates WHERE id=?').bind(response.id).first<Candidate>();
  if(!key||(p&&key.account_id!==p.accountId))throw proof();
@@ -203,6 +201,12 @@ async function authenticate(request:Request,env:Environment,challengeToken:unkno
   if(!result.verified)throw proof();newCounter=result.authenticationInfo.newCounter;
  }catch{throw proof();}
  const now=await env.DB.prepare('SELECT unixepoch() AS at').first<{at:number}>();if(!now)throw unavailable();
+ return {key,newCounter,verifiedAt:now.at};
+}
+async function authenticate(request:Request,env:Environment,challengeToken:unknown,input:unknown,p?:IdentityPrincipal){
+ const rp=context(request,env),c=await consumeIdentityChallenge(env.DB,challengeToken,p?'reauth':'login',rp),data=record(input,['version','credential']);
+ if(p){boundIdentityChallenge(c,p);await assertCurrentIdentity(env.DB,p,{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true});}
+ const {key,newCounter,verifiedAt}=await verifyIdentityAssertion(env,c,data.credential,p);
  const nonce=crypto.randomUUID(),token=newSessionToken(),tokenHash=await hashToken(token),authorityId=crypto.randomUUID();
  const gate=p?identityPredicate(env.DB,p,{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true}):null;
  const admission=env.DB.prepare(`INSERT INTO identity_ceremony_receipts SELECT ?,?,?,?, ?,?,?,unixepoch() FROM identity_authentication_candidates
@@ -215,12 +219,12 @@ async function authenticate(request:Request,env:Environment,challengeToken:unkno
  const purpose=p?.purpose??(key.stage==='enrolling'?'enrollment':'recovery');
  const authority=authorityKind==='session'
   ?env.DB.prepare(`INSERT INTO identity_sessions SELECT ?,?,?,1,?,'web',?,'passkey',?,unixepoch(),? WHERE ${receiptGate} RETURNING id`)
-   .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,key.id,now.at,now.at+604800,c.request_id,nonce)
+   .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,key.id,verifiedAt,verifiedAt+604800,c.request_id,nonce)
   :env.DB.prepare(`INSERT INTO identity_grants SELECT ?,?,?,1,?,'web',?,?,'passkey',?,?,?,NULL,unixepoch(),? WHERE ${receiptGate} RETURNING id`)
-   .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,purpose,attempt!.id,now.at,attempt!.revision,key.id,now.at+1800,c.request_id,nonce);
+   .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,purpose,attempt!.id,verifiedAt,attempt!.revision,key.id,verifiedAt+1800,c.request_id,nonce);
  try{
   const result=await env.DB.batch([admission,
-   env.DB.prepare(`UPDATE identity_credentials SET counter=?,last_used_at=? WHERE id=? AND account_id=? AND ${receiptGate}`).bind(newCounter,now.at,key.id,key.account_id,c.request_id,nonce),
+   env.DB.prepare(`UPDATE identity_credentials SET counter=?,last_used_at=? WHERE id=? AND account_id=? AND ${receiptGate}`).bind(newCounter,verifiedAt,key.id,key.account_id,c.request_id,nonce),
    ...(p?[env.DB.prepare(`DELETE FROM ${p.kind==='session'?'identity_sessions':'identity_grants'} WHERE id=? AND account_id=? AND ${receiptGate}`).bind(p.authorityId,p.accountId,c.request_id,nonce)]:[]),authority
   ]);
   if(result[0].meta.changes!==1||result[result.length-1].results.length!==1)throw changed();
