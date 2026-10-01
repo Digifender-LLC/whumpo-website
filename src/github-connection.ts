@@ -23,15 +23,31 @@ async function readJSON(response:Response){
 async function revoke(config:GitHubConfig,token:string,transport:typeof fetch){
  const response=await request(API+'/applications/'+config.clientId+'/token',{method:'DELETE',headers:{...apiHeaders,authorization:'Basic '+btoa(config.clientId+':'+config.clientSecret),'content-type':'application/json'},body:JSON.stringify({access_token:token})},transport);await response.body?.cancel();return response.status===204;
 }
-export async function cleanupGitHub(db:D1Database,config:GitHubConfig|undefined,transport:typeof fetch=fetch){
+export async function cleanupGitHub(db:D1Database,config:GitHubConfig|undefined,transport:typeof fetch=fetch,userId:string|null=null){
  if(!config)return;
- const now=new Date().toISOString();await db.batch([db.prepare('DELETE FROM github_oauth_states WHERE expires_at<=?').bind(now),db.prepare('DELETE FROM github_token_vault WHERE expires_at<=?').bind(now)]);
- const {results}=await db.prepare("SELECT id,user_id,ciphertext FROM github_token_vault WHERE state='revoking' LIMIT 5").all<{id:string;user_id:string;ciphertext:string}>();
- for(const row of results){try{const token=await unseal(config.key,aad(row.user_id,row.id,'token'),row.ciphertext);if(await revoke(config,token,transport))await db.prepare("DELETE FROM github_token_vault WHERE id=? AND state='revoking'").bind(row.id).run();}catch{/* Retain encrypted revocation work until retry or token expiry. */}}
+ // Interactive callers supply an owner; only the scheduled pass is global.
+ await db.batch([
+  db.prepare("DELETE FROM github_oauth_states WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND (? IS NULL OR user_id=?)").bind(userId,userId),
+  db.prepare("DELETE FROM github_token_vault WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND (? IS NULL OR user_id=?)").bind(userId,userId),
+  db.prepare("UPDATE github_token_vault SET state='revoking' WHERE (? IS NULL OR user_id=?) AND EXISTS(SELECT 1 FROM github_token_staging s WHERE s.token_id=github_token_vault.id AND (s.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM github_oauth_states f WHERE f.user_id=github_token_vault.user_id AND f.state_hash=s.state_hash AND f.claimed=1 AND f.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')))) AND NOT EXISTS(SELECT 1 FROM github_connections c WHERE c.active_token_id=github_token_vault.id)").bind(userId,userId),
+  db.prepare("DELETE FROM github_token_staging WHERE token_id IN (SELECT id FROM github_token_vault WHERE state='revoking' AND (? IS NULL OR user_id=?))").bind(userId,userId)
+ ]);
+ const {results}=await db.prepare("SELECT id,user_id,ciphertext FROM github_token_vault t WHERE state='revoking' AND (? IS NULL OR user_id=?) AND NOT EXISTS(SELECT 1 FROM github_revocation_claims r WHERE r.token_id=t.id AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) ORDER BY expires_at,id LIMIT 5").bind(userId,userId).all<{id:string;user_id:string;ciphertext:string}>();
+ for(const row of results){
+  const claim=crypto.randomUUID();
+  try{
+   const admitted=await db.prepare("INSERT INTO github_revocation_claims(token_id,claim_id,expires_at) SELECT id,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 minute') FROM github_token_vault WHERE id=? AND user_id=? AND state='revoking' AND NOT EXISTS(SELECT 1 FROM github_connections WHERE active_token_id=github_token_vault.id) ON CONFLICT(token_id) DO UPDATE SET claim_id=excluded.claim_id,expires_at=excluded.expires_at WHERE github_revocation_claims.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(claim,row.id,row.user_id).run();
+   if(admitted.meta.changes!==1)continue;
+   const token=await unseal(config.key,aad(row.user_id,row.id,'token'),row.ciphertext);
+   if(!await db.prepare("SELECT t.id FROM github_token_vault t JOIN github_revocation_claims r ON r.token_id=t.id WHERE t.id=? AND t.user_id=? AND t.state='revoking' AND r.claim_id=? AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM github_connections WHERE active_token_id=t.id)").bind(row.id,row.user_id,claim).first())continue;
+   if(await revoke(config,token,transport))await db.prepare("DELETE FROM github_token_vault WHERE id=? AND user_id=? AND state='revoking' AND EXISTS(SELECT 1 FROM github_revocation_claims WHERE token_id=github_token_vault.id AND claim_id=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(row.id,row.user_id,claim).run();
+   else await db.prepare('DELETE FROM github_revocation_claims WHERE token_id=? AND claim_id=?').bind(row.id,claim).run();
+  }catch{/* Retain encrypted work and let this bounded claim expire before retry. */}
+ }
 }
 export async function connectionStatus(db:D1Database,userId:string,config:GitHubConfig|undefined){
  const c=await db.prepare('SELECT c.login,c.connected_at,t.expires_at,t.state FROM github_connections c LEFT JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=?').bind(userId).first<{login:string;connected_at:string;expires_at:string|null;state:string|null}>();
- const pending=await db.prepare("SELECT COUNT(*) AS n FROM github_token_vault WHERE user_id=? AND state='revoking' AND expires_at>?").bind(userId,new Date().toISOString()).first<{n:number}>();
+ const pending=await db.prepare("SELECT COUNT(*) AS n FROM github_token_vault t WHERE user_id=? AND expires_at>? AND (state='revoking' OR EXISTS(SELECT 1 FROM github_token_staging s WHERE s.token_id=t.id AND s.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')))").bind(userId,new Date().toISOString()).first<{n:number}>();
  const connected=!!config&&c?.state==='active'&&!!c.expires_at&&c.expires_at>new Date().toISOString();
  return {github:{enabled:!!config,connected,expired:!!config&&c?.state==='active'&&!!c.expires_at&&c.expires_at<=new Date().toISOString(),login:c?.login??null,expiresAt:c?.expires_at??null,revocationPending:!!pending?.n,installURL:config?'https://github.com/apps/'+config.slug+'/installations/new':null,backupEnabled:connected},cloudflare:{enabled:false,connected:false}};
 }
@@ -54,25 +70,34 @@ export async function finishGitHub(db:D1Database,userId:string,sessionHash:strin
  if(typeof data.access_token!=='string'||!/^gh[uo]_[A-Za-z0-9_]{1,4090}$/.test(data.access_token))throw new ConnectionError(503,'GitHub returned an invalid access token.');
  const validLifetime=Number.isSafeInteger(data.expires_in)&&Number(data.expires_in)>0&&Number(data.expires_in)<=28800;
  const tokenId=crypto.randomUUID(),expires=validLifetime?new Date(Date.now()+Number(data.expires_in)*1000).toISOString():'9999-12-31T23:59:59.999Z';
- // Start fail-closed: even a misconfigured nonexpiring token is queued for revocation.
- try{await db.prepare("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,'revoking')").bind(tokenId,userId,await seal(config.key,aad(userId,tokenId,'token'),data.access_token),expires).run();}catch{try{await revoke(config,data.access_token,transport);}catch{}throw new ConnectionError(503,'GitHub access could not be saved. Start again later or revoke the app in GitHub settings.');}
+ // Store the encrypted credential and its staging lease atomically. An active
+ // vault row grants no access without the separately guarded connection pointer.
+ try{await db.batch([
+  db.prepare("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,'active')").bind(tokenId,userId,await seal(config.key,aad(userId,tokenId,'token'),data.access_token),expires),
+  db.prepare("INSERT INTO github_token_staging(token_id,state_hash,expires_at) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 minute'))").bind(tokenId,stateHash)
+ ]);}catch{try{await revoke(config,data.access_token,transport);}catch{}throw new ConnectionError(503,'GitHub access could not be saved. Start again later or revoke the app in GitHub settings.');}
  try{
   if(!validLifetime||!data.access_token.startsWith('ghu_'))throw new ConnectionError(503,'GitHub must return an expiring GitHub App user token. Check the app configuration.');
   const who=await readJSON(await request(API+'/user',{headers:{...apiHeaders,authorization:'Bearer '+data.access_token}},transport));
   if(!Number.isSafeInteger(who.id)||Number(who.id)<1||typeof who.login!=='string'||! /^[A-Za-z0-9-]{1,39}$/.test(who.login))throw new ConnectionError(503,'GitHub returned an invalid account.');
-  const now=new Date().toISOString();let results;try{results=await db.batch([
-   db.prepare("UPDATE github_token_vault SET state='revoking' WHERE id=(SELECT active_token_id FROM github_connections WHERE user_id=?) AND EXISTS(SELECT 1 FROM github_oauth_states WHERE user_id=? AND state_hash=? AND claimed=1 AND expires_at>?)").bind(userId,userId,stateHash,now),
-   db.prepare("UPDATE github_token_vault SET state='active' WHERE id=? AND EXISTS(SELECT 1 FROM github_oauth_states WHERE user_id=? AND state_hash=? AND claimed=1 AND expires_at>?)").bind(tokenId,userId,stateHash,now),
-   db.prepare("INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM github_token_vault WHERE id=? AND state='active') ON CONFLICT(user_id) DO UPDATE SET github_user_id=excluded.github_user_id,login=excluded.login,active_token_id=excluded.active_token_id,connected_at=excluded.connected_at").bind(userId,String(who.id),who.login,tokenId,now,tokenId),
+  let results;try{results=await db.batch([
+   db.prepare("INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) SELECT t.user_id,?,?,t.id,strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM github_token_vault t JOIN github_token_staging s ON s.token_id=t.id JOIN github_oauth_states f ON f.user_id=t.user_id AND f.state_hash=s.state_hash WHERE t.id=? AND t.user_id=? AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND s.state_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND f.session_hash=? AND f.claimed=1 AND f.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') ON CONFLICT(user_id) DO UPDATE SET github_user_id=excluded.github_user_id,login=excluded.login,active_token_id=excluded.active_token_id,connected_at=excluded.connected_at").bind(String(who.id),who.login,tokenId,userId,stateHash,sessionHash),
+   // Retire old usable credentials only after the replacement pointer wins.
+   // Other pending callbacks retain their own staging records until cleanup.
+   db.prepare("UPDATE github_token_vault SET state='revoking' WHERE user_id=? AND id!=? AND state='active' AND NOT EXISTS(SELECT 1 FROM github_token_staging WHERE token_id=github_token_vault.id) AND EXISTS(SELECT 1 FROM github_connections WHERE user_id=? AND active_token_id=?)").bind(userId,tokenId,userId,tokenId),
+   db.prepare('DELETE FROM github_token_staging WHERE token_id=? AND EXISTS(SELECT 1 FROM github_connections WHERE user_id=? AND active_token_id=?)').bind(tokenId,userId,tokenId),
    db.prepare('DELETE FROM github_oauth_states WHERE user_id=? AND state_hash=?').bind(userId,stateHash)
-  ]);}catch{const committed=await db.prepare('SELECT user_id FROM github_connections WHERE user_id=? AND active_token_id=?').bind(userId,tokenId).first();if(committed)return {connected:true};throw new ConnectionError(503,'GitHub connection could not be confirmed. Refresh its status before starting again.');}
-  if(results[1].meta.changes!==1)throw new ConnectionError(409,'This connection was cancelled or replaced. Start again if you still want to connect.');
- }finally{await cleanupGitHub(db,config,transport);}
+  ]);}catch{const committed=await db.prepare("SELECT c.user_id FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.id=? AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(userId,tokenId).first();if(committed)return {connected:true};throw new ConnectionError(503,'GitHub connection could not be confirmed. Refresh its status before starting again.');}
+  if(results[0].meta.changes!==1)throw new ConnectionError(409,'This connection was cancelled or replaced. Start again if you still want to connect.');
+ }finally{
+  await db.prepare("UPDATE github_token_staging SET expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_id=?").bind(tokenId).run();
+  await cleanupGitHub(db,config,transport,userId);
+ }
  return {connected:true};
 }
 export async function disconnectGitHub(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){
- await db.batch([db.prepare('DELETE FROM github_oauth_states WHERE user_id=?').bind(userId),db.prepare("UPDATE github_token_vault SET state='revoking' WHERE user_id=?").bind(userId),db.prepare('UPDATE github_connections SET active_token_id=NULL WHERE user_id=?').bind(userId)]);
- await cleanupGitHub(db,configuration,transport);return connectionStatus(db,userId,configuration);
+ await db.batch([db.prepare('DELETE FROM github_oauth_states WHERE user_id=?').bind(userId),db.prepare("UPDATE github_token_vault SET state='revoking' WHERE user_id=?").bind(userId),db.prepare('UPDATE github_connections SET active_token_id=NULL WHERE user_id=?').bind(userId),db.prepare('DELETE FROM github_token_staging WHERE token_id IN (SELECT id FROM github_token_vault WHERE user_id=?)').bind(userId)]);
+ await cleanupGitHub(db,configuration,transport,userId);return connectionStatus(db,userId,configuration);
 }
 
 export async function githubInstallations(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){

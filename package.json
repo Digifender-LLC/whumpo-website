@@ -48,7 +48,7 @@
     "test:onboarding": "node tests/onboarding.mjs",
     "test:workspace-agent": "node tests/workspace-agent.mjs",
     "test:workspace-read": "node tests/workspace-read.mjs",
-    "test:github-connection": "node tests/github-connection.mjs",
+    "test:github-connection": "node tests/github-connection.mjs && node tests/github-token-lifecycle.mjs",
     "test:backup-chat": "node tests/backup-chat.mjs",
     "test:github-backups": "node tests/github-backups.mjs",
     "test:domain-agent": "node tests/domain-agent.mjs",
