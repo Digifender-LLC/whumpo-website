@@ -8,11 +8,12 @@ For future work, use the [product and delivery roadmap](docs/roadmap/README.md),
 
 ## Current product
 
-- React workspace with Chat first, a separate dashboard, workflow pages, mobile navigation, and separate Profile and Settings screens. Chat accepts natural-language messages; critical actions use explicit review controls.
+- React workspace with Chat first, a separate dashboard, workflow pages, mobile navigation, and separate Profile and Settings screens. Chat accepts natural-language messages, retains account-scoped drafts/interrupted requests across reloads, and uses explicit review controls for critical actions.
 - Passkeys by default, invite/Turnstile signup, optional password sign-in, recovery codes and revocable sessions. Guided conversational onboarding persists without requiring AI or an external account.
 - Muse-assisted private drafts and edits, saved versions, source export, and explicit publication/restore reviews. Supported static/photo sites publish to customer subdomains.
+- Maintained capability lookup and versioned private project/service settings with pinned compilers and exact owner reviews; saving configuration does not publish or activate a service.
 - Bounded customer backend execution in a separate QuickJS Worker, reviewed application activation, controlled visitor pages and scoped visitor accounts/data. This is not a general-purpose VPS or unrestricted deployment environment.
-- CMS content editing, reviews and private media viewing are implemented; bounded image and WordPress taxonomy/media import workflows have connected local-native/browser acceptance. First live customer provisioning and broader migration coverage remain open. See [EmDash](docs/emdash.md).
+- CMS content editing, reviews and private media viewing are implemented; bounded image and WordPress taxonomy/media import workflows have connected local-native/browser acceptance. First live customer provisioning and broader migration coverage remain open; CMS testing is owner-deferred. See [EmDash](docs/emdash.md).
 
 ## Plans and inference
 
@@ -45,7 +46,7 @@ The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http:
 | Separate visitor/runtime services | `wrangler.apps.jsonc`, `wrangler.runtime.jsonc` |
 | Database changes | Numbered `migrations/` SQL files |
 
-Run `pnpm build` to generate assets. Never hand-edit bundles. The older owner UI in `web/app.js` is not the current frontend.
+Run `pnpm build` to generate assets. Never hand-edit bundles.
 
 ## Deployment and boundaries
 
@@ -62,7 +63,7 @@ For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.js
 - [Capability catalog and planner](docs/capability-planner.md) — reuse existing configuration and helpers; record bounded missing behavior before generating source
 - [Data lifecycle proposal](docs/data-lifecycle.md) and [background-job decision](docs/background-jobs.md) — retention/export/closure boundaries and durable recovery design
 - [Customer benchmarks and inference privacy](docs/customer-benchmarks.md) — synthetic outcome checks, cost evidence and real-model evaluation gates
-- [Content safety and US customer eligibility](docs/content-safety.md) — policy foundations; scanning and enforcement remain launch gates
+- [Content safety and US customer eligibility](docs/content-safety.md) — CSAM scanning is planned and owner-deferred; existing holds are not detection. Wider safety acceptance remains open
 - [Chat tools and navigation](docs/workspace-agent.md)
 - [Natural-language Chat and agent knowledge](docs/natural-language-chat.md): messages, explicit approvals, scoped lookups and the retrieval decision.
 - [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)

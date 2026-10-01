@@ -57,6 +57,11 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/docs-code-sync.md](../../docs/docs-code-sync.md)
 - [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
 - [docs/cloudflare-capability-roadmap.md](../../docs/cloudflare-capability-roadmap.md)
+- [docs/capability-matrix.md](../../docs/capability-matrix.md)
+- [docs/releases.md](../../docs/releases.md)
+- [docs/maintenance.md](../../docs/maintenance.md)
+- [docs/verification.md](../../docs/verification.md)
+- [docs/safety-coverage.md](../../docs/safety-coverage.md)
 
 ### Execution coordination
 
@@ -64,7 +69,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/3. Planning owner: Unassigned.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 UTC reconciliation against main a3c5461: all 14 MVP checklist rows and later commitments now distinguish source, dated configuration, local/live evidence and device/activation gaps. Recorded release ee62cc7 has four verified Workers, 113 migrations and 16 assets at 04:28:59 UTC; natural hourly/daily maintenance and real stopped-release reconciliation supersede older missing-evidence claims. Current schema inventory verifies 148 tables/31 classes. README, acceptance, risk register and Cloudflare catalog reconciled; old CMS-first priority removed, CSAM/CMS/Stripe deferrals retained. Runtime/source/config files match recorded deployed source 3a9b61b; no new Cloudflare read, journey, security scan, scanner implementation or provider activation. Word v0.9, full customer/device/security/finance/restore acceptance remain explicit gaps. Detailed evidence and completion belong to docs/capability-matrix.md and issue #3.
 
 ## WH-002 — Extend release manifests and rehearse partial deployment recovery
 
