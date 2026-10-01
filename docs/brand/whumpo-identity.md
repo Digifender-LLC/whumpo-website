@@ -340,3 +340,16 @@ Before public launch, finalize:
 Source master SHA-256: `ec1a7c90c66eacae1f697af4e259e179bdc9122660ce587149d07fe66b4b814b`. Only resampling/PNG encoding was applied; no artwork was generated, recolored or cropped. The normal 48px image is 5,202 bytes; the 96px retina version is 17,215 bytes.
 
 Type checks, production build and frontend-loading checks passed. A loopback fixture with the built frontend and disposable D1 verified the homepage header/footer, dashboard sidebar and 16/32/180px icon declarations. Desktop (1280px) and mobile (390px outer viewport) checks found no horizontal overflow; the logo loaded in the light homepage and dark workspace. Synthetic profile/project setup remained local, and browsing performed only read requests with no inference, publication or billing effects. Screenshots and fixture evidence remain private under `.secrets/brand-*`. No physical-device or browser-cache-refresh claim is made.
+
+### Private test release
+
+Release `2236a27b-c7e4-4285-ae1f-6cfae437db29` deployed source `7dcf933536b8c686968892023db992277e259e70`. Independent readback at **2026-10-01 16:09:42 UTC** matched the four Worker versions, unchanged bindings/CMS registry, all 116 migrations with none pending, and 24 selected frontend assets including all six brand images. Landing/workspace HTML exactly matched the archive and referenced the new icons. Public catalogue and sandbox-only billing remained unchanged; anonymous protected requests returned 401 and a foreign-origin mutation returned 403. The public browser also loaded the new homepage mark successfully.
+
+| Worker | Verified version |
+| --- | --- |
+| Runtime | `8ec1a9d8-0248-4ce3-8ad5-c663a01f956b` |
+| Apps | `fffed80c-5521-433a-8185-0bef5dde247b` |
+| Sites | `c8d84620-e69e-4ed4-988e-40ce659363b9` |
+| Platform | `adbdb889-c38a-45a1-a90e-18806e8d944d` |
+
+Private evidence is `.secrets/brand-release-verification.json`, the matching immutable release archive and `.secrets/brand-live-home.png`. No customer publication, new service, real billing or provider activation occurred. Existing browsers may retain an older favicon until they refresh the page/tab.
