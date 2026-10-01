@@ -58,3 +58,19 @@ Provider contract checked October 1, 2026: GitHub's [single-token deletion](http
 Local acceptance passed: all **13** cases in `tests/github-token-lifecycle.mjs`, existing `github-connection.mjs` and `github-backups.mjs`, plus `maintenance-inventory.mjs` and `account-closure-inventory.mjs`. The expanded regression covers cross-owner/scheduled cleanup during validation, absent/expired/superseded replacement, no capability from staging, concurrent claims, rollback of retirement/staging failures and late acknowledgments after claim takeover. Fixtures use Node 24, allowlisted environments, temporary homes, disposable D1/SQLite and synthetic providers. Both TypeScript projects and the build passed via `pnpm --config.verify-deps-before-run=false run check` / `run build`; roadmap validation/render and whitespace checks passed. No real GitHub credential or repository operation was used.
 
 Read-only live inspection at **2026-10-01T14:01:06.784Z** confirmed all four GitHub App binding names absent, zero retained GitHub credentials and zero queued revocations. The shared vault key remains present. This is configuration evidence only; customer connection activation is not part of A2 remediation.
+
+
+### A2 test release
+
+[PR #35](https://github.com/zemdregon/whumpo/pull/35) merged as `514c438538c227469605457dd7aaa0744b74b1d1`. Managed release `6116b6b5-f398-437c-b947-32376e75e629` archives implementation source `e07394657ca4779d2f78a95a03299c583bd5f826` and migration 0115, SHA-256 `bba1ae5a3d940ff6288d03eae32b9d7b82801089b91c0b165dd4908a11b973dc`. The compatibility review above was bound to the exact build/SQL. All five migration/Worker steps completed without repair/retry.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `37cefe92-3aa1-4ca1-be43-a7613b19586f` |
+| apps | `c905f029-7a14-4363-af85-bc6b68b4f13f` |
+| sites | `69d43a75-d4e8-4c3c-80b9-2e483699dd2b` |
+| platform | `7bffe3ef-16a5-4ef6-b5ff-5e599ffd1045` |
+
+Independent readback at **2026-10-01T14:07:26.091Z** confirmed all four candidate versions/tags, unchanged service/secret-binding names and CMS registry, **115 applied migrations** with none pending, all 16 exact frontend assets and workspace HTML. Both metadata table column sets, cascading foreign keys and the staging-expiry index match. All 28 maintenance backlog queries are available; staged credential count is zero in maintenance and closure inventory. GitHub App binding names remain absent and the vault is empty, so no customer grant was created or revoked.
+
+Home/workspace/health returned 200; anonymous connection/installation/start/disconnect requests returned 401 and foreign-Origin start/disconnect returned 403. Stripe remains in test mode. Private evidence: `.secrets/github-lifecycle-release-verification.json` and the immutable release archive. The dirty archive flag comprises only the shared dependency symlink and inspected generated visitor dependency-path comments; source was committed and those generated comment differences were restored afterward. This accepts deployed schema/code and entry boundaries, not real GitHub consent, repository writes or remote revocation. No CMS functional test, scanner or new paid service was activated.

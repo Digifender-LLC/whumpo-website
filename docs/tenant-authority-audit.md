@@ -1,6 +1,6 @@
 # Tenant and privileged-action authority audit
 
-**WH-004 · October 1, 2026 · source audit complete; A1 fixed, locally verified and deployed to private test; A2 fixed and locally verified; A3 remains open.**
+**WH-004 · October 1, 2026 · source audit complete; A1 fixed, locally verified and deployed to private test; A2 fixed, locally verified and deployed to private test; A3 remains open.**
 
 This is the consolidated authority map for source commit `a34a13171a768097b6bb80a548363dd7ab7e8659`. It complements the [security decision register](security-risk-actions.md), [acceptance gates](acceptance.md) and [roadmap issue](https://github.com/zemdregon/whumpo/issues/5). It is not a claim of exhaustive security or live acceptance.
 
@@ -24,7 +24,7 @@ The [visitor gateway](../src/app-gateway.ts) uses a project-specific origin and 
 
 ## Authority matrix
 
-This matrix preserves the audited `a34a131` snapshot. “Source reviewed” means the stated control was traced, including its migration guards; it does not mean a real provider/device journey passed. Subsequent A1 remediation is recorded below; A2/A3 remain open.
+This matrix preserves the audited `a34a131` snapshot. “Source reviewed” means the stated control was traced, including its migration guards; it does not mean a real provider/device journey passed. Subsequent A1/A2 remediation is recorded below; A3 remains open.
 
 | Privileged family and entry | Authority | Immutable target / current-state guard | Replay and stale-state handling | Evidence / disposition |
 | --- | --- | --- | --- | --- |
@@ -99,7 +99,7 @@ Recovery-code insertion/replacement and passkey-removal admission now require th
 
 Before the fix, `tests/owner-credential-authority.mjs` reproduced ten stale-request failures on `b5e0408`; four positive/isolation/rollback cases passed. After the fix, the expanded **21-case suite passed** through the actual platform handler with disposable local D1. It covers recovery/password revocation, real clock crossings after statement preparation, owner/session association, missing recovery-code insertion, a delayed request body, foreign/last-key rejection, normal changes and transactional rollback. Tests use synthetic credentials, no provider access and the allowlisted fixture environment. This is local execution evidence, not a native-device or live authenticated recovery journey.
 
-WH-004 remains open for A2/A3. The sealed scan and its historical results above are unchanged; these focused regressions establish only A1's corrected boundary. Deployment evidence is recorded in [owner recovery](owner-recovery.md).
+At the A1 checkpoint WH-004 remained open for A2/A3. The sealed scan and its historical results above are unchanged; these focused regressions establish only A1's corrected boundary. Deployment evidence is recorded in [owner recovery](owner-recovery.md).
 
 Additional verification passed: `node tests/owner-recovery-concurrency.mjs`, `node tests/owner-passkeys-http.mjs`, `pnpm --config.verify-deps-before-run=false run check`, and `pnpm --config.verify-deps-before-run=false run build`. The fixture suites used separate temporary homes and disposable D1; the pnpm flag prevents dependency reinstallation against the shared module directory. Roadmap validation, generated-backlog and whitespace checks passed. No CMS functional test ran.
 
@@ -108,6 +108,6 @@ A1 deployment is now verified: [PR #33](https://github.com/zemdregon/whumpo/pull
 
 ## A2 remediation — October 1, 2026
 
-Four targeted failures were reproduced on `858845e`: another owner's disconnect and global cleanup during validation, loss of the old connection when replacement admission fails, and duplicate concurrent revocation dispatch. The correction separates one-minute staging metadata from queued revocation, guards the atomic connection-pointer replacement before retiring prior usable tokens, scopes interactive cleanup to its owner and uses expiring claim identities to fence scheduled cleanup and late acknowledgments. Migration 0115 preserves vault format, encrypted ownership context, quota and existing capabilities. [Lifecycle and compatibility contract](integrations/github-connection.md#staging-isolation-and-cleanup-claims--october-1-2026). The 13-case regression and existing connection/backup/inventory suites now pass locally. Deployment is pending; A3 remains open.
+Four targeted failures were reproduced on `858845e`: another owner's disconnect and global cleanup during validation, loss of the old connection when replacement admission fails, and duplicate concurrent revocation dispatch. The correction separates one-minute staging metadata from queued revocation, guards the atomic connection-pointer replacement before retiring prior usable tokens, scopes interactive cleanup to its owner and uses expiring claim identities to fence scheduled cleanup and late acknowledgments. Migration 0115 preserves vault format, encrypted ownership context, quota and existing capabilities. [Lifecycle and compatibility contract](integrations/github-connection.md#staging-isolation-and-cleanup-claims--october-1-2026). The 13-case regression and existing connection/backup/inventory suites now pass locally. [Deployment is now verified](integrations/github-connection.md#a2-test-release); A3 remains open.
 
 Local acceptance passed: all **13** cases in `tests/github-token-lifecycle.mjs`, existing `github-connection.mjs` and `github-backups.mjs`, plus `maintenance-inventory.mjs` and `account-closure-inventory.mjs`. The expanded regression covers cross-owner/scheduled cleanup during validation, absent/expired/superseded replacement, no capability from staging, concurrent claims, rollback of retirement/staging failures and late acknowledgments after claim takeover. Fixtures use Node 24, allowlisted environments, temporary homes, disposable D1/SQLite and synthetic providers. Both TypeScript projects and the build passed via `pnpm --config.verify-deps-before-run=false run check` / `run build`; roadmap validation/render and whitespace checks passed. No real GitHub credential or repository operation was used.
