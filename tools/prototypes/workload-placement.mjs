@@ -37,10 +37,10 @@ function pin(v,path){
 const key=r=>`${r.projectId}/${r.resourceId}`;
 const kinds=['content','records','files','access','notifications','automation','custom-function'];
 
-/** Closed descriptor; validates shape/compatibility only. Pins and hook IDs need a trusted catalog. */
+/** Closed descriptor; validates the current shape only. Pins and hook IDs need a trusted catalog. */
 export function validateDescriptor(input){
  const d=copy(input);
- shape(d,['contractVersion','ref','kind','module','schema','ownership','dependencies','lifecycle','compatibility'],'descriptor');
+ shape(d,['contractVersion','ref','kind','module','schema','ownership','dependencies','lifecycle'],'descriptor');
  check(d.contractVersion===1,'UNSUPPORTED_VERSION','contractVersion');ref(d.ref,'ref');
  check(kinds.includes(d.kind),'UNSUPPORTED_KIND','kind');pin(d.module,'module');pin(d.schema,'schema');
  shape(d.ownership,['data','assets'],'ownership');list(d.ownership.data,32,'ownership.data');list(d.ownership.assets,32,'ownership.assets');
@@ -65,14 +65,6 @@ export function validateDescriptor(input){
  if(d.lifecycle.exportHook!==null)id(d.lifecycle.exportHook,'exportHook');
  check(d.lifecycle.exportHook!==null||(!d.ownership.assets.length&&d.ownership.data.every(x=>x.export==='excluded')),'MISSING_EXPORT_HOOK','exportHook');
  check(['not-verified','adapter-required','platform-only'].includes(d.lifecycle.portability),'UNVERIFIED_PORTABILITY','portability');
- shape(d.compatibility,['readSchemas','restoreSchemas'],'compatibility');
- for(const name of ['readSchemas','restoreSchemas']){
-  const pins=d.compatibility[name];list(pins,8,name);check(pins.length>0,'INVALID_LIST',name);
-  for(const p of pins){pin(p,name);check(p.name===d.schema.name,'INCOMPATIBLE_SCHEMA',name);}
-  unique(pins.map(p=>p.version),name);
-  check(pins.some(p=>equal(p,d.schema)),'INCOMPATIBLE_SCHEMA',name);
- }
- for(const p of d.compatibility.restoreSchemas)check(d.compatibility.readSchemas.some(r=>equal(r,p)),'INCOMPATIBLE_SCHEMA','restoreSchemas');
  return d;
 }
 
@@ -102,7 +94,7 @@ export function adapterCompatibility(descriptor,input){
  check(equal(d.ref,offer.ref),'CROSS_PROJECT','offer.ref');
  check(offer.kinds.includes(d.kind),'INCOMPATIBLE_ADAPTER','offer.kind');
  check(equal(d.module,offer.module),'MODULE_MISMATCH','offer.module');
- // The initial decision admits exact schema only. A migration is a separate reviewed operation.
+ // Read/write/restore all require the exact current schema; placement cannot admit an old reader.
  check(equal(d.schema,offer.schema),'SCHEMA_MISMATCH','offer.schema');
  return {compatible:true,ref:d.ref,descriptorDigest:descriptorDigest(d),adapter:offer.adapter,authority:'not-granted'};
 }

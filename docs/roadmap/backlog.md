@@ -366,6 +366,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/53. Planning owner: Unassigned
 - 2026-10-01 owner amendment: remove existing legacy fallbacks and assume current clients/schemas only. WH-105 strict client contract merged in PR #52. Runtime inventory and staged removal tracked in issue #53; full cleanup remains in progress.
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 - 2026-10-01 18:20 UTC: PR #55 current billing reset accepted in test, release 438cdaa6-4ef5-46b8-a8c1-ea3115ef61af source 75e41ff. Four Worker readbacks, 117 schema files, eight retired tables absent, authenticated API checks and 18 exact frontend assets passed. Remaining inventory stays open; see docs/current-version-policy.md.
+- 2026-10-01: offline logical-resource current-only contract verified with 60 checks. Identity/native/module/data plans and this reference are aligned; Chat producer/presentation, website specification creation and CMS shape cleanup remain open.
 
 ## WH-052 — Choose durable job orchestration from current requirements
 
@@ -5669,7 +5670,7 @@ Placement favors static assets and shared maintained APIs, with isolated on-dema
 - Plan project route bundling rather than one script per tiny feature
 - Compare Containers/VMs for actual sustained/native workloads including supporting services and minimum costs
 - Freeze logical project/resource IDs, scoped storage/runtime adapters, schema/version and migration/export hooks before WH-067; current shared D1 and QuickJS remain the initial implementations.
-- Freeze minimum module lifecycle/export descriptors now: logical IDs, exact schema/module version, owned data/asset references, export eligibility, dependency manifest and restore/migration compatibility. WH-067 supplies adapters with its first schema; WH-077 later verifies a runnable portable subset, without redesigning storage around an export format after launch.
+- Freeze minimum module lifecycle/export descriptors now: logical IDs, exact schema/module version, owned data/asset references, export eligibility, dependency manifest and exact current-schema restore and reviewed placement hooks. WH-067 supplies adapters with its first schema; WH-077 later verifies a runnable portable subset, without redesigning storage around an export format after launch.
 
 ### Acceptance criteria
 
@@ -5711,6 +5712,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/47. Planning owner: Unassigned
 ### Evidence
 
 - 2026-10-01 WH-071 decision/source evidence against d9f5d26: docs/workload-placement.md freezes logical project/resource and exact module/schema identities, scoped adapter obligations, lifecycle/export descriptors and fenced migration handoff. Offline reference and 60 synthetic checks verify compatibility/rejections and marginal container examples; current official provider prices/limits reviewed. Existing shared D1/private R2/QuickJS remain. No production imports, runtime/config/schema changes, provider activation, customer migration or export acceptance. Execution/completion evidence belongs in issue #47.
+- 2026-10-01 WH-120 amendment: offline descriptors remove read/restore compatibility lists; retired fields and mismatched schema versions/digests reject. docs/workload-placement.md removes the proposed legacy placement adapter and specifies forward repair/current-schema restoration. All 60 offline checks pass; no production consumer, provider call, deployment or CMS functional test.
 
 ## WH-073 — Serve published content and standard actions without maintenance inference
 
