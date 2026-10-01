@@ -5500,14 +5500,16 @@
         "migrations",
         "docs/workspace-identity.md",
         "docs/identity-authority.md",
-        "docs/identity-ceremonies.md"
+        "docs/identity-ceremonies.md",
+        "docs/identity-kits.md"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/68",
       "owner": null,
       "evidence": [
         "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
         "2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.",
-        "2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed."
+        "2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed.",
+        "2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change."
       ]
     },
     {
@@ -5555,13 +5557,15 @@
         "tools/owner-recovery-browser.mjs",
         "docs/workspace-identity.md",
         "docs/identity-authority.md",
-        "docs/identity-ceremonies.md"
+        "docs/identity-ceremonies.md",
+        "docs/identity-kits.md"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/69",
       "owner": null,
       "evidence": [
         "2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.",
-        "2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed."
+        "2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed.",
+        "2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change."
       ]
     },
     {

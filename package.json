@@ -171,7 +171,8 @@
     "test:feature-inclusion": "node tests/feature-inclusion.mjs",
     "test:feature-admission": "node tests/feature-admission.mjs",
     "test:identity-authority": "node tests/identity-authority.mjs",
-    "test:identity-ceremonies": "node tests/identity-ceremonies.mjs"
+    "test:identity-ceremonies": "node tests/identity-ceremonies.mjs",
+    "test:identity-kits": "node tests/identity-kits.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
