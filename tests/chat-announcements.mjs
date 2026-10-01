@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {updatedReplies} from '../frontend/src/lib/chat-announcements.ts';
+const old={id:'old',status:'completed',assistant_text:'A saved reply.'};
+const pending={id:'next',status:'pending',assistant_text:'Working on it.'};
+const completed={...pending,status:'completed',assistant_text:'Your private draft is ready to review.'};
+assert.deepEqual(updatedReplies(undefined,[old]),[],'Initial history is silent');
+assert.deepEqual(updatedReplies([old],[{...old}]),[],'Identical polling is silent');
+assert.deepEqual(updatedReplies([old],[old,pending]),[],'Pending status is not a reply');
+assert.deepEqual(updatedReplies([old,pending],[old,completed]),['next']);
+assert.deepEqual(updatedReplies([old],[old,completed]),['next']);
+assert.deepEqual(updatedReplies([old,completed],[old]),[],'Pagination removals are silent');
+assert.deepEqual(updatedReplies([old],[{...old,assistant_text:'Updated reply.'}]),['old']);
+assert.deepEqual(updatedReplies([pending],[{...pending,status:'failed'}]),['next'],'A saved failure response is still a reply, not success');
+assert.deepEqual(updatedReplies([old],[old,{...completed,assistant_text:' '}]),[]);
+assert.deepEqual(updatedReplies([old],[old,completed,{...completed,id:'second'}]),['next','second']);
+console.log('Chat announcements passed: silent initial/unchanged/pending snapshots, new and completed replies, changed replies, failure responses, empty content and batched updates.');

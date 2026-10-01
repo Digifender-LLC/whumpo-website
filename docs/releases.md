@@ -112,3 +112,16 @@ Managed release `20d37ba0-fca6-4003-a9c8-280f2b23edff` deploys source `3417ea2`.
 Independent readback at 2026-10-01T02:22:44.177Z confirmed candidate tags, service targets and secret-binding names, unchanged empty CMS registrations, 113 applied migrations, all 16 exact platform assets, home/health 200 and anonymous Chat/profile 401. Evidence is retained privately in `.secrets/safety-release-verification.json` and the immutable release archive. Its dirty flag covers the dependency symlink and generated visitor dependency-path comments; application source was committed before preparation.
 
 The [safety coverage contract](safety-coverage.md) records type/build checks and three local synthetic suites. Deployment makes the corrected guidance available to Chat; it does not connect a scanner, accept real-model safety behavior, activate a provider, run CMS functional tests or publish customer content.
+
+## Workspace recovery release — October 1, 2026 UTC
+
+Managed release `02370893-1c87-419d-ad49-9162ddb0f135` deploys frontend source `524cf00`. The review compared it with deployed source `3417ea2`: only workspace presentation/recovery/focus behavior changes; Worker APIs, service contracts, schema, compiler pins, routes, schedules and bindings are unchanged. All mixed Worker combinations remain compatible. There was no pending SQL. The sequence completed without repair or repeated mutation.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `06a0910b-bb51-4de2-a6cb-7d6ff255f806` |
+| apps | `3c9ab7a9-d73b-42f8-827b-83ef23f1b89f` |
+| sites | `5bee1ad1-f3cf-4ade-93bd-3698e5282ca5` |
+| platform | `e9f01d13-47cd-4a8b-84ad-3df7e6e43b70` |
+
+Readback at 2026-10-01T03:04:55.347Z confirmed all four candidate tags, unchanged service/secret-binding names and CMS registry, 113 migrations and all 16 exact platform assets. Home/workspace/health returned 200, and anonymous Chat/profile returned 401. [Workspace acceptance](workspace-refinement-acceptance.md#workspace-connection-recovery-and-accessible-replies--october-1-2026-utc) records the synthetic browser and focused test evidence, plus remaining complete-journey/device/screen-reader and reload-persistence work. The archived dirty flag covers the shared dependency symlink and inspected generated visitor path comments; application source was committed. No new paid provider, scanner, CMS functional test or customer publication occurred.
