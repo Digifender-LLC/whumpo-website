@@ -141,3 +141,17 @@ Managed release `dfd7f653-d7ec-483d-b54d-ec089f093edc` deploys source `272e3d7`.
 Independent readback at **2026-10-01T03:32:00.755Z** confirms all four candidate versions/tags, unchanged service/secret-binding names and CMS registry, 113 migrations with none pending, all 16 exact frontend assets, matching workspace entry HTML, home/workspace/health 200 and anonymous Chat/profile 401. The sequence completed without repair/retry. The private archive and `.secrets/chat-reload-release-verification.json` retain the evidence. Checkout dirtiness was limited to the shared dependency symlink and inspected generated visitor dependency-path comments; application source was committed before preparation.
 
 [Chat reload acceptance](workspace-refinement-acceptance.md#chat-reload-recovery--october-1-2026-utc) records focused storage/API/delivery checks and the synthetic browser journey. Live verification covered deployment/asset/authentication boundaries, not a signed-in real-model journey. Full owner-journey, actual screen-reader speech and physical-device acceptance remain open in WH-024. CSAM implementation, CMS testing and provider activation remain deferred. No customer content was published.
+
+
+## Welcome recovery and connected owner journey — October 1, 2026 UTC
+
+Release `1abae8bd-fa49-4878-afb8-bdbd1615b41f` from source `2add4c0` was verified at **2026-10-01T04:07:14.190Z**: all four versions/tags, unchanged service/secret-binding names and CMS registry, 113 migrations with none pending, all 16 exact frontend assets and workspace entry HTML, home/workspace/health 200, anonymous Chat/profile 401.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `b0e59059-936b-4531-b406-76b72d891845` |
+| apps | `3a5af63b-1eb1-43d0-a3c3-5dc0c0ab9a13` |
+| sites | `df16c1c6-4178-4f87-9114-e009972ce997` |
+| platform | `075ec017-8d81-4585-b111-9a6a8a3f2d94` |
+
+The release changes frontend welcome delivery/focus/sign-out recovery and chat presentation only; server handlers, review authority, service contracts and schema are unchanged. Mixed Worker compatibility was reviewed against unchanged APIs before the archived deployment. The protocol completed all steps without replay or repair. The recorded dirty checkout comprised the shared dependency symlink and generated visitor dependency-path comments; the deployed artifact bytes are preserved, and the checked comment-only working difference was restored afterward. [Connected journey scope, tests and remaining acceptance](workspace-refinement-acceptance.md#connected-owner-journey--october-1-2026-utc). Private evidence: `.secrets/owner-journey-release-verification.json` and immutable release archive. No CMS/scanner/provider activation or customer publication.
