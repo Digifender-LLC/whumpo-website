@@ -43,11 +43,13 @@ Imported code must be scanned **in the background before management**, not after
 
 Initial implementation inventory must include profile photos, project photos, CMS uploads/imports, WordPress references, imported/generated backend source, generated pages, visitor inputs and private/public serving paths. General GitHub source import is not made available simply because the backup integration exists. CMS feature acceptance stays paused; safety gates are a separate requirement. Static scanning cannot prove arbitrary code's future behavior; runtime isolation, restricted networking, publication review and subsequent abuse response remain necessary.
 
-## CSAM detection delivery path and limitations
+## CSAM detection — planned, owner-deferred
 
 As checked September 30, 2026, Cloudflare's [CSAM Scanning Tool](https://developers.cloudflare.com/cache/reference/csam-scanning/) compares images passing through Cloudflare cache against known CSAM lists. It requires a notification email; notifications describe detections and whether blocking succeeded. It is a useful additional public-delivery layer, **not a private R2 upload scanning API or a guarantee of detection before the first delivery**. Do not publish quarantine objects to make this tool scan them. Verify zone entitlement, service terms, charges and compatibility with each Worker delivery path before activation; none is claimed configured here.
 
 Private intake needs a vetted pre-publication service/partnership for known-CSAM matching plus separate sexual-content detection. Known-hash matching alone does not identify every new image; an adult-content classifier is not verified CSAM detection. Coverage for images, video, transformed copies and unsupported formats must be explicit. Provider selection, access, data processing terms and pricing require verification. Do not let the building agent inspect suspected CSAM or make final reporting decisions.
+
+**Owner decision, October 1, 2026 UTC:** CSAM scanning is planned only. Skip scanner implementation, provider enrollment and activation until the owner explicitly resumes this work. WH-011 is deferred, not completed. The unused provider-response helper and its test prepared during research were removed before commit or deployment. Existing quarantine and recorded-hold foundations do not constitute CSAM detection; this deferral does not approve held content.
 
 ## US operational prerequisites — not yet configured
 
