@@ -16,10 +16,10 @@ The inventory distinguishes actual runtime paths from historical text and curren
 
 | Area | Current finding / required work | Status |
 | --- | --- | --- |
-| Workspace identity | `Profile.accountId` was optional, with email as the query/session key and missing-account browser-recovery mode. Require a valid current account UUID from the authenticated profile before workspace entry. | Removed in current source; focused acceptance below. |
-| DNS alias | `confirmTXT` was an alias for current `confirmDNS`. All consumers must use the current name. No DNS handler behavior or remote record changes. | Alias removed in current source; fixtures use `confirmDNS`. |
+| Workspace identity | `Profile.accountId` was optional, with email as the query/session key and missing-account browser-recovery mode. Require a valid current account UUID from the authenticated profile before workspace entry. | Removed and deployed in the October 1 current billing release below. |
+| DNS alias | `confirmTXT` was an alias for current `confirmDNS`. All consumers must use the current name. No DNS handler behavior or remote record changes. | Alias removed and deployed; fixtures use `confirmDNS`. |
 | Chat interaction/native plans | Unsupported-schema projection, older-client renderer and browser downgrade had been proposed. | Removed from WH-105 in merged PR #52; strict current-client rejection is the contract. |
-| Billing/credits | `legacyPlans` permits Launch/Studio; entitlement selection can silently substitute Explore. Old test-credit preference/reservation interfaces and calendar-month grants are retired with their disposable test data. | Removed in current source and reset SQL: invoice-only coverage, retired tables/routes/handlers deleted, no unknown-plan substitution. Local verification/deployment acceptance below. |
+| Billing/credits | `legacyPlans` permits Launch/Studio; entitlement selection can silently substitute Explore. Old test-credit preference/reservation interfaces and calendar-month grants are retired with their disposable test data. | Removed and deployed: invoice-only coverage, retired tables/routes/handlers deleted, no unknown-plan substitution. Verification below. |
 | Chat text and actions | `chat-language.ts` rewrites known historical command prose, while some current handlers still emit it. Replace the producers/presentation dependency together; typed human action handlers remain authoritative. | Pending. Removing the text filter alone would expose commands again. |
 | Website specifications | Current draft creation/edit paths still produce page config that `importLegacySpecification` converts. Create/save the current specification directly, remove legacy import admission, and reset obsolete test drafts. Preserve current photo support and exact publication reviews. | Pending complete current-path replacement and compiler pin/schema evidence. |
 | CMS bodies/provenance | Validators accept older plain-text/staged representations and preserve optional older receipt shapes. Consolidate the current shape and reset obsolete fixtures. | Pending. CMS functional testing remains owner-deferred; no live CMS acceptance is claimed. |
@@ -47,3 +47,18 @@ Local acceptance passed:
 - Lifecycle catalogue, account-closure inventory, maintenance inventory, roadmap validation/alignment/render consistency, 1,817 local Markdown file targets, and diff checks.
 
 The agent fixture now uses a current synthetic photo clearance and 64-character digest. This is fixture maintenance, not scanner implementation or live detection acceptance. No model/provider call, real charge, customer publication or CMS functional test was part of these local checks. Deployment evidence follows separately.
+
+### Test deployment acceptance
+
+Managed release `438cdaa6-4ef5-46b8-a8c1-ea3115ef61af` completed October 1 at 18:19 UTC, with independent application readback at 18:20 UTC. Archived application/tooling source is `75e41ff5c1de192e9d39d470d325666bd2f94811`; subsequent changes are fixture/evidence only. The archive records checkout dirtiness from the untracked shared dependency symlink; committed source and deployed bytes are pinned.
+
+| Service | Verified active version |
+| --- | --- |
+| Platform | `6931136e-9a76-43e0-8f11-b2ef6f70918a` |
+| Runtime | `9accd3cd-6883-402b-bcec-8a0e607e9c6a` |
+| Apps | `683a4ab5-1967-4a37-986d-5157e5e57547` |
+| Sites | `080cdd7d-6fd4-4981-981e-01fe15c314aa` |
+
+All four candidate tags/identities and binding inventories match; all 117 schema files are applied with none pending and the CMS registry is unchanged. Direct database readback confirms all eight retired tables absent, five current catalogue IDs, and invoice-only paid coverage. A temporary authenticated fixture verified current account identity, zero-credit standard AI billing without retired fields, retired checkout/preferences routes returning 404, current sandbox subscription configuration, and the current public catalogue. Anonymous billing remains 401. All 18 built frontend asset files match deployed SHA-256 bytes. The fixture was removed afterward.
+
+This also deploys the earlier profile/DNS source slice. No inference or payment-provider dispatch, customer publication, new service/paid activation or CMS functional test occurred. No physical-device or full disaster-recovery acceptance is claimed. WH-120 remains open for the other inventory entries.
