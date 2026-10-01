@@ -166,7 +166,8 @@
     "test:github-app-setup": "node tests/github-app-setup.mjs",
     "verify": "node tools/verify.mjs",
     "test:service-client-compiler": "node tests/service-client-compiler.mjs",
-    "test:service-client-authority": "node tests/service-client-authority.mjs"
+    "test:service-client-authority": "node tests/service-client-authority.mjs",
+    "test:service-client-journey": "node tests/service-client-journey.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
