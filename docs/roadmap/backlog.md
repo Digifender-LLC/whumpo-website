@@ -2575,7 +2575,7 @@ Commercial engineering has explicit owner-approved provider, pricing, supported 
 
 Planning dependencies: WH-020, WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-- Owner explicitly deferred Stripe setup; payment activation and commercial/legal decisions require resumption.
+- Real-money activation, commercial/tax/refund/dispute terms and cost evidence remain undecided. Sandbox setup was resumed explicitly by the owner on October 1, 2026.
 
 ### References
 
@@ -2591,7 +2591,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01: owner authorized Stripe sandbox signup/invoice/billing work and supplied a verified sk_test key. No real-money activation. Sandbox contract: docs/stripe-sandbox.md.
 
 ## WH-042 — Implement subscription, invoice and entitlement lifecycle
 
@@ -2615,7 +2615,7 @@ Paid entitlements follow authoritative financial events and can recover duplicat
 
 - [ ] Only verified server events grant entitlements; browser success pages do not
 - [ ] Duplicate/reordered events cannot double-grant or silently regress paid state
-- [ ] Annual purchase issues monthly grants by recorded periods
+- [ ] Annual purchase records exact service-interval coverage; future resource allowances reset by recorded periods without adding an extra month
 - [ ] Sandbox proof precedes separately approved real payments
 
 ### Verification
@@ -2624,6 +2624,7 @@ Paid entitlements follow authoritative financial events and can recover duplicat
 - pnpm test:billing
 - pnpm test:plan-periods
 - Synthetic provider lifecycle and missed-event reconciliation tests
+- pnpm test:subscriptions
 
 ### Dependencies and blockers
 
@@ -2638,14 +2639,15 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/checkout.ts](../../src/checkout.ts)
 - [src/plans.ts](../../src/plans.ts)
 - [src/billing.ts](../../src/billing.ts)
+- [docs/stripe-sandbox.md](../../docs/stripe-sandbox.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/30. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- Sandbox slice authorized independently of commercial cost-period gates: optional onboarding Checkout, exact paid invoice coverage, renewal reconciliation and restricted billing portal. WH-022/023 remain prerequisites for real-money activation. Proration, refunds/disputes and resource-wallet funding remain open.
 
 ## WH-043 — Implement capacity ledger, grants, rollover and customer explanations
 

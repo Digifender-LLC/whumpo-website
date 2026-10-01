@@ -1,3 +1,5 @@
+> October 1, 2026 sandbox resumption: the owner authorized Stripe test signup, billing and invoice integration and supplied a verified sandbox key. See [sandbox implementation and acceptance](stripe-sandbox.md). Earlier statements below that Stripe setup is absent/deferred are historical; real-money activation remains gated.
+
 # Current MVP readiness — October 1, 2026 UTC
 
 **Latest recorded deployment:** [comparison recovery release](releases.md#readable-comparison-recovery--october-1-2026-utc) `ee62cc7e-a655-4aba-a84b-2568051415cf`, verified **2026-10-01T04:28:59.444Z**, has 113 applied migrations, all four matching Worker versions, unchanged service/secret-binding names and empty CMS registry, matching workspace HTML and 16 assets, home/workspace/health 200 and anonymous Chat/profile 401. Comparison navigation has readable private error pages while explicit JSON clients retain their original status/body contract. Authenticated comparison recovery was tested locally. This reconciliation inspected saved evidence; it made no new Cloudflare calls.
@@ -10,7 +12,7 @@
 
 Standard Chat now uses non-billable receipts. Zero test units/credits do not prevent standard work; historical metered requests keep their settlement/waiver behavior. Local actual-handler/D1 recovery, concurrency, first-project and inspection tests passed. A live Muse request against disposable local storage succeeded at zero balance with zero customer charges. Chat now provides paginated standard request history and exact request lookup without inference; Billing and Dashboard show standard assistance separately from historical accounting; desktop and 390-pixel browser views were inspected. The internal testing-capacity ceiling remains, so this is not proof of unrestricted provider capacity or completed launch fair-use enforcement. See [standard AI accounting](standard-ai-accounting.md).
 
-Chat remains the default standalone workspace view. Routine dashboard action controls were removed; explicitly requested workflow pages can contain scoped read/check shortcuts. Their real-model and connected local browser acceptance passed. Account/security controls and contextual human approvals remain. **CMS functional testing, CSAM scanner implementation/enrollment/activation and Stripe setup are deferred at the owner's request.**
+Chat remains the default standalone workspace view. Routine dashboard action controls were removed; explicitly requested workflow pages can contain scoped read/check shortcuts. Their real-model and connected local browser acceptance passed. Account/security controls and contextual human approvals remain. **CMS functional testing, CSAM scanner implementation/enrollment/activation are deferred at the owner's request.**
 
 The September 30 14:21 configuration inspection found Monitor persisted, zero registered CMS instances, configured Cloudflare OAuth/encryption bindings and absent customer GitHub App, Stripe and custom-hostname activation bindings. These are dated configuration observations, not customer consent/operation acceptance.
 
@@ -29,7 +31,7 @@ Internal safety evidence/correction storage and an operator preview/apply tool a
 1. Continue the [execution roadmap](roadmap/README.md): resolve [authority audit findings A1–A3](tenant-authority-audit.md), then continue production-inference privacy/quality evidence, device/assistive-technology acceptance and incident/recovery operations. Implementation milestones do not close those acceptance gates.
 2. Resolve the proposed retention/deletion/export contract and verify whole-platform restore/deletion behavior before offering account erasure. The [current inventory](data-lifecycle.md) covers 148 tables/31 classes at migration 0113; it does not execute deletion.
 3. Complete customer provider setup/consent and reviewed resource journeys when exact prerequisites are available. Preserve Muse-only owner testing, zero standard-AI credits, Monitor mode and the free-only GitHub constraint.
-4. Keep **CSAM scanner implementation, Daybreak, CMS functional testing and Stripe activation deferred**. Preserve applicable launch gates and continue independent work; no provider consent, purchase or customer publication is granted by this priority list.
+4. Keep **CSAM scanner implementation, Daybreak, CMS functional testing and real-money Stripe activation deferred**. Preserve applicable launch gates and continue independent work; no provider consent, purchase or customer publication is granted by this priority list.
 
 ## Earlier milestone evidence
 

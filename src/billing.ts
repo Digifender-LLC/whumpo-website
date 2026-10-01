@@ -13,7 +13,7 @@ export async function ensureBilling(db: D1Database, userId: string, date = new D
   await db.prepare('INSERT OR IGNORE INTO billing_accounts (user_id) VALUES (?)').bind(userId).run();
   // Select receipts inside the INSERT so an overlapping grant cannot be missed by a stale JS read.
   await db.prepare("INSERT OR IGNORE INTO usage_periods(user_id,period,allowance) SELECT ?,?,COALESCE(MAX(c.monthly_units),?) FROM plan_grants g JOIN plan_catalog c ON c.id=g.plan_id WHERE user_id=? AND period=?").bind(userId,period,plans[0].monthlyUnits,userId,period).run();
-  const entitlement=await db.prepare("SELECT c.id FROM plan_grants g JOIN plan_catalog c ON c.id=g.plan_id WHERE user_id=? AND period=? ORDER BY c.tier DESC,c.monthly_units DESC,c.published_sites DESC,c.id LIMIT 1").bind(userId,period).first<{id:string}>();
+  const entitlement=await db.prepare("SELECT c.id FROM plan_entitlements g JOIN plan_catalog c ON c.id=g.plan_id WHERE user_id=? AND starts_at<=? AND ends_at>? ORDER BY c.tier DESC,c.monthly_units DESC,c.published_sites DESC,c.id LIMIT 1").bind(userId,Math.floor(date.getTime()/1000),Math.floor(date.getTime()/1000)).first<{id:string}>();
   const plan=entitlementPlans.find(p=>p.id===entitlement?.id)??plans[0];
   // Only work never sent to a provider expires automatically. Uncertain calls retain their hold.
   await db.prepare("UPDATE usage_operations SET status = 'released', actual_units = 0, quota_charged = 0, credits_charged = 0, updated_at = ? WHERE user_id = ? AND status = 'reserved' AND expires_at <= ?").bind(date.toISOString(), userId, date.toISOString()).run();

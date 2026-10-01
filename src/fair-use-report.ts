@@ -15,10 +15,10 @@ export async function fairUseReport(db:Pick<D1Database,'prepare'>,owner?:string,
  turns AS (SELECT user_id,COUNT(*) n FROM chat_turns WHERE mode='ai' AND status='completed' AND created_at>=? AND created_at<=? GROUP BY user_id),
  lifecycle AS (SELECT user_id,COUNT(*) n,SUM(CASE WHEN ai_saved_at>=created_at AND export_prepared_at>=ai_saved_at AND removed_at>=export_prepared_at AND removed_at<=? AND julianday(removed_at)-julianday(created_at)<=3 THEN 1 ELSE 0 END) cycles FROM fair_use_project_lifecycle WHERE created_at>=? AND created_at<=? GROUP BY user_id),
  shadow AS (SELECT c.user_id,SUM(c.estimated_micros) micros FROM inference_calls c JOIN chat_turns t ON t.id=c.turn_id AND t.user_id=c.user_id WHERE c.cost_basis='subscription-shadow' AND c.status='observed' AND t.status='completed' AND c.created_at>=? AND c.created_at<=? GROUP BY c.user_id)
- SELECT COALESCE((SELECT c.id FROM plan_grants g JOIN plan_catalog c ON c.id=g.plan_id WHERE g.user_id=u.id AND g.period=? ORDER BY c.tier DESC,c.monthly_units DESC,c.published_sites DESC,c.id LIMIT 1),'explore') plan,
+ SELECT COALESCE((SELECT c.id FROM plan_entitlements g JOIN plan_catalog c ON c.id=g.plan_id WHERE g.user_id=u.id AND g.starts_at<=unixepoch(?) AND g.ends_at>unixepoch(?) ORDER BY c.tier DESC,c.monthly_units DESC,c.published_sites DESC,c.id LIMIT 1),'explore') plan,
  COALESCE(t.n,0) turns,COALESCE(l.n,0) projects,COALESCE(l.cycles,0) cycles,COALESCE(s.micros,0) shadow
  FROM users u LEFT JOIN turns t ON t.user_id=u.id LEFT JOIN lifecycle l ON l.user_id=u.id LEFT JOIN shadow s ON s.user_id=u.id
- WHERE (? IS NULL OR u.id=?) ORDER BY u.id LIMIT 1001`).bind(start7,end,end,start7,end,start30,end,end.slice(0,7),owner??null,owner??null).all<{plan:string;turns:number;projects:number;cycles:number;shadow:number}>();
+ WHERE (? IS NULL OR u.id=?) ORDER BY u.id LIMIT 1001`).bind(start7,end,end,start7,end,start30,end,end,end,owner??null,owner??null).all<{plan:string;turns:number;projects:number;cycles:number;shadow:number}>();
  if(results.length>1000)throw Error('Report exceeds supported account count');
  if(owner&&results.length!==1)throw Error('Account not found');
  const empty=()=>({accounts:0,completedAITurns7d:0,createdProjects7d:0,observedExportRemovalCycles7d:0,museShadowMicros30d:0,observationCandidates:0,reviewCandidates:0,behaviorSignals:0,unassessedAccounts:0});

@@ -168,7 +168,9 @@
     "test:service-client-compiler": "node tests/service-client-compiler.mjs",
     "test:service-client-authority": "node tests/service-client-authority.mjs",
     "test:service-client-journey": "node tests/service-client-journey.mjs",
-    "test:service-client-activation": "node tests/service-client-activation.mjs"
+    "test:service-client-activation": "node tests/service-client-activation.mjs",
+    "test:subscriptions": "node tests/subscriptions.mjs",
+    "setup:stripe": "node tools/stripe-sandbox.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -19,7 +19,7 @@ Supersedes the old Launch/Studio public proposal. Source: the owner's “AI VPS 
 
 Monthly prices are the owner's explicit choices. Annual prices follow the final discussion's proposed ten-month equivalent. Annual benefit: up to $20 wholesale per eligible standard registration or renewal, premium domains excluded. The quote helper shows the uncovered wholesale amount; it is not a retail invoice, transfer workflow, payment, inventory reservation or benefit redemption. No domain purchase is enabled. Renewal/transfer fulfillment, benefit ledger, customer ownership and transfer-out controls still need implementation before advertising an available benefit.
 
-The public landing page, API and `/plans` use the same catalogue. Resource amounts are labeled launch targets. They do not override current upload, project, domain, CMS, backend or platform safety caps. Explore remains the free invite-only test. Paid subscriptions remain unavailable because no Stripe account is configured. No annual entitlement or recurring payment fulfillment is claimed.
+The public landing page, API and `/plans` use the same catalogue. Resource amounts are labeled launch targets. They do not override current upload, project, domain, CMS, backend or platform safety caps. Explore remains the free invite-only test. Sandbox subscriptions are implemented for owner testing; [configuration and acceptance](stripe-sandbox.md) are recorded separately. Real payments remain unavailable. Sandbox annual coverage follows exact paid service dates; domain redemption and resource/premium funds remain unavailable.
 
 ### Public pricing panel with planned trial and Enterprise flows — September 29, 2026
 

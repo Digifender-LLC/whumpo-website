@@ -7,7 +7,7 @@ type StripeSession = { id: string; livemode: boolean; mode: string; status: stri
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export function checkoutEnabled(env: StripeConfig): boolean { return /^sk_test_[A-Za-z0-9]+$/.test(env.STRIPE_TEST_KEY ?? '') && /^whsec_[A-Za-z0-9]+$/.test(env.STRIPE_WEBHOOK_SECRET ?? ''); }
 function config(env: StripeConfig) { if (!checkoutEnabled(env)) throw new BillingError(503, 'Stripe test checkout is not configured'); return env.STRIPE_TEST_KEY!; }
-async function boundedText(source: Request | Response, limit: number) {
+export async function boundedText(source: Request | Response, limit: number) {
  const reader = source.body?.getReader(); if (!reader) throw new BillingError(400,'A request body is required');
  const chunks: Uint8Array[] = []; let length = 0;
  while (true) { const {done,value} = await reader.read(); if(done) break; length += value.length; if(length>limit){await reader.cancel();throw new BillingError(413,'Payment payload is too large');}chunks.push(value); }
@@ -45,7 +45,7 @@ export async function createCheckout(db: D1Database, env: StripeConfig, userId: 
  const url = new URL(session.url);if(url.protocol!=='https:' || url.hostname!=='checkout.stripe.com' || url.username || url.password || url.port)throw new BillingError(502,'Unexpected checkout destination');
  return {url:session.url,testMode:true};
 }
-export async function stripeWebhook(request: Request, db: D1Database, env: StripeConfig, transport?: typeof fetch) {
+export async function readStripeEvent(request: Request, env: StripeConfig) {
  config(env);
  const signature = request.headers.get('stripe-signature') ?? '';
  if(signature.length>4096)throw new BillingError(400,'Invalid webhook signature');
@@ -56,9 +56,13 @@ export async function stripeWebhook(request: Request, db: D1Database, env: Strip
  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.STRIPE_WEBHOOK_SECRET!),{name:'HMAC',hash:'SHA-256'},false,['verify']);
  let verified=false;for(const part of parts){if(!/^v1=[a-f0-9]{64}$/.test(part))continue;const bytes=Uint8Array.from(part.slice(3).match(/../g)!,x=>parseInt(x,16));if(await crypto.subtle.verify('HMAC',key,bytes,new TextEncoder().encode(timestamp+'.'+raw)))verified=true;}
  if(!verified)throw new BillingError(400,'Invalid webhook signature');
- let event: {livemode?:boolean;type?:string;data?:{object?:{id?:string}}};
+ let event: {livemode?:boolean;type?:string;data?:{object?:{id?:string;customer?:string}}};
  try{event=JSON.parse(raw);}catch{throw new BillingError(400,'Invalid webhook payload');}
  if(!event || event.livemode!==false)throw new BillingError(400,'Only Stripe test events are accepted');
+ return event;
+}
+export async function stripeWebhook(request: Request, db: D1Database, env: StripeConfig, transport?: typeof fetch) {
+ const event=await readStripeEvent(request,env);
  if(!['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type ?? ''))return {received:true};
  const sessionId=event.data?.object?.id;
  if(typeof sessionId!=='string' || !/^cs_test_[A-Za-z0-9]+$/.test(sessionId))throw new BillingError(400,'Invalid test checkout session');
