@@ -11,12 +11,12 @@ assert.equal(readRecovery(store,other,now),null);assert.equal(values.size,0,'Dif
 writeRecovery(store,owner,{...value,pending:null});assert.equal(readRecovery(store,owner,now+draftLifetime),null);assert.equal(values.size,0);
 writeRecovery(store,owner,value);assert.deepEqual(readRecovery(store,owner,now+draftLifetime),{...value,draft:''},'Unresolved identity outlives the unsent draft');assert.equal(JSON.parse(store.getItem(recoveryKey)).draft,'','Expired draft bytes are removed while the receipt remains');
 assert.deepEqual(readRecovery(store,owner,now-1),{...value,draft:''},'Clock rollback does not forget an unresolved request');
-const action={type:'confirm',kind:'site',reviewId:other},approval={id:crypto.randomUUID(),revision:9,action,content:'/confirm '+other};
+const action={type:'confirm',kind:'site',reviewId:other},approval={id:crypto.randomUUID(),revision:9,action,content:'Confirm the reviewed website change.'};
 writeRecovery(store,owner,{...value,pending:approval});assert.deepEqual(readRecovery(store,owner,now).pending,approval);
-for(const bad of [{...pending,id:'bad'},{...pending,revision:-1},{...pending,content:' '},{...pending,secret:'unexpected'},{...approval,content:'Different command'},{...approval,action:{...action,override:true}},{...approval,action:{type:'deleteEverything'}}]){
- store.setItem(recoveryKey,JSON.stringify({version:1,owner,...value,pending:bad}));assert.equal(readRecovery(store,owner,now),null);assert.equal(values.size,0);
+for(const bad of [{...pending,id:'bad'},{...pending,revision:-1},{...pending,content:' '},{...pending,secret:'unexpected'},{...approval,content:'Different label'},{...approval,content:'/confirm '+other},{...approval,action:{...action,override:true}},{...approval,action:{type:'deleteEverything'}}]){
+ store.setItem(recoveryKey,JSON.stringify({version:2,owner,...value,pending:bad}));assert.equal(readRecovery(store,owner,now),null);assert.equal(values.size,0);
 }
-for(const raw of ['{','[]',JSON.stringify({version:2,owner,...value}),JSON.stringify({version:1,owner,...value,draft:'x'.repeat(16001)}),JSON.stringify({version:1,owner,...value,extra:'private'}),'x'.repeat(100001)]){store.setItem(recoveryKey,raw);assert.equal(readRecovery(store,owner,now),null);}
+for(const raw of ['{','[]',JSON.stringify({version:1,owner,...value}),JSON.stringify({version:2,owner,...value,draft:'x'.repeat(16001)}),JSON.stringify({version:2,owner,...value,extra:'private'}),'x'.repeat(100001)]){store.setItem(recoveryKey,raw);assert.equal(readRecovery(store,owner,now),null);}
 writeRecovery(store,owner,{draft:'',pending:null,updatedAt:now});assert.equal(values.size,0);
 assert.throws(()=>writeRecovery(store,owner,{...value,draft:'x'.repeat(16001)}));
 const failed={getItem(){throw Error('blocked')},setItem(){throw Error('full')},removeItem(){throw Error('blocked')}};

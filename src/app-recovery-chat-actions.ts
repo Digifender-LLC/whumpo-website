@@ -8,10 +8,9 @@ export async function appRecoveryChatActions(db:D1Database,user:string,turns:Tur
  receipts??=await readChatReviewReceipts(db,user,turns);
  for(const turn of turns)delete turn.app_restore_review;
  const candidates=turns.slice(0,100).filter(t=>t.status==='completed'&&typeof t.assistant_text==='string'&&t.assistant_text.startsWith('Application data restore review ')).map(turn=>{
-  const match=String(turn.user_text).trim().match(/^\/(?:app-restore-review|confirm-app-restore)\s+([0-9a-f-]{36})\s+([0-9a-f-]{36})(?:\s+RESTORE)?$/i);
   const saved=receipts!.get(String(turn.id)),linked=saved?.kind==='appRestore'?saved.review_id:undefined;
-  return {turn,id:linked??match?.[2]??String(turn.id),project:match?.[1]};
- }).filter(c=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(c.id));
+  return {turn,id:linked};
+ }).filter((c):c is {turn:Turn;id:string}=>typeof c.id==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(c.id));
  const ids=[...new Set(candidates.map(c=>c.id))];
  for(let offset=0;offset<ids.length;offset+=50){
   const batch=ids.slice(offset,offset+50);
@@ -23,7 +22,7 @@ export async function appRecoveryChatActions(db:D1Database,user:string,turns:Tur
    const review={id:r.id,projectId:r.project_id,pointId:r.point_id,status:r.status,documents:r.documents,expiresAt:r.expires_at,pointCreatedAt:r.point_created_at,versionId:r.version_id,projectName:r.project_name};
    const description=describeAppRestore(review),historical=r.status==='applied'?describeAppRestore({...review,status:'pending'}):undefined;
    const state:AppRestorePresentation['state']=r.status==='applied'?'applied':!r.unexpired?'expired':!r.eligible?'changed':'ready';
-   for(const c of candidates)if(c.id===r.id&&(!c.project||c.project===r.project_id)&&(c.turn.assistant_text===description||historical!==undefined&&c.turn.assistant_text===historical)){
+   for(const c of candidates)if(c.id===r.id&&(c.turn.assistant_text===description||historical!==undefined&&c.turn.assistant_text===historical)){
     const {status,...metadata}=review;c.turn.app_restore_review={...metadata,state} satisfies AppRestorePresentation;
    }
   }

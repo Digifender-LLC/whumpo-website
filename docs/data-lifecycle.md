@@ -56,6 +56,10 @@ At this baseline, **148 control tables across 31 classes** are mapped. No prefix
 | Logs, local operator work and support evidence | Workers invocation/error logs; private `.secrets/` scripts, sessions, screenshots, reports, dumps and future support attachments. | Minimize collection; redact before support sharing. Each retained customer-bearing artifact needs owner/purpose/expiry/hold tagging. `.gitignore` is not a retention policy. Separate credentials from diagnostics and invalidate expired session material. No local files were purged by this task. |
 | Inference, moderation, payment and anti-abuse providers | Submitted prompts/content, scanner cases, transaction records or verification metadata under provider contracts. | Record destination and applicable terms per operation. Request supported deletion/revocation and record response; never claim local deletion erases provider/training copies. New scanner/Stripe/Gateway activation requires its own verified terms. |
 
+### Typed Chat action identity
+
+Current source schema 0118 adds `chat_turns.action_json`: bounded canonical control metadata (review/project identifiers, operation, exact digest/revision where required), null for human messages. It is immutable with the action's plain-language request label and follows the existing Chat turn lifecycle. It does not contain credentials or create another content-copy table. Transcript export remains human-readable; a future account export must separately decide which owned action identifiers belong in its allowlist. The browser stores current recovery version 2 under `whumpo.chat-recovery` and imports no retired recovery record. Schema deployment is pending; no existing customer data was purged by this source change.
+
 ### Saved configurations and new planning records
 
 Migrations 0108–0113 add records that an account purge/export must explicitly handle:
