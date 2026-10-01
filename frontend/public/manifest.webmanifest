@@ -1,0 +1,17 @@
+{
+  "id": "/workspace",
+  "name": "Whumpo",
+  "short_name": "Whumpo",
+  "description": "Big ideas. Less work. Your projects and Whumpo, always close by.",
+  "lang": "en-US",
+  "start_url": "/workspace",
+  "scope": "/workspace",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#F8FAFC",
+  "prefer_related_applications": false,
+  "icons": [
+    {"src": "/brand/whumpo-mark-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/brand/whumpo-mark-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}
+  ]
+}
