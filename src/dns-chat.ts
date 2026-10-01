@@ -1,3 +1,4 @@
+import {FeatureInclusionError} from './feature-inclusion';
 import type {CMSContent} from './cms-content';
 import type {CMSRead} from './cms-projects';
 import type {HealthOptions} from './site-health';
@@ -33,6 +34,6 @@ export function dnsChatCommand(db:D1Database,user:string,turnId:string,command:s
     if(action.state==='review')return describe(action)+'\nNo DNS write was authorized by this check.';
    }
    return describe(await confirmDNS(db,user,args[0],options.config,options.transport,options.hostingReady));
-  }catch(cause){return cause instanceof DomainError||cause instanceof ConnectionError?cause.message+"\nNo automatic retry will be sent. Ask to inspect the saved DNS review.":"The DNS result could not be saved. Ask to inspect the saved review and check its uncertain outcome. This request will not be dispatched again.";}
+  }catch(cause){return cause instanceof FeatureInclusionError||cause instanceof DomainError||cause instanceof ConnectionError?cause.message+"\nNo automatic retry will be sent. Ask to inspect the saved DNS review.":"The DNS result could not be saved. Ask to inspect the saved review and check its uncertain outcome. This request will not be dispatched again.";}
  };
 }

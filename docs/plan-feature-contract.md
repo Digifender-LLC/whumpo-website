@@ -15,7 +15,7 @@
 
 There is no `creator` plan ID, schema migration, grant replay, receipt rewrite or price change. Existing `personal` preferences, Stripe price mappings, invoice coverage and historical test entitlements retain their identities. Current presentation resolves Creator from the catalogue; historical documents, stored descriptions and provider-owned invoice/product labels are not rewritten. The Personal/Business audience switch and profile's “Personal details” are categories, not plan names. Retired `launch`/`studio` identities are rejected; their disposable test billing state was removed by the current-only reset.
 
-Explore remains a free invitation-only preview. It is not a paid launch tier and carries no launch feature grant. WH-090A implements explicit preview inclusion grants; current handlers still need WH-090B's admission adapters. Saving a preference, a configured OAuth credential or a sandbox invoice does not activate the full launch matrix.
+Explore remains a free invitation-only preview. It is not a paid launch tier and carries no launch feature grant. WH-090A implements explicit preview inclusion grants; WH-090B's source adapters enforce inclusion in current connection handlers, while shared restricted identity and connected acceptance remain open. Saving a preference, a configured OAuth credential or a sandbox invoice does not activate the full launch matrix.
 
 ## Stable feature families
 
@@ -100,4 +100,4 @@ The public catalogue exactly matched the source definitions and retained Creator
 
 ## WH-090A inclusion interface
 
-The [current inclusion and preview-grant interface](feature-inclusion.md) extends the invoice-only resolver and adds exact operator-owned test scopes. It is an input to authorization, with no `allowed` claim or implicit Explore grant. Packet B must still connect identity, eligibility, consent/readiness and final effect checks across handlers. WH-090 remains open; no planned feature or real billing is activated.
+The [current inclusion and preview-grant interface](feature-inclusion.md) extends the invoice-only resolver and adds exact operator-owned test scopes. It is an input to authorization, with no `allowed` claim or implicit Explore grant. The [source connection adapters](feature-admission.md) enforce eligibility at current effect boundaries. Packet B still needs the WH-114/115 principal handoff and its revocation/restricted-identity acceptance. WH-090 remains open; no planned feature or real billing is activated.
