@@ -1,3 +1,4 @@
+import {FeatureInclusionError} from './feature-inclusion';
 import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubscriptions,startSubscription,billingPortal} from './stripe-billing';
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
@@ -547,7 +548,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(method==='GET'&&pathname==='/api/connections/cloudflare/callback'){
     const params=new URL(request.url).searchParams;let destination='/workspace/?connection=cloudflare';
     try{if(params.has('error')){await cancelCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'');throw new ConnectionError(400,'Cloudflare authorization cancelled.');}await finishCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'',params.get('code')??'',cloudflareConfig(env));}
-    catch(cause){if(!(cause instanceof ConnectionError))throw cause;destination+='&connection_error=authorization';}
+    catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
   }
   if(method==='POST'&&pathname==='/api/connections/cloudflare/disconnect')return json(await disconnectCloudflare(env.DB,user.id,cloudflareConfig(env)));
@@ -560,7 +561,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const params=new URL(request.url).searchParams;
     let destination='/workspace/?connection=github';
     try{if(params.has('error')){await cancelGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'');throw new ConnectionError(400,'GitHub authorization was cancelled.');}await finishGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'',params.get('code')??'',githubConfig(env));}
-    catch(cause){if(!(cause instanceof ConnectionError))throw cause;destination+='&connection_error=authorization';}
+    catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
   }
   if (method === "POST" && pathname === "/api/connections/github/disconnect") return json(await disconnectGitHub(env.DB,user.id,githubConfig(env)));
@@ -663,7 +664,7 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return comparisonErrorResponse(request,await handle(request, env, ctx));
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
+      if (cause instanceof FeatureInclusionError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));
     }
