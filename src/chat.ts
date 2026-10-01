@@ -38,20 +38,18 @@ import {applyServiceClientsCommand,serviceClientChatLinks} from './project-speci
 import {applySpecificationCommand,specificationChatLinks} from './project-specification/store';
 import {inspectWorkspace} from './workspace-read';
 import {domainCommand} from './domains';
-import { attachPhoto } from './photo-versions';
 import { publicationCommand, siteURL } from './publications';
-import { renderLaunch, type LaunchConfig } from './components';
 import { hashToken } from './security';
 import { describePlans } from './plans';
 import { getBilling } from './billing';
 import { reconcileChat, sendAIChat } from './ai-chat';
 import type { AIConfig } from './ai';
 
-type State = { revision: number; step: 'idea' | 'name' | 'ready'; idea: string; brief_project_id: string | null; brief_stage: 'audience' | 'style' | null };
+type State = { revision: number };
 export const greeting = "Hi, I’m your Whumpo guide. What would you like to put online? Tell me about your business, project, or idea. I can save your brief and set up a project with you.";
 export async function chatState(db: D1Database, userId: string) {
-  await db.prepare('INSERT OR IGNORE INTO workspace_state (user_id) VALUES (?)').bind(userId).run();
-  const state = await db.prepare('SELECT revision, step, idea, brief_project_id, brief_stage FROM workspace_state WHERE user_id = ?').bind(userId).first<State>();
+  await db.prepare("INSERT OR IGNORE INTO workspace_state (user_id,step) VALUES (?,'ready')").bind(userId).run();
+  const state = await db.prepare('SELECT revision FROM workspace_state WHERE user_id = ?').bind(userId).first<State>();
   if (!state) throw new Error('Missing workspace state');
   return state;
 }
@@ -62,7 +60,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   // External reviews may outlive an interrupted transcript. Only offer backup confirmation
   // when its complete server-generated review receipt was saved; /backups can recover it otherwise.
   const result = await db.batch([
-    db.prepare('SELECT revision, step, brief_stage FROM workspace_state WHERE user_id = ?').bind(userId),
+    db.prepare('SELECT revision FROM workspace_state WHERE user_id = ?').bind(userId),
     db.prepare("SELECT t.id, t.revision, t.user_text, t.action_json, t.assistant_text, t.created_at, t.mode, t.status, CASE WHEN csr.status='pending' AND t.status='completed' AND csr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM cms_instances WHERE project_id=csr.project_id) AND instr(t.assistant_text,'Use the confirmation button for setup '||csr.id||' to approve this exact setup request.')>0 THEN csr.id ELSE NULL END AS cms_confirmation_id, CASE WHEN bl.kind='export' AND t.status='completed' AND br.status='applied' THEN br.id ELSE NULL END AS backend_state_export_id, CASE WHEN bl.kind='review' AND t.status='completed' AND br.status='ready' AND br.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND br.base_revision=bs.revision AND br.before_json=bs.state_json AND instr(t.assistant_text,'use the confirmation button for review '||br.id||'. A newer data revision invalidates this review.')>0 THEN br.id ELSE NULL END AS backend_state_confirmation_id, de.review_id AS directory_export_id, der.project_id AS directory_export_project_id, CASE WHEN dr.status='pending' AND t.status='completed' AND dr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND dr.expected_revision=ds.revision THEN dr.id ELSE NULL END AS directory_confirmation_id, CASE WHEN dc.kind='publish' AND dc.status='applied' AND ds2.live_json=dc.snapshot_json AND ds2.publication_revision=dp.revision AND dp.version_id IS NOT NULL THEN dc.project_id ELSE NULL END AS directory_project_id, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind, e.version_id AS export_version_id, CASE WHEN r.status='pending' AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM project_files WHERE id=r.file_id) THEN r.id ELSE NULL END AS photo_confirmation_id, CASE WHEN vr.status='pending' AND vr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM site_versions WHERE id=vr.version_id) THEN vr.id ELSE NULL END AS version_confirmation_id, CASE WHEN cr.status='pending' AND cr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') THEN cr.id ELSE NULL END AS contact_confirmation_id,CASE WHEN dpr.status='pending' AND dpr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM domain_claims WHERE id=dpr.claim_id AND token=dpr.proof_token AND expires_at=dpr.proof_expires_at) THEN dpr.id ELSE NULL END AS domain_proof_confirmation_id,cmp.version_id AS comparison_version_id,cmp.baseline_id AS comparison_baseline_id, CASE WHEN gb.state='pending' AND gb.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND substr(t.assistant_text,-length('Use the confirmation button for backup '||gb.id||' to authorize this exact backup.'))='Use the confirmation button for backup '||gb.id||' to authorize this exact backup.' THEN gb.id ELSE NULL END AS backup_confirmation_id, CASE WHEN gb.state='complete' AND gb.commit_sha IS NOT NULL THEN 'https://github.com/'||gb.repo_owner||'/'||gb.repo_name||'/tree/'||gb.commit_sha||'/'||gb.path ELSE NULL END AS backup_url FROM chat_turns t LEFT JOIN domain_proof_removals dpr ON dpr.id=t.id AND dpr.user_id=t.user_id LEFT JOIN cms_setup_reviews csr ON csr.id=t.id AND csr.user_id=t.user_id LEFT JOIN backend_state_links bl ON bl.turn_id=t.id LEFT JOIN backend_state_reviews br ON br.id=bl.review_id AND br.user_id=t.user_id LEFT JOIN backend_state bs ON bs.project_id=br.project_id LEFT JOIN directory_exports de ON de.turn_id=t.id LEFT JOIN directory_reviews der ON der.id=de.review_id AND der.user_id=t.user_id LEFT JOIN directory_reviews dr ON dr.id=t.id AND dr.user_id=t.user_id LEFT JOIN directories ds ON ds.project_id=dr.project_id LEFT JOIN directory_reviews dc ON dc.confirmed_by=t.id AND dc.user_id=t.user_id LEFT JOIN directories ds2 ON ds2.project_id=dc.project_id LEFT JOIN publications dp ON dp.project_id=dc.project_id LEFT JOIN github_backups gb ON gb.id=t.id AND gb.user_id=t.user_id LEFT JOIN chat_comparisons cmp ON cmp.turn_id=t.id LEFT JOIN contact_reviews cr ON cr.id=t.id AND cr.user_id=t.user_id LEFT JOIN version_removals vr ON vr.id=t.id AND vr.user_id=t.user_id LEFT JOIN photo_removals r ON r.id=t.id AND r.user_id=t.user_id LEFT JOIN chat_exports e ON e.turn_id=t.id LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_actions a ON a.id = t.id AND a.user_id=t.user_id LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100").bind(userId),
     db.prepare("SELECT COUNT(*) AS projects, COALESCE(SUM(CASE WHEN site_live=1 OR backend_live=1 OR cms_articles>0 THEN 1 ELSE 0 END),0) AS live, COALESCE(SUM(cms_articles),0) AS cms_articles FROM project_service_status WHERE owner_user_id = ?").bind(userId)
   ]);
@@ -128,15 +126,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(!ai)return {status:503,error:'Whumpo’s assistant is temporarily unavailable. Your saved work and Dashboard controls are still available. Please try again later.'};
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions);
   }
-  let step = state.step;
-  let idea = state.idea;
-  let briefProject = state.brief_project_id;
-  let briefStage = state.brief_stage;
-  let preference: {projectId:string; audience?:string; style?:string; theme?:LaunchConfig['theme']} | undefined;
   let reply: string;
-  let project: { id: string; name: string; purpose: string } | undefined;
   let exportId: string | undefined;
-  let version: { projectId: string; config: LaunchConfig; html: string; digest: string } | undefined;
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
   const maintenance=appMaintenanceRequest(content);
   if(maintenance&&'error' in maintenance)return {status:400,error:maintenance.error};
@@ -155,8 +146,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(!ai)return {status:503,error:'AI drafting is not connected. Please try again later.'};
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions,true);
   }
-  const known = [...transcriptRequests,'show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
-  if (ai && !usageReview && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
+  const known = [...transcriptRequests,'show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/files','show files','show photos','upload a photo','export my website','download my website'];
+  if (ai && !usageReview && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (!content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
   const backup=backupChatCommand(db,userId,input.id,command,dnsOptions);
@@ -172,8 +163,6 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const specification=await applySpecificationCommand(db,userId,input.id,command);
   const removal = await photoRemovalCommand(db,userId,input.id,command);
   const domain = await domainCommand(db,userId,input.id,command);
-  const photoCommand=command.match(/^\/photo\s+([0-9a-f-]{36})$/);
-  const photoDraft=photoCommand?await attachPhoto(db,userId,input.id,photoCommand[1]):undefined;
   const publication = await publicationCommand(db,userId,input.id,command);
   if(isTranscriptRequest(content))reply=transcriptReply;
   else if(usageReviewReply)reply=usageReviewReply.reply;
@@ -193,7 +182,6 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if(versionRemoval)reply=versionRemoval.reply;
   else if (removal) reply = removal.reply;
   else if (domain) reply = domain.reply;
-  else if (photoDraft) reply = photoDraft.reply;
   else if (publication) reply = publication.reply;
   else if (/^\/visitor-access(?:\s|$)/.test(command)||['visitor access','manage visitor access'].includes(command)) {
     const access=visitorAccessCommand(command)??{};
@@ -224,20 +212,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(!saved)reply="No saved version found. Create a private draft first, or ask to list your saved versions.";
     else {exportId=saved.id;reply=`Download the saved source for “${saved.name}” below. Version: ${saved.id}. The ZIP includes its HTML, styles and configuration. It contains no account credentials or chat history. This uses no AI units and does not change your live site.`;}
   }
-  else if (/^\/build(?:\s|$)/.test(command)) {
-    const args = command.split(/\s+/);
-    let theme = args[1] || 'ocean';
-    if (!['ocean','clay','forest'].includes(theme) || args.length > 3 || (args[2] && !/^[0-9a-f-]{36}$/.test(args[2]))) return {status:400,error:"Choose an ocean, clay or forest theme and the project for this private draft."};
-    const target = await db.prepare('SELECT id,name,purpose,preferred_theme FROM projects WHERE owner_user_id = ? AND (? IS NULL OR id = ?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[2] ?? null,args[2] ?? null).first<{id:string;name:string;purpose:string;preferred_theme:LaunchConfig['theme']}>();
-    if (!target) reply = "Start a project first, or ask to list your projects.";
-    else {
-      if (!args[1]) theme = target.preferred_theme;
-      const config: LaunchConfig = {name:target.name,description:target.purpose,theme:theme as LaunchConfig['theme']};
-      const html = renderLaunch(config);
-      version = {projectId:target.id,config,html,digest:await hashToken(html)};
-      reply = `I assembled a private first draft for “${target.name}” using the reusable launch-page layout (${theme}). Open the preview below. No AI units were used. This is a saved preview, not a published site. Ask to try a different theme.`;
-    }
-  } else if (/^\/brief(?:\s|$)/.test(command) || command==='show brief') {
+   else if (/^\/brief(?:\s|$)/.test(command) || command==='show brief') {
     const args=command==='show brief'?['/brief']:command.split(/\s+/);
     if(args.length>2 || (args[1]&&!/^[0-9a-f-]{36}$/.test(args[1]))) return {status:400,error:"Choose the project whose brief you want to read."};
     const saved=await db.prepare('SELECT name,purpose,audience,style_notes,preferred_theme FROM projects WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(userId,args[1]??null,args[1]??null).first<{name:string;purpose:string;audience:string;style_notes:string;preferred_theme:string}>();
@@ -271,47 +246,15 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   } else if (['/security', '/passkeys'].includes(command)) {
     reply = 'Open Profile → Passkeys & recovery to add a passkey, remove one, or replace your recovery code. These actions require a recent sign-in and your device confirmation. Never share a recovery code in chat.';
 
-  } else if (command === '/new') {
-    step = 'idea'; idea = ''; briefProject = null; briefStage = null; reply = 'Let’s start something new. What would you like to put online, and who is it for?';
-  } else if (command === '/cancel') {
-    step = 'ready'; idea = ''; briefProject = null; briefStage = null; reply = "I’ve cleared the unfinished brief. Your existing projects are unchanged. Tell me when you are ready to start another project.";
-  } else if (briefStage && (!content.startsWith('/') || command === '/skip')) {
-    const target = await db.prepare('SELECT id,name,purpose FROM projects WHERE id=? AND owner_user_id=?').bind(briefProject,userId).first<{id:string;name:string;purpose:string}>();
-    if (!target) { briefProject=null; briefStage=null; reply="That project is no longer available. Start another project to continue."; }
-    else if (briefStage === 'audience') {
-      preference={projectId:target.id,audience:command==='/skip'?'':content}; briefStage='style';
-      reply="What should it feel like? Choose ocean (crisp blue), clay (warm terracotta), or forest (calm green), or describe your style. I’ll save your preferences and assemble a private first draft.";
-    } else {
-      const theme:LaunchConfig['theme'] = ['ocean','clay','forest'].includes(command)?command as LaunchConfig['theme']:'ocean';
-      preference={projectId:target.id,style:command==='/skip'?'':content,theme};
-      const config:LaunchConfig={name:target.name,description:target.purpose,theme};const html=renderLaunch(config);
-      version={projectId:target.id,config,html,digest:await hashToken(html)};
-      briefProject=null;briefStage=null;
-      reply=`Your first private draft for “${target.name}” is ready. I used the ${theme} theme${!['ocean','clay','forest','/skip'].includes(command)?' as a starting point and saved your style notes for AI edits':''}. Your audience and style notes stay in the project brief; they are not added to the page. No AI units were used. Open the preview below, then tell me what to change${ai?'': ' once AI is connected'}. Ask for a publication review to make it public; nothing is published automatically.`;
-    }
-  } else if (command === '/skip') {
-    reply="There is no audience or style question to skip. Start a project first.";
-  } else if (content.startsWith('/')) {
-    reply = "This internal action is unsupported. Use the current workspace controls or describe what you need in Chat.";
-  } else if (step === 'idea') {
-    idea = content; step = 'name'; reply = "I’ve saved that brief. What would you like to call the project?";
-  } else if (step === 'name') {
-    if (content.length > 100) reply = 'Let’s use a shorter project name—100 characters or fewer.';
-    else {
-      project = { id: input.id, name: content, purpose: idea };
-      step = 'ready'; idea = ''; briefProject=project.id; briefStage='audience';
-      reply = `Your project “${content}” is saved. Who should this website speak to, and what would you like visitors to do? I’ll keep this as private planning context. It is fine to leave this undecided for now.`;
-    }
   } else {
-    reply = "AI-generated changes are unavailable in this environment. Your saved work and Dashboard controls remain available.";
+    reply = "This internal action is unsupported. Use current workspace controls or describe what you need in Chat.";
   }
   const now = new Date().toISOString();
   const statements = [
     db.prepare("INSERT INTO chat_turns (id, user_id, revision, user_text, assistant_text, created_at, ai_context_allowed, action_json) SELECT ?, user_id, revision + 1, ?, ?, ?, ?, ? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending')").bind(input.id, storedText, reply, now, usageReview||isTranscriptRequest(content)?0:1, actionJSON, userId, state.revision, userId),
-    db.prepare('UPDATE workspace_state SET revision = revision + 1, step = ?, idea = ?, brief_project_id = ?, brief_stage = ? WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(step, idea, briefProject, briefStage, userId, state.revision, input.id, userId)
+    db.prepare('UPDATE workspace_state SET revision = revision + 1 WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(userId, state.revision, input.id, userId)
   ];
   if(usageReviewReply)statements.push(...usageReviewReply.statements);
-  if (preference) statements.push(db.prepare('UPDATE projects SET audience=COALESCE(?,audience),style_notes=COALESCE(?,style_notes),preferred_theme=COALESCE(?,preferred_theme),updated_at=? WHERE id=? AND owner_user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(preference.audience??null,preference.style??null,preference.theme??null,now,preference.projectId,userId,input.id,userId));
   if(comparison)statements.push(...comparison.statements);
   if(directory)statements.push(...directory.statements);
   if(contact)statements.push(...contact.statements);
@@ -321,16 +264,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if (removal) statements.push(...removal.statements);
   if (domain) statements.push(...domain.statements);
   if (publication) statements.push(...publication.statements);
-  if (photoDraft) statements.push(...photoDraft.statements);
   if (exportId) statements.push(db.prepare("INSERT OR IGNORE INTO chat_exports(turn_id,version_id) SELECT id,? FROM chat_turns WHERE id=? AND user_id=?").bind(exportId,input.id,userId));
-  if (version) {
-    statements.push(db.prepare("INSERT INTO site_versions (id,project_id,component_id,config_json,html,digest,created_at) SELECT ?,?,'launch-page@1',?,?,?,? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?) AND EXISTS (SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?)").bind(input.id,version.projectId,JSON.stringify(version.config),version.html,version.digest,now,input.id,userId,version.projectId,userId));
-    statements.push(db.prepare("INSERT INTO activity_events (id,user_id,project_id,action,summary,created_at) SELECT ?,?,?, 'site.preview.created','Created a private preview with launch-page@1',? WHERE EXISTS (SELECT 1 FROM site_versions WHERE id = ?)").bind(`preview:${input.id}`,userId,version.projectId,now,input.id));
-  }
-  if (project) {
-    statements.push(db.prepare("INSERT INTO projects (id, owner_user_id, name, purpose, status, created_at, updated_at) SELECT ?, ?, ?, ?, 'draft', ?, ? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)").bind(project.id, userId, project.name, project.purpose, now, now, input.id, userId));
-    statements.push(db.prepare("INSERT INTO activity_events (id, user_id, project_id, action, summary, created_at) SELECT ?, ?, ?, 'project.created', ?, ? WHERE EXISTS (SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?)").bind(crypto.randomUUID(), userId, project.id, `Created project ${project.name} through chat`, now, project.id, userId));
-  }
   try {
     const results = await db.batch(statements);
     if (results[0].meta.changes !== 1) {

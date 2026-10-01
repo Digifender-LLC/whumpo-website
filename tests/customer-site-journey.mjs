@@ -7,7 +7,7 @@ const b=await build({stdin:{contents:"export {default as platform} from './src/i
 const {platform,host,hashToken}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const dir=await mkdtemp('/tmp/whumpo-customer-journey-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const ai=true,background=[],originalFetch=globalThis.fetch;
-const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:ai?'test':'local',API_LIMITER:{limit:async()=>({success:true})},...(ai?{AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_PROTOCOL:'responses',AI_API_KEY:'synthetic-only-no-real-credential'}:{})},ctx={waitUntil(promise){background.push(promise)}};
+const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:ai?'test':'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},...(ai?{AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_PROTOCOL:'responses',AI_API_KEY:'synthetic-only-no-real-credential'}:{})},ctx={waitUntil(promise){background.push(promise)}};
 let providerCalls=0,ackCalls=0,nextAction;
 if(ai)globalThis.fetch=async(url,init)=>{
  assert.equal(String(url),'https://opencode.ai/zen/go/v1/responses','Unexpected network request');
@@ -32,7 +32,7 @@ try{
  await json(owner,'/api/onboarding','PUT',{revision:0,stage:'review',project_name:'Copper Oven',idea:'A neighborhood bakery with fresh bread. UNTRUSTED_BRIEF_CANARY',audience:'Neighbors',preferred_theme:'clay'});
  await json(owner,'/api/onboarding/complete','POST',{revision:1});assert.equal((await json(owner,'/api/profile')).onboardingComplete,true);
  const {id:project}=await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(owner.id).first();
- if(ai){assert.equal((await json(owner,'/api/chat')).firstDraft.id,project);nextAction={kind:'preview',projectId:project,config:{name:'Copper Oven',headline:'Bread for our neighbors',description:'Fresh bread daily.',theme:'clay',aboutTitle:'Our bakery',aboutText:'A neighborhood bakery.',sections:[]}};}
+ if(ai){assert.equal((await json(owner,'/api/chat')).firstDraft.id,project);nextAction={kind:'specification',operation:'create',projectId:project,config:{name:'Copper Oven',headline:'Bread for our neighbors',description:'Fresh bread daily.',theme:'clay',aboutTitle:'Our bakery',aboutText:'A neighborhood bakery.',sections:[],photos:[]}};}
  const draft=await chat(owner,'Build my first private website using the saved brief.'),version=draft.data.turns.at(-1).version_id;assert.ok(version);assert.equal((await served(project)).status,404);
  if(ai){await Promise.all(background);assert.equal(providerCalls,1);assert.equal(draft.data.firstDraft,null);const spent=(await json(owner,'/api/billing')).standardAI.creditCharge;assert.equal(spent,0);await json(owner,'/api/chat','POST',draft.input);assert.equal(providerCalls,1);assert.equal((await json(owner,'/api/billing')).standardAI.creditCharge,spent);}
 
@@ -46,8 +46,8 @@ try{
  // Discard the first HTTP response, then replay exactly as a reconnecting client would.
  assert.equal((await call(owner,'/api/chat/actions','POST',input)).status,200);await json(owner,'/api/chat/actions','POST',input);
  assert.equal((await db.prepare('SELECT revision FROM publications WHERE project_id=?').bind(project).first()).revision,1);assert.equal(await(await served(project)).text(),original);
- if(ai)nextAction={kind:'edit',baseVersionId:version,changes:{theme:'forest'}};
- const next=await chat(owner,'Change the theme to forest'),nextId=next.data.turns.at(-1).version_id;assert.equal(await(await served(project)).text(),original);
+ if(ai)nextAction={kind:'specification',operation:'change',projectId:project,expectedRevision:1,operations:[{type:'design.setTheme',theme:'forest'}]};
+ const next=await chat(owner,'Change the theme to forest'),q=next.data.turns.at(-1).specification_review;assert.ok(q);const nextId=crypto.randomUUID();await json(owner,'/api/chat/actions','POST',{id:nextId,revision:next.data.state.revision,action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposalDigest,expectedRevision:q.expectedRevision}});assert.equal(await(await served(project)).text(),original);
  nextAction={kind:'review',operation:'restore',targetId:version};const stale=await chat(owner,'Review restoring version '+version);
  nextAction={kind:'review',operation:'publish',targetId:nextId};const replace=await chat(owner,'Review publishing version '+nextId);await confirm(owner,replace.data.turns.at(-1).confirmation_id);assert.notEqual(await(await served(project)).text(),original);
  assert.equal((await call(owner,'/api/publication-reviews/'+stale.input.id+'/diff')).status,409);

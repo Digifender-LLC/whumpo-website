@@ -1,11 +1,12 @@
 import {BackendError} from '../backend-error';
-import {previewHeaders,type SiteConfig} from '../components';
+import {previewHeaders,type SiteConfig,type PhotoConfig} from '../components';
 import {contentPolicyVersion} from '../content-policy';
 import {contentRiskPolicyVersion} from '../content-risk';
 import {requireSpecificationAvailable} from '../specification-safety';
-import {compileProjectSpecification,compileSpecificationChange,currentCompilerLock,importLegacySpecification} from './compiler';
-import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from './v1/json';
-import {projectPage} from './v1/schema';
+import {compileProjectSpecification,compileSpecificationChange,currentCompilerLock,compileNewWebsite} from './compiler';
+import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from './v2/json';
+import {projectPage} from './v2/schema';
+import {requireSpecificationPhotos,inlineSpecificationPhotos} from '../specification-photos';
 
 const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -16,7 +17,7 @@ function revision(value:unknown):asserts value is number {if(!Number.isSafeInteg
 function safe(error:unknown):never {if(error instanceof BackendError)throw error;if(error instanceof SpecificationError||error instanceof Error&&error.message==='Rendered site too large')throw new BackendError(422,'This website configuration is not supported. Ask for a smaller compatible change.');throw error;}
 type Head={project_id:string;name:string;draft_revision:number;revision:number;version_id:string|null;head_draft_revision:number|null;spec_json:string|null;spec_digest:string|null;lock_json:string|null};
 type Site={id:string;project_id:string;component_id:string;config_json:string;html:string;digest:string};
-type Proposal={id:string;user_id:string;project_id:string;operation:'import'|'change'|'restore';expected_revision:number;draft_revision:number;base_version_id:string|null;target_version_id:string|null;base_digest:string|null;request_hash:string;proposal_digest:string;spec_digest:string;manifest_digest:string;policy_version:string;expires_at:string;spec_json:string;lock_json:string;manifest_json:string;config_json:string;html:string;html_digest:string;diff_json:string;envelope_json:string};
+type Proposal={id:string;user_id:string;project_id:string;operation:'change'|'restore';expected_revision:number;draft_revision:number;base_version_id:string|null;target_version_id:string|null;base_digest:string|null;request_hash:string;proposal_digest:string;spec_digest:string;manifest_digest:string;policy_version:string;expires_at:string;spec_json:string;lock_json:string;manifest_json:string;config_json:string;html:string;html_digest:string;diff_json:string;envelope_json:string};
 type Receipt={id:string;project_id:string;proposal_id:string;proposal_digest:string;request_hash:string;version_id:string;revision:number};
 async function head(db:D1Database,user:string,project:string){
  id(project);
@@ -38,24 +39,44 @@ async function held(db:D1Database,user:string,hashes:string[]){
 }
 function home(compiled:Awaited<ReturnType<typeof compileProjectSpecification>>){
  if(compiled.artifacts.length!==1||compiled.artifacts[0].path!=='/')throw new BackendError(422,'This saved-version adapter supports one website homepage. Additional routes need their own delivery adapter.');
- return {artifact:compiled.artifacts[0],config:projectPage(compiled.specification,compiled.artifacts[0].pageId)};
+ const {photos,...text}=projectPage(compiled.specification,compiled.artifacts[0].pageId);
+ return {artifact:compiled.artifacts[0],config:photos.length?{...text,photos}:text,photos};
 }
-function fieldDiff(before:SiteConfig|null,after:SiteConfig){
- const fields=(c:SiteConfig|null)=>c?Object.fromEntries([['Site name',c.name],['Headline',c.headline],['Introduction',c.description],['Theme',c.theme],['About heading',c.aboutTitle],['About text',c.aboutText],...c.sections.flatMap((s,i)=>[[`Section ${i+1} heading`,s.heading],[`Section ${i+1} text`,s.text]])]):{};
+function fieldDiff(before:SiteConfig|PhotoConfig|null,after:SiteConfig|PhotoConfig){
+ const fields=(c:SiteConfig|PhotoConfig|null)=>c?Object.fromEntries([['Site name',c.name],['Headline',c.headline],['Introduction',c.description],['Theme',c.theme],['About heading',c.aboutTitle],['About text',c.aboutText],['Photos','photos' in c?JSON.stringify(c.photos):'[]'],...c.sections.flatMap((s,i)=>[[`Section ${i+1} heading`,s.heading],[`Section ${i+1} text`,s.text]])]):{};
  const a=fields(before),b=fields(after);return [...new Set([...Object.keys(a),...Object.keys(b)])].filter(key=>a[key]!==b[key]).map(label=>({label,before:a[label]??null,after:b[label]??null}));
 }
 const description=(q:Pick<Proposal,'operation'|'expected_revision'|'expires_at'|'config_json'|'diff_json'>)=>{
  const name=(JSON.parse(q.config_json) as SiteConfig).name,fields=(JSON.parse(q.diff_json) as {label:string}[]).map(row=>row.label);
- return `Website changes for “${name}”\n${q.operation==='import'?'Prepare this saved page for structured editing':q.operation==='restore'?'Restore this saved website configuration':'Save these website changes'}?\n${fields.length?'Changed fields: '+fields.join(', '):'The website text and theme stay the same.'}\nReview the private preview and full comparison below. Approval creates a new private saved version at revision ${q.expected_revision+1}. Publishing requires its own review.\nThis does not change visitor data, permissions, connections or your live website.\nReview expires: ${q.expires_at}`;
+ return `Website changes for “${name}”\n${q.operation==='restore'?'Restore this saved website configuration':'Save these website changes'}?\n${fields.length?'Changed fields: '+fields.join(', '):'The website text and theme stay the same.'}\nReview the private preview and full comparison below. Approval creates a new private saved version at revision ${q.expected_revision+1}. Publishing requires its own review.\nThis does not change visitor data, permissions, connections or your live website.\nReview expires: ${q.expires_at}`;
 };
 function link(db:D1Database,user:string,turn:string,review:string,hash:string){return db.prepare('INSERT INTO project_spec_chat_links(turn_id,proposal_id,reply_digest) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,review,hash,turn,user);}
+
+/** Saves a first private website and its current specification in the same Chat transaction.
+ * A project may be created earlier in that transaction; DB guards enforce ownership and first-only admission. */
+export async function createWebsite(db:D1Database,user:string,turn:string,project:string,input:unknown){
+ try{
+  id(turn);id(project);
+  if(await db.prepare('SELECT id FROM site_versions WHERE project_id=? LIMIT 1').bind(project).first())throw new BackendError(409,'This project already has a website. Read its specification and prepare a change review.');
+  const compiled=await compileNewWebsite(input),{artifact,config,photos}=home(compiled),now=new Date().toISOString();
+  await requireSpecificationPhotos(db,user,project,photos);
+  await held(db,user,[compiled.specificationDigest,compiled.manifestDigest,artifact.digest]);
+  const requestHash=await jsonDigest({kind:'website.create',projectId:project,config:input});
+  return {reply:`Saved the first private website for “${config.name}”. Open the preview below, then tell me what to change. Publishing requires a separate review.`,statements:[
+   db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source) SELECT ?,?,?,?,?,?,?,'ai' FROM chat_turns t JOIN projects p ON p.id=? AND p.owner_user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.mode='ai' AND t.status='pending' AND t.action_json IS NULL").bind(turn,project,artifact.component,canonicalJSON(config),artifact.html,artifact.digest,now,project,turn,user),
+   ...photos.map((photo,n)=>db.prepare('INSERT INTO version_photos(version_id,file_id,position,alt) VALUES(?,?,?,?)').bind(turn,photo.id,n,photo.alt)),
+   db.prepare('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,1,?,?,?,?,?,?)').bind(turn,project,turn,canonicalJSON(compiled.specification),compiled.specificationDigest,canonicalJSON(compiled.manifest.lock),canonicalJSON(compiled.manifest),compiled.manifestDigest),
+   db.prepare('INSERT INTO project_spec_creations(id,user_id,project_id,request_hash,version_id) VALUES(?,?,?,?,?)').bind(turn,user,project,requestHash,turn)
+  ]};
+ }catch(error){return safe(error);}
+}
 
 /** Preparation returns statements for the existing atomic AI-result transaction. */
 export async function prepareSpecification(db:D1Database,user:string,turn:string,request:Record<string,unknown>){
  try{
   const operation=request.operation;
   shape(request,operation==='change'?['kind','operation','projectId','expectedRevision','operations']:['kind','operation','projectId','expectedRevision','versionId']);
-  if(request.kind!=='specification'||!['import','change','restore'].includes(String(operation)))throw new BackendError(400,'Choose a supported website configuration operation.');
+  if(request.kind!=='specification'||!['change','restore'].includes(String(operation)))throw new BackendError(400,'Choose a supported website configuration operation.');
   id(turn);id(request.projectId);revision(request.expectedRevision);
   const current=await head(db,user,request.projectId),requestHash=await jsonDigest(request);
   if(current.version_id)await requireSpecificationAvailable(db,current.version_id);
@@ -63,21 +84,19 @@ export async function prepareSpecification(db:D1Database,user:string,turn:string
   if(prior){if(prior.request_hash!==requestHash)throw new BackendError(409,'This request ID already describes another website change.');return {reply:description(prior),statements:[] as D1PreparedStatement[]};}
   if(current.revision!==request.expectedRevision)throw changed();
   let compiled:Awaited<ReturnType<typeof compileProjectSpecification>>,target:string|null=null;
-  if(operation==='import'){
-   id(request.versionId);target=request.versionId;const old=await site(db,user,current.project_id,target);
-   const imported=await importLegacySpecification({versionId:old.id,componentId:old.component_id,config:JSON.parse(old.config_json),html:old.html,digest:old.digest},currentCompilerLock());compiled=imported.compiled;
-  }else if(operation==='restore'){
+  if(operation==='restore'){
    id(request.versionId);target=request.versionId;const old=await site(db,user,current.project_id,target);
    const saved=await db.prepare('SELECT spec_json,lock_json,spec_digest,manifest_digest FROM project_spec_versions WHERE version_id=? AND project_id=?').bind(target,current.project_id).first<{spec_json:string;lock_json:string;spec_digest:string;manifest_digest:string}>();
    if(!saved)throw new BackendError(404,'Saved website configuration not found.');
    compiled=await compileProjectSpecification(JSON.parse(saved.spec_json),JSON.parse(saved.lock_json));
    if(compiled.specificationDigest!==saved.spec_digest||compiled.manifestDigest!==saved.manifest_digest||home(compiled).artifact.digest!==old.digest||home(compiled).artifact.html!==old.html)throw new BackendError(409,'The saved website failed its integrity check.');
   }else{
-   if(!current.spec_json||!current.lock_json)throw new BackendError(409,'First prepare an existing saved website for structured editing.');
-   if(current.draft_revision!==current.head_draft_revision)throw new BackendError(409,'Other website drafts changed. Choose and review the saved page to import before editing it.');
+   if(!current.spec_json||!current.lock_json)throw new BackendError(409,'Create this website’s first draft before proposing changes.');
+   if(current.draft_revision!==current.head_draft_revision)throw new BackendError(409,'The website draft changed. Read its current specification before preparing a new review.');
    compiled=(await compileSpecificationChange(JSON.parse(current.spec_json),request.operations,JSON.parse(current.lock_json))).compiled;
   }
-  const {artifact,config}=home(compiled);
+  const {artifact,config,photos}=home(compiled);
+  await requireSpecificationPhotos(db,user,current.project_id,photos);
   await held(db,user,[compiled.specificationDigest,compiled.manifestDigest,artifact.digest]);
   let before:SiteConfig|null=null;
   if(current.spec_json){const priorCompiled=await compileProjectSpecification(JSON.parse(current.spec_json),JSON.parse(current.lock_json!));before=home(priorCompiled).config;}
@@ -106,6 +125,7 @@ export async function readSpecificationProposal(db:D1Database,user:string,review
   const envelope=JSON.parse(q.envelope_json);
   if(await jsonDigest(envelope)!==q.proposal_digest||envelope.id!==q.id||envelope.projectId!==q.project_id||envelope.operation!==q.operation||envelope.expectedRevision!==q.expected_revision||envelope.draftRevision!==q.draft_revision||envelope.baseVersionId!==q.base_version_id||envelope.targetVersionId!==q.target_version_id||envelope.baseDigest!==q.base_digest||envelope.nextDigest!==q.spec_digest||envelope.manifestDigest!==q.manifest_digest||envelope.policyVersion!==q.policy_version||envelope.expiresAt!==q.expires_at||canonicalJSON(envelope.requiredReviews)!=='[]'||envelope.diffDigest!==await jsonDigest(JSON.parse(q.diff_json),65536)||compiled.specificationDigest!==q.spec_digest||compiled.manifestDigest!==q.manifest_digest||canonicalJSON(compiled.manifest)!==q.manifest_json||canonicalJSON(config)!==q.config_json||artifact.html!==q.html||artifact.digest!==q.html_digest)throw changed();
  }catch(error){return safe(error);}
+ await requireSpecificationPhotos(db,user,q.project_id,projectPage(JSON.parse(q.spec_json),'home').photos);
  await held(db,user,[q.spec_digest,q.manifest_digest,q.html_digest]);return q;
 }
 
@@ -119,7 +139,8 @@ export async function applySpecificationCommand(db:D1Database,user:string,turn:s
  const q=await readSpecificationProposal(db,user,review);
  if(q.proposal_digest!==hash||q.expected_revision!==expectedRevision)throw changed();
  return {reply:`Saved private website revision ${expectedRevision+1}. Open the preview below. Your live website changes only after a separate publication review.`,statements:[
-  db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source,base_version_id) SELECT ?,project_id,'site-page@1',config_json,html,html_digest,?,'guided',base_version_id FROM project_spec_proposals WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(turn,new Date().toISOString(),review,user,turn,user),
+  db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source,base_version_id) SELECT ?,project_id,json_extract(manifest_json,'$.artifacts[0].component'),config_json,html,html_digest,?,'guided',base_version_id FROM project_spec_proposals WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(turn,new Date().toISOString(),review,user,turn,user),
+  ...projectPage(JSON.parse(q.spec_json),'home').photos.map((photo,n)=>db.prepare('INSERT INTO version_photos(version_id,file_id,position,alt) VALUES(?,?,?,?)').bind(turn,photo.id,n,photo.alt)),
   db.prepare('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) SELECT ?,project_id,expected_revision+1,id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest FROM project_spec_proposals WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM site_versions WHERE id=?)').bind(turn,review,user,turn),
   // Attempt the receipt whenever this confirmation turn exists. A candidate removed
   // after validation must abort the transaction, not silently save a success reply.
@@ -129,12 +150,13 @@ export async function applySpecificationCommand(db:D1Database,user:string,turn:s
 
 export async function specificationAction(db:D1Database,user:string,turn:string,request:Record<string,unknown>){
  try{
+  if(request.operation==='create'){shape(request,['kind','operation','projectId','config']);id(request.projectId);if(!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(request.projectId,user).first())throw new BackendError(404,'Project not found.');return createWebsite(db,user,turn,request.projectId,request.config);}
   if(request.operation==='read'){
    shape(request,['kind','operation','projectId']);id(request.projectId);const data=await readSpecification(db,user,request.projectId);
    // Inspection continuations accept a bounded string. Include editable references
    // and actual text, not the ever-growing version history or a status-only reply.
    const s=data.specification,inspection=JSON.stringify({type:'website_specification',projectId:data.projectId,revision:data.revision,versionId:data.versionId,otherDraftChanges:data.otherDraftChanges,...(s?{name:s.name,theme:s.design.theme,pages:s.pages,content:s.content}:{})});
-   return {reply:data.versionId?`Saved website configuration revision ${data.revision}.${data.otherDraftChanges?' Other drafts changed; choose a saved page to import before editing.':''}`:'This website does not have a saved specification yet. Choose an existing website version to prepare for structured editing.',inspection,statements:[] as D1PreparedStatement[]};
+   return {reply:data.versionId?`Saved website configuration revision ${data.revision}.${data.otherDraftChanges?' The draft changed; request a fresh review.':''}`:'This project has no website yet. Ask to create its first private draft.',inspection,statements:[] as D1PreparedStatement[]};
   }
   if(request.operation==='review'){
    shape(request,['kind','operation','reviewId']);id(request.reviewId);const q=await readSpecificationProposal(db,user,request.reviewId),reply=description(q);
@@ -151,9 +173,9 @@ export async function specificationChatLinks(db:D1Database,user:string,turns:Rec
  }
 }
 const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export async function specificationPreview(db:D1Database,user:string,review:string,comparison=false){
+export async function specificationPreview(db:D1Database,user:string,review:string,comparison=false,files?:R2Bucket){
  const q=await readSpecificationProposal(db,user,review);
- if(!comparison)return new Response(q.html,{headers:previewHeaders});
+ if(!comparison)return new Response(await inlineSpecificationPhotos(db,files,user,q.project_id,q.html,projectPage(JSON.parse(q.spec_json),'home').photos),{headers:{...previewHeaders,'content-security-policy':previewHeaders['content-security-policy']+'; img-src data:'}});
  const rows=JSON.parse(q.diff_json) as {label:string;before:string|null;after:string|null}[];
  const html=`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review website changes · Whumpo</title><style>body{font:16px/1.6 system-ui;background:#f8fafc;color:#0f2d5b;margin:0}main{max-width:850px;margin:auto;padding:24px}section{background:white;border:1px solid #dae5f0;border-radius:16px;padding:20px;margin:16px 0}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}h1{font-size:30px}h2{font-size:20px}h3{font-size:14px}</style><main><h1>Review website changes</h1><p>Approval saves a private version. Publishing remains a separate review. Return to Chat to approve this exact change.</p>${rows.length?rows.map(row=>`<section><h2>${escape(row.label)}</h2><h3>Before</h3><pre>${escape(row.before??'Not included')}</pre><h3>After</h3><pre>${escape(row.after??'Not included')}</pre></section>`).join(''):'<p>The website text and theme are unchanged. This records a new configuration version.</p>'}</main></html>`;
  return new Response(html,{headers:previewHeaders});

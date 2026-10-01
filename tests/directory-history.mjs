@@ -1,3 +1,4 @@
+import {createFixtureProject} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';import {mkdtemp,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';import wrangler from 'wrangler';
 async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
 const {sendChat,sendChatControl,readChat}=await module('src/chat.ts'),{readDirectory,directoryHistory,directoryAction,directorySnapshot,exportDirectory}=await module('src/directory.ts'),{prepareSiteAction}=await module('src/site-agent.ts'),host=(await module('src/site-host.ts')).default;
@@ -6,7 +7,7 @@ const stamp=()=>new Date().toISOString();
 async function chat(user,content,id=crypto.randomUUID()){const state=await readChat(db,user);const r=await sendChat(db,user,{id,content,revision:state.state.revision});assert.equal(r.status,200,JSON.stringify(r));return id;}
 const approvals=new Map();
 async function confirm(user,reviewId){const input={id:crypto.randomUUID(),revision:(await readChat(db,user)).state.revision,action:{type:'confirm',kind:'directory',reviewId}};const result=await sendChatControl(db,user,input);assert.equal(result.status,200,JSON.stringify(result));approvals.set(input.id,input);return input.id;}
-async function fixture(){const user=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'fixture',?)").bind(user,user+'@example.com','00',stamp()).run();await chat(user,'A community directory');const project=await chat(user,'Community');const version=await chat(user,'/build'),review=await chat(user,'/publish '+version);await chat(user,'/confirm '+review);return {user,project,version};}
+async function fixture(){const user=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'fixture',?)").bind(user,user+'@example.com','00',stamp()).run();const {project,version}=await createFixtureProject(db,user,'Community','A community directory');const review=await chat(user,'/publish '+version);await chat(user,'/confirm '+review);return {user,project,version};}
 const draft=f=>readDirectory(db,f.user,f.project),history=f=>directoryHistory(db,f.user,f.project),pub=f=>host.fetch(new Request('https://'+f.project+'.whumpo.site'+'/directory.json'),proxy.env);
 try{
  const a=await fixture(),b=await fixture();assert.equal((await history(a)).snapshots.length,0);

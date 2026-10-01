@@ -1,12 +1,12 @@
-import {renderContentSpecification,renderContentChange,importLegacySitePage} from './v1/content';
-import {canonicalJSON,copyJSON,jsonDigest,requireSpec} from './v1/json';
+import {renderContentSpecification,renderContentChange,createContentSpecification} from './v2/content';
+import {canonicalJSON,copyJSON,jsonDigest,requireSpec} from './v2/json';
 import {compilerArtifacts} from './compiler-artifacts.generated';
 import {compilerCatalog,type CompilerAvailability} from './catalog';
 
 // Catalog availability is current server policy, separate from immutable artifact identity.
 // Withdrawing an artifact prevents new compilation/apply; historical bytes stay unchanged.
 export type {CompilerAvailability} from './catalog';
-const lock={formatVersion:1,schemaVersion:1,compiler:{id:'project-content',version:1,digest:compilerArtifacts.compiler},modules:[{id:'content',version:1,digest:compilerArtifacts.content,dependencies:[]}],components:[{id:'site-page',version:1,digest:compilerArtifacts.component}]};
+const lock={formatVersion:1,schemaVersion:2,compiler:{id:'project-content',version:2,digest:compilerArtifacts.compiler},modules:[{id:'content',version:2,digest:compilerArtifacts.content,dependencies:[]}],components:[{id:'site-page',version:1,digest:compilerArtifacts.component},{id:'photo-page',version:1,digest:compilerArtifacts.component}]};
 export function currentCompilerLock(){return copyJSON(lock);}
 
 /** Availability must come from trusted server state, never a model/request payload. */
@@ -29,8 +29,6 @@ export async function compileSpecificationChange(before:unknown,operations:unkno
  const change=await renderContentChange(before,operations),compiled=await compileProjectSpecification(change.next.specification,expectedLock);
  return {baseDigest:change.baseDigest,nextDigest:compiled.specificationDigest,diff:change.diff,requiredReviews:change.requiredReviews,compiled};
 }
-export async function importLegacySpecification(input:unknown,expectedLock:unknown){
- assertCompilerAvailable(expectedLock,compilerCatalog);
- const imported=await importLegacySitePage(input);
- return {...imported,compiled:await compileProjectSpecification(imported.specification,expectedLock)};
+export async function compileNewWebsite(input:unknown){
+ return compileProjectSpecification(createContentSpecification(input),currentCompilerLock());
 }

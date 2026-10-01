@@ -2,13 +2,16 @@
 
 **Current Chat contract (September 30, 2026):** [Natural-language Chat and agent knowledge](natural-language-chat.md). Public messages no longer execute slash commands or browser navigation shortcuts. Older command examples and guided-mode evidence below describe the internal adapters and historical behavior; they are not current customer instructions. The owned action, immutable review and replay invariants remain in force.
 
+**Current-only website cutover, October 1 (deployment pending):** `specification.create` is the only first website action for an existing project. `specification.read/change/restore/review` owns later edits, including name, sections and photos. Generic `preview`/`edit`, legacy import and guided website construction are removed. [Storage and verification](project-specification-storage.md) is authoritative.
+
+
 The model can now propose a new project with a private first website, or attach a source download for an existing owned version. Natural-language requests after onboarding use these capabilities through validated agent tools. Explicit review controls have a separate structured endpoint.
 
 ## New project
 
-The allowlisted action contains only `kind: project`, a nonempty purpose of at most 1,000 characters, and the existing validated site-page configuration. The model must ask for a missing name/purpose, and use this action only when the customer requests a new project. The server chooses IDs and owner, validates and escapes all site text, enforces existing schema/output bounds and atomically commits the project, first version, chat result, setup-state transition and activity record. It uses the same reusable platform renderer as existing site drafts.
+The allowlisted action contains only `kind: project`, a nonempty purpose of at most 1,000 characters, and current page configuration with a required empty photos array. The model must ask for a missing name/purpose, and use this action only when the customer requests a new project. The server chooses IDs and owner, validates and escapes all site text, enforces existing schema/output bounds and atomically commits the project, first schema-2 specification/page/head/creation receipt, chat result, workspace transition and activity record. It uses the same reusable platform renderer as existing site drafts.
 
-The result contains server-generated project and version receipts. The model cannot select another owner, set a plan, publish, create a domain or execute backend code. New projects receive the selected starting theme. Existing project versions are unchanged. The account's 20-project test limit still applies; a quota failure rolls back the entire project/version transaction and refunds the request's units.
+The result contains server-generated project and version receipts. The model cannot select another owner, set a plan, publish, create a domain or execute backend code. New projects receive the selected starting theme. Existing project versions are unchanged. The account's 20-project test limit still applies; a quota failure rolls back the entire project/version transaction. Standard assistance spends no customer credits.
 
 ## Source download
 
@@ -18,7 +21,7 @@ No current publication is changed. The source download excludes account credenti
 
 ## Retry and failure behavior
 
-Both actions share the existing usage reservation and persisted AI-response transaction. A saved message replay makes no additional inference call. If the commit succeeds but its acknowledgement is lost, reconciliation uses the saved token receipt and existing artifacts rather than generating another project. Invalid fields, foreign versions and malformed component configurations produce no artifacts and refund the failed proposal's units. An uncertain provider response retains its existing hold for reconciliation.
+Both actions share the current internal inference reservation and persisted AI-response transaction. A saved message replay makes no additional inference call. If the commit succeeds but its acknowledgement is lost, reconciliation uses the saved token receipt and existing artifacts rather than generating another project. Invalid fields, foreign versions and malformed component configurations produce no artifacts and charge no customer credits. An uncertain provider response retains its existing hold for reconciliation.
 
 ## Evidence and limitations
 

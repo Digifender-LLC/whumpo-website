@@ -1,3 +1,4 @@
+import {createFixtureProject} from './current-site-fixture.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -11,7 +12,7 @@ const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBind
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
 const stamp=new Date('2030-02-15T00:00:00Z'),period='2030-02',next=new Date('2030-03-01T00:00:00Z');
 async function chat(user,content){const id=crypto.randomUUID(),state=await readChat(db,user);const result=await sendChat(db,user,{id,content,revision:state.state.revision});return {id,result};}
-async function project(user,name){await chat(user,'/new');await chat(user,'A useful website');const p=await chat(user,name);const v=await chat(user,'/build clay');return {project:p.id,version:v.id};}
+async function project(user,name){return createFixtureProject(db,user,name,'A useful website','clay');}
 async function publish(user,version){const review=await chat(user,'/publish '+version);return chat(user,'/confirm '+review.id);}
 try{
  // Paid receipts authorize current publication slots; a stale cache cannot bypass expiry.

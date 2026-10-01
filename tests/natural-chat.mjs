@@ -1,3 +1,5 @@
+import {createFixtureWebsite} from './current-site-fixture.mjs';
+Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -14,7 +16,7 @@ try{
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Garden','A landscaping website','draft',?,?)").bind(project,user,new Date().toISOString(),new Date().toISOString()).run();
  await db.prepare("UPDATE workspace_state SET step='ready' WHERE user_id=?").bind(user).run();
  const input=async(content,owner=user)=>({id:crypto.randomUUID(),revision:(await readChat(db,owner)).state.revision,content});
- const built=await input('/build ocean '+project);assert.equal((await sendChat(db,user,built)).status,200);
+ const built={id:await createFixtureWebsite(db,user,project,{name:'Garden',headline:'A greener neighborhood',description:'Landscaping',theme:'ocean',aboutTitle:'Our work',aboutText:'Garden care.',sections:[],photos:[]})};
  const review=await input('/publish '+built.id);assert.equal((await sendChat(db,user,review)).status,200);
  const websiteReview=(await readChat(db,user)).turns.find(t=>t.id===review.id);
  const config={baseURL:'https://opencode.ai/zen/go/v1',apiKey:'synthetic',model:'muse-spark-1.3-contributor',protocol:'responses'};

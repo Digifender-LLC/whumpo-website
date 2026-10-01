@@ -2,7 +2,7 @@ import {BackendError} from '../../backend-error';
 import {contentPolicyVersion} from '../../content-policy';
 import {contentRiskPolicyVersion} from '../../content-risk';
 import {previewHeaders} from '../../components';
-import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from '../v1/json';
+import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from '../v2/json';
 import {compileOwnedServiceClients} from './owned';
 import type {ServiceClientSpecification,ServiceClientTarget} from './compiler';
 import {readSavedServiceClientVersion,readServiceClientHead} from './store';
@@ -73,7 +73,7 @@ export async function serviceClientActivationAction(db:D1Database,user:string,tu
 export async function serviceClientActivationChatLinks(db:D1Database,user:string,turns:Record<string,unknown>[]){
  const cache=new Map<string,Promise<Review|null>>();const available=(review:string)=>{if(!cache.has(review))cache.set(review,(async()=>{try{const row=await ownedReview(db,user,review);await ready(db,user,row);return row;}catch(error){if(error instanceof BackendError||error instanceof SpecificationError)return null;throw error;}})());return cache.get(review)!;};
  const {results:linked}=await db.prepare('SELECT id FROM service_client_activation_reviews WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 100').bind(user).all<{id:string}>();
- // Do not allow a reopened legacy review to display stale companion approval metadata.
+ // Do not attach stale companion approval metadata to a reopened underlying review.
  for(const turn of turns)for(const key of ['contact_confirmation_id','backend_form_confirmation_id'])if(typeof turn[key]==='string'&&linked.some(r=>r.id===turn[key])&&!await available(String(turn[key])))delete turn[key];
  const {results}=await db.prepare('SELECT l.turn_id,l.review_id,l.reply_digest FROM service_client_activation_links l JOIN chat_turns t ON t.id=l.turn_id WHERE t.user_id=? ORDER BY t.revision DESC LIMIT 100').bind(user).all<{turn_id:string;review_id:string;reply_digest:string}>();
  for(const row of results){const turn=turns.find(t=>t.id===row.turn_id);if(!turn||turn.status!=='completed'||typeof turn.assistant_text!=='string'||await sha256(turn.assistant_text)!==row.reply_digest)continue;const review=await available(row.review_id);if(review){delete turn.contact_confirmation_id;delete turn.backend_form_confirmation_id;turn.service_client_activation={id:review.id,service:review.service,enabled:review.enabled===1};}}

@@ -460,11 +460,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const serviceActivation=pathname.match(/^\/api\/service-client-activations\/([0-9a-f-]{36})\/(preview|diff)$/);
   if(method==='GET'&&serviceActivation){if(new URL(request.url).search)return error(400,'Use the exact service activation review link.');return serviceClientActivationPreview(env.DB,user.id,serviceActivation[1],serviceActivation[2]==='diff');}
   const serviceClientReview=pathname.match(/^\/api\/service-client-reviews\/([0-9a-f-]{36})\/(preview|diff)$/);
-  if(method==='GET'&&serviceClientReview){if(new URL(request.url).search)return error(400,'Use the exact service settings review link.');return serviceClientPreview(env.DB,user.id,serviceClientReview[1],serviceClientReview[2]==='diff');}
+  if(method==='GET'&&serviceClientReview){if(new URL(request.url).search)return error(400,'Use the exact service settings review link.');return serviceClientPreview(env.DB,user.id,serviceClientReview[1],serviceClientReview[2]==='diff',env.FILES);}
   const serviceClientVersion=pathname.match(/^\/api\/service-client-versions\/([0-9a-f-]{36})\/preview$/);
-  if(method==='GET'&&serviceClientVersion){if(new URL(request.url).search)return error(400,'Use the exact saved service settings link.');return savedServiceClientPreview(env.DB,user.id,serviceClientVersion[1]);}
+  if(method==='GET'&&serviceClientVersion){if(new URL(request.url).search)return error(400,'Use the exact saved service settings link.');return savedServiceClientPreview(env.DB,user.id,serviceClientVersion[1],env.FILES);}
   const specificationReview=pathname.match(/^\/api\/specification-reviews\/([0-9a-f-]{36})\/(preview|diff)$/);
-  if(method==='GET'&&specificationReview){if(new URL(request.url).search)return error(400,'Use the exact website review link.');return specificationPreview(env.DB,user.id,specificationReview[1],specificationReview[2]==='diff');}
+  if(method==='GET'&&specificationReview){if(new URL(request.url).search)return error(400,'Use the exact website review link.');return specificationPreview(env.DB,user.id,specificationReview[1],specificationReview[2]==='diff',env.FILES);}
   if(method==='GET'&&diffMatch){const params=new URL(request.url).searchParams;if([...params.keys()].some(k=>k!=='base')||params.getAll('base').length>1)return error(400,'Choose a single baseline.');return diffPage(await compareVersions(env.DB,user.id,diffMatch[1],params.get('base')??undefined));}
   const reviewDiff=pathname.match(/^\/api\/publication-reviews\/([0-9a-f-]{36})\/diff$/);
   if(method==='GET'&&reviewDiff)return diffPage(await compareReview(env.DB,user.id,reviewDiff[1]));

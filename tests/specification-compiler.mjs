@@ -4,24 +4,22 @@ import {dirname,resolve,join} from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {build} from 'esbuild';
 import {createHash} from 'node:crypto';
-import {specificationContract} from '../tools/prototypes/project-specification.mjs';
 import {checkSpecificationCompiler} from '../tools/check-specification-compiler.mjs';
 Error.stackTraceLimit=0;
 
 const checked=await checkSpecificationCompiler();
-const bundle=await build({stdin:{contents:`export * from './src/project-specification/compiler';export * from './src/project-specification/v1/schema';export * from './src/project-specification/v1/json';export {siteConfig,renderSite} from './src/components';export {backendFormConfig} from './src/backend-form-config';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false});
+const bundle=await build({stdin:{contents:`export * from './src/project-specification/compiler';export * from './src/project-specification/v2/schema';export * from './src/project-specification/v2/json';export {siteConfig,renderSite,renderPhotoPage} from './src/components';export {backendFormConfig} from './src/backend-form-config';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].contents).toString('base64'));
 const detailing=JSON.parse(await readFile('tests/fixtures/project-specification/detailing.json','utf8'));
 const clone=value=>structuredClone(value),hash=text=>createHash('sha256').update(text).digest('hex');
-const lock=m.currentCompilerLock(),prototype=specificationContract({...m,validationArtifactDigest:checked.compilerDigest});
-const content={...clone(detailing),modules:[{id:'content',version:1}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};
+const lock=m.currentCompilerLock();
+const content={...clone(detailing),modules:[{id:'content',version:2}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};
 const rejects=(fn,code)=>assert.throws(fn,error=>error instanceof m.SpecificationError&&error.code===code,code);
 const rejectsAsync=(fn,code)=>assert.rejects(fn,error=>error instanceof m.SpecificationError&&error.code===code,code);
 let networkCalls=0;
 let expectedManifestDigest;
 const fetch=globalThis.fetch;globalThis.fetch=async()=>{networkCalls++;throw Error('Compiler attempted network/inference.');};
 try{
- assert.deepEqual(m.validateSpecification(detailing),prototype.validate(detailing));
  assert.deepEqual(m.validateSpecification(content),content);
  const decoded=m.validateSpecification(detailing);decoded.content[0].text='Mutable return';assert.notEqual(detailing.content[0].text,decoded.content[0].text);
  const negatives=[
@@ -29,8 +27,8 @@ try{
   ['UNKNOWN_FIELD',s=>{s.design.css='synthetic-private-marker';}],
   ['UNKNOWN_FIELD',s=>{s.integrations[0].apiKey='synthetic-private-marker';}],
   ['MISSING_FIELD',s=>{delete s.name;}],
-  ['UNSUPPORTED_VERSION',s=>{s.schemaVersion=2;}],
-  ['UNSUPPORTED_VERSION',s=>{s.modules[0].version=2;}],
+  ['UNSUPPORTED_VERSION',s=>{s.schemaVersion=1;}],
+  ['UNSUPPORTED_VERSION',s=>{s.modules[0].version=1;}],
   ['UNKNOWN_MODULE',s=>{s.modules[0].id='downloaded-module';}],
   ['UNSUPPORTED_VERSION',s=>{s.pages[0].component='site-page@2';}],
   ['INCOMPATIBLE',s=>{s.modules=s.modules.filter(m=>m.id!=='access');}],
@@ -56,7 +54,6 @@ try{
  for(const [code,mutate] of negatives){
   const value=clone(detailing);mutate(value);rejects(()=>m.validateSpecification(value),code);
   assert.throws(()=>m.validateSpecification(value),error=>!error.message.includes('synthetic-private-marker'));
-  assert.throws(()=>prototype.validate(value),error=>error.code===code);
  }
  const big=clone(content);big.content=Array.from({length:40},(_,n)=>({id:'copy-'+n,text:'x'.repeat(1000)}));rejects(()=>m.validateSpecification(big),'INPUT_TOO_LARGE');
  let deep={};for(let n=0;n<33;n++)deep={nested:deep};rejects(()=>m.validateSpecification(deep),'INPUT_TOO_DEEP');
@@ -77,7 +74,7 @@ try{
   [{type:'pages.setAudience',pageId:'home',audience:'staff'}],
   [{type:'rules.put',rule}],
  ];
- for(const operations of operationBatches)assert.deepEqual(m.changeSpecification(detailing,operations),prototype.change(detailing,operations));
+ for(const operations of operationBatches)assert.notDeepEqual(m.changeSpecification(detailing,operations).spec,detailing);
  assert.deepEqual(m.changeSpecification(detailing,operationBatches[2]).reviews,['schema']);
  assert.deepEqual(m.changeSpecification(detailing,operationBatches[3]).reviews,['permissions']);
  assert.deepEqual(m.changeSpecification(detailing,operationBatches[5]).reviews,['integration','spending']);
@@ -98,13 +95,13 @@ try{
  assert.match(output.previewHeaders['content-security-policy'],/^sandbox;/);
  assert.match(output.previewHeaders['content-security-policy'],/form-action 'none'/);
  assert.equal(output.previewHeaders['cache-control'],'private, no-store');
- assert.equal(output.artifacts[0].html,m.renderSite(m.projectPage(content,'home')));
+ assert.equal(output.artifacts[0].html,m.renderSite((({photos,...text})=>text)(m.projectPage(content,'home'))));
  assert.equal(output.artifacts[0].digest,hash(output.artifacts[0].html));
  assert.deepEqual(await m.compileProjectSpecification(content,m.currentCompilerLock()),output);
  function reorder(value){if(Array.isArray(value))return value.map(reorder);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,reorder(v)]));return value;}
  assert.deepEqual(await m.compileProjectSpecification(reorder(content),reorder(lock)),output);
  const mutableLock=m.currentCompilerLock();mutableLock.modules.length=0;assert.deepEqual(m.currentCompilerLock(),lock);
- for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
+ for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
  const available=[lock.compiler,...lock.modules,...lock.components].map(a=>({...a,state:'available'}));
  m.assertCompilerAvailable(lock,available);
  for(let n=0;n<available.length;n++){const withdrawn=clone(available);withdrawn[n].state='withdrawn';rejects(()=>m.assertCompilerAvailable(lock,withdrawn),'COMPILER_UNAVAILABLE');}
@@ -129,31 +126,40 @@ try{
  m.validateSpecification(dense);
  const denseOutput=await m.compileProjectSpecification(dense,lock);assert.ok(denseOutput.artifacts[0].bytes>30000&&denseOutput.artifacts[0].bytes<=32768);
  const change=await m.compileSpecificationChange(content,operationBatches[0],lock);assert.equal(change.baseDigest,output.specificationDigest);assert.notEqual(change.nextDigest,change.baseDigest);assert.deepEqual(change.requiredReviews,[]);assert.ok(change.compiled.artifacts[0].html.includes('Monday to Saturday'));assert.equal(change.diff[0].path,'/content');assert.deepEqual(content,unchangedContent());
- function unchangedContent(){return {...clone(detailing),modules:[{id:'content',version:1}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};}
+ function unchangedContent(){return {...clone(detailing),modules:[{id:'content',version:2}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};}
 
- const source={versionId:'11111111-1111-4111-8111-111111111111',componentId:'site-page@1',config:m.projectPage(content,'home'),html:output.artifacts[0].html,digest:output.artifacts[0].digest};
- const original=clone(source),imported=await m.importLegacySpecification(source,lock);
- assert.deepEqual(source,original);assert.deepEqual(m.projectPage(imported.specification,'home'),source.config);assert.equal(imported.compiled.artifacts[0].html,source.html);assert.equal(imported.origin.htmlDigest,source.digest);
- for(const [code,mutate] of [
-  ['ARTIFACT_MISMATCH',v=>{v.html+='tamper';}],
-  ['ARTIFACT_MISMATCH',v=>{v.html+='tamper';v.digest=hash(v.html);}],
-  ['ARTIFACT_MISMATCH',v=>{v.config.headline='Changed';}],
-  ['NON_CANONICAL_LEGACY',v=>{v.config.name=' '+v.config.name;}],
-  ['UNSUPPORTED_LEGACY',v=>{v.componentId='photo-page@1';}],
-  ['UNSUPPORTED_LEGACY',v=>{v.componentId='cms-page@1';}],
-  ['UNSUPPORTED_LEGACY',v=>{v.componentId='visitor-app@1';}],
-  ['UNKNOWN_FIELD',v=>{v.ownerId='forged';}],
-  ['INVALID_ID',v=>{v.versionId='not-a-version';}],
- ]){const bad=clone(source);mutate(bad);await rejectsAsync(()=>m.importLegacySpecification(bad,lock),code);}
+ const page=m.projectPage(content,'home'),created=await m.compileNewWebsite(page);
+ assert.equal(created.artifacts[0].html,output.artifacts[0].html);
+ assert.deepEqual(m.projectPage(created.specification,'home'),page);
+ assert.equal(m.importLegacySpecification,undefined);
+ const photoId=crypto.randomUUID(),photos=[{id:photoId,alt:'A tidy garden'}];
+ const illustrated=await m.compileNewWebsite({...page,photos});
+ assert.equal(illustrated.specification.pages[0].component,'photo-page@1');
+ assert.equal(illustrated.artifacts[0].html,m.renderPhotoPage({...page,photos}));
+ const removed=await m.compileSpecificationChange(illustrated.specification,[{type:'pages.setPhotos',pageId:'home',photos:[]}],lock);
+ assert.equal(removed.compiled.artifacts[0].html,created.artifacts[0].html);
+ assert.equal(removed.compiled.specification.pages[0].component,'site-page@1');
+ const renamed=await m.compileSpecificationChange(created.specification,[{type:'project.setName',name:'Neighborhood gardens'}],lock);
+ assert.match(renamed.compiled.artifacts[0].html,/Neighborhood gardens/);
+ const sections=[{heading:'Seasonal care',text:'Tidy every spring.'}];
+ const resectioned=await m.compileSpecificationChange(created.specification,[{type:'pages.setSections',pageId:'home',sections}],lock);
+ assert.deepEqual(m.projectPage(resectioned.compiled.specification,'home').sections,sections);
+ for(const operations of [[{type:'pages.setPhotos',pageId:'home',photos:[{id:'bad',alt:'Invalid'}]}],[{type:'pages.setPhotos',pageId:'home',photos:null}],[{type:'pages.setPhotos',pageId:'home',photos:[...photos,...photos]}],[{type:'pages.setSections',pageId:'home',sections:Array(7).fill(sections[0])}],[{type:'project.setName',name:''}]])assert.throws(()=>m.changeSpecification(content,operations));
+ const shared=clone(content);shared.pages.push({...clone(shared.pages[0]),id:'other',path:'/other'});
+ const modified=m.changeSpecification(shared,[{type:'pages.setSections',pageId:'home',sections}]).spec;
+ assert.deepEqual(m.projectPage(modified,'other'),m.projectPage(shared,'other'),'Replacing one page must retain shared content references');
+ const incompatible=clone(illustrated.specification);incompatible.pages[0].component='site-page@1';rejects(()=>m.validateSpecification(incompatible),'INCOMPATIBLE');
+ const missing=clone(content);delete missing.pages[0].photos;rejects(()=>m.validateSpecification(missing),'MISSING_FIELD');
+ const {photos:omitted,...oldInput}=page;await assert.rejects(m.compileNewWebsite(oldInput));
  assert.equal(networkCalls,0);
- console.log('Compiler fixtures passed: schema/prototype conformance, detached edits and review classes, incompatible migrations rejected, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, safe legacy import, zero network/model calls.');
+ console.log('Compiler fixtures passed: current schema validation, detached edits and review classes, incompatible migrations rejected, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
 }finally{globalThis.fetch=fetch;}
 
 // A second checkout/process proves input-path independence and that the build gate
 // rejects source/constant drift without rewriting any working-tree file.
 const dir=await mkdtemp('/tmp/whumpo-compiler-lock-');
 try{
- const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v1.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
+ const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v2.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
  for(const path of paths){await mkdir(dirname(join(dir,path)),{recursive:true});await copyFile(path,join(dir,path));}
  await symlink(resolve('node_modules'),join(dir,'node_modules'),'dir');
  const run=args=>spawnSync(process.execPath,['tools/check-specification-compiler.mjs',...args],{cwd:dir,encoding:'utf8'});

@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Example Detailing",
   "design": {"theme": "ocean"},
   "modules": [
-    {"id": "content", "version": 1},
+    {"id": "content", "version": 2},
     {"id": "records", "version": 1},
     {"id": "files", "version": 1},
     {"id": "access", "version": 1},
@@ -21,7 +21,7 @@
     {"id": "services", "text": "Interior refresh. Exterior detail. Full vehicle care."}
   ],
   "pages": [{
-    "id": "home", "path": "/", "component": "site-page@1", "audience": "public",
+    "id": "home", "path": "/", "component": "site-page@1", "audience": "public", "photos": [],
     "headline": "headline", "description": "introduction",
     "aboutTitle": "about-title", "aboutText": "about-text",
     "sections": [{"heading": "hours-title", "text": "hours"}, {"heading": "services-title", "text": "services"}]

@@ -1,5 +1,8 @@
 # Project photo storage
 
+**October 1 current source (deployment pending):** first website creation and later reviewed `pages.setPhotos` changes save schema-2 specification/page/photo references together. The private guided photo attachment and old page-conversion paths are removed. Both text and photo page presentations are current. Preview/export/publication retain ownership, exact byte integrity and current clearance checks. Synthetic test clearances below are not real scanning; CSAM implementation remains owner-deferred. Dated command examples are historical.
+
+
 Private uploads, versioned photo pages, authenticated previews, confirmed public serving, and portable image exports are implemented, with the mandatory safety gate below. Stored images without a current approval cannot be displayed or used. Reviewed removal of unused photos is available in chat and the photo panel. Photos referenced by any saved version are retained. Uploading a photo alone does not publish it or send its bytes to the AI provider.
 
 ## Upload contract

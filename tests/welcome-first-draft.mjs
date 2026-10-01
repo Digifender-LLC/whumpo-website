@@ -5,12 +5,12 @@ import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
 const bundled=await build({stdin:{contents:"export * from './src/onboarding';export * from './src/profile';export * from './src/ai-chat';export * from './src/chat';export * from './src/billing';export * from './src/first-draft';export * from './src/first-draft-command';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const {readOnboarding,saveOnboarding,completeOnboarding,updateProfile,sendAIChat:sendInternalAIChat,readChat,sendChat,getBilling,welcomeDraftProject,displayChatRequest}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+const {readOnboarding,saveOnboarding,completeOnboarding,updateProfile,sendAIChat:sendInternalAIChat,readChat,sendChat,getBilling,welcomeDraftProject}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
 // Exercise the internal constrained-build adapter; public Chat uses natural messages.
 const sendAIChat=(db,user,id,revision,content,config,transport,options)=>sendInternalAIChat(db,user,id,revision,content,config,transport,options,true);
 const dir=await mkdtemp('/tmp/whumpo-first-draft-');let proxy;
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic',protocol:'responses'};
-const page={name:'Copper Oven',headline:'Fresh bread for our neighbors',description:'Sourdough and pastries.',theme:'clay',aboutTitle:'Our bakery',aboutText:'A friendly neighborhood bakery.',sections:[]};
+const page={name:'Copper Oven',headline:'Fresh bread for our neighbors',description:'Sourdough and pastries.',theme:'clay',aboutTitle:'Our bakery',aboutText:'A friendly neighborhood bakery.',sections:[],photos:[]};
 const response=action=>Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Proposed first draft',action})}]}],usage:{input_tokens:1000,output_tokens:400}});
 try{
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
@@ -29,9 +29,7 @@ try{
  for(let n=0;n<6;n++)await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Copper Oven','A different later project','draft',?,?)").bind(crypto.randomUUID(),owner.user,new Date(Date.now()+60000+n).toISOString(),new Date(Date.now()+60000+n).toISOString()).run();
  assert.equal((await readChat(db,owner.user,true)).firstDraft.id,owner.project);
  assert.equal(await welcomeDraftProject(db,owner.user,foreign.project),null);
- assert.equal(displayChatRequest('/first-draft '+owner.project),'Build my first private website draft using my saved brief.');
- assert.equal(displayChatRequest('Please explain /first-draft'),'Please explain /first-draft');
- let calls=0;const transport=async(_url,init)=>{calls++;assert.ok(init.body.includes('Opening hours Tuesday through Sunday'));assert.ok(!init.body.includes('lavender telescope'));return response({kind:'preview',projectId:owner.project,config:page});};
+ let calls=0;const transport=async(_url,init)=>{calls++;assert.ok(init.body.includes('Opening hours Tuesday through Sunday'));assert.ok(!init.body.includes('lavender telescope'));return response({kind:'specification',operation:'create',projectId:owner.project,config:page});};
  const made=await run(owner,transport);assert.equal(made.result.status,200);assert.equal(calls,1);
  assert.equal((await readChat(db,owner.user,true)).firstDraft,null);
  assert.equal((await db.prepare('SELECT project_id FROM site_versions WHERE id=?').bind(made.id).first()).project_id,owner.project);
@@ -43,7 +41,7 @@ try{
  // Scope failures are rejected before any general action can run.
  const sameOwnerOther=crypto.randomUUID(),now=new Date().toISOString();
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Copper Oven','Different owned project','draft',?,?)").bind(sameOwnerOther,foreign.user,now,now).run();
- for(const action of [{kind:'project',purpose:'Unexpected second project',config:page},{kind:'preview',projectId:owner.project,config:page},{kind:'preview',projectId:sameOwnerOther,config:page},{kind:'inspect',scope:'usage'},{kind:'domain',operation:'prepare',projectId:foreign.project,hostname:'example.test'}]){
+ for(const action of [{kind:'project',purpose:'Unexpected second project',config:page},{kind:'specification',operation:'create',projectId:owner.project,config:page},{kind:'specification',operation:'create',projectId:sameOwnerOther,config:page},{kind:'inspect',scope:'usage'},{kind:'domain',operation:'prepare',projectId:foreign.project,hostname:'example.test'}]){
   const before=(await getBilling(db,foreign.user)).standardAI.creditCharge;let dispatches=0;
   const turn=await run(foreign,async()=>{dispatches++;return response(action);});assert.equal(dispatches,1);
   assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(turn.id).first()).status,'failed');
@@ -58,7 +56,7 @@ try{
  const racing=await account(),existing=crypto.randomUUID();
  const race=await run(racing,async()=>{
   await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source) VALUES(?,?,'site-page@1',?,'<h1>Saved elsewhere</h1>',?,?,'guided')").bind(existing,racing.project,JSON.stringify(page),'a'.repeat(64),new Date().toISOString()).run();
-  return response({kind:'preview',projectId:racing.project,config:page});
+  return response({kind:'specification',operation:'create',projectId:racing.project,config:page});
  });
  assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(race.id).first()).status,'failed');assert.equal(await db.prepare('SELECT id FROM site_versions WHERE id=?').bind(race.id).first(),null);assert.equal(await db.prepare('SELECT id FROM activity_events WHERE id=?').bind('draft:'+race.id).first(),null);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM site_versions WHERE project_id=?').bind(racing.project).first()).n,1);assert.equal((await getBilling(db,racing.user)).standardAI.creditCharge,0);assert.equal((await getBilling(db,racing.user)).standardAI.creditCharge,0);
@@ -68,13 +66,13 @@ try{
   if(!deleted&&await target.prepare("SELECT id FROM chat_turns WHERE user_id=? AND status='pending'").bind(removed.user).first()){deleted=true;await target.prepare('DELETE FROM projects WHERE id=?').bind(removed.project).run();}
   return target.batch(statements);
  };const value=target[key];return typeof value==='function'?value.bind(target):value;}});
- const removal=await run(removed,async()=>response({kind:'preview',projectId:removed.project,config:page}),deleteBeforeCommit);
+ const removal=await run(removed,async()=>response({kind:'specification',operation:'create',projectId:removed.project,config:page}),deleteBeforeCommit);
  const removedReceipt=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(removal.id).first();
  assert.equal(deleted,true);assert.equal(removedReceipt.status,'failed');assert.match(removedReceipt.assistant_text,/project changed/);assert.equal((await getBilling(db,removed.user)).standardAI.creditCharge,0);
  // Losing the commit acknowledgment recovers the saved draft without dispatching again.
  const recovering=await account();let saved=false;
  const lossy=new Proxy(db,{get(target,key){if(key==='batch')return async statements=>{const result=await target.batch(statements);if(!saved&&(await target.prepare('SELECT id FROM site_versions WHERE project_id=?').bind(recovering.project).first())){saved=true;throw Error('Lost draft commit acknowledgement');}return result;};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
- let recoverCalls=0;const recovered=await run(recovering,async()=>{recoverCalls++;return response({kind:'preview',projectId:recovering.project,config:page});},lossy);
+ let recoverCalls=0;const recovered=await run(recovering,async()=>{recoverCalls++;return response({kind:'specification',operation:'create',projectId:recovering.project,config:page});},lossy);
  assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(recovered.id).first()).status,'completed');assert.equal(recoverCalls,1);
  await sendAIChat(db,recovering.user,recovered.id,recovered.revision,recovered.content,config,()=>assert.fail('Do not redispatch a committed first draft'));
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM site_versions WHERE project_id=?').bind(recovering.project).first()).n,1);
@@ -86,7 +84,6 @@ try{
  let executions=0,appCalls=0;const backendRuntime={fetch:async(_url,init)=>{executions++;const request=JSON.parse(init.body);assert.deepEqual(request.input,{state:{},input:{note:'Synthetic note'}});return Response.json({ok:true,value:{state:{note:'Synthetic note'},result:'Saved'}});}};
  const appAction=projectId=>({kind:'backend',operation:'buildApplication',projectId,source:'export default ({input})=>({state:{note:input.note},result:"Saved"})',input:{state:{},input:{note:'Synthetic note'}},expected:{state:{note:'Synthetic note'},result:'Saved'}});
  const appTransport=async(_url,init)=>{appCalls++;assert.ok(init.body.includes('Opening hours Tuesday through Sunday'),'Full saved brief included');assert.ok(!init.body.includes('lavender telescope'));assert.ok(init.body.includes('only allowed actions are capabilities plan and backend buildApplication'));return appCalls===1?response({kind:'capabilities',operation:'plan',projectId:appOwner.project,needs:['custom.visitor-transition'],extension:{missing:'A private notebook replaces one note; the shared task list does not match this behavior.'}}):response({...appAction(appOwner.project),planId:appTurn});};
- assert.equal(displayChatRequest(appCommand),'Build and test my first private app using my saved brief.');
  assert.equal((await sendAIChat(db,appOwner.user,appTurn,appState.revision,appCommand,config,appTransport,{backendRuntime})).status,200);
  const appHistory=await readChat(db,appOwner.user,true);assert.equal(appHistory.firstDraft,null);assert.equal(appHistory.turns.at(-1).application_confirmation_id,appTurn);assert.equal(executions,1);assert.equal(appCalls,2);
  assert.equal((await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE project_id=?').bind(appOwner.project).first()).turn_id,appTurn);
@@ -94,7 +91,7 @@ try{
  assert.equal((await db.prepare('SELECT count(*) n FROM site_versions WHERE project_id=?').bind(appOwner.project).first()).n,0);
  await sendAIChat(db,appOwner.user,appTurn,appState.revision,appCommand,config,appTransport,{backendRuntime});assert.equal(appCalls,2);assert.equal(executions,1);
  assert.equal((await run(appOwner,()=>assert.fail('App already started'))).result.status,409);
- const scoped=await account();for(const action of [{kind:'preview',projectId:scoped.project,config:page},appAction(appOwner.project),{...appAction(scoped.project),operation:'create'},{kind:'inspect',scope:'usage'}]){
+ const scoped=await account();for(const action of [{kind:'specification',operation:'create',projectId:scoped.project,config:page},appAction(appOwner.project),{...appAction(scoped.project),operation:'create'},{kind:'inspect',scope:'usage'}]){
   const turn=crypto.randomUUID(),state=(await readChat(db,scoped.user)).state;
   await sendAIChat(db,scoped.user,turn,state.revision,'/first-app '+scoped.project,config,async()=>response(action),{backendRuntime});
   assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(turn).first()).status,'failed');assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(turn).first(),null);
