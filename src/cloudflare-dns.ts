@@ -84,5 +84,3 @@ export async function confirmDNS(db:D1Database,user:string,id:string,config:Clou
  }catch{await db.prepare("UPDATE cloudflare_dns_actions SET state='uncertain',detail='The DNS request outcome is uncertain. Check the result; this request will not be sent again. If no exact record can be observed, operator review is required.' WHERE id=? AND user_id=? AND state='sending'").bind(id,user).run();}
  return view(await owned(db,user,id));
 }
-// Backward-compatible internal name for existing TXT callers.
-export const confirmTXT=confirmDNS;
