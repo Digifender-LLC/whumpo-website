@@ -12,7 +12,7 @@
 
 ## Removal inventory
 
-The inventory distinguishes actual runtime paths from historical text and current features. Source completion is separate from test deployment; the parent issue remains open until all entries and required acceptance are resolved.
+The inventory distinguishes actual runtime paths from historical text and current features. All listed removals are implemented and deployed to the test platform. The current-contract release evidence below completes WH-120; CMS functional testing remains separately deferred.
 
 | Area | Current finding / required work | Status |
 | --- | --- | --- |
@@ -20,9 +20,9 @@ The inventory distinguishes actual runtime paths from historical text and curren
 | DNS alias | `confirmTXT` was an alias for current `confirmDNS`. All consumers must use the current name. No DNS handler behavior or remote record changes. | Alias removed and deployed; fixtures use `confirmDNS`. |
 | Chat interaction/native plans | Unsupported-schema projection, older-client renderer and browser downgrade had been proposed. | Removed from WH-105 in merged PR #52; strict current-client rejection is the contract. |
 | Billing/credits | `legacyPlans` permits Launch/Studio; entitlement selection can silently substitute Explore. Old test-credit preference/reservation interfaces and calendar-month grants are retired with their disposable test data. | Removed and deployed: invoice-only coverage, retired tables/routes/handlers deleted, no unknown-plan substitution. Verification below. |
-| Chat text and actions | `chat-language.ts` rewrites known historical command prose, while some current handlers still emit it. Replace the producers/presentation dependency together; typed human action handlers remain authoritative. | Request/reply rendering, obsolete help/navigation interpreters and review-selection fallbacks removed in source; producers emit plain language and canonical action receipts replace command-text approval proof. Private guided website creation is removed by the website replacement below. Deployment of these Chat changes is pending. |
-| Website specifications | New drafts save schema 2 directly; reviewed edits/restores include photos. Legacy import, full-page edit/preview actions, launch-page admission, duplicate offline prototype and guided website writers are removed. One current content/service compiler each; stale snapshots reject. | Source implemented with new compiler pins and schema 0119; local verification in the compiler/storage contracts. Deployment and obsolete test-data reset pending. |
-| CMS bodies/provenance | Validators accept older plain-text/staged representations and preserve optional older receipt shapes. Consolidate the current shape and reset obsolete fixtures. | Pending. CMS functional testing remains owner-deferred; no live CMS acceptance is claimed. |
+| Chat text and actions | `chat-language.ts` rewrites known historical command prose, while some current handlers still emit it. Replace the producers/presentation dependency together; typed human action handlers remain authoritative. | Request/reply rendering, obsolete help/navigation interpreters and review-selection fallbacks removed in source; producers emit plain language and canonical action receipts replace command-text approval proof. Private guided website creation is removed by the website replacement below. Deployed in the current-contract test release below. |
+| Website specifications | New drafts save schema 2 directly; reviewed edits/restores include photos. Legacy import, full-page edit/preview actions, launch-page admission, duplicate offline prototype and guided website writers are removed. One current content/service compiler each; stale snapshots reject. | Deployed with new compiler pins and schema 0119; local verification and current test acceptance below. |
+| CMS bodies/provenance | Only current staged edit bodies are accepted. Retired status-bearing edit replay is removed; provenance and analyzer reports require current fields. | Deployed in the platform; source/type/build and fixture syntax checks only for CMS. CMS functional testing remains owner-deferred; no native CMS instance exists. |
 | Release/identity/other plans | Earlier docs require old-client coexistence, password retirement staging and supported old binaries. Audit each active contract against current-only cutovers without dropping recovery or revocation guarantees. Current explicitly supported authentication methods are not automatically legacy solely because another method is planned. | Release tooling now admits only version-2 test reviews and forward-only reset/recovery. Identity/native and module/data-protection plans now use current-only resets and forward repair. Logical-resource offline contracts now use one exact schema and reject compatibility lists; no credential cutover performed. |
 
 ## Verification scope
@@ -120,3 +120,26 @@ Current `natural-chat`, `plan-periods` and `fair-use-observation` checks pass, i
 The competing welcome draft check exposed a missing current-state recheck before interpreting the model result; the orchestration now records a failed competing attempt without a phantom success version. Other initial failures were stale fixture expectations: removed command prose, missing synthetic auth limiter, a purported new comparison version that requested no change, and a synthetic fair-use removal receipt that still named the retired component. Fixtures now assert the current contract, and each affected suite passed afterward.
 
 Live acceptance harnesses and the browser journey are updated to create current first drafts and approve subsequent edits; they received syntax checks only in this slice. CMS fixture component admission received a static update only. No CMS functional test, scanner implementation, provider activation or customer publication occurred. The remote read-only account inventory was unavailable and supplies no deployment evidence. The test deployment remains at schema 0117; current Chat/website schemas 0118/0119, current client/services and obsolete test-data reset still require coordinated deployment and readback.
+
+## Current CMS shape cleanup — October 1, 2026
+
+Removed the pre-staging body builder, the historical receipt reconstruction branch and the alternative edit validator. Both current authoring input modes generate the same staged edit contract. Incomplete WordPress provenance is rejected on preparation and saved-review reads; the report consumer requires current analyzer fields. Native fixture calls and provenance fixtures were updated without executing CMS suites. See [the current CMS contract](emdash.md#current-content-contracts--october-1-2026) for the verification boundary.
+
+## Current-contract test release
+
+Managed release `925bb8a8-12b2-44f5-807a-251ab85a5905` completed on October 1 at **20:32:43 UTC**, from source `56cf5755f62e012977dff41e9f5164317ab98756`. It includes the merged current-client, offline-contract, Chat and website slices plus the CMS source cleanup. Schema 0118/0119 and runtime → apps → sites → platform completed without retry or repair. The archive records only the shared dependency symlink and generated visitor dependency-path comments as checkout dirtiness; exact deployed bytes are pinned.
+
+| Service | Verified active version |
+| --- | --- |
+| Platform | `9f4de3e2-752e-44d9-8ca4-36fa35a9d48a` |
+| Runtime | `8dc4d06e-378f-46f3-b015-f1315bc2ee07` |
+| Apps | `575a9c63-5bad-45ee-8625-0faefa0e6fbf` |
+| Sites | `dfdd629f-5265-48d0-a7ef-c2a383fa6b3a` |
+
+Independent readback at **20:32:59 UTC** confirms all four candidate tags, exact service/secret binding inventories, all 119 schema files and 17 new/replaced schema objects. Foreign-key checks are clear. All 18 frontend asset files match the archived hashes; landing/workspace/health respond successfully, and anonymous account/Chat/onboarding/preview reads require authentication. CMS registrations remain zero. Retired guided workspace state is cleared; the owner's existing uncertain AI turn remains intact.
+
+Pre-cutover readback found zero website versions/specifications/proposals, publications, GitHub backups, service-client proposals/versions and CMS drafts/edits/import reviews. No content conversion or additional deletion was needed. Unsupported old writes could fail during the short schema-to-platform interval; no old compiler or receipt reader was retained.
+
+Live application acceptance completed at **20:34:26 UTC** using real Workers/D1 and the configured Muse model. A temporary account signed in using a synthetic passkey, completed onboarding, created its first current website specification through natural Chat, prepared an exact private change, approved it, then restored the earlier configuration as a new forward version. Exact approval retries produced no duplicate version or receipt. Original preview bytes stayed unchanged, private reviews/previews required authentication, standard AI charged zero customer credits, and the customer hostname remained unpublished (404). Logout and removal of the synthetic account/project were verified. This is an HTTP/model journey, not physical-device or browser interaction acceptance.
+
+CMS verification is limited to source review, type/build and fixture syntax checks, as requested. No native CMS artifact, detector, real billing, new provider/resource or customer publication was activated.
