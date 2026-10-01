@@ -1,5 +1,5 @@
 import {visitorProject,visitorOrigin} from './hosts';
-import {deleteAppAccount,exportAppAccount} from './app-lifecycle';
+import {deleteAppAccount,exportAppAccount,prepareAppDeletion,readAppDeletion} from './app-lifecycle';
 import {appPasskeyOptions,appPasskeyVerify,recoverAppVisitor} from './app-auth';
 import {readAppData,readAppReceipt,revokeAppSession,transitionAppData} from './app-data';
 import {BackendError} from './backend-versions';
@@ -57,6 +57,8 @@ export async function applicationGateway(request:Request,env:AppEnv):Promise<Res
    if(typeof data.id!=='string'||typeof data.revision!=='number')throw new BackendError(400,'Provide the deletion request and reviewed revision');
    return json(await deleteAppAccount(env.DB,session,project,data.id,data.revision,data.confirmation));
   }
+  const deletionStatus=path.match(new RegExp(`^account/deletions/(${uuid})/(0|[1-9][0-9]{0,15})$`));
+  if(method==='GET'&&deletionStatus)return json(await readAppDeletion(env.DB,session,project,deletionStatus[1],Number(deletionStatus[2])));
   const page=await liveAppPage(env.DB,project);if(!page)return json({error:'Application page unavailable'},404);
   if(method==='GET'&&path==='config')return json({form:JSON.parse(page.config_json),pageId:page.id});
   if(method==='GET'&&path==='export')return await exportAppAccount(env.DB,session,project);
@@ -66,6 +68,10 @@ export async function applicationGateway(request:Request,env:AppEnv):Promise<Res
   if(method!=='POST')return json({error:'Not found'},404);
   if(path.startsWith('auth/')&&!(await env.AUTH_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many sign-in attempts. Try again in a minute.'},429);
   const data=await body(request);
+  if(path==='account/deletion-review'){
+   if(Object.keys(data).length)throw new BackendError(400,'Review your current application account');
+   return json(await prepareAppDeletion(env.DB,session,project));
+  }
   if(path==='data'){
    if(data.pageId!==page.id)throw new BackendError(409,'Application page changed. Reload before sending another change');
    if(typeof data.id!=='string'||typeof data.revision!=='number'||!Object.hasOwn(data,'input'))throw new BackendError(400,'Provide an operation ID, current revision and input');
