@@ -1,6 +1,6 @@
 # Content safety and US customer eligibility
 
-The [WH-010 safety coverage map](safety-coverage.md) traces mounted intake, model, execution, preview/export, publication and serving paths. It distinguishes the existing photo/import holds from unconnected detector/risk foundations and the remaining CMS/generated-content/visitor-data gaps. It is a design and source inventory; no scanner or CMS feature acceptance is implied.
+The [WH-010 safety coverage map](safety-coverage.md), reconciled October 1, 2026 UTC through migration 0113, traces mounted intake, model, execution, preview/export, publication and serving paths. It distinguishes photo/import holds and recorded specification/service holds from unconnected detector/risk producers and the remaining CMS/generated-content/visitor-data gaps. It is a design and source inventory; no scanner or CMS feature acceptance is implied.
 
 ## Product decisions — September 30, 2026
 
@@ -167,6 +167,14 @@ The helper calculates from trusted server history, inserts only when no record e
 The eventual action/publication transaction must recheck the current requirement and matching completed scan at commit time: a result returned before a concurrent escalation is not authorization. Policy changes require explicit invalidation/re-evaluation, rather than silently treating a new policy key as cleared. Capacity is bounded at 10,000 records per owner and 100,000 globally for this inactive foundation. Cleanup/retention, unresolved-case preservation and capacity operations must be designed before activation; these storage safeguards are not advertised AI quotas. Account deletion currently cascades these records, so they are not a legal evidence archive.
 
 Verification: `pnpm check`, `node tests/content-risk.mjs`, `node tests/content-screening.mjs`, and disposable-D1 `node tests/content-screening-decisions.mjs`. Tests cover sticky selection, upward escalation, competing requests, tenant isolation, immutable identity, lost-response recovery, database failure holds and absence of execution permission. Real moderation, trusted-history ingestion and live acceptance remain outstanding.
+
+### Current requirement consumers — October 1, 2026 UTC
+
+The earlier “inactive foundation” description applies to automatic requirement creation and scanner dispatch. Since migrations 0110–0113, saved [website specifications](project-specification-storage.md#removal-bounds-and-safety) and [service configurations/activation](project-service-clients.md) **do consume recorded required rows**. Exact owned specification, manifest, preview/candidate, website and backend dependency digests can hold private reads/changes/restores, proposal previews/comparisons, final private apply/publication, and linked contact/form activation. Later requirements suppress linked live clients/contact intake, including a final SQL contact-insertion guard. Critical separate disable reviews remain available.
+
+This does not create or complete scans. `reserveContentScreening`, `reservePhotoScan` and `recordPhotoScan` still have no running dispatcher/provider adapter. Current hold consumers do not ignore an outstanding requirement from an older policy. There is no general-content approval mechanism that can release it. Legacy website versions without a specification row, ordinary unlinked service reviews, separately published backend endpoints, submitted visitor/contact data and old Chat/inspection copies retain the gaps listed in S08–S17 of the coverage map. Pinned compiler output and a successful runtime test are not clearance.
+
+The agent's knowledge guidance names those limits and forbids bypassing a hold or claiming that unscanned work passed. Source requirements and actual server checks remain authoritative; knowledge text is not enforcement. The [lifecycle contract](data-lifecycle.md) handles duplicated snapshots and future restricted preservation separately.
 
 ## Recorded US declaration at signup
 
