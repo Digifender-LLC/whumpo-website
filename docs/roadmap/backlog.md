@@ -1567,6 +1567,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/identity-authority.md](../../docs/identity-authority.md)
 - [docs/identity-ceremonies.md](../../docs/identity-ceremonies.md)
 - [docs/identity-kits.md](../../docs/identity-kits.md)
+- [docs/identity-recovery.md](../../docs/identity-recovery.md)
 
 ### Execution coordination
 
@@ -1578,6 +1579,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned
 - 2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.
 - 2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed.
 - 2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change.
+- 2026-10-01: #69 source now implements current-kit restricted entry, exact all/some/none review, saved-kit securing/revocation, replacement-specific assertion completion, restricted kit rotation and emergency removal including compromised staged keys. It reuses the shared authority, verification, offers and receipts; recovery-commit grants preserve original proof time/expiry. Actual cryptographic journeys and 64 refusal/race checks pass on SQLite/local D1, with 47 kit/62 ceremony/72 authority regressions. Browser kit delivery, HTTP/admission/lifecycle and the coordinated current-only test reset remain open; no remote schema, active auth or deployment change.
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 
@@ -1635,6 +1637,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/identity-authority.md](../../docs/identity-authority.md)
 - [docs/identity-ceremonies.md](../../docs/identity-ceremonies.md)
 - [docs/identity-kits.md](../../docs/identity-kits.md)
+- [docs/identity-recovery.md](../../docs/identity-recovery.md)
 
 ### Execution coordination
 
@@ -1645,6 +1648,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned
 - 2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.
 - 2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed.
 - 2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change.
+- 2026-10-01: #69 source now implements current-kit restricted entry, exact all/some/none review, saved-kit securing/revocation, replacement-specific assertion completion, restricted kit rotation and emergency removal including compromised staged keys. It reuses the shared authority, verification, offers and receipts; recovery-commit grants preserve original proof time/expiry. Actual cryptographic journeys and 64 refusal/race checks pass on SQLite/local D1, with 47 kit/62 ceremony/72 authority regressions. Browser kit delivery, HTTP/admission/lifecycle and the coordinated current-only test reset remain open; no remote schema, active auth or deployment change.
 
 ## WH-024 — Audit the supported owner journey for usability and accessibility
 
