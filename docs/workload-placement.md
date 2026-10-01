@@ -38,7 +38,7 @@ For broader custom routes, plan one **project + environment + immutable release 
 
 ## Logical contract v1
 
-The executable descriptor schema is `validateDescriptor` in the offline reference. Its bounds (32 KiB JSON, depth 16, 32 owned data sets/assets, 16 dependencies, eight compatible schemas, 64 resources per fixture manifest) constrain the decision examples. They are not new customer entitlements or a claim that larger projects are implemented. Production APIs must additionally bound transport bytes before parsing. Expanding a schema/bound requires versioned compatibility review, never silent truncation.
+The executable descriptor schema is `validateDescriptor` in the offline reference. Its bounds (32 KiB JSON, depth 16, 32 owned data sets/assets, 16 dependencies, one exact current schema per descriptor, 64 resources per fixture manifest) constrain the decision examples. They are not new customer entitlements or a claim that larger projects are implemented. Production APIs must additionally bound transport bytes before parsing. Expanding a schema/bound requires a reviewed current-contract cutover, never silent truncation.
 
 ### Identity and physical resolution
 
@@ -46,7 +46,7 @@ The executable descriptor schema is `validateDescriptor` in the offline referenc
 - Current ownership resolves through `projects.owner_user_id` and the relevant membership/visitor policy on every authorized path. Owner identity is deliberately absent from the stable reference; a separately authorized ownership transition must not rename data. This contract does not implement ownership transfer.
 - `module = {name, version, digest}` and `schema = {name, version, digest}` pin exact maintained artifacts and the write schema. Positive integer versions, lowercase identifiers and SHA-256 digests are required. Unknown names/versions/hooks or mismatched bytes fail catalog resolution, even if their JSON shape is valid. A digest alone does not establish provenance or license permission.
 - Logical references may appear in specs, jobs, receipts and cost attribution. **Physical locators stay server-only**: D1 binding/database IDs, R2 bucket/object keys, runtime service/namespace/script IDs and credential references live behind a trusted registry/adapter. They are absent from model configuration, client descriptors and portable manifests. No secret value belongs in any descriptor.
-- Additive implementation must map existing project-owned records explicitly. Preserve current UUIDs, original immutable spec/version bytes and domain-specific receipts. A legacy adapter can resolve an existing publication or visitor document before there is a generic registry. No automatic historical migration, new customer database or rebinding is implied.
+- Implementation creates current project-owned records explicitly. Preserve current UUIDs and exact current receipts for retained records, or reset obsolete test fixtures. Do not implement a legacy publication/visitor adapter before the registry. No new customer database or rebinding is implied.
 
 ### Minimum descriptor fields
 
@@ -59,7 +59,7 @@ The executable descriptor schema is `validateDescriptor` in the offline referenc
 | `ownership.assets[]` | Same-project logical file-resource references; each must be a pinned dependency of kind files. Actual export snapshots additionally enumerate eligible file IDs, byte counts and digests. A resource reference is not permission to read every object. |
 | `dependencies[]` | Same-project resource reference and exact module pin. Missing, foreign, duplicate, self or cyclic dependencies fail. Cross-project template reuse copies verified public artifacts into a new owned instance; it never links private live resources. |
 | `lifecycle` | Export format version, export/delete/restore/migrate hook IDs, and portability classification. Hooks resolve only from the pinned maintained catalog, not URLs, scripts or model function names. Export hook can be null only when no owned data/assets are exportable. Classification is not-verified, adapter-required or platform-only; none claims a running standalone application. WH-077 records fresh acceptance and versions any expanded classification. |
-| `compatibility` | Exact read and restore schema pin lists. Current write schema must be present in both; a restore schema must also be readable. No duplicate version with different bytes. Read compatibility does not authorize a schema write, downgrade or migration. |
+| Current schema admission | The single `schema` pin governs read, write and restore. Old `compatibility`, `readSchemas` and `restoreSchemas` fields are rejected. An adapter must match the exact current schema name/version/digest; a shape-valid pin still needs trusted catalogue admission. |
 
 Lifecycle classes must define purpose/readers, current and proposed retention, deletion authority, key custody and allowed processing under WH-009/116. Unknown classes block implementation admission. Visitor identity, credentials, held evidence and internal billing/security receipts require separate classes and filtered handling. In particular, general records must not silently extend existing 30-day contact retention. The offline validator checks structural references; the implementing module must prove the hook/class behavior with actual persisted data.
 
@@ -85,19 +85,19 @@ Service boundaries must authenticate the trusted caller and derive scope on the 
 
 ## Placement registry and migration hooks
 
-WH-072 owns the actual registry/provisioning implementation. A reviewed entry maps one logical reference to a physical adapter, schema/artifact pins and a monotonic **placement revision**. Keep provider intent/receipt, resource state and previous compatible placement separately from the module descriptor. Physical moves do not rewrite logical IDs, historical cost events or saved client manifests. A registry row alone cannot establish a Worker binding or network isolation.
+WH-072 owns the actual registry/provisioning implementation. A reviewed entry maps one logical reference to a physical adapter, schema/artifact pins and a monotonic **placement revision**. Keep provider intent/receipt, resource state and prior physical-placement evidence separately from the module descriptor. Physical moves do not rewrite logical IDs, historical cost events or saved client manifests. A registry row alone cannot establish a Worker binding or network isolation.
 
 Required transition protocol:
 
-1. **Prepare:** measure the need; record exact source/target, snapshot/cutoff, module/schema pins, permission/safety/suppression watermarks, expected revisions, cost and rollback criteria. Authorize the precise operation. Unsupported adapters fail before mutation.
+1. **Prepare:** measure the need; record exact source/target, snapshot/cutoff, module/schema pins, permission/safety/suppression watermarks, expected revisions, cost and forward-recovery criteria. Authorize the precise operation. Unsupported adapters fail before mutation.
 2. **Provision/reconcile:** claim one durable intent. Use provider idempotency where supported and exact resource tags/receipts to resolve a lost response. An uncertain create stays unresolved; do not create a second database/container speculatively.
-3. **Copy and verify:** use an authorized consistent snapshot, pinned schema transform and scoped assets. Compare counts/checksums and representative behavior. Keep the target private and apply deletion/permission/safety changes since the snapshot. Do not copy real visitor records into ordinary preview fixtures.
+3. **Copy and verify:** use an authorized consistent snapshot of the current schema and scoped assets. Compare counts/checksums and representative behavior. Keep the target private and apply deletion/permission/safety changes since the snapshot. Do not copy real visitor records into ordinary preview fixtures.
 4. **Drain/fence:** stop new source writes and settle or hold outstanding operations. Initially prefer a bounded reviewed maintenance window. No implicit dual-write protocol. Jobs re-resolve the current placement rather than persisting a DB connection.
 5. **Cut over:** compare-and-swap the expected placement revision only after target verification and source-write fencing. Readers and writers must use a coherent admitted version. Old writers reject stale placement; ambiguity holds affected operations rather than writing both targets.
-6. **Observe/recover:** retain a compatible private recovery target. Before new writes, a verified route rollback may suffice; after new writes, replay/reconcile data or restore a current snapshot under another exact review. Never blindly point to the pre-cutover copy. Keep unresolved external effects and funding holds visible.
+6. **Observe/recover:** inspect the actual source/target and current write state, then prepare a reviewed forward repair or current-schema restore. Reset obsolete test encodings instead of adding an old reader. Never blindly point to the pre-cutover copy or revive an old module/runtime. Keep unresolved external effects and funding holds visible.
 7. **Retire:** revoke old bindings/routes, reconcile all copies/backups/late writes and delete only eligible owned resources. Record final provider confirmation and independent restore suppression. Shared buckets/databases and customer-owned external resources cannot be dropped as part of one project's deletion.
 
-Status must distinguish prepared, provisioning, verifying, ready, migrating, held, retiring and deleted. Deleted means confirmed eligible removal, not merely access denied. An unavailable key, unknown provider result or retention hold blocks the relevant transition and must be surfaced. Implementing work must test lost responses, stale/concurrent revisions, partial copy, old writers, deletion during migration, rollback after new writes and restore suppression.
+Status must distinguish prepared, provisioning, verifying, ready, migrating, held, retiring and deleted. Deleted means confirmed eligible removal, not merely access denied. An unavailable key, unknown provider result or retention hold blocks the relevant transition and must be surfaced. Implementing work must test lost responses, stale/concurrent revisions, partial copy, old writers, deletion during migration, forward recovery after new writes and restore suppression.
 
 ## Export and restoration boundary
 
@@ -143,7 +143,7 @@ For a VM comparison use `quoted compute + disk + backup + egress + network + sec
 | Native video batch or persistent process | Container/VM comparison and measured-need gate. |
 | Maintainer inference or raw shared connection in visitor requirements | Rejected regardless of cost or tier. |
 | Shared D1 → project D1 offer with same exact descriptor | Same logical reference/digest; compatible offer grants no authority and performs no migration. |
-| Foreign project/resource, changed module or schema, raw physical locator | Rejected. Read compatibility does not authorize a write-schema upgrade. |
+| Foreign project/resource, changed module or schema, raw physical locator | Rejected. Neither older nor newer schema offers match the exact current pin. |
 | Missing lifecycle/export hook, floating pin, forged portability | Rejected. Separate visitor export is explicit. |
 | Missing/foreign/cyclic dependency or non-file asset reference | Rejected. Two projects may use the same local UUID without sharing identity. |
 | Current engine/gateway boundary changes | Source anchors require this decision's limits to be reconciled. They do not replace execution isolation tests. |
@@ -161,3 +161,9 @@ No model calls, Cloudflare resources, runtime source/config changes, database mi
 - **WH-077:** consume descriptors already shipped with modules, enumerate actual exclusions and prove the claimed portable subset. Reclassify portability only with fresh clean-target evidence.
 
 The WH-071 decision is complete when the contract/scenarios, dated provider review and downstream references are checked and merged. Those evidence boundaries leave the larger roadmap and the above implementation/activation work open.
+
+## Current-only contract amendment — October 1, 2026
+
+WH-120 removes the descriptor's read/restore compatibility lists and the proposed legacy placement adapter. `schema` is now the only read/write/restore shape; retired compatibility fields and mismatched version/digest offers reject explicitly. The trusted module catalogue must still establish that a pin is the current supported artifact; the offline shape checker does not provide that authority. Physical placement can change behind an exact current contract, using reviewed fencing/readback and forward repair. Obsolete test encodings may be reset; no old schema decoder is retained.
+
+This changes only the offline decision reference, fixtures and implementation contract. No Worker imports the reference; no provider, database, customer site or runtime is changed. Historical acceptance above records the previous decision scope.
