@@ -274,6 +274,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/standard-ai-recovery.ts](../../src/standard-ai-recovery.ts)
 - [docs/deployment.md](../../docs/deployment.md)
 - [docs/usage-recovery.md](../../docs/usage-recovery.md)
+- [docs/maintenance.md](../../docs/maintenance.md)
+- [tools/report-maintenance.mjs](../../tools/report-maintenance.mjs)
+- [tools/maintenance-inventory.mjs](../../tools/maintenance-inventory.mjs)
 
 ### Execution coordination
 
@@ -281,7 +284,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/6. Planning owner: Unassigned.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01T03:21:25.142Z: read-only live report confirms natural daily run at 03:17:59.757 UTC, all configured daily jobs complete, unconfigured GitHub/hosting skipped, and prior hourly health complete. All 27 queues and five receipt families readable; 26 queues empty, one known historical AI hold still actionable. No manual cleanup/retry or new automation. Three offline maintenance suites pass against 113 migrations. Acceptance complete; see docs/maintenance.md and issue #6. This is scheduler/diagnostic acceptance, not provider activation, scanner detection, or a waiver of unresolved work.
 
 ## WH-052 — Choose durable job orchestration from current requirements
 
@@ -1378,6 +1381,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/lib/chat-announcements.ts](../../frontend/src/lib/chat-announcements.ts)
 - [tests/chat-announcements.mjs](../../tests/chat-announcements.mjs)
 - [tools/workspace-recovery-browser.mjs](../../tools/workspace-recovery-browser.mjs)
+- [frontend/src/lib/chat-recovery.ts](../../frontend/src/lib/chat-recovery.ts)
+- [frontend/src/use-chat-recovery.ts](../../frontend/src/use-chat-recovery.ts)
+- [tests/chat-recovery.mjs](../../tests/chat-recovery.mjs)
+- [tests/chat-recovery-profile.mjs](../../tests/chat-recovery-profile.mjs)
 
 ### Execution coordination
 
@@ -1387,6 +1394,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/10. Planning owner: Unassigned
 
 - 2026-10-01 UTC: initial/refresh error recovery, accessible reply notices, pending-turn presentation, keyboard focus and mobile sheet corrections verified with types/build, delivery/announcement/timing/loading checks and a synthetic loopback browser fixture at desktop/360/390 px. Draft and same-request identity survive workspace navigation; full reload persistence, complete owner journey and real screen-reader/device acceptance remain open. See docs/workspace-refinement-acceptance.md and issue #10. Deployment is recorded separately.
 - 2026-10-01 UTC test release 02370893-1c87-419d-ad49-9162ddb0f135 from source 524cf00: all four versions, 113 applied migrations / none pending, unchanged bindings/CMS registry, 16 exact assets, home/workspace/health 200 and anonymous Chat/profile 401 verified. Interactive UI checks used synthetic loopback APIs. PR #23 delivers this slice; complete journey, real assistive-technology/device acceptance and full reload persistence remain open in issue #10.
+- 2026-10-01 UTC: account-bound per-tab draft and exact unresolved-request persistence now survives reload. Synthetic browser verifies accepted-response loss without resending, pre-acceptance loss with explicit exact-ID retry, account switching and sign-out cleanup at desktop/390 px; focused storage/API/delivery tests and types/build/loading checks pass. See the superseding reload-recovery section in docs/workspace-refinement-acceptance.md. Complete journey, actual screen-reader/device acceptance remain open. Deployment recorded separately.
 
 # F2 — Useful websites and applications
 
