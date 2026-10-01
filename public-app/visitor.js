@@ -45,7 +45,7 @@
     root.replaceChildren(render(value));
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/bufferToBase64URLString.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/bufferToBase64URLString.js
   function bufferToBase64URLString(buffer) {
     const bytes = new Uint8Array(buffer);
     let str = "";
@@ -56,7 +56,7 @@
     return base64String.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/base64URLStringToBuffer.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/base64URLStringToBuffer.js
   function base64URLStringToBuffer(base64URLString) {
     const base64 = base64URLString.replace(/-/g, "+").replace(/_/g, "/");
     const padLength = (4 - base64.length % 4) % 4;
@@ -70,7 +70,7 @@
     return buffer;
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthn.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthn.js
   function browserSupportsWebAuthn() {
     return _browserSupportsWebAuthnInternals.stubThis(globalThis?.PublicKeyCredential !== void 0 && typeof globalThis.PublicKeyCredential === "function");
   }
@@ -78,7 +78,7 @@
     stubThis: (value) => value
   };
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toPublicKeyCredentialDescriptor.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toPublicKeyCredentialDescriptor.js
   function toPublicKeyCredentialDescriptor(descriptor) {
     const { id } = descriptor;
     return {
@@ -89,7 +89,7 @@
     };
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/isValidDomain.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/isValidDomain.js
   function isValidDomain(hostname) {
     return (
       // Consider localhost valid as well since it's okay wrt Secure Contexts
@@ -98,7 +98,7 @@
     );
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnError.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnError.js
   var WebAuthnError = class extends Error {
     constructor({ message: message2, code, cause, name }) {
       super(message2, { cause });
@@ -113,7 +113,7 @@
     }
   };
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyRegistrationError.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyRegistrationError.js
   function identifyRegistrationError({ error, options }) {
     const { publicKey } = options;
     if (!publicKey) {
@@ -209,7 +209,7 @@
     return error;
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnAbortService.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnAbortService.js
   var BaseWebAuthnAbortService = class {
     constructor() {
       Object.defineProperty(this, "controller", {
@@ -240,7 +240,7 @@
   };
   var WebAuthnAbortService = new BaseWebAuthnAbortService();
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toAuthenticatorAttachment.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toAuthenticatorAttachment.js
   var attachments = ["cross-platform", "platform"];
   function toAuthenticatorAttachment(attachment) {
     if (!attachment) {
@@ -252,7 +252,7 @@
     return attachment;
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startRegistration.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startRegistration.js
   async function startRegistration(options) {
     if (!options.optionsJSON && options.challenge) {
       console.warn("startRegistration() was not called correctly. It will try to continue with the provided options, but this call should be refactored to use the expected call structure instead. See https://simplewebauthn.dev/docs/packages/browser#typeerror-cannot-read-properties-of-undefined-reading-challenge for more information.");
@@ -342,7 +342,7 @@
 `, cause);
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthnAutofill.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthnAutofill.js
   function browserSupportsWebAuthnAutofill() {
     if (!browserSupportsWebAuthn()) {
       return _browserSupportsWebAuthnAutofillInternals.stubThis(new Promise((resolve) => resolve(false)));
@@ -357,7 +357,7 @@
     stubThis: (value) => value
   };
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyAuthenticationError.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyAuthenticationError.js
   function identifyAuthenticationError({ error, options }) {
     const { publicKey } = options;
     if (!publicKey) {
@@ -402,7 +402,7 @@
     return error;
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startAuthentication.js
+  // ../../../../Documents/TellUmo/node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startAuthentication.js
   async function startAuthentication(options) {
     if (!options.optionsJSON && options.challenge) {
       console.warn("startAuthentication() was not called correctly. It will try to continue with the provided options, but this call should be refactored to use the expected call structure instead. See https://simplewebauthn.dev/docs/packages/browser#typeerror-cannot-read-properties-of-undefined-reading-challenge for more information.");
@@ -488,7 +488,7 @@
   var pendingKey = "townhello-request:" + base;
   var deletionKey = "townhello-deletion:" + base;
   var deletion;
-  var reviewedRevision;
+  var deletionReview;
   try {
     const saved = JSON.parse(sessionStorage.getItem(deletionKey) || "null");
     if (saved && /^[0-9a-f-]{36}$/.test(saved.id) && Number.isSafeInteger(saved.revision) && saved.revision >= 0) deletion = saved;
@@ -557,7 +557,13 @@
   function showData(value) {
     renderVisitorData($("#saved-data"), value);
   }
+  function clearDeletionReview() {
+    deletionReview = void 0;
+    $("#delete-account").hidden = true;
+    $("#delete-account").reset();
+  }
   async function refresh() {
+    clearDeletionReview();
     const data = await api("data");
     revision = data.revision;
     showData(data.state);
@@ -699,6 +705,7 @@
   });
   $("#logout").onclick = () => act(async () => {
     await api("auth/logout", {});
+    clearDeletionReview();
     $("#workspace").hidden = true;
     $("#signin").hidden = false;
     $("#saved-data").replaceChildren();
@@ -708,73 +715,63 @@
   });
   $("#export-data").href = base + "/export";
   function deletionView() {
+    $("#description").textContent = "Account deletion status";
     for (const id of ["workspace", "signin", "recovery"]) $("#" + id).hidden = true;
     $("#deletion-pending").hidden = false;
   }
-  async function finishDeletion() {
-    let result;
-    try {
-      result = await api("account/delete", { ...deletion, confirmation: "DELETE" });
-    } catch (error) {
-      if (error.status === 409) {
-        deletion = void 0;
-        try {
-          sessionStorage.removeItem(deletionKey);
-        } catch {
-        }
-        $("#deletion-pending").hidden = true;
-        $("#delete-account").hidden = true;
-        reviewedRevision = void 0;
-        await enter();
-      }
-      throw error;
-    }
-    if (!result.deleted || result.id !== deletion.id) throw Error("Deletion could not be confirmed. Check this same request again.");
+  function completeDeletion(result) {
+    if (!result.deleted || result.id !== deletion.id) throw Error("Deletion is not confirmed. Check this request again; checking will not send another deletion.");
     deletion = void 0;
     try {
       sessionStorage.removeItem(deletionKey);
     } catch {
     }
     remember(null);
+    clearDeletionReview();
     $("#deletion-pending").hidden = true;
     $("#deleted").hidden = false;
     $("#saved-data").replaceChildren();
     $("#result").textContent = "";
     $("#recovery-code").value = "";
     HTMLFormElement.prototype.reset.call($("#application-form"));
-    HTMLFormElement.prototype.reset.call($("#delete-account"));
     status("Account deletion confirmed.");
   }
+  async function checkDeletion() {
+    const result = await api("account/deletions/" + deletion.id + "/" + deletion.revision);
+    if (result.deleted) completeDeletion(result);
+    else status("No completion is confirmed for this request and sign-in. No further deletion was sent. You can check again or return to sign in and prepare a new review.");
+  }
   $("#review-deletion").onclick = () => act(async () => {
-    await refresh();
-    reviewedRevision = revision;
+    clearDeletionReview();
+    const review = await api("account/deletion-review", {});
+    deletionReview = { id: review.id, revision: review.revision };
+    revision = review.revision;
+    showData(review.state);
     $("#saved-data").closest("details").open = true;
     $("#delete-account").hidden = false;
     $("#delete-account input").focus();
   });
-  $("#cancel-deletion").onclick = () => {
-    $("#delete-account").hidden = true;
-    $("#delete-account").reset();
-    reviewedRevision = void 0;
-  };
+  $("#cancel-deletion").onclick = clearDeletionReview;
   $("#delete-account").onsubmit = (event) => {
     event.preventDefault();
     act(async () => {
-      if (new FormData(event.target).get("confirmation") !== "DELETE" || reviewedRevision === void 0) throw Error("Review the latest information and type DELETE.");
-      deletion = { id: crypto.randomUUID(), revision: reviewedRevision };
+      if (new FormData(event.target).get("confirmation") !== "DELETE" || !deletionReview) throw Error("Review the latest information and type DELETE.");
+      deletion = { ...deletionReview };
       try {
         sessionStorage.setItem(deletionKey, JSON.stringify(deletion));
       } catch {
         deletion = void 0;
         throw Error("Enable session storage before deleting so this request can be checked after a lost response.");
       }
+      clearDeletionReview();
       deletionView();
-      await finishDeletion();
+      completeDeletion(await api("account/delete", { ...deletion, confirmation: "DELETE" }));
     });
   };
-  $("#check-deletion").onclick = () => act(finishDeletion);
+  $("#check-deletion").onclick = () => act(checkDeletion);
   $("#leave-deletion").onclick = () => act(async () => {
     deletion = void 0;
+    clearDeletionReview();
     try {
       sessionStorage.removeItem(deletionKey);
     } catch {
@@ -817,7 +814,7 @@
   act(async () => {
     if (deletion) {
       deletionView();
-      await finishDeletion();
+      await checkDeletion();
       return;
     }
     await loadConfig();
