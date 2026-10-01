@@ -155,3 +155,17 @@ Release `1abae8bd-fa49-4878-afb8-bdbd1615b41f` from source `2add4c0` was verifie
 | platform | `075ec017-8d81-4585-b111-9a6a8a3f2d94` |
 
 The release changes frontend welcome delivery/focus/sign-out recovery and chat presentation only; server handlers, review authority, service contracts and schema are unchanged. Mixed Worker compatibility was reviewed against unchanged APIs before the archived deployment. The protocol completed all steps without replay or repair. The recorded dirty checkout comprised the shared dependency symlink and generated visitor dependency-path comments; the deployed artifact bytes are preserved, and the checked comment-only working difference was restored afterward. [Connected journey scope, tests and remaining acceptance](workspace-refinement-acceptance.md#connected-owner-journey--october-1-2026-utc). Private evidence: `.secrets/owner-journey-release-verification.json` and immutable release archive. No CMS/scanner/provider activation or customer publication.
+
+
+## Readable comparison recovery — October 1, 2026 UTC
+
+Release `ee62cc7e-a655-4aba-a84b-2568051415cf` from source `3a9b61b` was independently verified at **2026-10-01T04:28:59.444Z**. All four versions/tags, unchanged service/secret-binding names and CMS registry, 113 applied migrations with none pending, all 16 frontend assets and workspace HTML match the archive. Home/workspace/health returned 200; anonymous Chat/profile returned 401. Anonymous comparison navigation now returns the readable sign-in HTML with 401 and private/no-store/security headers; an explicit JSON caller retains the original 401 JSON error.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `457631aa-8095-4538-9150-4137be8e39c0` |
+| apps | `78ebe24d-82d0-40a0-a1b6-5f3ec653a9e9` |
+| sites | `bbf7dc84-72e1-4be7-9b93-5510fda6f217` |
+| platform | `3bb91580-1686-460d-96c0-a26984899875` |
+
+The platform changes representation only for HTML GET comparison errors and updates comparison markup. JSON clients, authentication, owner/integrity/revision/expiry checks and mutations retain their existing contracts. Other Worker contracts, customer renderers/compiler identities, schema, routes and bindings are unchanged, so mixed old/new Workers remain compatible. All managed deployment steps completed without repair/replay. The archived dirty checkout contains the shared dependency symlink and generated visitor path comments; the checked comment-only working difference was restored after verification. [Feature and bounded browser evidence](version-comparisons.md#readable-recovery-and-responsive-comparison--october-1-2026-utc).
