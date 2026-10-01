@@ -33,7 +33,7 @@ try{
  // Retry after D1 committed the ready state and its audit event.
  lost=false;const lossyDB=new Proxy(db,{get(target,key){if(key==='batch')return async(...args)=>{const r=await target.batch(...args);if(!lost){lost=true;throw Error('lost D1 acknowledgement');}return r;};const v=target[key];return typeof v==='function'?v.bind(target):v;}});
  const committed=crypto.randomUUID();await assert.rejects(uploadPhoto(request(),{...env,DB:lossyDB},owner.id,owner.project,committed),{status:503});await uploadPhoto(request(),env,owner.id,owner.project,committed);assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE id=?").bind('file:'+committed).first()).n,1);
- for(let n=3;n<20;n++)await uploadPhoto(request(),env,owner.id,owner.project,crypto.randomUUID());await assert.rejects(uploadPhoto(request(),env,owner.id,owner.project,crypto.randomUUID()),{status:409});assert.equal((await env.FILES.list()).objects.length,20);assert.equal((await getBilling(db,owner.id)).quota.spent,0);
+ for(let n=3;n<20;n++)await uploadPhoto(request(),env,owner.id,owner.project,crypto.randomUUID());await assert.rejects(uploadPhoto(request(),env,owner.id,owner.project,crypto.randomUUID()),{status:409});assert.equal((await env.FILES.list()).objects.length,20);assert.equal((await getBilling(db,owner.id)).standardAI.creditCharge,0);
  const apiEnv={...env,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
  assert.equal((await worker.fetch(new Request('https://whumpo.com/api/files/'+id),apiEnv)).status,401);
  assert.equal((await worker.fetch(new Request('https://whumpo.com/api/projects/'+owner.project+'/files/'+id,{method:'PUT'}),apiEnv)).status,403);

@@ -134,7 +134,7 @@ try{
  await confirmActivation(owner,contactReview);await confirmActivation(owner,fresh);assert.equal(await m.activeContact(db,owner.project),null);assert.equal(await m.activeBackendForm(db,owner.project),null);
  await assert.rejects(db.prepare('DELETE FROM service_client_activation_reviews WHERE id=?').bind(contactReview.input.id).run(),/service_client_receipt_retained/);
  await assert.rejects(db.prepare('UPDATE service_client_activation_reviews SET version_id=? WHERE id=?').bind(offSettings.version,contactReview.input.id).run(),/service_client_immutable/);
- assert.equal((await db.prepare('SELECT coalesce(sum(quota_charged+credits_charged),0) units FROM usage_operations WHERE user_id=?').bind(owner.id).first()).units,0);
+ assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  }
  if(process.env.WHUMPO_SERVICE_ACTIVATION_BROWSER==='1'){
   const visitorOwner=await account();visitorOwner.site=await website(visitorOwner);await backend(visitorOwner);const privateSettings=await save(visitorOwner,0);await publish(visitorOwner,visitorOwner.site);

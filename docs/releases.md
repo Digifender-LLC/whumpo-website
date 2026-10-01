@@ -12,7 +12,8 @@
 
    ```json
    {
-     "version": 1,
+     "version": 2,
+     "environment": "test",
      "buildInputs": "Copy inputs.sha256 from the reviewed .secrets/build-snapshot.json",
      "review": "Commit/issue/document reference for the actual mixed-version contract review",
      "mixedWorkersCompatible": true,
@@ -47,15 +48,13 @@ Checksums detect accidental drift; they are not signatures or protection from an
 
 The journal records intent **before** each external operation using a synced temporary file, atomic rename and directory sync. A successful CLI completion is recorded separately from version readback. Failed commands keep fixed diagnostic categories in the journal; Wrangler detail remains in private logs. No automatic archive pruning is provided. Retain successful and interrupted archives, including previous releases. Copy the complete directory with restricted permissions to operator-controlled backup storage when establishing recovery readiness; local `.secrets/` is ignored by Git and is not a disaster backup.
 
-## Compatibility and database changes
+## Current-only schema changes and test resets
 
-For **every pending migration**, the review must contain its exact `{ "name": "0108_example.sql", "sha256": "…" }`, in archive order. It must also declare `schemaChange: "backward-compatible"` or `"destructive"`, `previousWorkersCompatible: true`, and a `schemaReview` reference. An apparently additive trigger or backfill is not automatically safe: examine old reads/writes, permissions, idempotency, constraints and recovery with the new schema.
+**Owner directive, October 1, 2026:** all environments are testing; obsolete test data may be deleted. Release review version 2 is the only accepted format and requires `environment: "test"`. Old version-1 review files and old-Worker compatibility fields are rejected. Historical archives remain evidence, not supported deployment targets.
 
-All intermediate combinations in the deployment order must be compatible. Prefer expand → deploy compatible readers/writers → migrate data → later reviewed contraction. If old Workers cannot run safely after a proposed change, this sequential deployment path **refuses that plan**. Design a separate maintenance/cutover procedure; do not falsify the declaration.
+Every pending SQL file still has an exact `{ "name": "0117_current_billing.sql", "sha256": "…" }` entry and `schemaReview`. The numbered SQL directory is the existing delivery mechanism for the current schema; it does not require data-preservation migrations. `schemaChange` is `none`, `update`, or `reset`. A reset additionally records `testDataResetAuthorized: true` and a `cutoverReview` describing the deleted data and temporary availability impact. Do not create a compatibility reader or restore old binaries to preserve discarded test fixtures.
 
-Declared destructive changes additionally require separate `restoreReview`, `restoreEvidence` and `recoveryStrategy` references. These must cover a tested restore point, deletion/revocation reconciliation, current keys/bindings and R2/customer data as applicable. This is a mandatory review-field gate, not a SQL semantic classifier or an automatically verified backup. Misclassified SQL remains an operator review risk. Applying all pending migrations is owner-authorized for testing; it does not establish backward compatibility or make an untested destructive restore safe.
-
-Worker rollback does not restore D1/R2/KV data. Cloudflare limits rollback to the 100 most recently published versions and can refuse it when bound resources have changed or disappeared. Review the actual schema/resource state before using a recorded prior version. [Cloudflare rollback behavior and limits](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/) (checked September 30, 2026).
+The cross-Worker service review remains necessary: tenant and credential boundaries cannot change mid-call. A reset may temporarily make the old platform unavailable between SQL application and the current platform deployment; the owner accepts temporary test rough edges. Record that interval honestly. Failure recovery inspects actual state and deploys a corrected current release. An uncertain provider write must still be reconciled before repeating it.
 
 ## Recovery decision table
 
@@ -65,16 +64,16 @@ First inspect the private logs, journal, `status` output and whether the origina
 | --- | --- | --- |
 | Preparation | No new remote mutation; incomplete local archive may exist without a sealed manifest. | Fix the build/review/drift, prepare a new archive. Never apply an unsealed one. |
 | Migration command | Schema may be partially advanced; all Workers still on their old versions. | Read applied names. If all archived SQL is present, resume can settle it. Otherwise stop: inspect failed SQL and its transaction behavior, prove the previous process is terminal, then review an explicit forward repair. No automatic SQL replay or reverse migration. |
-| After runtime | New runtime with old apps/sites/platform. | If command completion was saved and tagged runtime/bindings match, resume skips runtime and continues apps. If unsafe, use the reviewed previous runtime version/artifact only after schema compatibility review. |
-| After apps | New runtime/apps with old sites/platform. | Confirm both identities; resume starts sites. A deliberate reversal proceeds from consumers toward dependencies, preserving the already-applied compatible schema. |
+| After runtime | New runtime with old apps/sites/platform. | If command completion was saved and tagged runtime/bindings match, resume skips runtime and continues apps. If unsafe, stop and prepare a corrected current release. |
+| After apps | New runtime/apps with old sites/platform. | Confirm both identities; resume starts sites. Repair forward with current components and the applied schema. |
 | After sites | New runtime/apps/sites with old platform. | Confirm three identities; resume starts the binding-preserving platform step. Retain every CMS registration and existing key. |
 | After platform | All four candidates may be active but final readback/journal completion may have failed. | Saved command completion plus four matching tags/version IDs, services, secret names, schema and unchanged CMS inventory allows settlement without another deployment. Perform application acceptance afterward. |
 | CLI outcome uncertain | Upload may have activated code before routes/schedules/settings finished. | Even a matching candidate tag is insufficient. The tool stops and does not set the operation back to pending. Prove the process terminal, inspect provider version, routing, schedule and asset state, then make an explicit reviewed repair/new release. Preserve the original unresolved journal as evidence; do not edit its completion flag to bypass the hold. |
 | CMS registry, unrelated Worker or schema drift | Another operation changed the baseline. | Stop and reconcile that operation. Prepare a newly reviewed release against the actual state; never silently discard/reconstruct CMS bindings from a stale manifest. |
 
-There is no automatic rollback. A deliberate rollback plan identifies exact recorded previous Worker IDs and checks the **current** schema and CMS registry. If registrations were added since that version, restore the old compiled platform artifact through a newly prepared binding-preserving release rather than sending traffic to an old version without those bindings. Preserve the existing `.secrets/cms/master.key`; never generate a replacement for existing deployments. The registration inventory is recovery evidence, not authority to reinsert stale/deleted rows or recreate tenant resources.
+Recovery is forward-only. Prepare a corrected current release after inspecting the current schema, registrations and bindings. Preserve the existing `.secrets/cms/master.key` for registered instances; a reset of obsolete billing fixtures does not authorize changing unrelated credentials. Historical artifacts and journals are evidence, not a supported old-runtime deployment mode.
 
-Already-deployed versions from **before** this protocol have provider version IDs but no new local release archive. Do not claim their artifacts were reconstructed by the first preparation. Their immediate recovery depends on provider version availability and independently retained earlier artifacts. New managed releases retain exact local bytes for future forward repairs. Complete whole-platform/database/object/key restoration remains WH-008/019/059; this release mechanism does not satisfy those tasks.
+Complete whole-platform/database/object/key recovery remains WH-008/019/059. This release mechanism does not by itself satisfy those tasks.
 
 ## Local verification — September 30, 2026
 
@@ -199,3 +198,7 @@ Managed release `4c4be7bc-1354-4e05-b4f1-533bd6f92b79` deploys source `a27039b` 
 ## GitHub token lifecycle release — October 1, 2026 UTC
 
 Managed release `6116b6b5-f398-437c-b947-32376e75e629` deploys `e073946` ([PR #35](https://github.com/zemdregon/whumpo/pull/35)) and additive metadata migration 0115. The reviewed old/new vault/pointer contract remains compatible; other Worker/service contracts, bindings, routes, schedules and frontend behavior are unchanged. All steps completed without repair/retry. Independent readback at **14:07:26 UTC** confirms 115 migrations, four candidate versions, exact binding/registration inventories, both metadata tables/foreign keys/index, all 16 frontend assets and workspace HTML, 28 available maintenance queries and anonymous/foreign-Origin access denials. Customer GitHub remains unconfigured with zero credentials; Stripe remains sandbox-only. [Exact versions, local regressions, schema review and verification limits](integrations/github-connection.md#a2-test-release).
+
+## Current-only billing reset — October 1, 2026
+
+Managed release `438cdaa6-4ef5-46b8-a8c1-ea3115ef61af` applied the owner-authorized disposable test reset `0117_current_billing.sql` and all four current Workers from source `75e41ff`. Version-2 review and forward recovery rules were used; no old billing reader/conversion remains. Independent schema, authenticated API and exact asset readback passed. [Version identities and bounded acceptance](current-version-policy.md#test-deployment-acceptance) record the evidence. This is a current test cutover, not legacy runtime support or a full recovery drill.

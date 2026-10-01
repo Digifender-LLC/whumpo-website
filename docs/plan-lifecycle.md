@@ -1,48 +1,17 @@
-> October 1, 2026 catalogue update: `personal` now displays as **Creator**. The [feature catalogue](plan-feature-contract.md) adds cumulative launch packaging only; stored IDs, prices, provider mappings, historical receipts and grants below are unchanged. WH-090 owns future feature enforcement.
+# Current plan coverage
 
-> October 1, 2026: [Stripe sandbox subscriptions](stripe-sandbox.md) add immutable paid invoice coverage for exact service intervals. `plan_entitlements` combines those intervals with legacy calendar-month receipts for current plan selection, publication slots and fair-use tier observations. This does not mint historical test units, advanced credits or the future resource pool. The month-grant descriptions below remain the legacy accounting contract. Real payments, plan switching/proration and refunds/disputes remain unavailable.
+**October 1, 2026.** Explore is the free testing plan when there is no active paid invoice coverage. Starter, Creator (`personal` is its current stored ID), Business and Business Pro are the only paid plans. Their prices and feature packaging are defined in [the shared catalogue](plan-feature-contract.md).
 
-# Monthly plan entitlements
+`plan_entitlements` contains only verified `stripe_paid_invoices` intervals. Coverage starts inclusively and ends exclusively, in Unix seconds. Overlapping current receipts select the highest tier. Missing coverage selects Explore; an unrecognized or retired plan raises a billing error. Draft capacity preferences grant no entitlement.
 
-Current launch catalogue and model-cost policy: [pricing-and-model-policy.md](pricing-and-model-policy.md). Launch/Studio references below describe legacy test entitlements.
+Launch, Studio, calendar-month plan grants, cached account plan IDs and monthly test-unit allowances are removed. The pre-release schema reset deletes their disposable data. There is no compatibility reader, translation or substitute paid plan.
 
-## Legacy monthly fulfillment boundary
+Current paid invoice records remain immutable and tenant-scoped. Stripe renewal, failed payment, cancellation and annual boundaries use the same [sandbox subscription contract](stripe-sandbox.md). Subscription coverage does not mint resource or advanced-model credits.
 
-`grantPlan` is an internal fulfillment function, not an HTTP endpoint or model action. It accepts Starter, Personal, Business and Business Pro plus the historical Launch/Studio identities, for a specific UTC calendar month (`src/billing.ts`, `src/plans.ts`, migration 0052). A future payment adapter must establish the paid invoice, customer ownership, calendar period and product before calling it. The new sandbox adapter records exact invoice-line service dates separately and makes no real subscription charge. This legacy function alone is not a subscription system.
+## Publication limits
 
-A unique grant ID and globally unique payment/reference ID identify an immutable receipt. Identical retries recover the same result; changes to owner, plan, month or reference are rejected. The receipt, existing-period allowance adjustment and ledger entry commit in one SQLite statement/trigger transaction. A lost acknowledgement is recovered by reading the exact receipt. A browser redirect, cached account plan or model output cannot create an entitlement.
+The confirmation transaction checks owned current revisions, exact saved versions, expiry and the current paid coverage. Explore and Starter allow one published site; Creator five; Business ten; Business Pro twenty-five. Existing published sites remain editable if coverage expires; a new publication cannot exceed the current limit. This is the current publication policy, independent of billing history.
 
-## Monthly behavior
+## Verification
 
-Explore supplies 50 test units in each UTC month. Current confirmed receipts grant Starter 250, Personal 800, Business 1,600 and Business Pro 3,200 test units; legacy Launch and Studio remain 250 and 800. These are existing test entitlements, not the proposed Whumpo resource pool. The highest confirmed tier in a month wins. Receiving the same or a lower tier later does not reset usage or add a second allowance. Upgrading changes the allowance ceiling, preserving spent units, reservations and credit balances. For example, moving from Launch to Studio after using 40 units leaves 760 monthly units, not a fresh 800.
-
-An invoice/renewal must grant each new paid month explicitly. Without a grant for the next month, that month uses Explore. A downgrade can take effect by granting the lower tier for the next month. The current month's paid entitlement is preserved. Current-month refunds, entitlement revocation, proration, renewal grace periods and payment dispute policy are not implemented and must be settled before subscriptions are enabled. No automatic plan-cancellation or billing-provider action is implied by the absence of a grant.
-
-Credits remain a separate balance and do not expire at the month boundary. Explicit overage opt-in still governs new operations. Already dispatched or uncertain operations retain their original month and reservation; settling them after a rollover does not debit the new month's allowance. Merely receiving a future-month grant does not run future-dated reservation expiry or alter the current month.
-
-If an entitlement arrives before that month's first use, creating its usage period grants the correct allowance once. If it arrives after period creation, the trigger raises the existing allowance by the difference and records only that delta. Catalog amounts are currently fixed in the catalogue and migrations; changing them requires an explicit versioned entitlement/migration design, not editing one constant in isolation.
-
-## Published sites after a downgrade
-
-Publication confirmation reads current-month receipts directly: Explore allows one site; Starter one, Personal five, Business ten and Business Pro twenty-five. Legacy Launch allows three and Studio ten. `billing_accounts.plan_id` is a legacy field and is no longer authorization for paid allowance or publication slots. A stale paid cache cannot authorize another site after the entitlement month ends.
-
-Existing published sites are not automatically taken offline by a downgrade or failed renewal. They remain editable/restorable, even when their count exceeds the new tier. The account cannot publish another site while over its current limit; unpublishing frees slots. This is an explicit grandfathering policy for the test platform, not strict automatic enforcement of a lower live-site count. Before sales, decide whether to keep this policy or introduce a communicated grace period and user-selected sites. Never silently choose and delete a user's live sites.
-
-## Verification and remaining work
-
-AI requests reserve quota and claim the expected conversation revision in one D1 batch. Competing messages cannot leave a second hold or call the model. A retry with the same message ID must match its original text and revision; conflicting reuse returns a conflict. If the initial transaction commits but its acknowledgement is lost, replay reads the saved pending turn without dispatching again. An undispatched turn is subsequently reconciled and released after the timeout. Provider-dispatched uncertain calls retain their hold for review.
-
-`test:plan-periods` covers concurrent/replayed receipts, conflicting owners and references, quota/hold preservation, ledger totals, no unconfirmed paid rollover, lower-tier renewal, persistent credits, late settlement, grants before first use, lost acknowledgements, immutable receipts and publication limits independent of the legacy cache. Billing, publication and checkout regression suites cover the surrounding contracts.
-
-Still required for paid subscriptions: customer/subscription mappings, trusted product and invoice-period mapping, subscription checkout, invoice-paid fulfillment, idempotent event handling, missed/out-of-order-event reconciliation, cancellation/downgrade controls, proration and refund policy, authenticated management links, real test-mode acceptance and a tested separation between test entitlements and any future live-money environment. No plan grant was installed for a real account while building or testing this feature.
-
-## Deployment evidence — September 29, 2026
-
-Migration 0020 applied locally and remotely before deployment. Main Worker version `e75566e6-46d9-40be-997b-739d4ff9f896`; public Worker version `955bcbf9-dce2-4227-9d00-85c46fc9c302`. TypeScript, billing (including conflicting concurrent message IDs), plan-period, publication, checkout, site-agent and workspace-agent checks passed. A temporary production account signed in with a passkey and received one live Muse reply: Explore allowance 25, four units settled, zero held. Exact replay did not increase usage; conflicting text under the same ID returned 409. Checkout remained disabled. Logout passed and the temporary account was deleted. Paid receipt behavior was verified only in disposable local databases.
-
-
-## Explore allowance revision
-
-Migration 0032 raises the normal free allowance from 25 to 50 after live onboarding tests showed the old ceiling could block the first or second edit. Current and future stored 25-unit periods receive an audited 25-unit increase; past periods and paid allowances remain unchanged. Spent usage, pending/dispatched holds and credit balances are preserved. A compatibility trigger also raises current/future periods inserted by the previous Worker during rollout. New code takes the Explore allowance from the shared plan catalogue. Paid prices, paid allowances and credit-pack pricing are unchanged.
-
-`test:explore-allowance` runs the exact migration twice against existing spend and a dispatched hold, verifies one ledger adjustment, then settles the hold. It also covers historical periods, paid ceilings and an old-Worker insert. `test:billing`, `test:plan-periods` and `test:usage-recovery` retain concurrency, settlement, renewal and recovery coverage. This is a bounded invite-only testing allowance, not a promise that every request yields a fixed number of edits.
+`tests/plan-periods.mjs` checks paid service intervals, tier ordering, expiry, preference non-authority, publication limits and current domain quote policy. `tests/subscriptions.mjs` verifies actual adapter behavior with a synthetic Stripe transport. `tests/billing.mjs` checks retired and unknown identities explicitly. See [current-only acceptance](current-version-policy.md) for source/deployment status.

@@ -32,7 +32,7 @@ try{
  const review=await chat(a,'/publish '+next);const rd=await compareReview(db,a.id,review.id);assert.equal(rd.before.id,old);assert.equal(rd.after.id,next);assert.equal(rd.kind,'publish');await assert.rejects(compareReview(db,b.id,review.id),e=>e.status===404);
  if(process.env.WHUMPO_DIFF_FIXTURE)await writeFile(process.env.WHUMPO_DIFF_FIXTURE,await diffPage(rd).text());
  // Guided receipt pins its baseline, even when publication changes after the read.
- const free=await chat(a,'/diff '+next);assert.equal(free.result.status,200);const turn=(await readChat(db,a.id)).turns.at(-1);assert.equal(turn.comparison_version_id,next);assert.equal(turn.comparison_baseline_id,old);assert.equal((await getBilling(db,a.id)).quota.spent,0);
+ const free=await chat(a,'/diff '+next);assert.equal(free.result.status,200);const turn=(await readChat(db,a.id)).turns.at(-1);assert.equal(turn.comparison_version_id,next);assert.equal(turn.comparison_baseline_id,old);assert.equal((await getBilling(db,a.id)).standardAI.creditCharge,0);
  await publish(a,next);await assert.rejects(compareReview(db,a.id,review.id),e=>e.status===409);assert.equal((await db.prepare('SELECT baseline_id FROM chat_comparisons WHERE turn_id=?').bind(free.id).first()).baseline_id,old);assert.equal((await compareVersions(db,a.id,next)).changes.length,0);
  const restore=await chat(a,'/restore '+old);assert.equal((await compareReview(db,a.id,restore.id)).kind,'restore');const unpublish=await chat(a,'/unpublish '+a.project);const ud=await compareReview(db,a.id,unpublish.id);assert.equal(ud.after,null);assert.ok(ud.changes.every(c=>c.after===null));
  // Expired pending review cannot be rendered as a valid approval snapshot.

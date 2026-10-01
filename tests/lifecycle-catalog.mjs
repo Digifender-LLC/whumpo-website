@@ -7,7 +7,7 @@ await validateLifecycleReferences(catalog);
 const {db,migrations}=await migratedLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,148);assert.equal(report.classCount,31);assert.equal(migrations.length,113);
+ assert.equal(report.tableCount,147);assert.equal(report.classCount,31);assert.equal(migrations.length,117);
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
  assert.equal(report.directOwnerBlocks.length,21);
  assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['auth_challenges','file_cleanup']);

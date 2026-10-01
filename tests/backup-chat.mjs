@@ -67,7 +67,7 @@ try{
  // A lost provider response is reconciled by reading, never by repeating the commit.
  remote=false;const uncertain=await message('/review-backup '+version+' test/backup 17');mode='after';await message('/confirm-backup '+uncertain.id);assert.equal(writes,2);assert.equal((await listBackups(db,user)).backups.find(b=>b.id===uncertain.id).state,'uncertain');
  await message('/check-backup '+uncertain.id);assert.equal(writes,2);assert.equal((await listBackups(db,user)).backups.find(b=>b.id===uncertain.id).state,'complete');mode='ok';
- assert.equal((await getBilling(db,user)).quota.spent,0);
+ assert.equal((await getBilling(db,user)).standardAI.creditCharge,0);
  // A lost durable chat claim must not call GitHub or create a saved review.
  const lost=crypto.randomUUID(),lossy=new Proxy(db,{get(t,k){if(k==='batch')return async statements=>{await t.batch(statements);throw Error('Lost claim acknowledgement');};const v=t[k];return typeof v==='function'?v.bind(t):v;}});
  await message('/review-backup '+version+' test/backup 17',lost,undefined,lossy);assert.equal(await db.prepare('SELECT id FROM github_backups WHERE id=?').bind(lost).first(),null);assert.match((await readChat(db,user)).turns.at(-1).assistant_text,/not yet been saved/);

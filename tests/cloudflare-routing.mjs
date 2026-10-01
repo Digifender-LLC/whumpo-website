@@ -62,7 +62,7 @@ try{
  const msg=async(content,id=crypto.randomUUID(),revision)=>{const state=await readChat(db,chat.user);return sendChat(db,chat.user,{id,content,revision:revision??state.state.revision},undefined,opts);};
  const reviewId=crypto.randomUUID();await msg('/review-routing '+chat.connection+' '+zone,reviewId);assert.match((await readChat(db,chat.user)).turns.at(-1).assistant_text,/DNS-only CNAME/);assert.equal(cp.posts,0);
  await msg('/check-dns '+reviewId);assert.equal(cp.posts,0);
- const rev=(await readChat(db,chat.user)).state.revision,id=crypto.randomUUID();await msg('/confirm-dns '+reviewId,id,rev);await msg('/confirm-dns '+reviewId,id,rev);assert.equal(cp.posts,1);assert.equal((await getBilling(db,chat.user)).quota.spent,0);
+ const rev=(await readChat(db,chat.user)).state.revision,id=crypto.randomUUID();await msg('/confirm-dns '+reviewId,id,rev);await msg('/confirm-dns '+reviewId,id,rev);assert.equal(cp.posts,1);assert.equal((await getBilling(db,chat.user)).standardAI.creditCharge,0);
  // AI may only prepare exact server-derived routing. Supplied target or confirmation is rejected.
  const agent=await account(),agp=provider(agent),ai={baseURL:'https://model.invalid/v1',apiKey:'synthetic',model:'synthetic',protocol:'responses'};
  const action={kind:'dns',operation:'routingReview',connectionId:agent.connection,zoneId:zone};
