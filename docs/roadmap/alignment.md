@@ -72,3 +72,7 @@ Run roadmap validation, regenerate the Markdown backlog, confirm exact rendering
 ## Shared identity decision — October 1, 2026
 
 WH-113 now has the source-grounded [workspace identity protocol](../workspace-identity.md), tracked in [issue #42](https://github.com/zemdregon/whumpo/issues/42). It resolves restricted authority, partial recovery, one kit state machine, invitation resumption and compatible migration. WH-114 builds common state/guards with activation off; WH-115 reuses them for restricted recovery. Per-account and global password retirement require both implementations plus reviewed device/cohort evidence. WH-090/105/054/081/083 consume this contract rather than implementing their own session/recovery rules. This is decision evidence only; no deployed policy, schema or credential changed. WH-089 and WH-071 remain independent next contracts.
+
+## Cumulative feature contract — October 1, 2026
+
+WH-089 now supplies the [shared catalogue](../plan-feature-contract.md) in code and presentation. Creator retains `personal`; no grant or provider mapping is rewritten. WH-090 consumes stable feature IDs, current identity and existing invoice coverage rather than creating another entitlement source. WH-105 uses the same IDs for Chat bindings. This closes the early feature-definition handoff; runtime enforcement, delivery and commercial activation remain distinct.

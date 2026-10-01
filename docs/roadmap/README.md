@@ -85,7 +85,7 @@ The first-paid-launch connection set is **GitHub, Cloudflare, Gmail, Google Cale
 | **WH-101–103** | F3 | Pro staging/promotion, portfolio reporting and reviewed bulk changes, using promoted WH-054 plus the compiler, recovery, reporting, bounded work and module-version foundations. |
 | **WH-104** | F3 | Complete tier/provider acceptance against one candidate release, including WH-042 sandbox lifecycle and WH-021 production privacy. Required before WH-047/049. |
 
-All new tasks are P1; WH-089 is planning-ready, the remaining packets planned. Provider implementation can begin with synthetic fixtures when its dependencies are ready. Each large packet must split into contract, implementation and connected acceptance children; provider children additionally record external registration/consent/privacy/cost blockers. New packets are unclaimed, have no execution issues yet and do not claim completed features.
+All new tasks are P1; WH-089 is planning-ready, the remaining packets planned. Provider implementation can begin with synthetic fixtures when its dependencies are ready. Each large packet must split into contract, implementation and connected acceptance children; provider children additionally record external registration/consent/privacy/cost blockers. WH-089 now has catalogue/local-acceptance evidence in issue #44; the remaining extension packets are unclaimed at this checkpoint and do not claim completed features.
 
 Development can proceed in independent slices, but **every selected feature and provider is required before the first paid launch**. Preserve these dependency directions:
 
@@ -150,7 +150,7 @@ The original nine-task foundation queue is historical: WH-001/003/004/006/009/01
 | --- | --- | --- |
 | Completed release foundation | WH-002 / issue #39 | Reuse the verified archive/partial-recovery tooling; [October 1 correction and evidence](../releases.md#archive-input-correction-and-wh-002-acceptance--october-1-2026). Full disaster recovery remains separate. |
 | Evidence and reliability | WH-020 / #9, WH-024 / #10, WH-052 / #11 | Reconcile existing benchmarks, usability and job architecture with their remaining acceptance. |
-| Early shared contracts | WH-113 identity decision delivered; WH-089 tier identifiers and WH-071 logical placement next | Consume the [shared identity contract](../workspace-identity.md); prevent new clients, roles and modules from choosing incompatible foundations. |
+| Early shared contracts | WH-113 identity and WH-089 tier catalogue delivered; WH-071 logical placement next | Consume the [shared identity contract](../workspace-identity.md); prevent new clients, roles and modules from choosing incompatible foundations. |
 | Contract consumers | WH-105 Chat bindings after WH-113/089; WH-116 data classification after WH-113/009/020 | Define shared client and storage boundaries before implementation. |
 | Implementations | WH-090, WH-114/115/117, WH-106/107, WH-067, WH-056 | Follow the exact dependency graph and [cross-workstream sequence](alignment.md). |
 
@@ -313,3 +313,7 @@ This lane can begin alongside current work; it does not wait for all F3–F5 wor
 Native bearer access must preserve current owner/session/recovery authority and browser Origin checks. Process death and lost replies recover immutable receipts before explicit same-ID retries. Models, share intents and notifications cannot approve actions. Real photo use remains gated by existing safety acceptance, and FCM setup/dispatch is separate from the job ADR's local prototype. The contract records dated provider references, unverified account/signing prerequisites and supporting execution/storage costs; no new paid service or schedule is activated here.
 
 Keep full offline synchronization, iOS, customer Android-app generation, full workspace parity and public Play release deferred. Stripe remains sandbox-only; CMS testing stays owner-deferred. Use acceptance-based milestones; set delivery dates only after the identity/API foundation establishes effort. A mock, signed artifact, configured provider and accepted customer journey remain different evidence.
+
+### Cumulative catalogue delivery — October 1, 2026
+
+WH-089 implements the [shared feature catalogue and Creator display rollout](../plan-feature-contract.md), tracked in [issue #44](https://github.com/zemdregon/whumpo/issues/44). Current source/API/UI/Chat use stable feature IDs and cumulative packaging; `personal`, prices, receipts and Stripe mappings remain compatible. Catalogue presentation has source, local acceptance and private-test deployment readback; runtime feature enforcement remains separate. WH-090 consumes this catalogue and existing subscription coverage; WH-105 can now use the shared identity and feature contracts. All individual features/providers and full paid-launch gates retain their acceptance requirements.
