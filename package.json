@@ -6,7 +6,7 @@
     "dev": "node tools/build.mjs && wrangler dev --var ENVIRONMENT:local",
     "db:local": "wrangler d1 migrations apply whumpo-control --local",
     "types": "wrangler types",
-    "check": "node tools/generate-cms-native-schema.mjs --check && node tools/check-specification-compiler.mjs --check && tsc --noEmit && tsc -p tsconfig.frontend.json --noEmit",
+    "check": "node tools/generate-cms-native-schema.mjs --check && node tools/check-specification-compiler.mjs --check && node tools/check-service-client-compiler.mjs --check && tsc --noEmit && tsc -p tsconfig.frontend.json --noEmit",
     "test:specification-compiler": "node tests/specification-compiler.mjs",
     "test:specification-journey": "node tests/specification-journey.mjs",
     "test:smoke": "node tests/smoke.mjs",
@@ -164,7 +164,11 @@
     "setup:github": "node tools/configure-github-app.mjs",
     "test:connection-history-ui": "node tests/connection-history-ui.mjs",
     "test:github-app-setup": "node tests/github-app-setup.mjs",
-    "verify": "node tools/verify.mjs"
+    "verify": "node tools/verify.mjs",
+    "test:service-client-compiler": "node tests/service-client-compiler.mjs",
+    "test:service-client-authority": "node tests/service-client-authority.mjs",
+    "test:service-client-journey": "node tests/service-client-journey.mjs",
+    "test:service-client-activation": "node tests/service-client-activation.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

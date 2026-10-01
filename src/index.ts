@@ -1,6 +1,8 @@
+import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
+import {serviceClientPreview,savedServiceClientPreview} from './project-specification/service-clients/store';
 import {specificationPreview} from './project-specification/store';
 import {acceptsCustomerEligibility,customerEligibilityMessage,customerEligibilityStatement} from './content-policy';
 import {eraseRevokedVisitor} from './app-owner-erasure';
@@ -454,6 +456,12 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const photoMatch=pathname.match(/^\/api\/files\/([0-9a-f-]{36})$/);
   if (photoMatch && method === 'GET') return readPhoto(env,user.id,photoMatch[1]);
   const diffMatch=pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/diff$/);
+  const serviceActivation=pathname.match(/^\/api\/service-client-activations\/([0-9a-f-]{36})\/(preview|diff)$/);
+  if(method==='GET'&&serviceActivation){if(new URL(request.url).search)return error(400,'Use the exact service activation review link.');return serviceClientActivationPreview(env.DB,user.id,serviceActivation[1],serviceActivation[2]==='diff');}
+  const serviceClientReview=pathname.match(/^\/api\/service-client-reviews\/([0-9a-f-]{36})\/(preview|diff)$/);
+  if(method==='GET'&&serviceClientReview){if(new URL(request.url).search)return error(400,'Use the exact service settings review link.');return serviceClientPreview(env.DB,user.id,serviceClientReview[1],serviceClientReview[2]==='diff');}
+  const serviceClientVersion=pathname.match(/^\/api\/service-client-versions\/([0-9a-f-]{36})\/preview$/);
+  if(method==='GET'&&serviceClientVersion){if(new URL(request.url).search)return error(400,'Use the exact saved service settings link.');return savedServiceClientPreview(env.DB,user.id,serviceClientVersion[1]);}
   const specificationReview=pathname.match(/^\/api\/specification-reviews\/([0-9a-f-]{36})\/(preview|diff)$/);
   if(method==='GET'&&specificationReview){if(new URL(request.url).search)return error(400,'Use the exact website review link.');return specificationPreview(env.DB,user.id,specificationReview[1],specificationReview[2]==='diff');}
   if(method==='GET'&&diffMatch){const params=new URL(request.url).searchParams;if([...params.keys()].some(k=>k!=='base')||params.getAll('base').length>1)return error(400,'Choose a single baseline.');return diffPage(await compareVersions(env.DB,user.id,diffMatch[1],params.get('base')??undefined));}
