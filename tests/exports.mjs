@@ -29,7 +29,7 @@ try{
  assert.equal((await send(owner,'/export ../../secrets')).result.status,400);
  const {id:newer}=await send(owner,'/build forest');await send(owner,'download my website');assert.equal((await readChat(db,owner.id)).turns.at(-1).export_version_id,newer);
  assert.equal(strFromU8(unzipSync(new Uint8Array(await(await request('/site-versions/'+version+'/export',owner)).arrayBuffer()))['public/index.html']),original.html);
- assert.equal((await getBilling(db,owner.id)).quota.spent,0);assert.equal((await getBilling(db,owner.id)).quota.reserved,0);
+ assert.equal((await getBilling(db,owner.id)).standardAI.creditCharge,0);assert.equal((await getBilling(db,owner.id)).standardAI.creditCharge,0);
  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM publications WHERE version_id IS NOT NULL').first()).n,0);
  // Follow the version review contract introduced after this export regression test.
  await db.prepare('INSERT INTO version_removals(id,user_id,project_id,version_id,digest,component_id,version_created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)').bind(version,owner.id,original.project_id,version,original.digest,original.component_id,original.created_at,new Date(Date.now()+60000).toISOString()).run();

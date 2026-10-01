@@ -1,88 +1,40 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
-import wrangler from 'wrangler';
-const { getPlatformProxy } = wrangler;
-import { build } from 'esbuild';
-const bundle=await build({entryPoints:['src/billing.ts'],bundle:true,platform:'node',format:'esm',write:false});
-const {getBilling,reserveUsage,dispatchUsage,finishUsage,grantCredits,setOverage,uncertainUsage,getOperation}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
-const directory = await mkdtemp('/tmp/tellumo-billing-');
-execFileSync(process.execPath, ['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',directory], {stdio:'pipe',maxBuffer:16*1024*1024});
-const proxy=await getPlatformProxy({persist:{path:directory+'/v3'},remoteBindings:false});
-const db=proxy.env.DB;
-const hash='a'.repeat(64), uid=crypto.randomUUID();
-async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
-try {
-  const user=await account(), other=await account();
-  let state=await getBilling(db,user);assert.equal(state.quota.available,50);assert.equal(state.credits.overageEnabled,false);
-  const requests=await Promise.allSettled(Array.from({length:15},()=>reserveUsage(db,user,crypto.randomUUID(),hash,5)));
-  const held=requests.filter(r=>r.status==='fulfilled').map(r=>r.value.operation);
-  assert.equal(held.length,10);assert.equal(requests.filter(r=>r.status==='rejected'&&r.reason.status===402).length,5);
-  state=await getBilling(db,user);assert.equal(state.quota.available,0);assert.equal(state.quota.reserved,50);
-  assert.equal((await getBilling(db,other)).quota.available,50);
-  assert.equal(await getOperation(db,other,held[0].id),null);
-  const replay=await reserveUsage(db,user,held[0].id,hash,5);assert.equal(replay.created,false);
-  await assert.rejects(reserveUsage(db,user,held[0].id,'b'.repeat(64),5),{status:409});
-  assert.equal(await dispatchUsage(db,user,held[0].id),true);assert.equal(await dispatchUsage(db,user,held[0].id),false);
-  await Promise.all([finishUsage(db,user,held[0].id,2),finishUsage(db,user,held[0].id,2)]);
-  state=await getBilling(db,user);assert.equal(state.quota.spent,2);assert.equal(state.quota.available,3);
-  await assert.rejects(finishUsage(db,user,held[0].id,3),{status:409});
-  for(const op of held.slice(1))await finishUsage(db,user,op.id,0);
-  await Promise.all([grantCredits(db,user,'test-grant',50,'test'),grantCredits(db,user,'test-grant',50,'test')]);
-  assert.equal((await getBilling(db,user)).credits.available,50);
-  await assert.rejects(reserveUsage(db,user,crypto.randomUUID(),hash,55),{status:402});
-  await setOverage(db,user,true);
-  const op=(await reserveUsage(db,user,crypto.randomUUID(),hash,55)).operation;assert.equal(op.quota_reserved,48);assert.equal(op.credits_reserved,7);
-  await dispatchUsage(db,user,op.id);await finishUsage(db,user,op.id,51);
-  state=await getBilling(db,user);assert.equal(state.quota.spent,50);assert.equal(state.credits.available,47);assert.equal(state.credits.reserved,0);
-  // Available allowance released by one operation must be used before another spends credits.
-  const user2=await account();await grantCredits(db,user2,'test-grant-2',100,'test');await setOverage(db,user2,true);
-  const a=(await reserveUsage(db,user2,crypto.randomUUID(),hash,50)).operation;
-  const b=(await reserveUsage(db,user2,crypto.randomUUID(),hash,20)).operation;
-  await dispatchUsage(db,user2,a.id);await dispatchUsage(db,user2,b.id);await finishUsage(db,user2,a.id,1);await finishUsage(db,user2,b.id,10);
-  state=await getBilling(db,user2);assert.equal(state.quota.spent,11);assert.equal(state.credits.available,100);
-  // An uncertain dispatched call retains its hold; only undispatched holds expire.
-  const start=new Date('2027-01-31T23:59:00.000Z'), later=new Date('2027-02-01T00:10:00.000Z');
-  const x=(await reserveUsage(db,user2,crypto.randomUUID(),hash,10,start)).operation;
-  const y=(await reserveUsage(db,user2,crypto.randomUUID(),hash,10,start)).operation;
-  await dispatchUsage(db,user2,x.id,start);await uncertainUsage(db,user2,x.id);
-  state=await getBilling(db,user2,later);assert.equal(state.quota.available,50);
-  assert.equal((await getOperation(db,user2,y.id)).status,'released');assert.equal((await getOperation(db,user2,x.id)).status,'uncertain');
-  await finishUsage(db,user2,x.id,4,later);assert.equal((await getBilling(db,user2,later)).quota.spent,0);
-  const old=await db.prepare('SELECT spent,reserved FROM usage_periods WHERE user_id=? AND period=?').bind(user2,'2027-01').first();assert.deepEqual(old,{spent:4,reserved:0});
-  await assert.rejects(db.prepare("UPDATE billing_ledger SET credits_delta=999 WHERE user_id=?").bind(user2).run(),/ledger_immutable/);
-  await assert.rejects(db.prepare("DELETE FROM billing_ledger WHERE user_id=?").bind(user2).run(),/ledger_immutable/);
-  // Account deletion can still cascade through its own financial test data.
-  await db.prepare('DELETE FROM users WHERE id=?').bind(user2).run();
-  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM billing_ledger WHERE user_id=?').bind(user2).first()).n,0);
-  const aiBundle=await build({entryPoints:['src/ai-chat.ts'],bundle:true,platform:'node',format:'esm',write:false});
-  const {sendAIChat,reconcileChat}=await import('data:text/javascript;base64,'+Buffer.from(aiBundle.outputFiles[0].text).toString('base64'));
-  async function chatAccount(){const id=await account();await db.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(id).run();return id;}
-  const config={baseURL:'https://example.test/v1',apiKey:'fake-key',model:'fake-model',protocol:'responses'};
-  let calls=0;
-  const provider=async (url,init)=>{calls++;assert.equal(url.pathname,'/v1/responses');assert.ok(JSON.parse(init.body).max_output_tokens<=2048);return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'What should visitors do on your website?',action:null})}]}],usage:{input_tokens:80,output_tokens:200}});};
-  const chatter=await chatAccount(), messageId=crypto.randomUUID();
-  assert.equal((await sendAIChat(db,chatter,messageId,0,'Help plan my website',config,provider)).status,200);
-  assert.equal((await sendAIChat(db,chatter,messageId,0,'Help plan my website',config,provider)).status,200);
-  assert.equal(calls,1);assert.equal((await getBilling(db,chatter)).quota.spent,0);
-  const turn=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(messageId).first();assert.equal(turn.status,'completed');assert.match(turn.assistant_text,/visitors/);
-  const racer=await chatAccount();calls=0;
-  const race=await Promise.all([sendAIChat(db,racer,crypto.randomUUID(),0,'First question',config,provider),sendAIChat(db,racer,crypto.randomUUID(),0,'Second question',config,provider)]);
-  assert.equal(calls,1);assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);assert.equal((await getBilling(db,racer)).quota.reserved,0);
-  const duplicate=await chatAccount(), duplicateId=crypto.randomUUID();calls=0;
-  const conflict=await Promise.all([sendAIChat(db,duplicate,duplicateId,0,'First content',config,provider),sendAIChat(db,duplicate,duplicateId,0,'Different content',config,provider)]);
-  assert.deepEqual(conflict.map(r=>r.status).sort(),[200,409]);assert.equal(calls,1);
-  assert.equal((await getBilling(db,duplicate)).quota.reserved,0);assert.equal((await getBilling(db,duplicate)).quota.spent,0);
-  assert.equal((await db.prepare('SELECT COUNT(*) n FROM usage_operations WHERE user_id=?').bind(duplicate).first()).n,0);
-  const uncertain=await chatAccount(), uncertainId=crypto.randomUUID();let failures=0;
-  const timeout=async()=>{failures++;throw new Error('Simulated disconnect');};
-  await sendAIChat(db,uncertain,uncertainId,0,'Plan a site',config,timeout);
-  await sendAIChat(db,uncertain,uncertainId,0,'Plan a site',config,timeout);
-  assert.equal(failures,1);assert.equal(await getOperation(db,uncertain,uncertainId),null);assert.equal((await db.prepare('SELECT state FROM standard_ai_requests WHERE id=?').bind(uncertainId).first()).state,'uncertain');assert.equal((await getBilling(db,uncertain)).quota.reserved,0);
-  const rejected=await chatAccount(), rejectedId=crypto.randomUUID();
-  await sendAIChat(db,rejected,rejectedId,0,'Plan a site',config,async()=>new Response('rate limited',{status:429}));
-  assert.equal((await getBilling(db,rejected)).quota.reserved,0);assert.equal((await getBilling(db,rejected)).quota.spent,0);
-  assert.equal((await db.prepare('SELECT status FROM chat_turns WHERE id=?').bind(rejectedId).first()).status,'failed');
-  console.log('AI integration checks passed: saved answers, replay without duplicate calls, racing messages, settlement, uncertain disconnects, and no customer charges for standard replies or rejected requests.');
-  console.log('Billing checks passed: concurrent reservations, replay, exact-once settlement/grants, overage opt-in, quota-first settlement, expiry, month rollover, immutable ledger, and owner isolation.');
-} finally {await proxy.dispose(); await rm(directory,{recursive:true,force:true});}
+import {DatabaseSync} from 'node:sqlite';
+import {readFile,readdir} from 'node:fs/promises';
+import {build} from 'esbuild';
+import {paidPlan} from './helpers/paid-plan.mjs';
+const {outputFiles}=await build({stdin:{contents:"export * from './src/billing';export {default as worker} from './src/index';export {hashToken} from './src/security';export {reconcileChat} from './src/ai-chat';export {ensureInferenceBudget} from './src/model-costs';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const {getBilling,ensureBilling,worker,hashToken,reconcileChat,ensureInferenceBudget}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON');
+const db={prepare(q){const bind=p=>({run:async()=>{const r=sql.prepare(q).run(...p);return {meta:{changes:r.changes}};},first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({results:sql.prepare(q).all(...p)})});return {...bind([]),bind:(...p)=>bind(p)};}};
+const retired=['billing_accounts','usage_periods','usage_operations','billing_ledger','credit_grants','plan_grants','checkout_orders','usage_waivers'];
+try{
+ const files=(await readdir('migrations')).filter(f=>f.endsWith('.sql')).sort();
+ for(const f of files.filter(f=>f<'0117'))sql.exec(await readFile('migrations/'+f,'utf8'));
+ const owner=crypto.randomUUID(),other=crypto.randomUUID(),turn=crypto.randomUUID(),now=new Date().toISOString();
+ for(const id of [owner,other])sql.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").run(id,id+'@example.invalid',now);
+ sql.prepare('INSERT INTO billing_accounts(user_id) VALUES(?)').run(owner);
+ sql.prepare("INSERT INTO usage_periods(user_id,period,allowance) VALUES(?,'2026-10',50)").run(owner);
+ sql.prepare("INSERT INTO usage_operations(id,user_id,period,request_hash,quoted_units,quota_reserved,credits_reserved,created_at,updated_at,expires_at) VALUES(?,?,'2026-10',?,10,10,0,?,?,?)").run(turn,owner,'a'.repeat(64),now,now,now);
+ sql.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'Old test','Pending',?,'ai','pending')").run(turn,owner,now);
+ await paidPlan(db,owner,'personal');
+ for(const f of files.filter(f=>f>='0117'))sql.exec(await readFile('migrations/'+f,'utf8'));
+ for(const table of retired)assert.equal(sql.prepare('SELECT name FROM sqlite_schema WHERE name=?').get(table),undefined,table);
+ assert.equal(sql.prepare('SELECT status FROM chat_turns WHERE id=?').get(turn).status,'failed');
+ assert.deepEqual(sql.prepare('PRAGMA foreign_key_check').all(),[]);
+ assert.deepEqual(sql.prepare('SELECT id FROM plan_catalog ORDER BY tier').all().map(r=>r.id),['explore','starter','personal','business','business-pro']);
+ assert.throws(()=>sql.exec("INSERT INTO plan_catalog VALUES('launch',1,3)"),/immutable/);
+ for(const id of ['launch','studio','explore','unknown'])assert.throws(()=>sql.prepare("INSERT INTO stripe_subscription_orders(id,user_id,plan_id,interval,price_id,amount_cents,created_at) VALUES(?,?,?,'month','price_fixture',1700,1)").run(crypto.randomUUID(),owner,id),/current_plan_required/);
+ const b=await getBilling(db,owner);assert.equal(b.plan.id,'personal');assert.equal(b.standardAI.creditCharge,0);assert.deepEqual(Object.keys(b).sort(),['period','plan','standardAI']);assert.equal((await getBilling(db,other)).plan.id,'explore');
+ for(const plan_id of ['launch','studio','unknown','explore'])await assert.rejects(ensureBilling({prepare(){return {bind(){return {all:async()=>({results:[{plan_id}]})}}}}},owner),e=>e.status===409);
+ for(const plan of ['unknown','constructor','toString'])await assert.rejects(ensureInferenceBudget(db,owner,'2026-10',plan),/Unknown inference plan/);
+ const orphan=crypto.randomUUID();sql.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,2,'Missing current receipt','Pending',?,'ai','pending')").run(orphan,owner,now);
+ await assert.rejects(reconcileChat(db,owner),e=>e.status===409);assert.equal(sql.prepare('SELECT status FROM chat_turns WHERE id=?').get(orphan).status,'pending');
+ const token='1'.repeat(64);sql.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await hashToken(token),owner,new Date(Date.now()+60000).toISOString(),now);
+ const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){throw Error('No background work')}};
+ for(const path of ['checkout','preferences']){
+  const r=await worker.fetch(new Request('https://whumpo.com/api/billing/'+path,{method:'POST',headers:{origin:'https://whumpo.com',cookie:'tellumo_session='+token,'content-type':'application/json'},body:JSON.stringify({id:crypto.randomUUID(),product:'credits-100',overageEnabled:true})}),env,ctx);assert.equal(r.status,404,path);
+ }
+ const r=await worker.fetch(new Request('https://whumpo.com/api/billing',{headers:{cookie:'tellumo_session='+token}}),env,ctx);assert.equal(r.status,200);assert(!Object.hasOwn(await r.json(),'creditPack'));
+ console.log('Current billing passed: populated test-state reset, no retired tables/plans/routes, invoice coverage, no customer metering, unknown plan rejection and missing-receipt refusal. Actual handlers + SQLite, no provider calls.');
+}finally{sql.close();}

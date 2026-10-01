@@ -41,6 +41,7 @@ export function archivedConfig(role,base,entry,cms){
 }
 
 export async function prepareRelease(root,driver,review,{git=()=>({commit:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),dirty:!!execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim()})}={}){
+ if(driver.configs.platform.vars?.ENVIRONMENT!=='test')throw Error('Only the test platform may be released');
  const build=await verifyBuildSnapshot(root),before=await driver.observe();
  if(review?.buildInputs!==build.inputs.sha256)throw Error('Compatibility review does not match the current build inputs');
  const migrationFiles=await fileInventory(join(root,'migrations')),migrations=migrationPlan(migrationFiles,before.migrations);

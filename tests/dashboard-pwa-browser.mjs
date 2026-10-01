@@ -67,7 +67,7 @@ try{
  await page.evaluate(async()=>{const registration=await navigator.serviceWorker.ready;const changed=new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));await registration.update();await changed;});
  assert.equal(await page.evaluate(()=>window.__pwaDocument),'preserved');assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).inputValue(),'Synthetic unsent garden note');
  assert.deepEqual(await cacheRows(),cached);assert.equal(errors.length,0,errors.join('\n'));
- for(const table of ['inference_calls','publications','usage_operations','stripe_paid_invoices'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
+ for(const table of ['inference_calls','publications','stripe_paid_invoices'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
  await writeFile('.secrets/pwa-browser.json',JSON.stringify({checkedAt:new Date().toISOString(),manifestErrors:manifest.errors,installabilityErrors:installability.installabilityErrors,caches:cached,mobileWidth:390,offlineRecovery:true,updatePreservesDraft:true,pageErrors:errors,apiRequests:requests.filter(r=>r.path.startsWith('/api/')),scope:'Disposable Chromium/D1, no physical-device or OS-install acceptance'},null,2),{mode:0o600});
  console.log('PWA browser passed: valid/installable manifest, active worker, mobile Settings, explicit install dismissal, offline/reconnect, public-only cache and update preserving unsent draft.');
 }finally{await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

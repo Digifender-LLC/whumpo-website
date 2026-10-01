@@ -84,8 +84,6 @@ GitHub backups: /help backups`,
  billing:`Plans and usage
 /plans shows available plan information; /usage shows usage and allowances.
 /ai-history [PAGE] or “show my AI requests” lists standard requests without using the model. /ai-request REQUEST_ID shows one saved status. These reads never retry work or spend credits.
-/usage-history [PAGE] lists historical test-unit charges and holds separately.
-/credits shows historical credit balances. /credits on and /credits off save the legacy overage preference; neither enables advanced models or charges standard assistance.
 /activity shows recorded workspace activity. /traffic shows recorded public-page requests.
 For operator help, type “request a usage review: ” followed by your explanation. This saves a private request; it does not send external mail or change limits. “Show my usage reviews” reads responses. Review statements and responses stay out of later AI context.
 

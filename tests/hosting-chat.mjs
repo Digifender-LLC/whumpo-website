@@ -40,7 +40,7 @@ try{
  assert.match((await message('/disconnect-hosting '+reviewId)).text,/disconnected/);assert.equal(deletes,2);
  // Cancel an unconfirmed review without any provider mutation.
  const cancel=await message('/review-hosting '+claimId);await message('/disconnect-hosting '+cancel.id);assert.equal(writes,1);assert.equal(deletes,2);
- assert.equal((await getBilling(db,user)).quota.spent,0);
+ assert.equal((await getBilling(db,user)).standardAI.creditCharge,0);
  // A lost chat-claim acknowledgement leaves a durable provisional receipt, but performs no hosting work.
  const lost=crypto.randomUUID(),lossy=new Proxy(db,{get(t,k){if(k==='batch')return async statements=>{await t.batch(statements);throw Error('Lost claim acknowledgement');};const v=t[k];return typeof v==='function'?v.bind(t):v;}});
  await message('/review-hosting '+claimId,lost,undefined,lossy);assert.equal(await db.prepare('SELECT id FROM domain_connections WHERE id=?').bind(lost).first(),null);assert.match((await readChat(db,user)).turns.at(-1).assistant_text,/not yet been saved/);

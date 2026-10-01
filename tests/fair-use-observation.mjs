@@ -1,3 +1,4 @@
+import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -38,17 +39,16 @@ try{
  const readOnly={prepare(sql){assert.match(sql,/^(SELECT|WITH)\b/);return db.prepare(sql);}};
  let report=await fairUseReport(readOnly);assert.equal(report.totals.accounts,2);assert.equal(report.totals.unassessedAccounts,2);assert.equal(report.totals.completedAITurns7d,1);assert.equal(report.totals.observedExportRemovalCycles7d,1);assert.equal(report.mode.mode,'monitor');assert.equal(report.economics.profitMicros,null);
  for(const canary of [owner,other,'example.test','private prompt','private answer',project,version])assert.ok(!JSON.stringify(report).includes(canary));
- assert.equal((await db.prepare('SELECT COUNT(*) n FROM billing_accounts').first()).n,0);
- await db.prepare('INSERT INTO billing_accounts(user_id) VALUES(?)').bind(owner).run();
+
  const period=new Date().toISOString().slice(0,7);
- await db.prepare("INSERT INTO plan_grants(id,user_id,period,plan_id,reference,created_at) VALUES('old-plan',?,'2020-01','business-pro','test-old',?)").bind(owner,created).run();
+ await paidPlan(db,owner,'business-pro',{start:1577836800,end:1580515200});
  assert.equal((await fairUseReport(readOnly,owner)).byPlan.explore.accounts,1);
- await db.prepare("INSERT INTO plan_grants(id,user_id,period,plan_id,reference,created_at) VALUES('new-plan',?,?,'starter','test-current',?)").bind(owner,period,created).run();
+ await paidPlan(db,owner,'starter');
  await db.prepare("WITH RECURSIVE n(i) AS (SELECT 2 UNION ALL SELECT i+1 FROM n WHERE i<100) INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT 'report-turn-'||i,?,i,'private prompt','private answer',?,'ai','completed' FROM n").bind(owner,created).run();
  report=await fairUseReport(readOnly,owner);assert.equal(report.totals.completedAITurns7d,100);assert.equal(report.byPlan.starter.accounts,1);assert.equal(report.totals.observationCandidates,1);assert.equal(report.totals.reviewCandidates,0);assert.equal(report.totals.createdProjects7d,1);assert.equal(report.accountAssessment.mode,'monitor');assert.deepEqual(report.activeRestrictions,[]);
  assert.equal((await fairUseReport(readOnly,other)).totals.completedAITurns7d,0);
  await assert.rejects(fairUseReport(readOnly,crypto.randomUUID()));await assert.rejects(fairUseReport(readOnly,"' OR 1=1"));
- await db.prepare("INSERT INTO plan_grants(id,user_id,period,plan_id,reference,created_at) VALUES('higher-plan',?,?,'business','test-upgrade',?)").bind(owner,period,created).run();
+ await paidPlan(db,owner,'business');
  report=await fairUseReport(readOnly,owner);assert.equal(report.byPlan.business.accounts,1);assert.equal(report.totals.observationCandidates,0);
  await db.prepare('DELETE FROM users WHERE id=?').bind(owner).run();assert.equal(await lifecycle(),null);
  console.log('Operator report passed: read-only queries, no identity/content exposure, current-period highest entitlement, old receipts excluded, Explore not misclassified, aggregate counts not multiplied, owner scoping and missing financial data explicit.');

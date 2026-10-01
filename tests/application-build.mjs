@@ -66,7 +66,7 @@ try{
   const transport=async()=>{modelCalls++;const planId=await fixtureExtensionPlan(db,chatUser,chatProject,chatTurn,'custom.visitor-transition');return Response.json({choices:[{message:{content:JSON.stringify({reply:'Untrusted model assurance',action:{...action(chatProject),planId}})},finish_reason:'stop'}],usage:{prompt_tokens:1000,completion_tokens:200}});};
   const content='Build a private notebook app and test a synthetic note, then prepare my approval.';
   assert.equal((await sendAIChat(db,chatUser,chatTurn,state.revision,content,config,transport,{backendRuntime:service})).status,200);
-  const history=await readChat(db,chatUser);assert.equal(history.turns.at(-1).application_confirmation_id,chatTurn);assert.doesNotMatch(history.turns.at(-1).assistant_text,/Untrusted model assurance/);assert.equal(modelCalls,1);assert.equal(calls-before,1);assert.equal((await getBilling(db,chatUser)).quota.reserved,0);
+  const history=await readChat(db,chatUser);assert.equal(history.turns.at(-1).application_confirmation_id,chatTurn);assert.doesNotMatch(history.turns.at(-1).assistant_text,/Untrusted model assurance/);assert.equal(modelCalls,1);assert.equal(calls-before,1);assert.equal((await getBilling(db,chatUser)).standardAI.creditCharge,0);
   await sendAIChat(db,chatUser,chatTurn,state.revision,content,config,transport,{backendRuntime:service});assert.equal(modelCalls,1);assert.equal(calls-before,1);
   await sendChat(db,chatUser,{id:id(),revision:history.state.revision,content:'/application-build '+chatTurn});assert.equal((await readChat(db,chatUser)).turns.at(-1).application_confirmation_id,chatTurn);assert.equal(calls-before,1);
  }
@@ -86,12 +86,12 @@ try{
   const content=process.env.WELCOME_APP==='1'?'/first-app '+liveProject:'Build a small private notebook app for my existing Private notebook project. Each visitor starts with an empty document. When they submit a note, replace their document with {note: the submitted text} and return "Saved". Generate the backend and check it with the synthetic note "Hello notebook", then show me the approval review. Keep it disabled and unpublished.';
   const response=await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service},process.env.WELCOME_APP==='1');
   const history=await readChat(db,liveUser),last=history.turns.at(-1),billing=await getBilling(db,liveUser);
-  console.log(JSON.stringify({live:true,status:response.status,turnStatus:last?.status,providerCalls,runtimeCalls:calls-before,spent:billing.quota.spent,reserved:billing.quota.reserved,hasApproval:!!last?.application_confirmation_id}));
-  assert.equal(response.status,200);assert.equal(last?.status,'completed');assert.equal(last?.application_confirmation_id,liveTurn,'Natural app request should finish with exact owner review');assert.equal(providerCalls,2);assert.equal(calls-before,1);assert.equal(billing.quota.spent,0);assert.equal(billing.quota.reserved,0);
+  console.log(JSON.stringify({live:true,status:response.status,turnStatus:last?.status,providerCalls,runtimeCalls:calls-before,spent:billing.standardAI.creditCharge,reserved:billing.standardAI.creditCharge,hasApproval:!!last?.application_confirmation_id}));
+  assert.equal(response.status,200);assert.equal(last?.status,'completed');assert.equal(last?.application_confirmation_id,liveTurn,'Natural app request should finish with exact owner review');assert.equal(providerCalls,2);assert.equal(calls-before,1);assert.equal(billing.standardAI.creditCharge,0);assert.equal(billing.standardAI.creditCharge,0);
   assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(liveProject).first()).enabled,0);
   if(process.env.WELCOME_APP==='1'){assert.equal(history.firstDraft,null);assert.equal((await db.prepare('SELECT turn_id FROM welcome_first_drafts WHERE project_id=?').bind(liveProject).first()).turn_id,liveTurn);}
   await sendAIChat(db,liveUser,liveTurn,state.revision,content,config,transport,{backendRuntime:service});assert.equal(providerCalls,2);assert.equal(calls-before,1);
-  const recovered=await sendChat(db,liveUser,{id:id(),revision:history.state.revision,content:'/application-build '+liveTurn});assert.equal(recovered.status,200);assert.equal((await readChat(db,liveUser)).turns.at(-1).application_confirmation_id,liveTurn);assert.equal((await getBilling(db,liveUser)).quota.spent,billing.quota.spent);
+  const recovered=await sendChat(db,liveUser,{id:id(),revision:history.state.revision,content:'/application-build '+liveTurn});assert.equal(recovered.status,200);assert.equal((await readChat(db,liveUser)).turns.at(-1).application_confirmation_id,liveTurn);assert.equal((await getBilling(db,liveUser)).standardAI.creditCharge,billing.standardAI.creditCharge);
  }
  // A supported starter uses pinned platform source and the existing build/review lifecycle.
  const libraryProject=await project(),libraryTurn=await turn(),beforeLibrary=calls;

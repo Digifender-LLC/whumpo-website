@@ -23,7 +23,7 @@ try{
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM site_versions WHERE project_id=?').bind(project).first()).n,1);
  assert.equal((await db.prepare('SELECT status FROM projects WHERE id=?').bind(project).first()).status,'draft');
  const context=await siteContext(db,user);assert.equal(context.projects[0].audience,'Neighbors looking for fresh bread. Private audience note.');assert.equal(context.projects[0].style_notes,'forest');assert.equal((await siteContext(db,other)).projects.length,0);
- assert.equal((await getBilling(db,user)).quota.spent,0);
+ assert.equal((await getBilling(db,user)).standardAI.creditCharge,0);
  const rebuild=await send(user,'/build');assert.equal(JSON.parse((await db.prepare('SELECT config_json FROM site_versions WHERE id=?').bind(rebuild).first()).config_json).theme,'forest');
  await send(user,'/new');await send(user,'Another idea');await send(user,'Another project');await send(user,'/skip');const skipped=await send(user,'/skip');assert.equal(JSON.parse((await db.prepare('SELECT config_json FROM site_versions WHERE id=?').bind(skipped).first()).config_json).theme,'ocean');
  await send(user,'/new');await send(user,'Third idea');const third=await send(user,'Third project');await send(user,'Audience three');const free=await send(user,'Minimal with purple accents');assert.equal(JSON.parse((await db.prepare('SELECT config_json FROM site_versions WHERE id=?').bind(free).first()).config_json).theme,'ocean');assert.equal((await db.prepare('SELECT style_notes FROM projects WHERE id=?').bind(third).first()).style_notes,'Minimal with purple accents');
@@ -37,6 +37,6 @@ try{
  const before=(await readChat(db,user)).state;
  const blocked=await sendChat(db,user,{content:'clay',id:crypto.randomUUID(),revision:before.revision},ai);assert.equal(blocked.status,409);
  assert.equal((await readChat(db,user)).state.brief_stage,'style');assert.equal((await readChat(db,user)).state.revision,before.revision);assert.equal((await db.prepare('SELECT preferred_theme FROM projects WHERE id=?').bind(fourth).first()).preferred_theme,'ocean');
- assert.equal((await getBilling(db,user)).quota.spent,0);
+ assert.equal((await getBilling(db,user)).standardAI.creditCharge,0);
  console.log('Onboarding passed: persisted stages, command interruption, simultaneous replay, private preferences, owner isolation, first draft, saved theme, skip, free-form notes, cancellation and zero inference.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

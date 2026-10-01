@@ -50,7 +50,7 @@ try{
  assert.equal((await chat(owner,'/confirm-photo-delete '+lostReview.id,lossy)).result.status,200);assert.ok(lost);assert.equal((await db.prepare("SELECT COUNT(*) n FROM activity_events WHERE id=?").bind('photo-removal:'+lostFile).first()).n,1);
  // Pending physical deletions count against storage capacity before any new R2 write.
  await db.prepare("WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<500) INSERT INTO file_cleanup(object_key,created_at) SELECT 'fixture-capacity/'||x,? FROM n").bind(new Date().toISOString()).run();await assert.rejects(upload(owner),{status:409});
- assert.equal((await getBilling(db,owner.id)).quota.spent,0);
+ assert.equal((await getBilling(db,owner.id)).standardAI.creditCharge,0);
  await db.prepare('DELETE FROM users WHERE id=?').bind(owner.id).run();assert.equal((await db.prepare('SELECT COUNT(*) n FROM photo_removals WHERE user_id=?').bind(owner.id).first()).n,0);
  console.log('Photo removal passed: owner-only review/confirmation, no mutation before approval, replay tombstones, delayed R2 cleanup, pending-upload orphans, saved-version protection including review races, expiry at commit, lost acknowledgement, storage capacity and account cascade.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

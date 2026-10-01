@@ -12,7 +12,7 @@ const api=await response.json(),byId=id=>api.plans.find(p=>p.id===id);
 assert.deepEqual(api.plans.map(p=>p.id),['explore','starter','personal','business','business-pro']);
 assert.equal(byId('personal').name,'Creator');assert.equal(byId('creator'),undefined);
 assert.deepEqual(api.plans.slice(1).map(p=>[p.monthlyCents,p.annualCents]),[[1700,17000],[3000,30000],[7900,79000],[13900,139000]]);
-assert.equal(api.draft,true);assert.equal(api.checkoutMode,'test');assert.equal(api.checkoutEnabled,false);assert.equal(api.subscriptionsEnabled,false);
+assert.equal(api.draft,true);assert.equal(api.checkoutMode,'test');assert(!Object.hasOwn(api,'checkoutEnabled'));assert(!Object.hasOwn(api,'creditPack'));assert.equal(api.subscriptionsEnabled,false);
 assert.equal(api.featureCatalogue.purpose,'launch-packaging-only');assert.equal(api.featureCatalogue.commercialActivation,false);
 assert.equal(api.featureCatalogue.version,1);
 const features=api.featureCatalogue.features,ids=features.map(f=>f.id);assert.equal(ids.length,new Set(ids).size);
