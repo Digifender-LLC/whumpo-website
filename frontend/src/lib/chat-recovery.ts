@@ -1,6 +1,6 @@
 import {chatControl} from '../../../src/chat-controls';
 import type {ChatRequest} from './chat-delivery';
-export const recoveryKey='whumpo.chat-recovery.v1';
+export const recoveryKey='whumpo.chat-recovery';
 export const draftLifetime=24*60*60*1000;
 const maxText=16000,maxRecord=100000;
 type Store=Pick<Storage,'getItem'|'setItem'|'removeItem'>;
@@ -11,7 +11,7 @@ function request(value:unknown):ChatRequest|null{
  if(!value||typeof value!=='object'||Array.isArray(value))return null;
  const v=value as Record<string,unknown>;
  if(!exact(v,['id','revision','content','action'])||!id(v.id)||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||typeof v.content!=='string'||!v.content.trim()||v.content.length>maxText||v.content!==v.content.trim())return null;
- if('action'in v){const control=chatControl(v.action);if(!control||control.command!==v.content)return null;return {id:v.id,revision:Number(v.revision),content:v.content,action:control.action};}
+ if('action'in v){const control=chatControl(v.action);if(!control||control.label!==v.content)return null;return {id:v.id,revision:Number(v.revision),content:v.content,action:control.action};}
  return {id:v.id,revision:Number(v.revision),content:v.content};
 }
 export function readRecovery(store:Store,owner:string,now=Date.now()):Recovery|null{
@@ -20,7 +20,7 @@ export function readRecovery(store:Store,owner:string,now=Date.now()):Recovery|n
  try{
   if(!id(owner)||raw.length>maxRecord)throw Error('Invalid recovery');
   const v=JSON.parse(raw);
-  if(!v||typeof v!=='object'||Array.isArray(v)||!exact(v,['version','owner','updatedAt','draft','pending'])||v.version!==1||v.owner!==owner||!Number.isSafeInteger(v.updatedAt)||v.updatedAt<0||typeof v.draft!=='string'||v.draft.length>maxText)throw Error('Invalid recovery');
+  if(!v||typeof v!=='object'||Array.isArray(v)||!exact(v,['version','owner','updatedAt','draft','pending'])||v.version!==2||v.owner!==owner||!Number.isSafeInteger(v.updatedAt)||v.updatedAt<0||typeof v.draft!=='string'||v.draft.length>maxText)throw Error('Invalid recovery');
   const pending=v.pending===null?null:request(v.pending);if(v.pending!==null&&!pending)throw Error('Invalid request');
   // Never forget an unresolved operation just because an unsent draft expired.
   const draft=now>=v.updatedAt&&now-v.updatedAt<draftLifetime?v.draft:'';
@@ -34,6 +34,6 @@ export function readRecovery(store:Store,owner:string,now=Date.now()):Recovery|n
 export function writeRecovery(store:Store,owner:string,value:Recovery):void{
  if(!id(owner)||typeof value.draft!=='string'||value.draft.length>maxText||!Number.isSafeInteger(value.updatedAt)||value.updatedAt<0||value.pending!==null&&!request(value.pending))throw Error('Recovery is unavailable');
  if(!value.draft&&!value.pending){store.removeItem(recoveryKey);return;}
- const raw=JSON.stringify({version:1,owner,draft:value.draft,pending:value.pending,updatedAt:value.updatedAt});if(raw.length>maxRecord)throw Error('Recovery is too large');store.setItem(recoveryKey,raw);
+ const raw=JSON.stringify({version:2,owner,draft:value.draft,pending:value.pending,updatedAt:value.updatedAt});if(raw.length>maxRecord)throw Error('Recovery is too large');store.setItem(recoveryKey,raw);
 }
 export function clearChatRecovery(){try{sessionStorage.removeItem(recoveryKey);}catch{/* Storage may be unavailable in this browser. */}}

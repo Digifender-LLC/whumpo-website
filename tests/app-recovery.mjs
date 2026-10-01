@@ -75,7 +75,8 @@ try{
  const pendingText=readyChat.turns.find(t=>t.id===reviewed).assistant_text;
  const forged=[{id:reviewed,user_text:'fixture',assistant_text:pendingText+' Changed',status:'completed'},{id:reviewed,user_text:'fixture',assistant_text:pendingText,status:'pending'},{id:id(),user_text:'fixture',assistant_text:pendingText,status:'completed'}];await appRecoveryChatActions(db,user,forged);assert.ok(forged.every(t=>!t.app_restore_review));
  const foreign=[{id:reviewed,user_text:'fixture',assistant_text:pendingText,status:'completed'}];await appRecoveryChatActions(db,other,foreign);assert.ok(!foreign[0].app_restore_review);
- const expiredRow=await recovery.readAppRestore(db,user,project,expired),expiredTurn={id:id(),user_text:`/app-restore-review ${project} ${expired}`,assistant_text:describeAppRestore(expiredRow),status:'completed'};await appRecoveryChatActions(db,user,[expiredTurn]);assert.equal(expiredTurn.app_restore_review.state,'expired');
+ const expiredRow=await recovery.readAppRestore(db,user,project,expired),expiredTurn={id:id(),user_text:`/app-restore-review ${project} ${expired}`,assistant_text:describeAppRestore(expiredRow),status:'completed'};await appRecoveryChatActions(db,user,[expiredTurn]);assert.equal(expiredTurn.app_restore_review,undefined,'Command text without a saved receipt cannot select a review');
+ await chat(`/app-restore-review ${project} ${expired}`,expiredTurn.id);const expiredSaved=(await readChat(db,user)).turns.find(t=>t.id===expiredTurn.id);assert.equal(expiredSaved.app_restore_review.state,'expired');
  const listing=await chat('/app-recovery '+project);assert.ok(listing.includes(saved));assert.ok(!listing.includes(c.id));
  await assert.rejects(backendAction(db,user,id(),{kind:'backend',operation:'confirmAppRestore',projectId:project,targetId:reviewed}));
  assert.match((await backendAction(db,user,id(),{kind:'backend',operation:'appRestoreReview',projectId:project,targetId:reviewed})).reply,/Status: pending/);

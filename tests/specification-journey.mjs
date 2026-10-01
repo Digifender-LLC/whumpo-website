@@ -6,7 +6,7 @@ import {build} from 'esbuild';
 import {unzipSync,strFromU8} from 'fflate';
 import wrangler from 'wrangler';
 Error.stackTraceLimit=0;
-const bundle=await build({stdin:{contents:"export {default as platform} from './src/index';export {default as host} from './src/site-host';export {hashToken} from './src/security';export {sendChatControl,readChat} from './src/chat';export * from './src/project-specification/store';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const bundle=await build({stdin:{contents:"export {default as platform} from './src/index';export {default as host} from './src/site-host';export {hashToken} from './src/security';export {chatControl} from './src/chat-controls';export {sendChatControl,readChat} from './src/chat';export * from './src/project-specification/store';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].contents).toString('base64'));
 const dir=await mkdtemp('/tmp/whumpo-specification-');
 execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
@@ -49,7 +49,7 @@ async function syntheticProposal(a,request,remainingMs){
 }
 async function preparedConfirmation(a,q){
  const turn=id(),command=`/confirm-specification ${q.id} ${q.proposalDigest} ${q.expectedRevision}`,prepared=await m.applySpecificationCommand(db,a.id,turn,command),revision=(await json(a,'/api/chat')).state.revision;
- return {turn,statements:[db.prepare('INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) VALUES(?,?,?,?,?,?)').bind(turn,a.id,revision+1,command,prepared.reply,now()),...prepared.statements]};
+ return {turn,statements:[db.prepare('INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,?,?,?,?)').bind(turn,a.id,revision+1,m.chatControl({type:'specificationApply',reviewId:q.id,proposalDigest:q.proposalDigest,expectedRevision:q.expectedRevision}).label,prepared.reply,now(),JSON.stringify({type:'specificationApply',reviewId:q.id,proposalDigest:q.proposalDigest,expectedRevision:q.expectedRevision})),...prepared.statements]};
 }
 const served=a=>m.host.fetch(new Request('https://'+a.project+'.whumpo.site/'),{DB:db,FILES:proxy.env.FILES});
 const count=async(table,project)=>Number((await db.prepare(`SELECT count(*) n FROM ${table} WHERE project_id=?`).bind(project).first()).n);
