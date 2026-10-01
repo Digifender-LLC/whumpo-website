@@ -4,7 +4,7 @@
 
 ## Customer flow
 
-**October 1 current source, deployment pending:** new websites are created directly as schema-2 specifications with `project-content@2`. Old page import, `preview`/`edit` action aliases and the private `/new`/`build`/`photo` guided writers are removed. The current onboarding brief and explicitly requested additional-project creation remain supported.
+**October 1 current test deployment:** new websites are created directly as schema-2 specifications with `project-content@2`. Old page import, `preview`/`edit` action aliases and the private `/new`/`build`/`photo` guided writers are removed. The current onboarding brief and explicitly requested additional-project creation remain supported.
 
 1. The agent calls `specification` operation `create` for an owned project with no website, using the current plain-text config and required photo array. The first page, specification, photo references and creation receipt commit together. Creating a new project and its first page uses that same transaction builder.
 2. A later natural-language change reads the saved specification/revision, then proposes `change`. Text, theme, name, ordered sections and approved photo references are supported. The owner opens the private preview and complete before/after comparison.
@@ -34,7 +34,7 @@ Before preview, approval or reopening a review, the server checks ownership, cur
 
 The confirmation turn, workspace revision, immutable site/specification versions, receipt, head and activity event commit in the existing [D1 batch transaction](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch). Database guards recheck owner/project, exact canonical confirmation, candidate/base/target, revisions, expiry, safety holds and quotas **inside the transaction**. A candidate removed after application validation forces an abort; a no-op insert cannot save a success-only reply. Concurrent stale requests cannot both advance the head. A lost acknowledgement is recovered from the original owned turn/receipt without compiling or creating another version.
 
-**October 1 current-source receipt update (deployment pending):** schema 0118 requires canonical typed action JSON on the same confirmation turn, including exact review ID, proposal digest and integer expected revision. Command text cannot satisfy this gate. See [current Chat receipts](natural-language-chat.md#current-receipts-and-plain-language-replies).
+**October 1 current deployed receipt contract:** schema 0118 requires canonical typed action JSON on the same confirmation turn, including exact review ID, proposal digest and integer expected revision. Command text cannot satisfy this gate. See [current Chat receipts](natural-language-chat.md#current-receipts-and-plain-language-replies).
 
 Current compiler/policy code is trusted Worker configuration, checked again on each operation; it is not an editable customer database row. Future module changes need an exact current-version cutover. Both current compiler identities are version 2; older locks reject. Initial creation rechecks owner, pending-turn identity, first-only draft state, current schema/manifest, photo references and known holds inside its transaction. Competing first saves cannot establish two heads or leave orphan versions.
 
@@ -58,7 +58,7 @@ Current source checks passed: both compiler suites (including independent reprod
 
 The connected HTTP/D1 journey verifies current direct creation and reviewed changes, recent-auth/origin/foreign denials, competing HTTP approvals, exact replay, stale/expired/removed-candidate rollback, immutable head/version/receipt retention, byte-exact export/publication, known holds and parent cleanup. Inference interpretation is scripted; compilation, previews and approvals invoke no model.
 
-No remote deployment or obsolete-data reset has occurred for schema 0119. Deploy the current client/platform/site services with 0118/0119 and reset obsolete test drafts/settings under the release protocol. Do not roll out a compatibility reader or translate old approval text. Dated v1 evidence below records earlier behavior only.
+Release `925bb8a8-12b2-44f5-807a-251ab85a5905` deployed the current client and all four Workers with schema 0118/0119. Remote inspection found no obsolete website/specification/service-setting rows to delete; schema 0119 clears retired guided workspace state. Old approval text is not converted. [Current release evidence](current-version-policy.md#current-contract-test-release) records exact versions and the passing live Muse/HTTP first-create → reviewed edit → forward-restore journey, including exact replay and fixture cleanup. Dated v1 evidence below records earlier behavior only.
 
 ## Historical verification and deployment
 
