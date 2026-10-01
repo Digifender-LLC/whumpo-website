@@ -2,6 +2,8 @@
 
 **WH-113 decision, amended for current-only test cutovers October 1, 2026. Source reviewed: `d4153985b7350d0a3f3e96e7fa01cb77486ea3e0`. Contract only; not an implemented or activated authentication change.** [Issue #42](https://github.com/zemdregon/whumpo/issues/42) owns execution evidence. WH-114/115 implement this contract; WH-005 supplies web/device acceptance and WH-083/087 native implementation/acceptance.
 
+The isolated [authority foundation](identity-authority.md) now implements the current principal/schema/committing guard under #70. Verified ceremonies, kits, connected UI and the coordinated test cutover remain open under #68/#69/#71/#72; current authentication is not switched by that foundation.
+
 This specifies the accepted [identity policy](roadmap/identity-and-data-protection.md) for owners and future workspace members. Web, Android, feature entitlements and Chat consume the same server authority. Application visitors retain [their separate identity](app-data.md); customer origins never gain workspace authority. Account recovery does not recover future client-encrypted content keys.
 
 ## Source inventory and changes required
