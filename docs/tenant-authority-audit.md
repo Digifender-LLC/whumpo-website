@@ -1,6 +1,6 @@
 # Tenant and privileged-action authority audit
 
-**WH-004 · October 1, 2026 · source audit complete; A1 fixed and locally verified; A2/A3 remain open.**
+**WH-004 · October 1, 2026 · source audit complete; A1 fixed, locally verified and deployed to private test; A2/A3 remain open.**
 
 This is the consolidated authority map for source commit `a34a13171a768097b6bb80a548363dd7ab7e8659`. It complements the [security decision register](security-risk-actions.md), [acceptance gates](acceptance.md) and [roadmap issue](https://github.com/zemdregon/whumpo/issues/5). It is not a claim of exhaustive security or live acceptance.
 
@@ -102,3 +102,5 @@ Before the fix, `tests/owner-credential-authority.mjs` reproduced ten stale-requ
 WH-004 remains open for A2/A3. The sealed scan and its historical results above are unchanged; these focused regressions establish only A1's corrected boundary. Deployment evidence is recorded in [owner recovery](owner-recovery.md).
 
 Additional verification passed: `node tests/owner-recovery-concurrency.mjs`, `node tests/owner-passkeys-http.mjs`, `pnpm --config.verify-deps-before-run=false run check`, and `pnpm --config.verify-deps-before-run=false run build`. The fixture suites used separate temporary homes and disposable D1; the pnpm flag prevents dependency reinstallation against the shared module directory. Roadmap validation, generated-backlog and whitespace checks passed. No CMS functional test ran.
+
+A1 deployment is now verified: [PR #33](https://github.com/zemdregon/whumpo/pull/33), release `4c4be7bc-1354-4e05-b4f1-533bd6f92b79`; [exact versions and verification scope](owner-recovery.md#a1-test-release). The source audit snapshot remains unchanged.
