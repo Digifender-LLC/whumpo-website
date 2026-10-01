@@ -32,3 +32,18 @@ The inventory distinguishes actual runtime paths from historical text and curren
 For remaining entries, use the actual current handler and schema boundaries: retired identifiers must reject, new project creation must directly produce a current specification, typed actions must retain exact review checks, and current operation retries must not duplicate effects. Test resets may discard obsolete fixtures. Re-run only the focused suites for the touched path. Record deployment source/version separately; local success does not establish that the test site has changed.
 
 **First source slice verified — October 1:** `node tests/current-interfaces.mjs`, `node tests/chat-recovery.mjs`, `node tests/chat-recovery-profile.mjs`, `pnpm --config.verify-deps-before-run=false run check` and `pnpm --config.verify-deps-before-run=false run build` passed. Roadmap validation/alignment/render checks and diff checks passed. The profile test uses actual handlers with disposable SQLite; interface responses are synthetic. DNS fixtures now import the current export, with no DNS/provider call in this verification. Deployment and the remaining inventory are still pending under the open parent issue.
+
+## Current billing and release policy — October 1, 2026
+
+Source `75e41ff` removes retired Launch/Studio admission, old test-credit checkout/preferences, calendar grants, metered Chat settlement/recovery, legacy billing UI/history, and their operator cleanup paths. Current subscription invoices determine paid coverage; missing coverage is explicitly Explore, while unknown coverage is an error. Standard AI keeps zero customer credit charge and its own current receipts. Reset `0117_current_billing.sql` discards eight obsolete test tables and retired plan fixtures. It does not translate them into current receipts.
+
+Release preparation now accepts only current version-2 reviews for `ENVIRONMENT=test`. Destructive test resets require the explicit reset review; older review/restore fields reject. Uncertain provider outcomes, immutable archive checks and exact current service/secret boundaries remain enforced.
+
+Local acceptance passed:
+
+- Both TypeScript projects and the frontend build.
+- `billing`, `checkout`, `plan-catalogue`, `billing-ui`, `ai`, `current-interfaces`, `frontend-loading`, and `release-manifest` checks. The billing test resets populated obsolete SQLite state through actual schema/handlers; checkout checks retired event nonfulfillment and current signature/configuration gates.
+- Credential-free local D1 suites: `subscriptions`, `plan-periods`, `standard-ai-usage`, `standard-ai-chat`, `standard-ai-recovery`, `standard-ai-history`, `model-costs`, `fair-use-observation`, `fair-use-reviews`, `agent-inspection`, `workspace-read`, `customer-site-journey`, `site-agent`, and `first-ai-journey`.
+- Lifecycle catalogue, account-closure inventory, maintenance inventory, roadmap validation/alignment/render consistency, 1,817 local Markdown file targets, and diff checks.
+
+The agent fixture now uses a current synthetic photo clearance and 64-character digest. This is fixture maintenance, not scanner implementation or live detection acceptance. No model/provider call, real charge, customer publication or CMS functional test was part of these local checks. Deployment evidence follows separately.
