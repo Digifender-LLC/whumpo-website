@@ -100,7 +100,7 @@ New guest comments, lead/brand data, connector-derived content, staging and vect
 
 This map was checked against the mounted route families in `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/app-gateway.ts`, the referenced source, scan/screening/evidence call sites, and relevant migrations 0098–0113. Source-path/link checks accompany the change. The agent's platform knowledge now names the coverage gaps and current hold boundaries explicitly, and cites this coverage map alongside the existing feature contracts. No detector, paid provider, customer endpoint, migration or customer data is added by this reconciliation. CMS functional and real-provider safety testing remain outside it.
 
-On October 1, 2026 UTC, `pnpm check`, `pnpm build`, the three local suites below, roadmap validation/render checks, all 67 local references in these safety documents and `git diff --check` passed. The expanded contact test initially reached the missing-Turnstile configuration guard (503); inert test bindings now let GET/HEAD/POST reach the intended held-service refusal (404), without a provider request. No server guard was relaxed.
+On October 1, 2026 UTC, `pnpm check`, `pnpm build`, the three local suites below, roadmap validation/render checks, all 68 local references in these safety documents and `git diff --check` passed. The expanded contact test initially reached the missing-Turnstile configuration guard (503); inert test bindings now let GET/HEAD/POST reach the intended held-service refusal (404), without a provider request. No server guard was relaxed.
 
 Verification separates existing evidence from this recheck:
 
@@ -112,3 +112,9 @@ Verification separates existing evidence from this recheck:
 | `tests/natural-chat.mjs` | Natural-language messages, exact human controls, owned knowledge lookup and all cited knowledge source paths | Guidance accuracy is manually reconciled with this map; guidance itself cannot enforce safety |
 
 Missing checks remain implementation work. Completion of WH-010 records a current source map and handoff; it does not close WH-011–017 or claim readiness for unrestricted customer beta.
+
+## Private test deployment — October 1, 2026 UTC
+
+The corrected agent safety guidance from `3417ea2` is deployed in managed release `20d37ba0-fca6-4003-a9c8-280f2b23edff`. Readback at 2026-10-01T02:22:44.177Z confirmed all four candidate versions, unchanged service/secret-binding names and CMS registrations, 113 applied migrations with none pending, all 16 platform assets, home/health 200 and anonymous Chat/profile 401. The only runtime source difference from the preceding release is `src/agent-knowledge.ts`; no safety gate, route, compiler, provider or schema changed. Exact versions and mixed-release scope are recorded in [releases](releases.md#safety-knowledge-release--october-1-2026-utc).
+
+The private archive and `.secrets/safety-release-verification.json` retain detailed evidence. This is release/readback verification plus the local fixture acceptance above, not a real-model moderation evaluation or detector acceptance. WH-011–017 remain open work.

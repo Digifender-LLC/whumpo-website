@@ -97,3 +97,18 @@ Interrupted release `ddd4bab3-27a3-4aee-9c87-34fc9ab33bbf` and its original jour
 ## Service-settings release — September 30, 2026
 
 Managed release `03b74965-16b8-4a41-8848-33cb1e21867f` completed schema → runtime → apps → sites → platform without repair/retry. It pins source `6740b4c` and migrations 0112/0113. Independent readback confirms 113 migrations, four matching candidate versions, unchanged service/secret-binding name inventories, 48 new/replaced migration objects, all 16 frontend assets and authentication boundaries. The previous 111-migration release remains the historical baseline above. [Exact version IDs, mixed-Worker review and local/live application acceptance](project-service-clients.md#test-release--september-30-2026) are in the feature contract. No new paid resource, customer publication, provider route or CMS activation occurred. The private archive records the generated visitor bundle's path-comment differences and shared dependency symlink as checkout dirtiness, with committed application source and exact compiled bytes retained. This is not a disaster-recovery drill.
+
+## Safety knowledge release — October 1, 2026 UTC
+
+Managed release `20d37ba0-fca6-4003-a9c8-280f2b23edff` deploys source `3417ea2`. The only runtime source difference from `6740b4c` is the safety reference guidance and its version in `src/agent-knowledge.ts`; service contracts, routes, schedules, bindings, compiler identities and schema are unchanged. Mixed old/new Workers are compatible. The archived no-SQL review pins the current build; all 113 migrations were already applied. Runtime → apps → sites → platform completed without repair/retry.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `32b4c263-ff2d-4ecd-8d89-92d1c9892f71` |
+| apps | `41afcc1d-2af8-44c0-9ebd-b9db0e6635d6` |
+| sites | `c9636442-d5f0-44f6-9a1b-9b0aa36131a0` |
+| platform | `65dd6c82-3ad4-4b0e-a6f1-cdfe3cfce131` |
+
+Independent readback at 2026-10-01T02:22:44.177Z confirmed candidate tags, service targets and secret-binding names, unchanged empty CMS registrations, 113 applied migrations, all 16 exact platform assets, home/health 200 and anonymous Chat/profile 401. Evidence is retained privately in `.secrets/safety-release-verification.json` and the immutable release archive. Its dirty flag covers the dependency symlink and generated visitor dependency-path comments; application source was committed before preparation.
+
+The [safety coverage contract](safety-coverage.md) records type/build checks and three local synthetic suites. Deployment makes the corrected guidance available to Chat; it does not connect a scanner, accept real-model safety behavior, activate a provider, run CMS functional tests or publish customer content.
