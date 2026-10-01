@@ -1,3 +1,5 @@
+import {clearChatRecovery} from './lib/chat-recovery';
+import {saveWelcomeProfile,saveWelcomeProgress,finishWelcome,type WelcomeDraft as Draft,type Welcome} from './lib/welcome-delivery';
 import {useEffect,useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
@@ -9,9 +11,7 @@ import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';
 import {Label} from './components/ui/label';
 import {ProfilePicturePicker,profilePicture,avatarChoices} from './profile-picture-picker';
-import {welcomePrompts,welcomeStage,firstWelcomePrompt,type WelcomePrompt,type WelcomeStage} from '../../src/welcome-prompts';
-type Draft={revision:number;stage:WelcomeStage;prompt?:WelcomePrompt;project_name:string;idea:string;audience:string;preferred_theme:string};
-type Welcome={complete:boolean;state?:Draft};
+import {welcomePrompts,welcomeStage,firstWelcomePrompt,type WelcomePrompt} from '../../src/welcome-prompts';
 const themes=[['ocean','Fresh & bright','#60B5FF'],['clay','Warm & cozy','#e7ab89'],['forest','Calm & natural','#78b9a1']] as const;
 export function Onboarding({profile}:{profile:Profile}){
  const state=useQuery({queryKey:['onboarding'],queryFn:()=>api<Welcome>('/onboarding')});
@@ -22,11 +22,13 @@ export function Onboarding({profile}:{profile:Profile}){
 }
 function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  const [draft,setDraft]=useState(initial),[name,setName]=useState(profile.name),[bio,setBio]=useState(profile.about_me),[share,setShare]=useState(!!profile.share_context),[busy,setBusy]=useState(false),[photoBusy,setPhotoBusy]=useState(false),[error,setError]=useState(''),[returnToReview,setReturnToReview]=useState(false);
- const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),mounted=useRef(false),lock=useRef(false);
+ const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),mounted=useRef(false),lock=useRef(false),errorPanel=useRef<HTMLDivElement>(null);
  const prompt=draft.prompt??firstWelcomePrompt(draft.stage),index=welcomePrompts.indexOf(prompt),chapter=['profile','project','review'].indexOf(welcomeStage(prompt)),waiting=busy||photoBusy;
  useEffect(()=>{if(mounted.current){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'center',behavior:'instant'});}mounted.current=true;},[prompt]);
+ useEffect(()=>{if(error){const panel=errorPanel.current;if(panel&&(document.activeElement===document.body||panel.closest('form')?.contains(document.activeElement)))panel.focus();}},[error]);
  async function persist(nextPrompt:WelcomePrompt){
-  const next=await send<Welcome>('/onboarding',{revision:draft.revision,stage:welcomeStage(nextPrompt),prompt:nextPrompt,project_name:draft.project_name,idea:draft.idea,audience:draft.audience,preferred_theme:draft.preferred_theme},'PUT');
+  const input={revision:draft.revision,stage:welcomeStage(nextPrompt),prompt:nextPrompt,project_name:draft.project_name,idea:draft.idea,audience:draft.audience,preferred_theme:draft.preferred_theme};
+  const next=await saveWelcomeProgress(input,()=>send<Welcome>('/onboarding',input,'PUT'),()=>api<Welcome>('/onboarding'));
   if(next.complete){await queryClient.invalidateQueries({queryKey:['session']});return;}
   if(next.state)setDraft(next.state);
  }
@@ -34,13 +36,13 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  async function proceed(){await action(async()=>{
   if(prompt==='name'){
    if(!name.trim())throw Error('What should we call you?');
-   queryClient.setQueryData(['session'],await send<Profile>('/profile',{revision:profile.revision,name:name.trim()},'PATCH'));
+   const changes={name:name.trim()};queryClient.setQueryData(['session'],await saveWelcomeProfile(profile,changes,()=>send<Profile>('/profile',{revision:profile.revision,...changes},'PATCH'),()=>api<Profile>('/profile')));
   }
-  if(prompt==='bio')queryClient.setQueryData(['session'],await send<Profile>('/profile',{revision:profile.revision,about_me:bio.trim(),share_context:share},'PATCH'));
+  if(prompt==='bio'){const changes={about_me:bio.trim(),share_context:share};queryClient.setQueryData(['session'],await saveWelcomeProfile(profile,changes,()=>send<Profile>('/profile',{revision:profile.revision,...changes},'PATCH'),()=>api<Profile>('/profile')));}
   if(prompt==='idea'&&!draft.idea.trim())throw Error('Tell me a little about what you’d like to make.');
   if(prompt==='project-name'&&!draft.project_name.trim())throw Error('Give your project a working name. You can change it later.');
   if(prompt==='review'){
-   await send('/onboarding/complete',{revision:draft.revision});
+   await finishWelcome(()=>send<Welcome>('/onboarding/complete',{revision:draft.revision}),()=>api<Welcome>('/onboarding'));
    await navigate({to:'/workspace',search:{signup:false}});
    queryClient.setQueryData(['session'],await api<Profile>('/profile'));
    void queryClient.invalidateQueries({queryKey:['chat']});void queryClient.invalidateQueries({queryKey:['dashboard']});
@@ -62,7 +64,7 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  const optional=prompt==='bio'||prompt==='audience'||prompt==='style';
  const nextLabel=prompt==='review'?'Start my project':returnToReview?'Save and review':prompt==='picture'?'Use this picture':prompt==='bio'&&!bio.trim()||prompt==='audience'&&!draft.audience.trim()?'Skip for now':prompt==='style'?'Use this starting feel':'Continue';
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-xl">
-  <div className="flex items-center justify-between gap-4"><Brand/><Button variant="ghost" className="min-h-11" disabled={waiting} onClick={()=>void action(async()=>{await send('/auth/logout');queryClient.clear();location.assign('/workspace');})}>Sign out</Button></div>
+  <div className="flex items-center justify-between gap-4"><Brand/><Button variant="ghost" className="min-h-11" disabled={waiting} onClick={()=>void action(async()=>{await send('/auth/logout');clearChatRecovery();queryClient.clear();location.assign('/workspace');})}>Sign out</Button></div>
   <ol aria-label="Welcome progress" className="mt-8 mb-6 flex gap-3">{['About you','Your first idea','Ready to begin'].map((label,i)=><li key={label} aria-current={chapter===i?'step':undefined} className="flex-1"><div className={'h-1.5 rounded-full mb-2 '+(i<=chapter?'bg-primary':'bg-muted')}/><span className={'text-xs '+(i===chapter?'font-semibold':'text-muted-foreground')}>{label}</span></li>)}</ol>
   <p className="text-xs text-muted-foreground mb-6">Guided welcome · no AI usage · answers save when you continue</p>
   {answered.length>0&&prompt!=='review'&&<details key={'answers-'+prompt} className="mb-6 rounded-2xl border bg-card px-4"><summary className="cursor-pointer py-3 text-sm font-medium min-h-11">Your answers so far <span className="text-muted-foreground">({answered.length})</span></summary><dl className="pb-3 space-y-3">{answered.map(row=><div key={row.prompt} className="flex items-start justify-between gap-3"><div className="min-w-0"><dt className="text-xs text-muted-foreground">{row.label}</dt><dd className="text-sm whitespace-pre-wrap break-words line-clamp-3">{row.value}</dd></div><Button type="button" variant="ghost" className="min-h-11 shrink-0" disabled={waiting} onClick={()=>go(row.prompt)} aria-label={'Edit '+row.label.toLowerCase()}>Edit</Button></div>)}</dl></details>}
@@ -79,7 +81,7 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
     {prompt==='review'&&<><div className="flex items-center gap-3"><img src={profilePicture(profile)} alt="Your profile picture" className="size-12 rounded-full object-cover"/><div className="min-w-0"><p className="font-semibold break-words">{profile.name}</p><p className="text-xs text-muted-foreground">{profile.share_context?'Name and bio shared with your agent':'Name and bio kept out of AI context'}</p></div></div><dl className="space-y-3 border-t pt-3">{answerRows.filter(row=>row.prompt!=='picture'&&row.prompt!=='name').map(row=><div key={row.prompt} className="flex items-start justify-between gap-3"><div className="min-w-0"><dt className="text-xs text-muted-foreground">{row.label}</dt><dd className="mt-1 text-sm whitespace-pre-wrap break-words">{row.value}</dd></div><Button type="button" variant="ghost" className="min-h-11 shrink-0" disabled={waiting} onClick={()=>go(row.prompt,true)} aria-label={'Edit '+row.label.toLowerCase()}>Edit</Button></div>)}</dl><div className="flex flex-wrap gap-x-5"><Button type="button" variant="link" className="min-h-11 p-0" disabled={waiting} onClick={()=>go('name',true)}>Edit name</Button><Button type="button" variant="link" className="min-h-11 p-0" disabled={waiting} onClick={()=>go('picture',true)}>Edit picture</Button></div></>}
    </div>
    {prompt==='review'&&<div className="flex gap-3 text-sm text-muted-foreground"><Check className="size-5 shrink-0 text-primary"/><p>Your project starts private. No domain, paid service, or publication is created. You can change these details later.</p></div>}
-   {error&&<div role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm space-y-2"><p>{error}</p><Button type="button" variant="link" className="p-0 min-h-11 h-auto whitespace-normal text-left" disabled={waiting} onClick={()=>location.reload()}>Discard unsaved changes and reload</Button></div>}
+   {error&&<div ref={errorPanel} tabIndex={-1} role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm space-y-2"><p>{error}</p><p>Your answer is still here. Reloading replaces it with your saved details.</p><Button type="button" variant="link" className="p-0 min-h-11 h-auto whitespace-normal text-left" disabled={waiting} onClick={()=>location.reload()}>Discard unsaved changes and reload</Button></div>}
    <div className="flex gap-3">{index>0&&<Button type="button" variant="outline" className="min-h-12 min-w-12 rounded-xl" disabled={waiting} onClick={()=>go(welcomePrompts[index-1])} aria-label="Previous welcome question"><ArrowLeft className="size-4"/></Button>}<Button className="flex-1 min-h-12 rounded-xl" disabled={waiting} type="submit">{busy?'Saving…':nextLabel}{prompt==='review'?<Sparkles className="size-4"/>:<ArrowRight className="size-4"/>}</Button></div>
    {optional&&<p className="text-xs text-center text-muted-foreground">You can change this in your {prompt==='bio'?'profile':'project details'} later.{prompt==='style'&&<> <Button type="button" variant="link" className="text-xs min-h-11" disabled={waiting} onClick={()=>go('review')}>Skip for now</Button></>}</p>}
   </form>
