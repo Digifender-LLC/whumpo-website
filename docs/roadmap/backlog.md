@@ -1385,6 +1385,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/use-chat-recovery.ts](../../frontend/src/use-chat-recovery.ts)
 - [tests/chat-recovery.mjs](../../tests/chat-recovery.mjs)
 - [tests/chat-recovery-profile.mjs](../../tests/chat-recovery-profile.mjs)
+- [frontend/src/lib/welcome-delivery.ts](../../frontend/src/lib/welcome-delivery.ts)
+- [tests/welcome-delivery.mjs](../../tests/welcome-delivery.mjs)
+- [tools/owner-journey-browser.mjs](../../tools/owner-journey-browser.mjs)
+- [docs/onboarding.md](../../docs/onboarding.md)
 
 ### Execution coordination
 
@@ -1396,6 +1400,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/10. Planning owner: Unassigned
 - 2026-10-01 UTC test release 02370893-1c87-419d-ad49-9162ddb0f135 from source 524cf00: all four versions, 113 applied migrations / none pending, unchanged bindings/CMS registry, 16 exact assets, home/workspace/health 200 and anonymous Chat/profile 401 verified. Interactive UI checks used synthetic loopback APIs. PR #23 delivers this slice; complete journey, real assistive-technology/device acceptance and full reload persistence remain open in issue #10.
 - 2026-10-01 UTC: account-bound per-tab draft and exact unresolved-request persistence now survives reload. Synthetic browser verifies accepted-response loss without resending, pre-acceptance loss with explicit exact-ID retry, account switching and sign-out cleanup at desktop/390 px; focused storage/API/delivery tests and types/build/loading checks pass. See the superseding reload-recovery section in docs/workspace-refinement-acceptance.md. Complete journey, actual screen-reader/device acceptance remain open. Deployment recorded separately.
 - 2026-10-01T03:32:00.755Z: test release dfd7f653-d7ec-483d-b54d-ec089f093edc from 272e3d7 verified: four versions/tags, 113 migrations and none pending, unchanged bindings/CMS registry, 16 exact assets, matching workspace HTML, home/workspace/health 200 and anonymous Chat/profile 401. PR #24; interactive recovery acceptance used synthetic APIs. Full journey, actual screen-reader speech and physical phones remain open.
+- 2026-10-01 UTC: connected actual-handler/disposable-D1 owner journey with scripted inference reproduced and corrected lost-response welcome saves, avatar/error focus and review wording. Natural Chat created/edited private drafts and opened preview/review; unshared bio excluded. Trial/contact/payment unavailability inspected. See connected-owner-journey evidence in docs/workspace-refinement-acceptance.md; real invitation/passkeys, screen-reader speech and physical devices remain open. Deployment recorded separately.
 
 # F2 — Useful websites and applications
 

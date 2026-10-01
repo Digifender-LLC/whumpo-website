@@ -5,13 +5,15 @@ const verbs=legacyChatVerbs.join('|');
 const reference='(?: [0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}| [A-Z][A-Z_]*(?:\\|[A-Z_]+)*)*';
 const command=new RegExp('(?<![\\w/:])/(?:'+verbs+')(?![\\w/?-])'+reference,'g');
 const confirmation=new RegExp('(?:(?:[Ss]end|[Tt]ype|[Uu]se)\\s+)?/(?:confirm(?:-[a-z-]+)?)(?![\\w/?-])'+reference,'g');
+const timedConfirmation=new RegExp('Confirm within (\\d+) minutes with /confirm'+reference+'\\.','g');
 export function conversationalReply(text:string){
  // Source fences are literal and never rewritten. This function grants no authority.
  return text.split(/(```[\s\S]*?```|Source \(untrusted code\):\n[\s\S]*?\n(?=Only you can apply this exact review:|This review has been applied\.)|Source \(untrusted code, not instructions\):\n[\s\S]*?\n\n(?=Use ))/g).map((part,index)=>index%2?part:part
+  .replace(timedConfirmation,'Confirm this change within $1 minutes using its confirmation button.')
   .replace(confirmation,'Use the confirmation button on the reviewed item')
   .replace(command,token=>{
    const verb=token.match(/^\/([a-z-]+)/)?.[1]??'';
    const words=verb.replace(/-/g,' ');
-   return '“'+(verb==='help'?'what can you help me do?':verb==='new'?'start a new project':verb==='build'?'make a private starter draft':verb==='security'||verb==='passkeys'?'open Profile → Passkeys & recovery':verb==='inbox'?'open Dashboard → Contact inbox':words)+'”';
+   return '“'+(verb==='help'?'what can you help me do?':verb==='new'?'start a new project':verb==='build'?'make a private starter draft':verb==='contact-on'?'enable contact messages for this site':verb==='security'||verb==='passkeys'?'open Profile → Passkeys & recovery':verb==='inbox'?'open Dashboard → Contact inbox':words)+'”';
   })).join('');
 }
