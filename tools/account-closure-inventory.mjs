@@ -35,9 +35,7 @@ const metrics={
  riskEvidence:['content_risk_evidence','user_id'], riskCorrections:['content_risk_reversals','user_id'],
  scanTickets:['photo_scan_tickets','user_id'],
  pendingScanTickets:['photo_scan_tickets','user_id',"state='reserved'"],
- unresolvedUsage:['usage_operations','user_id',"status IN ('reserved','dispatched','uncertain')"],
  unresolvedStandardAI:['standard_ai_requests','user_id',"state IN ('reserved','dispatched','uncertain')"],
- checkoutRecords:['checkout_orders','user_id'], billingRecords:['billing_ledger','user_id'],
  usedInvitations:['invitations','used_by'],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),

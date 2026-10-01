@@ -15,7 +15,7 @@ try{
  await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();
  await db.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(user).run();
  await getBilling(db,user);
- await db.prepare('UPDATE usage_periods SET allowance=0 WHERE user_id=?').bind(user).run();
+
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Synthetic Bakery','A fictional bakery test project','draft',?,?)").bind(project,user,now,now).run();
  const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:(await readFile('opencode.key','utf8')).trim(),protocol:'responses'};
  let calls=0;const transport=(...args)=>{calls++;return fetch(...args);};
@@ -27,9 +27,9 @@ try{
  const tab=saved.layout.tabs[0];assert.equal(tab.label,'Bakery overview');assert.equal(tab.projectId,project);
  assert.deepEqual(new Set(tab.shortcuts),new Set(['project','versions']));assert.deepEqual(saved.layout.widgets,['projects','usage','activity']);
  const beforeReplay=calls;await sendAIChat(db,user,turn,0,request,config,transport);assert.equal(calls,beforeReplay);assert.deepEqual(await readLayout(db,user),saved);
- const spent=(await getBilling(db,user)).quota.spent;assert.equal(spent,0);assert.equal((await db.prepare('SELECT state FROM standard_ai_requests WHERE id=?').bind(turn).first()).state,'completed');assert.equal((await db.prepare('SELECT COUNT(*) n FROM usage_operations WHERE user_id=?').bind(user).first()).n,0);
+ const spent=(await getBilling(db,user)).standardAI.creditCharge;assert.equal(spent,0);assert.equal((await db.prepare('SELECT state FROM standard_ai_requests WHERE id=?').bind(turn).first()).state,'completed');assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  for(const kind of tab.shortcuts){const state=await readChat(db,user),content=shortcutCommand(kind,tab.projectId),id=crypto.randomUUID();assert.ok(content);const result=await sendChat(db,user,{id,revision:state.state.revision,content},config);assert.equal(result.status,200);const receipt=await db.prepare('SELECT mode,assistant_text FROM chat_turns WHERE id=?').bind(id).first();assert.equal(receipt.mode,'guided');assert.match(receipt.assistant_text,kind==='project'?/Synthetic Bakery/:/version|draft/i);}
- assert.equal((await getBilling(db,user)).quota.spent,spent);
+ assert.equal((await getBilling(db,user)).standardAI.creditCharge,spent);
  for(const table of ['publications','site_versions'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
  console.log(JSON.stringify({passed:true,model:config.model,calls,inputTokens:record.input_tokens,outputTokens:record.output_tokens,testUnits:spent,requestedShortcuts:tab.shortcuts,replayCalls:0,shortcutInference:false,publications:0}));
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

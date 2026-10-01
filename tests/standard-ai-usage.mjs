@@ -29,7 +29,7 @@ try{
  const cancelled=crypto.randomUUID();await reserveStandardAI(db,user,cancelled,hash);await cancelStandardAI(db,user,cancelled);await cancelStandardAI(db,user,cancelled);assert.equal(await dispatchStandardAI(db,user,cancelled),false);
  const racing=crypto.randomUUID();await reserveStandardAI(db,user,racing,hash);const race=await Promise.allSettled([dispatchStandardAI(db,user,racing),cancelStandardAI(db,user,racing)]);const final=await readStandardAI(db,user,racing);assert.ok(['dispatched','released'].includes(final.state));assert.equal(race[0].value,final.state==='dispatched');assert.equal(race[1].status,final.state==='released'?'fulfilled':'rejected');
  // Even without any billing account or allowance, standard receipts complete without charging.
- for(const table of ['billing_accounts','usage_periods','usage_operations','billing_ledger','credit_grants','inference_calls'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0,table);
+ for(const table of ['inference_calls'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0,table);
  const costsCode=await build({entryPoints:['src/model-costs.ts'],bundle:true,format:'esm',platform:'node',write:false});
  const {ensureInferenceBudget,inferenceReservation,dispatchInference,observeInference}=await import('data:text/javascript;base64,'+Buffer.from(costsCode.outputFiles[0].text).toString('base64'));
  const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-not-dispatched',protocol:'responses'},period=now.slice(0,7);
@@ -50,11 +50,7 @@ try{
  const closed=await turn();await cancelStandardAI(db,user,closed);await assert.rejects(()=>inferenceReservation(db,user,closed,period,config,10000,2000).run(),/inference_owner/);
  const premature=await turn();await inferenceReservation(db,user,premature,period,config,10000,2000).run();await assert.rejects(()=>db.prepare("INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,'No dispatch',1,1)").bind(premature,user).run(),/agent_inspection_closed/);
  const excessive=await turn();await assert.rejects(()=>inferenceReservation(db,user,excessive,period,config,1_000_000_000,1_000_000_000).run(),/inference_budget/);
- for(const table of ['billing_accounts','usage_periods','usage_operations','billing_ledger','credit_grants'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0,table);
- const billingCode=await build({entryPoints:['src/billing.ts'],bundle:true,format:'esm',platform:'node',write:false});
- const {reserveUsage}=await import('data:text/javascript;base64,'+Buffer.from(billingCode.outputFiles[0].text).toString('base64'));
- await assert.rejects(()=>reserveUsage(db,user,standard,hash,1),/ai_accounting_path_conflict/);
- const legacy=crypto.randomUUID();await reserveUsage(db,user,legacy,hash,1);await assert.rejects(()=>reserveStandardAI(db,user,legacy,hash),/ai_accounting_path_conflict/);assert.equal(await readStandardAI(db,user,legacy),null);
+ assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  console.log('Standard inference bridge passed: internal cost reservation/settlement, cancelled reserve cleanup, bounded inspection continuation, foreign/closed/wrong-month denial, retained provider ceiling and zero customer ledger changes.');
  console.log('Standard AI receipts passed: duplicate/competing admission, owner isolation, dispatch/cancel race, uncertain-result retention, exact completion replay, immutable identity and zero customer/provider ledger mutation.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

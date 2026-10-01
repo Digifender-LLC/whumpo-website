@@ -18,12 +18,12 @@ try{
  assert.match(created.turn.assistant_text,/untested private backend draft/);assert.doesNotMatch(created.turn.assistant_text,/Already deployed/);
  assert.equal((await db.prepare('SELECT source FROM backend_versions WHERE id=?').bind(version).first()).source,source);
  assert.equal((await db.prepare('SELECT count(*) n FROM publications WHERE project_id=? AND version_id IS NOT NULL').bind(a.project).first()).n,0);
- const spent=(await getBilling(db,a.user)).quota.spent;
+ const spent=(await getBilling(db,a.user)).standardAI.creditCharge;
  assert.match((await guided(a,'/backends '+a.project)).turn.assistant_text,new RegExp(version));
  assert.ok((await guided(a,'/backend '+version)).turn.assistant_text.includes(source));
  const run=await guided(a,'/test-backend '+version+' {"quantity":3,"price":7}');assert.match(run.turn.assistant_text,/"total":21/);assert.equal(executions,1);
  await sendChat(db,a.user,run.request,undefined,{backendRuntime});assert.equal(executions,1);
- assert.match((await guided(a,'/backend-result '+run.request.id)).turn.assistant_text,/"total":21/);assert.equal((await getBilling(db,a.user)).quota.spent,spent);
+ assert.match((await guided(a,'/backend-result '+run.request.id)).turn.assistant_text,/"total":21/);assert.equal((await getBilling(db,a.user)).standardAI.creditCharge,spent);
  assert.match((await guided(b,'/backend '+version)).turn.assistant_text,/not found/);
  assert.match((await guided(b,'/test-backend '+version+' null')).turn.assistant_text,/not found/);assert.equal(executions,1);
  assert.match((await guided(b,'/backend-result '+run.request.id)).turn.assistant_text,/not found/);

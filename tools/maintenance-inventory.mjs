@@ -10,7 +10,6 @@ export const backlogInventory={
  photos:queue('file_cleanup','1=1','created_at'),
  github:queue('github_token_vault t LEFT JOIN github_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'h.requested_at'),
  cloudflare:queue('cloudflare_token_vault t LEFT JOIN cloudflare_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'h.requested_at'),
- legacy_ai:queue('usage_operations',"status IN ('reserved','dispatched','uncertain')",'updated_at',600000),
  standard_ai:queue('standard_ai_requests',"state IN ('reserved','dispatched','uncertain')",'updated_at',600000),
  fair_use:aged('fair_use_project_lifecycle','removed_at','+90 days'),
  traffic:aged('site_traffic_daily','day','+30 days'),
@@ -37,7 +36,6 @@ export const backlogInventory={
  dns_unknown:queue('cloudflare_dns_actions',"state IN ('sending','uncertain')",'created_at',600000),
 };
 export const operationInventory={
- legacy_ai:{table:'usage_operations',state:'status',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/usage-recovery.md'},
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},
  hosting:{table:'domain_connections',state:'state',states:['creating','uncertain','disconnecting','provisioning'],time:'created_at',guide:'docs/integrations/domain-hosting.md'},
  backups:{table:'github_backups',state:'state',states:['dispatching','uncertain'],time:'dispatched_at',guide:'docs/integrations/github-backups.md'},

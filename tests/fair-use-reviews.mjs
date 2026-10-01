@@ -1,3 +1,4 @@
+import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -14,9 +15,9 @@ try{
  const owner=crypto.randomUUID(),other=crypto.randomUUID(),id=crypto.randomUUID();
  for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'test','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
  const period=new Date().toISOString().slice(0,7);
- const grant=async(user,plan)=>{const receipt=crypto.randomUUID();await db.prepare('INSERT OR IGNORE INTO billing_accounts(user_id) VALUES(?)').bind(user).run();await db.prepare('INSERT INTO plan_grants(id,user_id,period,plan_id,reference,created_at) VALUES(?,?,?,?,?,?)').bind(receipt,user,period,plan,receipt,new Date().toISOString()).run();};
+ const grant=(user,plan)=>paidPlan(db,user,plan);
  for(const user of [owner,other])await grant(user,'starter');
- const billingBefore=await db.prepare('SELECT * FROM billing_ledger ORDER BY id').all();
+ const billingBefore=await db.prepare('SELECT * FROM stripe_paid_invoices ORDER BY id').all();
  const context={plan:'starter',category:'project_churn',reviewer:'operator-fixture',context:'Check whether the repeated sites are legitimate client work.'};
  const [a,b]=await Promise.all([open(db,owner,id,context),open(db,owner,id,context)]);
  assert.equal(Number(a.replayed)+Number(b.replayed),1);assert.deepEqual(a.review,b.review);assert.equal(a.enforcementEnabled,false);
@@ -39,7 +40,7 @@ try{
  assert.equal((await db.prepare('SELECT count(*) n FROM fair_use_reviews').first()).n,1);
  assert.equal((await db.prepare('SELECT requested_mode FROM fair_use_control WHERE id=1').first()).requested_mode,'monitor');
  assert.equal((await db.prepare('SELECT count(*) n FROM chat_turns').first()).n,0);
- assert.deepEqual((await db.prepare('SELECT * FROM billing_ledger ORDER BY id').all()).results,billingBefore.results);
+ assert.deepEqual((await db.prepare('SELECT * FROM stripe_paid_invoices ORDER BY id').all()).results,billingBefore.results);
  const operatorId=crypto.randomUUID(),input={action:'open',account:owner,id:operatorId,...context};
  const readOnly={prepare(sql){assert.match(sql,/^SELECT/);return db.prepare(sql);},batch:statements=>db.batch(statements)};
  const preview=await runFairUseOperator(service,readOnly,input);assert.equal(preview.preview,true);assert.equal(preview.current,null);assert.equal(preview.observation.entitlement.planId,'starter');assert.equal(preview.applyDigest,fairUseOperatorDigest(fairUseOperatorInput(JSON.stringify(input))));

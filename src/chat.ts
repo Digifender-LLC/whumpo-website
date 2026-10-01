@@ -9,7 +9,7 @@ import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from '.
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
 import {appRecoveryChatActions} from './app-recovery-chat-actions';
 import {appPageDesignProjectId} from './app-page-design';
-import {readUsageHistory,describeUsageHistory,BillingError} from './billing';
+import {BillingError} from './billing';
 import {applicationChatActions} from './app-chat-actions';
 import {cmsPendingRequest,pendingCMSWork,describePendingCMS} from './cms-pending';
 import {cmsWordPressLinks} from './cms-wordpress-chat';
@@ -46,7 +46,7 @@ import { publicationCommand, siteURL } from './publications';
 import { renderLaunch, type LaunchConfig } from './components';
 import { hashToken } from './security';
 import { describePlans } from './plans';
-import { ensureBilling, getBilling } from './billing';
+import { getBilling } from './billing';
 import { reconcileChat, sendAIChat } from './ai-chat';
 import type { AIConfig } from './ai';
 
@@ -90,9 +90,8 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await serviceClientChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   await serviceClientActivationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   await specificationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
-  const billing = await getBilling(db, userId);
   const firstDraft=await welcomeDraftProject(db,userId);
-  return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0], usage: { available: billing.quota.available, reserved: billing.quota.reserved, credits: billing.credits.available } };
+  return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0] };
 }
 
 /** Public messages have no command interpreter, including slash-prefixed text. */
@@ -137,7 +136,6 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   let preference: {projectId:string; audience?:string; style?:string; theme?:LaunchConfig['theme']} | undefined;
   let reply: string;
   let project: { id: string; name: string; purpose: string } | undefined;
-  let overage: boolean | undefined;
   let exportId: string | undefined;
   let version: { projectId: string; config: LaunchConfig; html: string; digest: string } | undefined;
   const command = ['show versions','my versions','show my saved versions'].includes(content.toLowerCase()) ? '/versions' : content.toLowerCase();
@@ -160,7 +158,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(!ai)return {status:503,error:'AI drafting is not connected. Please try again later.'};
     return sendAIChat(db,userId,input.id,state.revision,content,ai,undefined,dnsOptions,true);
   }
-  const known = [...transcriptRequests,'show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','show usage history','show my usage history','/credits','/credits on','/credits off','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
+  const known = [...transcriptRequests,'show my ai requests','show ai history','show recent ai requests','/traffic','show traffic','my traffic','visitor access','manage visitor access','/visitor-access','/inbox','show inbox','my inbox','/versions','/brief','show brief','/projects','show my projects','my projects','show services','/plans','show plans','pricing','/usage','show usage','/activity','show activity','/domains','show domains','/connections','show connections','/security','/passkeys','/help','help','/new','/cancel','/files','show files','show photos','upload a photo','export my website','download my website'];
   if (ai && !usageReview && !help && !navigation && !pendingCMS && !maintenance && (command.startsWith('/ask ') || command.startsWith('/edit ') || (state.step === 'ready' && !state.brief_stage && !content.startsWith('/') && !known.includes(command)))) return sendAIChat(db, userId, input.id, state.revision, content, ai,undefined,dnsOptions);
   const hosting=hostingChatCommand(db,userId,input.id,command,dnsOptions);
   const dns = dnsChatCommand(db,userId,input.id,command,dnsOptions);
@@ -261,17 +259,9 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     const request=await readStandardAIRequest(db,userId,match[1]);
     if(!request)return {status:404,error:'AI request not found.'};
     reply=describeStandardAIRequest(request)+'\n\nThis is a saved status, not a retry. Read the original Chat response for the work result. An interrupted request is not sent again automatically.';
-  } else if (/^\/usage-history(?:\s|$)/.test(command)||['show usage history','show my usage history'].includes(command)) {
-    const parts=command.startsWith('/')?command.split(/\s+/):['/usage-history'];
-    if(parts.length>2||parts[1]&&!/^(?:[1-9]\d{0,2}|1000)$/.test(parts[1]))return {status:400,error:'Use /usage-history, optionally followed by a page from 1 to 1000.'};
-    reply=describeUsageHistory(await readUsageHistory(db,userId,Number(parts[1]??1)));
-  } else if (['/usage', 'show usage', '/credits'].includes(command)) {
+  } else if (['/usage', 'show usage'].includes(command)) {
     const billing = await getBilling(db, userId);
-    reply = `${billing.plan.name} · ${billing.period}\nStandard AI assistance uses no credits or monthly test units. It is intended for building and maintaining your projects under fair use. Advanced models are not enabled yet; future advanced work will require explicit credit-spending approval.\n\nHistorical test accounting: ${billing.quota.spent} monthly units used; ${billing.quota.reserved} held for earlier requests. ${billing.credits.available} existing test credits available; ${billing.credits.reserved} held. These balances do not limit new standard assistance.\n\nUse /usage-history for historical test-unit receipts. Say “show my AI requests” or use /ai-history to read recent standard requests here. Testing capacity and provider availability can still interrupt service; credits do not bypass those checks. Paid upgrades and credit purchases are not enabled yet.`;
-  } else if (['/credits on', '/credits off'].includes(command)) {
-    await ensureBilling(db, userId);
-    overage = command === '/credits on';
-    reply = overage ? 'Your legacy credit preference is saved. Standard AI does not spend these credits. This does not authorize advanced models, buy credits or charge a payment method.' : 'Your legacy credit preference is off. Earlier reserved work can still settle against its existing hold. Standard AI does not spend credits.';
+    reply = `${billing.plan.name} · ${billing.period}\nStandard AI assistance is included under fair use for building and maintaining your projects, with no credit charges. Advanced models are not enabled yet; future advanced work will require explicit credit-spending approval.\n\nAsk to see your recent AI requests. Testing capacity and provider availability can still interrupt service. Subscriptions are sandbox-only; real payments and advanced credit purchases are disabled.`;
   } else if (['/plans', 'show plans', 'pricing'].includes(command)) {
     reply = describePlans();
   } else if (['/activity', 'show activity'].includes(command)) {
@@ -341,10 +331,6 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if (version) {
     statements.push(db.prepare("INSERT INTO site_versions (id,project_id,component_id,config_json,html,digest,created_at) SELECT ?,?,'launch-page@1',?,?,?,? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?) AND EXISTS (SELECT 1 FROM projects WHERE id = ? AND owner_user_id = ?)").bind(input.id,version.projectId,JSON.stringify(version.config),version.html,version.digest,now,input.id,userId,version.projectId,userId));
     statements.push(db.prepare("INSERT INTO activity_events (id,user_id,project_id,action,summary,created_at) SELECT ?,?,?, 'site.preview.created','Created a private preview with launch-page@1',? WHERE EXISTS (SELECT 1 FROM site_versions WHERE id = ?)").bind(`preview:${input.id}`,userId,version.projectId,now,input.id));
-  }
-  if (overage !== undefined) {
-    statements.push(db.prepare('UPDATE billing_accounts SET overage_enabled = ? WHERE user_id = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(overage ? 1 : 0, userId, input.id, userId));
-    statements.push(db.prepare("INSERT INTO activity_events (id,user_id,action,summary,created_at) SELECT ?,user_id,'billing.preference',?,? FROM chat_turns WHERE id = ? AND user_id = ?").bind(`billing:${input.id}`, overage ? 'Enabled existing credits for quota overage' : 'Disabled credits for new operations', now, input.id, userId));
   }
   if (project) {
     statements.push(db.prepare("INSERT INTO projects (id, owner_user_id, name, purpose, status, created_at, updated_at) SELECT ?, ?, ?, ?, 'draft', ?, ? WHERE EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)").bind(project.id, userId, project.name, project.purpose, now, now, input.id, userId));

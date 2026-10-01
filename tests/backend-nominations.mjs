@@ -29,7 +29,7 @@ try{
  let retained=(await db.prepare('SELECT COUNT(*) n FROM backend_nominations WHERE user_id=?').bind(owner).first()).n;
  while(retained++<20)await db.prepare('INSERT INTO backend_nominations(id,user_id,version_id,digest,created_at,expires_at) VALUES(?,?,?,?,?,?)').bind(id(),owner,version,prepared.digest,'1999-01-01T00:00:00.000Z','2000-01-01T00:00:00.000Z').run();
  await assert.rejects(prepareNomination(db,owner,id(),version),e=>e.status===409);
- assert.equal((await db.prepare('SELECT source FROM backend_versions WHERE id=?').bind(version).first()).source,source);assert.equal((await db.prepare('SELECT COUNT(*) n FROM backend_runs').first()).n,0);assert.equal((await db.prepare('SELECT COUNT(*) n FROM usage_operations').first()).n,0);
+ assert.equal((await db.prepare('SELECT source FROM backend_versions WHERE id=?').bind(version).first()).source,source);assert.equal((await db.prepare('SELECT COUNT(*) n FROM backend_runs').first()).n,0);assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  await db.prepare('DELETE FROM projects WHERE id=?').bind(project).run();assert.equal((await db.prepare('SELECT COUNT(*) n FROM backend_nominations WHERE user_id=?').bind(owner).first()).n,0);
  console.log('Private nominations passed: exact-version consent, tenant refusal, immutable digest, expiry, concurrent consent/capacity, lost write acknowledgments, withdrawal/replay, guided Chat privacy, model denial, no execution/spend and deletion cascade.');
 }finally{if(proxy)await proxy.dispose();await rm(dir,{recursive:true,force:true});}

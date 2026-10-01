@@ -45,7 +45,7 @@ try{
  assert.equal(saved.preferred_plan,'personal');assert.equal(saved.billing_interval,'year');
  assert.ok(requests.filter(r=>r.path==='/api/workspace/capacity'&&r.method==='PUT'&&r.status===200).length>=2);
  assert.ok(requests.every(r=>r.method==='GET'||r.path==='/api/workspace/capacity'&&r.method==='PUT'));
- for(const table of ['inference_calls','publications','usage_operations','plan_grants','stripe_paid_invoices'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
+ for(const table of ['inference_calls','publications','stripe_paid_invoices'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
  await writeFile('.secrets/plan-catalogue-browser.json',JSON.stringify({checkedAt:new Date().toISOString(),requests,preferences:saved,noInferencePublicationOrBilling:true},null,2),{mode:0o600});
  console.log('Plan catalogue browser passed: persisted personal preference after two saves, no inference, publication, grant or Stripe invoice.');
 

@@ -31,7 +31,7 @@ try{
  }finally{globalThis.fetch=originalFetch;}
  // Actual AI transport must not receive the customer review or operator response.
  const chat=await readChat(db,user);let calls=0;await sendAIChat(db,user,crypto.randomUUID(),chat.state.revision,'Help plan my homepage',{baseURL:'https://provider.test/v1',apiKey:'synthetic',model:'fixture',protocol:'responses'},async(_url,init)=>{calls++;const body=JSON.stringify(JSON.parse(init.body));for(const secret of ['PRIVATE-REVIEW','PRIVATE-OPERATOR','Competing reply','Follow-up private explanation'])assert.ok(!body.includes(secret),secret);return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'What should visitors find?',action:null})}]}],usage:{input_tokens:100,output_tokens:100}});});assert.equal(calls,1);
- assert.equal((await db.prepare('SELECT COUNT(*) n FROM usage_operations').first()).n,0);
+ assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  // No internal fair-use evidence or mode was edited; account deletion cascades.
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM fair_use_reviews').first()).n,0);await db.prepare('DELETE FROM users WHERE id=?').bind(user).run();assert.equal((await service.listUsageReviewRequests(db,user)).length,0);
  for(const bad of [{action:'answer',account:other,id:crypto.randomUUID(),response:'x',operator:'y',private_note:'no'},{action:'list',account:[other]}])assert.throws(()=>usageReviewInput(JSON.stringify(bad)));

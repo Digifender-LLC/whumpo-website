@@ -23,7 +23,7 @@ try{
  assert.equal((await call('/api/onboarding/complete','POST',{revision:1})).status,200);
  const project=(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(user).first()).id;
  // Synthetic accounting rows for visual acceptance; no provider is called.
- await db.prepare('UPDATE usage_periods SET allowance=0 WHERE user_id=?').bind(user).run();
+
  for(const state of ['completed','uncertain']){
   const id=crypto.randomUUID();await db.prepare('INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,user,'a'.repeat(64),now,now).run();
   await db.prepare("UPDATE standard_ai_requests SET state='dispatched' WHERE id=?").bind(id).run();
@@ -51,7 +51,7 @@ try{
  input.on('line',line=>{if(line.trim()==='finish')finish()});await finished;
  assert.ok(requests.some(r=>r.path==='/api/billing'&&r.method==='GET'&&r.status===200));
  assert.ok(requests.every(r=>r.method==='GET'));
- for(const table of ['inference_calls','publications','usage_operations'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
+ for(const table of ['inference_calls','publications'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
  await writeFile('.secrets/standard-billing-browser.json',JSON.stringify({checkedAt:new Date().toISOString(),requests,inferenceCalls:0,publications:0,customerUsageOperations:0},null,2),{mode:0o600});
  console.log('Standard billing browser passed: authenticated billing read, no mutations, no inference, publication or customer usage operations.');
 }catch(error){console.error(error.message);process.exitCode=1;}finally{input?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await proxy?.dispose();await rm(dir,{recursive:true,force:true});}

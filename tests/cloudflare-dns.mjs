@@ -48,7 +48,7 @@ try{
  await message('/confirm-dns '+r.id);assert.match((await readChat(db,conversational.user)).turns.at(-1).assistant_text,/not found/);assert.equal(cp.posts,1);
  await assert.rejects(message('/review-dns invalid'),{status:400});
  await message('/dns');const history=(await readChat(db,conversational.user)).turns.at(-1).assistant_text;assert.ok(history.includes(chatReview));assert.ok(!history.includes(r.id));
- assert.equal((await getBilling(db,conversational.user)).quota.spent,0);
+ assert.equal((await getBilling(db,conversational.user)).standardAI.creditCharge,0);
  // Losing a chat claim acknowledgement stops dispatch. Its durable text accurately reports no saved result.
  const interrupted=await account(),ip=provider();await readChat(db,interrupted.user);const lostTurn=crypto.randomUUID();
  const lostChatDB=new Proxy(db,{get(target,key){if(key==='batch')return async statements=>{await target.batch(statements);throw Error('Lost chat acknowledgement');};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
@@ -57,6 +57,6 @@ try{
  const disabledTurn=crypto.randomUUID();assert.equal((await sendChat(db,interrupted.user,{id:disabledTurn,revision:1,content:'/dns-zones'})).status,200);assert.match((await readChat(db,interrupted.user)).turns.at(-1).assistant_text,/awaiting platform configuration/);
  console.log('DNS chat checks passed: review before confirmation, read-only checks, stale revision, simultaneous replay, payload conflict, owner isolation, lost chat acknowledgement, disabled configuration and zero AI usage.');
  const unknown=await account(),n=provider(),nr=await review(unknown,n);const noAck=async(url,init)=>{if(init.method==='POST'){n.posts++;throw Error('Disconnected before response');}return n.send(url,init);};assert.equal((await confirmDNS(db,unknown.user,nr.id,config,noAck)).state,'uncertain');assert.equal((await confirm(unknown,n,nr.id)).state,'uncertain');assert.equal(n.posts,1);
- assert.equal((await getBilling(db,owner.user)).quota.spent,0);
+ assert.equal((await getBilling(db,owner.user)).standardAI.creditCharge,0);
  console.log('Cloudflare DNS checks passed: owner/zone binding, no write before confirmation, exact TXT quoting, preservation of existing records, stale-inventory/proof rejection, concurrent distinct reviews, single-dispatch recovery, unresolved outcomes, credential revocation and zero AI units.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

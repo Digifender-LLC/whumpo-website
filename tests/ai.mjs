@@ -3,13 +3,7 @@ import {agentContentPolicy} from '../src/content-policy.ts';
 import { build } from 'esbuild';
 const bundle = await build({entryPoints:['src/ai.ts'],bundle:true,platform:'node',format:'esm',write:false});
 const { complete } = await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
-import { buildUnits } from '../src/plans.ts';
 
-assert.equal(buildUnits(0, 0), 0);
-assert.equal(buildUnits(1000, 0), 1);
-assert.equal(buildUnits(1, 250), 2);
-assert.throws(() => buildUnits(-1, 1));
-assert.throws(() => buildUnits(Number.MAX_SAFE_INTEGER, 1));
 
 const config = { baseURL: 'https://example.test/v1', apiKey: 'test-secret', model: 'test-model' };
 const messages = [{ role: 'user', content: 'Make a bakery website' }];

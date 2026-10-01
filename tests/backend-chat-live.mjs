@@ -25,6 +25,6 @@ try{
   const run=await db.prepare('SELECT result_json FROM backend_runs WHERE id=?').bind(request.id).first();assert.deepEqual(JSON.parse(run.result_json),{ok:true,value:{total:quantity*unitPrice}});
   await sendChat(db,a.user,request,undefined,{backendRuntime});
  }
- const billing=await getBilling(db,a.user);assert.equal(billing.quota.reserved,0);
- console.log('Live Muse generated a private backend draft; actual workerd ran two guided examples correctly, replay stayed stable. AI units spent:',billing.quota.spent);
+ const billing=await getBilling(db,a.user);assert.equal(billing.standardAI.creditCharge,0);
+ console.log('Live Muse generated a private backend draft; actual workerd ran two guided examples correctly, replay stayed stable. AI units spent:',billing.standardAI.creditCharge);
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

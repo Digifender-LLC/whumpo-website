@@ -38,7 +38,7 @@ try{
  for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v1.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v1.json'])await writeFile(join(root,name),'fixture');
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
  for(const role of workerOrder){
-  configs[role]={name:'tellumo-'+role,account_id:'a'.repeat(32),main:'src/index.ts',workers_dev:false,preview_urls:false,...(role==='runtime'?{}:{d1_databases:[{binding:'DB',database_name:'tellumo-control',database_id:'1'.repeat(36),migrations_dir:'./migrations'}]}),...(['apps','platform'].includes(role)?{assets:{directory:role==='apps'?'./public-app':'./dist'}}:{})};
+  configs[role]={name:'tellumo-'+role,account_id:'a'.repeat(32),main:'src/index.ts',vars:{ENVIRONMENT:'test'},workers_dev:false,preview_urls:false,...(role==='runtime'?{}:{d1_databases:[{binding:'DB',database_name:'tellumo-control',database_id:'1'.repeat(36),migrations_dir:'./migrations'}]}),...(['apps','platform'].includes(role)?{assets:{directory:role==='apps'?'./public-app':'./dist'}}:{})};
   if(role==='apps')configs[role].services=[{binding:'BACKEND_RUNTIME',service:'tellumo-runtime'}];
   await writeFile(join(root,configFiles[role]),JSON.stringify(configs[role]));
  }
@@ -47,7 +47,7 @@ try{
  await writeFile(join(root,'frontend/main.tsx'),'frontend source');await writeFile(join(root,'web/visitor.ts'),'visitor source');
  await writeFile(join(root,'migrations',sql[0]),'CREATE TABLE fixture(id);');await writeFile(join(root,'migrations',sql[1]),'ALTER TABLE fixture ADD COLUMN label TEXT;');
  await saveBuildSnapshot(root);await writeFile(join(root,'.secrets/private.key'),'DO_NOT_ARCHIVE');reset();
- review={version:1,buildInputs:(await readJSON(join(root,'.secrets/build-snapshot.json'))).inputs.sha256,review:'synthetic mixed-version review',mixedWorkersCompatible:true,schemaChange:'backward-compatible',previousWorkersCompatible:true,schemaReview:'synthetic schema review',migrations:[{name:sql[1],sha256:digest(await readFile(join(root,'migrations',sql[1])))}]};
+ review={version:2,environment:'test',buildInputs:(await readJSON(join(root,'.secrets/build-snapshot.json'))).inputs.sha256,review:'synthetic mixed-version review',mixedWorkersCompatible:true,schemaChange:'update',schemaReview:'synthetic schema review',migrations:[{name:sql[1],sha256:digest(await readFile(join(root,'migrations',sql[1])))}]};
  await assert.rejects(()=>prepareRelease(root,driver,{...review,buildInputs:'wrong'}),/current build inputs/);
  const first=await prepare(),manifest=await verifyRelease(first.directory);
  assert.equal(mutations,0);assert.deepEqual(manifest.order,workerOrder);assert.equal(manifest.migrations.pending.length,1);
@@ -99,8 +99,10 @@ try{
  assert.throws(()=>validateCompatibility({...review,migrations:[]},plan),/exact pending/);
  assert.throws(()=>validateCompatibility({...review,schemaReview:''},plan),/schema review/);
  assert.throws(()=>validateCompatibility({...review,previousWorkersCompatible:'true'},plan),/compatibility/);
- assert.throws(()=>validateCompatibility({...review,schemaChange:'destructive'},plan),/separate restore/);
- validateCompatibility({...review,schemaChange:'destructive',restoreReview:'review-2',restoreEvidence:'disposable restore drill',recoveryStrategy:'forward-compatible contraction after old readers retired'},plan);
+ assert.throws(()=>validateCompatibility({...review,schemaChange:'reset'},plan),/data-reset authorization/);
+ validateCompatibility({...review,schemaChange:'reset',testDataResetAuthorized:true,cutoverReview:'Owner-approved disposable test reset; brief unavailability accepted; repair with current source'},plan);
+ assert.throws(()=>validateCompatibility({...review,version:1},plan),/current test-release/);
+ assert.throws(()=>validateCompatibility({...review,environment:'production'},plan),/current test-release/);
  // Binding inventory preserves identities while stripping credential values.
  assert.deepEqual(bindingSummary([{type:'secret_text',name:'KEY',text:'PRIVATE_VALUE'},{type:'service',name:'CMS_x',service:'cms-x',token:'PRIVATE_VALUE'}]),{services:[{binding:'CMS_x',service:'cms-x'}],secrets:['KEY']});
  const cms=[{project_id:'abc-def',worker_name:'townhello-cms-abcdef',deployment_state:'connected'}];
