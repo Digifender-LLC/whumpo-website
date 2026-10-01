@@ -1,7 +1,7 @@
 # Compiled clients for existing website services
 
 
-**October 1 current-source cutover (deployment pending):** the only service-client compiler is `project-service-clients@2`, using current schema-2 website snapshots and both current text/photo page renderers. Its service configuration remains schema 1 (fixed contact/stateless form). Older compiler locks and unversioned website drafts reject; no import/conversion reader remains. Private photo previews recheck current ownership, clearance and R2 byte digests. Dated earlier release evidence below is historical.
+**October 1 current test cutover:** the only service-client compiler is `project-service-clients@2`, using current schema-2 website snapshots and both current text/photo page renderers. Its service configuration remains schema 1 (fixed contact/stateless form). Older compiler locks and unversioned website drafts reject; no import/conversion reader remains. Private photo previews recheck current ownership, clearance and R2 byte digests. Dated earlier release evidence below is historical.
 
 **September 30, 2026 — WH-066C implemented and deployed with local, mobile-viewport and private real-model acceptance.** The pinned companion compiler now has bounded private proposals, immutable saved settings, forward restore, natural-language Chat tools and authenticated preview/comparison routes. Saving settings does not publish or activate a service. The current saved revision can now prepare each existing activation review for separate human approval. Migrations `0112_service_client_specifications.sql` and `0113_service_client_activations.sql` are applied in test release `03b74965-16b8-4a41-8848-33cb1e21867f`. Delivery is tracked by [execution issue #17](https://github.com/zemdregon/whumpo/issues/17) and [parent #14](https://github.com/zemdregon/whumpo/issues/14). Local verification and deployment readback are recorded below; they do not imply unrestricted live customer or physical-device acceptance.
 
@@ -66,7 +66,7 @@ Preparation selects one exact owned website version. The comparison shows readab
 
 The server-issued `serviceClientApply` control requires recent authentication and origin/rate-limit checks. One D1 batch creates the confirmation turn, full independent settings snapshot, metadata receipt, revision head and activity. Database guards recheck ownership, current publication/contact/backend/form references, expected revision, expiry, known holds and exact proposal artifacts inside that transaction. A proposal removed after application validation aborts the whole batch. Competing approvals cannot advance the same revision twice. A retry recovers an existing receipt; changed payloads cannot reuse it.
 
-**October 1 current-source receipt update (deployment pending):** schema 0118 requires canonical typed action JSON on the same confirmation turn, including exact review ID, proposal digest and integer expected revision. Command text cannot satisfy this gate. See [current Chat receipts](natural-language-chat.md#current-receipts-and-remaining-reply-cleanup).
+**October 1 current deployed receipt contract:** schema 0118 requires canonical typed action JSON on the same confirmation turn, including exact review ID, proposal digest and integer expected revision. Command text cannot satisfy this gate. See [current Chat receipts](natural-language-chat.md#current-receipts-and-remaining-reply-cleanup).
 
 Owner-only routes:
 

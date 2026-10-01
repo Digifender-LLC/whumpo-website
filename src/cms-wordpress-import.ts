@@ -1,9 +1,9 @@
 import {prepareWordPressMediaCandidate} from './cms-wordpress-mapped-media';
-import type {wordpressTaxonomyPlan} from './cms-wordpress-taxonomies';
+import type {WordPressReport} from './cms-wordpress-analysis';
 import {captureCMSWordPressSource} from './cms-wordpress-sources';
 import {prepareCMSImport} from './cms-imports';
 import {CMSProjectError} from './cms-error';
-type StagedArticle={taxonomyPlan?:ReturnType<typeof wordpressTaxonomyPlan>;sourceId:number;collection:'posts'|'pages'|null;sourceHTML:string;sourceAuthor:string|null;sourceURL:string|null;sourceStatus:string;sourceDate:string|null;sourceSlug:string|null;sourceExcerpt?:string;categories?:string[];tags?:string[];candidate:{data:{title:string;content:unknown;excerpt?:string}}|null};
+type StagedArticle=WordPressReport['articles'][number];
 /** Parser is a fixed server dependency, never a request body, model tool, URL or customer script. */
 export type WordPressAnalyzer=(bytes:Uint8Array)=>Promise<{source:{digest:string};articles:StagedArticle[]}>;
 export async function prepareCMSWordPressImport(db:D1Database,files:R2Bucket,user:string,project:string,sourceUploadId:string,sourceItemId:number,reviewId:string,env:Record<string,unknown>,analyze:WordPressAnalyzer){
@@ -11,8 +11,8 @@ export async function prepareCMSWordPressImport(db:D1Database,files:R2Bucket,use
  const report=await analyze(bytes);if(report.source.digest!==source.digest)throw new CMSProjectError(503,'Source analysis did not match the retained export');
  const articles=report.articles.filter(a=>a.sourceId===sourceItemId);if(articles.length!==1||!articles[0].candidate||!articles[0].collection)throw new CMSProjectError(409,'This source article needs changes before import');
  const a=articles[0];
- if(a.taxonomyPlan?.status==='needs_changes')throw new CMSProjectError(409,'This article’s categories or tags need changes before a complete import can be reviewed. Inspect the source mapping report.');
- return prepareCMSImport(db,user,project,reviewId,{sourceDigest:source.digest,sourceId:a.sourceId,collection:a.collection!,...(a.taxonomyPlan?.terms.length?{taxonomyPlan:a.taxonomyPlan.terms}:{}),title:a.candidate!.data.title,content:a.candidate!.data.content,...(a.candidate!.data.excerpt===undefined?{}:{excerpt:a.candidate!.data.excerpt}),provenance:{sourceHTML:a.sourceHTML,author:a.sourceAuthor??'',sourceURL:a.sourceURL??'',sourceStatus:a.sourceStatus,sourceDate:a.sourceDate??'',sourceSlug:a.sourceSlug??'',excerpt:a.sourceExcerpt??'',categories:a.categories??[],tags:a.tags??[]}},{...env,FILES:files},sourceUploadId);
+ if(a.taxonomyPlan.status==='needs_changes')throw new CMSProjectError(409,'This article’s categories or tags need changes before a complete import can be reviewed. Inspect the source mapping report.');
+ return prepareCMSImport(db,user,project,reviewId,{sourceDigest:source.digest,sourceId:a.sourceId,collection:a.collection!,...(a.taxonomyPlan.terms.length?{taxonomyPlan:a.taxonomyPlan.terms}:{}),title:a.candidate!.data.title,content:a.candidate!.data.content,...(a.candidate!.data.excerpt===undefined?{}:{excerpt:a.candidate!.data.excerpt}),provenance:{sourceHTML:a.sourceHTML,author:a.sourceAuthor??'',sourceURL:a.sourceURL??'',sourceStatus:a.sourceStatus,sourceDate:a.sourceDate??'',sourceSlug:a.sourceSlug??'',excerpt:a.sourceExcerpt,categories:a.categories,tags:a.tags}},{...env,FILES:files},sourceUploadId);
 }
 
 /** Explicit local selections prepare a review; they never approve or write the customer draft. */

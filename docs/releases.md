@@ -202,3 +202,7 @@ Managed release `6116b6b5-f398-437c-b947-32376e75e629` deploys `e073946` ([PR #3
 ## Current-only billing reset — October 1, 2026
 
 Managed release `438cdaa6-4ef5-46b8-a8c1-ea3115ef61af` applied the owner-authorized disposable test reset `0117_current_billing.sql` and all four current Workers from source `75e41ff`. Version-2 review and forward recovery rules were used; no old billing reader/conversion remains. Independent schema, authenticated API and exact asset readback passed. [Version identities and bounded acceptance](current-version-policy.md#test-deployment-acceptance) record the evidence. This is a current test cutover, not legacy runtime support or a full recovery drill.
+
+## Current Chat, website and CMS contracts — October 1, 2026
+
+Managed release `925bb8a8-12b2-44f5-807a-251ab85a5905` deploys source `56cf575` with schema 0118/0119. This removes old command presentation/approval proof, guided/full-page website writers, compiler/schema-1 admission and CMS body/provenance compatibility paths. The schema reset clears retired workspace creation state; pre-cutover inspection found no old website/service-client/CMS content rows to delete. The owner's uncertain AI request and provider credentials remain intact. All four steps completed and independent version/binding/schema/asset/authentication readback passed. [Exact versions and verification limits](current-version-policy.md#current-contract-test-release). CMS functional testing remains deferred.
