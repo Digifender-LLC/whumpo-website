@@ -854,7 +854,8 @@
         "src/usage-recovery.ts",
         "src/cloudflare-connection.ts",
         "src/app-lifecycle.ts",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -1035,7 +1036,8 @@
         "src/gateway-spend.ts",
         "src/standard-ai-usage.ts",
         "docs/pricing-and-model-policy.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -2352,7 +2354,8 @@
         "docs/contact-forms.md",
         "src/backend-publication.ts",
         "src/runtime/worker.ts",
-        "src/site-traffic.ts"
+        "src/site-traffic.ts",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -2441,7 +2444,8 @@
         "docs/background-jobs.md",
         "tools/prototypes/job-journal.mjs",
         "tests/job-journal-prototype.mjs",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/11",
       "owner": null,
@@ -2583,7 +2587,8 @@
         "docs/backend-execution.md",
         "docs/cloudflare-capability-roadmap.md",
         "docs/resource-pool-economics.md",
-        "src/runtime/worker.ts"
+        "src/runtime/worker.ts",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -3134,7 +3139,8 @@
         "src/contacts.ts",
         "src/app-gateway.ts",
         "src/photo-safety.ts",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -3316,11 +3322,16 @@
         "docs/cloudflare-capability-roadmap.md",
         "docs/resource-pool-economics.md",
         "src/runtime/worker.ts",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md",
+        "tools/prototypes/workload-placement.mjs",
+        "tests/workload-placement-prototype.mjs"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/47",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-01 WH-071 decision/source evidence against d9f5d26: docs/workload-placement.md freezes logical project/resource and exact module/schema identities, scoped adapter obligations, lifecycle/export descriptors and fenced migration handoff. Offline reference and 60 synthetic checks verify compatibility/rejections and marginal container examples; current official provider prices/limits reviewed. Existing shared D1/private R2/QuickJS remain. No production imports, runtime/config/schema changes, provider activation, customer migration or export acceptance. Execution/completion evidence belongs in issue #47."
+      ]
     },
     {
       "id": "WH-072",
@@ -3365,7 +3376,8 @@
         "docs/data-lifecycle.md",
         "docs/deployment.md",
         "docs/emdash.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -3411,7 +3423,8 @@
         "docs/content-safety.md",
         "src/site-host.ts",
         "src/app-host.ts",
-        "src/app-gateway.ts"
+        "src/app-gateway.ts",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -3457,7 +3470,8 @@
         "docs/backend-execution.md",
         "docs/releases.md",
         "docs/workspace-agent.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -3506,7 +3520,8 @@
         "docs/background-jobs.md",
         "docs/resource-pool-economics.md",
         "docs/app-data.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -3600,7 +3615,8 @@
         "docs/data-lifecycle.md",
         "docs/shared-components.md",
         "docs/app-data.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
@@ -3689,7 +3705,8 @@
         "docs/pricing-and-model-policy.md",
         "docs/backend-execution.md",
         "wrangler.apps.jsonc",
-        "wrangler.runtime.jsonc"
+        "wrangler.runtime.jsonc",
+        "docs/workload-placement.md"
       ],
       "issue": null,
       "owner": null,
