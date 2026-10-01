@@ -39,7 +39,7 @@ export function Workspace(){
  const location=useRouterState({select:s=>s.location});
  const profile=useQuery({queryKey:['session'],queryFn:async()=>{
   const next=await api<Profile>('/profile'),previous=queryClient.getQueryData<Profile>(['session']);
-  if(previous&&(previous.accountId??previous.email)!==(next.accountId??next.email))queryClient.removeQueries({predicate:q=>q.queryKey[0]!=='session'});
+  if(previous&&previous.accountId!==next.accountId)queryClient.removeQueries({predicate:q=>q.queryKey[0]!=='session'});
   return next;
  }});
  useEffect(()=>{const theme=profile.data?.theme??'system',media=matchMedia('(prefers-color-scheme: dark)'),apply=()=>document.documentElement.classList.toggle('dark',theme==='dark'||theme==='system'&&media.matches);apply();media.addEventListener('change',apply);return()=>media.removeEventListener('change',apply);},[profile.data?.theme]);
@@ -48,10 +48,10 @@ export function Workspace(){
  if(profile.error)return profile.error instanceof APIError&&profile.error.status===401?<Auth signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}/>:<main className="page-pad"><h1>Couldn’t open your workspace</h1><p role="alert">{message(profile.error)}</p><Button onClick={()=>profile.refetch()}>Try again</Button></main>;
  if(!profile.data)return null;
  if(!profile.data.onboardingComplete)return <Onboarding profile={profile.data}/>;
- return <WorkspaceSession key={profile.data.accountId??profile.data.email} account={profile.data}/>;
+ return <WorkspaceSession key={profile.data.accountId} account={profile.data}/>;
 }
 function WorkspaceSession({account}:{account:Profile}){
- const profile={data:account},scope=account.accountId??account.email;
+ const profile={data:account},scope=account.accountId;
  const location=useRouterState({select:s=>s.location}),view=location.pathname.split('/')[2]||'chat',navigate=useNavigate();
  const dashboard=useQuery({queryKey:['dashboard',scope],queryFn:()=>api<Dashboard>('/workspace/dashboard')});
  const chat=useQuery({queryKey:['chat',scope],queryFn:()=>api<Chat>('/chat'),refetchInterval:q=>q.state.data?.turns.some(t=>t.status==='pending')?2500:false});

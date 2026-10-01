@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 119 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 120 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -301,6 +301,69 @@ Issue: https://github.com/zemdregon/whumpo/issues/6. Planning owner: Unassigned.
 ### Evidence
 
 - 2026-10-01T03:21:25.142Z: read-only live report confirms natural daily run at 03:17:59.757 UTC, all configured daily jobs complete, unconfigured GitHub/hosting skipped, and prior hourly health complete. All 27 queues and five receipt families readable; 26 queues empty, one known historical AI hold still actionable. No manual cleanup/retry or new automation. Three offline maintenance suites pass against 113 migrations. Acceptance complete; see docs/maintenance.md and issue #6. This is scheduler/diagnostic acceptance, not provider activation, scanner detection, or a waiver of unresolved work.
+
+## WH-120 — Remove existing legacy compatibility paths
+
+Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **ready**. Kind: implementation. Size: L.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Whumpo has one current runtime/API/client path with retired versions, aliases and plan modes removed.
+
+### Scope
+
+- Require the current authenticated account UUID and remove email/missing-account compatibility behavior
+- Remove obsolete DNS aliases and update callers to current handlers
+- Retire legacy Launch/Studio admission, test-credit interfaces and silent unknown-plan substitution with explicit forward data/receipt treatment
+- Replace historical-command presentation and page-conversion dependencies with current typed action and specification paths
+- Consolidate CMS shapes and active release/identity/native plans under current-version-only rules; preserve the separate owner-deferred CMS functional-testing boundary
+- Split implementation into concrete reviewed slices while keeping this parent open until the full removal inventory and required test deployment are verified
+
+### Acceptance criteria
+
+- [ ] No retained runtime path supports an obsolete schema/client/route/alias or retired entitlement; unknown and stale inputs reject explicitly
+- [ ] Current project creation/editing, typed approvals, tenant ownership, accounting and uncertain-operation identity remain correct through forward changes
+- [ ] Documentation and roadmap describe current-only rollout; historical evidence is not interpreted as an active compatibility obligation
+- [ ] Focused actual-handler checks cover removed branches and current behavior, and required test deployment is separately verified
+
+### Verification
+
+- Run focused current interface, billing, Chat and compiler/adapter tests for each touched path; do not run deferred CMS functional tests
+- Run pnpm check/build for TypeScript/UI changes and roadmap validate/alignment/render/render --check/diff checks
+- Inspect current source and test deployment for each inventory entry; keep partial/local completion distinct from complete/deployed cleanup
+
+### Dependencies and blockers
+
+Planning dependencies: None. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/current-version-policy.md](../../docs/current-version-policy.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [src/plans.ts](../../src/plans.ts)
+- [src/billing.ts](../../src/billing.ts)
+- [src/chat-language.ts](../../src/chat-language.ts)
+- [src/cloudflare-dns.ts](../../src/cloudflare-dns.ts)
+- [src/project-specification/store.ts](../../src/project-specification/store.ts)
+- [src/cms-content-shape.ts](../../src/cms-content-shape.ts)
+- [frontend/src/lib/api.ts](../../frontend/src/lib/api.ts)
+- [frontend/src/workspace.tsx](../../frontend/src/workspace.tsx)
+- [tests/current-interfaces.mjs](../../tests/current-interfaces.mjs)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/53. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-01 owner amendment: remove existing legacy fallbacks and assume current clients/schemas only. WH-105 strict client contract merged in PR #52. Runtime inventory and staged removal tracked in issue #53; full cleanup remains in progress.
 
 ## WH-052 — Choose durable job orchestration from current requirements
 
