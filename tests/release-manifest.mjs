@@ -32,7 +32,7 @@ let review;
 const prepare=()=>prepareRelease(root,driver,review,{git:()=>({commit:'a'.repeat(40),dirty:false})});
 try{
  for(const dir of ['src','frontend','web','public-app','tools','dist','migrations','node_modules/wrangler','compiler-locks'])await mkdir(join(root,dir),{recursive:true});
- for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/build.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v1.json'])await writeFile(join(root,name),'fixture');
+ for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/build.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v1.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v1.json'])await writeFile(join(root,name),'fixture');
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
  for(const role of workerOrder){
   configs[role]={name:'whumpo-'+role,account_id:'a'.repeat(32),main:'src/index.ts',workers_dev:false,preview_urls:false,...(role==='runtime'?{}:{d1_databases:[{binding:'DB',database_name:'whumpo-control',database_id:'1'.repeat(36),migrations_dir:'./migrations'}]}),...(['apps','platform'].includes(role)?{assets:{directory:role==='apps'?'./public-app':'./dist'}}:{})};

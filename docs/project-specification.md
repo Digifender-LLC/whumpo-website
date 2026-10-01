@@ -4,7 +4,7 @@
 
 Whumpo's maintainer serves authenticated owners. Visitors, form submissions, scheduled customer rules and webhooks cannot start maintainer inference, borrow its context/tools/credentials or draw on its funding. Standard runtime actions must function when maintenance inference is unavailable. Optional customer runtime AI is the separate WH-079 contract; there is no AI operation in this initial specification.
 
-**Implementation follow-up:** WH-065's [capability planner](capability-planner.md) is deployed in test. WH-066A adds the [typed schema and deterministic content compiler](project-specification-compiler.md), with exact artifact locks, pure edits and legacy site import. That library is locally verified but not mounted as an API; durable proposals, apply/restore and forms/API delivery remain open. The decision and prototype descriptions below retain their original scope.
+**Implementation follow-up:** WH-065's [capability planner](capability-planner.md) is deployed in test. WH-066A adds the [typed schema and deterministic content compiler](project-specification-compiler.md), with exact artifact locks, pure edits and legacy site import. WH-066B now connects the single-homepage adapter to durable private proposals, preview/apply/forward restore and live synthetic acceptance; see [storage evidence](project-specification-storage.md). Forms/API delivery remains open in #17, with the distinct [service-client companion](project-service-clients.md) under implementation. The decision and prototype descriptions below retain their original scope.
 
 ## Current inventory and reuse decision
 
@@ -97,7 +97,7 @@ WH-066 should implement a project head, immutable specification versions, bounde
 
 An adapter can import an owned existing `site-page@1` configuration into content references with an origin version/digest. It must preserve every rendered string/theme, leave original immutable bytes alone and make no live change. Photo, CMS, custom backend and visitor state need their own explicit adapters; do not flatten them into text or silently migrate data. CMS testing remains owner-deferred. Do not deploy this prototype as an API or treat its trusted fixture actor objects as authentication.
 
-WH-065 has published the maintained capability/version/compatibility/readiness catalog and bounded planner. WH-066's schema/content compiler is implemented; next it connects durable proposals, real preview delivery, version transactions and existing approvals. WH-067 adds narrow shared records/access/files APIs; WH-068/069 implements configured notifications and deterministic rules. Dedicated project storage, broader execution and optional runtime AI retain their separate roadmap gates.
+WH-065 has published the maintained capability/version/compatibility/readiness catalog and bounded planner. WH-066's schema/content compiler and durable single-homepage proposals, preview delivery, version transactions and approvals are implemented. The remaining forms/API integration must preserve its distinct service contracts. WH-067 adds narrow shared records/access/files APIs; WH-068/069 implements configured notifications and deterministic rules. Dedicated project storage, broader execution and optional runtime AI retain their separate roadmap gates.
 
 ## Verification and coordination
 
