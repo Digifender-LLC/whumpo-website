@@ -2648,6 +2648,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/30. Planning owner: Unassigned
 ### Evidence
 
 - Sandbox slice authorized independently of commercial cost-period gates: optional onboarding Checkout, exact paid invoice coverage, renewal reconciliation and restricted billing portal. WH-022/023 remain prerequisites for real-money activation. Proration, refunds/disputes and resource-wallet funding remain open.
+- 2026-10-01: PR31 merged, release fcb8723b deployed 114 migrations/four Workers/16 assets. Synthetic owner completed mobile onboarding against deployed APIs and a real Stripe sandbox test-card Checkout; webhook independently recorded one paid invoice before any refresh. Paid state did not bypass project-first gate. Invoice portal and end-of-period cancellation accepted; paid access preserved, standard AI/customer credits zero, fixture cleaned. Detailed scoped evidence in docs/stripe-sandbox.md. Full commercial lifecycle remains open.
 
 ## WH-043 — Implement capacity ledger, grants, rollover and customer explanations
 

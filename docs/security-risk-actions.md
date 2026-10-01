@@ -1,6 +1,6 @@
 # Security risk decisions and follow-up actions
 
-**Original working assessment: September 29, 2026; status reconciled October 1, 2026 UTC in the [capability matrix](capability-matrix.md).** This is a decision register for the supplied threat model, not a list of confirmed vulnerabilities or a declaration of live acceptance. Reassess before expanding beyond invitation-only testing and after each new public capability. The current readiness record is [acceptance.md](acceptance.md). October 1 reconciliation inspected existing source/release records without a new security scan or cloud read. CSAM scanner implementation, CMS functional testing and Stripe setup remain owner-deferred; none is silently resumed by the actions below.
+**Original working assessment: September 29, 2026; status reconciled October 1, 2026 UTC in the [capability matrix](capability-matrix.md).** This is a decision register for the supplied threat model, not a list of confirmed vulnerabilities or a declaration of live acceptance. Reassess before expanding beyond invitation-only testing and after each new public capability. The current readiness record is [acceptance.md](acceptance.md). October 1 reconciliation inspected existing source/release records without a new security scan or cloud read. CSAM scanner implementation and CMS functional testing remain owner-deferred. The owner explicitly resumed Stripe sandbox setup on October 1; real-money activation remains gated.
 
 Use these labels consistently: **Fix** for a demonstrated boundary failure or a prerequisite to the stated use; **Reduce and monitor** for residual risk with bounded controls; **Accept for test** for intentional behavior within the private test assumptions; **Activation gate** for a capability not yet available to customers. A test-stage acceptance does not extend automatically to real customer data or open enrollment.
 
@@ -43,7 +43,7 @@ Use these labels consistently: **Fix** for a demonstrated boundary failure or a 
 | Stateless public backends | Unauthenticated cross-origin JSON is intentional for reviewed stateless endpoints. Reassess if an endpoint reads private visitor/owner state or gains durable write authority. |
 | Local development mode | Invitation and transport differences are acceptable only on a private localhost server. Publicly exposed local-mode Workers require immediate correction. Deployed config uses `ENVIRONMENT=test`. |
 | Minor enumeration and low-value metadata | Accept only where responses reveal no useful credential, tenant data or operational secret. Reclassify on concrete exploit evidence. |
-| Test-mode Stripe bookkeeping | Real-money subscription/refund issues are not live while checkout and required bindings are disabled. Prevent test-credit abuse; complete financial lifecycle review before enabling payments. See [payments.md](payments.md). |
+| Test-mode Stripe bookkeeping | Sandbox checkout/invoices and cancellation are deployed and verified; live keys remain rejected. Complete proration/refund/dispute and financial lifecycle review before separately approved real-money payments. See [payments.md](payments.md). |
 
 ## Activation gates
 
