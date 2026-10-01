@@ -1,0 +1,64 @@
+{
+  "contentChange": {
+    "version": 1,
+    "kind": "form",
+    "template": "content-change@1",
+    "title": "Update your detailing services",
+    "summary": "Use these answers to prepare a private preview. Saving and publishing each require their own review.",
+    "presentation": "inline",
+    "fields": [
+      {
+        "id": "headline", "type": "text", "label": "Headline", "help": "What should visitors see first?", "required": true,
+        "binding": "answer.value@1", "constraints": {"maxLength": 120},
+        "source": {"binding": "site.content@1", "contentId": "headline", "revision": 3},
+        "default": {"value": "A fresh start for your car.", "provenance": "saved"}
+      },
+      {
+        "id": "services", "type": "long-text", "label": "Services", "help": "Keep the services and prices accurate.", "required": true,
+        "binding": "answer.value@1", "constraints": {"maxLength": 1000},
+        "source": {"binding": "site.content@1", "contentId": "services", "revision": 3},
+        "default": {"value": "Interior refresh. Exterior detail. Full vehicle care.", "provenance": "saved"}
+      }
+    ],
+    "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": "site.content-prepare@1"
+  },
+  "custom": {
+    "version": 1, "kind": "form", "template": "custom@1", "title": "Plan your service page",
+    "summary": "Tell Whumpo about the work you offer. This saves a brief and changes no website.", "presentation": "panel",
+    "fields": [
+      {"id": "area", "type": "text", "label": "Service area", "help": "A city or neighborhood is enough.", "required": true, "binding": "answer.value@1", "constraints": {"maxLength": 160}},
+      {"id": "mobile", "type": "boolean", "label": "Do you visit customers?", "help": "", "required": true, "binding": "answer.value@1", "constraints": {}},
+      {"id": "radius", "type": "number", "label": "Travel radius in miles", "help": "", "required": true, "binding": "answer.value@1", "constraints": {"min": 0, "max": 100, "step": 1}, "when": {"fieldId": "mobile", "equals": true}},
+      {"id": "sizes", "type": "multi-choice", "label": "Vehicle sizes", "help": "Choose all that apply.", "required": true, "binding": "answer.value@1", "constraints": {"options": [{"id": "car", "label": "Car"}, {"id": "van", "label": "Van"}]}},
+      {"id": "photos", "type": "attachment", "label": "Existing cleared photos", "help": "Optional. Uploading uses the separate photo flow.", "required": false, "binding": "answer.value@1", "constraints": {"collection": "photos", "multiple": true, "maxItems": 3}}
+    ], "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": null
+  },
+  "projectBrief": {
+    "version": 1, "kind": "form", "template": "project-brief@1", "title": "Your next project",
+    "summary": "Save a brief for a later project. First-project welcome remains its own guided flow.", "presentation": "inline",
+    "fields": [
+      {"id": "name", "type": "text", "label": "Project name", "help": "", "required": true, "binding": "answer.value@1", "constraints": {"maxLength": 100}},
+      {"id": "purpose", "type": "long-text", "label": "What should it do?", "help": "", "required": true, "binding": "answer.value@1", "constraints": {"maxLength": 1000}}
+    ], "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": null
+  },
+  "projectSelection": {
+    "version": 1, "kind": "form", "template": "project-select@1", "title": "Choose your project",
+    "summary": "Which project should we work on? Existing forms keep their original target.", "presentation": "inline",
+    "fields": [{"id": "project", "type": "resource", "label": "Project", "help": "Choose a project you can access.", "required": true, "binding": "answer.value@1", "constraints": {"collection": "projects", "multiple": false, "maxItems": 1}}],
+    "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": null
+  },
+  "choice": {
+    "version": 1, "kind": "form", "template": "choice@1", "title": "Choose a writing style",
+    "summary": "This is a preference for your brief and does not approve a website change.", "presentation": "inline",
+    "fields": [{"id": "tone", "type": "choice", "label": "Writing style", "help": "", "required": true, "binding": "answer.value@1", "constraints": {"options": [{"id": "friendly", "label": "Friendly"}, {"id": "formal", "label": "Formal"}]}}],
+    "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": null
+  },
+  "view": {
+    "version": 1, "kind": "view", "template": "status@1", "title": "Your detailing site",
+    "summary": "Current project status and measured request traffic. Missing measurements stay unavailable.", "presentation": "inline", "fields": [],
+    "cards": [
+      {"id": "status", "binding": "project.status@1", "display": "status", "limit": 1, "reviewId": null},
+      {"id": "traffic", "binding": "project.traffic@1", "display": "table", "limit": 20, "reviewId": null}
+    ], "submitBinding": null, "continuationBinding": null
+  }
+}
