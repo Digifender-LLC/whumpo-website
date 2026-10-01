@@ -167,7 +167,8 @@
     "test:service-client-activation": "node tests/service-client-activation.mjs",
     "test:subscriptions": "node tests/subscriptions.mjs",
     "setup:stripe": "node tools/stripe-sandbox.mjs",
-    "test:current-website-specifications": "node tests/current-website-specifications.mjs"
+    "test:current-website-specifications": "node tests/current-website-specifications.mjs",
+    "test:feature-inclusion": "node tests/feature-inclusion.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

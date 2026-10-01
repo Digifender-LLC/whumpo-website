@@ -6,6 +6,15 @@
   "contract": "docs/data-lifecycle.md",
   "classes": [
     {
+      "id": "feature-preview-authority", "tables": ["feature_preview_grants"], "scope": "mixed",
+      "purpose": "Explicit operator-issued private-test inclusion for one account/project, feature, operation and interval. Not authentication, customer approval, provider consent or a subscription.",
+      "currentRetention": "Immutable metadata retained under account/project after expiry or one-way revocation to prevent request-ID recreation. No age purge. Quotas bound lifetime row count; account/project deletion cascades.",
+      "proposedRetention": "Ordinary account/project closure purges scoped test grants after admissions stop. Preserve only a separately justified minimal unresolved-operation identity; grants never survive export/restore as transferable authority.",
+      "deletionAuthority": "Operator may revoke; only reviewed parent cleanup removes retained rows. Models and customer jobs cannot issue, refresh or remove grants.",
+      "exportPolicy": "Allowlist scope, feature, operation, interval and revoked status. Exclude internal operator review references. Never export a grant as authority for another account or deployment.",
+      "references": ["src/feature-inclusion.ts", "src/feature-preview-grants.ts", "docs/feature-inclusion.md"]
+    },
+    {
       "id": "owner-identity", "tables": ["users", "customer_eligibility"], "scope": "owner",
       "purpose": "Identify the account and its recorded US customer declaration.",
       "currentRetention": "Retained while the account exists; eligibility cascades. Other tables can prevent account deletion.",
