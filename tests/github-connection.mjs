@@ -1,3 +1,4 @@
+import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -8,7 +9,7 @@ const {startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,g
 const dir=await mkdtemp('/tmp/whumpo-github-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
 const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'whumpo-test',key:'ab'.repeat(32)};
-async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
+async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();await paidPlan(db,id,'business');return id;}
 const denied=async()=>{throw Error('No transport expected');};let calls=0,exchanges=0,revocations=[];
 function provider(start,{token='ghu_synthetic',expires=28800,revokeStatus=204,userStatus=200,beforeUser}={}){return async(url,init={})=>{calls++;assert.equal(init.redirect,'manual');assert.ok(init.signal);const parsed=new URL(url);
  if(url==='https://github.com/login/oauth/access_token'){exchanges++;const body=JSON.parse(init.body);assert.equal(body.client_secret,config.clientSecret);assert.equal(body.redirect_uri,'https://whumpo.com/api/connections/github/callback');const digest=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body.code_verifier))).toString('base64url');assert.equal(digest,new URL(start.url).searchParams.get('code_challenge'));assert.equal(parsed.search,'');return Response.json({access_token:token,expires_in:expires,refresh_token:'discard-this-refresh-token'});}
@@ -53,9 +54,9 @@ try{
  }}))),e=>e.status===401);
  const replacementFlow=await start(user);await finish(user,replacementFlow,provider(replacementFlow,{token:'ghu_before_replace'}));
  await assert.rejects(githubInstallations(db,user,config,async()=>{const newer=await start(user);await finish(user,newer,provider(newer,{token:'ghu_after_replace'}));return Response.json({total_count:1,installations:[{id:1,app_id:123,account:{login:'stale-replaced-org'}}]});}),e=>e.status===401);assert.equal((await connectionStatus(db,user,config)).github.connected,true);
- const staleAccess=await githubAccess(db,user,config,denied);await disconnectGitHub(db,user,undefined);await assert.rejects(staleAccess.assertCurrent(),e=>e.status===401);await assert.rejects(staleAccess.send('/user/installations?per_page=100'),e=>e.status===401);
+ const staleAccess=await githubAccess(db,user,config,denied,{projectId:null,operation:'read'});await disconnectGitHub(db,user,undefined);await assert.rejects(staleAccess.assertCurrent(),e=>e.status===401);await assert.rejects(staleAccess.send('/user/installations?per_page=100'),e=>e.status===401);
  const writeFlow=await start(user);await finish(user,writeFlow,provider(writeFlow,{token:'ghu_write_race'}));let writes=0;
- const writing=await githubAccess(db,user,config,async()=>{writes++;await disconnectGitHub(db,user,undefined);return Response.json({data:{alreadyAccepted:true}});});await assert.rejects(writing.send('/graphql',{method:'POST',body:'{}'}),e=>e.status===401);assert.equal(writes,1,'No automatic retry after a possibly accepted write');
+ const writing=await githubAccess(db,user,config,async()=>{writes++;await disconnectGitHub(db,user,undefined);return Response.json({data:{alreadyAccepted:true}});},{projectId:null,operation:'dispatch'});await assert.rejects(writing.send('/graphql',{method:'POST',body:'{}'}),e=>e.status===401);assert.equal(writes,1,'No automatic retry after a possibly accepted write');
  const final=await start(user);await finish(user,final,provider(final,{token:'ghu_expiring'}));await db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE user_id=?").bind(user).run();assert.equal((await connectionStatus(db,user,config)).github.connected,false);await assert.rejects(()=>githubInstallations(db,user,config,denied));await cleanupGitHub(db,config,denied);assert.equal((await db.prepare('SELECT COUNT(*) n FROM github_token_vault WHERE user_id=?').bind(user).first()).n,0);
  console.log('GitHub connection checks passed: PKCE, one-time session state, encrypted user-bound tokens, owner isolation, installation filtering, replacement, cancellation race, immediate disconnect, queued revocation, expiry and bounded provider failures. No real GitHub credentials were used.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

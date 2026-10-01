@@ -1,3 +1,4 @@
+import {paidPlan} from './helpers/paid-plan.mjs';
 import {createFixtureProject} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,mkdir,writeFile} from 'node:fs/promises';
@@ -13,7 +14,7 @@ const {sendChat,readChat}=await module('src/chat.ts'),{ownedExport}=await module
 const dir=await mkdtemp('/tmp/whumpo-backups-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
 const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'test',key:'ab'.repeat(32)},now=new Date().toISOString();
-async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',now).run();return id;}
+async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',now).run();await paidPlan(db,id,'business');return id;}
 async function send(user,content){const id=crypto.randomUUID(),state=await readChat(db,user);await sendChat(db,user,{id,revision:state.state.revision,content});return id;}
 const denied=async()=>{throw Error('Unexpected network');};
 try{

@@ -4255,12 +4255,14 @@
         "docs/roadmap/alignment.md",
         "docs/workspace-identity.md",
         "docs/plan-feature-contract.md",
-        "docs/feature-inclusion.md"
+        "docs/feature-inclusion.md",
+        "docs/feature-admission.md"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/62",
       "owner": null,
       "evidence": [
-        "2026-10-01: split into #63 current inclusion/preview-grant interface, #64 enforcement and #65 connected acceptance/test release. The foundation extends current invoice coverage rather than creating paid-plan truth. Parent stays open; inclusion alone is not authorization and no current handler is represented as gated until its adapter acceptance."
+        "2026-10-01: split into #63 current inclusion/preview-grant interface, #64 enforcement and #65 connected acceptance/test release. The foundation extends current invoice coverage rather than creating paid-plan truth. Parent stays open; inclusion alone is not authorization and no current handler is represented as gated until its adapter acceptance.",
+        "2026-10-01: #64 source adapters enforce current inclusion at GitHub/Cloudflare OAuth, provider reads, exact review/confirmation and dispatch boundaries; protected uncertain recovery is bound to recorded read-only destinations. Full #64/#65 acceptance still requires the shared WH-114/115 principal runtime, session/epoch/restricted-purpose revocation and future membership/job adapters. Source implementation is not a deployed or full-authorization claim."
       ]
     },
     {

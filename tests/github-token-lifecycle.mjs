@@ -1,3 +1,4 @@
+import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -11,7 +12,7 @@ const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return
 try{
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',directory],{stdio:'pipe',maxBuffer:16*1024*1024});
  proxy=await wrangler.getPlatformProxy({persist:{path:directory+'/v3'},remoteBindings:false});const db=proxy.env.DB;
- async function owner(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users VALUES(?,?,'00','synthetic',?)").bind(id,id+'@example.test',new Date().toISOString()).run();return id;}
+ async function owner(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users VALUES(?,?,'00','synthetic',?)").bind(id,id+'@example.test',new Date().toISOString()).run();await paidPlan(db,id,'business');return id;}
  const active=user=>db.prepare('SELECT c.active_token_id,t.state FROM github_connections c LEFT JOIN github_token_vault t ON t.id=c.active_token_id WHERE c.user_id=?').bind(user).first();
  function provider(token,{onUser,onRevoke,revokeStatus=204}={}){return async(url,init)=>{
   if(url==='https://github.com/login/oauth/access_token')return Response.json({access_token:token,expires_in:3600});
@@ -48,7 +49,7 @@ try{
  });
  await check('pending token grants no capability before validation',async()=>{
   const user=await owner();await connect(user,'ghu_no_capability',{onUser:async()=>{
-   await assert.rejects(githubAccess(db,user,config),e=>e.status===401);
+   await assert.rejects(githubAccess(db,user,config,fetch,{projectId:null,operation:'read'}),e=>e.status===401);
    assert.equal((await connectionStatus(db,user,config)).github.connected,false);
    assert.equal((await db.prepare('SELECT COUNT(*) n FROM github_token_staging s JOIN github_token_vault t ON t.id=s.token_id WHERE t.user_id=?').bind(user).first()).n,1);
   }});
