@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 
 /** The isolated current schema has only a canonical user FK, never old auth tables. */
 export async function identityDatabase(){
- const schema=`CREATE TABLE users(id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,created_at INTEGER NOT NULL) STRICT;
+ const schema=`${await readFile('src/workspace-identity/canonical-inputs.sql','utf8')}
  CREATE TABLE test_effects(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE) STRICT;
  ${await readFile('src/workspace-identity/schema.sql','utf8')}`;
  if(process.argv.length===2){
@@ -18,7 +18,11 @@ export async function identityDatabase(){
   };
   const db={prepare,batch:async statements=>{
    sql.exec('BEGIN');try{
-    const results=[];for(const statement of statements)results.push(await statement.run());
+    const results=[];for(const statement of statements){
+     const query=sql.prepare(statement.query);
+     if(query.columns().length)results.push({success:true,results:query.all(...statement.params)});
+     else{const changed=query.run(...statement.params);results.push({success:true,results:[],meta:{changes:Number(changed.changes)}});}
+    }
     sql.exec('COMMIT');return results;
    }catch(error){sql.exec('ROLLBACK');throw error;}
   }};
