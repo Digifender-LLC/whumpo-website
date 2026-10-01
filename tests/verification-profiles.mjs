@@ -3,9 +3,8 @@ import {existsSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fixtureEnvironment,runProfile} from '../tools/verify.mjs';
-const environment=fixtureEnvironment({PATH:'/bin',RUN_LIVE_MUSE:'1',CLOUDFLARE_API_TOKEN:'secret',AI_API_KEY:'secret',NODE_OPTIONS:'--inspect',HTTPS_PROXY:'secret'},'/tmp/fixture','site');
-assert.equal(environment.SITE_AI,'1');
-for(const key of ['RUN_LIVE_MUSE','CLOUDFLARE_API_TOKEN','AI_API_KEY','NODE_OPTIONS','HTTPS_PROXY'])assert.equal(environment[key],undefined);
+const environment=fixtureEnvironment({PATH:'/bin',SITE_AI:'1',RUN_LIVE_MUSE:'1',CLOUDFLARE_API_TOKEN:'secret',AI_API_KEY:'secret',NODE_OPTIONS:'--inspect',HTTPS_PROXY:'secret'},'/tmp/fixture');
+for(const key of ['SITE_AI','RUN_LIVE_MUSE','CLOUDFLARE_API_TOKEN','AI_API_KEY','NODE_OPTIONS','HTTPS_PROXY'])assert.equal(environment[key],undefined);
 const cwd=mkdtempSync(join(tmpdir(),'whumpo-profile-test-'));let calls=0,home;
 try{
  assert.throws(()=>runProfile('unknown',{cwd}),/Choose/);

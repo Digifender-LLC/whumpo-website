@@ -13,10 +13,9 @@ export const profiles={
 
 // Deliberately allowlist environment inputs. In particular, no provider keys,
 // optional live-test flags, NODE_OPTIONS, proxies or inherited Wrangler auth.
-export function fixtureEnvironment(parent,home,profile){
+export function fixtureEnvironment(parent,home){
  const env={HOME:home,XDG_CONFIG_HOME:home,CI:'1',WRANGLER_SEND_METRICS:'false',WRANGLER_LOAD_DEV_VARS_FROM_DOT_ENV:'false'};
  for(const key of ['PATH','SystemRoot','WINDIR','TMPDIR','TEMP','TMP'])if(parent[key])env[key]=parent[key];
- if(profile==='site')env.SITE_AI='1'; // This suite intercepts inference with synthetic replies.
  return env;
 }
 
@@ -29,7 +28,7 @@ export function runProfile(name,{run=spawnSync,parent=process.env,cwd=root}={}){
  try{
   for(const script of profiles[name]){
    console.log(`Verifying ${name}: ${script}`);
-   const result=run(process.execPath,[script],{cwd,env:fixtureEnvironment(parent,home,name),stdio:'inherit',timeout:300000});
+   const result=run(process.execPath,[script],{cwd,env:fixtureEnvironment(parent,home),stdio:'inherit',timeout:300000});
    if(result.error||result.signal||result.status!==0)throw Error(`${script} failed (${result.error?.code??result.signal??result.status}).`);
   }
  }finally{rmSync(home,{recursive:true,force:true});}
