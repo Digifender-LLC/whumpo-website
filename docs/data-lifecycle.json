@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "reviewedAt": "2026-09-30",
+  "reviewedAt": "2026-10-01",
   "policyStatus": "proposed-not-approved",
   "runtimeEnforcement": false,
   "contract": "docs/data-lifecycle.md",
@@ -42,9 +42,9 @@
       "references": ["docs/account-closure.md", "src/index.ts"]
     },
     {
-      "id": "conversation", "tables": ["chat_turns", "agent_inspections", "activity_events"], "scope": "owner",
-      "purpose": "Conversation continuity, saved agent inspection results and action history.",
-      "currentRetention": "Retained under account; current Chat transcript has an upper revision but is not a whole-account snapshot. Internal inspections and receipts can outlive visible messages.",
+      "id": "conversation", "tables": ["chat_turns", "agent_inspections", "activity_events", "chat_review_receipts"], "scope": "owner",
+      "purpose": "Conversation continuity, saved agent inspection results, action history and metadata proving that a specific review was presented in a Chat reply.",
+      "currentRetention": "Retained under account; current Chat transcript has an upper revision but is not a whole-account snapshot. Internal inspections and receipts can outlive visible messages. chat_review_receipts has a direct NO ACTION owner reference and cascades with its Chat turn; it does not grant confirmation authority.",
       "proposedRetention": "Retain active-account conversation until an approved user removal/retention policy; ordinary closure purge includes inspections and copied context. Extract only necessary unresolved-operation metadata first.",
       "deletionAuthority": "Owner closure or future reviewed conversation deletion; do not delete referenced authority/operation evidence without migration.",
       "exportPolicy": "Saved user/assistant turns and customer action summaries at a stable cutoff. Exclude private operator material and internal inspection dumps.",
@@ -58,6 +58,24 @@
       "deletionAuthority": "Exact owner version/project/account review; check live and external-backup dependencies at commit time.",
       "exportPolicy": "Owned source/config/HTML and provenance, subject to current content/media clearance. Export is not automatic publication permission.",
       "references": ["docs/version-retention.md", "docs/version-comparisons.md"]
+    },
+    {
+      "id": "project-configurations", "tables": ["project_spec_proposals", "project_spec_versions", "service_client_proposals", "service_client_versions"], "scope": "project",
+      "purpose": "Full private website/service configuration, compiler locks, manifests, target references, previews, release candidates and comparison copies, including forward-restored snapshots.",
+      "currentRetention": "Proposals expire after ten minutes; preparing another proposal clears expired project proposals and a bounded global batch. Expiry is not a timed purge. Saved full snapshots have count/byte bounds, not age expiry. Exact website removal cascades dependent full snapshots and removes associated proposal/comparison copies; current heads and unexpired unapplied/activation reviews retain dependencies.",
+      "proposedRetention": "Retain active saved configurations until exact removal or closure. Enumerate every full snapshot, proposal, preview, comparison and Chat/inspection copy during erasure. Restore creates a forward version under current safety and ownership checks; deleted bytes cannot be recreated from metadata receipts.",
+      "deletionAuthority": "Exact owner website/project/account review and current dependency/hold checks. Direct retained-head or review deletion is not a supported bypass; eligible parent cascades do not constitute a customer closure workflow.",
+      "exportPolicy": "Allowlist owned cleared configurations, pinned compiler/version provenance and compatible artifacts. Label private desired settings separately from enabled services; exclude internal envelopes/authority digests, visitor records and credentials. Current whole-account export remains unimplemented.",
+      "references": ["docs/project-specification.md", "docs/project-service-clients.md", "src/project-specification/store.ts", "src/project-specification/service-clients/store.ts", "docs/version-retention.md"]
+    },
+    {
+      "id": "configuration-authority", "tables": ["project_spec_applies", "project_spec_heads", "project_spec_chat_links", "service_client_applies", "service_client_heads", "service_client_chat_links", "service_client_activation_reviews", "service_client_activation_links"], "scope": "project",
+      "purpose": "Immutable private-save receipts, current revision pointers, exact Chat presentation links and metadata provenance for separately confirmed contact/form activation reviews.",
+      "currentRetention": "Apply/activation receipts retain IDs, digests, revisions and target metadata independently of full saved bytes. Receipt/head deletion is guarded while parents exist; eligible parent cascades remove them. Presentation links follow their turn/proposal/review. No terminal-receipt age purge; short review expiry is not erasure. Existing service review constraints still apply.",
+      "proposedRetention": "Preserve minimum replay and unresolved-effect identity before erasing content, then use an approved metadata schedule. Extract independent restore suppression before account/project cascades; current same-database tombstones cannot suppress an older database restore. Minimize expired operational targets after dependent operations settle.",
+      "deletionAuthority": "Exact owner lifecycle review coordinated with existing service withdrawal and unresolved-operation reconciliation. Neither Chat links nor private saves authorize activation; historical receipts cannot reactivate after a disable or restore erased configuration.",
+      "exportPolicy": "Allowlist customer-visible save/activation status, time and version provenance. Exclude internal target envelopes, authority hashes and operational reference graphs. No source, form submissions or visitor data are stored in these metadata receipts.",
+      "references": ["docs/project-specification.md", "docs/project-service-clients.md", "src/project-specification/service-clients/activation.ts", "docs/contact-forms.md", "docs/backend-execution.md"]
     },
     {
       "id": "project-media", "tables": ["project_files", "version_photos", "photo_removals", "file_cleanup"], "scope": "mixed",
@@ -114,13 +132,13 @@
       "references": ["src/contacts.ts", "docs/contact-forms.md"]
     },
     {
-      "id": "backend-artifacts", "tables": ["backend_versions", "backend_runs", "backend_state", "backend_state_reviews", "backend_state_links", "backend_form_reviews", "backend_form_settings", "backend_publications", "backend_publication_reviews", "backend_public_usage", "application_builds"], "scope": "project",
-      "purpose": "Bounded backend source, tests, state, saved snapshots and live authority.",
-      "currentRetention": "Account/project-linked artifacts and immutable review/operation metadata; some authority references block cascades. Backend snapshots may duplicate submitted personal data.",
+      "id": "backend-artifacts", "tables": ["backend_versions", "backend_runs", "backend_state", "backend_state_reviews", "backend_state_links", "backend_form_reviews", "backend_form_settings", "backend_publications", "backend_publication_reviews", "backend_public_usage", "application_builds", "composition_plans", "backend_extension_uses"], "scope": "project",
+      "purpose": "Bounded backend source, tests, state, saved snapshots, private capability plans, generated-extension provenance and live authority.",
+      "currentRetention": "Account/project-linked artifacts and immutable review/operation metadata; some authority references block cascades. Backend snapshots may duplicate submitted personal data. Composition plans expire for new execution after fifteen minutes but have no age purge; retained extension provenance references the plan and prevents premature deletion. Count bounds do not establish timed retention.",
       "proposedRetention": "Active artifacts until removal/closure; disable execution and form ingress first. Settle dispatched work; scrub current and snapshot copies and keep minimum replay/deletion metadata separately.",
       "deletionAuthority": "Exact owner source/state/closure review; worker outcomes cannot authorize new external effects during closure.",
       "exportPolicy": "Cleared source/tests and compatibility manifest; private state requires separate explicit data scope. Never include secrets or execute source while exporting.",
-      "references": ["docs/app-data.md", "docs/account-closure.md"]
+      "references": ["docs/app-data.md", "docs/account-closure.md", "src/composition-plans.ts", "docs/capability-planner.md"]
     },
     {
       "id": "shared-reuse", "tables": ["backend_nominations", "backend_component_instances"], "scope": "project",

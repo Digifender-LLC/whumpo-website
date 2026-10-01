@@ -7,6 +7,15 @@ const metrics={
  accounts:['users','id'], projects:['projects','owner_user_id'],
  liveProjects:['project_service_status','owner_user_id','site_live=1 OR backend_live=1 OR cms_articles>0'],
  sessions:['sessions','user_id'], chatTurns:['chat_turns','user_id'],
+ chatReviewReceipts:['chat_review_receipts','user_id'],
+ compositionPlans:['composition_plans','user_id'],
+ specificationProposals:['project_spec_proposals','user_id'],
+ specificationSnapshots:['project_spec_versions','project_id IN (SELECT id FROM owned_projects)'],
+ specificationSaveReceipts:['project_spec_applies','user_id'],
+ serviceClientProposals:['service_client_proposals','user_id'],
+ serviceClientSnapshots:['service_client_versions','project_id IN (SELECT id FROM owned_projects)'],
+ serviceClientSaveReceipts:['service_client_applies','user_id'],
+ serviceActivationReceipts:['service_client_activation_reviews','user_id'],
  githubCredentials:['github_token_vault','user_id'], cloudflareCredentials:['cloudflare_token_vault','user_id'],
  githubPendingRevocations:['github_token_vault','user_id',"state='revoking'"],
  cloudflarePendingRevocations:['cloudflare_token_vault','user_id',"state='revoking'"],
@@ -46,6 +55,7 @@ export async function accountClosureInventory(db,userId=null){
   limitations:[
    'Read-only control-database snapshot; not a complete data export or deletion authorization.',
    'Provider resources, R2 objects and backups have not been reconciled. Row counts are not resource counts.',
+   'Saved configuration/proposal counts include full content copies. Metadata receipt counts do not prove independent restore suppression or safe deletion order.',
    'No legal-hold or retention decision has been established; zero blocked records does not establish clearance.',
    'Account closure, provider cancellation and restore-safe deletion orchestration are not implemented.',
   ]};
