@@ -76,3 +76,36 @@ WH-113 now has the source-grounded [workspace identity protocol](../workspace-id
 ## Cumulative feature contract — October 1, 2026
 
 WH-089 now supplies the [shared catalogue](../plan-feature-contract.md) in code and presentation. Creator retains `personal`; no grant or provider mapping is rewritten. WH-090 consumes stable feature IDs, current identity and existing invoice coverage rather than creating another entitlement source. WH-105 uses the same IDs for Chat bindings. This closes the early feature-definition handoff; runtime enforcement, delivery and commercial activation remain distinct.
+
+## Follow-up dependency audit — October 1, 2026
+
+Reviewed all 118 task dependency lists against source `db8b740`, including the now-delivered WH-113 identity protocol and WH-089 catalogue. The latter's presentation is deployed in private test release `37497b4a-0b2d-4004-94cf-12838eff9e96`; it does not implement feature enforcement. Live GitHub evidence confirms #39/#42/#44 completed; #9/#10/#11/#21/#30 remain open. Earlier dated snapshots above retain their original scope.
+
+The first alignment established the architecture; this pass makes additional cross-workstream prerequisites executable in the canonical graph. No task is appended, renumbered or removed.
+
+| Remaining rework risk | Correction |
+| --- | --- |
+| New modules and typed Chat interactions invent eligibility checks before shared enforcement exists | WH-067 and WH-106 now depend on WH-090. Module owner controls also consume WH-105. Published visitor serving retains its own app policy and the protected hosting contract. |
+| Team/guest/provider records and pooled caches ship before their protection and processing rules | WH-054/056/075/092 now consume WH-116. Membership and feedback register WH-105 bindings before clients. Existing encrypted credentials remain the foundation. |
+| Account closure grows a second scheduler; generic jobs later need new identity/resource fields | WH-018 now consumes WH-052; WH-052 consumes WH-071/113. One job envelope carries stable logical resource and actor scope; domain receipts remain authoritative. |
+| Cost attribution changes when data moves between physical services | WH-022 consumes WH-071 logical identities. Moving a database never rewrites a historical usage event. |
+| Export requirements arrive after module schemas, and first exports wait for a database fleet | WH-071 freezes minimal lifecycle/export descriptors before WH-067. WH-077 consumes that contract instead of waiting for WH-072; future physical adapters need their own export acceptance. |
+| Capacity pooling bypasses feature decisions | WH-075 consumes WH-090 as well as protection rules, preserving actor revocation, uncertain readback and non-billable standard assistance. |
+| Paid tiers pass individual screens without proving the composed platform | WH-104 includes the existing WH-080 synthetic integration pilot. Provider, device, customer, safety and finance acceptance remain separate requirements. |
+
+### Execution order after the delivered foundations
+
+1. **Immediate independent contracts:** WH-071 placement/lifecycle/export interface and WH-105 interaction/binding contract. Reconcile WH-020's outstanding outcome/privacy evidence; then WH-116 protection classification. WH-090 can begin from delivered WH-089/113 and the existing subscription resolver.
+2. **Shared engines:** complete WH-052 with the identity/placement handoff, WH-114/115 enrollment/recovery, WH-117 protection, WH-106/107 interactions, WH-067 module APIs and WH-056 connector conformance. Split contract, implementation and externally gated acceptance before claiming large packets.
+3. **Feature adapters and journeys:** shared sender/notifications/rules, Creator feedback/design, Business records/connectors, Pro collaboration/releases, owner views and the native subset. Reuse the common handlers. Initial Chat delivery does not wait for every future feature; each feature adds its own binding and connected acceptance.
+4. **Acceptance and launch:** candidate-specific protection/recovery, the composed pilot, primary Chat experience and cumulative paid tiers, with the existing safety, measured-finance and commercial gates. Free beta remains independent of the full paid-tier and Android gates.
+
+A full contract/schema handoff may be delivered before its parent finishes external acceptance, but must be named and evidenced explicitly in a child packet. Do not informally ignore a parent dependency or mark its untested remainder done. Compatibility/version metadata belongs in the first schema; later rollout, storage placement and client additions extend it.
+
+No additional product decision is needed for these sequencing fixes. Existing unresolved activation choices remain in their packets; CSAM and Daybreak stay deferred, CMS testing stays paused, and standard AI remains unlimited fair use with Monitor default.
+
+### Persistent graph check
+
+`node tools/roadmap.mjs alignment` checks required upstream paths and forbidden release/optional-infrastructure dependencies. It rejects reintroduced billing/launch cycles, missing shared contract paths, a web-beta dependency on Android/PRF/paid tiers, a platform sender dependency on mailbox connectors, and an export dependency on future physical database placement. Run it when extending the backlog, alongside structural validation and render checks. It reads only local planning data and does not infer completion, deployment or approval from reachability.
+
+**Follow-up verification:** structural validation, alignment reachability and exact generated rendering passed. All 118 IDs, original acceptance criteria, prior scope entries, issue mappings and evidence were preserved; 11 packets have dependency changes. Ten deliberately broken dependency graphs were rejected by the new check, and structural validation rejected a cycle. No runtime behavior or provider service is changed by the roadmap tooling.
