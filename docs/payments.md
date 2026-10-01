@@ -2,7 +2,7 @@
 
 Current launch catalogue and model-cost policy: [pricing-and-model-policy.md](pricing-and-model-policy.md). Launch/Studio references below describe legacy test entitlements.
 
-Status — October 1, 2026: the owner resumed Stripe sandbox work and supplied a verified test key. Optional subscription signup, paid invoices and management are implemented in [the sandbox adapter](stripe-sandbox.md); that document records configuration/deployment/acceptance separately. No real payments are enabled. The legacy credit-pack path below remains for historical tests and is not offered as advanced-model credit purchasing.
+Status — October 1, 2026: the owner resumed Stripe sandbox work and supplied a verified test key. Optional subscription signup, paid invoices and management are deployed and verified in [the sandbox adapter](stripe-sandbox.md); that document records configuration/deployment/acceptance separately. No real payments are enabled. The legacy credit-pack path below remains for historical tests and is not offered as advanced-model credit purchasing.
 
 ## Credit orders
 
