@@ -28,7 +28,7 @@ assert.equal((await call('/_emdash/api/plugins')).status,403);
 assert.equal((await fetch(base+'/_emdash/admin/setup')).status,403);
 const service={fetch:async request=>{const u=new URL(request.url);return fetch(base+u.pathname+u.search,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),signal:request.signal});}};assert.deepEqual((await verifyCMSInitialization(service,config)).collections.sort(),['pages','posts']);
 console.log('Actual EmDash bridge passed: unsigned/wrong-owner denial, empty-content setup, replay/conflict handling, pinned owner administration, schema reads, setup closed and other management routes denied.');
-const shapeBuild=await build({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsDraftBody,cmsEditBody,cmsStagedEditBody,cmsRichDraftBody,cmsRichEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeBuild.outputFiles[0].text).toString('base64'));
+const shapeBuild=await build({entryPoints:['src/cms-content-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsDraftBody,cmsStagedEditBody,cmsRichDraftBody,cmsRichEditBody}=await import('data:text/javascript;base64,'+Buffer.from(shapeBuild.outputFiles[0].text).toString('base64'));
 const taxonomyBuild=await build({entryPoints:['src/cms-taxonomy-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsTaxonomyDefinition,cmsTaxonomyTerm}=await import('data:text/javascript;base64,'+Buffer.from(taxonomyBuild.outputFiles[0].text).toString('base64'));
 for(const name of ['categories','tags']){
  const defPath='/_emdash/api/taxonomies/'+name,definition=cmsTaxonomyDefinition(name),definitionId=id();
@@ -55,13 +55,13 @@ for(const collection of ['posts','pages']){
  if(collection==='posts')assert.equal(data.data.item.data.excerpt,draftBody.data.excerpt);
  else assert.equal((await call('/_emdash/api/content/pages',cmsRichDraftBody('Page',initial.data.content,'No page excerpt'))).status,403);
  const item=data.data.item,read=await call('/_emdash/api/content/'+collection+'/'+item.id);assert.equal(read.status,200);const snapshot=(await read.json()).data;assert.equal(snapshot.item.data.title,'Native '+collection);assert.ok(renderCMSDraft({collection,revision:snapshot._rev,item:snapshot.item}).includes('&lt;script&gt;plain text only&lt;/script&gt;'));
- const editId=id(),editBody=cmsEditBody('Edited '+collection,'Changed paragraph',snapshot._rev),path='/_emdash/api/content/'+collection+'/'+item.id;
+ const editId=id(),editBody=cmsStagedEditBody('Edited '+collection,'Changed paragraph',snapshot._rev),path='/_emdash/api/content/'+collection+'/'+item.id;
  const edited=await call(path,editBody,editId,config,'PUT'),editData=await edited.json();assert.equal(edited.status,200,JSON.stringify(editData));assert.equal(editData.data.item.data.title,'Edited '+collection);if(collection==='posts')assert.equal(editData.data.item.data.excerpt,draftBody.data.excerpt);assert.notEqual(editData.data._rev,snapshot._rev);
  assert.deepEqual(await (await call(path,editBody,editId,config,'PUT')).json(),editData);
- assert.equal((await call(path,cmsEditBody('Changed replay','Other',snapshot._rev),editId,config,'PUT')).status,409);
- assert.equal((await call(path,cmsEditBody('Stale edit','Lost update',snapshot._rev),id(),config,'PUT')).status,409);
+ assert.equal((await call(path,cmsStagedEditBody('Changed replay','Other',snapshot._rev),editId,config,'PUT')).status,409);
+ assert.equal((await call(path,cmsStagedEditBody('Stale edit','Lost update',snapshot._rev),id(),config,'PUT')).status,409);
  assert.equal((await call(path,cmsDraftBody('No revision','Body'),id(),config,'PUT')).status,403);
- const contenders=await Promise.all(['One','Two'].map(title=>call(path,cmsEditBody(title,'Race',editData.data._rev),id(),config,'PUT')));assert.deepEqual(contenders.map(r=>r.status).sort(),[200,409]);
+ const contenders=await Promise.all(['One','Two'].map(title=>call(path,cmsStagedEditBody(title,'Race',editData.data._rev),id(),config,'PUT')));assert.deepEqual(contenders.map(r=>r.status).sort(),[200,409]);
  assert.equal((await call('/_emdash/api/content/'+collection,{...draftBody,status:'published'})).status,403);
  assert.equal((await call('/_emdash/api/content/'+collection+'/'+item.id+'/publish',{})).status,403);
  const latest=(await (await call(path)).json()).data,publishPath=path+'/publish',publishId=id();

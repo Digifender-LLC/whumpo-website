@@ -25,7 +25,7 @@ try{
   if(!excerptCapable&&new URL(request.url).pathname.endsWith('/capabilities')){const payload=await response.json();delete payload.data.structuredContent.excerptVersion;return Response.json(payload);}
   if(drop&&request.method==='POST'){drop=false;throw Error('Lost native receipt');}return response;
  }}};
- const candidate={sourceDigest:'c'.repeat(64),sourceId:123,collection:'posts',title:'Imported story',content:[{_type:'block',style:'normal',markDefs:[],children:[{_type:'span',text:'Original story',marks:[]}]}],provenance:{sourceHTML:'<p>Original story</p><script>bad()</script>',author:'Source writer',sourceURL:'https://old.example/story',sourceStatus:'publish',sourceDate:'2026-09-01',sourceSlug:'story'}};
+ const candidate={sourceDigest:'c'.repeat(64),sourceId:123,collection:'posts',title:'Imported story',content:[{_type:'block',style:'normal',markDefs:[],children:[{_type:'span',text:'Original story',marks:[]}]}],provenance:{sourceHTML:'<p>Original story</p><script>bad()</script>',author:'Source writer',sourceURL:'https://old.example/story',sourceStatus:'publish',sourceDate:'2026-09-01',sourceSlug:'story',excerpt:'',categories:[],tags:[]}};
  const {canonicalImportProvenance}=await module('src/cms-import-provenance.ts');
  const {renderCMSDraft}=await module('src/cms-preview.ts');
  for(const published of [false,true]){const html=renderCMSDraft({collection:'posts',item:{status:'draft',data:{title:'Story',content:candidate.content,excerpt:'<script>text only</script>'}}},published);assert.ok(html.includes('&lt;script&gt;text only&lt;/script&gt;'));assert.ok(!html.includes('<script>'));}

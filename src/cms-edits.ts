@@ -4,7 +4,7 @@ import {validateCMSRichContent} from './cms-rich-text';
 import {editableCMS} from './cms-plain-text';
 import {cmsConnection,requireStructuredCMS,requireCMSImages} from './cms-status';
 import {callCMS,CMSBridgeError} from './cms-bridge';
-import {cmsEditBody,cmsStagedEditBody,cmsRichEditBody} from './cms-content-shape';
+import {cmsStagedEditBody,cmsRichEditBody,validCMSEdit} from './cms-content-shape';
 import {readCMSDraft,type ContentFormat} from './cms-content';
 import {CMSProjectError} from './cms-projects';
 type Row={id:string;draft_request_id:string;body:string;result:string|null;content_format:ContentFormat};
@@ -14,8 +14,9 @@ export async function editCMSDraft(db:D1Database,user:string,project:string,id:s
  const draft=await db.prepare('SELECT collection,item_id FROM cms_draft_requests WHERE id=? AND user_id=? AND project_id=?').bind(draftId,user,project).first<{collection:string;item_id:string}>();
  if(!draft?.item_id)throw new CMSProjectError(404,'CMS draft not found');
  const read=()=>db.prepare('SELECT * FROM cms_edit_requests WHERE id=?').bind(id).first<Row>();let row=await read();const recovering=!!row;
- // Preserve pre-staging operation bodies exactly when recovering historical receipts.
- let body:string;try{body=JSON.stringify((format==='structured'?cmsRichEditBody:row&&JSON.parse(row.body).status==='draft'?cmsEditBody:cmsStagedEditBody)(title,text,revision));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
+ // Current request bodies are immutable. A retired body is never reconstructed or dispatched.
+ if(row&&!validCMSEdit(row.body))throw new CMSProjectError(409,'This saved edit uses an unsupported content contract. Read the current article and prepare a new edit.');
+ let body:string;try{body=JSON.stringify((format==='structured'?cmsRichEditBody:cmsStagedEditBody)(title,text,revision));}catch(e){throw new CMSProjectError(400,(e as Error).message);}
  if(!row){
   if(format==='structured'&&cmsImageReferences(text).length){await requireCMSImages(db,user,project,env);await captureCMSArticleImages(db,user,project,text,env);}
   if(format==='structured')await requireStructuredCMS(db,user,project,env);
@@ -30,9 +31,9 @@ export async function editCMSDraft(db:D1Database,user:string,project:string,id:s
  if(!row.result){
   if(format==='structured'&&cmsImageReferences(text).length)await requireCMSImages(db,user,project,env);
   if(format==='structured')await requireStructuredCMS(db,user,project,env);
-  // A historical unresolved request can still be undispatched. Do not flatten a
-  // rich revision that is still current; changed revisions can only recover
-  // their original native receipt or fail the existing revision precondition.
+  // An unresolved current request can still be undispatched. Preserve rich
+  // content; changed revisions can only recover their exact native receipt
+  // or fail the revision precondition.
   if(recovering){const current=await readCMSDraft(db,user,project,draftId,env);
   if(current.revision===revision&&format==='structured'){try{validateCMSRichContent(current.item.data?.content);}catch{throw new CMSProjectError(409,'Current content has unsupported formatting; this saved request cannot replace it safely.');}}
   if(current.revision===revision&&format==='plain'&&!editableCMS(current))throw new CMSProjectError(409,'This saved plain-text request would remove current article formatting. Content is unchanged; use the publishing desk to preview or download it.');}
@@ -60,7 +61,9 @@ export async function cmsEditAction(db:D1Database,user:string,action:Record<stri
  }
  if(action.operation==='retryEdit'){
   const row=await db.prepare('SELECT e.* FROM cms_edit_requests e JOIN cms_draft_requests d ON d.id=e.draft_request_id WHERE e.id=? AND d.project_id=? AND d.user_id=?').bind(draftId,project,user).first<Row>();
-  if(!row)throw new CMSProjectError(404,'CMS edit request not found');const body=JSON.parse(row.body);
+  if(!row)throw new CMSProjectError(404,'CMS edit request not found');
+  if(!validCMSEdit(row.body))throw new CMSProjectError(409,'This saved edit uses an unsupported content contract. Read the current article and prepare a new edit.');
+  const body=JSON.parse(row.body);
   return editCMSDraft(db,user,project,row.id,row.draft_request_id,body.data.title,row.content_format==='structured'?body.data.content:body.data.content[0].children[0].text,body._rev,env,row.content_format);
  }
  throw new CMSProjectError(400,'Unsupported CMS edit operation');
