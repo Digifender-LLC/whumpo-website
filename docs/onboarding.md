@@ -1,5 +1,17 @@
 # Customer welcome and project setup
 
+## Current customer flow — October 1, 2026 UTC
+
+The guided welcome asks for name, picture, optional bio and sharing choice, then the first project's idea, working name, optional audience and starting style. Review and completion create one private project before Chat/dashboard access. Customers then describe the first build in natural Chat; the starter card shows the saved brief and invites a request. It has no direct website/app build buttons. Public Chat accepts natural text only. The older first-build buttons and slash-command examples below are historical implementation evidence, superseded by [natural-language Chat](natural-language-chat.md). Internal adapters remain for bounded handlers and fixtures, not customer commands. Routine project-detail changes are requested through the agent or a customer-requested workflow.
+
+### Lost-response recovery
+
+Profile name/bio saves and welcome checkpoints now perform one read after an uncertain response (transport failure, 408, 409 or server failure). They never automatically repeat the write. Profile recovery requires the same authenticated account ID, exactly the next revision and the submitted fields. Checkpoint recovery requires exactly the next revision, question, chapter and normalized project answers. Completion recovers only an already-complete welcome; the server's atomic project-creation receipt remains authoritative. A definitive rejection, unavailable read or different saved state leaves the answer intact and displays the original error. Explicit reload explains that it replaces unsaved answers. This is saved-state recovery, not durable storage of unsaved welcome text.
+
+Errors take focus only while the customer remains in the answer form or focus has fallen to the document. Avatar selection returns keyboard focus to the chosen artwork after its disabled save state, unless the customer has moved elsewhere. Welcome sign-out clears this tab's Chat recovery record just like Profile sign-out. No schema, profile-sharing default or publication authority changes.
+
+`node tests/welcome-delivery.mjs` verifies exact readback and refusal cases without network; `node tests/onboarding-welcome.mjs` exercises the actual handlers against disposable D1. Connected browser evidence and deployment status are recorded in [owner-journey acceptance](workspace-refinement-acceptance.md#connected-owner-journey--october-1-2026-utc). Existing photo holds remain distinct from scanning: CSAM scanning is planned only and implementation is owner-deferred.
+
 ## Workspace entry gate — September 30, 2026
 
 Chat (including history) and workspace dashboard/layout/capacity APIs now return `409 onboarding_required` for signed-in customers who have not started a project. Profile, private photo upload and saved welcome progress remain accessible. The existing frontend gate prevents the workspace from rendering or requesting its data during welcome. Existing project owners and customers with recorded welcome completion retain access, including after deleting their first project.
