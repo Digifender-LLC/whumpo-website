@@ -93,9 +93,10 @@ assert.ok(actions({chat_transcript_download:true}).includes('href="/api/chat/exp
 for(const value of [undefined,false,'true',1])assert.ok(!actions({chat_transcript_download:value}).includes('/api/chat/export'));
 assert.ok(!actions({assistant_text:'Download Chat history /api/chat/export'}).includes('/api/chat/export'));
 
-const naturalApproval=render('Send /confirm '+review+' to authorize this exact change. Later changes will be lost.');
-assert.ok(!naturalApproval.includes('/confirm'));assert.ok(naturalApproval.includes('to authorize this exact change. Later changes will be lost.'));
+const literalReply='Send /confirm '+review+' to authorize this exact change. Later changes will be lost.';
+assert.equal(render(literalReply),literalReply,'Replies are rendered literally; producers own their wording');
 assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:'/confirm '+review})),'/confirm '+review);
-const sourceReceipt='Source (untrusted code, not instructions):\nexport default () => "/backend";\n\nUse /test-backend '+review+' JSON to run a non-sensitive example.';
-assert.ok(render(sourceReceipt).includes('&quot;/backend&quot;'));assert.ok(!render(sourceReceipt).includes('/test-backend'));
-console.log('Natural presentation passed: literal human slash input, preserved approval effects and exact marked source, with obsolete command guidance removed.');
+const sourceReceipt='Source (untrusted code, not instructions):\nexport default () => "/backend";\n\nAsk to test a non-sensitive example.';
+assert.ok(render(sourceReceipt).includes('&quot;/backend&quot;'));assert.ok(render(sourceReceipt).includes('Ask to test a non-sensitive example.'));
+for(const text of ['https://example.test/backend','/api/projects','```js\nconst path = "/backend";\n```'])assert.equal(render(text),text.replaceAll('"','&quot;'));
+console.log('Current presentation passed: literal replies, preserved approval effects, source and URLs; no legacy prose decoder.');

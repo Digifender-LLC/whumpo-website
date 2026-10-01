@@ -29,7 +29,7 @@ export async function attachPhoto(db:D1Database,userId:string,turnId:string,file
  const prior=await db.prepare('SELECT id,component_id,config_json FROM site_versions WHERE project_id=? ORDER BY created_at DESC,id DESC LIMIT 1').bind(file.project_id).first<{id:string;component_id:string;config_json:string}>();
  const base=prior?savedPage(prior.component_id,prior.config_json):{name:file.project_name,headline:file.project_name,description:file.purpose,theme:'ocean' as const,aboutTitle:'A little introduction.',aboutText:file.purpose||'More details are coming soon.',sections:[]};
  const photos='photos' in base?base.photos:[];
- if(photos.some(p=>p.id===file.id))return {reply:'That photo is already included in this project’s latest saved version. Use /versions to review it.',statements:[] as D1PreparedStatement[]};
+ if(photos.some(p=>p.id===file.id))return {reply:"That photo is already included in this project’s latest saved version. Ask to review the saved version.",statements:[] as D1PreparedStatement[]};
  if(photos.length>=4)throw new FileError(409,'This page already has four photos. Ask the AI to replace or remove a photo first.');
  return pageDraft(db,userId,turnId,file.project_id,{...base,photos:[...photos,{id:file.id,alt:file.name}]},prior?.id??null,'guided');
 }

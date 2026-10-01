@@ -11,7 +11,7 @@ export function backendLineChanges(before:string,after:string){
  return {startLine:prefix+1,removed:a.slice(prefix,a.length-suffix),added:b.slice(prefix,b.length-suffix),unchangedBefore:prefix,unchangedAfter:suffix};
 }
 export async function compareBackends(db:D1Database,user:string,target:string,baseline:string){
- if(!uuid.test(target)||!uuid.test(baseline))throw new BackendError(400,'Use /backend-diff NEW_VERSION_ID ORIGINAL_VERSION_ID');
+ if(!uuid.test(target)||!uuid.test(baseline))throw new BackendError(400,"Choose the two saved backend versions to compare.");
  const {results}=await db.prepare('SELECT v.id,v.project_id,v.source,v.digest,v.created_at,p.name FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE v.id IN (?,?) AND p.owner_user_id=?').bind(target,baseline,user).all<{id:string;project_id:string;source:string;digest:string;created_at:string;name:string}>();
  const next=results.find(v=>v.id===target),old=results.find(v=>v.id===baseline);
  if(!next||!old||next.project_id!==old.project_id)throw new BackendError(404,'Choose two saved backend versions from the same project in your account');

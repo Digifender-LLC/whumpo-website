@@ -7,6 +7,6 @@ export function visitorProjectFromSearch(search:string){
 export function visitorAccessCommand(input:string):{projectId?:string;error?:never}|{error:string;projectId?:never}|undefined{
  const value=input.trim();if(!/^\/visitor-access(?:\s|$)/i.test(value))return;
  const parts=value.split(/\s+/);
- if(parts.length>2||(parts[1]&&!projectPattern.test(parts[1])))return {error:'Use /visitor-access, optionally followed by a project ID.'};
+ if(parts.length>2||(parts[1]&&!projectPattern.test(parts[1])))return {error:"Choose the project whose private visitor access controls you want to open."};
  return {projectId:parts[1]};
 }

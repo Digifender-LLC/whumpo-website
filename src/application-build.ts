@@ -17,8 +17,8 @@ export async function readApplicationBuild(db:D1Database,user:string,id:string){
  if(review)return describeApplicationReview(await readApplicationReview(db,user,id));
  const run=await db.prepare('SELECT state,result_json FROM backend_runs WHERE id=? AND user_id=?').bind(id,user).first<{state:string;result_json:string|null}>();
  const result=run?.result_json?JSON.parse(run.result_json):null;
- const status=!run?'The draft was saved, but no test was reserved. Ask me to inspect and check the saved version.':run.state!=='complete'?'The test is pending or its outcome is unknown. It will not execute again automatically.':result?.ok===true&&result?.check?.status==='passed'?`The synthetic check passed. An approval review has not been prepared. You can request it with /enable-application ${id} ${id}.`:'The synthetic check did not pass. No approval review was prepared. Ask me to inspect the receipt and correct the private draft.';
- return `Private application build\nProject: ${row.project_id}\nVersion: ${id}\n${status}\nRead the source: /backend ${id}\nRead the test receipt: /backend-result ${id}\nNo application was activated or visitor page published by this build.`;
+ const status=!run?'The draft was saved, but no test was reserved. Ask me to inspect and check the saved version.':run.state!=='complete'?'The test is pending or its outcome is unknown. It will not execute again automatically.':result?.ok===true&&result?.check?.status==='passed'?`The synthetic check passed. An approval review has not been prepared. Ask to prepare the application activation review using this saved version and successful test.`:'The synthetic check did not pass. No approval review was prepared. Ask me to inspect the receipt and correct the private draft.';
+ return `Private application build\nProject: ${row.project_id}\nVersion: ${id}\n${status}\nAsk to read the saved source and test receipt for build ${id}.\nNo application was activated or visitor page published by this build.`;
 }
 export async function buildApplication(db:D1Database,user:string,id:string,action:Record<string,unknown>,service?:Fetcher){
  let component:Awaited<ReturnType<typeof readBackendComponent>>|undefined;
@@ -61,6 +61,6 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
   if(run.state==='complete'&&'result' in run&&run.result?.ok===true&&run.result?.check?.status==='passed')return describeApplicationReview(await prepareApplication(db,user,action.projectId,id,'enable',id,id));
   return await readApplicationBuild(db,user,id);
  }catch{
-  return `A private application draft was saved, but its test or approval review could not be confirmed. Check /application-build ${id} before continuing. This build will not automatically run another test. Nothing was activated or published by this build.`;
+  return `A private application draft was saved, but its test or approval review could not be confirmed. Ask to check the saved application build ${id} before continuing. This build will not automatically run another test. Nothing was activated or published by this build.`;
  }
 }

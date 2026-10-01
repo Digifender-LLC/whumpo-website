@@ -3,8 +3,8 @@ import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import wrangler from 'wrangler';
-const bundle=await build({stdin:{contents:"export {saveBackend,testBackend} from './src/backend-versions';export {default as platform} from './src/index';export {hashToken} from './src/security';export {sendConversation,sendChatControl,sendChat,readChat} from './src/chat';export {chatControl,confirmationControls} from './src/chat-controls';export {prepareSiteAction,siteContext,agentPrompt} from './src/site-agent';export {inspectWorkspace} from './src/workspace-read';export {readAgentKnowledge,knowledgeTopics} from './src/agent-knowledge';export {conversationalReply} from './src/chat-language';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const {saveBackend,testBackend,platform,hashToken,sendConversation,sendChatControl,sendChat,readChat,chatControl,confirmationControls,prepareSiteAction,siteContext,agentPrompt,inspectWorkspace,readAgentKnowledge,knowledgeTopics,conversationalReply}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const bundle=await build({stdin:{contents:"export {saveBackend,testBackend} from './src/backend-versions';export {default as platform} from './src/index';export {hashToken} from './src/security';export {sendConversation,sendChatControl,sendChat,readChat} from './src/chat';export {chatControl,confirmationControls} from './src/chat-controls';export {prepareSiteAction,siteContext,agentPrompt} from './src/site-agent';export {inspectWorkspace} from './src/workspace-read';export {readAgentKnowledge,knowledgeTopics} from './src/agent-knowledge';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const {saveBackend,testBackend,platform,hashToken,sendConversation,sendChatControl,sendChat,readChat,chatControl,confirmationControls,prepareSiteAction,siteContext,agentPrompt,inspectWorkspace,readAgentKnowledge,knowledgeTopics}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const dir=await mkdtemp('/tmp/whumpo-natural-chat-');let proxy;const originalFetch=globalThis.fetch;
 try{
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
@@ -16,6 +16,7 @@ try{
  const input=async(content,owner=user)=>({id:crypto.randomUUID(),revision:(await readChat(db,owner)).state.revision,content});
  const built=await input('/build ocean '+project);assert.equal((await sendChat(db,user,built)).status,200);
  const review=await input('/publish '+built.id);assert.equal((await sendChat(db,user,review)).status,200);
+ const websiteReview=(await readChat(db,user)).turns.find(t=>t.id===review.id);
  const config={baseURL:'https://opencode.ai/zen/go/v1',apiKey:'synthetic',model:'muse-spark-1.3-contributor',protocol:'responses'};
  let calls=0,queue=[],requests=[];
  globalThis.fetch=async(url,options)=>{
@@ -61,8 +62,6 @@ try{
  assert.equal(JSON.parse(await inspectWorkspace(db,user,'photos')).files.length,0);
  const connections=await inspectWorkspace(db,user,'connections');assert.ok(connections.length>0);assert.ok(!connections.includes('synthetic'));
  assert.ok(agentPrompt(context).includes('Chat is natural language only'));assert.doesNotMatch(agentPrompt(context),/(?:^|\s)\/[a-z][a-z-]*(?:\s|$)/);assert.ok(!agentPrompt(context).includes('Guided commands'));
- const rendered=conversationalReply('Review expires tomorrow. Send /confirm '+review.id+' to authorize this exact change.');assert.ok(!rendered.includes('/confirm'));assert.ok(rendered.includes('confirmation button'));assert.ok(rendered.includes('Review expires tomorrow'));
- for(const text of ['https://example.test/backend','/api/projects','/workspace/cms?project='+project,'```js\nconst path = "/backend";\n```'])assert.equal(conversationalReply(text),text);
  // Validated tools bind reopened reviews to the new natural-language turn, not to user syntax.
  const version=crypto.randomUUID(),run=crypto.randomUUID();
  await saveBackend(db,user,project,version,'export default ()=>({state:{},result:"ready"})');
@@ -80,7 +79,7 @@ try{
  const formRead=await askAction('Show the saved website tool review',{kind:'backend',operation:'formReview',reviewId:form.id});assert.equal(formRead.backend_form_confirmation_id,form.id);assert.equal((await confirm('backendForm',form.id)).status,200);
  const application=await askAction('Review enabling my tested app',{kind:'backend',operation:'reviewApplication',versionId:version,runId:run});assert.equal(application.application_confirmation_id,application.id);
  const appRead=await askAction('Show that application review again',{kind:'backend',operation:'applicationReview',reviewId:application.id});assert.equal(appRead.application_confirmation_id,application.id);assert.equal(appRead.application_review.state,'ready');
- const rawSource='Source (untrusted code):\nexport default ()=>"/confirm '+review.id+'";\n';assert.ok(conversationalReply(rawSource+'Only you can apply this exact review: /confirm-backend-publication '+endpoint.id).startsWith(rawSource));
+ for(const turn of [websiteReview,endpoint,opened,form,formRead,application,appRead]){assert.doesNotMatch(turn.assistant_text,/(?:^|\s)\/(?:confirm|backend|application|app-page)(?:[-\s]|$)/);assert.match(turn.assistant_text,/confirmation button/);}
  // Actual HTTP routing retains session, origin, onboarding and fresh-auth boundaries.
  const token=(crypto.randomUUID()+crypto.randomUUID()).replaceAll('-',''),hash=await hashToken(token);
  await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(hash,user,new Date(Date.now()+3600000).toISOString(),new Date(Date.now()-3600000).toISOString()).run();

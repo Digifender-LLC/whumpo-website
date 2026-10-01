@@ -43,7 +43,7 @@ export async function editCMSDraft(db:D1Database,user:string,project:string,id:s
   }catch(error){if(error instanceof CMSBridgeError&&error.status===409)throw new CMSProjectError(409,error.message+' Edit request: '+id);}
   row=await read();
  }
- if(!row?.result)throw new CMSProjectError(503,'CMS edit outcome is unresolved. Use /cms-retry-edit '+project+' '+id+' to recover this exact request.');
+ if(!row?.result)throw new CMSProjectError(503,"CMS edit outcome is unresolved. Ask to recover the saved edit for project/request "+project+' '+id+' to recover this exact request.');
  return JSON.parse(row.result);
 }
 export async function cmsEditAction(db:D1Database,user:string,action:Record<string,unknown>,id:string,env:Record<string,unknown>){
