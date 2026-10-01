@@ -4,7 +4,7 @@
 
 The first complete journey is **existing-project content brief → private comparison/preview → exact private save → separate publication review**. It works with the delivered content compiler and requires neither CMS nor a new provider. The following preserves every current domain review, including the explicit review before saving a structured private version. Customer visitor forms and app presentation remain separate WH-067/070 contracts; a visitor never acquires owner Chat or maintainer inference.
 
-**Owner amendment, October 1:** Whumpo is current-version-only. No legacy schema/client decoder, downgrade renderer, compatibility projection or old-route adapter is supported. This supersedes the earlier roadmap compatibility language. Forward-migrate retained test data to the current representation before a cutover; reject stale requests explicitly. Saved receipts retain their exact facts and never become authority to run an older path.
+**Owner amendment, October 1:** Whumpo is current-version-only. No legacy schema/client decoder, downgrade renderer, compatibility projection or old-route adapter is supported. This supersedes the earlier roadmap compatibility language. Reset obsolete test data before a cutover; reject stale requests explicitly. Saved receipts retain their exact facts and never become authority to run an older path.
 
 ## Source-grounded journey inventory
 
