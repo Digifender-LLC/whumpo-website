@@ -17,6 +17,7 @@ const metrics={
  serviceClientSaveReceipts:['service_client_applies','user_id'],
  serviceActivationReceipts:['service_client_activation_reviews','user_id'],
  githubCredentials:['github_token_vault','user_id'], cloudflareCredentials:['cloudflare_token_vault','user_id'],
+ githubStagedCredentials:['github_token_vault','user_id','EXISTS(SELECT 1 FROM github_token_staging WHERE token_id=github_token_vault.id)'],
  githubPendingRevocations:['github_token_vault','user_id',"state='revoking'"],
  cloudflarePendingRevocations:['cloudflare_token_vault','user_id',"state='revoking'"],
  githubAuthorizationAttempts:['github_oauth_states','user_id'], cloudflareAuthorizationAttempts:['cloudflare_oauth_states','user_id'],

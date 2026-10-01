@@ -31,12 +31,12 @@ The operator report labels an observed run `stalled` after 15 minutes and a sche
 
 ## Backlogs and recovery
 
-The report covers **27 queues**. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
+The report covers **28 queues**, including expired GitHub staging leases added in migration 0115. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
 
 | Group | Covered work | Attention rule |
 | --- | --- | --- |
 | Imports and photos | Pending source triage; queued object cleanup | One hour / 25 hours from queue creation |
-| Connection cleanup | Revocations, expired OAuth attempts/tokens, abandoned staged Cloudflare credentials | 25 hours since revocation request, expiration or staged-retirement eligibility; unknown age flags immediately |
+| Connection cleanup | Revocations, expired OAuth attempts/tokens, abandoned staged Cloudflare/GitHub credentials | 25 hours since revocation request, expiration or staged-retirement eligibility; unknown age flags immediately |
 | Retention | Removed-project fair-use records, traffic, obsolete application migration documents, owner erasure/deletion receipts, app usage, contact submissions/receipts, health evidence/budgets | 25 hours past eligibility; obsolete migration documents lack an age and flag immediately |
 | Hosting/health | Active/provisioning/disconnecting host refresh, unknown creation, due current-publication health checks, checks stuck in progress | Two hours since last hosting check or health-check eligibility; 10 minutes for unknown creation; 15 minutes for in-progress checks |
 | Provider operations | Historical/standard AI receipts, dispatched/uncertain GitHub backups and DNS actions | Ten minutes from available receipt timestamp |
@@ -51,7 +51,7 @@ Exit codes: `0` means the covered observations do not currently require attentio
 
 ## Acceptance and WH-006 completion
 
-`node tests/maintenance.mjs` uses all migrations in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 27 queries against the current schema, five receipt families, exact new revocation clocks, preserved unknown history, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use and health budgets; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
+`node tests/maintenance.mjs` uses all migrations in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 28 queries against the current schema, five receipt families, exact new revocation clocks, preserved unknown history, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use, health budgets and expired GitHub staging; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
 
 The previously outstanding natural daily execution evidence is now recorded below alongside the first hourly run. WH-006 acceptance is complete; wider incident alerting and unresolved-operation remediation remain separate work. The backlog and recovery-pointer coverage listed above is implemented; historical timestamps absent from source records remain explicitly unknown. No CMS functional testing or new activation is authorized by this inventory. Monitoring/alert delivery is not installed.
 
