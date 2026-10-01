@@ -39,6 +39,14 @@ try{
  const approval={id:crypto.randomUUID(),revision:(await readChat(db,user)).state.revision,action:{type:'confirm',kind:'site',reviewId:review.id}};
  const before=calls;assert.equal((await sendChatControl(db,user,approval)).status,200);assert.equal((await sendChatControl(db,user,approval)).status,200);assert.equal(calls,before);
  assert.equal((await db.prepare('SELECT version_id FROM publications WHERE project_id=?').bind(project).first()).version_id,built.id);
+ const savedApproval=await db.prepare('SELECT user_text,action_json FROM chat_turns WHERE id=?').bind(approval.id).first();
+ assert.equal(savedApproval.user_text,chatControl(approval.action).label);assert.equal(savedApproval.action_json,JSON.stringify(chatControl(approval.action).action));
+ assert.equal((await sendChatControl(db,user,{...approval,action:{...approval.action,reviewId:crypto.randomUUID()}})).status,409);
+ assert.equal((await sendChatControl(db,user,{...approval,revision:approval.revision+1})).status,409);
+ assert.equal((await sendConversation(db,user,{id:approval.id,revision:approval.revision,content:savedApproval.user_text},config)).status,409);
+ await assert.rejects(()=>db.prepare('UPDATE chat_turns SET action_json=NULL WHERE id=?').bind(approval.id).run(),/chat_action_immutable/);
+ await assert.rejects(()=>db.prepare("UPDATE chat_turns SET user_text='Changed label' WHERE id=?").bind(approval.id).run(),/chat_action_immutable/);
+
  const foreign={...approval,id:crypto.randomUUID(),revision:(await readChat(db,other)).state.revision};await sendChatControl(db,other,foreign);assert.equal((await db.prepare('SELECT confirmed_by FROM publication_actions WHERE id=?').bind(review.id).first()).confirmed_by,approval.id);
  for(const action of [{type:'command',command:'/confirm '+review.id},{type:'confirm',kind:'site',reviewId:review.id,command:'/new'},{type:'confirm',kind:'site',reviewId:other+' /new'},{type:'appMaintenance',kind:'upgrade',reviewId:review.id,confirmation:'WRONG'}]){assert.equal(chatControl(action),undefined);assert.equal((await sendChatControl(db,user,{...approval,id:crypto.randomUUID(),action})).status,400);}
  assert.equal((await sendConversation(db,user,{...await input('hello'),action:approval.action},config)).status,400);

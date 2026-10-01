@@ -29,8 +29,8 @@ export async function reconcileChat(db: D1Database, userId: string) {
 }
 
 export async function sendAIChat(db: D1Database, userId: string, id: string, revision: number, content: string, config: AIConfig, transport: typeof fetch = globalThis.fetch.bind(globalThis), dnsOptions?:DNSChatOptions, internalIntent=false) {
-  const previous = await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id = ? AND user_id = ?').bind(id, userId).first<{ user_text: string; revision: number }>();
-  if (previous) return previous.user_text === content && previous.revision === revision + 1 ? { status: 200 } : { status: 409, error: 'This message ID was already used for another request' };
+  const previous = await db.prepare('SELECT user_text,revision,action_json FROM chat_turns WHERE id = ? AND user_id = ?').bind(id, userId).first<{ user_text: string; revision: number; action_json:string|null }>();
+  if (previous) return previous.action_json===null && previous.user_text === content && previous.revision === revision + 1 ? { status: 200 } : { status: 409, error: 'This message ID was already used for another request' };
   const pageDesignId=internalIntent?appPageDesignProjectId(content):undefined,pageDesign=pageDesignId?await readAppPageDesign(db,userId,pageDesignId):null;
   if(pageDesignId&&!pageDesign)return {status:409,error:'Choose an approved application without a live visitor page. Refresh Chat to see its current status.'};
   const firstApp=internalIntent&&!!firstAppProjectId(content);
@@ -66,8 +66,8 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const boundInput = () => policyInputBound(messages);
   const outputLimit = 2048;
   async function noReservation(){
-    const prior=await db.prepare('SELECT user_text,revision FROM chat_turns WHERE id=? AND user_id=?').bind(id,userId).first<{user_text:string;revision:number}>();
-    if(prior)return prior.user_text===content&&prior.revision===revision+1?{status:200}:{status:409,error:'This message ID was already used for another request'};
+    const prior=await db.prepare('SELECT user_text,revision,action_json FROM chat_turns WHERE id=? AND user_id=?').bind(id,userId).first<{user_text:string;revision:number;action_json:string|null}>();
+    if(prior)return prior.action_json===null&&prior.user_text===content&&prior.revision===revision+1?{status:200}:{status:409,error:'This message ID was already used for another request'};
     const state=await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(userId).first<{revision:number}>();
     if(state?.revision!==revision)return {status:409,error:'Another message changed the conversation. Refresh and try again.'};
     return {status:409,error:'Another request is still being processed. Refresh Chat before sending a new message.'};

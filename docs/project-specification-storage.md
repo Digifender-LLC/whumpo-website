@@ -31,6 +31,8 @@ Before preview, approval or reopening a review, the server checks ownership, cur
 
 The confirmation turn, workspace revision, immutable site/specification versions, receipt, head and activity event commit in the existing [D1 batch transaction](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch). Database guards recheck owner/project, exact canonical confirmation, candidate/base/target, revisions, expiry, safety holds and quotas **inside the transaction**. A candidate removed after application validation forces an abort; a no-op insert cannot save a success-only reply. Concurrent stale requests cannot both advance the head. A lost acknowledgement is recovered from the original owned turn/receipt without compiling or creating another version.
 
+**October 1 current-source receipt update (deployment pending):** schema 0118 requires canonical typed action JSON on the same confirmation turn, including exact review ID, proposal digest and integer expected revision. Command text cannot satisfy this gate. See [current Chat receipts](natural-language-chat.md#current-receipts-and-remaining-reply-cleanup).
+
 Current compiler/policy code is trusted Worker configuration, checked again on each operation; it is not an editable customer database row. Future module withdrawal/version upgrades need their own delivery compatibility review. The immutable v1 compiler identity remains unchanged.
 
 ## Removal, bounds and safety

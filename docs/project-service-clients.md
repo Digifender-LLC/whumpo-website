@@ -63,6 +63,8 @@ Preparation selects one exact owned website version. The comparison shows readab
 
 The server-issued `serviceClientApply` control requires recent authentication and origin/rate-limit checks. One D1 batch creates the confirmation turn, full independent settings snapshot, metadata receipt, revision head and activity. Database guards recheck ownership, current publication/contact/backend/form references, expected revision, expiry, known holds and exact proposal artifacts inside that transaction. A proposal removed after application validation aborts the whole batch. Competing approvals cannot advance the same revision twice. A retry recovers an existing receipt; changed payloads cannot reuse it.
 
+**October 1 current-source receipt update (deployment pending):** schema 0118 requires canonical typed action JSON on the same confirmation turn, including exact review ID, proposal digest and integer expected revision. Command text cannot satisfy this gate. See [current Chat receipts](natural-language-chat.md#current-receipts-and-remaining-reply-cleanup).
+
 Owner-only routes:
 
 - `GET /api/service-client-reviews/:id/preview`: current disabled proposal preview.
