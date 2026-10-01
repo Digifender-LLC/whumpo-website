@@ -21,6 +21,7 @@ export const backlogInventory={
  contact_submissions:expiry('contact_submissions'),
  contact_receipts:expiry('contact_receipts'),
  github_oauth:expiry('github_oauth_states'),
+ github_staged:expiry('github_token_staging'),
  github_expired_tokens:expiry('github_token_vault'),
  cloudflare_oauth:expiry('cloudflare_oauth_states'),
  cloudflare_expired_tokens:expiry('cloudflare_token_vault'),
