@@ -96,7 +96,7 @@ Zero unresolved critical authorization or unsafe-serving failures is required fo
 
 | Decision/prerequisite | Work that can proceed | Dependent work held |
 | --- | --- | --- |
-| Moderation provider eligibility, terms, budget and responsible safety/legal operator | Coverage, adapter contracts, restricted retention design and benign synthetic fixtures. | Real scanning/approval and customer beta safety acceptance: WH-011/012/017. |
+| **Owner-deferred CSAM scanning**; provider eligibility, terms, budget and responsible safety/legal operator remain unresolved | Planned requirements only for CSAM; skip scanner implementation, enrollment and activation until explicitly resumed. Existing holds are not detection. | WH-011 and dependent scanner work; real scanning/approval and customer beta safety acceptance remain unaccepted. |
 | Physical devices and a reviewed disposable live identity | Test matrix and existing synthetic/browser checks. | Remaining actual-device/human Turnstile acceptance: WH-005. |
 | Production AI data-use/privacy and model budget | Offline benchmarks and read-only provider research. | Confidential customer workloads and new paid provider/Gateway route: WH-020/021. |
 | Customer Cloudflare consent and owned zone; customer GitHub App and repository | Existing code verification and exact configuration plans. | Real DNS/backup/hosting journeys: WH-031/032/033. |

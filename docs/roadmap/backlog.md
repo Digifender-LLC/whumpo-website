@@ -631,7 +631,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/8. Planning owner: Unassigned.
 
 ## WH-011 — Select and authorize moderation providers and response operations
 
-Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **blocked**. Kind: decision. Size: M.
+Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
 Reviewed: 2026-09-30. Source baseline: `05443262a88b658c8d72460a75b28facacabec4f`. This is a planning snapshot, not current execution or deployment status.
 
@@ -664,20 +664,24 @@ Private intake has reviewed detector coverage, terms, cost and a responsible inc
 
 Planning dependencies: WH-010, WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
+- Owner decision, 2026-10-01 UTC: CSAM scanning is planned only. Skip scanner implementation, provider enrollment and activation until explicitly resumed; dependent scanner work must not proceed around this deferral.
 - Provider eligibility/access, data-processing terms, budget and responsible safety/legal operator need owner decisions; no provider is currently accepted.
 
 ### References
 
 - [docs/content-safety.md](../../docs/content-safety.md)
 - [src/photo-scan-results.ts](../../src/photo-scan-results.ts)
+- [docs/safety-coverage.md](../../docs/safety-coverage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/21. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 UTC owner deferred CSAM scanning before implementation delivery. Unused uncommitted response helper/test and unfinished provider proposal removed; no scanner/provider deployment or activation. Issue #21 remains open and unclaimed for future planning. Existing quarantine/hold foundations are not detector coverage or safety-launch acceptance.
 
 ## WH-012 — Implement bounded private scan dispatch and result reconciliation
 

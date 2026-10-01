@@ -24,7 +24,7 @@ Write the concrete before/after behavior and check the packet's assumptions agai
 
 For an L task, decompose first: contract/schema, isolated implementation, connected local journey and live activation often need separate deliverables. Do not mark a parent finished because its first foundation is present. Use existing patterns and dependencies; keep frontend source authoritative and preserve concurrent work. Use isolated branches/worktrees for simultaneous implementation, and coordinate migration numbers immediately before creating a migration.
 
-Ready packets are safe to **begin**, not preauthorized for every future side effect. Complete local preparation and an exact reviewable configuration/resource/cost plan before asking for a missing decision. Keep independent work moving. Preserve explicit Stripe and CMS testing deferrals until the owner changes them.
+Ready packets are safe to **begin**, not preauthorized for every future side effect. Complete local preparation and an exact reviewable configuration/resource/cost plan before asking for a missing decision. Keep independent work moving. Preserve explicit Stripe setup, CMS testing and CSAM scanner implementation deferrals until the owner changes them.
 
 ## Preserve the invariants
 

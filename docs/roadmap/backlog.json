@@ -459,7 +459,7 @@
       "title": "Select and authorize moderation providers and response operations",
       "phase": "F1",
       "priority": "P0",
-      "readiness": "blocked",
+      "readiness": "deferred",
       "kind": "decision",
       "size": "M",
       "dependsOn": [
@@ -467,6 +467,7 @@
         "WH-009"
       ],
       "blockers": [
+        "Owner decision, 2026-10-01 UTC: CSAM scanning is planned only. Skip scanner implementation, provider enrollment and activation until explicitly resumed; dependent scanner work must not proceed around this deferral.",
         "Provider eligibility/access, data-processing terms, budget and responsible safety/legal operator need owner decisions; no provider is currently accepted."
       ],
       "outcome": "Private intake has reviewed detector coverage, terms, cost and a responsible incident operator.",
@@ -488,11 +489,16 @@
       ],
       "references": [
         "docs/content-safety.md",
-        "src/photo-scan-results.ts"
+        "src/photo-scan-results.ts",
+        "docs/safety-coverage.md",
+        "docs/data-lifecycle.md",
+        "docs/background-jobs.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/21",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-01 UTC owner deferred CSAM scanning before implementation delivery. Unused uncommitted response helper/test and unfinished provider proposal removed; no scanner/provider deployment or activation. Issue #21 remains open and unclaimed for future planning. Existing quarantine/hold foundations are not detector coverage or safety-launch acceptance."
+      ]
     },
     {
       "id": "WH-012",
