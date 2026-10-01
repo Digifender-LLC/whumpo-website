@@ -3,7 +3,7 @@ import {readdir,readFile,writeFile,mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 // No secret/configuration-value output. Only explicitly versioned build inputs.
 const trees=['src','frontend','web','public-app'];
-const files=['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc','tools/build.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v1.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v1.json'];
+const files=['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v1.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v1.json'];
 const snapshotPath='.secrets/build-snapshot.json';
 async function walk(root,base){
  const result=[];

@@ -5670,6 +5670,56 @@
       "issue": null,
       "owner": null,
       "evidence": []
+    },
+    {
+      "id": "WH-119",
+      "title": "Make the dashboard an installable PWA",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "ready",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-001",
+        "WH-003"
+      ],
+      "blockers": [],
+      "outcome": "Customers can add the existing mobile workspace to their phone home screen and open it as an app.",
+      "scope": [
+        "Stable workspace manifest and elephant app/touch icons",
+        "User-triggered Settings installation with iPhone/manual browser guidance",
+        "Public-only offline navigation screen with explicit reconnect; preserve existing account and Chat recovery authority",
+        "Fingerprint worker/cache assets and verify installability, mobile layout and safe worker updates"
+      ],
+      "acceptance": [
+        "Installed app starts at the Chat-first workspace and preserves authentication/onboarding and mobile navigation",
+        "Browser installability criteria pass; manifest and 192/512px icons are served on the test domain",
+        "Service worker never caches private/API/auth/chat responses or queues mutations; network failures get a public reconnect screen",
+        "Worker updates preserve the current document and unsent draft",
+        "Installation is user-triggered; standalone state and manual guidance are usable; physical-device acceptance remains explicitly distinct from Chromium emulation"
+      ],
+      "verification": [
+        "Type/build and focused PWA cache/routing/update checks",
+        "Build snapshot/release manifest and lazy-loading regressions",
+        "Disposable Chromium plus actual local D1/platform journey; no model/provider calls",
+        "Deployed asset/readback and browser manifest/worker checks; report physical-device limits honestly"
+      ],
+      "references": [
+        "docs/dashboard-pwa.md",
+        "docs/unified-workspace-and-capacity.md",
+        "frontend/public/manifest.webmanifest",
+        "frontend/public/workspace-sw.js",
+        "frontend/src/install-app.tsx",
+        "tools/build-pwa.mjs",
+        "tests/dashboard-pwa.mjs",
+        "tests/dashboard-pwa-browser.mjs"
+      ],
+      "issue": "https://github.com/zemdregon/whumpo/issues/49",
+      "owner": null,
+      "evidence": [
+        "2026-10-01 local/source: installable workspace manifest, elephant 192/512px icons, Settings install/manual guidance and public-only offline worker implemented. Type/build, PWA cache/routing/version checks, build/release snapshot and lazy-loading checks pass. Disposable Chromium with actual local platform/D1 reports zero manifest/installability errors and verifies mobile layout, install dismissal, offline/reconnect and worker updates preserving an unsent draft. Deployment evidence follows in docs/dashboard-pwa.md and issue #49; physical-phone OS install remains unverified.",
+        "2026-10-01T16:55:49.916Z test acceptance: corrected release e6edca89-4021-494c-a4b0-0875531e3132, source aa8b2c38b4c69e1a4dba76fb01b0fe0bea544778, deployed and reconciled. Twenty selected assets match archive bytes; live Chromium reports zero manifest/installability errors, active worker, four public cached files and successful offline/reconnect to sign-in. Health 200, anonymous session 401/no-store. No new migration/service/paid activation. Physical-phone OS installation remains unverified. See docs/dashboard-pwa.md and issue #49."
+      ]
     }
   ]
 }

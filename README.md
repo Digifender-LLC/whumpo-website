@@ -8,6 +8,7 @@ For future work, use the [product and delivery roadmap](docs/roadmap/README.md),
 
 ## Current product
 
+- [Installable workspace](docs/dashboard-pwa.md) with phone home-screen icons, browser installation guidance and a public offline reconnect screen.
 - React workspace with Chat first, a separate dashboard, workflow pages, mobile navigation, and separate Profile and Settings screens. Chat accepts natural-language messages, retains account-scoped drafts/interrupted requests across reloads, and uses explicit review controls for critical actions.
 - Passkeys by default, invite/Turnstile signup, optional password sign-in, recovery codes and revocable sessions. Guided conversational onboarding persists without requiring AI or an external account.
 - Muse-assisted private drafts and edits, saved versions, source export, and explicit publication/restore reviews. Supported static/photo sites publish to customer subdomains.

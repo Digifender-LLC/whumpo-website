@@ -5,6 +5,8 @@ import {createRootRoute,createRoute,createRouter,RouterProvider,Outlet} from '@t
 import {queryClient} from './lib/api';
 import {Landing} from './landing';
 import {DeferredArea} from './deferred-area';
+import {initializePwa} from './lib/pwa';
+initializePwa();
 const Workspace=lazy(()=>import('./workspace').then(module=>({default:module.Workspace})));
 function WorkspaceEntry(){return <DeferredArea label="Opening your workspace…"><Workspace/></DeferredArea>;}
 import './styles.css';
