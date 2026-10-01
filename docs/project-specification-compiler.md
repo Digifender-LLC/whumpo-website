@@ -1,6 +1,6 @@
 # Deterministic project specification compiler
 
-**Current source contract — October 1, 2026. WH-120 / [#53](https://github.com/zemdregon/whumpo/issues/53). Deployment pending.** This supersedes the original WH-066A compiler/import contract. The only supported website specification is schema **2**, compiled by `project-content@2`. Version-1 readers, locks, import adapters and the duplicate offline specification prototype are removed. Obsolete test drafts must be reset; they are never converted. See the [current-version policy](current-version-policy.md).
+**Current source contract — October 1, 2026. WH-120 / [#53](https://github.com/zemdregon/whumpo/issues/53). Deployed to the test platform.** This supersedes the original WH-066A compiler/import contract. The only supported website specification is schema **2**, compiled by `project-content@2`. Version-1 readers, locks, import adapters and the duplicate offline specification prototype are removed. Obsolete test drafts must be reset; they are never converted. See the [current-version policy](current-version-policy.md).
 
 The [specification ADR](project-specification.md) owns shapes and operations. The [storage contract](project-specification-storage.md) owns authenticated creation, review, apply and delivery. The [capability planner](capability-planner.md) selects maintained capabilities before source generation. Compilation grants no publication, provider or spending authority.
 
