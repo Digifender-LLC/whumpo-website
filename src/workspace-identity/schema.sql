@@ -70,14 +70,14 @@ CREATE TABLE identity_grants (
  client TEXT NOT NULL CHECK(client='web'),
  purpose TEXT NOT NULL CHECK(purpose IN ('enrollment','recovery')),
  attempt_id TEXT NOT NULL,
- proof_method TEXT NOT NULL CHECK(proof_method IN ('registration','passkey','recovery-key')),
+ proof_method TEXT NOT NULL CHECK(proof_method IN ('registration','passkey','recovery-key','recovery-commit')),
  proof_at INTEGER NOT NULL CHECK(proof_at>=0),
  proof_revision INTEGER NOT NULL CHECK(proof_revision BETWEEN 0 AND 9007199254740991),
  credential_id TEXT,
  kit_generation INTEGER,
  issued_at INTEGER NOT NULL CHECK(issued_at>=proof_at),
  expires_at INTEGER NOT NULL CHECK(expires_at>issued_at AND expires_at<=proof_at+1800),
- CHECK((proof_method='recovery-key' AND purpose='recovery' AND credential_id IS NULL AND kit_generation IS NOT NULL AND kit_generation>0)
+ CHECK((proof_method IN ('recovery-key','recovery-commit') AND purpose='recovery' AND credential_id IS NULL AND kit_generation IS NOT NULL AND kit_generation>0)
     OR (proof_method IN ('registration','passkey') AND credential_id IS NOT NULL AND kit_generation IS NULL)),
  CHECK(proof_method!='registration' OR purpose='enrollment'),
  FOREIGN KEY(attempt_id,account_id) REFERENCES identity_attempts(id,account_id) ON DELETE CASCADE,
@@ -90,7 +90,7 @@ CREATE TABLE identity_challenges (
  id TEXT PRIMARY KEY CHECK(length(id)=36),
  token_hash TEXT NOT NULL UNIQUE CHECK(length(token_hash)=64 AND token_hash NOT GLOB '*[^0-9a-f]*'),
  challenge TEXT NOT NULL CHECK(length(challenge) BETWEEN 32 AND 256),
- kind TEXT NOT NULL CHECK(kind IN ('signup','login','add','reauth')),
+ kind TEXT NOT NULL CHECK(kind IN ('signup','login','add','reauth','recovery_complete')),
  policy_version INTEGER NOT NULL CHECK(policy_version=1),
  client TEXT NOT NULL CHECK(client='web'),
  origin TEXT NOT NULL CHECK(origin IN ('https://whumpo.com','http://localhost:8787')),
@@ -112,7 +112,7 @@ CREATE TABLE identity_challenges (
  expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+300),
  CHECK((kind='signup' AND account_id IS NOT NULL AND email IS NOT NULL AND invite_hash IS NOT NULL AND eligibility_version IS NOT NULL AND authority_id IS NULL)
   OR (kind='login' AND account_id IS NULL AND authority_id IS NULL)
-  OR (kind IN ('add','reauth') AND account_id IS NOT NULL AND authority_id IS NOT NULL AND authority_kind IS NOT NULL AND auth_epoch IS NOT NULL AND credential_revision IS NOT NULL)),
+  OR (kind IN ('add','reauth','recovery_complete') AND account_id IS NOT NULL AND authority_id IS NOT NULL AND authority_kind IS NOT NULL AND auth_epoch IS NOT NULL AND credential_revision IS NOT NULL)),
  UNIQUE(account_id,request_id)
 ) STRICT;
 CREATE INDEX identity_challenges_expiry ON identity_challenges(expires_at);
@@ -173,7 +173,7 @@ CREATE TABLE identity_effect_receipts (
  id TEXT PRIMARY KEY CHECK(length(id)=36),
  execution_nonce TEXT NOT NULL CHECK(length(execution_nonce)=36),
  account_id TEXT REFERENCES identity_accounts(account_id) ON DELETE SET NULL,
- kind TEXT NOT NULL CHECK(kind IN ('kit_prepare','kit_save','kit_rotate','enrollment_complete','enrollment_cancel')),
+ kind TEXT NOT NULL CHECK(kind IN ('kit_prepare','kit_save','kit_rotate','enrollment_complete','enrollment_cancel','recovery_start','recovery_review','recovery_secure','recovery_complete','passkey_remove')),
  request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
  offer_id TEXT,
  kit_generation INTEGER,
@@ -196,6 +196,46 @@ BEGIN SELECT RAISE(ABORT,'identity_request_conflict'); END;
 CREATE TRIGGER identity_ceremony_request_unique BEFORE INSERT ON identity_ceremony_receipts
 WHEN EXISTS(SELECT 1 FROM identity_effect_receipts WHERE id=NEW.id)
 BEGIN SELECT RAISE(ABORT,'identity_request_conflict'); END;
+
+CREATE TABLE identity_recovery_reviews (
+ attempt_id TEXT PRIMARY KEY,
+ account_id TEXT NOT NULL,
+ review_id TEXT NOT NULL UNIQUE CHECK(length(review_id)=36),
+ loss_mode TEXT NOT NULL CHECK(loss_mode IN ('all','some','none')),
+ credential_revision INTEGER NOT NULL CHECK(credential_revision BETWEEN 0 AND 9007199254740991),
+ lost_ids TEXT NOT NULL CHECK(json_valid(lost_ids) AND json_type(lost_ids)='array' AND json_array_length(lost_ids)<=10),
+ retained_ids TEXT NOT NULL CHECK(json_valid(retained_ids) AND json_type(retained_ids)='array' AND json_array_length(retained_ids)<=10),
+ reviewed_at INTEGER NOT NULL CHECK(reviewed_at>=0),
+ kit_generation INTEGER,
+ kit_saved_at INTEGER,
+ secured_at INTEGER,
+ CHECK((kit_generation IS NULL AND kit_saved_at IS NULL AND secured_at IS NULL)
+  OR (kit_generation IS NOT NULL AND kit_saved_at IS NOT NULL AND secured_at IS NOT NULL
+   AND kit_generation>0 AND kit_saved_at>=reviewed_at AND secured_at>=kit_saved_at)),
+ FOREIGN KEY(attempt_id,account_id) REFERENCES identity_attempts(id,account_id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX identity_recovery_reviews_account ON identity_recovery_reviews(account_id);
+CREATE TRIGGER identity_recovery_review_immutable BEFORE UPDATE ON identity_recovery_reviews
+WHEN NEW.attempt_id!=OLD.attempt_id OR NEW.account_id!=OLD.account_id OR NEW.review_id!=OLD.review_id
+ OR NEW.loss_mode!=OLD.loss_mode OR NEW.credential_revision!=OLD.credential_revision OR NEW.lost_ids!=OLD.lost_ids
+ OR NEW.retained_ids!=OLD.retained_ids OR NEW.reviewed_at!=OLD.reviewed_at
+ OR (OLD.kit_generation IS NOT NULL AND (NEW.kit_generation IS NULL OR NEW.kit_generation<=OLD.kit_generation))
+BEGIN SELECT RAISE(ABORT,'identity_recovery_review_immutable'); END;
+
+-- Completion depends on the saved current kit and the reviewed retained IDs, not client counts.
+CREATE VIEW identity_recovery_ready AS
+SELECT r.* FROM identity_recovery_reviews r
+JOIN identity_accounts a ON a.account_id=r.account_id
+JOIN identity_attempts t ON t.id=r.attempt_id AND t.account_id=a.account_id
+WHERE a.policy_version=1 AND a.stage='recovering' AND a.current_attempt_id=t.id
+ AND t.kind='recovery' AND t.status='secured' AND t.auth_epoch=a.auth_epoch AND t.kit_generation=a.kit_generation
+ AND r.kit_generation=a.kit_generation AND r.kit_saved_at IS NOT NULL AND r.secured_at IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM identity_credentials c WHERE c.account_id=a.account_id AND c.status='active' AND c.id NOT IN (SELECT value FROM json_each(r.retained_ids)))
+ AND (SELECT count(*) FROM identity_credentials c WHERE c.account_id=a.account_id AND c.status='active')=json_array_length(r.retained_ids)
+ AND ((r.loss_mode='all' AND json_array_length(r.retained_ids)=0
+   AND (SELECT count(*) FROM identity_credentials c WHERE c.account_id=a.account_id AND c.status='staged' AND c.attempt_id=t.id)>=2)
+  OR (r.loss_mode IN ('some','none') AND json_array_length(r.retained_ids)>=1
+   AND (SELECT count(*) FROM identity_credentials c WHERE c.account_id=a.account_id AND c.status='staged' AND c.attempt_id=t.id)>=1));
 
 CREATE VIEW identity_current_kit_offers AS
 SELECT o.* FROM identity_kit_offers o
@@ -310,6 +350,6 @@ WHERE a.policy_version=1 AND g.policy_version=1 AND g.client='web' AND g.auth_ep
    OR (g.purpose='recovery' AND (
      (a.stage IN ('ready','recovering') AND a.current_attempt_id IS NULL AND t.status='open' AND a.kit_generation>0)
      OR (a.stage='recovering' AND a.current_attempt_id=t.id AND t.status='secured' AND a.kit_generation>0))))
- AND ((g.proof_method='recovery-key' AND g.kit_generation=a.kit_generation AND g.credential_id IS NULL)
+ AND ((g.proof_method IN ('recovery-key','recovery-commit') AND g.kit_generation=a.kit_generation AND g.credential_id IS NULL)
    OR (g.proof_method IN ('registration','passkey') AND c.id IS NOT NULL
      AND ((c.status='staged' AND c.attempt_id=t.id) OR (c.status='active' AND g.proof_method='passkey' AND g.purpose='recovery'))));

@@ -3,7 +3,7 @@ import {hashToken} from '../security';
 type Database=Pick<D1Database,'prepare'>;
 type AuthorityKind='session'|'grant';
 type Purpose='workspace'|'enrollment'|'recovery';
-type ProofMethod='passkey'|'registration'|'recovery-key';
+type ProofMethod='passkey'|'registration'|'recovery-key'|'recovery-commit';
 export type IdentityProof=Readonly<{method:ProofMethod;verifiedAt:number;attemptRevision:number|null;credentialId:string|null}>;
 export type IdentityPrincipal=Readonly<{
  accountId:string;authorityId:string;kind:AuthorityKind;purpose:Purpose;policyVersion:1;authEpoch:number;client:'web';

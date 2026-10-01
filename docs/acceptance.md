@@ -26,7 +26,7 @@ Customer-initiated [usage reviews](usage-review-requests.md) now support a priva
 
 Internal safety evidence/correction storage and an operator preview/apply tool are implemented; trusted automated intake and enforcement remain inactive. Media scan tickets, retry handling and sticky supplemental screening requirements are also foundations, not configured detection. [Account closure inventory](account-closure.md) is read-only; deletion orchestration is unfinished.
 
-**Current identity source:** [shared kits and enrollment completion](identity-kits.md) now verify two-passkey signup, one-time kit preparation/save, guarded completion, ordinary kit replacement and pending cancellation on SQLite/local D1. These isolated modules are not active authentication. Restricted recovery, browser delivery, central admission, the current-only test reset and owner/device acceptance remain open under WH-114/115.
+**Current identity source:** [shared kits and enrollment completion](identity-kits.md) now verify two-passkey signup, one-time kit preparation/save, guarded completion, ordinary kit replacement and pending cancellation on SQLite/local D1. These isolated modules are not active authentication. The [restricted recovery backend](identity-recovery.md) now verifies all/some/none review/secure/completion, resumable replacement, restricted kit rotation and emergency removal on disposable databases. Browser delivery, central admission, the current-only test reset and owner/device acceptance remain open under WH-114/115.
 
 ## Current delivery priorities
 

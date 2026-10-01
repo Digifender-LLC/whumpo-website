@@ -1,6 +1,6 @@
 # Saved recovery kits and enrollment completion
 
-**WH-114B [#71](https://github.com/zemdregon/whumpo/issues/71) and WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Implemented and verified in isolated source; not deployed or connected to HTTP/UI.** This completes #71's backend enrollment path and implements the shared kit preparation, acknowledgment and ordinary rotation part of #69. Restricted recovery, browser delivery and the coordinated current-only test cutover remain open.
+**WH-114B [#71](https://github.com/zemdregon/whumpo/issues/71) and WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Implemented and verified in isolated source; not deployed or connected to HTTP/UI.** This completes #71's backend enrollment path and implements the shared kit preparation, acknowledgment and ordinary rotation part of #69. The [restricted recovery backend](identity-recovery.md) now extends this source; browser delivery and the coordinated current-only test cutover remain open.
 
 ## Current implementation
 
@@ -9,7 +9,7 @@
 | Operation | Required state and effect |
 | --- | --- |
 | Read kit state | Current matching authority reads its active generation and current offer's public metadata. No key or verifier is returned. |
-| Prepare | Generate a random 256-bit key and store only its hash in a thirty-minute offer. Replace any uncommitted offer. Restricted preparation advances the attempt's semantic revision, invalidating earlier completion proofs. An ordinary session and an already secured recovery attempt require fresh passkey proof. A pre-secure recovery grant, including emergency zero-key recovery, can prepare with current kit proof. |
+| Prepare | Generate a random 256-bit key and store only its hash in a thirty-minute offer. Replace any uncommitted offer. Restricted preparation advances the attempt's semantic revision, invalidating earlier completion proofs. An ordinary session and replacement of a secured saved recovery kit require fresh passkey proof. A pending revised loss review uses its restricted recovery authority. A pre-secure recovery grant, including emergency zero-key recovery, can prepare with current kit proof. |
 | Save acknowledgment | Record the first acknowledgment of the exact current offer/generation under its purpose, epoch and semantic review. This is the single user confirmation that the kit was saved, not evidence of durable storage. The browser adapter must reuse this acknowledgment for completion/commit. |
 | Ordinary rotation | A current fresh workspace session commits the exact saved offer. Rotate the verifier/generation, advance the authority epoch, cancel competing attempts and delete old grants/challenges/other sessions. Keep the initiating session only with its original proof time, issued time and expiry, updated to the new epoch. |
 | Finish enrollment | Require two distinct current staged keys, the exact saved offer and a fresh assertion bound to the unchanged attempt. Atomically complete the attempt, activate keys/kit, mark the account ready, consume all grants/challenges and issue one ordinary session. Creates no project and calls no model/provider. |
@@ -17,7 +17,7 @@
 
 Preparation leaves the active verifier/generation unchanged. An expired offer, credential-set change, changed attempt, changed epoch, wrong account/purpose, missing acknowledgment or stale proof prevents commit. Counter/challenge bookkeeping and a matching reauthentication do not invalidate the saved offer. Losing or superseded preparations require an explicit new preparation if the plaintext response was lost.
 
-The initial kit activates only with successful enrollment completion. Ordinary replacement activates only at its guarded rotation commit. Recovery's secure step and replacement-completion operation will reuse these records; they are not implemented by this packet. In particular, general fresh proof is **not** a substitute for the required new replacement-key assertion after saving the recovery kit.
+The initial kit activates only with successful enrollment completion. Ordinary replacement activates only at its guarded rotation commit. The [recovery secure and replacement-completion operations](identity-recovery.md) now reuse these records. In particular, general fresh proof is **not** a substitute for the required new replacement-key assertion after saving the recovery kit.
 
 ## One-time document and receipts
 
@@ -46,4 +46,4 @@ Both runs passed **47 refusal/race checks**, plus positive enrollment, one-time 
 
 The existing **62** ceremony and **72** authority refusal/race suites also passed against SQLite and local D1. Type checks, application build, roadmap validation/alignment/render checks and whitespace checks passed.
 
-#69 still owns kit download/copy/print UI, current-kit proof admission and loss review, guarded securing, restricted replacement of a lost saved kit, replacement-bound completion and emergency key removal. #72 owns the HTTP/client adapters, central admission, lifecycle registration and removal of superseded authentication during one coordinated test reset. No remote schema, active route, real owner credential, physical device or deployment changed here.
+#69 now has the [restricted recovery backend](identity-recovery.md), including kit proof/review/secure, restricted kit replacement, replacement-bound completion and emergency key removal. Kit download/copy/print UI remains open. #72 owns the HTTP/client adapters, central admission, lifecycle registration and removal of superseded authentication during one coordinated test reset. No remote schema, active route, real owner credential, physical device or deployment changed here.
