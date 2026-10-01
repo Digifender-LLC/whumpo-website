@@ -2,7 +2,7 @@
 
 ## Brand Identity System
 
-**Version 1.0 • September 2026**
+**Version 1.1 • October 2026**
 
 > **BIG IDEAS. LESS WORK.**
 
@@ -108,15 +108,17 @@ The cloud elephant is Whumpo’s signature brand asset. It combines cloud-like l
 
 # 06 • Logo System
 
-## Wordmark first. Mascot-supported.
+## Elephant mark with the Whumpo wordmark
 
-The primary signature is the Whumpo wordmark in deep navy, paired with the cloud elephant only when space allows. The wordmark must remain fully legible without the mascot.
+On October 1, 2026, the owner selected the supplied cloud-elephant artwork reaching toward a gold star against a blue sky as the main brand mark. Pair it with the Whumpo wordmark on the homepage and workspace sidebar; use the same artwork for the favicon and touch icon. The wordmark remains legible independently.
+
+The exact supplied master is [whumpo-mark-original.png](whumpo-mark-original.png). Committed PNG derivatives in `frontend/public/brand/whumpo-mark-*.png` preserve the full composition and colors, using size reduction only. The shared `Brand` component serves 48/96/192px variants; HTML declares 16/32px favicons and the 180px touch icon. The retired rounded-W asset is removed. Desktop header/sidebar use a fixed 44px image (the existing mobile header uses 32px) to avoid layout shifts and a rounded container suitable for both themes. These small files keep the 1.6 MB master out of normal page downloads.
 
 | Variant | Use |
 |---|---|
-| **Primary** | Deep-navy Whumpo wordmark. Preferred for product header, website, invoices, and formal brand use. |
+| **Primary** | Approved elephant/star mark with the Whumpo wordmark. Use in the website header and workspace. |
 | **Mascot lockup** | Wordmark plus cloud elephant. Preferred for marketing, onboarding, app-store creative, and social. |
-| **Compact mark** | Cloud-elephant head or rounded W. Use for favicon, app icon, avatar, and small UI contexts. |
+| **Compact mark** | The same approved elephant/star artwork, reduced to the required icon size. No rounded-W substitute. |
 | **One-color** | Use deep navy, white, or black only when production constraints require a single color. |
 
 ## Clear space & minimum size
@@ -327,8 +329,27 @@ This is a working identity system based on the current exploratory brand board.
 
 Before public launch, finalize:
 
-- logo geometry
+- any future approved simplified icon geometry
 - production wordmark files
 - mascot turnarounds
 - animation rules
 - final accessibility contrast values
+
+## October 1 mark verification
+
+Source master SHA-256: `ec1a7c90c66eacae1f697af4e259e179bdc9122660ce587149d07fe66b4b814b`. Only resampling/PNG encoding was applied; no artwork was generated, recolored or cropped. The normal 48px image is 5,202 bytes; the 96px retina version is 17,215 bytes.
+
+Type checks, production build and frontend-loading checks passed. A loopback fixture with the built frontend and disposable D1 verified the homepage header/footer, dashboard sidebar and 16/32/180px icon declarations. Desktop (1280px) and mobile (390px outer viewport) checks found no horizontal overflow; the logo loaded in the light homepage and dark workspace. Synthetic profile/project setup remained local, and browsing performed only read requests with no inference, publication or billing effects. Screenshots and fixture evidence remain private under `.secrets/brand-*`. No physical-device or browser-cache-refresh claim is made.
+
+### Private test release
+
+Release `2236a27b-c7e4-4285-ae1f-6cfae437db29` deployed source `7dcf933536b8c686968892023db992277e259e70`. Independent readback at **2026-10-01 16:09:42 UTC** matched the four Worker versions, unchanged bindings/CMS registry, all 116 migrations with none pending, and 24 selected frontend assets including all six brand images. Landing/workspace HTML exactly matched the archive and referenced the new icons. Public catalogue and sandbox-only billing remained unchanged; anonymous protected requests returned 401 and a foreign-origin mutation returned 403. The public browser also loaded the new homepage mark successfully.
+
+| Worker | Verified version |
+| --- | --- |
+| Runtime | `8ec1a9d8-0248-4ce3-8ad5-c663a01f956b` |
+| Apps | `fffed80c-5521-433a-8185-0bef5dde247b` |
+| Sites | `c8d84620-e69e-4ed4-988e-40ce659363b9` |
+| Platform | `adbdb889-c38a-45a1-a90e-18806e8d944d` |
+
+Private evidence is `.secrets/brand-release-verification.json`, the matching immutable release archive and `.secrets/brand-live-home.png`. No customer publication, new service, real billing or provider activation occurred. Existing browsers may retain an older favicon until they refresh the page/tab.

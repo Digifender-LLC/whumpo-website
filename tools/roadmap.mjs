@@ -82,6 +82,44 @@ export async function validateRoadmap(data){
  return data;
 }
 
+// Architectural handoffs are paths, not a requirement to repeat every transitive edge.
+// Keep these aligned with docs/roadmap/alignment.md when product decisions change.
+export function alignmentProblems(data){
+ const tasks=new Map(data.tasks.map(task=>[task.id,task])),problems=[];
+ const id=number=>`WH-${String(number).padStart(3,'0')}`;
+ function reaches(from,to,seen=new Set()){
+  if(seen.has(from))return false;
+  seen.add(from);
+  return (tasks.get(from)?.dependsOn??[]).some(next=>next===to||reaches(next,to,seen));
+ }
+ const required={
+  18:[52,117],22:[71],52:[71,113],54:[90,105,115,116],56:[52,90,105,116],
+  67:[65,66,71,90,105,116],75:[52,90,113,116],77:[67,71,76],
+  81:[105,113],83:[115],90:[89,113],92:[105,116],
+  104:[31,32,80,90,112],106:[90,105,116],
+  48:[5,17,19,117],49:[23,41,104,112]
+ };
+ for(let feature=91;feature<=103;feature++)required[feature]=[90,105,116];
+ const forbidden={
+  22:[23,41,47,49,104],42:[23,47,49,104],43:[23,47,49,104],
+  48:[49,87,104,112,118],52:[12,18,36,68,69,74,86],
+  56:[31,32,36,49,96,97,98,99,100,104],
+  67:[70,72,77,80,104],71:[22,50,55,67,72],77:[72],
+  81:[84,87,107,112],90:[42,49,104],105:[106,107,109,110,112],
+  116:[106,117,118],117:[8,19,48],
+  35:[11,12,16],36:[56,96,98]
+ };
+ for(const [from,targets] of Object.entries(required))for(const to of targets){
+  if(!tasks.has(id(from))||!tasks.has(id(to)))problems.push(`Missing alignment task ${id(from)} or ${id(to)}`);
+  else if(!reaches(id(from),id(to)))problems.push(`${id(from)} must follow shared prerequisite ${id(to)}`);
+ }
+ for(const [from,targets] of Object.entries(forbidden))for(const to of targets){
+  if(!tasks.has(id(from))||!tasks.has(id(to)))problems.push(`Missing alignment task ${id(from)} or ${id(to)}`);
+  else if(reaches(id(from),id(to)))problems.push(`${id(from)} must remain independent of downstream/optional gate ${id(to)}`);
+ }
+ return problems;
+}
+
 const text=value=>value.replace(/([\\`*_[\]<>])/g,'\\$1').replace(/\r?\n/g,' ');
 const bullets=(values,empty='None recorded.')=>values.length?values.map(value=>`- ${value}`).join('\n'):empty;
 const ordered=tasks=>[...tasks].sort((a,b)=>priorities.indexOf(a.priority)-priorities.indexOf(b.priority)||a.id.localeCompare(b.id,undefined,{numeric:true}));
@@ -127,14 +165,18 @@ export function renderRoadmap(data){
 async function main(args){
  const [command,...rest]=args;
  if(!command||command==='--help'||command==='help'){
-  console.log('Usage: node tools/roadmap.mjs validate | next | show WH-001 | render [--check]\nOnly render without --check writes a file. No command reads live issue state or calls external APIs.');return;
+  console.log('Usage: node tools/roadmap.mjs validate | alignment | next | show WH-001 | render [--check]\nOnly render without --check writes a file. No command reads live issue state or calls external APIs.');return;
  }
- if(!['validate','next','show','render'].includes(command)||(command==='show'?rest.length!==1:command==='render'?rest.length>1||(rest.length===1&&rest[0]!=='--check'):rest.length!==0))fail('Invalid command. Run node tools/roadmap.mjs --help');
+ if(!['validate','alignment','next','show','render'].includes(command)||(command==='show'?rest.length!==1:command==='render'?rest.length>1||(rest.length===1&&rest[0]!=='--check'):rest.length!==0))fail('Invalid command. Run node tools/roadmap.mjs --help');
  let data;
  try{data=JSON.parse(await readFile(sourcePath,'utf8'));}
  catch(error){if(error.code==='ENOENT')fail('Missing docs/roadmap/backlog.json; create the canonical backlog first.');throw error;}
  await validateRoadmap(data);
  if(command==='validate'){console.log(`Valid roadmap: ${data.tasks.length} tasks, ${data.phases.length} phases; dependencies are acyclic and references exist.`);return;}
+ if(command==='alignment'){
+  const problems=alignmentProblems(data);if(problems.length)fail(`Alignment conflicts:\n${problems.join('\n')}`);
+  console.log('Roadmap alignment passed: shared contract paths and independent implementation/launch lanes preserved. No live execution state read.');return;
+ }
  if(command==='show'){
   const task=data.tasks.find(item=>item.id===rest[0]);if(!task)fail(`Unknown task: ${rest[0]}`);
   process.stdout.write(taskMarkdown(data,task));return;

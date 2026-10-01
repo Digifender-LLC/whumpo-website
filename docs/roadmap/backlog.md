@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `2207186331c41eb97a058aea4de0b32a7987e380`. 118 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 118 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -16,7 +16,7 @@ A current evidence baseline and repeatable release, verification and operational
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **ready**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -75,7 +75,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/3. Planning owner: Unassigned.
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **ready**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -136,7 +136,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/39. Planning owner: Unassigned
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **ready**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -194,7 +194,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/4. Planning owner: Unassigned.
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **ready**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -250,7 +250,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **ready**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -306,7 +306,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/6. Planning owner: Unassigned.
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -320,6 +320,7 @@ Background safety, cleanup and notification work gets one justified durable exec
 - Document at-least-once delivery, retries, idempotency, dead letters, cancellation and unknown external outcomes
 - Prepare an ADR with cost/entitlement verification and a small synthetic prototype plan
 - Freeze one reusable job/outbox envelope for tenant/actor/purpose, input/version, lease/fencing, cancellation, operation/readback and delivery status. WH-036/068/069/074/086 provide adapters, not independent retry or authority engines.
+- Consume WH-071 logical resource/version identities and WH-113 actor/restricted-session rules in the shared envelope. Recheck current dispatch authority; job claims and restored receipts never create normal session or provider authority.
 
 ### Acceptance criteria
 
@@ -337,7 +338,7 @@ Background safety, cleanup and notification work gets one justified durable exec
 
 ### Dependencies and blockers
 
-Planning dependencies: None. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-071, WH-113. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -368,7 +369,7 @@ Operated safety, privacy, identity, recovery and lifecycle for explicitly suppor
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -426,7 +427,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -482,7 +483,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -540,7 +541,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -607,7 +608,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/7. Planning owner: Unassigned.
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -674,7 +675,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/8. Planning owner: Unassigned.
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -728,7 +729,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/21. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -781,7 +782,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -835,7 +836,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -890,7 +891,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -943,7 +944,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -995,7 +996,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1048,7 +1049,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1062,6 +1063,7 @@ An owner can export supported data and request closure without losing reconcilia
 - Resolve unknown usage/provider operations before eligible erasure
 - Withdraw services, revoke tokens before erasing keys, and clean owned objects/resources resumably
 - Implement export/closure against WH-116/117 data and key custody contracts before acceptance; distinguish platform account export from WH-077 portable project delivery. Future data modules register lifecycle adapters rather than add a second closure/export engine.
+- Use WH-052 job/outbox identities, fencing and uncertain-effect recovery for resumable closure; feature-specific deletion receipts remain authoritative. Do not build an independent scheduler or retry engine.
 
 ### Acceptance criteria
 
@@ -1079,7 +1081,7 @@ An owner can export supported data and request closure without losing reconcilia
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-009, WH-015, WH-006, WH-117. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-009, WH-015, WH-006, WH-117, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -1104,7 +1106,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1157,7 +1159,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **ready**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1215,7 +1217,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/9. Planning owner: Unassigned.
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: release. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1275,7 +1277,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1329,7 +1331,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1381,7 +1383,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1441,7 +1443,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/42. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1502,7 +1504,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1564,7 +1566,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **ready**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1645,7 +1647,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/10. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **planned**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1706,7 +1708,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1770,7 +1772,7 @@ Better customer outcomes, evaluated generation, usable app interfaces and accept
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1829,7 +1831,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1888,7 +1890,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1942,7 +1944,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2000,7 +2002,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2055,7 +2057,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2110,7 +2112,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2167,7 +2169,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2223,7 +2225,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2277,7 +2279,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2331,7 +2333,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2382,7 +2384,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2437,7 +2439,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2490,7 +2492,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2542,7 +2544,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2594,7 +2596,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2651,7 +2653,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2703,7 +2705,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2758,7 +2760,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2773,6 +2775,7 @@ A Creator shares one immutable private preview for accountless comments and can 
 - Keep feedback separate from edits, team membership, publication approval, spending and model authority
 - Split link/asset authority, comment lifecycle and browser acceptance; remove access when the referenced preview is removed or no longer permitted
 - Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.
+- Use WH-116 feedback/guest-capability data classification before storage and WH-105 registered owner bindings before clients. Guest capabilities remain separate from member identity and cannot grant workspace access.
 
 ### Acceptance criteria
 
@@ -2790,7 +2793,7 @@ A Creator shares one immutable private preview for accountless comments and can 
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-090. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-090, WH-105, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -2817,7 +2820,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2875,7 +2878,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2932,7 +2935,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2996,7 +2999,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3011,6 +3014,7 @@ Forms and their submitted answers survive reloads and interrupted requests witho
 - Bind stable submission IDs to exact payloads and recover committed state after lost acknowledgements without automatic effect redispatch
 - Extend history/export and lifecycle inventory for definitions, answers and attachment references; minimize model and local-device copies
 - Implement the content-change-brief fixture through existing domain handlers rather than a generic command or network proxy
+- Enforce WH-090 current feature decisions when issuing, submitting and handing off interactions; protected history/readback remains scoped to current actor authority. Do not retrofit plan checks into a second interaction permission system later.
 
 ### Acceptance criteria
 
@@ -3029,7 +3033,7 @@ Forms and their submitted answers survive reloads and interrupted requests witho
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-105, WH-004, WH-009, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-105, WH-004, WH-009, WH-116, WH-090. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -3056,7 +3060,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3113,7 +3117,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3173,7 +3177,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3231,7 +3235,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3293,7 +3297,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3353,7 +3357,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3418,7 +3422,7 @@ Verified provider economics, funded cumulative plans and every selected Creator/
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3476,7 +3480,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3491,6 +3495,7 @@ Real usage and provider costs can be reconciled without prematurely charging cus
 - Reconcile aggregate usage against invoices/account floors
 - Instrument expanded launch workloads: kits/previews, comments, leads, notifications, requested connector reads/actions, collaboration, staging and portfolio/bulk work
 - Deliver the versioned event envelope and existing producer adapters first; later feature packets register additional dimensions through that interface. Initial delivery does not require those future feature implementations or WH-023 closed-period acceptance.
+- Attribute events to WH-071 stable logical project/resource identities, independently of the physical Worker/database. Preserve original provider event IDs and tariff versions across placement changes.
 
 ### Acceptance criteria
 
@@ -3508,7 +3513,7 @@ Real usage and provider costs can be reconciled without prematurely charging cus
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-020, WH-006. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-020, WH-006, WH-071. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -3534,7 +3539,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3590,7 +3595,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **blocked**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3644,7 +3649,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3705,7 +3710,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/30. Planning owner: Unassigned
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3761,7 +3766,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3816,7 +3821,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: release. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3874,7 +3879,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3925,7 +3930,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3976,7 +3981,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4029,7 +4034,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4085,7 +4090,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4102,6 +4107,7 @@ Multi-person customers can collaborate without sharing owner credentials or expa
 - Creator guest reviewers and Business notification destinations are not team members
 - Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.
 - Reuse WH-113/115 workspace enrollment, restricted recovery and current-authority policy for members. Do not add a separate member login, password fallback or account recovery route.
+- Freeze membership data/readers/retention under WH-116 and register owner-facing bindings under WH-105 before new schema or clients. Connected feature acceptance uses the shared Chat renderer when available; backend work does not wait for the whole Chat rollout.
 
 ### Acceptance criteria
 
@@ -4119,7 +4125,7 @@ Multi-person customers can collaborate without sharing owner credentials or expa
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-004, WH-009, WH-090, WH-115. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-004, WH-009, WH-090, WH-115, WH-105, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -4146,7 +4152,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4161,6 +4167,7 @@ All selected connections reuse server-controlled explicit bounded reads, reviewe
 - Define request-bound lookup/data-use consent and allowlisted operations; exclude arbitrary outbound fetch, continuous sync and visitor-triggered maintainer
 - Keep WH-036 platform delivery independent of customer mailbox OAuth; split contract/implementation/conformance children without depending on provider children or WH-049
 - Adapt existing Cloudflare/GitHub vault, consent and receipt machinery to the common contract before WH-031/032 final acceptance; platform sender delivery WH-036 is an independent adapter, not a prerequisite for all connectors.
+- Classify provider-selected data, minimized receipts and key custody under WH-116 before new adapters persist data. Reuse the existing encrypted vault, allowing each provider to retain narrower operation and consent rules.
 
 ### Acceptance criteria
 
@@ -4182,7 +4189,7 @@ All selected connections reuse server-controlled explicit bounded reads, reviewe
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-004, WH-009, WH-052, WH-090, WH-105. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-004, WH-009, WH-052, WH-090, WH-105, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -4210,7 +4217,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4273,7 +4280,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/44. Planning owner: Unassigned
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4335,7 +4342,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4398,7 +4405,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4460,7 +4467,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4522,7 +4529,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4584,7 +4591,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4646,7 +4653,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4703,7 +4710,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4758,7 +4765,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4815,7 +4822,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4829,6 +4836,7 @@ One candidate release proves every selected tier benefit and all seven provider 
 - Complete Creator reuse/feedback, Business lead/workflow/lookup/action/reporting and Pro collaboration/staging/portfolio/bulk journeys
 - Reconcile grants with WH-042 sandbox subscription events and Creator identity; verify renewal/downgrade and protected recovery
 - Require accepted production privacy and real provider consent/action/revocation evidence and cost/readiness reviews; split fixture/browser/external acceptance children
+- Require WH-080 composed-pilot evidence in addition to the tier journeys, so launch cannot precede shared-module isolation and zero-maintainer visitor-serving proof. The pilot remains synthetic; real provider/customer acceptance is still separately required.
 
 ### Acceptance criteria
 
@@ -4849,7 +4857,7 @@ One candidate release proves every selected tier benefit and all seven provider 
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-089, WH-090, WH-091, WH-092, WH-093, WH-094, WH-095, WH-096, WH-097, WH-098, WH-099, WH-100, WH-101, WH-102, WH-103, WH-031, WH-032, WH-042, WH-021, WH-112. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-089, WH-090, WH-091, WH-092, WH-093, WH-094, WH-095, WH-096, WH-097, WH-098, WH-099, WH-100, WH-101, WH-102, WH-103, WH-031, WH-032, WH-042, WH-021, WH-112, WH-080. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 - Real provider approvals, consenting accounts and accepted production privacy remain required; see WH-031/032 and WH-096–100.
 - Stripe sandbox is deployed and owner-authorized; real-money activation and CMS testing remain gated. Local/connected evidence never authorizes commercial activation.
@@ -4881,7 +4889,7 @@ Demand-led scale, search and advanced hosting beyond the accepted launch set; re
 
 Phase: **Measured expansion** (F4). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4934,7 +4942,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4986,7 +4994,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5041,7 +5049,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5094,7 +5102,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: S.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5145,7 +5153,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5199,7 +5207,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **planned**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5261,7 +5269,7 @@ Configure and compose maintained modules first; generate only missing custom beh
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5320,7 +5328,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/12. Planning owner: Unassigned
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5379,7 +5387,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/13. Planning owner: Unassigned
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5439,7 +5447,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/14. Planning owner: Unassigned
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5455,6 +5463,7 @@ Composed interfaces and custom frontends reuse the same maintained tenant-scoped
 - Evaluate proven libraries or managed services before building complex identity/payment engines
 - Consume WH-071 logical storage/runtime interfaces and WH-116 data classification; freeze module instance/config/version and migration hooks before tables or client APIs. Add services to the delivered WH-066 compiler/catalog instead of replacing its supported adapters.
 - Keep customer-application visitor/staff roles distinct from Whumpo workspace membership in WH-054. A staff upload rule does not grant owner Chat/admin access or require creating a parallel workspace authentication system.
+- Use WH-090 for owner feature admission/configuration and WH-105 for registered owner-facing bindings from the first module. Visitor/staff authorization remains the separate application policy; ordinary published serving does not become a workspace-subscription check or silently stop on plan loss.
 
 ### Acceptance criteria
 
@@ -5472,7 +5481,7 @@ Composed interfaces and custom frontends reuse the same maintained tenant-scoped
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-065, WH-066, WH-009, WH-010, WH-071, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-065, WH-066, WH-009, WH-010, WH-071, WH-116, WH-090, WH-105. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -5500,7 +5509,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5515,6 +5524,7 @@ Placement favors static assets and shared maintained APIs, with isolated on-dema
 - Plan project route bundling rather than one script per tiny feature
 - Compare Containers/VMs for actual sustained/native workloads including supporting services and minimum costs
 - Freeze logical project/resource IDs, scoped storage/runtime adapters, schema/version and migration/export hooks before WH-067; current shared D1 and QuickJS remain the initial implementations.
+- Freeze minimum module lifecycle/export descriptors now: logical IDs, exact schema/module version, owned data/asset references, export eligibility, dependency manifest and restore/migration compatibility. WH-067 supplies adapters with its first schema; WH-077 later verifies a runnable portable subset, without redesigning storage around an export format after launch.
 
 ### Acceptance criteria
 
@@ -5558,7 +5568,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5615,7 +5625,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5629,6 +5639,7 @@ Pooling reduces idle work without allowing one project or job class to exhaust a
 - Enforce per-project and platform concurrency, queue length, database work, upload/transform bytes, custom CPU/memory and spend bounds
 - Reserve interactive capacity separately from scans/imports/builds; plan bounded failure groups as observed load grows
 - Support reviewed selective dedicated isolation only when performance/containment evidence warrants it
+- Consume WH-090 current operation eligibility and WH-116 data/cache protection requirements before pooling. Capacity admission cannot bypass actor revocation or convert standard owner assistance into customer-credit usage.
 
 ### Acceptance criteria
 
@@ -5646,7 +5657,7 @@ Pooling reduces idle work without allowing one project or job class to exhaust a
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-065, WH-050, WH-052, WH-113. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-065, WH-050, WH-052, WH-113, WH-090, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -5671,7 +5682,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5726,7 +5737,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5783,7 +5794,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5836,7 +5847,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5892,7 +5903,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5950,7 +5961,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6008,7 +6019,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6064,7 +6075,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6120,7 +6131,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6134,6 +6145,7 @@ Customers can export what they own with an honest account of managed dependencie
 - Distinguish static source download, data portability and a functioning standalone application
 - Select a supported self-hostable runtime, replacement adapters or a documented migration path for each shared capability
 - Include export format/version/migrations, unavailable feature report and secure secret reconfiguration instructions
+- Verify exports for currently supported placement adapters using WH-071 logical identities. WH-072 physical database provisioning is optional future coverage, not a prerequisite for the first portable subset; if adopted, add its adapter and fresh acceptance before claiming it is portable.
 
 ### Acceptance criteria
 
@@ -6151,7 +6163,7 @@ Customers can export what they own with an honest account of managed dependencie
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-066, WH-067, WH-072, WH-076, WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-066, WH-067, WH-076, WH-009, WH-071. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -6163,6 +6175,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/shared-components.md](../../docs/shared-components.md)
 - [docs/app-data.md](../../docs/app-data.md)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 
 ### Execution coordination
 
@@ -6176,7 +6189,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6237,7 +6250,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6297,7 +6310,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6357,7 +6370,7 @@ A native Kotlin/Compose owner app delivers reliable Chat, project reviews, photo
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6421,7 +6434,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6475,7 +6488,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6538,7 +6551,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6600,7 +6613,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6657,7 +6670,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6716,7 +6729,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **blocked**. Kind: release. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6778,7 +6791,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Native Android owner experience** (F6). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-01. Source baseline: `2207186331c41eb97a058aea4de0b32a7987e380`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 

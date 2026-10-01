@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "reviewedAt": "2026-10-01",
-  "sourceCommit": "2207186331c41eb97a058aea4de0b32a7987e380",
+  "sourceCommit": "db8b740ab2346f55f2985593b1ec531a99027630",
   "phases": [
     {
       "id": "F0",
@@ -824,7 +824,8 @@
         "WH-009",
         "WH-015",
         "WH-006",
-        "WH-117"
+        "WH-117",
+        "WH-052"
       ],
       "blockers": [],
       "outcome": "An owner can export supported data and request closure without losing reconciliation or provider revocation authority.",
@@ -832,7 +833,8 @@
         "Add fresh-session exact review and durable stop-new-work closure state",
         "Resolve unknown usage/provider operations before eligible erasure",
         "Withdraw services, revoke tokens before erasing keys, and clean owned objects/resources resumably",
-        "Implement export/closure against WH-116/117 data and key custody contracts before acceptance; distinguish platform account export from WH-077 portable project delivery. Future data modules register lifecycle adapters rather than add a second closure/export engine."
+        "Implement export/closure against WH-116/117 data and key custody contracts before acceptance; distinguish platform account export from WH-077 portable project delivery. Future data modules register lifecycle adapters rather than add a second closure/export engine.",
+        "Use WH-052 job/outbox identities, fencing and uncertain-effect recovery for resumable closure; feature-specific deletion receipts remain authoritative. Do not build an independent scheduler or retry engine."
       ],
       "acceptance": [
         "Closure blocks delayed OAuth callbacks and new work",
@@ -1001,7 +1003,8 @@
       "size": "L",
       "dependsOn": [
         "WH-020",
-        "WH-006"
+        "WH-006",
+        "WH-071"
       ],
       "blockers": [],
       "outcome": "Real usage and provider costs can be reconciled without prematurely charging customers.",
@@ -1010,7 +1013,8 @@
         "Capture authoritative infrastructure and complete task costs, separating control/retry overhead",
         "Reconcile aggregate usage against invoices/account floors",
         "Instrument expanded launch workloads: kits/previews, comments, leads, notifications, requested connector reads/actions, collaboration, staging and portfolio/bulk work",
-        "Deliver the versioned event envelope and existing producer adapters first; later feature packets register additional dimensions through that interface. Initial delivery does not require those future feature implementations or WH-023 closed-period acceptance."
+        "Deliver the versioned event envelope and existing producer adapters first; later feature packets register additional dimensions through that interface. Initial delivery does not require those future feature implementations or WH-023 closed-period acceptance.",
+        "Attribute events to WH-071 stable logical project/resource identities, independently of the physical Worker/database. Preserve original provider event IDs and tariff versions across placement changes."
       ],
       "acceptance": [
         "Duplicate and delayed events cannot double-count",
@@ -2404,14 +2408,18 @@
       "readiness": "ready",
       "kind": "decision",
       "size": "S",
-      "dependsOn": [],
+      "dependsOn": [
+        "WH-071",
+        "WH-113"
+      ],
       "blockers": [],
       "outcome": "Background safety, cleanup and notification work gets one justified durable execution approach.",
       "scope": [
         "Compare existing D1/cron receipts with Cloudflare Queues and Workflows for concrete job classes",
         "Document at-least-once delivery, retries, idempotency, dead letters, cancellation and unknown external outcomes",
         "Prepare an ADR with cost/entitlement verification and a small synthetic prototype plan",
-        "Freeze one reusable job/outbox envelope for tenant/actor/purpose, input/version, lease/fencing, cancellation, operation/readback and delivery status. WH-036/068/069/074/086 provide adapters, not independent retry or authority engines."
+        "Freeze one reusable job/outbox envelope for tenant/actor/purpose, input/version, lease/fencing, cancellation, operation/readback and delivery status. WH-036/068/069/074/086 provide adapters, not independent retry or authority engines.",
+        "Consume WH-071 logical resource/version identities and WH-113 actor/restricted-session rules in the shared envelope. Recheck current dispatch authority; job claims and restored receipts never create normal session or provider authority."
       ],
       "acceptance": [
         "Selected design preserves existing immutable receipts and does not assume exactly-once external effects",
@@ -2497,7 +2505,9 @@
         "WH-004",
         "WH-009",
         "WH-090",
-        "WH-115"
+        "WH-115",
+        "WH-105",
+        "WH-116"
       ],
       "blockers": [],
       "outcome": "Multi-person customers can collaborate without sharing owner credentials or expanding publication/spending authority accidentally.",
@@ -2508,7 +2518,8 @@
         "Split contract/schema, membership/invitations and approval/connected acceptance into coherent children; retain the parent gate",
         "Creator guest reviewers and Business notification destinations are not team members",
         "Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.",
-        "Reuse WH-113/115 workspace enrollment, restricted recovery and current-authority policy for members. Do not add a separate member login, password fallback or account recovery route."
+        "Reuse WH-113/115 workspace enrollment, restricted recovery and current-authority policy for members. Do not add a separate member login, password fallback or account recovery route.",
+        "Freeze membership data/readers/retention under WH-116 and register owner-facing bindings under WH-105 before new schema or clients. Connected feature acceptance uses the shared Chat renderer when available; backend work does not wait for the whole Chat rollout."
       ],
       "acceptance": [
         "Role changes revoke stale sessions/reviews as required",
@@ -2591,7 +2602,8 @@
         "WH-009",
         "WH-052",
         "WH-090",
-        "WH-105"
+        "WH-105",
+        "WH-116"
       ],
       "blockers": [],
       "outcome": "All selected connections reuse server-controlled explicit bounded reads, reviewed actions, scoped consent, current eligibility and reliable reconciliation.",
@@ -2600,7 +2612,8 @@
         "Reuse encrypted scoped credentials, account binding, refresh/revocation, current eligibility and durable dispatch/readback receipts",
         "Define request-bound lookup/data-use consent and allowlisted operations; exclude arbitrary outbound fetch, continuous sync and visitor-triggered maintainer",
         "Keep WH-036 platform delivery independent of customer mailbox OAuth; split contract/implementation/conformance children without depending on provider children or WH-049",
-        "Adapt existing Cloudflare/GitHub vault, consent and receipt machinery to the common contract before WH-031/032 final acceptance; platform sender delivery WH-036 is an independent adapter, not a prerequisite for all connectors."
+        "Adapt existing Cloudflare/GitHub vault, consent and receipt machinery to the common contract before WH-031/032 final acceptance; platform sender delivery WH-036 is an independent adapter, not a prerequisite for all connectors.",
+        "Classify provider-selected data, minimized receipts and key custody under WH-116 before new adapters persist data. Reuse the existing encrypted vault, allowing each provider to retain narrower operation and consent rules."
       ],
       "acceptance": [
         "Connector target hosts/scopes are server-controlled",
@@ -3085,7 +3098,9 @@
         "WH-009",
         "WH-010",
         "WH-071",
-        "WH-116"
+        "WH-116",
+        "WH-090",
+        "WH-105"
       ],
       "blockers": [],
       "outcome": "Composed interfaces and custom frontends reuse the same maintained tenant-scoped standard APIs.",
@@ -3095,7 +3110,8 @@
         "Keep module organization independent of deployment count; several modules can share the current backend",
         "Evaluate proven libraries or managed services before building complex identity/payment engines",
         "Consume WH-071 logical storage/runtime interfaces and WH-116 data classification; freeze module instance/config/version and migration hooks before tables or client APIs. Add services to the delivered WH-066 compiler/catalog instead of replacing its supported adapters.",
-        "Keep customer-application visitor/staff roles distinct from Whumpo workspace membership in WH-054. A staff upload rule does not grant owner Chat/admin access or require creating a parallel workspace authentication system."
+        "Keep customer-application visitor/staff roles distinct from Whumpo workspace membership in WH-054. A staff upload rule does not grant owner Chat/admin access or require creating a parallel workspace authentication system.",
+        "Use WH-090 for owner feature admission/configuration and WH-105 for registered owner-facing bindings from the first module. Visitor/staff authorization remains the separate application policy; ordinary published serving does not become a workspace-subscription check or silently stop on plan loss."
       ],
       "acceptance": [
         "Authenticated scope and field/record/file permissions are enforced inside every API, including direct/custom frontend use",
@@ -3278,7 +3294,8 @@
         "Keep existing QuickJS for supported custom logic; evaluate Workers for Platforms for workloads needing a broader execution boundary",
         "Plan project route bundling rather than one script per tiny feature",
         "Compare Containers/VMs for actual sustained/native workloads including supporting services and minimum costs",
-        "Freeze logical project/resource IDs, scoped storage/runtime adapters, schema/version and migration/export hooks before WH-067; current shared D1 and QuickJS remain the initial implementations."
+        "Freeze logical project/resource IDs, scoped storage/runtime adapters, schema/version and migration/export hooks before WH-067; current shared D1 and QuickJS remain the initial implementations.",
+        "Freeze minimum module lifecycle/export descriptors now: logical IDs, exact schema/module version, owned data/asset references, export eligibility, dependency manifest and restore/migration compatibility. WH-067 supplies adapters with its first schema; WH-077 later verifies a runnable portable subset, without redesigning storage around an export format after launch."
       ],
       "acceptance": [
         "Customer-controlled code never runs in the privileged shared platform process or receives cross-tenant connections",
@@ -3458,7 +3475,9 @@
         "WH-065",
         "WH-050",
         "WH-052",
-        "WH-113"
+        "WH-113",
+        "WH-090",
+        "WH-116"
       ],
       "blockers": [],
       "outcome": "Pooling reduces idle work without allowing one project or job class to exhaust another project service.",
@@ -3466,7 +3485,8 @@
         "Carry server-verified project/actor/purpose scope into jobs, cached results and provider adapters",
         "Enforce per-project and platform concurrency, queue length, database work, upload/transform bytes, custom CPU/memory and spend bounds",
         "Reserve interactive capacity separately from scans/imports/builds; plan bounded failure groups as observed load grows",
-        "Support reviewed selective dedicated isolation only when performance/containment evidence warrants it"
+        "Support reviewed selective dedicated isolation only when performance/containment evidence warrants it",
+        "Consume WH-090 current operation eligibility and WH-116 data/cache protection requirements before pooling. Capacity admission cannot bypass actor revocation or convert standard owner assistance into customer-credit usage."
       ],
       "acceptance": [
         "Forged tenant arguments/headers and copied job IDs cannot cross records, files, caches or outputs",
@@ -3548,9 +3568,9 @@
       "dependsOn": [
         "WH-066",
         "WH-067",
-        "WH-072",
         "WH-076",
-        "WH-009"
+        "WH-009",
+        "WH-071"
       ],
       "blockers": [],
       "outcome": "Customers can export what they own with an honest account of managed dependencies and a tested route to running supported outcomes elsewhere.",
@@ -3558,7 +3578,8 @@
         "Export specification, content, allowed customer data, custom source, asset manifests/digests and exact module/compiler versions",
         "Distinguish static source download, data portability and a functioning standalone application",
         "Select a supported self-hostable runtime, replacement adapters or a documented migration path for each shared capability",
-        "Include export format/version/migrations, unavailable feature report and secure secret reconfiguration instructions"
+        "Include export format/version/migrations, unavailable feature report and secure secret reconfiguration instructions",
+        "Verify exports for currently supported placement adapters using WH-071 logical identities. WH-072 physical database provisioning is optional future coverage, not a prerequisite for the first portable subset; if adopted, add its adapter and fresh acceptance before claiming it is portable."
       ],
       "acceptance": [
         "Exports never include platform/other-tenant secrets or unapproved private data",
@@ -3578,7 +3599,8 @@
         "docs/account-closure.md",
         "docs/data-lifecycle.md",
         "docs/shared-components.md",
-        "docs/app-data.md"
+        "docs/app-data.md",
+        "docs/roadmap/alignment.md"
       ],
       "issue": null,
       "owner": null,
@@ -4280,7 +4302,9 @@
         "WH-004",
         "WH-009",
         "WH-010",
-        "WH-090"
+        "WH-090",
+        "WH-105",
+        "WH-116"
       ],
       "blockers": [],
       "outcome": "A Creator shares one immutable private preview for accountless comments and can revoke access without granting workspace or release authority.",
@@ -4289,7 +4313,8 @@
         "Add guest comments and owner resolution with safe rendering, abuse/rate limits and lifecycle/export coverage; unverified display names are not verified identities",
         "Keep feedback separate from edits, team membership, publication approval, spending and model authority",
         "Split link/asset authority, comment lifecycle and browser acceptance; remove access when the referenced preview is removed or no longer permitted",
-        "Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained."
+        "Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.",
+        "Use WH-116 feedback/guest-capability data classification before storage and WH-105 registered owner bindings before clients. Guest capabilities remain separate from member identity and cannot grant workspace access."
       ],
       "acceptance": [
         "Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary",
@@ -4890,7 +4915,8 @@
         "WH-032",
         "WH-042",
         "WH-021",
-        "WH-112"
+        "WH-112",
+        "WH-080"
       ],
       "blockers": [
         "Real provider approvals, consenting accounts and accepted production privacy remain required; see WH-031/032 and WH-096\u2013100.",
@@ -4901,7 +4927,8 @@
         "Maintain a tier/feature/entrypoint evidence matrix for all four tiers, inheritance and selected connector operations",
         "Complete Creator reuse/feedback, Business lead/workflow/lookup/action/reporting and Pro collaboration/staging/portfolio/bulk journeys",
         "Reconcile grants with WH-042 sandbox subscription events and Creator identity; verify renewal/downgrade and protected recovery",
-        "Require accepted production privacy and real provider consent/action/revocation evidence and cost/readiness reviews; split fixture/browser/external acceptance children"
+        "Require accepted production privacy and real provider consent/action/revocation evidence and cost/readiness reviews; split fixture/browser/external acceptance children",
+        "Require WH-080 composed-pilot evidence in addition to the tier journeys, so launch cannot precede shared-module isolation and zero-maintainer visitor-serving proof. The pilot remains synthetic; real provider/customer acceptance is still separately required."
       ],
       "acceptance": [
         "Every new packet and promoted WH-054/056 foundation meets acceptance; configuration or mock success cannot satisfy live provider delivery",
@@ -4998,7 +5025,8 @@
         "WH-105",
         "WH-004",
         "WH-009",
-        "WH-116"
+        "WH-116",
+        "WH-090"
       ],
       "blockers": [],
       "outcome": "Forms and their submitted answers survive reloads and interrupted requests without duplicate work or lost authority boundaries.",
@@ -5007,7 +5035,8 @@
         "Implement owner-scoped read, draft/save, submit, cancel and resume adapters with strict schemas, current actor/project authority and expected revisions",
         "Bind stable submission IDs to exact payloads and recover committed state after lost acknowledgements without automatic effect redispatch",
         "Extend history/export and lifecycle inventory for definitions, answers and attachment references; minimize model and local-device copies",
-        "Implement the content-change-brief fixture through existing domain handlers rather than a generic command or network proxy"
+        "Implement the content-change-brief fixture through existing domain handlers rather than a generic command or network proxy",
+        "Enforce WH-090 current feature decisions when issuing, submitting and handing off interactions; protected history/readback remains scoped to current actor authority. Do not retrofit plan checks into a second interaction permission system later."
       ],
       "acceptance": [
         "Atomic submission and exact same-ID replay produce one answer receipt and at most one admitted downstream operation; changed payloads conflict",

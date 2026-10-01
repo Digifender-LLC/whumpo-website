@@ -1,13 +1,13 @@
 # Whumpo product and delivery roadmap
 
-**Aligned October 1, 2026 against source `2207186` and the 118-task local planning extension.** The [alignment review](alignment.md) records corrected dependencies, shared contract ownership, current issue evidence and remaining launch gates. Stable task IDs and phase labels are preserved; phase and task numbers are not build order. This is a delivery plan, not a release or provider authorization.
+**Aligned October 1, 2026; follow-up dependency audit against `db8b740` covers all 118 tasks.** The [alignment review](alignment.md) records corrected dependencies, shared contract ownership, current issue evidence and remaining launch gates. Stable task IDs and phase labels are preserved; phase and task numbers are not build order. This is a delivery plan, not a release or provider authorization.
 
 Whumpo should first become a dependable way for an invited customer to create, improve, publish and recover a useful website or bounded application. The next investment should turn its substantial foundations into operated customer journeys. Broader Cloudflare capabilities follow demonstrated demand and measured economics.
 
 ## Start here
 
 - [GitHub execution hub](https://github.com/zemdregon/whumpo/issues/2): nine initial task issues, claims, progress and handoffs. The complete longer-term plan remains in the backlog below.
-- [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths and verification.
+- [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths, current build order and persistent graph checks.
 - [Full backlog](backlog.md): every task, dependency, acceptance criterion and verification boundary.
 - [Chat as the primary workspace](chat-first-experience.md): interactive forms, agent-managed dashboards/views, continuity and WH-105–112 delivery packets.
 - [Low-friction identity and data protection](identity-and-data-protection.md): passkey-only workspace access, two-key signup, printable recovery and WH-113–118 protection packets.
@@ -21,6 +21,7 @@ Run from the repository root:
 
 ```sh
 node tools/roadmap.mjs validate
+node tools/roadmap.mjs alignment
 node tools/roadmap.mjs next
 node tools/roadmap.mjs show WH-001
 ```
