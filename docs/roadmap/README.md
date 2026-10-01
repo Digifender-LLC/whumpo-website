@@ -148,7 +148,7 @@ The original nine-task foundation queue is historical: WH-001/003/004/006/009/01
 
 | Lane | Work to finish or begin | Why now |
 | --- | --- | --- |
-| Existing work | WH-002 / issue #39 | Finish release-archive verification already claimed on its separate branch. |
+| Completed release foundation | WH-002 / issue #39 | Reuse the verified archive/partial-recovery tooling; [October 1 correction and evidence](../releases.md#archive-input-correction-and-wh-002-acceptance--october-1-2026). Full disaster recovery remains separate. |
 | Evidence and reliability | WH-020 / #9, WH-024 / #10, WH-052 / #11 | Reconcile existing benchmarks, usability and job architecture with their remaining acceptance. |
 | Early shared contracts | WH-113 identity, WH-089 tier identifiers, WH-071 logical placement | Prevent new clients, roles and modules from choosing incompatible foundations. |
 | Contract consumers | WH-105 Chat bindings after WH-113/089; WH-116 data classification after WH-113/009/020 | Define shared client and storage boundaries before implementation. |

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {saveBuildSnapshot} from '../tools/build-snapshot.mjs';
+import {saveBuildSnapshot,verifyBuildSnapshot,readBuildInputs} from '../tools/build-snapshot.mjs';
 import {prepareRelease,archivedConfig,expectedServiceBindings} from '../tools/prepare-release.mjs';
 import {workerOrder,configFiles,readJSON,verifyRelease,applyRelease,fileInventory,migrationPlan,validateCompatibility,digest,copyTree,assertWorker} from '../tools/release-manifest.mjs';
 import {bindingSummary} from '../tools/release-provider.mjs';
@@ -10,9 +10,12 @@ import {bindingSummary} from '../tools/release-provider.mjs';
 const root=await mkdtemp(join(tmpdir(),'whumpo-release-'));
 const sql=['0001_initial.sql','0002_expand.sql'];
 const configs={};
+// Nonempty registration metadata only; never provision or invoke a CMS instance.
+const cmsFixture={project_id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',user_id:'fixture-owner',review_id:'fixture-review',worker_name:'whumpo-cms-bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb',database_name:'fixture-db',bucket_name:'fixture-bucket',state:'connected',database_id:'fixture-db-id',session_namespace_id:'fixture-namespace',deployed_version_id:'fixture-cms-version',created_at:'2026-09-30T00:00:00.000Z',account_id:'a'.repeat(32),source_digest:'b'.repeat(64),secret_digest:'c'.repeat(64),origin:'https://cms-fixture.example.test',tag:'fixture-cms-tag',deployment_state:'connected',worker_version_id:'fixture-cms-version',platform_version_id:'before-platform'};
+const cmsBinding={binding:'CMS_bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb',service:cmsFixture.worker_name,environment:'production'};
 let live,counts,failAfter,failBefore,observeFailure,mutations;
-const reportedServices=role=>(configs[role].services??[]).map(s=>({...s,environment:'production'}));
-const baseline=()=>({workers:Object.fromEntries(workerOrder.map(role=>[role,{id:'before-'+role,tag:null,services:reportedServices(role),secrets:role==='platform'?['AI_API_KEY']:[]}])),cms:[],migrations:sql.slice(0,1)});
+const reportedServices=role=>[...(configs[role].services??[]).map(s=>({...s,environment:'production'})),...(role==='platform'?[cmsBinding]:[])];
+const baseline=()=>({workers:Object.fromEntries(workerOrder.map(role=>[role,{id:'before-'+role,tag:null,services:reportedServices(role),secrets:role==='platform'?['AI_API_KEY','CMS_BRIDGE_MASTER_KEY']:[]}])),cms:[structuredClone(cmsFixture)],migrations:sql.slice(0,1)});
 const driver={
  configs,verifyToolchain:async()=>{},withLock:async work=>work(async()=>{}),
  observe:async()=>{if(observeFailure){observeFailure=false;throw Error('Private provider error must not be persisted');}return structuredClone(live);},
@@ -40,6 +43,8 @@ try{
   await writeFile(join(root,configFiles[role]),JSON.stringify(configs[role]));
  }
  await writeFile(join(root,'src/index.ts'),'source');await writeFile(join(root,'dist/index.html'),'static asset');await writeFile(join(root,'public-app/visitor.js'),'visitor');
+ // Model the real nonempty input trees: archives retain files, not empty dirs.
+ await writeFile(join(root,'frontend/main.tsx'),'frontend source');await writeFile(join(root,'web/visitor.ts'),'visitor source');
  await writeFile(join(root,'migrations',sql[0]),'CREATE TABLE fixture(id);');await writeFile(join(root,'migrations',sql[1]),'ALTER TABLE fixture ADD COLUMN label TEXT;');
  await saveBuildSnapshot(root);await writeFile(join(root,'.secrets/private.key'),'DO_NOT_ARCHIVE');reset();
  review={version:1,buildInputs:(await readJSON(join(root,'.secrets/build-snapshot.json'))).inputs.sha256,review:'synthetic mixed-version review',mixedWorkersCompatible:true,schemaChange:'backward-compatible',previousWorkersCompatible:true,schemaReview:'synthetic schema review',migrations:[{name:sql[1],sha256:digest(await readFile(join(root,'migrations',sql[1])))}]};
@@ -47,15 +52,17 @@ try{
  const first=await prepare(),manifest=await verifyRelease(first.directory);
  assert.equal(mutations,0);assert.deepEqual(manifest.order,workerOrder);assert.equal(manifest.migrations.pending.length,1);
  assert.equal(manifest.before.workers.platform.id,'before-platform');
+ assert.deepEqual(manifest.cms,[cmsFixture]);assert.deepEqual(manifest.before.cms,[cmsFixture]);assert.deepEqual(manifest.workers.platform.services,[cmsBinding]);
  assert.deepEqual(manifest.workers.apps.services,[{binding:'BACKEND_RUNTIME',service:'whumpo-runtime',environment:'production'}]);
  for(const mismatch of [{service:'other'},{environment:'staging'},{entrypoint:'Other'}])assert.throws(()=>assertWorker(manifest,'apps',{tag:manifest.workers.apps.tag,services:[{...manifest.workers.apps.services[0],...mismatch}],secrets:[]}),/service bindings changed/);
  assert.deepEqual(expectedServiceBindings([{binding:'TEST',service:'worker',entrypoint:'API'}]),[{binding:'TEST',service:'worker',environment:'production',entrypoint:'API'}]);
  assert.throws(()=>expectedServiceBindings([{binding:'TEST',service:'worker',props:{unexpected:true}}]),/archive support/);
  assert.ok(manifest.files.some(f=>f.path==='workers/runtime/runtime.wasm'));
+ for(const name of ['project-content-v1.json','project-service-clients-v1.json'])assert.ok(manifest.files.some(f=>f.path==='source/compiler-locks/'+name),'Required compiler lock missing from archived source: '+name);
  assert.ok(!JSON.stringify(manifest).includes('DO_NOT_ARCHIVE'));
  assert.ok(!manifest.files.some(f=>f.path.includes('.secrets')||f.path.includes('node_modules')));
  assert.equal((await readJSON(join(first.directory,'payload/config/platform.json'))).assets.directory,'../assets/platform');
- for(const path of ['workers/runtime/index.js','workers/runtime/runtime.wasm','assets/platform/index.html','migrations/'+sql[1],'config/platform.json','source/pnpm-lock.yaml']){
+ for(const path of ['workers/runtime/index.js','workers/runtime/runtime.wasm','assets/platform/index.html','migrations/'+sql[1],'config/platform.json','source/pnpm-lock.yaml','source/compiler-locks/project-content-v1.json','source/compiler-locks/project-service-clients-v1.json']){
   const file=join(first.directory,'payload',path),bytes=await readFile(file);await writeFile(file,'changed');await assert.rejects(()=>applyRelease(first.directory,driver),/mismatch/);assert.equal(mutations,0);await writeFile(file,bytes);
  }
  await writeFile(join(first.directory,'payload/unexpected'),'extra');await assert.rejects(()=>verifyRelease(first.directory));await rm(join(first.directory,'payload/unexpected'));
@@ -67,10 +74,11 @@ try{
   reset();const release=await prepare();failAfter=role;
   await assert.rejects(()=>applyRelease(release.directory,driver),new RegExp('stopped at '+role));
   const interrupted=await readJSON(join(release.directory,'journal.json'));
+  assert.deepEqual((await verifyRelease(release.directory)).cms,[cmsFixture]);assert.deepEqual(live.cms,[cmsFixture]);
   assert.equal(interrupted.steps[role].status,'unknown');assert.equal(interrupted.steps[role].operationConfirmed,true);
   const result=await applyRelease(release.directory,driver);assert.equal(result.status,'deployed');
   assert.deepEqual(Object.values(counts),[1,1,1,1,1]);
-  await applyRelease(release.directory,driver);assert.deepEqual(Object.values(counts),[1,1,1,1,1]);
+  await applyRelease(release.directory,driver);assert.deepEqual(Object.values(counts),[1,1,1,1,1]);assert.deepEqual(live.cms,[cmsFixture]);assert.deepEqual(live.workers.platform.services,[cmsBinding]);
   assert.ok(!(await readFile(join(release.directory,'journal.json'),'utf8')).includes('Private'));
   live.workers.platform.secrets=[];await assert.rejects(()=>applyRelease(release.directory,driver),/required secret/);assert.deepEqual(Object.values(counts),[1,1,1,1,1]);
  }
@@ -101,5 +109,13 @@ try{
  // Previous candidate bytes are retained after later preparations/deployments.
  await verifyRelease(first.directory);await copyTree(join(first.directory,'payload'),join(root,'restored-payload'));
  assert.deepEqual(await fileInventory(join(first.directory,'payload')),await fileInventory(join(root,'restored-payload')));
- console.log('Release manifests passed: immutable four-Worker artifacts/assets/SQL, no secret copies, schema review, drift refusal, persisted intent, partial failures at all four steps, reconciliation without duplicate deployment, uncertain-command holds, binding inventory and recoverable archives.');
+ // Reconstruct the recorded build from source + assets. Do not mint a new
+ // snapshot: the original manifest must validate the recovered compiler inputs.
+ const recovered=join(root,'recovered-checkout');await copyTree(join(first.directory,'payload/source'),recovered);
+ await copyTree(join(first.directory,'payload/assets/platform'),join(recovered,'dist'));
+ await copyTree(join(first.directory,'payload/assets/apps'),join(recovered,'public-app'));
+ await mkdir(join(recovered,'.secrets'));await writeFile(join(recovered,'.secrets/build-snapshot.json'),JSON.stringify(manifest.build));
+ assert.deepEqual(await readBuildInputs(recovered),manifest.build.inputs);
+ assert.deepEqual(await verifyBuildSnapshot(recovered),manifest.build);
+ console.log('Release manifests passed: immutable four-Worker artifacts/assets/SQL, no secret copies, schema review, drift refusal, persisted intent, partial failures at all four steps, reconciliation without duplicate deployment, uncertain-command holds, nonempty CMS registration/binding preservation and recovered build inputs including compiler locks.');
 }finally{await rm(root,{recursive:true,force:true});}
