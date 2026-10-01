@@ -4,7 +4,7 @@
 
 ## Implemented contract
 
-[schema.sql](../src/workspace-identity/schema.sql) defines the five authority tables below; [verified ceremonies](identity-ceremonies.md) now extend it with challenge/receipt tables and a current-key candidate view. It sits outside `migrations/` until enrollment and recovery are complete and the reviewed test reset is ready. Its owner reference is canonical `users(id)`. It does not inspect password fields or existing session, passkey or recovery-code tables. Merely applying this SQL is not an authentication cutover.
+[schema.sql](../src/workspace-identity/schema.sql) defines the five authority tables below; [verified ceremonies](identity-ceremonies.md) now extend it with challenge/receipt tables and a current-key candidate view; [shared kits and enrollment completion](identity-kits.md) add current offers and terminal effect receipts. It sits outside `migrations/` until enrollment and recovery are complete and the reviewed test reset is ready. Its owner reference is canonical `users(id)`. It does not inspect password fields or existing session, passkey or recovery-code tables. Merely applying this SQL is not an authentication cutover.
 
 | Records | Current invariant |
 | --- | --- |

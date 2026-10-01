@@ -143,6 +143,73 @@ BEGIN SELECT RAISE(ABORT,'identity_receipt_limit'); END;
 CREATE TRIGGER identity_challenges_account_delete BEFORE DELETE ON users
 BEGIN DELETE FROM identity_challenges WHERE account_id=OLD.id; END;
 
+CREATE TABLE identity_kit_offers (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ account_id TEXT NOT NULL UNIQUE REFERENCES identity_accounts(account_id) ON DELETE CASCADE,
+ purpose TEXT NOT NULL CHECK(purpose IN ('workspace','enrollment','recovery')),
+ attempt_id TEXT,
+ auth_epoch INTEGER NOT NULL CHECK(auth_epoch BETWEEN 1 AND 9007199254740991),
+ credential_revision INTEGER NOT NULL CHECK(credential_revision BETWEEN 0 AND 9007199254740991),
+ attempt_revision INTEGER,
+ generation INTEGER NOT NULL CHECK(generation BETWEEN 1 AND 9007199254740991),
+ verifier TEXT NOT NULL CHECK(length(verifier)=64 AND verifier NOT GLOB '*[^0-9a-f]*'),
+ created_at INTEGER NOT NULL CHECK(created_at>=0),
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+1800),
+ saved_at INTEGER CHECK(saved_at IS NULL OR (saved_at>=created_at AND saved_at<expires_at)),
+ CHECK((purpose='workspace' AND attempt_id IS NULL AND attempt_revision IS NULL)
+  OR (purpose!='workspace' AND attempt_id IS NOT NULL AND attempt_revision IS NOT NULL AND attempt_revision>=0)),
+ FOREIGN KEY(attempt_id,account_id) REFERENCES identity_attempts(id,account_id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX identity_kit_offers_expiry ON identity_kit_offers(expires_at);
+CREATE TRIGGER identity_kit_offer_immutable BEFORE UPDATE ON identity_kit_offers
+WHEN NEW.id!=OLD.id OR NEW.account_id!=OLD.account_id OR NEW.purpose!=OLD.purpose OR NEW.attempt_id IS NOT OLD.attempt_id
+ OR NEW.auth_epoch!=OLD.auth_epoch OR NEW.credential_revision!=OLD.credential_revision OR NEW.attempt_revision IS NOT OLD.attempt_revision
+ OR NEW.generation!=OLD.generation OR NEW.verifier!=OLD.verifier OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at
+ OR (OLD.saved_at IS NOT NULL AND NEW.saved_at IS NOT OLD.saved_at)
+BEGIN SELECT RAISE(ABORT,'identity_kit_offer_immutable'); END;
+
+-- Account deletion anonymizes terminal receipts; they cannot authenticate or recreate access.
+CREATE TABLE identity_effect_receipts (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ execution_nonce TEXT NOT NULL CHECK(length(execution_nonce)=36),
+ account_id TEXT REFERENCES identity_accounts(account_id) ON DELETE SET NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('kit_prepare','kit_save','kit_rotate','enrollment_complete','enrollment_cancel')),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
+ offer_id TEXT,
+ kit_generation INTEGER,
+ attempt_id TEXT,
+ created_at INTEGER NOT NULL CHECK(created_at>=0)
+) STRICT;
+CREATE INDEX identity_effect_receipts_account ON identity_effect_receipts(account_id,created_at);
+CREATE INDEX identity_effect_receipts_expiry ON identity_effect_receipts(created_at);
+CREATE TRIGGER identity_effect_receipt_immutable BEFORE UPDATE ON identity_effect_receipts
+WHEN NEW.id!=OLD.id OR NEW.execution_nonce!=OLD.execution_nonce OR NEW.kind!=OLD.kind OR NEW.request_hash!=OLD.request_hash
+ OR NEW.offer_id IS NOT OLD.offer_id OR NEW.kit_generation IS NOT OLD.kit_generation OR NEW.attempt_id IS NOT OLD.attempt_id
+ OR NEW.created_at!=OLD.created_at OR (NEW.account_id IS NOT OLD.account_id AND NEW.account_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'identity_effect_receipt_immutable'); END;
+CREATE TRIGGER identity_effect_receipt_limit BEFORE INSERT ON identity_effect_receipts
+WHEN (SELECT count(*) FROM identity_effect_receipts)>=50000
+BEGIN SELECT RAISE(ABORT,'identity_receipt_limit'); END;
+CREATE TRIGGER identity_effect_request_unique BEFORE INSERT ON identity_effect_receipts
+WHEN EXISTS(SELECT 1 FROM identity_ceremony_receipts WHERE id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'identity_request_conflict'); END;
+CREATE TRIGGER identity_ceremony_request_unique BEFORE INSERT ON identity_ceremony_receipts
+WHEN EXISTS(SELECT 1 FROM identity_effect_receipts WHERE id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'identity_request_conflict'); END;
+
+CREATE VIEW identity_current_kit_offers AS
+SELECT o.* FROM identity_kit_offers o
+JOIN identity_accounts a ON a.account_id=o.account_id
+LEFT JOIN identity_attempts t ON t.id=o.attempt_id AND t.account_id=o.account_id
+WHERE a.policy_version=1 AND a.auth_epoch=o.auth_epoch AND a.credential_revision=o.credential_revision
+ AND o.generation=a.kit_generation+1 AND o.expires_at>unixepoch()
+ AND ((o.purpose='workspace' AND a.stage='ready' AND a.current_attempt_id IS NULL AND o.attempt_id IS NULL)
+  OR (t.auth_epoch=a.auth_epoch AND t.kit_generation=a.kit_generation AND t.revision=o.attempt_revision AND t.kind=o.purpose AND (
+   (o.purpose='enrollment' AND a.stage='enrolling' AND a.current_attempt_id=t.id AND t.status='open')
+   OR (o.purpose='recovery' AND (
+    (a.stage IN ('ready','recovering') AND a.current_attempt_id IS NULL AND t.status='open' AND a.kit_generation>0)
+    OR (a.stage='recovering' AND a.current_attempt_id=t.id AND t.status='secured' AND a.kit_generation>0))))));
+
 -- Current keys that may prove returning access; staged keys only resume their own flow.
 CREATE VIEW identity_authentication_candidates AS
 SELECT c.id,c.account_id,c.public_key,c.counter,c.status,c.attempt_id AS credential_attempt_id,

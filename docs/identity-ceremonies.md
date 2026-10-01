@@ -1,6 +1,6 @@
 # Verified passkey ceremonies and pending enrollment
 
-**WH-114B / [#71](https://github.com/zemdregon/whumpo/issues/71), October 1, 2026. Source implementation in isolation; not activated or deployed.** This extends the [current authority foundation](identity-authority.md). The issue remains open for kit-bound completion and its connected acceptance. Parent [#68](https://github.com/zemdregon/whumpo/issues/68), recovery [#69](https://github.com/zemdregon/whumpo/issues/69) and coordinated cutover [#72](https://github.com/zemdregon/whumpo/issues/72) remain open.
+**WH-114B / [#71](https://github.com/zemdregon/whumpo/issues/71), October 1, 2026. Source implementation in isolation; not activated or deployed.** This extends the [current authority foundation](identity-authority.md). The [shared kit and completion implementation](identity-kits.md) now completes its backend enrollment/cancellation scope with connected disposable database checks. Parent [#68](https://github.com/zemdregon/whumpo/issues/68), recovery [#69](https://github.com/zemdregon/whumpo/issues/69) and coordinated cutover [#72](https://github.com/zemdregon/whumpo/issues/72) remain open.
 
 ## Implemented behavior
 
@@ -41,7 +41,7 @@ Challenge bindings temporarily contain normalized email, invitation verifier and
 
 ## Remaining work
 
-This is verified pending signup and current login, not complete signup. WH-115 must supply the shared random-kit prepare/save/commit lifecycle. WH-114B then needs two-key, saved-kit and fresh-assertion completion in one guarded transaction, terminal receipt behavior, authenticated cancellation and its failure tests. Completing recovery must require a new replacement assertion after the kit-save step; a retained-key assertion or the general fresh-proof predicate is insufficient.
+The shared [kit lifecycle and enrollment completion](identity-kits.md) now implement two-key, saved-kit and fresh-assertion completion, terminal receipt behavior and authenticated pending cancellation with failure tests. WH-115 still needs restricted recovery and browser kit delivery. Completing recovery must require a new replacement assertion after the kit-save step; a retained-key assertion or the general fresh-proof predicate is insufficient.
 
 #72 owns trusted identity-state/UI bootstrap before profile/welcome, strict cookie selection, no-store/bounded HTTP bodies, rate-limit wiring, removal of superseded routes, final HTTP/Chat/provider principal composition, lifecycle registration and the coordinated test cutover. There are no active routes importing this module yet. Real Turnstile, actual owner/device enrollment and deployed acceptance remain separate from the local fixtures.
 
@@ -49,7 +49,7 @@ This is verified pending signup and current login, not complete signup. WH-115 m
 
 `node tests/identity-ceremonies.mjs` and `node tests/identity-ceremonies.mjs --d1` exercise the actual module and schema with independently generated ES256 keys, CBOR registration responses and signed assertions. The verifier is not mocked. Turnstile transport is synthetic and checks the configured hostname/action; no external account or live challenge is contacted.
 
-Cases cover gate failures, wrong origin/RP/UV/signature/handle, cross-origin proof, replay, missing/oversized proof, lost-response resumption, second-key registration, receipt readback/conflicts, duplicate rollback, concurrent invitation/login, expiry, revocation after cryptographic admission, changed reviews, cross-account authority, all-or-nothing failed signup, account quota, session pruning, reauthentication at grant quota and spent invitations after deletion. Ready identity and recovery secure state are explicitly seeded only to test their ceremony admission; that is not evidence that kit/completion/recovery-secure code exists.
+Cases cover gate failures, wrong origin/RP/UV/signature/handle, cross-origin proof, replay, missing/oversized proof, lost-response resumption, second-key registration, receipt readback/conflicts, duplicate rollback, concurrent invitation/login, expiry, revocation after cryptographic admission, changed reviews, cross-account authority, all-or-nothing failed signup, account quota, session pruning, reauthentication at grant quota and spent invitations after deletion. Ready identity and recovery secure state are explicitly seeded only to test their ceremony admission; that is not evidence of recovery-secure implementation. The separate kit suite establishes ready identities through the actual complete signup path.
 
 ### Local results, October 1, 2026
 
@@ -58,4 +58,4 @@ Cases cover gate failures, wrong origin/RP/UV/signature/handle, cross-origin pro
 - Type checks, application build, roadmap validation/alignment/render verification and whitespace checks passed.
 - The D1 run exposed aggregate trigger-change counts; inserts now verify the returned row. The SQLite fixture now executes each batch without yielding between statements, matching D1 transaction isolation for concurrent ceremony tests.
 
-No physical authenticator, live Turnstile token, deployed auth handler or complete kit/enrollment/recovery flow was exercised.
+These ceremony-only results do not include a physical authenticator, live Turnstile token or deployed handler. Complete signup and ordinary rotation are now verified separately in the [kit suite](identity-kits.md); full recovery remains open.
