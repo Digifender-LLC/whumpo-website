@@ -4,40 +4,43 @@
 
 ## Customer flow
 
-1. Ask the agent to prepare an existing saved website for structured editing. The server loads an **owned immutable `site-page@1` version**, verifies normalized configuration and byte-exact rendering, and prepares a ten-minute import review.
-2. Chat names the website, changed fields and private-save scope. The owner can open the proposed website and the complete before/after comparison. These links require authentication and current ownership; HTML uses the existing private, sandboxed preview headers.
-3. **Save reviewed private version** sends a typed approval containing the review UUID, exact proposal digest and expected specification revision. Same-origin checks, a recent sign-in and the authentication rate limiter apply. The agent cannot call this approval, and typing a slash command or “yes” does not approve it.
-4. A subsequent natural-language edit reads the current specification and its content IDs. `content.replace` and `design.setTheme` compile a new candidate without inference. The owner reviews and saves it in the same way.
-5. Restoring a saved configuration creates a **new forward version** under the same review contract. Existing versions remain immutable. Publication uses the separate existing publication review; saving/restoring a configuration never moves the live pointer.
+**October 1 current source, deployment pending:** new websites are created directly as schema-2 specifications with `project-content@2`. Old page import, `preview`/`edit` action aliases and the private `/new`/`build`/`photo` guided writers are removed. The current onboarding brief and explicitly requested additional-project creation remain supported.
 
-The Chat tools are `specification` operations `read`, `import`, `change`, `restore` and `review`. The `read` operation participates in the bounded, two-call inspection continuation, supplying serialized editable content IDs/text, page references, theme and current revision. Version-history growth is excluded from that model lookup; the existing saved-version inspection remains available for choosing restore targets. Models interpret the request and select a validated operation; compilation, preview, comparison and approval make no model calls. Standard assistance remains zero customer-unit debit. Generic full-page preview/edit proposals cannot bypass a project's saved specification. If another existing adapter creates a draft, its revision invalidates pending reviews; the agent must explicitly choose and review a fresh import before another structured edit.
+1. The agent calls `specification` operation `create` for an owned project with no website, using the current plain-text config and required photo array. The first page, specification, photo references and creation receipt commit together. Creating a new project and its first page uses that same transaction builder.
+2. A later natural-language change reads the saved specification/revision, then proposes `change`. Text, theme, name, ordered sections and approved photo references are supported. The owner opens the private preview and complete before/after comparison.
+3. **Save reviewed private version** sends a typed approval containing review UUID, exact proposal digest and expected revision. Same-origin, recent sign-in and rate checks apply. Neither model text nor a slash command grants approval.
+4. `restore` prepares a new forward version from a saved current specification. All versions remain immutable. `review` reopens an exact review; `read` supplies bounded serialized editable IDs/text through the inspection continuation.
+5. Publishing, taking offline and changing live services retain their separate exact reviews. Creating, editing or restoring a private specification never moves the live pointer.
 
-The mounted adapter supports **one public homepage at `/`, declaring only `content@1`**. Extra routes and records/forms/files/access/integration/rule declarations fail closed, even though the schema library can validate more. There are no secret values or role grants to restore through this adapter. It does not attach media, execute generated source, provision infrastructure or change visitor data. The content compiler's one-to-four-page output remains a library capability until its broader delivery adapter exists.
+The mounted adapter accepts **one public homepage at `/`, declaring only `content@2`**. Both current `site-page@1` and `photo-page@1` presentations are supported. Photos remain private R2 objects, scoped to the same owner/project and subject to current clearance. Preview bytes are digest-verified and embedded only in authenticated responses. Additional routes, staff access and records/forms/files/rules declarations fail closed. The compiler's broader schema/library coverage does not provision these capabilities.
+
+Existing drafts without a current snapshot/lock reject preview, export, publication and public delivery. They are disposable test data to reset at cutover; there is no conversion, old reader or automatic alternate compiler.
 
 ## Persisted authority and transaction
 
-Migration `0110_project_specifications.sql` introduces:
+The current schema includes original storage tables (0110), typed approval guards (0118) and current creation guards (0119):
 
 | State | Purpose and retention |
 | --- | --- |
-| `projects.site_draft_revision` | Increments on every new immutable website version, including existing adapters. Pre-migration history starts at zero; creating another draft invalidates a prepared review. Removing an unrelated old version does not invalidate the head. |
+| `projects.site_draft_revision` | Increments on every new immutable website version, including a first current draft. The first current draft starts at revision one; a concurrent draft invalidates a prepared review. Removing an unrelated old version does not invalidate the head. |
 | `project_spec_proposals` | Immutable candidate spec, compiler lock, exact HTML/configuration/manifest, readable diff and review envelope. Binds owner/project, operation, request hash, current specification/draft revisions, base/restore target, digests, policy and ten-minute expiry. |
 | `project_spec_versions` | Full independent configuration/lock/manifest snapshot paired with the existing immutable `site_versions` row. No delta chain or dependency on the continued existence of a proposal/ancestor. |
 | `project_spec_applies` | Immutable metadata-only idempotency receipt. Unique proposal, output version and project revision; exact request hash prevents a changed-payload replay. Survives removal of the candidate/version while the project remains. |
-| `project_spec_heads` | Current specification version and revision, advanced only by a valid apply receipt. |
+| `project_spec_creations` | Immutable metadata-only first-save receipt, unique per project and output version. Admits only a pending owned AI turn with no approval payload. |
+| `project_spec_heads` | Established by a valid creation receipt and subsequently advanced only by valid apply receipts. |
 | `project_spec_chat_links` | Immutable owner-scoped review link with the exact server reply digest. Edited or model-invented text cannot acquire an approval button. |
 
 Before preview, approval or reopening a review, the server checks ownership, current revisions/base, target existence, expiry, policy identity, current compiler/catalog compatibility and every saved artifact/envelope/diff digest. It recompiles from the saved specification using the exact pinned lock and compares actual output bytes. Unsupported schema or renderer-size errors become fixed safe responses, never raw submitted values or SQL.
 
 The confirmation turn, workspace revision, immutable site/specification versions, receipt, head and activity event commit in the existing [D1 batch transaction](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch). Database guards recheck owner/project, exact canonical confirmation, candidate/base/target, revisions, expiry, safety holds and quotas **inside the transaction**. A candidate removed after application validation forces an abort; a no-op insert cannot save a success-only reply. Concurrent stale requests cannot both advance the head. A lost acknowledgement is recovered from the original owned turn/receipt without compiling or creating another version.
 
-**October 1 current-source receipt update (deployment pending):** schema 0118 requires canonical typed action JSON on the same confirmation turn, including exact review ID, proposal digest and integer expected revision. Command text cannot satisfy this gate. See [current Chat receipts](natural-language-chat.md#current-receipts-and-remaining-reply-cleanup).
+**October 1 current-source receipt update (deployment pending):** schema 0118 requires canonical typed action JSON on the same confirmation turn, including exact review ID, proposal digest and integer expected revision. Command text cannot satisfy this gate. See [current Chat receipts](natural-language-chat.md#current-receipts-and-plain-language-replies).
 
-Current compiler/policy code is trusted Worker configuration, checked again on each operation; it is not an editable customer database row. Future module withdrawal/version upgrades need their own delivery compatibility review. The immutable v1 compiler identity remains unchanged.
+Current compiler/policy code is trusted Worker configuration, checked again on each operation; it is not an editable customer database row. Future module changes need an exact current-version cutover. Both current compiler identities are version 2; older locks reject. Initial creation rechecks owner, pending-turn identity, first-only draft state, current schema/manifest, photo references and known holds inside its transaction. Competing first saves cannot establish two heads or leave orphan versions.
 
 ## Removal, bounds and safety
 
-The current specification head and base/target of an unexpired unapplied review are retained. Existing live-publication, pending publication, backup and exact-removal protections still apply. Removing an eligible version purges proposals and full comparison/candidate copies associated with it, and cascades its specification snapshot. Independent later versions retain their own full content. Metadata-only apply receipts prevent retries from resurrecting removed bytes or moving the head backward. Explicit operator parent-project or parent-account cleanup cascades all new state (including the account-order correction in migration 0111); no new customer account/project delete endpoint is added.
+The current specification head and base/target of an unexpired unapplied review are retained. Existing live-publication, pending publication, backup and exact-removal protections still apply. Removing an eligible version purges proposals and full comparison/candidate copies associated with it, and cascades its specification snapshot. Independent later versions retain their own full content. Metadata-only creation/apply receipts prevent retries from resurrecting removed bytes or moving the head backward. Explicit operator parent-project or parent-account cleanup cascades all new state (including the account-order correction in migration 0111); no new customer account/project delete endpoint is added.
 
 Proposal preparation removes expired candidate copies for that project and up to 100 expired copies elsewhere; this is bounded transaction cleanup, not a scheduled global purge. Immutable versions and metadata receipts are independent of that cleanup. Limits are 50 retained proposals per project / 4,000 platform-wide and 500 apply receipts per project / 20,000 platform-wide. Existing 25 saved-site-version limits remain. The compiler bounds each spec to 32 KiB, lock to 4 KiB and homepage HTML to 32 KiB; persistence additionally bounds manifest, diff and review envelopes. Capacity failures require freeing eligible saved versions or operator review of test limits; they do not create paid resources or silently prune recoverable versions.
 
@@ -49,7 +52,15 @@ This is **not a new detector or a complete generated-content safety implementati
 
 Uses Whumpo's existing private test D1 and Workers services; no new resource, paid-only service, provider authorization, customer DNS or AI routing change. D1 read/write/storage and Worker execution accrue against existing account allowances; this is not a promise of zero marginal provider cost. Cloudflare [D1 batch semantics](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch) checked September 30, 2026. Account-wide usage and entitlement remain operational checks.
 
-## Verification and deployment
+## Current verification — October 1, 2026
+
+Current source checks passed: both compiler suites (including independent reproduction/pin refusal), `current-website-specifications`, `specification-journey`, and lifecycle catalog. The current fast SQLite journey verifies direct first/additional-project creation, rejected retired actions/schemas/locks, exact approvals, competing reviews and first saves, lost-response replay, forward restores, export/preview/publication, same-project photo ownership, clearance/expiry, byte-integrity failures, private-to-live separation, late photo revocation, late content holds, atomic rollback, creation-receipt retention/cascade, and the 25-version quota including exact rollback and slot recovery after reviewed deletion. Photo clearances are explicitly synthetic; no detector or scanning provider runs.
+
+The connected HTTP/D1 journey verifies current direct creation and reviewed changes, recent-auth/origin/foreign denials, competing HTTP approvals, exact replay, stale/expired/removed-candidate rollback, immutable head/version/receipt retention, byte-exact export/publication, known holds and parent cleanup. Inference interpretation is scripted; compilation, previews and approvals invoke no model.
+
+No remote deployment or obsolete-data reset has occurred for schema 0119. Deploy the current client/platform/site services with 0118/0119 and reset obsolete test drafts/settings under the release protocol. Do not roll out a compatibility reader or translate old approval text. Dated v1 evidence below records earlier behavior only.
+
+## Historical verification and deployment
 
 Local verification on September 30, 2026:
 

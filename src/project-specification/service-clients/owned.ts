@@ -1,6 +1,6 @@
 import {BackendError} from '../../backend-error';
 import {requireSpecificationAvailable} from '../../specification-safety';
-import {jsonDigest,sha256,SpecificationError} from '../v1/json';
+import {jsonDigest,sha256,SpecificationError} from '../v2/json';
 import {compileServiceClientArtifacts,validateServiceClientSpecification,validateServiceClientTarget,type ServiceClientTarget} from './compiler';
 
 const validID=(value:string)=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(value);

@@ -2,14 +2,11 @@
 import assert from 'node:assert/strict';
 import {readFile,writeFile,rm} from 'node:fs/promises';
 import {createHash,generateKeyPairSync,randomBytes,sign} from 'node:crypto';
-import {build} from 'esbuild';
 import {cloudflareClient,remoteD1} from '../tools/cms-cloudflare.mjs';
 if(process.env.RUN_LIVE_SERVICE_CLIENTS!=='1')throw Error('Set RUN_LIVE_SERVICE_CLIENTS=1 for the private live service-client check');
 const config=JSON.parse(await readFile('wrangler.jsonc','utf8'));assert.equal(config.vars.ENVIRONMENT,'test');
 const db=remoteD1(cloudflareClient(config.account_id),config.d1_databases.find(d=>d.binding==='DB').database_id);
-assert.ok(await db.prepare("SELECT name FROM d1_migrations WHERE name='0113_service_client_activations.sql'").first());
-const bundle=await build({entryPoints:['src/components.ts'],bundle:true,platform:'node',format:'esm',write:false});
-const {siteConfig,renderSite}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+assert.ok(await db.prepare("SELECT name FROM d1_migrations WHERE name='0119_current_website_specifications.sql'").first());
 const base='https://whumpo.com',id=crypto.randomUUID(),email='service-client-fixture-'+id+'@example.test',credentialID=randomBytes(32).toString('base64url');
 const {privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),jwk=publicKey.export({format:'jwk'});
 const cose=Buffer.concat([Buffer.from([0xa5,1,2,3,0x26,0x20,1,0x21,0x58,0x20]),Buffer.from(jwk.x,'base64url'),Buffer.from([0x22,0x58,0x20]),Buffer.from(jwk.y,'base64url')]).toString('base64url');
@@ -33,8 +30,7 @@ try{
  await json('/api/profile','PATCH',{revision:0,name:'River',avatar_id:'sun',about_me:'',share_context:false});await json('/api/onboarding');
  await json('/api/onboarding','PUT',{revision:0,stage:'review',project_name:'Example Garden',idea:'A synthetic landscaping website for private deployment verification.',audience:'Neighbors',preferred_theme:'forest'});await json('/api/onboarding/complete','POST',{revision:1});
  project=(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(id).first()).id;
- const original=crypto.randomUUID(),page=siteConfig({name:'Example Garden',description:'Local landscaping.',headline:'A greener neighborhood',theme:'forest',aboutTitle:'Our work',aboutText:'Garden care.',sections:[{heading:'Hours',text:'Monday through Friday'}]}),html=renderSite(page);
- await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at) VALUES(?,?,'site-page@1',?,?,?,?)").bind(original,project,JSON.stringify(page),html,sha(html).toString('hex'),now()).run();
+ const original=await chat('Create my first private landscaping homepage in project '+project+'. Do not publish or activate anything.','version_id');
  const q=await chat('Prepare private website service settings for saved homepage '+original+' in project '+project+'. Start with neither contact intake nor a website tool requested (both null). Use serviceClients prepare at the current revision. Do not publish or activate anything.');
  const privatePath='/api/service-client-reviews/'+q.id+'/preview';assert.equal((await fetch(base+privatePath)).status,401);const proposed=await call(privatePath);assert.equal(proposed.status,200);assert.match(proposed.headers.get('cache-control'),/private/);
  const v1=await approve(q),first=await preview(v1);assert.equal((await call(privatePath)).status,409);

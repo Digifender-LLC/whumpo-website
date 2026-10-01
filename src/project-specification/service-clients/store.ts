@@ -1,11 +1,12 @@
 import {BackendError} from '../../backend-error';
 import {contentPolicyVersion} from '../../content-policy';
 import {contentRiskPolicyVersion} from '../../content-risk';
-import {previewHeaders} from '../../components';
+import {previewHeaders,photoConfig} from '../../components';
 import {requireSpecificationAvailable} from '../../specification-safety';
-import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from '../v1/json';
+import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from '../v2/json';
 import {compileServiceClientArtifacts,currentServiceClientLock,type ServiceClientSpecification,type ServiceClientTarget} from './compiler';
 import {compileOwnedServiceClients} from './owned';
+import {inlineSpecificationPhotos} from '../../specification-photos';
 const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const digest=/^[0-9a-f]{64}$/;
@@ -132,8 +133,14 @@ export async function serviceClientChatLinks(db:D1Database,user:string,turns:Rec
  for(const row of results){const turn=turns.find(t=>t.id===row.turn_id);if(!turn||turn.status!=='completed'||typeof turn.assistant_text!=='string'||await sha256(turn.assistant_text)!==row.reply_digest)continue;try{const q=await readServiceClientProposal(db,user,row.proposal_id);turn.service_client_review={id:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision};}catch(e){if(!(e instanceof BackendError))throw e;}}
 }
 const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export async function serviceClientPreview(db:D1Database,user:string,review:string,comparison=false){
- const q=await readServiceClientProposal(db,user,review);if(!comparison)return new Response(q.preview_html,{headers:previewHeaders});
+async function previewPhotos(db:D1Database,user:string,version:string,html:string,files?:R2Bucket){
+ const row=await db.prepare('SELECT v.project_id,v.component_id,v.config_json FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(version,user).first<{project_id:string;component_id:string;config_json:string}>();
+ if(!row)throw new BackendError(404,'Saved website not found.');
+ return inlineSpecificationPhotos(db,files,user,row.project_id,html,row.component_id==='photo-page@1'?photoConfig(JSON.parse(row.config_json)).photos:[]);
+}
+const photoPreviewHeaders={...previewHeaders,'content-security-policy':previewHeaders['content-security-policy']+'; img-src data:'};
+export async function serviceClientPreview(db:D1Database,user:string,review:string,comparison=false,files?:R2Bucket){
+ const q=await readServiceClientProposal(db,user,review);if(!comparison)return new Response(await previewPhotos(db,user,q.website_version_id,q.preview_html,files),{headers:photoPreviewHeaders});
  const diff=JSON.parse(q.diff_json),s=JSON.parse(q.spec_json) as ServiceClientSpecification;
  const describe=(v:ServiceClientSpecification|null)=>{
   if(!v)return 'No saved service settings';const form=v.statelessForm?.config;
@@ -144,8 +151,8 @@ export async function serviceClientPreview(db:D1Database,user:string,review:stri
  const html=`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review website services · Whumpo</title><style>body{margin:0;font:16px/1.6 system-ui;color:#0f2d5b;background:#f8fafc}main{max-width:850px;margin:auto;padding:24px}section{background:white;padding:20px;border:1px solid #dae5f0;border-radius:16px;margin:16px 0}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}</style><main><h1>Review website service settings</h1><p>This saves a private configuration. It does not change your live page, collect messages or activate a website tool. Return to Chat to approve.</p><section><h2>Before</h2><pre>${escape(describe(diff.configuration.before))}</pre></section><section><h2>After</h2><pre>${escape(describe(s))}</pre></section><section><p>Changed website or service settings require a fresh review. Restoring settings cannot restore a removed service or change which backend runs a saved form.</p><details><summary>Technical details</summary><pre>${escape(JSON.stringify({configuration:diff.configuration,website:diff.website,serviceTarget:diff.serviceTarget},null,2))}</pre></details></section></main></html>`;
  return new Response(html,{headers:previewHeaders});
 }
-export async function savedServiceClientPreview(db:D1Database,user:string,version:string){
- try{id(version);const row=await db.prepare('SELECT v.project_id FROM service_client_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(version,user).first<{project_id:string}>();if(!row)throw new BackendError(404,'Saved service configuration not found.');const saved=await savedVersion(db,user,row.project_id,version);return new Response(saved.preview_html,{headers:previewHeaders});}catch(e){return safe(e);}
+export async function savedServiceClientPreview(db:D1Database,user:string,version:string,files?:R2Bucket){
+ try{id(version);const row=await db.prepare('SELECT v.project_id FROM service_client_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(version,user).first<{project_id:string}>();if(!row)throw new BackendError(404,'Saved service configuration not found.');const saved=await savedVersion(db,user,row.project_id,version);return new Response(await previewPhotos(db,user,saved.website_version_id,saved.preview_html,files),{headers:photoPreviewHeaders});}catch(e){return safe(e);}
 }
 // Shared owned reads for the separate activation handoff; never permission to activate.
 export {savedVersion as readSavedServiceClientVersion,head as readServiceClientHead};

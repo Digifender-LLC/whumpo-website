@@ -1,3 +1,4 @@
+import {createFixtureProject,changeFixtureWebsite} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -10,7 +11,7 @@ execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','mig
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
 async function chat(user,content,id=crypto.randomUUID(),revision){const state=await readChat(db,user);return {id,result:await sendChat(db,user,{content,id,revision:revision??state.state.revision})};}
-async function create(user,name){await chat(user,'/new');await chat(user,'A synthetic '+name+' website.');const p=await chat(user,name);const v=await chat(user,`/build ocean ${p.id}`);assert.equal(v.result.status,200);return {project:p.id,version:v.id};}
+async function create(user,name){return createFixtureProject(db,user,name,'A synthetic '+name+' website.');}
 const url=id=>'https://'+id+'.whumpo.site/';
 const served=id=>host.fetch(new Request(url(id)),{DB:db});
 const {readTraffic,recordTraffic,cleanupTraffic,trafficDescription}=await module('src/site-traffic.ts');

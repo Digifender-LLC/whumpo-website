@@ -1,12 +1,12 @@
 # Shared code library without shared customer data
 
-Current planning interface: the [versioned capability planner](capability-planner.md) selects supported configuration and shared helpers before custom source. Its library application handoff records pinned provenance and uses the existing synthetic-check/review lifecycle. Historical slash-command examples below are internal adapters; customer Chat uses natural language.
+Current planning interface: the [versioned capability planner](capability-planner.md) selects supported configuration and shared helpers before custom source. Its library application handoff records pinned provenance and uses the existing synthetic-check/review lifecycle. Customer Chat uses natural language. Dated slash-command examples below are historical; guided website writers and the launch component are removed.
 
-The [specification compiler](project-specification-compiler.md) now adds a locally verified content compilation library, pinned artifact identities and a build gate. It has no mounted API or persistent apply flow yet; those remain part of WH-066.
+The [specification compiler](project-specification-compiler.md) now adds a locally verified content compilation library, pinned artifact identities and a build gate. The mounted current adapter creates schema-2 private drafts directly and saves later changes through exact owner reviews; see [storage](project-specification-storage.md).
 
 ## Decision
 
-Whumpo should assemble the first site from reviewed, versioned components before asking a model to generate new code. A sign-in flow, contact form or pricing page should normally select an existing component and fill validated configuration. AI handles layout composition, requirements that are not covered, and later customization.
+Whumpo assembles the first site from reviewed, versioned components before asking a model to generate new code. A sign-in flow, contact form or pricing page should normally select an existing component and fill validated configuration. AI handles layout composition, requirements that are not covered, and later customization.
 
 The shared library contains code and synthetic examples. Customer prompts, generated sites, uploads, business content, credentials, database rows and chat history stay in the customer's workspace. There is no cross-tenant similarity search over those artifacts.
 
@@ -34,7 +34,7 @@ An instance belongs to one project and one owner. Configuration, databases, bind
 
 For sign-in, reuse the reviewed authentication implementation and customize a constrained presentation layer. AI styling changes must not alter session validation, cookie settings, password/passkey verification or access checks. Security-sensitive changes require a separately reviewed component version. Sharing code does not imply sharing accounts, sessions or databases.
 
-Store private customizations as a project-owned patch against a pinned base version. Updates are explicit, previewed, tested and reversible. A withdrawn version blocks new installs; existing affected projects receive an update notice and a tested migration path. Do not silently rewrite deployed customer code.
+Store private customizations as a project-owned patch against a pinned base version. Updates are explicit, previewed and tested. One current implementation is admitted; stale/withdrawn versions reject. Disposable obsolete test records are reset under a reviewed cutover. Current operation receipts and forward repair remain required.
 
 ## Retrieval and caching
 

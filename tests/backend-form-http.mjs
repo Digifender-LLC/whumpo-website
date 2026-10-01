@@ -8,7 +8,7 @@ const register=await fetch(base+'/api/auth/register',{method:'POST',headers:{ori
 const post=(path,data,origin=base,session=cookie)=>fetch(base+path,{method:'POST',headers:{origin,cookie:session,'content-type':'application/json'},body:JSON.stringify(data)});
 const get=path=>fetch(base+path,{headers:{cookie}});
 const chat=content=>fixture.seedChat(cookie,content); // Private fixture setup only; public Chat has no commands.
-const project=await fixture.firstProject(cookie,'Neighborhood orders','A small order calculator'),siteVersion=await chat('/build'),siteReview=await chat('/publish '+siteVersion);await chat('/confirm '+siteReview);
+const project=await fixture.firstProject(cookie,'Neighborhood orders','A small order calculator'),siteVersion=await fixture.seedWebsite(cookie,project),siteReview=await chat('/publish '+siteVersion);await chat('/confirm '+siteReview);
 const versionId=crypto.randomUUID(),runId=crypto.randomUUID(),reviewId=crypto.randomUUID(),backendPath='/api/projects/'+project+'/backends';
 await fixture.seedBackend(project,versionId,'export default ({quantity,price,express,querySelector:note})=>({total:quantity*price+(express?5:0),note})',cookie);
 const run=await post(backendPath+'/'+versionId+'/test',{id:runId,input:{quantity:2,price:12.5,express:true,querySelector:'Example'}});assert.equal(run.status,200);assert.deepEqual((await run.json()).result,{ok:true,value:{total:30,note:'Example'}});
