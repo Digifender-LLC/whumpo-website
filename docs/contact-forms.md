@@ -5,11 +5,13 @@ The first reusable dynamic capability is a platform-authored contact form, share
 ## Customer flow
 
 1. Publish a saved website version.
-2. Ask the agent to prepare a contact-form review, or use `/contact-on PROJECT_ID`. The Details → Contact inbox panel also prepares this command.
-3. Confirm the exact review with its button or `/confirm-contact REVIEW_ID` within ten minutes.
+2. Ask the agent to enable a contact form for the project. It prepares an exact review.
+3. Confirm that review with its approval button within ten minutes.
 4. The public host adds a Contact link to that live version. It opens a Whumpo-hosted form at `https://whumpo.com/contact/PROJECT_ID`.
-5. Open `/inbox` or Details → Contact inbox to read messages. This panel does not copy visitor content into chat history or model context.
-6. `/contact-off PROJECT_ID` prepares a disabling review. Confirmation stops new intake. Existing messages remain private until deletion or expiry.
+5. Open Dashboard → Contact inbox to read messages. This panel does not copy visitor content into chat history or model context.
+6. Ask the agent to disable the contact form. Confirming the disabling review stops new intake. Existing messages remain private until deletion or expiry.
+
+Chat accepts natural language; slash-shaped strings in internal handlers and older fixtures are implementation details, not customer commands. See [natural-language Chat](natural-language-chat.md).
 
 Publishing, restoring or unpublishing advances the publication revision and disables the previous form. Publication reviews disclose this effect. A fresh review is needed to activate intake for the new live version, including restoration of the same saved HTML. Contact settings are a hosted runtime capability: they do not alter the immutable site artifact, its checksum, private preview or static source ZIP.
 
@@ -39,8 +41,8 @@ Messages become inaccessible at 30 days. Daily 03:17 UTC maintenance removes exp
 
 ## Verification
 
-`npm run test:contacts` uses disposable local D1 state and controlled provider responses. It covers review/confirmation and replay, cross-owner access, duplicate and deleted-message replay, public rendering, Origin rejection, body bounds, Turnstile hostname/action/project checks, oversized verification responses, publication and disable races, atomic hourly/project/global caps, expiry inside confirmation, forbidden model confirmation/inbox reads, context exclusion and retention cleanup. Publication and site-agent regressions also pass.
+`pnpm test:contacts` uses disposable local D1 state and controlled provider responses. It covers review/confirmation and replay, cross-owner access, duplicate and deleted-message replay, public rendering, Origin rejection, body bounds, Turnstile hostname/action/project checks, oversized verification responses, publication and disable races, atomic hourly/project/global caps, expiry inside confirmation, forbidden model confirmation/inbox reads, context exclusion and retention cleanup. Publication and site-agent regressions also pass.
 
-Browser inspection of a synthetic inbox verified `/inbox`, readable status and messages, and literal display of markup in a visitor name. Live acceptance results are recorded in `docs/deployment.md`. Successful real Turnstile completion remains a distinct browser acceptance gate; seeded live inbox fixtures do not prove that flow.
+Historical browser inspection of a synthetic inbox verified the then-current inbox entry, readable status and messages, and literal display of markup in a visitor name. That evidence does not establish the current Dashboard entry's browser acceptance. Live acceptance results are recorded in `docs/deployment.md`. Successful real Turnstile completion remains a distinct browser acceptance gate; seeded live inbox fixtures do not prove that flow.
 
 Sources: [Cloudflare D1 batching](https://developers.cloudflare.com/d1/worker-api/d1-database/), [Turnstile server validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/), and [Workers best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/), checked September 29, 2026.
