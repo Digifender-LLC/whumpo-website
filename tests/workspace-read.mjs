@@ -29,15 +29,15 @@ try{
  // Metered natural-language inspection returns the server record, and replay does not call the model again.
  const inspected=await send(db,owner,{kind:'inspect',scope:'version',targetId:created});const record=await db.prepare('SELECT * FROM chat_turns WHERE id=?').bind(inspected).first();assert.equal(record.status,'completed');assert.ok(record.assistant_text.includes(config.headline));const priorCalls=calls;await sendAIChat(db,owner.id,inspected,record.revision-1,'Make a warm bakery site',cfg,provider(null));assert.equal(calls,priorCalls);
  // Guided exact inspection remains available without a configured model or units.
- for(const content of ['/project '+owner.project,'/inspect '+created,'show my saved versions']){const state=await readChat(db,owner.id),units=(await getBilling(db,owner.id)).quota.spent;const r=await sendChat(db,owner.id,{content,id:crypto.randomUUID(),revision:state.state.revision},cfg);assert.equal(r.status,200);assert.equal((await getBilling(db,owner.id)).quota.spent,units);}
+ for(const content of ['/project '+owner.project,'/inspect '+created,'show my saved versions']){const state=await readChat(db,owner.id),units=(await getBilling(db,owner.id)).standardAI.creditCharge;const r=await sendChat(db,owner.id,{content,id:crypto.randomUUID(),revision:state.state.revision},cfg);assert.equal(r.status,200);assert.equal((await getBilling(db,owner.id)).standardAI.creditCharge,units);}
  // Help topics are deterministic guided reads, including natural-language help with AI configured.
  const {chatHelp}=await module('src/chat-help.ts');assert.equal(chatHelp('help me build a bakery website',true),undefined);assert.equal(chatHelp('help me recover my account',true),undefined);
- const beforeHelp=(await getBilling(db,owner.id)).quota.spent;
+ const beforeHelp=(await getBilling(db,owner.id)).standardAI.creditCharge;
  for(const [content,expected] of [['/help','Choose a guide:'],['help cms','/confirm-cms-discard'],['/help all','/backend-state-history'],['/help billing','Payments and credit purchases are not enabled'],['/help unknown','Choose a guide:']]){
   const state=await readChat(db,owner.id),rid=crypto.randomUUID();assert.equal((await sendChat(db,owner.id,{content,id:rid,revision:state.state.revision},cfg)).status,200);
   const turn=await db.prepare('SELECT * FROM chat_turns WHERE id=?').bind(rid).first();assert.ok(turn.assistant_text.includes(expected));assert.equal(turn.status,'completed');
  }
- assert.equal((await getBilling(db,owner.id)).quota.spent,beforeHelp);
+ assert.equal((await getBilling(db,owner.id)).standardAI.creditCharge,beforeHelp);
  await db.prepare("UPDATE workspace_state SET step='idea' WHERE user_id=?").bind(owner.id).run();
  const helpState=await readChat(db,owner.id);await sendChat(db,owner.id,{content:'/help cms',id:crypto.randomUUID(),revision:helpState.state.revision});assert.equal((await readChat(db,owner.id)).state.step,'idea');await db.prepare("UPDATE workspace_state SET step='ready' WHERE user_id=?").bind(owner.id).run();
  // All twenty project identities remain discoverable; preview authorization no longer depends on top five context membership.

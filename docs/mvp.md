@@ -244,7 +244,7 @@ Installation/repository discovery, exact source reviews, explicit confirmation a
 
 ### Audited recovery of unresolved AI holds (September 29)
 
-Operators can inspect and explicitly waive an aged uncertain AI hold without retrying the model or fabricating provider usage. Migration 0028 atomically restores held quota/credits, closes the original chat turn and saves an immutable audit receipt. Known token receipts, settled charges and active turns are excluded. Late model-result writes are fenced at the transaction boundary. This closes the indefinite-hold support gap; automatic provider-receipt reconciliation and the deferred payment/subscription lifecycle remain incomplete. See [usage recovery](usage-recovery.md).
+This historical test-unit waiver implementation was removed on October 1 under WH-120. The current [standard AI recovery path](standard-ai-accounting.md) retains accurate request/provider outcomes without a customer unit ledger; obsolete test holds and the waiver tool are deleted.
 
 ## Published website verification
 

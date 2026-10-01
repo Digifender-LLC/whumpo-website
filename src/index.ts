@@ -57,15 +57,14 @@ import { ownedPreview } from './photo-versions';
 import { StorageLimitError } from './storage-budget';
 import { FileError, uploadPhoto, listPhotos, readPhoto, cleanupPhotos } from './files';
 import { ownedExport } from './exports';
-import { checkoutEnabled, createCheckout } from './checkout';
 import { componentCatalog, previewHeaders } from './components';
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
-import { publicPlans, domainBenefit, creditPack } from "./plans";
+import { publicPlans, domainBenefit } from "./plans";
 import { launchFeatureCatalogue } from "./plan-features";
 import { readChat, sendConversation, sendChatControl } from "./chat";
 import {chatControl} from "./chat-controls";
 import { AuthError, passkeyOptions, passkeyVerify, recoverAccount, recoveryPasskeys } from "./passkeys";
-import { BillingError, getBilling, setOverage } from "./billing";
+import { BillingError, getBilling } from "./billing";
 import { configuredAI } from "./ai-chat";
 
 type User = { id: string; email: string };
@@ -149,7 +148,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && !sameOrigin(request)) return error(403, "Origin check failed");
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
-  if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, featureCatalogue: launchFeatureCatalogue, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", creditPack, currency: "USD", draft: true, checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", subscriptionsEnabled: subscriptionsEnabled(env) });
+  if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, featureCatalogue: launchFeatureCatalogue, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", currency: "USD", draft: true, checkoutMode: "test", subscriptionsEnabled: subscriptionsEnabled(env) });
   if (method === "POST" && pathname.startsWith("/api/auth/") && pathname !== "/api/auth/logout") {
     if (!(await env.AUTH_LIMITER.limit({ key: ip })).success) return error(429, "Too many sign-in attempts. Try again in a minute.");
   }
@@ -488,17 +487,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (method === 'POST' && pathname === '/api/billing/subscription/refresh') return json(await refreshSubscriptions(env.DB,env,user.id));
   if (method === 'POST' && pathname === '/api/billing/subscription/checkout') return json(await startSubscription(env.DB,env,user.id,(await body(request))??{}));
   if (method === 'POST' && pathname === '/api/billing/portal') return json(await billingPortal(env.DB,env,user.id));
-  if (method === "GET" && pathname === "/api/billing") return json({ ...await getBilling(env.DB, user.id), checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", creditPack });
-  if (method === "POST" && pathname === "/api/billing/checkout") {
-    const data = await body(request);
-    return json(await createCheckout(env.DB, env, user.id, data?.id, data?.product));
-  }
-  if (method === "POST" && pathname === "/api/billing/preferences") {
-    const data = await body(request);
-    if (typeof data?.overageEnabled !== "boolean") return error(400, "Choose whether existing credits may cover overage");
-    await setOverage(env.DB, user.id, data.overageEnabled);
-    return json({ ...await getBilling(env.DB, user.id), checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", creditPack });
-  }
+  if (method === "GET" && pathname === "/api/billing") return json({ ...await getBilling(env.DB, user.id), checkoutMode: "test" });
   if (method === "GET" && pathname === "/api/passkeys") {
     const { results } = await env.DB.prepare("SELECT id, name, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY created_at").bind(user.id).all();
     return json({ passkeys: results });

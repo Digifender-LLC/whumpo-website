@@ -43,7 +43,7 @@ try{
  const searched=[];let searchCursor=157;
  while(searchCursor){const page=await json(owner,'/api/chat/history?before='+searchCursor+'&q=Question');searched.push(...page.turns);searchCursor=page.nextBefore;}
  assert.equal(searched.length,156);assert.equal(new Set(searched.map(t=>t.id)).size,156);
- assert.equal((await db.prepare('SELECT COUNT(*) n FROM usage_operations WHERE user_id=?').bind(owner.id).first()).n,0);
+ assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  await db.prepare('UPDATE chat_turns SET ai_context_allowed=0 WHERE user_id=? AND revision=54').bind(owner.id).run();
  assert.equal((await call(null,'/api/chat/export')).status,401);
  assert.equal((await call(owner,'/api/chat/export?user_id='+foreign.id)).status,400);
@@ -60,7 +60,7 @@ try{
  const state=await json(owner,'/api/chat');assert.equal(state.turns.at(-1).chat_transcript_download,true);
  assert.equal((await db.prepare('SELECT ai_context_allowed FROM chat_turns WHERE id=?').bind(command.id).first()).ai_context_allowed,0);
  assert.equal((await db.prepare('SELECT count(*) n FROM inference_calls').first()).n,0);
- assert.equal((await db.prepare('SELECT count(*) n FROM usage_operations WHERE user_id=?').bind(owner.id).first()).n,0);
+ assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  await db.prepare("UPDATE chat_turns SET assistant_text='Forged download prose' WHERE id=?").bind(command.id).run();assert.equal((await json(owner,'/api/chat')).turns.at(-1).chat_transcript_download,undefined);
  let pages=0;
  const failing=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{if(sql.includes('revision>?')&&++pages===2)throw Error('Synthetic export read failure');return target.prepare(sql);};const value=target[key];return typeof value==='function'?value.bind(target):value;}});

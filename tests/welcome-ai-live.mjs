@@ -28,13 +28,13 @@ try{
  const receipt=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(turn).first();
  const versions=(await db.prepare('SELECT project_id,component_id,config_json FROM site_versions').all()).results;
  const billing=await getBilling(db,user);
- console.log(JSON.stringify({outcome,status:receipt?.status,reply:receipt?.assistant_text,calls,versions:versions.length,spent:billing.quota.spent,reserved:billing.quota.reserved}));
+ console.log(JSON.stringify({outcome,status:receipt?.status,reply:receipt?.assistant_text,calls,versions:versions.length,spent:billing.standardAI.creditCharge,reserved:billing.standardAI.creditCharge}));
  assert.equal(receipt?.status,'completed');assert.equal(versions.length,1,'First request should produce one private draft');assert.equal(versions[0].project_id,project,'Reuse the welcome project');
  assert.equal(calls,1,'The complete brief should build without another inspection call');assert.equal((await readChat(db,user,true)).firstDraft,null);
  const page=JSON.parse(versions[0].config_json);assert.equal(page.name,'Copper Oven');assert.equal(page.theme,'clay');assert.match(JSON.stringify(page),/bread|sourdough/i);assert.match(JSON.stringify(page),/Tuesday/i);assert.match(JSON.stringify(page),/Sunday/i);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM projects WHERE owner_user_id=?').bind(user).first()).n,1);
- assert.equal((await db.prepare('SELECT COUNT(*) n FROM publications').first()).n,0);assert.equal(billing.quota.reserved,0);assert.equal(billing.quota.spent,0);
- const previousCalls=calls;await sendAIChat(db,user,turn,state.revision,content,config,transport);assert.equal(calls,previousCalls);assert.equal((await getBilling(db,user)).quota.spent,billing.quota.spent);
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM publications').first()).n,0);assert.equal(billing.standardAI.creditCharge,0);assert.equal(billing.standardAI.creditCharge,0);
+ const previousCalls=calls;await sendAIChat(db,user,turn,state.revision,content,config,transport);assert.equal(calls,previousCalls);assert.equal((await getBilling(db,user)).standardAI.creditCharge,billing.standardAI.creditCharge);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM site_versions').first()).n,1);
  console.log('Live welcome handoff passed: saved brief/theme, existing project, private draft, opt-in context, settled usage and replay.');
 }finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}

@@ -286,10 +286,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 ### References
 
 - [src/index.ts](../../src/index.ts)
-- [src/usage-recovery.ts](../../src/usage-recovery.ts)
 - [src/standard-ai-recovery.ts](../../src/standard-ai-recovery.ts)
 - [docs/deployment.md](../../docs/deployment.md)
-- [docs/usage-recovery.md](../../docs/usage-recovery.md)
+- [docs/standard-ai-accounting.md](../../docs/standard-ai-accounting.md)
 - [docs/maintenance.md](../../docs/maintenance.md)
 - [tools/report-maintenance.mjs](../../tools/report-maintenance.mjs)
 - [tools/maintenance-inventory.mjs](../../tools/maintenance-inventory.mjs)
@@ -318,7 +317,7 @@ Whumpo has one current runtime/API/client path with retired versions, aliases an
 
 - Require the current authenticated account UUID and remove email/missing-account compatibility behavior
 - Remove obsolete DNS aliases and update callers to current handlers
-- Retire legacy Launch/Studio admission, test-credit interfaces and silent unknown-plan substitution with explicit forward data/receipt treatment
+- Retire legacy Launch/Studio admission, test-credit interfaces and silent unknown-plan substitution by deleting obsolete test data; no preservation migrations
 - Replace historical-command presentation and page-conversion dependencies with current typed action and specification paths
 - Consolidate CMS shapes and active release/identity/native plans under current-version-only rules; preserve the separate owner-deferred CMS functional-testing boundary
 - Split implementation into concrete reviewed slices while keeping this parent open until the full removal inventory and required test deployment are verified
@@ -530,7 +529,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 - [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
 - [docs/deployment.md](../../docs/deployment.md)
-- [docs/usage-recovery.md](../../docs/usage-recovery.md)
+- [docs/standard-ai-accounting.md](../../docs/standard-ai-accounting.md)
 - [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
@@ -1153,7 +1152,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 - [docs/account-closure.md](../../docs/account-closure.md)
 - [tools/account-closure-inventory.mjs](../../tools/account-closure-inventory.mjs)
-- [src/usage-recovery.ts](../../src/usage-recovery.ts)
+- [src/standard-ai-recovery.ts](../../src/standard-ai-recovery.ts)
 - [src/cloudflare-connection.ts](../../src/cloudflare-connection.ts)
 - [src/app-lifecycle.ts](../../src/app-lifecycle.ts)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
@@ -1433,7 +1432,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 ### References
 
 - [docs/deployment.md](../../docs/deployment.md)
-- [docs/usage-recovery.md](../../docs/usage-recovery.md)
+- [docs/standard-ai-accounting.md](../../docs/standard-ai-accounting.md)
 - [docs/account-closure.md](../../docs/account-closure.md)
 - [docs/roadmap/execution.md](../../docs/roadmap/execution.md)
 
@@ -2382,7 +2381,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 ### References
 
 - [docs/usage-review-requests.md](../../docs/usage-review-requests.md)
-- [docs/usage-recovery.md](../../docs/usage-recovery.md)
+- [docs/standard-ai-accounting.md](../../docs/standard-ai-accounting.md)
 - [src/usage-review-requests.ts](../../src/usage-review-requests.ts)
 - [tools/respond-usage-review.mjs](../../tools/respond-usage-review.mjs)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
@@ -3830,7 +3829,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 - [docs/payments.md](../../docs/payments.md)
 - [docs/plan-lifecycle.md](../../docs/plan-lifecycle.md)
-- [src/checkout.ts](../../src/checkout.ts)
+- [src/stripe-billing.ts](../../src/stripe-billing.ts)
 - [src/plans.ts](../../src/plans.ts)
 - [src/billing.ts](../../src/billing.ts)
 - [docs/stripe-sandbox.md](../../docs/stripe-sandbox.md)
@@ -4382,7 +4381,7 @@ The catalogue, API labels, pricing UI, Settings and Chat describe the approved c
 ### Verification
 
 - pnpm test:plan-periods and catalogue-to-API/UI/Chat contract checks for all four tiers
-- Pricing/Settings keyboard/mobile checks plus existing personal preferences and legacy receipts
+- Pricing/Settings keyboard/mobile checks with current personal plan preferences and invoice receipts
 - pnpm check/build for code changes; docs/backlog checks without billing or provider mutation
 
 ### Dependencies and blockers
@@ -5540,7 +5539,7 @@ The same validated specification and pinned module/compiler versions reproduce e
 - Implement schema validation and deterministic render/compiler adapters for the initial supported presentation/forms/API clients
 - Connect proposal diff, permission/compatibility checks, isolated preview, explicit apply and immutable version recording
 - Reuse existing publication/export/restore receipts and expected-revision guards
-- Plan legacy version import/adapters without rewriting immutable saved artifacts
+- Create only current-version project specifications; retire obsolete test fixtures and readers
 
 ### Acceptance criteria
 

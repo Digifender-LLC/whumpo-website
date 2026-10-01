@@ -22,7 +22,7 @@ assert.equal((await send('/build clay',3)).status,200);
 assert.equal(await(await request(`/site-versions/${id}/preview`)).text(),html);
 assert.equal((await send(`/build ocean ${project}`,0)).status,409);
 assert.equal((await send('/build javascript:evil',4)).status,400);
-const billing=await(await request('/billing')).json();assert.equal(billing.quota.spent,0);assert.equal(billing.quota.reserved,0);
+const billing=await(await request('/billing')).json();assert.equal(billing.standardAI.creditCharge,0);assert.equal(billing.standardAI.creditCharge,0);
 const catalog=await(await request('/components')).json();assert.ok(!JSON.stringify(catalog).includes('Bread'));assert.ok(!JSON.stringify(catalog).includes('bakery'));
 for(let revision=4;revision<27;revision++)assert.equal((await send('/build forest',revision)).status,200);
 assert.equal((await send('/build',27)).status,409);

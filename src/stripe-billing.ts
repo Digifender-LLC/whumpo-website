@@ -1,5 +1,5 @@
 import {BillingError} from './billing';
-import {boundedText,checkoutEnabled,readStripeEvent,stripeWebhook} from './checkout';
+import {boundedText,stripeTestConfigured,readStripeEvent} from './stripe-common';
 import {plans} from './plans';
 
 export const stripeVersion='2025-02-24.acacia';
@@ -19,7 +19,7 @@ const objectId=(id:unknown,prefix:string):id is string=>typeof id==='string'&&ne
 function requireMatch(value:unknown){if(!value)throw new BillingError(409,'Stripe sandbox details do not match the saved billing record.');}
 function catalog(env:Config):Catalog{
  try{
-  if(!checkoutEnabled(env))throw Error();
+  if(!stripeTestConfigured(env))throw Error();
   const c=JSON.parse(env.STRIPE_SANDBOX_CATALOG??'') as Catalog;
   if(c.version!==1||!objectId(c.portal,'bpc'))throw Error();
   for(const p of plans.filter(p=>p.monthlyCents))for(const interval of ['month','year'])if(!objectId(c.prices?.[p.id+':'+interval],'price'))throw Error();
@@ -155,13 +155,13 @@ export async function billingPortal(db:D1Database,env:Config,user:string,transpo
  return {url:hostedURL(portal.url,'billing.stripe.com'),testMode:true};
 }
 export async function stripeBillingWebhook(request:Request,db:D1Database,env:Config,transport:typeof fetch=fetch){
- const copy=request.clone(),event=await readStripeEvent(request,env),id=event.data?.object?.id;
- if(!subscriptionsEnabled(env))return stripeWebhook(copy,db,env,transport);
+ const event=await readStripeEvent(request,env),id=event.data?.object?.id;
+ catalog(env);
  if(event.type?.startsWith('checkout.session.')){
   requireMatch(objectId(id,'cs_test'));
   const s=await stripe<Session>(env,'checkout/sessions/'+id+'?expand[]=line_items.data.price',transport);
   requireMatch(s.id===id&&s.livemode===false);
-  if(s.mode!=='subscription'||s.metadata?.app!==stripeApp)return stripeWebhook(copy,db,env,transport);
+  if(s.mode!=='subscription'||s.metadata?.app!==stripeApp)return {received:true};
   const order=await db.prepare('SELECT o.* FROM stripe_subscription_orders o JOIN stripe_customers c ON c.user_id=o.user_id WHERE o.id=? AND c.customer_id=?').bind(s.metadata.order??'',s.customer).first<Order>();
   if(order)await readSession(db,env,order,s.customer,transport,s);
  }else if(event.type?.startsWith('invoice.')&&objectId(id,'in')){

@@ -116,7 +116,7 @@ try{
  const removal=await chat(owner,{kind:'versionRemovalReview',versionId:owner.site});assert.ok(removal.turn.version_confirmation_id);await confirm(owner,'version',removal.turn.version_confirmation_id);
  assert.equal((await call(owner,`/api/service-client-versions/${v1}/preview`)).status,404);assert.equal(await count('service_client_versions',owner.project),1);assert.equal(await count('service_client_proposals',owner.project),0);assert.equal(await count('service_client_applies',owner.project),5);assert.equal((await m.readServiceClients(db,owner.id,owner.project)).versionId,nextSaved.version);
  await json(owner,'/api/chat/actions','POST',saved.request);assert.equal(await count('service_client_versions',owner.project),1);assert.equal(await count('service_client_applies',owner.project),5);
- assert.equal((await db.prepare("SELECT coalesce(sum(quota_charged+credits_charged),0) units FROM usage_operations WHERE user_id=?").bind(owner.id).first()).units,0);
+ assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  if(process.env.WHUMPO_SERVICE_BROWSER==='1'){
   const browserAccount=await account(),draft=await chat(browserAccount,{kind:'preview',projectId:browserAccount.project,config});browserAccount.site=draft.turn.version_id;await backend(browserAccount);
   const review=await chat(browserAccount,prepare(browserAccount,0,both));const before={calls,executions};inference=false;

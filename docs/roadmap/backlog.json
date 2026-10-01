@@ -178,7 +178,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/4",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001\u20130113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
+        "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001–0113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
       ]
     },
     {
@@ -299,10 +299,9 @@
       ],
       "references": [
         "src/index.ts",
-        "src/usage-recovery.ts",
         "src/standard-ai-recovery.ts",
         "docs/deployment.md",
-        "docs/usage-recovery.md",
+        "docs/standard-ai-accounting.md",
         "docs/maintenance.md",
         "tools/report-maintenance.mjs",
         "tools/maintenance-inventory.mjs"
@@ -348,7 +347,7 @@
       "references": [
         "docs/security-risk-actions.md",
         "docs/deployment.md",
-        "docs/usage-recovery.md",
+        "docs/standard-ai-accounting.md",
         "docs/pricing-and-model-policy.md",
         "docs/roadmap/identity-and-data-protection.md",
         "docs/roadmap/alignment.md"
@@ -455,7 +454,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.",
-        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001\u20130113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7.",
+        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001–0113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7.",
         "2026-10-01 alignment: foundation completion remains historical. WH-116 and each new Chat/module/connector/member feature must register new data classes, retention/export/deletion and key custody; they do not inherit complete coverage from issue #7."
       ]
     },
@@ -509,7 +508,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/8",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001\u20130113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011\u2013017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
+        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001–0113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011–017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
         "2026-10-01 UTC test release 20d37ba0-fca6-4003-a9c8-280f2b23edff from source 3417ea2 deploys the corrected agent knowledge. Readback verified four candidate versions, unchanged service/secret-binding names and CMS registry, 113 applied migrations / none pending, 16 matching platform assets, home/health 200 and anonymous Chat/profile 401. See docs/safety-coverage.md and docs/releases.md. No real-model moderation evaluation, detector connection, CMS functional test or customer publication."
       ]
     },
@@ -851,7 +850,7 @@
       "references": [
         "docs/account-closure.md",
         "tools/account-closure-inventory.mjs",
-        "src/usage-recovery.ts",
+        "src/standard-ai-recovery.ts",
         "src/cloudflare-connection.ts",
         "src/app-lifecycle.ts",
         "docs/roadmap/alignment.md",
@@ -1655,7 +1654,7 @@
       ],
       "references": [
         "docs/usage-review-requests.md",
-        "docs/usage-recovery.md",
+        "docs/standard-ai-accounting.md",
         "src/usage-review-requests.ts",
         "tools/respond-usage-review.mjs",
         "docs/roadmap/alignment.md"
@@ -1958,7 +1957,7 @@
       "references": [
         "docs/payments.md",
         "docs/plan-lifecycle.md",
-        "src/checkout.ts",
+        "src/stripe-billing.ts",
         "src/plans.ts",
         "src/billing.ts",
         "docs/stripe-sandbox.md",
@@ -2222,7 +2221,7 @@
         "Choose supported website/app paths and a small cohort size based on measured capacity",
         "Review gate matrix, open risks, support ownership and rollback",
         "Keep unavailable provider/CMS/payment paths explicitly disabled",
-        "Require WH-117 transparent data-protection acceptance and the WH-113\u2013115 owner identity/recovery policy through WH-005; WH-118 feasibility is outside beta prerequisites"
+        "Require WH-117 transparent data-protection acceptance and the WH-113–115 owner identity/recovery policy through WH-005; WH-118 feasibility is outside beta prerequisites"
       ],
       "acceptance": [
         "All required gate evidence refers to the candidate release and admitted paths",
@@ -2613,7 +2612,7 @@
       "blockers": [],
       "outcome": "All selected connections reuse server-controlled explicit bounded reads, reviewed actions, scoped consent, current eligibility and reliable reconciliation.",
       "scope": [
-        "Define common capabilities for GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot; new adapter delivery belongs to WH-096\u2013100",
+        "Define common capabilities for GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot; new adapter delivery belongs to WH-096–100",
         "Reuse encrypted scoped credentials, account binding, refresh/revocation, current eligibility and durable dispatch/readback receipts",
         "Define request-bound lookup/data-use consent and allowlisted operations; exclude arbitrary outbound fetch, continuous sync and visitor-triggered maintainer",
         "Keep WH-036 platform delivery independent of customer mailbox OAuth; split contract/implementation/conformance children without depending on provider children or WH-049",
@@ -2771,7 +2770,7 @@
       ],
       "references": [
         "docs/deployment.md",
-        "docs/usage-recovery.md",
+        "docs/standard-ai-accounting.md",
         "docs/account-closure.md",
         "docs/roadmap/execution.md"
       ],
@@ -3036,7 +3035,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/13",
       "owner": null,
       "evidence": [
-        "2026-10-01 alignment: live GitHub completion evidence re-read. Catalog/planner implementation completed in b457f6b and issue #13 with local and deployed readback evidence. General service modules remain WH-067\u2013069."
+        "2026-10-01 alignment: live GitHub completion evidence re-read. Catalog/planner implementation completed in b457f6b and issue #13 with local and deployed readback evidence. General service modules remain WH-067–069."
       ]
     },
     {
@@ -3057,7 +3056,7 @@
         "Implement schema validation and deterministic render/compiler adapters for the initial supported presentation/forms/API clients",
         "Connect proposal diff, permission/compatibility checks, isolated preview, explicit apply and immutable version recording",
         "Reuse existing publication/export/restore receipts and expected-revision guards",
-        "Plan legacy version import/adapters without rewriting immutable saved artifacts"
+        "Create only current-version project specifications; retire obsolete test fixtures and readers"
       ],
       "acceptance": [
         "Identical supported inputs and pinned versions yield byte-identical outputs/digests without model generation",
@@ -3086,7 +3085,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 issue readback for the tier extension: parent #14 remains open; #15 compiler/schema and #16 durable private proposal/apply/restore are closed with recorded source and synthetic acceptance. Forms/API child #17 remains open; content-only compilation is not complete WH-066/067 delivery. Source at review: 628c16f. This roadmap update does not verify a deployment.",
-        "2026-10-01 alignment: live GitHub completion evidence re-read. Initial supported compiler scope completed through #15/#16/#17 and merged PR #18 (0002632). Content, fixed contact intake and reviewed stateless clients have deterministic/private apply/restore and scoped connected evidence. General records/access/files and notification/rule services remain WH-067\u2013069."
+        "2026-10-01 alignment: live GitHub completion evidence re-read. Initial supported compiler scope completed through #15/#16/#17 and merged PR #18 (0002632). Content, fixed contact intake and reviewed stateless clients have deterministic/private apply/restore and scoped connected evidence. General records/access/files and notification/rule services remain WH-067–069."
       ]
     },
     {
@@ -4180,7 +4179,7 @@
       ],
       "verification": [
         "pnpm test:plan-periods and catalogue-to-API/UI/Chat contract checks for all four tiers",
-        "Pricing/Settings keyboard/mobile checks plus existing personal preferences and legacy receipts",
+        "Pricing/Settings keyboard/mobile checks with current personal plan preferences and invoice receipts",
         "pnpm check/build for code changes; docs/backlog checks without billing or provider mutation"
       ],
       "references": [
@@ -4431,7 +4430,7 @@
         "Expose scheduled/completed/failed/cancelled/uncertain receipts; recheck rule/connection/feature authority before each unsent step",
         "Wire provider-backed recipes only through their accepted adapters; split workflow core, selected adapters and connected acceptance children",
         "Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.",
-        "Initial automatic notifications use the approved WH-036/068 platform sender. Customer mailbox/calendar/CRM recipes require a separately supported adapter operation and reviewed rule authority; WH-096\u2013100 owner-request consent alone never enables unattended sends or polling."
+        "Initial automatic notifications use the approved WH-036/068 platform sender. Customer mailbox/calendar/CRM recipes require a separately supported adapter operation and reviewed rule authority; WH-096–100 owner-request consent alone never enables unattended sends or polling."
       ],
       "acceptance": [
         "Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary",
@@ -4939,7 +4938,7 @@
         "WH-080"
       ],
       "blockers": [
-        "Real provider approvals, consenting accounts and accepted production privacy remain required; see WH-031/032 and WH-096\u2013100.",
+        "Real provider approvals, consenting accounts and accepted production privacy remain required; see WH-031/032 and WH-096–100.",
         "Stripe sandbox is deployed and owner-authorized; real-money activation and CMS testing remain gated. Local/connected evidence never authorizes commercial activation."
       ],
       "outcome": "One candidate release proves every selected tier benefit and all seven provider journeys before commercial presentation or paid activation.",
@@ -5750,7 +5749,7 @@
       "scope": [
         "Require the current authenticated account UUID and remove email/missing-account compatibility behavior",
         "Remove obsolete DNS aliases and update callers to current handlers",
-        "Retire legacy Launch/Studio admission, test-credit interfaces and silent unknown-plan substitution with explicit forward data/receipt treatment",
+        "Retire legacy Launch/Studio admission, test-credit interfaces and silent unknown-plan substitution by deleting obsolete test data; no preservation migrations",
         "Replace historical-command presentation and page-conversion dependencies with current typed action and specification paths",
         "Consolidate CMS shapes and active release/identity/native plans under current-version-only rules; preserve the separate owner-deferred CMS functional-testing boundary",
         "Split implementation into concrete reviewed slices while keeping this parent open until the full removal inventory and required test deployment are verified"

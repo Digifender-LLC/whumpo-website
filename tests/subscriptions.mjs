@@ -48,7 +48,7 @@ try{
  invoice.livemode=true;await assert.rejects(refreshSubscriptions(db,env,owner,transport),{status:409});invoice.livemode=false;
  await Promise.all([stripeBillingWebhook(await event('invoice.paid',invoice.id),db,env,transport),stripeBillingWebhook(await event('checkout.session.completed',session.id),db,env,transport)]);
  await stripeBillingWebhook(await event('invoice.payment_failed',invoice.id),db,env,transport);
- assert.equal((await getBilling(db,owner)).plan.id,'personal');assert.equal((await getBilling(db,other)).plan.id,'explore');assert.equal((await getBilling(db,owner)).credits.available,0);assert.equal((await db.prepare('SELECT COUNT(*) n FROM stripe_paid_invoices').first()).n,1);
+ assert.equal((await getBilling(db,owner)).plan.id,'personal');assert.equal((await getBilling(db,other)).plan.id,'explore');assert.equal((await getBilling(db,owner)).standardAI.creditCharge,0);assert.equal((await db.prepare('SELECT COUNT(*) n FROM stripe_paid_invoices').first()).n,1);
  assert.equal((await billingPortal(db,env,owner,transport)).testMode,true);assert.equal((await subscriptionStatus(db,env,other)).invoices.length,0);
  sub.cancel_at_period_end=true;await refreshSubscriptions(db,env,owner,transport);assert.equal((await subscriptionStatus(db,env,owner)).subscription.cancel_at_period_end,1);assert.equal((await getBilling(db,owner)).plan.id,'personal');
  const future=new Date((invoice.lines.data[0].period.end+1)*1000);assert.equal((await getBilling(db,owner,future)).plan.id,'explore');

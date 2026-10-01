@@ -4,10 +4,11 @@ import { internalAITargetCents } from './plans';
 
 export async function ensureInferenceBudget(db: D1Database, user: string, period: string, plan: string) {
   // Explore owner testing uses the same $20 planning ceiling; no provider API charge is claimed.
-  const target = internalAITargetCents[plan as keyof typeof internalAITargetCents] ?? 2000;
+  const target = plan === 'explore' ? 2000 : internalAITargetCents[plan as keyof typeof internalAITargetCents];
+  if (plan !== 'explore' && !Object.hasOwn(internalAITargetCents, plan)) throw Error('Unknown inference plan');
   await db.prepare('INSERT INTO inference_budgets(user_id,period,budget_micros) VALUES(?,?,?) ON CONFLICT(user_id,period) DO UPDATE SET budget_micros=MAX(budget_micros,excluded.budget_micros)').bind(user,period,target*10000).run();
   // A reservation not dispatched can be released after the existing usage reconciler closes it.
-  await db.prepare("UPDATE inference_calls SET status='released' WHERE user_id=? AND status='reserved' AND (EXISTS(SELECT 1 FROM usage_operations o WHERE o.id=inference_calls.turn_id AND o.user_id=inference_calls.user_id AND o.status='released') OR EXISTS(SELECT 1 FROM standard_ai_requests s WHERE s.id=inference_calls.turn_id AND s.user_id=inference_calls.user_id AND s.state='released'))").bind(user).run();
+  await db.prepare("UPDATE inference_calls SET status='released' WHERE user_id=? AND status='reserved' AND EXISTS(SELECT 1 FROM standard_ai_requests s WHERE s.id=inference_calls.turn_id AND s.user_id=inference_calls.user_id AND s.state='released')").bind(user).run();
 }
 export function inferenceReservation(db: D1Database, user: string, id: string, period: string, config: AIConfig, inputBound: number, outputBound: number, role: 'orchestrator' | 'ack' = 'orchestrator') {
   // Non-Muse configs are used by offline transport tests. They are explicitly unpriced.

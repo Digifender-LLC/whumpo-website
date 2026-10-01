@@ -12,8 +12,7 @@ import type {DNSChatOptions} from './dns-chat';
 import {DomainError} from './domains';
 import { siteContext, agentPrompt,agentWorkspaceData,agentPromptFocus, prepareSiteAction, ProposalError } from './site-agent';
 import { complete, ProviderError, type AIConfig, type ChatMessage } from './ai';
-import { finishUsage, ensureBilling, getOperation, uncertainUsage } from './billing';
-import { buildUnits } from './plans';
+import { BillingError, ensureBilling } from './billing';
 import { hashToken } from './security';
 
 export function configuredAI(env: Env): AIConfig | undefined {
@@ -25,27 +24,7 @@ export function configuredAI(env: Env): AIConfig | undefined {
 export async function reconcileChat(db: D1Database, userId: string) {
   const { results } = await db.prepare("SELECT id,input_tokens,output_tokens,created_at FROM chat_turns WHERE user_id = ? AND status = 'pending' LIMIT 5").bind(userId).all<{ id: string; input_tokens: number | null; output_tokens: number | null; created_at: string }>();
   for (const turn of results) {
-    if(await reconcileStandardChat(db,userId,turn))continue;
-    if (turn.input_tokens !== null && turn.output_tokens !== null) {
-      try {
-        await finishUsage(db, userId, turn.id, buildUnits(turn.input_tokens, turn.output_tokens));
-        await db.prepare("UPDATE chat_turns SET status = 'completed' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(turn.id, userId).run();
-      } catch {
-        await uncertainUsage(db, userId, turn.id);
-        await uncertainInference(db,userId,turn.id);
-        await db.prepare("UPDATE chat_turns SET status = 'uncertain', assistant_text = 'The AI response needs a usage review. Its units remain held; retrying this message will not make another model call.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(turn.id, userId).run();
-      }
-    } else if (Date.parse(turn.created_at) < Date.now() - 120000) {
-      const op = await getOperation(db, userId, turn.id);
-      if (op?.status === 'reserved' || op?.status === 'released') {
-        if (op.status === 'reserved') await finishUsage(db, userId, turn.id, 0);
-        await db.prepare("UPDATE chat_turns SET status = 'failed', assistant_text = 'The request stopped before reaching the AI. No units were charged. Send a new message to try again.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(turn.id, userId).run();
-      } else {
-        await uncertainUsage(db, userId, turn.id);
-        await uncertainInference(db,userId,turn.id);
-        await db.prepare("UPDATE chat_turns SET status = 'uncertain', assistant_text = 'The AI request was interrupted. Its units remain held while usage is checked. This message will not be sent twice.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(turn.id, userId).run();
-      }
-    }
+    if (!await reconcileStandardChat(db,userId,turn)) throw new BillingError(409, 'Missing current AI request receipt. This request needs review.');
   }
 }
 

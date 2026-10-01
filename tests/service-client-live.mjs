@@ -53,7 +53,7 @@ try{
  assert.equal((await db.prepare('SELECT enabled FROM contact_settings WHERE project_id=?').bind(project).first()).enabled,0);
  assert.equal((await db.prepare('SELECT count(*) n FROM publications WHERE project_id=? AND version_id IS NOT NULL').bind(project).first()).n,0);
  assert.equal((await fetch('https://'+project+'.whumpo.site/')).status,404);
- const billing=await json('/api/billing');assert.equal(billing.quota.spent,0);assert.equal(billing.quota.reserved,0);
+ const billing=await json('/api/billing');assert.equal(billing.standardAI.creditCharge,0);assert.equal(billing.standardAI.creditCharge,0);
  await json('/api/auth/logout','POST',{});assert.equal((await call('/api/me')).status,401);success=true;
 }catch(error){originalFailure=error;throw error;}finally{
  // Only this fixture identity is eligible for cleanup; no customer publications/resources exist.

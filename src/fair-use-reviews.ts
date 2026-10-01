@@ -14,7 +14,7 @@ export async function readFairUseReview(db:D1Database,user:string,id:string){
  const row=await db.prepare('SELECT * FROM fair_use_reviews WHERE id=? AND user_id=?').bind(identifier(id),identifier(user)).first<FairUseReview>();
  if(!row)throw new FairUseReviewError(404,'Review not found');return row;
 }
-const currentPlanSQL="SELECT c.id FROM plan_entitlements g JOIN plan_catalog c ON c.id=g.plan_id WHERE g.user_id=? AND g.starts_at<=unixepoch() AND g.ends_at>unixepoch() AND strftime('%Y-%m','now')=? ORDER BY c.tier DESC,c.monthly_units DESC,c.published_sites DESC,c.id LIMIT 1";
+const currentPlanSQL="SELECT c.id FROM plan_entitlements g JOIN plan_catalog c ON c.id=g.plan_id WHERE g.user_id=? AND g.starts_at<=unixepoch() AND g.ends_at>unixepoch() AND strftime('%Y-%m','now')=? ORDER BY c.tier DESC,c.published_sites DESC,c.id LIMIT 1";
 export async function previewFairUseReviewObservation(db:D1Database,user:string,plan:FairUsePlan){
  identifier(user);if(!Object.hasOwn(fairUseThresholds,plan))throw new FairUseReviewError(400,'Invalid review plan');
  const now=Date.now(),period=new Date(now).toISOString().slice(0,7);

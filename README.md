@@ -6,7 +6,7 @@ Whumpo is an invitation-only AI website and application platform in private test
 
 For future work, use the [product and delivery roadmap](docs/roadmap/README.md), the [architecture and sequencing alignment](docs/roadmap/alignment.md), its [prioritized task backlog](docs/roadmap/backlog.md), and [agent execution guide](docs/roadmap/execution.md). Run `node tools/roadmap.mjs next` for planning candidates, then check their linked GitHub issues for current ownership and completion evidence.
 
-Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and use explicit forward changes. The linked inventory tracks existing paths still being retired.
+Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory tracks existing paths still being retired.
 
 ## Current product
 
@@ -26,7 +26,7 @@ Owner testing uses `muse-spark-1.3-contributor` on OpenCode Go via the OpenAI-co
 
 Cloudflare AI Gateway, comparative Workers AI/external routing and premium-model credits are planned; route selection and spending-reservation foundations do not constitute live provider dispatch. **Monitor mode is deployed by default:** fair-use observations never warn, throttle or block users. An operator-attested company-finance comparison and internal review CLI are implemented; automatic verified finance ingestion and active enforcement remain unimplemented. Run `pnpm report:fair-use` for a private read-only operator report.
 
-Historical test-unit receipts retain their original reservation/settlement rules. New standard assistance uses separate non-billable receipts; the internal Muse testing-capacity ceiling remains. See [standard AI accounting](docs/standard-ai-accounting.md). Stripe sandbox signup, subscriptions, invoices and cancellation are deployed and verified for owner testing; no real payments are enabled. See the [sandbox contract and verification](docs/stripe-sandbox.md) and [payments](docs/payments.md).
+Retired test units, credit purchases and plan-grant paths are removed from current source. Standard assistance uses one non-billable receipt path; the internal Muse testing-capacity ceiling remains. See [standard AI accounting](docs/standard-ai-accounting.md). Stripe sandbox signup, subscriptions, invoices and cancellation are deployed and verified for owner testing; no real payments are enabled. See the [sandbox contract and verification](docs/stripe-sandbox.md) and [payments](docs/payments.md).
 
 ## Development
 

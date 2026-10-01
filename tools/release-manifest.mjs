@@ -50,15 +50,14 @@ export function migrationPlan(files,applied){
  return {files,applied:sorted,pending:names.slice(sorted.length)};
 }
 
-// SQL cannot prove compatibility. All pending SQL, including apparently additive
-// triggers/backfills, requires a reviewed document. Destructive changes add a
-// separate restore review. No regex is treated as permission to run SQL.
+// Current test releases only. SQL hashes pin the reset; no old-binary support contract.
 export function validateCompatibility(plan,migrations){
- if(!plan||plan.version!==1||plan.mixedWorkersCompatible!==true||typeof plan.review!=='string'||!plan.review.trim())throw Error('A mixed-Worker compatibility review is required');
- if(!same(plan.migrations,migrations.pending.map(name=>({name,sha256:migrations.files.find(f=>f.path===name).sha256}))))throw Error('Compatibility review must pin the exact pending migrations');
- if(!['none','backward-compatible','destructive'].includes(plan.schemaChange)||(!migrations.pending.length?plan.schemaChange!=='none':plan.schemaChange==='none'))throw Error('Invalid schema change classification');
- if(migrations.pending.length&&(plan.previousWorkersCompatible!==true||typeof plan.schemaReview!=='string'||!plan.schemaReview.trim()))throw Error('Pending migrations require old/new Worker compatibility and a schema review');
- if(plan.schemaChange==='destructive'&&['restoreReview','restoreEvidence','recoveryStrategy'].some(k=>typeof plan[k]!=='string'||!plan[k].trim()))throw Error('Destructive migrations require a separate restore review, evidence and recovery strategy');
+ if(!plan||plan.version!==2||plan.environment!=='test'||plan.mixedWorkersCompatible!==true||typeof plan.review!=='string'||!plan.review.trim())throw Error('A current test-release and mixed-Worker review is required');
+ if(['previousWorkersCompatible','restoreReview','restoreEvidence'].some(k=>Object.hasOwn(plan,k)))throw Error('Retired release compatibility fields are not supported');
+ if(!same(plan.migrations,migrations.pending.map(name=>({name,sha256:migrations.files.find(f=>f.path===name).sha256}))))throw Error('Release review must pin the exact pending migrations');
+ if(!['none','update','reset'].includes(plan.schemaChange)||(!migrations.pending.length?plan.schemaChange!=='none':plan.schemaChange==='none'))throw Error('Invalid schema change classification');
+ if(migrations.pending.length&&(typeof plan.schemaReview!=='string'||!plan.schemaReview.trim()))throw Error('Pending schema changes require a schema review');
+ if(plan.schemaChange==='reset'&&(plan.testDataResetAuthorized!==true||typeof plan.cutoverReview!=='string'||!plan.cutoverReview.trim()))throw Error('Test resets require explicit data-reset authorization and a current cutover review');
  return plan;
 }
 
