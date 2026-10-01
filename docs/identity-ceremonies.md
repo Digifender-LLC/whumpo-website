@@ -41,7 +41,7 @@ Challenge bindings temporarily contain normalized email, invitation verifier and
 
 ## Remaining work
 
-The shared [kit lifecycle and enrollment completion](identity-kits.md) now implement two-key, saved-kit and fresh-assertion completion, terminal receipt behavior and authenticated pending cancellation with failure tests. WH-115 still needs restricted recovery and browser kit delivery. Completing recovery must require a new replacement assertion after the kit-save step; a retained-key assertion or the general fresh-proof predicate is insufficient.
+The shared [kit lifecycle and enrollment completion](identity-kits.md) now implement two-key, saved-kit and fresh-assertion completion, terminal receipt behavior and authenticated pending cancellation with failure tests. WH-115 now has the [restricted recovery backend](identity-recovery.md); browser kit delivery remains open. Completing recovery must require a new replacement assertion after the kit-save step; a retained-key assertion or the general fresh-proof predicate is insufficient.
 
 #72 owns trusted identity-state/UI bootstrap before profile/welcome, strict cookie selection, no-store/bounded HTTP bodies, rate-limit wiring, removal of superseded routes, final HTTP/Chat/provider principal composition, lifecycle registration and the coordinated test cutover. There are no active routes importing this module yet. Real Turnstile, actual owner/device enrollment and deployed acceptance remain separate from the local fixtures.
 
@@ -58,4 +58,4 @@ Cases cover gate failures, wrong origin/RP/UV/signature/handle, cross-origin pro
 - Type checks, application build, roadmap validation/alignment/render verification and whitespace checks passed.
 - The D1 run exposed aggregate trigger-change counts; inserts now verify the returned row. The SQLite fixture now executes each batch without yielding between statements, matching D1 transaction isolation for concurrent ceremony tests.
 
-These ceremony-only results do not include a physical authenticator, live Turnstile token or deployed handler. Complete signup and ordinary rotation are now verified separately in the [kit suite](identity-kits.md); full recovery remains open.
+These ceremony-only results do not include a physical authenticator, live Turnstile token or deployed handler. Complete signup and ordinary rotation are now verified separately in the [kit suite](identity-kits.md); the [dedicated recovery suite](identity-recovery.md) now covers backend recovery; browser and deployed acceptance remain open.
