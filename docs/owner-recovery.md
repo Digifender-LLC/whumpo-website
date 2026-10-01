@@ -41,3 +41,19 @@ Recovery-code replacement and passkey removal recheck the initiating owner/sessi
 `tests/owner-credential-authority.mjs` reproduced ten failures before correction, then passed all 21 expanded cases afterward. It exercises actual mounted handlers with disposable local D1, synthetic owners/credentials and pauses before the real mutation. Coverage includes recovery/password revocation, expiry/freshness crossing after statement preparation, changed session owner, delayed streamed body, insertion and replacement, foreign/last-key rejection, normal changes and cleanup-failure rollback. The `test:owner-recovery` script includes this regression. No real owner credentials or provider state were used. See the [A1 audit follow-up](tenant-authority-audit.md#a1-remediation--october-1-2026); A2/A3 remain open.
 
 Additional verification passed: `node tests/owner-recovery-concurrency.mjs`, `node tests/owner-passkeys-http.mjs`, `pnpm --config.verify-deps-before-run=false run check`, and `pnpm --config.verify-deps-before-run=false run build`. The fixture suites used separate temporary homes and disposable D1; the pnpm flag prevents dependency reinstallation against the shared module directory. Roadmap validation, generated-backlog and whitespace checks passed. No CMS functional test ran.
+
+
+### A1 test release
+
+[PR #33](https://github.com/zemdregon/whumpo/pull/33) merged as `e7036b1a9d753648d3b779b22cf3adff05721f3c`. Managed release `4c4be7bc-1354-4e05-b4f1-533bd6f92b79` archives implementation source `a27039bc214373129f747502cf9c4a0fab59e87d`. The mixed-version review compared the two changed platform routes with deployed Stripe source `d414df9`; schema, other Workers, service contracts, bindings, routes, schedules, compilers and frontend behavior are unchanged. All 114 migrations were already applied; no SQL ran. Every deployment step completed without repair/retry.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `0d96e17c-ff7f-4feb-80ff-48db97969163` |
+| apps | `795ba1e2-7858-4662-a32e-744c774a1979` |
+| sites | `f8c82bb9-baa7-4787-b7d1-6fcbccc5edf0` |
+| platform | `33f03069-722f-449a-a2ed-e94046fb5707` |
+
+Independent readback at **2026-10-01T13:48:45.687Z** confirmed all four candidate versions/tags, unchanged service/secret-binding names and CMS registration inventory, 114 migrations, all 16 exact frontend assets and workspace HTML. Home/workspace/health returned 200; anonymous Chat/profile and both credential mutations returned 401; foreign-Origin credential mutations returned 403. Credential denials returned no replacement code or session cookie and retained `no-store`. Stripe still advertises sandbox mode.
+
+Private evidence: `.secrets/credential-release-verification.json` and the immutable release archive. The archive's dirty flag covers only the shared dependency symlink and inspected generated visitor dependency-path comments; implementation source was committed. Generated comment differences were restored after deployment. This confirms deployed code/artifacts and entry boundaries; the interleavings were accepted locally, not repeated with a real owner's credentials or physical passkey. No customer content, CMS functional test, new paid service or live payment was involved.
