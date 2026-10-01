@@ -352,6 +352,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tools/prototypes/job-journal.mjs](../../tools/prototypes/job-journal.mjs)
 - [tests/job-journal-prototype.mjs](../../tests/job-journal-prototype.mjs)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -1093,6 +1094,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/cloudflare-connection.ts](../../src/cloudflare-connection.ts)
 - [src/app-lifecycle.ts](../../src/app-lifecycle.ts)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -1318,6 +1320,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/backend-publication.ts](../../src/backend-publication.ts)
 - [src/runtime/worker.ts](../../src/runtime/worker.ts)
 - [src/site-traffic.ts](../../src/site-traffic.ts)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -3526,6 +3529,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/standard-ai-usage.ts](../../src/standard-ai-usage.ts)
 - [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -5089,6 +5093,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/cloudflare-capability-roadmap.md](../../docs/cloudflare-capability-roadmap.md)
 - [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
 - [src/runtime/worker.ts](../../src/runtime/worker.ts)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -5496,6 +5501,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/app-gateway.ts](../../src/app-gateway.ts)
 - [src/photo-safety.ts](../../src/photo-safety.ts)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -5555,14 +5561,17 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
 - [src/runtime/worker.ts](../../src/runtime/worker.ts)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+- [tools/prototypes/workload-placement.mjs](../../tools/prototypes/workload-placement.mjs)
+- [tests/workload-placement-prototype.mjs](../../tests/workload-placement-prototype.mjs)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/47. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 WH-071 decision/source evidence against d9f5d26: docs/workload-placement.md freezes logical project/resource and exact module/schema identities, scoped adapter obligations, lifecycle/export descriptors and fenced migration handoff. Offline reference and 60 synthetic checks verify compatibility/rejections and marginal container examples; current official provider prices/limits reviewed. Existing shared D1/private R2/QuickJS remain. No production imports, runtime/config/schema changes, provider activation, customer migration or export acceptance. Execution/completion evidence belongs in issue #47.
 
 ## WH-073 — Serve published content and standard actions without maintenance inference
 
@@ -5612,6 +5621,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/site-host.ts](../../src/site-host.ts)
 - [src/app-host.ts](../../src/app-host.ts)
 - [src/app-gateway.ts](../../src/app-gateway.ts)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -5669,6 +5679,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
 - [docs/app-data.md](../../docs/app-data.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -6006,6 +6017,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/deployment.md](../../docs/deployment.md)
 - [docs/emdash.md](../../docs/emdash.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -6062,6 +6074,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/releases.md](../../docs/releases.md)
 - [docs/workspace-agent.md](../../docs/workspace-agent.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -6176,6 +6189,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/shared-components.md](../../docs/shared-components.md)
 - [docs/app-data.md](../../docs/app-data.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 
@@ -6353,6 +6367,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/backend-execution.md](../../docs/backend-execution.md)
 - [wrangler.apps.jsonc](../../wrangler.apps.jsonc)
 - [wrangler.runtime.jsonc](../../wrangler.runtime.jsonc)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
 
 ### Execution coordination
 

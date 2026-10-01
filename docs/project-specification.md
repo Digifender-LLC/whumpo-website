@@ -99,6 +99,8 @@ An adapter can import an owned existing `site-page@1` configuration into content
 
 WH-065 has published the maintained capability/version/compatibility/readiness catalog and bounded planner. WH-066's schema/content compiler and durable single-homepage proposals, preview delivery, version transactions and approvals are implemented. The forms/API companion preserves its distinct fixed-contact and stateless-function service contracts; general records/staff/files remain unsupported. WH-067 adds narrow shared records/access/files APIs; WH-068/069 implements configured notifications and deterministic rules. Dedicated project storage, broader execution and optional runtime AI retain their separate roadmap gates.
 
+**WH-071 handoff (October 1):** [workload placement](workload-placement.md) freezes logical module-resource references, exact schema/module pins, scoped adapters and lifecycle/export descriptors before WH-067. These are additive metadata for new module delivery; historical immutable specs and service-client target revisions retain their existing meanings.
+
 ## Verification and coordination
 
 - `node tests/project-specification-prototype.mjs` uses the current `siteConfig`, `renderSite` and `backendFormConfig`, an in-memory protocol model and the synthetic JSON fixture. It checks unknown/deep/oversized and incompatible inputs, module/dependency/reference validation, all four changes, owner/visitor/workflow isolation, no model confirmation, exact digest/class approval, stale competing proposals, invalid-batch non-application, request conflicts/replay, expiry, immutable returned copies/history and escaped text. Network dispatch is replaced with a failing stub and remains unused. No model, D1/R2, CMS, provider or customer operation is performed.

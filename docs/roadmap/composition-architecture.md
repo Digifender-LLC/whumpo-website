@@ -16,6 +16,8 @@ Whumpo's AI serves the signed-in owner who creates and maintains a project. Visi
 
 Read [shared components](../shared-components.md), [backend execution](../backend-execution.md), [application data](../app-data.md), [background jobs](../background-jobs.md), [content safety](../content-safety.md) and [lifecycle policy](../data-lifecycle.md) before implementation. Existing feature contracts and owner deferrals remain authoritative. The general shared module system, portable full-app export and project-database fleet described here are not implemented by the existing small helper catalog.
 
+**WH-071 follow-up, October 1:** the [logical resource and placement contract](../workload-placement.md) freezes the identities, scoped adapter obligations, lifecycle/export descriptors and migration protocol used below. Shared D1/private R2/QuickJS remain initial implementations. Dedicated resources and broader runtimes remain conditional; the offline decision reference performs no provisioning or migration.
+
 ## 1. Make the project specification the primary change surface
 
 Persist a project-owned, schema-versioned specification with pages/routes, layout and design tokens, content schemas, forms, file collections, access roles, deterministic rules, module references and non-secret configuration. Pin compiler version, every module version/digest, dependency lock information and the required data-schema version. Record authority and secret **references**, never secret values. Separate owner-editable design from platform-enforced authorization, safety and funding policy.
