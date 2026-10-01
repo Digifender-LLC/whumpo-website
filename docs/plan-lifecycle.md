@@ -1,10 +1,12 @@
+> October 1, 2026: [Stripe sandbox subscriptions](stripe-sandbox.md) add immutable paid invoice coverage for exact service intervals. `plan_entitlements` combines those intervals with legacy calendar-month receipts for current plan selection, publication slots and fair-use tier observations. This does not mint historical test units, advanced credits or the future resource pool. The month-grant descriptions below remain the legacy accounting contract. Real payments, plan switching/proration and refunds/disputes remain unavailable.
+
 # Monthly plan entitlements
 
 Current launch catalogue and model-cost policy: [pricing-and-model-policy.md](pricing-and-model-policy.md). Launch/Studio references below describe legacy test entitlements.
 
-## Implemented fulfillment boundary; checkout still disabled
+## Legacy monthly fulfillment boundary
 
-`grantPlan` is an internal fulfillment function, not an HTTP endpoint or model action. It accepts Starter, Personal, Business and Business Pro plus the historical Launch/Studio identities, for a specific UTC calendar month (`src/billing.ts`, `src/plans.ts`, migration 0052). A future payment adapter must establish the paid invoice, customer ownership, calendar period and product before calling it. The platform has no Stripe account configured, does not sell subscriptions, and has made no real subscription charge. This implementation alone is not a subscription system.
+`grantPlan` is an internal fulfillment function, not an HTTP endpoint or model action. It accepts Starter, Personal, Business and Business Pro plus the historical Launch/Studio identities, for a specific UTC calendar month (`src/billing.ts`, `src/plans.ts`, migration 0052). A future payment adapter must establish the paid invoice, customer ownership, calendar period and product before calling it. The new sandbox adapter records exact invoice-line service dates separately and makes no real subscription charge. This legacy function alone is not a subscription system.
 
 A unique grant ID and globally unique payment/reference ID identify an immutable receipt. Identical retries recover the same result; changes to owner, plan, month or reference are rejected. The receipt, existing-period allowance adjustment and ledger entry commit in one SQLite statement/trigger transaction. A lost acknowledgement is recovered by reading the exact receipt. A browser redirect, cached account plan or model output cannot create an entitlement.
 

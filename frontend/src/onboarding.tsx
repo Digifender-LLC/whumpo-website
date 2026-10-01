@@ -1,3 +1,4 @@
+import {SubscriptionPanel} from './subscription-panel';
 import {clearChatRecovery} from './lib/chat-recovery';
 import {saveWelcomeProfile,saveWelcomeProgress,finishWelcome,type WelcomeDraft as Draft,type Welcome} from './lib/welcome-delivery';
 import {useEffect,useRef,useState} from 'react';
@@ -69,6 +70,7 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
   <p className="text-xs text-muted-foreground mb-6">Guided welcome · no AI usage · answers save when you continue</p>
   {answered.length>0&&prompt!=='review'&&<details key={'answers-'+prompt} className="mb-6 rounded-2xl border bg-card px-4"><summary className="cursor-pointer py-3 text-sm font-medium min-h-11">Your answers so far <span className="text-muted-foreground">({answered.length})</span></summary><dl className="pb-3 space-y-3">{answered.map(row=><div key={row.prompt} className="flex items-start justify-between gap-3"><div className="min-w-0"><dt className="text-xs text-muted-foreground">{row.label}</dt><dd className="text-sm whitespace-pre-wrap break-words line-clamp-3">{row.value}</dd></div><Button type="button" variant="ghost" className="min-h-11 shrink-0" disabled={waiting} onClick={()=>go(row.prompt)} aria-label={'Edit '+row.label.toLowerCase()}>Edit</Button></div>)}</dl></details>}
   <div className="flex items-start gap-3 mb-6"><img src="/brand/avatars/cloud.svg" alt="" className="size-11 rounded-full shrink-0"/><div className="min-w-0 rounded-2xl rounded-tl-sm bg-secondary/60 p-4 sm:p-5"><p className="text-xs font-semibold text-primary mb-2">WHUMPO</p><h1 ref={heading} tabIndex={-1} className="text-xl sm:text-2xl font-bold tracking-tight break-words focus-visible:outline-2 focus-visible:outline-ring">{questions[prompt]}</h1><p className="mt-3 text-sm leading-relaxed text-muted-foreground">{hints[prompt]}</p></div></div>
+  {prompt==='review'&&<div className="mb-6"><SubscriptionPanel onboarding/></div>}
   <form className="space-y-5 pb-8" onSubmit={e=>{e.preventDefault();void proceed()}} aria-label="Your welcome answer">
    <div className="rounded-2xl border bg-card p-4 sm:p-5 space-y-4">
     {prompt==='name'&&<div className="space-y-2"><Label htmlFor="welcome-name">Your name</Label><Input id="welcome-name" value={name} onChange={e=>setName(e.target.value)} autoComplete="name" maxLength={80} required disabled={waiting} className="min-h-12" placeholder="What your friends call you"/></div>}

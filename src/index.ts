@@ -1,3 +1,4 @@
+import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubscriptions,startSubscription,billingPortal} from './stripe-billing';
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
 import {exportChatTranscript} from './chat-transcript';
@@ -56,7 +57,7 @@ import { ownedPreview } from './photo-versions';
 import { StorageLimitError } from './storage-budget';
 import { FileError, uploadPhoto, listPhotos, readPhoto, cleanupPhotos } from './files';
 import { ownedExport } from './exports';
-import { checkoutEnabled, createCheckout, stripeWebhook } from './checkout';
+import { checkoutEnabled, createCheckout } from './checkout';
 import { componentCatalog, previewHeaders } from './components';
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { publicPlans, domainBenefit, creditPack } from "./plans";
@@ -143,11 +144,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const method = request.method;
   if (method === "GET" && pathname === "/api/health") return json({ status: "ok" });
   if (method === "GET" && pathname === "/api/config") return json({ inviteRequired: !localMode(request, env), turnstileSiteKey: localMode(request, env) ? null : env.TURNSTILE_SITE_KEY });
-  if (method === "POST" && pathname === "/api/stripe/webhook") return json(await stripeWebhook(request, env.DB, env));
+  if (method === "POST" && pathname === "/api/stripe/webhook") return json(await stripeBillingWebhook(request, env.DB, env));
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && !sameOrigin(request)) return error(403, "Origin check failed");
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
-  if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", creditPack, currency: "USD", draft: true, checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", subscriptionsEnabled: false });
+  if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", creditPack, currency: "USD", draft: true, checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", subscriptionsEnabled: subscriptionsEnabled(env) });
   if (method === "POST" && pathname.startsWith("/api/auth/") && pathname !== "/api/auth/logout") {
     if (!(await env.AUTH_LIMITER.limit({ key: ip })).success) return error(429, "Too many sign-in attempts. Try again in a minute.");
   }
@@ -482,6 +483,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const {results} = await env.DB.prepare('SELECT id,component_id,digest,created_at FROM site_versions WHERE project_id = ? ORDER BY created_at DESC,id DESC LIMIT 25').bind(versionsMatch[1]).all();
     return json({versions:results});
   }
+  if (method === 'GET' && pathname === '/api/billing/subscription') return json(await subscriptionStatus(env.DB,env,user.id));
+  if (method === 'POST' && pathname === '/api/billing/subscription/refresh') return json(await refreshSubscriptions(env.DB,env,user.id));
+  if (method === 'POST' && pathname === '/api/billing/subscription/checkout') return json(await startSubscription(env.DB,env,user.id,(await body(request))??{}));
+  if (method === 'POST' && pathname === '/api/billing/portal') return json(await billingPortal(env.DB,env,user.id));
   if (method === "GET" && pathname === "/api/billing") return json({ ...await getBilling(env.DB, user.id), checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", creditPack });
   if (method === "POST" && pathname === "/api/billing/checkout") {
     const data = await body(request);
