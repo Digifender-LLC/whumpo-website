@@ -1564,14 +1564,16 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
 - [migrations](../../migrations)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/identity-authority.md](../../docs/identity-authority.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
+- 2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 
@@ -1626,14 +1628,15 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/owner-recovery-concurrency.mjs](../../tests/owner-recovery-concurrency.mjs)
 - [tools/owner-recovery-browser.mjs](../../tools/owner-recovery-browser.mjs)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/identity-authority.md](../../docs/identity-authority.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.
 
 ## WH-024 — Audit the supported owner journey for usability and accessibility
 
