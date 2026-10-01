@@ -1,6 +1,6 @@
 # Tenant and privileged-action authority audit
 
-**WH-004 · October 1, 2026 · source audit complete; remediation and regression acceptance open.**
+**WH-004 · October 1, 2026 · source audit complete; A1 fixed and locally verified; A2/A3 remain open.**
 
 This is the consolidated authority map for source commit `a34a13171a768097b6bb80a548363dd7ab7e8659`. It complements the [security decision register](security-risk-actions.md), [acceptance gates](acceptance.md) and [roadmap issue](https://github.com/zemdregon/whumpo/issues/5). It is not a claim of exhaustive security or live acceptance.
 
@@ -11,7 +11,7 @@ The Standard Codex Security scan `7b3504ac-bcbe-4100-bca2-9178209c4ba5` was seal
 - Fully reviewed all 685 implementation/configuration/test paths in the selected 687-path source inventory; the two exceptions are dependency-resolution metadata and upstream generated platform type declarations. Reviewed 706 distinct tracked files including supporting configuration, SVG assets and contracts, out of 791 tracked files. The remaining ancillary documents, licenses and binary brand/font assets are explicitly outside full implementation review.
 - Covered all 210 `src/` files and all 113 SQL migrations, maintained and checked-in generated frontend/visitor code, integration templates, release/operator tools, and test source. External dependencies and the QuickJS engine binary were not independently audited.
 - The scan itself was static and offline. No application execution, test execution, cloud inventory, live provider requests, credential reads or deployments occurred during it. Any subsequent local checks below are separate evidence.
-- **CSAM scanning and Daybreak are blocked/deferred by the owner.** No implementation, enrollment, activation or further Daybreak work is part of this task. CMS functional testing and Stripe setup also remain deferred. Reading existing authorization holds does not establish detection coverage.
+- **CSAM scanning and Daybreak are blocked/deferred by the owner.** No implementation, enrollment, activation or further Daybreak work is part of this task. CMS functional testing remained deferred throughout the scan. Stripe setup was deferred at the audited snapshot; the subsequently authorized sandbox release is recorded separately in [stripe-sandbox.md](stripe-sandbox.md). Reading existing authorization holds does not establish detection coverage.
 - Private test with a sole owner is the stated deployment assumption. Native-device authentication, provider consent/resource behavior, distributed abuse resistance and backup-aware erasure remain separate acceptance gates.
 
 ## Shared entry boundaries
@@ -24,11 +24,11 @@ The [visitor gateway](../src/app-gateway.ts) uses a project-specific origin and 
 
 ## Authority matrix
 
-“Source reviewed” below means the stated control was traced, including current migration guards. It does not mean a real provider/device journey passed. Known failures are called out separately.
+This matrix preserves the audited `a34a131` snapshot. “Source reviewed” means the stated control was traced, including its migration guards; it does not mean a real provider/device journey passed. Subsequent A1 remediation is recorded below; A2/A3 remain open.
 
 | Privileged family and entry | Authority | Immutable target / current-state guard | Replay and stale-state handling | Evidence / disposition |
 | --- | --- | --- | --- | --- |
-| Owner credentials: `/api/auth/*`, `/api/profile/password` | Exact Origin, authentication limiter, recovery proof or current/recent owner session | Password and enrollment commits check authorizing session; recovery consumes the current code and selected passkey set | Recovery rotates code and revokes sessions atomically; **recovery-code replacement and passkey removal lack a commit-time session check** | [Dispatcher](../src/index.ts), [passkeys](../src/passkeys.ts); **A1 open** |
+| Owner credentials: `/api/auth/*`, `/api/profile/password` | Exact Origin, authentication limiter, recovery proof or current/recent owner session | Password and enrollment commits check authorizing session; recovery consumes the current code and selected passkey set | Recovery rotates code and revokes sessions atomically; **recovery-code replacement and passkey removal lack a commit-time session check** | [Dispatcher](../src/index.ts), [passkeys](../src/passkeys.ts); **A1 found at audit; subsequent fix below** |
 | Profile, onboarding and workspace: `/api/profile`, `/api/onboarding`, `/api/workspace/*` | Current owner; workspace entry requires completed first-project onboarding | Owner-scoped profile/layout and revision checks; bounded fields; agent profile sharing opt-in | Stale revisions conflict; prepared images require the existing exact-byte serving hold | [Profile](../src/profile.ts), [onboarding](../src/onboarding.ts), [workspace](../src/workspace-navigation.ts); source reviewed |
 | Site publish/rollback/unpublish through typed Chat review | Review owner and project owner; deliberate confirmation | Frozen version, operation, project, expected publication revision, expiry and current entitlement | Applied receipts recover the same result; stale live revision and changed dependencies reject | [Publications](../src/publications.ts), [version retention](version-retention.md); source reviewed |
 | Private specification/service-client save and activation through typed Chat review | Owner/project joins; model may prepare, human saves/activates | Versioned compiler identities, configuration digests, expected heads; separate contact/form activation authority | Same review cannot retarget; forward restore creates a new version; removed dependencies and changed revisions reject | [Specification](project-specification.md), [service clients](project-service-clients.md); source reviewed |
@@ -91,3 +91,14 @@ All **11 selected suites passed** against the unchanged audited implementation. 
 Documentation checks also passed: `node tools/roadmap.mjs validate`, `node tools/roadmap.mjs render --check`, `git diff --check`, and existence checks for this document's local links. No TypeScript changed, so no new type-check/build was needed. None of these passing suites contains the missing A1–A3 scenarios; their results do not mark those findings fixed.
 
 Non-security observations retained for later work: the build-snapshot test fixture omits newly required compiler checker/lock inputs; the CMS panel inventory request uses a prose string instead of the inventory path (CMS testing remains deferred). Hosting creation could bind its current proof in the final admission statement; separate proof/routing/TLS checks still prevent serving stale authority. These are not additional reportable vulnerabilities.
+
+
+## A1 remediation — October 1, 2026
+
+Recovery-code insertion/replacement and passkey-removal admission now require the **exact initiating session**, its owner, unexpired lifetime and ten-minute freshness in the committing SQL. The database clock supplies both time boundaries. The passkey activity receipt admits the same transaction's key removal and session revocation; remaining-key/password rules still apply. A denied write issues no replacement recovery code or cookie. No migration or inter-Worker contract change is needed.
+
+Before the fix, `tests/owner-credential-authority.mjs` reproduced ten stale-request failures on `b5e0408`; four positive/isolation/rollback cases passed. After the fix, the expanded **21-case suite passed** through the actual platform handler with disposable local D1. It covers recovery/password revocation, real clock crossings after statement preparation, owner/session association, missing recovery-code insertion, a delayed request body, foreign/last-key rejection, normal changes and transactional rollback. Tests use synthetic credentials, no provider access and the allowlisted fixture environment. This is local execution evidence, not a native-device or live authenticated recovery journey.
+
+WH-004 remains open for A2/A3. The sealed scan and its historical results above are unchanged; these focused regressions establish only A1's corrected boundary. Deployment evidence is recorded in [owner recovery](owner-recovery.md).
+
+Additional verification passed: `node tests/owner-recovery-concurrency.mjs`, `node tests/owner-passkeys-http.mjs`, `pnpm --config.verify-deps-before-run=false run check`, and `pnpm --config.verify-deps-before-run=false run build`. The fixture suites used separate temporary homes and disposable D1; the pnpm flag prevents dependency reinstallation against the shared module directory. Roadmap validation, generated-backlog and whitespace checks passed. No CMS functional test ran.
