@@ -15,10 +15,9 @@ export async function applicationChatActions(db:D1Database,user:string,turns:Tur
  for(const turn of turns){delete turn.app_page_live_project_id;delete turn.app_page_review;delete turn.application_page_design_project_id;delete turn.application_review;delete turn.application_confirmation_id;delete turn.application_operation;delete turn.app_page_confirmation_id;delete turn.app_page_operation;}
  for(const kind of ['application','app-page'] as const){
   const candidates=turns.slice(0,100).filter(t=>t.status==='completed'&&typeof t.assistant_text==='string'&&t.assistant_text.startsWith(kind==='application'?'Application review ':'Application page review ')).map(turn=>{
-   const read=String(turn.user_text).trim().match(new RegExp('^/'+(kind==='application'?'(?:application-(?:review|build)|confirm-application)':'(?:app-page-review|confirm-app-page)')+'\\s+([0-9a-f-]{36})$','i'));
    const saved=receipts!.get(String(turn.id)),linked=saved?.kind===(kind==='application'?'application':'appPage')?saved.review_id:undefined;
-   return {turn,id:linked??read?.[1]??String(turn.id)};
-  }).filter(c=>uuid.test(c.id));
+   return {turn,id:linked};
+  }).filter((c):c is {turn:Turn;id:string}=>typeof c.id==='string'&&uuid.test(c.id));
   const ids=[...new Set(candidates.map(c=>c.id))];
   for(let offset=0;offset<ids.length;offset+=50){
    const batch=ids.slice(offset,offset+50),placeholders=batch.map(()=>'?').join(',');

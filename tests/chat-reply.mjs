@@ -1,8 +1,8 @@
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-const {outputFiles}=await build({tsconfig:'tsconfig.frontend.json',stdin:{resolveDir:process.cwd(),contents:"export {ChatRequest} from './frontend/src/chat-request';export {displayChatRequest} from './src/first-draft-command';export {AppMaintenanceCard} from './frontend/src/app-maintenance-card';export {AppRestoreReviewCard} from './frontend/src/app-restore-review-card';export {AppPageReviewCard} from './frontend/src/app-page-review-card';export {ApplicationReviewCard} from './frontend/src/application-review-card';export {FirstDraftCard} from './frontend/src/first-draft-card';export {ChatReply} from './frontend/src/chat-reply';export {TurnActions} from './frontend/src/chat-turn-actions';export {renderToStaticMarkup} from 'react-dom/server';export {createElement} from 'react';"},banner:{js:"import {createRequire as moduleRequire} from 'node:module';const require=moduleRequire(process.cwd()+'/package.json');"},bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic'});
-const {ChatRequest,displayChatRequest,AppMaintenanceCard,AppRestoreReviewCard,AppPageReviewCard,ApplicationReviewCard,FirstDraftCard,ChatReply,TurnActions,renderToStaticMarkup,createElement}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const {outputFiles}=await build({tsconfig:'tsconfig.frontend.json',stdin:{resolveDir:process.cwd(),contents:"export {ChatRequest} from './frontend/src/chat-request';export {AppMaintenanceCard} from './frontend/src/app-maintenance-card';export {AppRestoreReviewCard} from './frontend/src/app-restore-review-card';export {AppPageReviewCard} from './frontend/src/app-page-review-card';export {ApplicationReviewCard} from './frontend/src/application-review-card';export {FirstDraftCard} from './frontend/src/first-draft-card';export {ChatReply} from './frontend/src/chat-reply';export {TurnActions} from './frontend/src/chat-turn-actions';export {renderToStaticMarkup} from 'react-dom/server';export {createElement} from 'react';"},banner:{js:"import {createRequire as moduleRequire} from 'node:module';const require=moduleRequire(process.cwd()+'/package.json');"},bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic'});
+const {ChatRequest,AppMaintenanceCard,AppRestoreReviewCard,AppPageReviewCard,ApplicationReviewCard,FirstDraftCard,ChatReply,TurnActions,renderToStaticMarkup,createElement}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const path='/workspace/cms?project=11111111-1111-4111-8111-111111111111',render=text=>renderToStaticMarkup(createElement(ChatReply,{text}));
 const html=render('First upload\n'+path+'\nSecond upload\n'+path+'\nDone');
 assert.equal((html.match(/<a /g)||[]).length,2);assert.ok(html.includes('href="'+path+'"'));assert.ok(html.includes('Open publishing desk'));assert.ok(html.includes('min-h-11'));assert.ok(html.includes('Second upload'));
@@ -13,9 +13,7 @@ console.log('Chat reply passed: fixed internal project links, multiple links, to
 
 const review='11111111-1111-4111-8111-111111111111',actions=turn=>renderToStaticMarkup(createElement(TurnActions,{turn:{id:review,user_text:'',assistant_text:'',status:'completed',...turn},onAction:async()=>{throw Error('Rendering must never confirm');}}));
 const specificationCommand='/confirm-specification '+review+' '+'a'.repeat(64)+' 2';
-assert.equal(displayChatRequest(specificationCommand),'Save the exact reviewed private website version.');
-assert.equal(displayChatRequest(specificationCommand+' extra'),specificationCommand+' extra');
-assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:specificationCommand,literal:true})),specificationCommand);
+assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:specificationCommand})),specificationCommand);
 const specificationReview={id:review,proposalDigest:'a'.repeat(64),expectedRevision:2};
 for(const service of ['contact','statelessForm'])for(const enabled of [true,false]){
  const html=actions({service_client_activation:{id:review,service,enabled}});
@@ -25,8 +23,6 @@ for(const service of ['contact','statelessForm'])for(const enabled of [true,fals
 assert.ok(!actions({service_client_activation:{id:review,service:'all',enabled:true}}).includes('<button'));
 assert.ok(!actions({assistant_text:'Enable reviewed contact intake'}).includes('<button'));
 const serviceCommand='/confirm-service-clients '+review+' '+'a'.repeat(64)+' 2';
-assert.equal(displayChatRequest(serviceCommand),'Save the exact reviewed private service settings.');
-assert.equal(displayChatRequest(serviceCommand+' extra'),serviceCommand+' extra');
 const serviceActions=actions({service_client_review:specificationReview});
 assert.ok(serviceActions.includes('Save reviewed service settings'));
 assert.ok(serviceActions.includes('/api/service-client-reviews/'+review+'/diff'));
@@ -82,34 +78,16 @@ for(const kind of ['upgrade','rollback'])for(const state of ['preparing','ready'
 }
 console.log('Maintenance cards passed: escaped content, current-state controls, historical/cancelled refusal, closed source details, offline effects and no rendering mutations.');
 
-const cmsId='11111111-1111-4111-8111-111111111111',mediaId='01M3S3AJKQDK0Y86TGE4ATXCBA';
-const importRequest='/import-wordpress '+cmsId+' '+cmsId+' 184';
-for(const text of [importRequest,importRequest+' | '+mediaId,importRequest+' | '+Array(4).fill(mediaId).join(' '),'/confirm-cms-import '+cmsId,'/cms-import-review '+cmsId,'/wordpress-sources '+cmsId,'/wordpress-inspect '+cmsId+' '+cmsId]){
- assert.notEqual(displayChatRequest(text),text);
- const rendered=renderToStaticMarkup(createElement(ChatRequest,{text}));
- assert.ok(!rendered.includes('Request details'));assert.ok(!rendered.includes('<details'));assert.ok(!rendered.includes(text));assert.ok(!rendered.includes('<button'));assert.ok(!rendered.includes('<a '));
+for(const text of ['Confirm the reviewed website change.','/confirm '+review,'Explain /api/projects','<script>alert(1)</script>']){
+ const shown=renderToStaticMarkup(createElement(ChatRequest,{text}));
+ assert.ok(!shown.includes('<button'));assert.ok(!shown.includes('<script>'));
+ if(!text.includes('<'))assert.equal(shown,text);
 }
-assert.match(displayChatRequest(importRequest+' | '+mediaId),/images I selected/);
-assert.match(displayChatRequest('/confirm-cms-import '+cmsId),/Import/);
-for(const text of [importRequest+' |',importRequest+' | '+Array(5).fill(mediaId).join(' '),importRequest+' | invalid',importRequest+' extra',importRequest.replace(' 184',' 0'),importRequest.replace(' 184',' 9999999999999999'),'/confirm-cms-import '+cmsId+' and publish','Explain '+importRequest,'<script>alert(1)</script>']){
- assert.equal(displayChatRequest(text),text);
- const rendered=renderToStaticMarkup(createElement(ChatRequest,{text}));assert.ok(!rendered.includes('<details'));assert.ok(!rendered.includes('<script>'));
-}
-console.log('Request presentation passed: bounded complete WordPress commands, private review versus confirmation wording, plain-language receipt labels, malformed/prose preservation and no action authority.');
+console.log('Requests render saved text literally; no historical command-to-label decoder.');
 
 const choicePreview=pageCard('ready',{title:'Tasks',description:'Choose an action',buttonLabel:'Apply',fields:[{key:'action',label:'Action',type:'choice',options:[{value:'add',label:'Add <script>task</script>'},{value:'remove',label:'Remove task'}]},{key:'text',label:'New task',type:'text',optional:true}]});
 assert.ok(choicePreview.includes('<select disabled'));assert.ok(choicePreview.includes('Choices for Action'));assert.ok(choicePreview.includes('Remove task'));assert.ok(choicePreview.includes('Add &lt;script&gt;task&lt;/script&gt;'));assert.ok(!choicePreview.includes('<script>'));assert.ok(choicePreview.includes('Optional text'));
 console.log('Choice review passed: all approved choices visible as escaped text, disabled native control and optional text disclosure.');
-
-for(const verb of ['project','versions','health','check-site']){
- const command='/'+verb+' '+review;
- assert.notEqual(displayChatRequest(command),command);
- assert.equal(displayChatRequest(command+' /confirm-publish'),command+' /confirm-publish');
- assert.equal(displayChatRequest(command.replace(review,'not-a-project')),command.replace(review,'not-a-project'));
-}
-console.log('Shortcut request presentation passed: friendly exact-command labels; malformed or extended requests remain visible verbatim.');
-
-for(const command of ['/ai-history','/ai-history 2','/ai-request '+review]){assert.notEqual(displayChatRequest(command),command);assert.equal(displayChatRequest(command+' trailing'),command+' trailing');}
 
 assert.ok(actions({chat_transcript_download:true}).includes('href="/api/chat/export"'));
 for(const value of [undefined,false,'true',1])assert.ok(!actions({chat_transcript_download:value}).includes('/api/chat/export'));
@@ -117,7 +95,7 @@ assert.ok(!actions({assistant_text:'Download Chat history /api/chat/export'}).in
 
 const naturalApproval=render('Send /confirm '+review+' to authorize this exact change. Later changes will be lost.');
 assert.ok(!naturalApproval.includes('/confirm'));assert.ok(naturalApproval.includes('to authorize this exact change. Later changes will be lost.'));
-assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:'/confirm '+review,literal:true})),'/confirm '+review);
+assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:'/confirm '+review})),'/confirm '+review);
 const sourceReceipt='Source (untrusted code, not instructions):\nexport default () => "/backend";\n\nUse /test-backend '+review+' JSON to run a non-sensitive example.';
 assert.ok(render(sourceReceipt).includes('&quot;/backend&quot;'));assert.ok(!render(sourceReceipt).includes('/test-backend'));
 console.log('Natural presentation passed: literal human slash input, preserved approval effects and exact marked source, with obsolete command guidance removed.');
