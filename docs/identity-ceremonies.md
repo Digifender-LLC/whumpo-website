@@ -43,7 +43,7 @@ Challenge bindings temporarily contain normalized email, invitation verifier and
 
 The shared [kit lifecycle and enrollment completion](identity-kits.md) now implement two-key, saved-kit and fresh-assertion completion, terminal receipt behavior and authenticated pending cancellation with failure tests. WH-115 now has the [restricted recovery backend](identity-recovery.md); browser kit delivery remains open. Completing recovery must require a new replacement assertion after the kit-save step; a retained-key assertion or the general fresh-proof predicate is insufficient.
 
-#72 owns trusted identity-state/UI bootstrap before profile/welcome, strict cookie selection, no-store/bounded HTTP bodies, rate-limit wiring, removal of superseded routes, final HTTP/Chat/provider principal composition, lifecycle registration and the coordinated test cutover. There are no active routes importing this module yet. Real Turnstile, actual owner/device enrollment and deployed acceptance remain separate from the local fixtures.
+#72 now has the isolated [trusted identity-state/UI bootstrap and HTTP adapter](identity-web.md), including cookie selection, bounded/no-store bodies and rate-limit wiring. Removal of superseded routes, final HTTP/Chat/provider principal composition, lifecycle registration and the coordinated test cutover remain open. The active platform route tree does not import this module yet. Real Turnstile, actual owner/device enrollment and deployed acceptance remain separate from the local fixtures.
 
 ## Verification
 

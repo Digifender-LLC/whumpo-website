@@ -1,6 +1,6 @@
 # Saved recovery kits and enrollment completion
 
-**WH-114B [#71](https://github.com/zemdregon/whumpo/issues/71) and WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Implemented and verified in isolated source; not deployed or connected to HTTP/UI.** This completes #71's backend enrollment path and implements the shared kit preparation, acknowledgment and ordinary rotation part of #69. The [restricted recovery backend](identity-recovery.md) now extends this source; browser delivery and the coordinated current-only test cutover remain open.
+**WH-114B [#71](https://github.com/zemdregon/whumpo/issues/71) and WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Implemented and verified with the isolated [HTTP/browser flow](identity-web.md); not deployed.** This completes #71's backend enrollment path and implements the shared kit preparation, acknowledgment and ordinary rotation part of #69. The [restricted recovery backend](identity-recovery.md) now extends this source; common platform admission and the coordinated current-only test cutover remain open.
 
 ## Current implementation
 
@@ -21,7 +21,7 @@ The initial kit activates only with successful enrollment completion. Ordinary r
 
 ## One-time document and receipts
 
-[kit-document.ts](../src/workspace-identity/kit-document.ts) formats the successful preparation response as text with the constant filename `whumpo-recovery-kit.txt`. It includes Whumpo, the account label, generation/offer ID/date, the key, the manually entered workspace address and instructions for independent storage and account recovery. It does not promise recovery of separate content encryption keys. This is document content, not a shipped download/copy/print UI.
+[kit-document.ts](../src/workspace-identity/kit-document.ts) formats the successful preparation response as text with the constant filename `whumpo-recovery-kit.txt`. It includes Whumpo, the account label, generation/offer ID/date, the key, the manually entered workspace address and instructions for independent storage and account recovery. It does not promise recovery of separate content encryption keys. The [trusted kit component](identity-web.md) now delivers this document through download/copy/print in the isolated browser flow; the deployed client has not switched.
 
 Plaintext is returned only to the winning prepare call and is never reconstructed. Repeating the same request returns a non-secret receipt with null document/key/offer fields. Client delivery must keep plaintext in transient memory, clear it on exit, revoke download object URLs and keep it out of persistent app storage, URLs, filenames, logs, Chat, telemetry and screenshots. Use synthetic values for browser/print acceptance.
 
@@ -46,4 +46,6 @@ Both runs passed **47 refusal/race checks**, plus positive enrollment, one-time 
 
 The existing **62** ceremony and **72** authority refusal/race suites also passed against SQLite and local D1. Type checks, application build, roadmap validation/alignment/render checks and whitespace checks passed.
 
-#69 now has the [restricted recovery backend](identity-recovery.md), including kit proof/review/secure, restricted kit replacement, replacement-bound completion and emergency key removal. Kit download/copy/print UI remains open. #72 owns the HTTP/client adapters, central admission, lifecycle registration and removal of superseded authentication during one coordinated test reset. No remote schema, active route, real owner credential, physical device or deployment changed here.
+#69 now has the [restricted recovery backend](identity-recovery.md), including kit proof/review/secure, restricted kit replacement, replacement-bound completion and emergency key removal. The HTTP/client adapters and kit download/copy/print UI now pass isolated acceptance. #72 still owns central platform admission, lifecycle registration and removal of superseded authentication during one coordinated test reset. No remote schema, active route, real owner credential, physical device or deployment changed here.
+
+The [current web packet](identity-web.md) now verifies one-time download/copy/print delivery and saved-progress UI against the isolated HTTP/backend flow. Its production route installation remains part of the coordinated #72 cutover.
