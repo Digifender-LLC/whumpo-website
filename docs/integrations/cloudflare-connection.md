@@ -1,5 +1,11 @@
 # Customer Cloudflare authorization
 
+## Planned plan eligibility — September 30, 2026
+
+Customer Cloudflare OAuth and its reviewed DNS operations are planned **Business and Business Pro** benefits; Starter and Creator (the accepted new name for Personal; display rollout is WH-089) do not include external account connections. This is a launch-catalogue decision, not current server enforcement: the private Explore preview and existing provider configuration, consent and exact DNS reviews are unchanged, and real-money subscriptions remain disabled (the authorized sandbox is separately available). Ordinary custom-domain eligibility, manual DNS instructions and annual domain benefits keep their separate existing rules. Hosting on Whumpo does not require a customer Cloudflare account connection.
+
+Before paid launch, enforce current eligibility when starting/activating authorization and using provider capabilities, including pending and background work. Define expiry/downgrade behavior while preserving status, disconnect/revocation and recovery of uncertain DNS operations. Real customer consent, scoped resources, DNS and revocation acceptance remain required; configured bindings alone do not meet these gates. See the [accepted pricing decision](../pricing-and-model-policy.md#accepted-external-connections-decision--september-30-2026). This policy change neither provisions customer infrastructure nor authorizes DNS changes or provider charges.
+
 ## Delivered boundary
 
 Customers can open Connected accounts from Details, `/connections`, “connect cloudflare” or “disconnect cloudflare”. The implemented OAuth Authorization Code flow uses a confidential client, S256 PKCE, a ten-minute state bound to the current Whumpo session, and an exact callback URL. A recent login and matching Origin are required to start. Codes can be exchanged once. Cancellation, a different session/user, expired state and replay cannot authorize access.

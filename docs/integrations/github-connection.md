@@ -1,5 +1,11 @@
 # Optional GitHub connection
 
+## Planned plan eligibility — September 30, 2026
+
+GitHub authorization and reviewed repository backups are planned **Business and Business Pro** benefits; Starter and Creator (the accepted new name for Personal; display rollout is WH-089) do not include external account connections. This is a launch-catalogue decision, not current server enforcement: the private Explore preview and existing provider configuration, consent and review gates are unchanged, and real-money subscriptions remain disabled (the authorized sandbox is separately available). Downloadable source export and owner sign-in are separate features with unchanged rules.
+
+Before paid launch, enforce current eligibility when starting/activating authorization and using provider capabilities, including pending and background work. Define expiry/downgrade behavior while preserving status, disconnect/revocation and recovery of uncertain backup operations. Real App setup, consent and backup acceptance remain required. See the [accepted pricing decision](../pricing-and-model-policy.md#accepted-external-connections-decision--september-30-2026); inclusion in a proposed plan does not enable this integration.
+
 ## Disconnect and in-flight replies — September 30, 2026
 
 GitHub capabilities now recheck the exact captured user/token identity, active pointer, vault state and expiry after receiving a provider response. If local authorization was disconnected, replaced or expired, the response body is cancelled and the result is refused. Installation discovery uses the same capability and rechecks again after consuming the complete bounded JSON body, preventing an in-flight stream from returning stale installation metadata after disconnect. No additional permissions, refresh tokens or provider endpoints are introduced.
