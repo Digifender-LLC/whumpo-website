@@ -38,3 +38,18 @@ Type checks/build, focused PWA checks, build-snapshot and release-manifest check
 ### Hosting compatibility correction
 
 The first test deployment exposed Cloudflare's automatic `/pwa/offline.html` → `/pwa/offline` redirect. Because worker installation deliberately refuses redirects, its offline cache did not activate. The worker now fetches the canonical extensionless screen URL; the local browser fixture reproduces the redirect to prevent this regression. This changed no account or backend behavior. Final deployed acceptance requires the corrected worker to activate and pass the live offline/reconnect check.
+
+### Test deployment accepted — 2026-10-01T16:55:49.916Z
+
+Corrected release `e6edca89-4021-494c-a4b0-0875531e3132`, archived source `aa8b2c38b4c69e1a4dba76fb01b0fe0bea544778`, is deployed. All four service versions were reconciled; all 116 existing migrations remain applied with zero new/pending migrations and zero CMS registrations. The archive's dirty flag reflects only the existing untracked node_modules symlink; versioned source was committed.
+
+| Worker | Active version |
+| --- | --- |
+| runtime | `aa2cbcf9-47ea-4cd3-bcf0-e1c69eccc84c` |
+| apps | `cfec8388-0932-4511-b3dc-d4ff6a054af8` |
+| sites | `21bd2ced-2db1-4d00-8f32-f56cc9116574` |
+| platform | `59bb90b9-7d4e-4c33-953d-644558ef41c1` |
+
+Readback matched all 20 selected deployed HTML/JS/CSS/brand/PWA assets byte-for-byte to the archive. The canonical offline page returns 200 without redirect; worker/manifest MIME and revalidation headers are correct. Fresh-profile Chromium at whumpo.com reports no manifest/installability errors, activates the worker, and stores exactly four public cache entries. Offline reload displays the branded screen; reconnect returns to the actual sign-in page. Health returns 200 and an anonymous session read returns 401 with no-store. Private evidence: .secrets/pwa-release-verification.json and .secrets/pwa-live-offline-mobile.png.
+
+The earlier `01c93c6d-d69e-49ce-94b8-42a13c44720d` release did not pass offline activation because of the documented HTML redirect; this corrected release supersedes it. OS-level installation on physical iPhone/Android and mobile credential enrollment remain unverified; no browser-emulation result is labeled as device acceptance.

@@ -5717,7 +5717,8 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/49",
       "owner": null,
       "evidence": [
-        "2026-10-01 local/source: installable workspace manifest, elephant 192/512px icons, Settings install/manual guidance and public-only offline worker implemented. Type/build, PWA cache/routing/version checks, build/release snapshot and lazy-loading checks pass. Disposable Chromium with actual local platform/D1 reports zero manifest/installability errors and verifies mobile layout, install dismissal, offline/reconnect and worker updates preserving an unsent draft. Deployment evidence follows in docs/dashboard-pwa.md and issue #49; physical-phone OS install remains unverified."
+        "2026-10-01 local/source: installable workspace manifest, elephant 192/512px icons, Settings install/manual guidance and public-only offline worker implemented. Type/build, PWA cache/routing/version checks, build/release snapshot and lazy-loading checks pass. Disposable Chromium with actual local platform/D1 reports zero manifest/installability errors and verifies mobile layout, install dismissal, offline/reconnect and worker updates preserving an unsent draft. Deployment evidence follows in docs/dashboard-pwa.md and issue #49; physical-phone OS install remains unverified.",
+        "2026-10-01T16:55:49.916Z test acceptance: corrected release e6edca89-4021-494c-a4b0-0875531e3132, source aa8b2c38b4c69e1a4dba76fb01b0fe0bea544778, deployed and reconciled. Twenty selected assets match archive bytes; live Chromium reports zero manifest/installability errors, active worker, four public cached files and successful offline/reconnect to sign-in. Health 200, anonymous session 401/no-store. No new migration/service/paid activation. Physical-phone OS installation remains unverified. See docs/dashboard-pwa.md and issue #49."
       ]
     }
   ]
