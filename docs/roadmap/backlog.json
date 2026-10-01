@@ -1041,11 +1041,17 @@
         "frontend/src/chat-turn-actions.tsx",
         "frontend/src/landing.tsx",
         "frontend/src/pricing.tsx",
-        "docs/workspace-refinement-acceptance.md"
+        "docs/workspace-refinement-acceptance.md",
+        "frontend/src/query-recovery.tsx",
+        "frontend/src/lib/chat-announcements.ts",
+        "tests/chat-announcements.mjs",
+        "tools/workspace-recovery-browser.mjs"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/10",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-01 UTC: initial/refresh error recovery, accessible reply notices, pending-turn presentation, keyboard focus and mobile sheet corrections verified with types/build, delivery/announcement/timing/loading checks and a synthetic loopback browser fixture at desktop/360/390 px. Draft and same-request identity survive workspace navigation; full reload persistence, complete owner journey and real screen-reader/device acceptance remain open. See docs/workspace-refinement-acceptance.md and issue #10. Deployment is recorded separately."
+      ]
     },
     {
       "id": "WH-025",

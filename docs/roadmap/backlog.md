@@ -1374,6 +1374,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/landing.tsx](../../frontend/src/landing.tsx)
 - [frontend/src/pricing.tsx](../../frontend/src/pricing.tsx)
 - [docs/workspace-refinement-acceptance.md](../../docs/workspace-refinement-acceptance.md)
+- [frontend/src/query-recovery.tsx](../../frontend/src/query-recovery.tsx)
+- [frontend/src/lib/chat-announcements.ts](../../frontend/src/lib/chat-announcements.ts)
+- [tests/chat-announcements.mjs](../../tests/chat-announcements.mjs)
+- [tools/workspace-recovery-browser.mjs](../../tools/workspace-recovery-browser.mjs)
 
 ### Execution coordination
 
@@ -1381,7 +1385,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/10. Planning owner: Unassigned
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01 UTC: initial/refresh error recovery, accessible reply notices, pending-turn presentation, keyboard focus and mobile sheet corrections verified with types/build, delivery/announcement/timing/loading checks and a synthetic loopback browser fixture at desktop/360/390 px. Draft and same-request identity survive workspace navigation; full reload persistence, complete owner journey and real screen-reader/device acceptance remain open. See docs/workspace-refinement-acceptance.md and issue #10. Deployment is recorded separately.
 
 # F2 — Useful websites and applications
 
