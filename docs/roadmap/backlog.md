@@ -516,6 +516,7 @@ Lifecycle implementation has an explicit promise for active data, backups, provi
 - Extend the existing closure inventory into a documented data/resource ownership map
 - Draft export format, retention classes, deletion tombstones and unresolved-operation treatment
 - Identify owner/legal decisions without asserting compliance
+- Include guest links/comments, brand/section assets, lead records, staging data, connector-derived data and operation receipts in lifecycle classes
 
 ### Acceptance criteria
 
@@ -523,6 +524,7 @@ Lifecycle implementation has an explicit promise for active data, backups, provi
 - [ ] Customer-owned repositories/zones are never implicitly deleted
 - [ ] Backup expiry and restored-data suppression are explicit
 - [ ] Decision record distinguishes proposed terms from owner-approved policy and names remaining legal review
+- [ ] Define new retention/export/deletion and uncertain-operation treatment; do not silently extend 30-day contact retention or copy provider data into model history
 
 ### Verification
 
@@ -547,6 +549,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
 - [tools/lifecycle-catalog.mjs](../../tools/lifecycle-catalog.mjs)
 - [tests/lifecycle-catalog.mjs](../../tests/lifecycle-catalog.mjs)
+- [tests/account-closure-inventory.mjs](../../tests/account-closure-inventory.mjs)
+- [tests/specification-journey.mjs](../../tests/specification-journey.mjs)
+- [tests/service-client-activation.mjs](../../tests/service-client-activation.mjs)
 
 ### Execution coordination
 
@@ -555,6 +560,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/7. Planning owner: Unassigned.
 ### Evidence
 
 - 2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.
+- 2026-10-01 UTC reconciliation against source 0002632 / migrations 0001–0113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7.
 
 ## WH-010 — Map safety coverage and specify the remaining fail-closed boundaries
 

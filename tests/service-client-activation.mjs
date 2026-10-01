@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
 import {mkdtemp,rm,readdir,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
@@ -70,6 +71,9 @@ try{
  await assert.rejects(m.prepareServiceClientActivation(db,owner.id,id(),{...activation(owner,v1,'contact'),service:'all'}),e=>e.status===400);
  const refused=await chat(owner,sc(owner,'activate',{versionId:v1,service:'contact'}));assert.equal(refused.turn.service_client_activation,undefined);
  const first=await activationReview(owner,v1,'contact');assert.equal(first.turn.contact_confirmation_id,undefined,'One exact control, not a duplicate legacy button');
+ const inventories=await Promise.all([accountClosureInventory(db),accountClosureInventory(db,owner.id),accountClosureInventory(db,foreign.id)]);
+ for(const metric of ['serviceClientProposals','serviceClientSnapshots','serviceClientSaveReceipts','serviceActivationReceipts'])assert.deepEqual(inventories.map(r=>r.counts[metric]),[1,1,0]);
+ for(const report of inventories){assert.equal(report.readyForDeletion,false);assert.ok(!JSON.stringify(report).includes(owner.id));assert.doesNotMatch(JSON.stringify(report),/Example Garden|Garden estimate|contact-link@1/);}
  for(const suffix of ['preview','diff']){const path=`/api/service-client-activations/${first.input.id}/${suffix}`;assert.equal((await call(null,path)).status,401);assert.equal((await call(foreign,path)).status,404);assert.equal((await call(owner,path+'?confirm=true')).status,400);const response=await call(owner,path);assert.equal(response.status,200);assert.match(response.headers.get('content-security-policy'),/sandbox;.*form-action 'none'/);assert.doesNotMatch(await response.text(),/<script|\saction=|\sformaction=/);}
  assert.equal(await m.activeContact(db,owner.project),null);assert.equal(await m.activeBackendForm(db,owner.project),null);
  // A new private head invalidates old handoffs. No partial service mutation.

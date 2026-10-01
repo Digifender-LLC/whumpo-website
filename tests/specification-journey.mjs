@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
@@ -59,6 +60,10 @@ try{
  const foreignFirst=await chat(foreign,{kind:'preview',projectId:foreign.project,config});
  const foreignImport=await chat(foreign,spec(foreign,'import',{expectedRevision:0,versionId:foreignFirst.turn.version_id}));
  await approve(foreign,foreignImport.turn.specification_review);
+ // Inventory real saved copies and their separate receipts without leaking a tenant's content.
+ const inventories=await Promise.all([accountClosureInventory(db),accountClosureInventory(db,foreign.id),accountClosureInventory(db,owner.id)]);
+ for(const metric of ['specificationProposals','specificationSnapshots','specificationSaveReceipts'])assert.deepEqual(inventories.map(r=>r.counts[metric]),[1,1,0]);
+ for(const report of inventories){assert.equal(report.readyForDeletion,false);assert.ok(!JSON.stringify(report).includes(foreign.id));assert.doesNotMatch(JSON.stringify(report),/Example Garden|Monday through Friday/);}
  const qa=await syntheticProposal(foreign,spec(foreign,'change',{expectedRevision:1,operations:[{type:'design.setTheme',theme:'clay'}]}));
  const qb=await syntheticProposal(foreign,spec(foreign,'change',{expectedRevision:1,operations:[{type:'design.setTheme',theme:'ocean'}]}));
  const raceRevision=(await json(foreign,'/api/chat')).state.revision;
