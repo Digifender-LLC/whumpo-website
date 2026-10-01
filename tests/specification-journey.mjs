@@ -138,7 +138,10 @@ try{
  const saved=await db.prepare('SELECT spec_digest FROM project_spec_versions WHERE version_id=?').bind(v2).first();
  await db.prepare("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-policy',1,1,'risk_or_missing_history',100,60)").bind(owner.id,saved.spec_digest).run();
  for(const suffix of ['preview','export','diff'])assert.equal((await call(owner,`/api/site-versions/${v2}/${suffix}`)).status,423);
- assert.equal((await served(owner)).status,503);await assert.rejects(db.prepare('UPDATE publications SET version_id=? WHERE project_id=?').bind(v2,owner.project).run(),/specification_held/);
+ for(const url of [`https://${owner.project}.whumpo.site/`,`http://localhost/s/${owner.project}/`])for(const method of ['GET','HEAD']){
+  const blocked=await m.host.fetch(new Request(url,{method}),{DB:db,FILES:proxy.env.FILES});assert.equal(blocked.status,503);assert.doesNotMatch(await blocked.text(),/Monday through Saturday|A greener neighborhood/);
+ }
+ await assert.rejects(db.prepare('UPDATE publications SET version_id=? WHERE project_id=?').bind(v2,owner.project).run(),/specification_held/);
  const heldRestore=await chat(owner,spec(owner,'restore',{expectedRevision:3,versionId:v2}));assert.equal(heldRestore.turn.specification_review,undefined);assert.match(heldRestore.turn.assistant_text,/held for safety/);
  // Explicit operator parent cascade must clean up the bounded state and metadata receipts.
  await db.prepare('DELETE FROM projects WHERE id=?').bind(owner.project).run();for(const table of ['project_spec_proposals','project_spec_versions','project_spec_applies','project_spec_heads'])assert.equal(await count(table,owner.project),0);
