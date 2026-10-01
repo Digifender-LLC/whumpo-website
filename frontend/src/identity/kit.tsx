@@ -1,0 +1,21 @@
+import {useEffect,useRef,useState} from 'react';
+import {Copy,Download,Printer} from 'lucide-react';
+import {Button} from '../components/ui/button';
+import type {PreparedIdentityKit,IdentityOffer} from '../lib/identity';
+export function IdentityKit({prepared,offer,busy,onSaved,onReplace}:{prepared:PreparedIdentityKit|null;offer:IdentityOffer;busy:boolean;onSaved:()=>void;onReplace:()=>void}){
+ const [note,setNote]=useState(''),printFrame=useRef<HTMLIFrameElement|null>(null),urls=useRef(new Set<string>());
+ useEffect(()=>{const discard=()=>{for(const url of urls.current)URL.revokeObjectURL(url);urls.current.clear();printFrame.current?.remove();printFrame.current=null;};window.addEventListener('pagehide',discard);return()=>{window.removeEventListener('pagehide',discard);discard();};},[]);
+ useEffect(()=>{setNote('');},[offer.id,offer.saved]);
+ const text=prepared?.offer?.id===offer.id?prepared.text:null;
+ async function copy(){try{if(text)await navigator.clipboard.writeText(text);setNote('Copied. Store the kit somewhere separate from your passkeys.');}catch{setNote('Copy did not finish. Use Download, or select the recovery key below.');}}
+ function download(){if(!text)return;const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));urls.current.add(url);const a=document.createElement('a');a.href=url;a.download='whumpo-recovery-kit.txt';a.click();setTimeout(()=>{URL.revokeObjectURL(url);urls.current.delete(url);},1000);setNote('Save the downloaded kit somewhere private, separate from your passkeys.');}
+ function print(){
+  if(!text)return;printFrame.current?.remove();const frame=document.createElement('iframe');frame.title='Recovery kit print view';frame.style.cssText='position:fixed;width:1px;height:1px;left:-9999px;border:0';document.body.append(frame);printFrame.current=frame;
+  const doc=frame.contentDocument,win=frame.contentWindow;if(!doc||!win){frame.remove();setNote('The print view could not open. You can download a text copy instead.');return;}
+  doc.title='Whumpo recovery kit';const style=doc.createElement('style');style.textContent='body{padding:24px;color:#111;background:white;font:14px/1.6 sans-serif}pre{white-space:pre-wrap;overflow-wrap:anywhere}';const pre=doc.createElement('pre');pre.textContent=text;doc.head.append(style);doc.body.append(pre);
+  win.addEventListener('afterprint',()=>{frame.remove();if(printFrame.current===frame)printFrame.current=null;},{once:true});win.focus();win.print();setNote('Printing is optional. Confirm below only after saving a copy.');
+ }
+ return <section className="space-y-5" aria-labelledby="kit-heading"><h2 id="kit-heading" className="text-xl font-bold">{offer.saved?'Your kit is saved':'Save your recovery kit'}</h2><p className="text-sm text-muted-foreground">Keep it private and separate from your passkeys. This kit becomes active only when Whumpo confirms setup or replacement. Until then, keep your current kit.</p>
+ {text?<><div className="grid grid-cols-1 sm:grid-cols-3 gap-2"><Button variant="outline" disabled={busy} onClick={download}><Download className="size-4"/>Download</Button><Button variant="outline" disabled={busy} onClick={()=>void copy()}><Copy className="size-4"/>Copy</Button><Button variant="outline" disabled={busy} onClick={print}><Printer className="size-4"/>Print / PDF</Button></div><details className="rounded-xl border p-4"><summary className="cursor-pointer text-sm font-medium">Show private recovery key</summary><p className="font-mono text-sm break-all select-all mt-4">{prepared!.key}</p></details></>:!offer.saved?<p className="text-sm">This unsaved kit can’t be shown again. If you did not save a copy, prepare a new one.</p>:null}
+ <p role="status" className="text-sm text-muted-foreground">{note}</p>{!offer.saved&&<Button className="w-full min-h-12 whitespace-normal" disabled={busy} onClick={onSaved}>I’ve saved my recovery kit</Button>}<Button variant="ghost" disabled={busy} onClick={onReplace}>Prepare a different kit</Button><p className="text-xs text-muted-foreground">This confirmation doesn’t verify your backup. Whumpo cannot retrieve this key for you. It restores account access, not separately encrypted content keys. Never share it in Chat or with support.</p></section>;
+}

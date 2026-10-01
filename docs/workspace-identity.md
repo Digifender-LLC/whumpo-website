@@ -2,7 +2,7 @@
 
 **WH-113 decision, amended for current-only test cutovers October 1, 2026. Source reviewed: `d4153985b7350d0a3f3e96e7fa01cb77486ea3e0`. Protocol decision; runtime activation remains pending.** [Issue #42](https://github.com/zemdregon/whumpo/issues/42) owns execution evidence. WH-114/115 implement this contract; WH-005 supplies web/device acceptance and WH-083/087 native implementation/acceptance.
 
-The isolated [authority foundation](identity-authority.md) now implements the current principal/schema/committing guard under #70. The [ceremony source implementation](identity-ceremonies.md) now adds verified signup, restricted resumption, current login and reauthentication under #71. The [kit lifecycle implementation](identity-kits.md) now completes #71 backend enrollment/cancellation and adds ordinary saved-kit replacement. The [restricted recovery backend](identity-recovery.md) now implements exact loss review/secure, replacement-bound completion, restricted kit rotation and emergency removal. Connected UI and the coordinated test cutover remain open under #68/#69/#72; current authentication is not switched by these isolated modules.
+The isolated [authority foundation](identity-authority.md) now implements the current principal/schema/committing guard under #70. The [ceremony source implementation](identity-ceremonies.md) now adds verified signup, restricted resumption, current login and reauthentication under #71. The [kit lifecycle implementation](identity-kits.md) now completes #71 backend enrollment/cancellation and adds ordinary saved-kit replacement. The [restricted recovery backend](identity-recovery.md) now implements exact loss review/secure, replacement-bound completion, restricted kit rotation and emergency removal. The [HTTP/browser packet](identity-web.md) now verifies deterministic signup/security/recovery and kit delivery in isolation. Common platform admission, lifecycle registration and the coordinated test cutover remain open under #68/#69/#72; current authentication is not switched by these isolated modules.
 
 This specifies the accepted [identity policy](roadmap/identity-and-data-protection.md) for owners and future workspace members. Web, Android, feature entitlements and Chat consume the same server authority. Application visitors retain [their separate identity](app-data.md); customer origins never gain workspace authority. Account recovery does not recover future client-encrypted content keys.
 
@@ -98,7 +98,7 @@ An old ordinary session is not sufficient to remove keys after its fresh-passkey
 
 ## Versioned operation contract
 
-Implement one `/api/auth/identity/v1/` browser adapter over shared domain operations. These routes are **reserved, not present today**. Native transport reuses their semantics, not browser cookies or a generic proxy. POST mutations require exact Origin for browser requests, bounded JSON, current authority and idempotent effect IDs. Client-supplied `userId`, step counts or `complete` flags never grant authority.
+Implement one `/api/auth/identity/v1/` browser adapter over shared domain operations. These routes are **implemented in the isolated adapter, not installed in the active platform today**. Native transport reuses their semantics, not browser cookies or a generic proxy. POST mutations require exact Origin for browser requests, bounded JSON, current authority and idempotent effect IDs. Client-supplied `userId`, step counts or `complete` flags never grant authority.
 
 | Relative operation | Authority / result |
 | --- | --- |
