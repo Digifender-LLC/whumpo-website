@@ -7,7 +7,7 @@ await validateLifecycleReferences(catalog);
 const {db,migrations}=await migratedLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,148);assert.equal(report.classCount,31);assert.equal(migrations.length,119);
+ assert.equal(report.tableCount,149);assert.equal(report.classCount,32);assert.equal(migrations.length,120);
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
  assert.equal(report.directOwnerBlocks.length,21);
  assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['auth_challenges','file_cleanup']);
@@ -20,6 +20,8 @@ try{
  for(const name of ['project_spec_creations','project_spec_applies','service_client_applies','service_client_activation_reviews']){
   const table=report.tables.find(t=>t.name===name);assert.equal(table.class,'configuration-authority');assert.ok(!table.columns.includes('spec_json'));assert.ok(table.ownerPath.includes('users'));
  }
+ assert.equal(report.tables.find(t=>t.name==='feature_preview_grants').class,'feature-preview-authority');
+ assert.ok(report.tables.find(t=>t.name==='feature_preview_grants').ownerPath.includes('users'));
  assert.equal(report.tables.find(t=>t.name==='backend_extension_uses').class,'backend-artifacts');
  assert.ok(report.tables.find(t=>t.name==='app_documents').ownerPath.includes('app_visitors'));
  assert.ok(report.tables.find(t=>t.name==='cms_media_uploads').ownerPath.includes('users'));

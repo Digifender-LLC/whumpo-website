@@ -26,6 +26,16 @@ try{
  assert.throws(()=>sql.exec("INSERT INTO plan_catalog VALUES('launch',1,3)"),/immutable/);
  for(const id of ['launch','studio','explore','unknown'])assert.throws(()=>sql.prepare("INSERT INTO stripe_subscription_orders(id,user_id,plan_id,interval,price_id,amount_cents,created_at) VALUES(?,?,?,'month','price_fixture',1700,1)").run(crypto.randomUUID(),owner,id),/current_plan_required/);
  const b=await getBilling(db,owner);assert.equal(b.plan.id,'personal');assert.equal(b.standardAI.creditCharge,0);assert.deepEqual(Object.keys(b).sort(),['period','plan','standardAI']);assert.equal((await getBilling(db,other)).plan.id,'explore');
+ const at=2_000_000_000,when=t=>new Date(t*1000);
+ await paidPlan(db,other,'personal',{start:at-200,end:at+20});await paidPlan(db,other,'personal',{start:at-100,end:at+200});
+ await paidPlan(db,other,'personal',{start:at+100,end:at+300});
+ assert.deepEqual((await ensureBilling(db,other,when(at))).coverage,{startsAt:at-200,endsAt:at+200});
+ assert.deepEqual((await ensureBilling(db,other,when(at+100))).coverage,{startsAt:at-100,endsAt:at+300});
+ assert.equal((await ensureBilling(db,other,when(at+300))).coverage,null);
+ for(const bounds of [{starts_at:at+1,ends_at:at+10},{starts_at:at-10,ends_at:at},{starts_at:at-0.5,ends_at:at+10},{starts_at:at-10,ends_at:Number.MAX_SAFE_INTEGER+1}]){
+  const invalid={prepare:()=>({bind:()=>({all:async()=>({results:[{plan_id:'personal',...bounds}]})})})};
+  await assert.rejects(ensureBilling(invalid,other,when(at)),e=>e.status===409);
+ }
  for(const plan_id of ['launch','studio','unknown','explore'])await assert.rejects(ensureBilling({prepare(){return {bind(){return {all:async()=>({results:[{plan_id}]})}}}}},owner),e=>e.status===409);
  for(const plan of ['unknown','constructor','toString'])await assert.rejects(ensureInferenceBudget(db,owner,'2026-10',plan),/Unknown inference plan/);
  const orphan=crypto.randomUUID();sql.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,2,'Missing current receipt','Pending',?,'ai','pending')").run(orphan,owner,now);
