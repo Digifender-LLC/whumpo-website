@@ -1,3 +1,4 @@
+import {serviceClientActivationReceipt} from './project-specification/service-clients/activation';
 import {linkChatReviewReply} from './chat-review-receipts';
 import {requireExtensionPlan} from './composition-plans';
 import {listBackendImports} from './backend-imports';
@@ -72,7 +73,7 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
    }
    if(verb==='backend-form')return 'Website tool: '+JSON.stringify(await readBackendForm(db,user,id));
    if(verb==='backend-form-review')return describeBackendForm(await readBackendFormReview(db,user,id));
-   if(verb==='confirm-backend-form')return describeBackendForm(await confirmBackendForm(db,user,id));
+   if(verb==='confirm-backend-form'){const row=await confirmBackendForm(db,user,id);return await serviceClientActivationReceipt(db,user,id)??describeBackendForm(row);}
    if(verb==='configure-backend-form'||verb==='disable-backend-form'){if(verb==='configure-backend-form'&&input===null)throw new BackendError(400,'Provide form JSON; use /disable-backend-form to review hiding it.');return describeBackendForm(await prepareBackendForm(db,user,id,turnId,verb==='disable-backend-form'?null:input));}
    if(verb==='backend-publication')return 'Current public endpoint: '+JSON.stringify(await readBackendPublication(db,user,id));
    if(verb==='backend-publication-review')return describeBackendPublication(await readBackendPublicationReview(db,user,id));

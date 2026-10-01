@@ -1,3 +1,4 @@
+import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
@@ -455,6 +456,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const photoMatch=pathname.match(/^\/api\/files\/([0-9a-f-]{36})$/);
   if (photoMatch && method === 'GET') return readPhoto(env,user.id,photoMatch[1]);
   const diffMatch=pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/diff$/);
+  const serviceActivation=pathname.match(/^\/api\/service-client-activations\/([0-9a-f-]{36})\/(preview|diff)$/);
+  if(method==='GET'&&serviceActivation){if(new URL(request.url).search)return error(400,'Use the exact service activation review link.');return serviceClientActivationPreview(env.DB,user.id,serviceActivation[1],serviceActivation[2]==='diff');}
   const serviceClientReview=pathname.match(/^\/api\/service-client-reviews\/([0-9a-f-]{36})\/(preview|diff)$/);
   if(method==='GET'&&serviceClientReview){if(new URL(request.url).search)return error(400,'Use the exact service settings review link.');return serviceClientPreview(env.DB,user.id,serviceClientReview[1],serviceClientReview[2]==='diff');}
   const serviceClientVersion=pathname.match(/^\/api\/service-client-versions\/([0-9a-f-]{36})\/preview$/);
