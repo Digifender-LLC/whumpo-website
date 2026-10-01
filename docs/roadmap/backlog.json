@@ -4148,11 +4148,18 @@
         "frontend/src/pricing.tsx",
         "frontend/src/workspace-pages.tsx",
         "src/connection-chat.ts",
-        "docs/plan-lifecycle.md"
+        "docs/plan-lifecycle.md",
+        "docs/plan-feature-contract.md",
+        "src/plan-features.ts",
+        "frontend/src/plan-features.tsx",
+        "tests/plan-catalogue.mjs",
+        "tools/plan-catalogue-browser.mjs"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/44",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-01: cumulative version-1 launch feature catalogue and Creator display rollout implemented against 9cb2a62. personal IDs/prices/preferences/provider mappings and immutable receipts preserved. API/pricing/Settings/Chat distinguish planned inclusions, existing foundations, required provider consent and pending launch acceptance; all seven Business/Pro connections named and common security/recovery/export/standard AI retained. Catalogue, plan-period and synthetic subscription regressions, TypeScript/build/loading and connected loopback mobile/keyboard preference checks passed. No runtime feature enforcement, real billing/provider action, schema or deployment; WH-090 and feature/launch acceptance remain separate. See docs/plan-feature-contract.md and issue #44."
+      ]
     },
     {
       "id": "WH-090",
@@ -4198,7 +4205,8 @@
         "docs/integrations/cloudflare-connection.md",
         "docs/background-jobs.md",
         "docs/roadmap/alignment.md",
-        "docs/workspace-identity.md"
+        "docs/workspace-identity.md",
+        "docs/plan-feature-contract.md"
       ],
       "issue": null,
       "owner": null,
@@ -4250,7 +4258,8 @@
         "docs/shared-components.md",
         "docs/photos.md",
         "docs/data-lifecycle.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/plan-feature-contract.md"
       ],
       "issue": null,
       "owner": null,
@@ -4300,7 +4309,8 @@
         "docs/content-safety.md",
         "docs/data-lifecycle.md",
         "docs/project-specification-storage.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/plan-feature-contract.md"
       ],
       "issue": null,
       "owner": null,
@@ -4347,7 +4357,8 @@
         "src/contacts.ts",
         "docs/roadmap/composition-architecture.md",
         "docs/data-lifecycle.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/plan-feature-contract.md"
       ],
       "issue": null,
       "owner": null,
@@ -4913,7 +4924,8 @@
         "docs/plan-lifecycle.md",
         "docs/customer-benchmarks.md",
         "docs/roadmap/composition-architecture.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/plan-feature-contract.md"
       ],
       "issue": null,
       "owner": null,
@@ -4964,7 +4976,8 @@
         "src/workspace-dashboard.ts",
         "frontend/src/workspace.tsx",
         "docs/roadmap/alignment.md",
-        "docs/workspace-identity.md"
+        "docs/workspace-identity.md",
+        "docs/plan-feature-contract.md"
       ],
       "issue": null,
       "owner": null,

@@ -2803,6 +2803,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
 
 ### Execution coordination
 
@@ -2860,6 +2861,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
 
 ### Execution coordination
 
@@ -2980,6 +2982,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/workspace.tsx](../../frontend/src/workspace.tsx)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
 
 ### Execution coordination
 
@@ -4251,14 +4254,19 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/workspace-pages.tsx](../../frontend/src/workspace-pages.tsx)
 - [src/connection-chat.ts](../../src/connection-chat.ts)
 - [docs/plan-lifecycle.md](../../docs/plan-lifecycle.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
+- [src/plan-features.ts](../../src/plan-features.ts)
+- [frontend/src/plan-features.tsx](../../frontend/src/plan-features.tsx)
+- [tests/plan-catalogue.mjs](../../tests/plan-catalogue.mjs)
+- [tools/plan-catalogue-browser.mjs](../../tools/plan-catalogue-browser.mjs)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/44. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-01: cumulative version-1 launch feature catalogue and Creator display rollout implemented against 9cb2a62. personal IDs/prices/preferences/provider mappings and immutable receipts preserved. API/pricing/Settings/Chat distinguish planned inclusions, existing foundations, required provider consent and pending launch acceptance; all seven Business/Pro connections named and common security/recovery/export/standard AI retained. Catalogue, plan-period and synthetic subscription regressions, TypeScript/build/loading and connected loopback mobile/keyboard preference checks passed. No runtime feature enforcement, real billing/provider action, schema or deployment; WH-090 and feature/launch acceptance remain separate. See docs/plan-feature-contract.md and issue #44.
 
 ## WH-090 — Enforce shared server feature entitlements independently of billing activation
 
@@ -4312,6 +4320,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/background-jobs.md](../../docs/background-jobs.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
 
 ### Execution coordination
 
@@ -4853,6 +4862,7 @@ Planning dependencies: WH-089, WH-090, WH-091, WH-092, WH-093, WH-094, WH-095, W
 - [docs/customer-benchmarks.md](../../docs/customer-benchmarks.md)
 - [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
 
 ### Execution coordination
 
@@ -6212,6 +6222,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/photos.md](../../docs/photos.md)
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
 
 ### Execution coordination
 

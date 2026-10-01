@@ -61,6 +61,7 @@ import { checkoutEnabled, createCheckout } from './checkout';
 import { componentCatalog, previewHeaders } from './components';
 import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { publicPlans, domainBenefit, creditPack } from "./plans";
+import { launchFeatureCatalogue } from "./plan-features";
 import { readChat, sendConversation, sendChatControl } from "./chat";
 import {chatControl} from "./chat-controls";
 import { AuthError, passkeyOptions, passkeyVerify, recoverAccount, recoveryPasskeys } from "./passkeys";
@@ -148,7 +149,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && !sameOrigin(request)) return error(403, "Origin check failed");
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
-  if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", creditPack, currency: "USD", draft: true, checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", subscriptionsEnabled: subscriptionsEnabled(env) });
+  if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, featureCatalogue: launchFeatureCatalogue, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", creditPack, currency: "USD", draft: true, checkoutEnabled: checkoutEnabled(env), checkoutMode: "test", subscriptionsEnabled: subscriptionsEnabled(env) });
   if (method === "POST" && pathname.startsWith("/api/auth/") && pathname !== "/api/auth/logout") {
     if (!(await env.AUTH_LIMITER.limit({ key: ip })).success) return error(429, "Too many sign-in attempts. Try again in a minute.");
   }

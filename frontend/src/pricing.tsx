@@ -3,6 +3,8 @@ import {Link} from '@tanstack/react-router';
 import {Check} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {publicPlans} from '../../src/plans';
+import {launchHighlights} from '../../src/plan-features';
+import {PlanFeatureDetails} from './plan-features';
 
 type Interval = 'month' | 'year';
 type Audience = 'personal' | 'business';
@@ -19,11 +21,14 @@ function Features({items}: {items:string[]}) {
 function PlanCard({plan, interval, featured=false}: {plan:PaidPlan; interval:Interval; featured?:boolean}) {
   const amount=interval==='month'?plan.monthlyCents:plan.annualCents;
   const period=interval==='month'?'month':'year';
+  const parent=publicPlans.find(p=>p.id===plan.launchFeatures.inherits);
   return <article className={'flex min-w-0 flex-col rounded-3xl border p-6 '+(featured?'border-[#60b5ff] bg-[#edf7ff]':'border-[#dce6ef] bg-white')}>
     <h3 className="text-xl font-extrabold">{plan.name}</h3>
     <p className="mt-6 text-4xl font-bold tracking-tight">${(amount/100).toLocaleString()}<span className="text-xs font-normal text-[#526780]"> / {period}</span></p>
     <p className="mt-1 min-h-6 text-sm text-[#526780]">{interval==='year'?'Billed annually · save two months':'Billed monthly'}</p>
-    <Features items={['Flexible hosting resources','Ongoing site help under fair use',interval==='year'?`${plan.annualDomains} eligible standard domain${plan.annualDomains===1?'':'s'} planned with annual billing`:'Annual billing includes eligible domain benefits']}/>
+    <p className="mt-5 text-sm font-semibold">{parent?`Planned: everything in ${parent.name}, plus`:'Planned launch inclusions'}</p>
+    <Features items={[...launchHighlights[plan.id],interval==='year'?`${plan.annualDomains} eligible standard domain${plan.annualDomains===1?'':'s'} planned with annual billing`:'Eligible domain benefits planned with annual billing']}/>
+    <div className="mb-6"><PlanFeatureDetails planId={plan.id}/></div>
     <Button asChild variant="outline" className="mt-auto w-full rounded-full bg-white"><Link to="/workspace" search={{signup:true}}>Explore with an invite</Link></Button>
   </article>;
 }
