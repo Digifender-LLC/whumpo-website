@@ -1,10 +1,13 @@
 # Compiled clients for existing website services
 
+
+**October 1 current-source cutover (deployment pending):** the only service-client compiler is `project-service-clients@2`, using current schema-2 website snapshots and both current text/photo page renderers. Its service configuration remains schema 1 (fixed contact/stateless form). Older compiler locks and unversioned website drafts reject; no import/conversion reader remains. Private photo previews recheck current ownership, clearance and R2 byte digests. Dated earlier release evidence below is historical.
+
 **September 30, 2026 — WH-066C implemented and deployed with local, mobile-viewport and private real-model acceptance.** The pinned companion compiler now has bounded private proposals, immutable saved settings, forward restore, natural-language Chat tools and authenticated preview/comparison routes. Saving settings does not publish or activate a service. The current saved revision can now prepare each existing activation review for separate human approval. Migrations `0112_service_client_specifications.sql` and `0113_service_client_activations.sql` are applied in test release `03b74965-16b8-4a41-8848-33cb1e21867f`. Delivery is tracked by [execution issue #17](https://github.com/zemdregon/whumpo/issues/17) and [parent #14](https://github.com/zemdregon/whumpo/issues/14). Local verification and deployment readback are recorded below; they do not imply unrestricted live customer or physical-device acceptance.
 
 ## Contract and reuse
 
-The existing content specification's `forms` point to general record schemas. Neither current contact intake nor a stateless function implements that record contract. This compiler uses a separate closed companion document, leaving `project-content@1`, the v1 specification and all saved versions unchanged:
+The existing content specification's `forms` point to general record schemas. Neither current contact intake nor a stateless function implements that record contract. This compiler uses a separate closed companion document over the current schema-2 website snapshot:
 
 ```json
 {
@@ -33,9 +36,9 @@ The form's schema does not prove that the selected function implements the owner
 
 ## Immutable artifact identity
 
-`compiler-locks/project-service-clients-v1.json` pins the rendering bundle, source inputs, wrapper and esbuild version. `project-service-clients@1` resolves `contact-link@1` and `stateless-form@1` from that same maintained bundle. Their shared bundle digest is deliberate; these are not independently downloaded packages. The current server catalog controls availability separately from historical artifact identity. Both module entries must remain available for this compiler version, including a request that only uses one.
+`compiler-locks/project-service-clients-v2.json` pins the rendering bundle, source inputs, wrapper and esbuild version. `project-service-clients@2` resolves `contact-link@1` and `stateless-form@1` from that same maintained bundle. Their shared bundle digest is deliberate; these are not independently downloaded packages. The current server catalog controls availability separately from historical artifact identity. Both module entries must remain available for this compiler version, including a request that only uses one.
 
-`tools/check-service-client-compiler.mjs` checks this identity during `pnpm check` and `pnpm build`; the release build fingerprint includes its lock and checking tool. The existing content compiler lock remains unchanged. Once accepted, do not repin an identity after changing its renderer, schema, browser script or wrapper. Preserve the old implementation and add a reviewed version. No runtime dependency resolver, external package download or model participates in compilation.
+`tools/check-service-client-compiler.mjs` checks this identity during `pnpm check` and `pnpm build`; the release build fingerprint includes its lock and checking tool. The content and service compiler locks each identify their current implementation. Once accepted, do not repin an identity after changing its renderer, schema, browser script or wrapper. Introduce a reviewed new identity, remove the superseded implementation, and reset obsolete test snapshots. No runtime dependency resolver, external package download or model participates in compilation.
 
 Given the same normalized configuration, exact saved site input, target snapshot and lock, compilation yields identical bytes and digests:
 
@@ -93,7 +96,7 @@ Uses existing deterministic renderers and bounded D1 reads/transactions. No new 
 
 Initial compiler-library verification (commit `6a71137`):
 
-- `node tests/service-client-compiler.mjs`: exact existing-renderer output, inert previews, strict shape/size/reference rejection, escaped labels, normalized input, stable digests, detached data, unchanged content-v1 identity, an independent copied-tree/process/timezone reproduction, catalog withdrawal, lock/source drift and stale-constant gates. Network/inference is replaced with a throwing stub.
+- `node tests/service-client-compiler.mjs`: exact existing-renderer output, inert previews, strict shape/size/reference rejection, escaped labels, normalized input, stable digests, detached data, the current content/compiler identities, an independent copied-tree/process/timezone reproduction, catalog withdrawal, lock/source drift and stale-constant gates. Network/inference is replaced with a throwing stub.
 - `node tests/service-client-authority.mjs`: disposable local D1 and the actual isolated QuickJS runtime; two owners and same-owner cross-project refusal; read-only compilation; existing exact contact/form/backend/site reviews; byte equality to the served page; stateless visitor calculation with maintenance inference unavailable; changed settings, website restore/republication, backend republication/withdrawal, deleted versions and known holds. These are source-library/existing-handler fixtures, not a newly connected Chat journey or deployed customer acceptance.
 
 Initial library results on September 30, 2026: both new suites passed, as did `pnpm check`, `pnpm build`, `node tests/specification-compiler.mjs`, `node tests/release-manifest.mjs` and `git diff --check`. Existing content-v1 digest remains `25a73c88b1a51e9ec9512ca72c22bd515d835403b659c34fc3bc9b96780c3d2b`; the new compiler digest is `c5850e0381d236879c411333eeda2627f9aafabe42f92b9f798a6693e86126cd`.
@@ -124,7 +127,9 @@ Provenance is metadata-only, immutable, bounded to 500 reviews/project and 20,00
 
 Local checks on September 30, 2026: `pnpm check`, `node tests/chat-reply.mjs` and `node tests/service-client-activation.mjs` passed. The latter uses disposable D1, actual HTTP handlers, scripted Muse interpretation and real isolated QuickJS. It proves ownership, current-head enforcement, private preview access, stale target rejection, preparation rollback without orphan reviews, late safety holds between preflight and commit, sequential approvals, review recovery, same-source endpoint rebinding, concurrent approvals, lost acknowledgements, exact candidate/served bytes, visitor execution without inference, post-activation holds, critical disable and replay without reactivation. Standard assistance debits zero customer units. These results do not imply a deployment, real-provider interpretation, physical-device acceptance or general records support.
 
-### Migration and mixed-Worker review
+### Historical September 30 release review — superseded for the next cutover
+
+The following records that completed deployment only. The next release uses the current-only reset and coordinated forward cutover in [current version policy](current-version-policy.md); it does not preserve old compiler readers or promise mixed-version operation.
 
 Migrations 0112/0113 preserve existing rows and columns. 0112 adds private state and retention checks; 0113 adds linked-review provenance, keeps the original backend-form ownership/publication/settings checks, and adds hold filtering to its existing live view. Old ordinary reviews have no provenance row, so their established checks continue. New provenance cannot authorize an old Worker to bypass the final database guards. Old site Workers may still display a previously linked contact entry after a later configuration hold during a mixed deployment, but the final submission trigger already refuses new messages; the new site Worker hides that entry too. No content or visitor record is backfilled or deleted.
 

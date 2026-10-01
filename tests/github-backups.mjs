@@ -1,3 +1,4 @@
+import {createFixtureProject} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,mkdir,writeFile} from 'node:fs/promises';
 import {dirname} from 'node:path';
@@ -19,7 +20,7 @@ try{
  const user=await account(),other=await account(),token=crypto.randomUUID();
  await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(token,user,await seal(config.key,`whumpo:github:token:${user}:${token}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
  await db.prepare('INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) VALUES(?,?,?,?,?)').bind(user,'44','test',token,now).run();
- await send(user,'A local bakery');await send(user,'Bakery');const version=await send(user,'/build clay');
+ const {version}=await createFixtureProject(db,user,'Bakery','A local bakery','clay');
  const archive=await ownedExport(db,user,version),files=unzipSync(archive),gitdir=dir+'/git';await mkdir(gitdir);
  execFileSync('git',['init','-q',gitdir]);for(const [path,bytes] of Object.entries(files)){await mkdir(dirname(gitdir+'/'+path),{recursive:true});await writeFile(gitdir+'/'+path,bytes);}
  execFileSync('git',['-C',gitdir,'add','.']);const independentTree=execFileSync('git',['-C',gitdir,'write-tree'],{encoding:'utf8'}).trim();

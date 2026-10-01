@@ -1,4 +1,4 @@
-import {siteConfig} from '../../components';
+import {siteConfig,photoConfig} from '../../components';
 import {backendFormConfig} from '../../backend-form-config';
 import {SpecificationError,canonicalJSON,copyJSON,plain,requireSpec as check,shape as exactShape} from './json';
 import type {ProjectSpecification,SpecificationOperation,SpecificationReview,SpecificationPage} from './types';
@@ -6,7 +6,7 @@ const copy=copyJSON;
 const same=(a:unknown,b:unknown)=>canonicalJSON(a)===canonicalJSON(b);
 const fail=(code:string,path:string):never=>{throw new SpecificationError(code,path);};
 function shape(value:unknown,required:string[],_optional:string[]=[],path='request'):asserts value is Record<string,unknown>{exactShape(value,required,path);}
-const moduleVersions=Object.freeze({content:1,records:1,files:1,access:1,notifications:1,automation:1});
+const moduleVersions=Object.freeze({content:2,records:1,files:1,access:1,notifications:1,automation:1});
 const dependencies:Record<string,string[]>={records:['content'],files:['access'],notifications:['access'],automation:['records','notifications','access']};
 function text(v:unknown,max:number,path:string,empty=false){check(typeof v==='string'&&v.length<=max&&(empty||v.trim().length>0)&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v),'INVALID_TEXT',path);}
 const identity=(v:unknown,path:string)=>check(typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v)&&!['constructor','prototype','tojson'].includes(v),'INVALID_ID',path);
@@ -17,7 +17,7 @@ export function validateSpecification(input:unknown):ProjectSpecification {
   // Public JSON transport must enforce a streaming byte bound before parsing too.
   const spec=copyJSON(input) as ProjectSpecification;
   shape(spec,['schemaVersion','name','design','modules','content','pages','records','forms','files','access','integrations','rules']);
-  check(spec.schemaVersion===1,'UNSUPPORTED_VERSION','schemaVersion');text(spec.name,100,'name');
+  check(spec.schemaVersion===2,'UNSUPPORTED_VERSION','schemaVersion');text(spec.name,100,'name');
   shape(spec.design,['theme'],[],'design');check(['ocean','clay','forest'].includes(spec.design.theme),'INCOMPATIBLE','design.theme');
   list(spec.modules,6,'modules');unique(spec.modules,'id','modules');
   const modules=new Set<string>();
@@ -31,12 +31,13 @@ export function validateSpecification(input:unknown):ProjectSpecification {
   function value(id:string){identity(id,'content.reference');check(content.has(id),'MISSING_REFERENCE','content');return content.get(id)!;}
   list(spec.pages,4,'pages');check(spec.pages.length>0,'INVALID_LIST','pages');unique(spec.pages,'id','pages');unique(spec.pages,'path','pages');
   for(const p of spec.pages){
-   shape(p,['id','path','component','audience','headline','description','aboutTitle','aboutText','sections'],[],'pages');identity(p.id,'pages.id');
+   shape(p,['id','path','component','audience','headline','description','aboutTitle','aboutText','sections','photos'],[],'pages');identity(p.id,'pages.id');
    check(typeof p.path==='string'&&/^(?:\/|\/[a-z][a-z0-9-]{0,39})$/.test(p.path)&&!['/api','/assets','/backend','/cms','/contact','/directory','/workspace'].includes(p.path),'INCOMPATIBLE','pages.path');
-   check(p.component==='site-page@1','UNSUPPORTED_VERSION','pages.component');check(['public','staff'].includes(p.audience),'INCOMPATIBLE','pages.audience');
+   check(['site-page@1','photo-page@1'].includes(p.component),'UNSUPPORTED_VERSION','pages.component');check(['public','staff'].includes(p.audience),'INCOMPATIBLE','pages.audience');
    check(p.audience!=='staff'||modules.has('access'),'INCOMPATIBLE','pages.access');
+   list(p.photos,4,'pages.photos');check(p.component===(p.photos.length?'photo-page@1':'site-page@1'),'INCOMPATIBLE','pages.component');
    list(p.sections,6,'pages.sections');for(const s of p.sections)shape(s,['heading','text'],[],'pages.sections');
-   try{siteConfig({name:spec.name,theme:spec.design.theme,headline:value(p.headline),description:value(p.description),aboutTitle:value(p.aboutTitle),aboutText:value(p.aboutText),sections:p.sections.map(s=>({heading:value(s.heading),text:value(s.text)}))});}catch(e){if(e instanceof SpecificationError)throw e;fail('INCOMPATIBLE','pages.componentConfiguration');}
+   try{photoConfig({photos:p.photos,name:spec.name,theme:spec.design.theme,headline:value(p.headline),description:value(p.description),aboutTitle:value(p.aboutTitle),aboutText:value(p.aboutText),sections:p.sections.map(s=>({heading:value(s.heading),text:value(s.text)}))});}catch(e){if(e instanceof SpecificationError)throw e;fail('INCOMPATIBLE','pages.componentConfiguration');}
   }
   shape(spec.access,['roles'],[],'access');list(spec.access.roles,1,'access.roles');check(same(spec.access.roles,[])||same(spec.access.roles,['staff']),'INCOMPATIBLE','access.roles');
   check(modules.has('access')===(spec.access.roles.length===1&&spec.access.roles[0]==='staff'),'INCOMPATIBLE','access.module');
@@ -82,6 +83,17 @@ export function changeSpecification(before:unknown,input:unknown){
    check(plain(op),'INVALID_SHAPE','operations');
    switch(op.type){
     case 'content.replace':shape(op,['type','contentId','text']);text(op.text,1000,'operations.text',true);found(next.content,op.contentId,'contentId').text=op.text;break;
+    case 'project.setName':shape(op,['type','name']);text(op.name,100,'operations.name');next.name=op.name;break;
+    case 'pages.setSections':{
+     shape(op,['type','pageId','sections']);list(op.sections,6,'operations.sections');
+     const page=found(next.pages,op.pageId,'pageId'),otherReferences=new Set(next.pages.flatMap(p=>[p.headline,p.description,p.aboutTitle,p.aboutText,...(p===page?[]:p.sections.flatMap(s=>[s.heading,s.text]))]));
+     const unused=new Set(page.sections.flatMap(s=>[s.heading,s.text]).filter(id=>!otherReferences.has(id)));
+     next.content=next.content.filter(c=>!unused.has(c.id));
+     const ids=new Set(next.content.map(c=>c.id));let counter=1;
+     const add=(value:string)=>{let id;do{id=`section-copy-${counter++}`;}while(ids.has(id));ids.add(id);next.content.push({id,text:value});return id;};
+     page.sections=op.sections.map(section=>{shape(section,['heading','text']);text(section.heading,100,'operations.sections.heading');text(section.text,800,'operations.sections.text');return {heading:add(section.heading),text:add(section.text)};});break;
+    }
+    case 'pages.setPhotos':{shape(op,['type','pageId','photos']);list(op.photos,4,'operations.photos');const page=found(next.pages,op.pageId,'pageId');page.photos=copy(op.photos);page.component=page.photos.length?'photo-page@1':'site-page@1';break;}
     case 'design.setTheme':shape(op,['type','theme']);next.design.theme=op.theme;break;
     case 'records.addField':shape(op,['type','recordId','field']);check(plain(op.field)&&op.field.type==='text'&&op.field.optional===true,'MIGRATION_REQUIRED','field');found(next.records,op.recordId,'recordId').fields.push(copy(op.field));reviews.add('schema');break;
     case 'files.setPolicy':shape(op,['type','collectionId','read','upload']);Object.assign(found(next.files,op.collectionId,'collectionId'),{read:op.read,upload:op.upload});reviews.add('permissions');break;
@@ -97,7 +109,7 @@ export function changeSpecification(before:unknown,input:unknown){
 
 function pageConfiguration(spec:ProjectSpecification,page:SpecificationPage){
  const value=(id:string)=>spec.content.find(c=>c.id===id)!.text;
- return siteConfig({name:spec.name,theme:spec.design.theme,headline:value(page.headline),description:value(page.description),aboutTitle:value(page.aboutTitle),aboutText:value(page.aboutText),sections:page.sections.map(s=>({heading:value(s.heading),text:value(s.text)}))});
+ return photoConfig({photos:page.photos,name:spec.name,theme:spec.design.theme,headline:value(page.headline),description:value(page.description),aboutTitle:value(page.aboutTitle),aboutText:value(page.aboutText),sections:page.sections.map(s=>({heading:value(s.heading),text:value(s.text)}))});
 }
 export function projectPage(input:unknown,pageId:string){
  const spec=validateSpecification(input),page=spec.pages.find(p=>p.id===pageId);

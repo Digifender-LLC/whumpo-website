@@ -24,7 +24,6 @@
     "test:billing-ui": "node tests/billing-ui.mjs",
     "test:billing": "node tests/billing.mjs",
     "test:runtime-ai": "node tests/runtime-ai.mjs",
-    "test:previews": "node tests/previews.mjs",
     "test:directory-history": "node tests/directory-history.mjs",
     "test:directories": "node tests/directories.mjs",
     "test:site-health": "node tests/site-health.mjs",
@@ -43,7 +42,6 @@
     "test:domain-proof-removal": "node tests/domain-proof-removal.mjs",
     "test:domains": "node tests/domains.mjs",
     "test:domain-purchase-quote": "node tests/domain-purchase-quote.mjs",
-    "test:onboarding": "node tests/onboarding.mjs",
     "test:workspace-agent": "node tests/workspace-agent.mjs",
     "test:workspace-read": "node tests/workspace-read.mjs",
     "test:github-connection": "node tests/github-connection.mjs && node tests/github-token-lifecycle.mjs",
@@ -168,7 +166,8 @@
     "test:service-client-journey": "node tests/service-client-journey.mjs",
     "test:service-client-activation": "node tests/service-client-activation.mjs",
     "test:subscriptions": "node tests/subscriptions.mjs",
-    "setup:stripe": "node tools/stripe-sandbox.mjs"
+    "setup:stripe": "node tools/stripe-sandbox.mjs",
+    "test:current-website-specifications": "node tests/current-website-specifications.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

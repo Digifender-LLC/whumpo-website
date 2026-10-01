@@ -3,13 +3,13 @@ import {requireSpecificationAvailable} from './specification-safety';
 import { versionPhotos, type PhotoAsset } from './photo-versions';
 import { FileError } from './files';
 import { strToU8, zipSync } from 'fflate';
-import { launchConfig, siteConfig, photoConfig, previewHeaders } from './components';
+import { siteConfig, photoConfig, previewHeaders } from './components';
 import { hashToken } from './security';
 
 type ExportVersion = {id:string;component_id:string;config_json:string;html:string;digest:string;created_at:string};
 /** Only bounded site artifacts enter this archive. No account, conversation or runtime bindings. */
 export async function siteArchive(version:ExportVersion,photos:PhotoAsset[]=[]) {
- const config=version.component_id==='launch-page@1'?launchConfig(JSON.parse(version.config_json)):version.component_id==='site-page@1'?siteConfig(JSON.parse(version.config_json)):version.component_id==='photo-page@1'?photoConfig(JSON.parse(version.config_json)):null;
+ const config=version.component_id==='site-page@1'?siteConfig(JSON.parse(version.config_json)):version.component_id==='photo-page@1'?photoConfig(JSON.parse(version.config_json)):null;
  if(!config || strToU8(version.html).length>32768 || strToU8(version.config_json).length>8192 || await hashToken(version.html)!==version.digest)throw Error('Saved site cannot be exported');
  if(photos.length>4||photos.some(p=>p.bytes.length>1048576))throw new FileError(503,'Photo export exceeds the test limit');
  const manifest={...(photos.length?{photos:photos.map(p=>({id:p.id,alt:p.alt,sha256:p.digest,bytes:p.size}))}:{}),format:'whumpo-static-site',formatVersion:1,version:version.id,component:version.component_id,createdAt:version.created_at,htmlSha256:version.digest,configuration:config};

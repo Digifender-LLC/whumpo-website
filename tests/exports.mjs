@@ -1,3 +1,4 @@
+import {createFixtureProject,changeFixtureWebsite} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -14,8 +15,8 @@ async function send(user,content,id=crypto.randomUUID(),revision){const state=aw
 async function request(path,user){return worker.fetch(new Request('https://whumpo.com/api'+path,{headers:user?{cookie:'whumpo_session='+user.session}:{}}),env);}
 try{
  const owner=await account(),other=await account();
- await send(owner,'A neighborhood bakery');await send(owner,'Bread & <Butter>');await send(other,'Other-owner-private-brief');await send(other,'Other owner');
- const {id:version}=await send(owner,'/build clay');const original=await db.prepare('SELECT * FROM site_versions WHERE id=?').bind(version).first();
+ const {project,version}=await createFixtureProject(db,owner.id,'Bread & <Butter>','A neighborhood bakery','clay');await createFixtureProject(db,other.id,'Other owner','Other-owner-private-brief');
+ const original=await db.prepare('SELECT * FROM site_versions WHERE id=?').bind(version).first();
  const revision=(await readChat(db,owner.id)).state.revision,id=crypto.randomUUID();const concurrent=await Promise.all([send(owner,'/export '+version,id,revision),send(owner,'/export '+version,id,revision)]);assert.ok(concurrent.every(x=>x.result.status===200));const chat=await readChat(db,owner.id);assert.equal(chat.state.revision,revision+1);assert.equal(chat.turns.at(-1).export_version_id,version);
  const response=await request('/site-versions/'+version+'/export',owner);assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'application/zip');assert.ok(response.headers.get('cache-control').includes('no-store'));assert.equal(response.headers.get('content-disposition'),`attachment; filename="whumpo-site-${version}.zip"`);
  const bytes=new Uint8Array(await response.arrayBuffer());assert.ok(bytes.length<50000);const files=unzipSync(bytes);assert.deepEqual(Object.keys(files).sort(),['README.txt','public/_headers','public/index.html','whumpo/site.json']);assert.equal(strFromU8(files['public/index.html']),original.html);const manifest=JSON.parse(strFromU8(files['whumpo/site.json']));assert.equal(manifest.htmlSha256,await hashToken(strFromU8(files['public/index.html'])));assert.equal(manifest.version,version);assert.equal(manifest.configuration.name,'Bread & <Butter>');assert.ok(strFromU8(files['public/_headers']).includes("sandbox; default-src 'none'"));
@@ -27,7 +28,7 @@ try{
  const denied=await send(other,'/export '+version);assert.equal(denied.result.status,200);assert.equal((await readChat(db,other.id)).turns.at(-1).export_version_id,null);
  await assert.rejects(db.prepare('INSERT INTO chat_exports(turn_id,version_id) VALUES(?,?)').bind(denied.id,version).run(),/export_owner/);
  assert.equal((await send(owner,'/export ../../secrets')).result.status,400);
- const {id:newer}=await send(owner,'/build forest');await send(owner,'download my website');assert.equal((await readChat(db,owner.id)).turns.at(-1).export_version_id,newer);
+ const newer=await changeFixtureWebsite(db,owner.id,project,[{type:'design.setTheme',theme:'forest'}]);await send(owner,'/export '+newer);assert.equal((await readChat(db,owner.id)).turns.at(-1).export_version_id,newer);
  assert.equal(strFromU8(unzipSync(new Uint8Array(await(await request('/site-versions/'+version+'/export',owner)).arrayBuffer()))['public/index.html']),original.html);
  assert.equal((await getBilling(db,owner.id)).standardAI.creditCharge,0);assert.equal((await getBilling(db,owner.id)).standardAI.creditCharge,0);
  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM publications WHERE version_id IS NOT NULL').first()).n,0);

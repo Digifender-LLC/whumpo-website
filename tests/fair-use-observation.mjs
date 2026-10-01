@@ -17,14 +17,14 @@ try{
  const lifecycle=()=>db.prepare('SELECT * FROM fair_use_project_lifecycle WHERE project_id=?').bind(project).first();
  assert.equal((await lifecycle()).ai_saved_at,null);
  await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'private prompt','private answer',?,'ai','pending')").bind(version,owner,created).run();
- await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at) VALUES(?,?,'test','{}','<p>Test</p>','test',?)").bind(version,project,created).run();
+ await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at) VALUES(?,?,'site-page@1','{}','<p>Test</p>','test',?)").bind(version,project,created).run();
  await noteSourceExport(db,owner,version);assert.equal((await lifecycle()).export_prepared_at,null);
  await db.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(version).run();assert.ok((await lifecycle()).ai_saved_at);
  await noteSourceExport(db,other,version);assert.equal((await lifecycle()).export_prepared_at,null);
  await noteSourceExport(db,owner,version);const exported=await lifecycle();assert.ok(exported.export_prepared_at);
  await noteSourceExport(db,owner,version);assert.deepEqual(await lifecycle(),exported);
  await assert.rejects(db.prepare("UPDATE fair_use_project_lifecycle SET export_prepared_at=NULL WHERE project_id=?").bind(project).run());
- await db.prepare("INSERT INTO version_removals(id,user_id,project_id,version_id,digest,component_id,version_created_at,expires_at) VALUES(?,?,?,?,'test','test',?,?)").bind(version,owner,project,version,created,new Date(Date.now()+60000).toISOString()).run();
+ await db.prepare("INSERT INTO version_removals(id,user_id,project_id,version_id,digest,component_id,version_created_at,expires_at) VALUES(?,?,?,?,'test','site-page@1',?,?)").bind(version,owner,project,version,created,new Date(Date.now()+60000).toISOString()).run();
  await db.prepare("UPDATE version_removals SET status='applied',confirmed_by=? WHERE id=?").bind(version,version).run();assert.equal((await lifecycle()).removed_at,null);
  let observed=await readFairUseObservation(db,owner,'starter');assert.equal(observed.metrics.completedAITurns7d,1);assert.equal(observed.metrics.observedExportRemovalCycles7d,0);assert.equal(observed.assessment.mode,'monitor');assert.equal(observed.metrics.verifiedStandardProviderMicros30d,null);
  await db.prepare('DELETE FROM projects WHERE id=?').bind(project).run();assert.ok((await lifecycle()).removed_at);

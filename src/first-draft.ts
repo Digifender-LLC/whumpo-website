@@ -16,5 +16,5 @@ export async function welcomeDraftProject(db:D1Database,userId:string,projectId?
 export function firstDraftProposalAllowed(raw:string,projectId:string,kind:'website'|'app'='website'){
  let value;try{value=JSON.parse(raw);}catch{return false;}
  return value&&typeof value==='object'&&!Array.isArray(value)&&
-  (value.action===null||value.action&&typeof value.action==='object'&&!Array.isArray(value.action)&&value.action.projectId===projectId&&(kind==='app'?(value.action.kind==='backend'&&value.action.operation==='buildApplication'||value.action.kind==='capabilities'&&value.action.operation==='plan'):value.action.kind==='preview'));
+  (value.action===null||value.action&&typeof value.action==='object'&&!Array.isArray(value.action)&&value.action.projectId===projectId&&(kind==='app'?(value.action.kind==='backend'&&value.action.operation==='buildApplication'||value.action.kind==='capabilities'&&value.action.operation==='plan'):value.action.kind==='specification'&&value.action.operation==='create'));
 }

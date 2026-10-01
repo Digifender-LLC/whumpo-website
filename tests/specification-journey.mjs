@@ -55,21 +55,20 @@ const served=a=>m.host.fetch(new Request('https://'+a.project+'.whumpo.site/'),{
 const count=async(table,project)=>Number((await db.prepare(`SELECT count(*) n FROM ${table} WHERE project_id=?`).bind(project).first()).n);
 try{
  const owner=await account(),foreign=await account();
- const config={name:'Example Garden',description:'Landscaping for neighbors.',headline:'A greener neighborhood',theme:'forest',aboutTitle:'Our work',aboutText:'Local garden care.',sections:[{heading:'Hours',text:'Monday through Friday'}]};
+ const config={name:'Example Garden',description:'Landscaping for neighbors.',headline:'A greener neighborhood',theme:'forest',aboutTitle:'Our work',aboutText:'Local garden care.',sections:[{heading:'Hours',text:'Monday through Friday'}],photos:[]};
  // Separate owner: actual concurrent HTTP controls commit at most one outcome.
- const foreignFirst=await chat(foreign,{kind:'preview',projectId:foreign.project,config});
- const foreignImport=await chat(foreign,spec(foreign,'import',{expectedRevision:0,versionId:foreignFirst.turn.version_id}));
- await approve(foreign,foreignImport.turn.specification_review);
+ await chat(foreign,spec(foreign,'create',{config}));
  // Inventory real saved copies and their separate receipts without leaking a tenant's content.
  const inventories=await Promise.all([accountClosureInventory(db),accountClosureInventory(db,foreign.id),accountClosureInventory(db,owner.id)]);
- for(const metric of ['specificationProposals','specificationSnapshots','specificationSaveReceipts'])assert.deepEqual(inventories.map(r=>r.counts[metric]),[1,1,0]);
+ for(const metric of ['specificationSnapshots','specificationCreationReceipts'])assert.deepEqual(inventories.map(r=>r.counts[metric]),[1,1,0]);
+ for(const metric of ['specificationProposals','specificationSaveReceipts'])assert.deepEqual(inventories.map(r=>r.counts[metric]),[0,0,0]);
  for(const report of inventories){assert.equal(report.readyForDeletion,false);assert.ok(!JSON.stringify(report).includes(foreign.id));assert.doesNotMatch(JSON.stringify(report),/Example Garden|Monday through Friday/);}
  const qa=await syntheticProposal(foreign,spec(foreign,'change',{expectedRevision:1,operations:[{type:'design.setTheme',theme:'clay'}]}));
  const qb=await syntheticProposal(foreign,spec(foreign,'change',{expectedRevision:1,operations:[{type:'design.setTheme',theme:'ocean'}]}));
  const raceRevision=(await json(foreign,'/api/chat')).state.revision;
  const raceInputs=[qa,qb].map(q=>({id:id(),revision:raceRevision,action:approval(q)}));
  const race=await Promise.all(raceInputs.map(request=>call(foreign,'/api/chat/actions','POST',request)));
- assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);assert.equal((await m.readSpecification(db,foreign.id,foreign.project)).revision,2);assert.equal(await count('project_spec_applies',foreign.project),2);
+ assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);assert.equal((await m.readSpecification(db,foreign.id,foreign.project)).revision,2);assert.equal(await count('project_spec_applies',foreign.project),1);
  // A candidate disappearing after validation cannot commit a success-only turn.
  const deleted=await syntheticProposal(foreign,spec(foreign,'change',{expectedRevision:2,operations:[{type:'content.replace',contentId:'section-1-text',text:'By appointment'}]}));
  const deleting=await preparedConfirmation(foreign,deleted);await db.prepare('DELETE FROM project_spec_proposals WHERE id=?').bind(deleted.id).run();
@@ -81,41 +80,42 @@ try{
  await assert.rejects(db.batch(expiry.statements),/specification_expired/);assert.equal(await db.prepare('SELECT id FROM chat_turns WHERE id=?').bind(expiry.turn).first(),null);
  await assert.rejects(m.readSpecificationProposal(db,foreign.id,expiring.id),e=>e.status===409);
  const next=await syntheticProposal(foreign,spec(foreign,'change',{expectedRevision:2,operations:[{type:'content.replace',contentId:'section-1-text',text:'New appointments'}]}));
- assert.equal(await db.prepare('SELECT id FROM project_spec_proposals WHERE id=?').bind(expiring.id).first(),null);assert.equal(await count('project_spec_applies',foreign.project),2);
+ assert.equal(await db.prepare('SELECT id FROM project_spec_proposals WHERE id=?').bind(expiring.id).first(),null);assert.equal(await count('project_spec_applies',foreign.project),1);
  // A safety hold on the prior content added after validation blocks the new version.
  const lateHold=await preparedConfirmation(foreign,next),foreignHead=await m.readSpecification(db,foreign.id,foreign.project);
  const foreignDigest=(await db.prepare('SELECT spec_digest FROM project_spec_versions WHERE version_id=?').bind(foreignHead.versionId).first()).spec_digest;
  await db.prepare("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-policy',1,1,'risk_or_missing_history',100,60)").bind(foreign.id,foreignDigest).run();
  await assert.rejects(db.batch(lateHold.statements),/specification_held/);assert.equal(await db.prepare('SELECT id FROM chat_turns WHERE id=?').bind(lateHold.turn).first(),null);
  await assert.rejects(m.readSpecification(db,foreign.id,foreign.project),e=>e.status===423);assert.equal((await call(foreign,`/api/specification-reviews/${next.id}/diff`)).status,423);
- const first=await chat(owner,{kind:'preview',projectId:owner.project,config}),original=first.turn.version_id;assert.ok(original);
- const originalHTML=await(await call(owner,`/api/site-versions/${original}/preview`)).text();
- const proposal=await chat(owner,spec(owner,'import',{expectedRevision:0,versionId:original}));let review=proposal.turn.specification_review;assert.ok(review);
- assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,0);assert.equal(await count('site_versions',owner.project),1);
+ const first=await chat(owner,spec(owner,'create',{config:{...config,theme:'clay'}})),original=first.turn.version_id;assert.ok(original);
+ let originalHTML=await(await call(owner,`/api/site-versions/${original}/preview`)).text();
+ const proposal=await chat(owner,spec(owner,'change',{expectedRevision:1,operations:[{type:'design.setTheme',theme:'forest'}]}));let review=proposal.turn.specification_review;assert.ok(review);
+ originalHTML=await(await call(owner,`/api/specification-reviews/${review.id}/preview`)).text();
+ assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,1);assert.equal(await count('site_versions',owner.project),1);
  for(const suffix of ['preview','diff']){const path=`/api/specification-reviews/${review.id}/${suffix}`;assert.equal((await call(null,path)).status,401);assert.equal((await call(foreign,path)).status,404);const page=await call(owner,path);assert.equal(page.status,200);assert.match(page.headers.get('content-security-policy'),/sandbox;.*form-action 'none'/);assert.match(page.headers.get('cache-control'),/private/);if(suffix==='preview')assert.equal(await page.text(),originalHTML);}
  const bad=await input(owner,approval(review));bad.action.proposalDigest='0'.repeat(64);assert.equal((await call(owner,'/api/chat/actions','POST',bad)).status,409);
  const exact=await input(owner,approval(review));assert.equal((await call(owner,'/api/chat/actions','POST',exact,'https://foreign.test')).status,403);
  await db.prepare('UPDATE sessions SET created_at=? WHERE user_id=?').bind(new Date(Date.now()-3600000).toISOString(),owner.id).run();assert.equal((await call(owner,'/api/chat/actions','POST',exact)).status,401);await db.prepare('UPDATE sessions SET created_at=? WHERE user_id=?').bind(now(),owner.id).run();
- const imported=await approve(owner,review),v1=imported.version;assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,1);assert.equal((await served(owner)).status,404);
+ const imported=await approve(owner,review),v1=imported.version;assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,2);assert.equal((await served(owner)).status,404);
  await json(owner,'/api/chat/actions','POST',imported.request);assert.equal(await count('site_versions',owner.project),2);assert.equal(await count('project_spec_applies',owner.project),1);
- assert.equal((await call(owner,'/api/chat/actions','POST',{...imported.request,action:{...imported.request.action,expectedRevision:1}})).status,409);
+ assert.equal((await call(owner,'/api/chat/actions','POST',{...imported.request,action:{...imported.request.action,expectedRevision:0}})).status,409);
  assert.equal((await call(owner,`/api/specification-reviews/${review.id}/preview`)).status,409);
- const direct=await chat(owner,{kind:'edit',baseVersionId:v1,changes:{theme:'clay'}});assert.match(direct.turn.assistant_text,/saved configuration/);assert.equal(await count('site_versions',owner.project),2);
+ const direct=await chat(owner,{kind:'edit',baseVersionId:v1,changes:{theme:'clay'}});assert.equal(direct.turn.status,'failed');assert.equal(await count('site_versions',owner.project),2);
  const denial=await chat(owner,{kind:'specification',operation:'apply',reviewId:review.id});assert.equal(denial.turn.specification_review,undefined);assert.equal(await count('project_spec_applies',owner.project),1);
- const changed=await chat(owner,[spec(owner,'read',{}),spec(owner,'change',{expectedRevision:1,operations:[{type:'content.replace',contentId:'section-1-text',text:'Monday through Saturday'}]})]);review=changed.turn.specification_review;assert.ok(review);
- const rival=await chat(owner,spec(owner,'change',{expectedRevision:1,operations:[{type:'design.setTheme',theme:'clay'}]}));assert.ok(rival.turn.specification_review);
+ const changed=await chat(owner,[spec(owner,'read',{}),spec(owner,'change',{expectedRevision:2,operations:[{type:'content.replace',contentId:'section-1-text',text:'Monday through Saturday'}]})]);review=changed.turn.specification_review;assert.ok(review);
+ const rival=await chat(owner,spec(owner,'change',{expectedRevision:2,operations:[{type:'design.setTheme',theme:'clay'}]}));assert.ok(rival.turn.specification_review);
  // Lose the committed database acknowledgement; the same typed request recovers once.
  const lostInput=await input(owner,approval(review));let lose=true;
  const lostDB={prepare:db.prepare.bind(db),batch:async statements=>{const result=await db.batch(statements);if(lose){lose=false;throw Error('Synthetic lost acknowledgement');}return result;}};
  const beforeCalls=calls;assert.equal((await m.sendChatControl(lostDB,owner.id,lostInput)).status,200);assert.equal(calls,beforeCalls);await json(owner,'/api/chat/actions','POST',lostInput);
- const v2=lostInput.id;assert.equal(await count('project_spec_applies',owner.project),2);assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,2);
+ const v2=lostInput.id;assert.equal(await count('project_spec_applies',owner.project),2);assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,3);
  assert.equal((await call(owner,'/api/chat/actions','POST',await input(owner,approval(rival.turn.specification_review)))).status,409);
  const html2=await(await call(owner,`/api/site-versions/${v2}/preview`)).text();assert.match(html2,/Monday through Saturday/);assert.equal(await(await call(owner,`/api/site-versions/${v1}/preview`)).text(),originalHTML);
  const zip=unzipSync(new Uint8Array(await(await call(owner,`/api/site-versions/${v2}/export`)).arrayBuffer()));assert.equal(strFromU8(zip['public/index.html']),html2);
  const publish=await chat(owner,{kind:'review',operation:'publish',targetId:v2});await json(owner,'/api/chat/actions','POST',await input(owner,{type:'confirm',kind:'site',reviewId:publish.input.id}));assert.equal(await(await served(owner)).text(),html2);
- const restore=await chat(owner,spec(owner,'restore',{expectedRevision:2,versionId:v1}));assert.ok(restore.turn.specification_review);const restored=await approve(owner,restore.turn.specification_review),v3=restored.version;
- assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,3);assert.equal(await(await call(owner,`/api/site-versions/${v3}/preview`)).text(),originalHTML);assert.equal(await(await served(owner)).text(),html2);
- assert.equal(await count('project_spec_versions',owner.project),3);
+ const restore=await chat(owner,spec(owner,'restore',{expectedRevision:3,versionId:v1}));assert.ok(restore.turn.specification_review);const restored=await approve(owner,restore.turn.specification_review),v3=restored.version;
+ assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,4);assert.equal(await(await call(owner,`/api/site-versions/${v3}/preview`)).text(),originalHTML);assert.equal(await(await served(owner)).text(),html2);
+ assert.equal(await count('project_spec_versions',owner.project),4);
  // User/project boundaries and immutable protocol records.
  await assert.rejects(m.readSpecification(db,foreign.id,owner.project),e=>e.status===404);
  await assert.rejects(db.prepare('UPDATE project_spec_proposals SET html=? WHERE id=?').bind('altered',restore.input.id).run(),/specification_immutable/);
@@ -123,17 +123,17 @@ try{
  await assert.rejects(db.prepare('DELETE FROM project_spec_applies WHERE id=?').bind(v1).run(),/specification_receipt_retained/);
  await assert.rejects(db.prepare('UPDATE project_spec_heads SET revision=revision+1 WHERE project_id=?').bind(owner.project).run(),/specification_changed/);
  const currentRemoval=await chat(owner,{kind:'versionRemovalReview',versionId:v3});assert.equal(currentRemoval.turn.version_confirmation_id,null);assert.match(currentRemoval.turn.assistant_text,/current saved website configuration/);await assert.rejects(db.prepare('DELETE FROM site_versions WHERE id=?').bind(v3).run(),/version_removal_specification/);
- // A removed legacy origin cannot survive inside its saved candidate/diff; full independent versions remain.
+ // Removing a superseded current version purges its related candidates; independent later versions remain.
  const removal=await chat(owner,{kind:'versionRemovalReview',versionId:original});await json(owner,'/api/chat/actions','POST',await input(owner,{type:'confirm',kind:'version',reviewId:removal.input.id}));assert.equal((await call(owner,`/api/site-versions/${original}/preview`)).status,404);
- assert.equal(await db.prepare('SELECT id FROM project_spec_proposals WHERE id=?').bind(proposal.input.id).first(),null);assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,3);
- await json(owner,'/api/chat/actions','POST',imported.request);assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,3);assert.equal(await count('project_spec_applies',owner.project),3);
- const afterDelete=await chat(owner,spec(owner,'change',{expectedRevision:3,operations:[{type:'design.setTheme',theme:'ocean'}]}));assert.ok(afterDelete.turn.specification_review);
+ assert.equal(await db.prepare('SELECT id FROM project_spec_proposals WHERE id=?').bind(proposal.input.id).first(),null);assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,4);
+ await json(owner,'/api/chat/actions','POST',imported.request);assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,4);assert.equal(await count('project_spec_applies',owner.project),3);
+ const afterDelete=await chat(owner,spec(owner,'change',{expectedRevision:4,operations:[{type:'design.setTheme',theme:'ocean'}]}));assert.ok(afterDelete.turn.specification_review);
  // Recheck a concurrent new draft inside the transaction, after application validation.
  const r=afterDelete.turn.specification_review,turn=id(),prepared=await m.applySpecificationCommand(db,owner.id,turn,`/confirm-specification ${r.id} ${r.proposalDigest} ${r.expectedRevision}`);
  const later=id();await db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at) SELECT ?,project_id,component_id,config_json,html,digest,? FROM site_versions WHERE id=?").bind(later,now(),v3).run();
  const rev=(await json(owner,'/api/chat')).state.revision;
  await assert.rejects(db.batch([db.prepare('INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) VALUES(?,?,?,?,?,?)').bind(turn,owner.id,rev+1,`/confirm-specification ${r.id} ${r.proposalDigest} ${r.expectedRevision}`,prepared.reply,now()),...prepared.statements]),/specification_changed/);
- assert.equal(await db.prepare('SELECT id FROM site_versions WHERE id=?').bind(turn).first(),null);assert.equal(await db.prepare('SELECT id FROM chat_turns WHERE id=?').bind(turn).first(),null);assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,3);
+ assert.equal(await db.prepare('SELECT id FROM site_versions WHERE id=?').bind(turn).first(),null);assert.equal(await db.prepare('SELECT id FROM chat_turns WHERE id=?').bind(turn).first(),null);assert.equal((await m.readSpecification(db,owner.id,owner.project)).revision,4);
  // Known safety requirements hold all delivery paths, not just the new proposal preview.
  const saved=await db.prepare('SELECT spec_digest FROM project_spec_versions WHERE version_id=?').bind(v2).first();
  await db.prepare("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-policy',1,1,'risk_or_missing_history',100,60)").bind(owner.id,saved.spec_digest).run();
@@ -142,9 +142,9 @@ try{
   const blocked=await m.host.fetch(new Request(url,{method}),{DB:db,FILES:proxy.env.FILES});assert.equal(blocked.status,503);assert.doesNotMatch(await blocked.text(),/Monday through Saturday|A greener neighborhood/);
  }
  await assert.rejects(db.prepare('UPDATE publications SET version_id=? WHERE project_id=?').bind(v2,owner.project).run(),/specification_held/);
- const heldRestore=await chat(owner,spec(owner,'restore',{expectedRevision:3,versionId:v2}));assert.equal(heldRestore.turn.specification_review,undefined);assert.match(heldRestore.turn.assistant_text,/held for safety/);
+ const heldRestore=await chat(owner,spec(owner,'restore',{expectedRevision:4,versionId:v2}));assert.equal(heldRestore.turn.specification_review,undefined);assert.match(heldRestore.turn.assistant_text,/held for safety/);
  // Explicit operator parent cascade must clean up the bounded state and metadata receipts.
- await db.prepare('DELETE FROM projects WHERE id=?').bind(owner.project).run();for(const table of ['project_spec_proposals','project_spec_versions','project_spec_applies','project_spec_heads'])assert.equal(await count(table,owner.project),0);
+ await db.prepare('DELETE FROM projects WHERE id=?').bind(owner.project).run();for(const table of ['project_spec_proposals','project_spec_versions','project_spec_creations','project_spec_applies','project_spec_heads'])assert.equal(await count(table,owner.project),0);
  await db.prepare('DELETE FROM users WHERE id=?').bind(foreign.id).run();assert.equal(await db.prepare('SELECT id FROM projects WHERE id=?').bind(foreign.project).first(),null);assert.equal(await count('project_spec_applies',foreign.project),0);
- console.log('Specification journey passed: actual authenticated HTTP Chat/tools and exact recent-auth controls; private preview/diff, import/change/forward restore, immutable versions, export/publication reuse, foreign/origin/refusal, lost acknowledgement replay, stale/late rollback, deletion cleanup/tombstones, current-head retention, safety holds across delivery and operator cascade. Scripted interpretation only; compiler/approval/preview execute no model calls.');
+ console.log('Specification journey passed: actual authenticated HTTP Chat/tools and exact recent-auth controls; private preview/diff, direct creation/change/forward restore, immutable versions, export/publication reuse, foreign/origin/refusal, lost acknowledgement replay, stale/late rollback, deletion cleanup/tombstones, current-head retention, safety holds across delivery and operator cascade. Scripted interpretation only; compiler/approval/preview execute no model calls.');
 }finally{await Promise.allSettled(background);globalThis.fetch=originalFetch;await proxy.dispose();await rm(dir,{recursive:true,force:true});}

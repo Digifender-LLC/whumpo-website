@@ -1,5 +1,5 @@
 import {requireSpecificationAvailable} from './specification-safety';
-import {launchConfig,siteConfig,photoConfig,componentCatalog} from './components';
+import {siteConfig,photoConfig,componentCatalog} from './components';
 import {hashToken} from './security';
 export class DiffError extends Error {constructor(public status:number,message:string){super(message);}}
 type Version={id:string;component_id:string;config_json:string;html:string;digest:string;created_at:string};
@@ -14,10 +14,10 @@ function fields(v:Version|null){
  const result=new Map<string,string>();if(!v)return result;
  let value:unknown;try{value=JSON.parse(v.config_json);}catch{throw new DiffError(503,'This saved configuration cannot be compared.');}
  try{
-  const c=v.component_id==='launch-page@1'?launchConfig(value):v.component_id==='site-page@1'?siteConfig(value):v.component_id==='photo-page@1'?photoConfig(value):null;
+  const c=v.component_id==='site-page@1'?siteConfig(value):v.component_id==='photo-page@1'?photoConfig(value):null;
   if(!c)throw Error('Unsupported component');
   result.set('Layout',`${componentCatalog.find(c=>c.id===v.component_id)!.name} (version 1)`);result.set('Site name',c.name);result.set('Introduction',c.description);result.set('Theme',c.theme);
-  if(v.component_id!=='launch-page@1'){const details=v.component_id==='photo-page@1'?photoConfig(value):siteConfig(value);result.set('Headline',details.headline);result.set('About heading',details.aboutTitle);result.set('About text',details.aboutText);details.sections.forEach((section,i)=>{result.set(`Section ${i+1} heading`,section.heading);result.set(`Section ${i+1} text`,section.text);});}
+  {const details=v.component_id==='photo-page@1'?photoConfig(value):siteConfig(value);result.set('Headline',details.headline);result.set('About heading',details.aboutTitle);result.set('About text',details.aboutText);details.sections.forEach((section,i)=>{result.set(`Section ${i+1} heading`,section.heading);result.set(`Section ${i+1} text`,section.text);});}
   if(v.component_id==='photo-page@1')photoConfig(value).photos.forEach((photo,i)=>result.set('Photo '+photo.id,`Position ${i+1}\nDescription: ${photo.alt}`));
  }catch{throw new DiffError(503,'This saved component cannot be compared.');}
  return result;

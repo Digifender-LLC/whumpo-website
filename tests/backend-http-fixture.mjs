@@ -1,3 +1,4 @@
+import {createFixtureWebsite} from './current-site-fixture.mjs';
 // Disposable HTTP server, D1/R2 and actual QuickJS. Never seeds a shared/live environment.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -48,6 +49,7 @@ export async function backendHttpFixture(){
    return (await call('/projects')).projects[0].id;
   }
   async function seedChat(cookie,content){const token=cookie.split('=')[1],user=(await proxy.env.DB.prepare('SELECT user_id FROM sessions WHERE token_hash=?').bind(await hashToken(token)).first()).user_id;const state=await readChat(proxy.env.DB,user),id=crypto.randomUUID();const result=await sendChat(proxy.env.DB,user,{id,revision:state.state.revision,content});assert.equal(result.status,200);return id;}
-  return {base,seedBackend,firstProject,seedChat,dispose};
+  async function seedWebsite(cookie,project){const token=cookie.split('=')[1],user=(await proxy.env.DB.prepare('SELECT user_id FROM sessions WHERE token_hash=?').bind(await hashToken(token)).first()).user_id;return createFixtureWebsite(proxy.env.DB,user,project,{name:'Neighborhood orders',headline:'Neighborhood orders',description:'A small order calculator',theme:'ocean',aboutTitle:'About',aboutText:'Synthetic orders',sections:[],photos:[]});}
+  return {base,seedBackend,firstProject,seedChat,seedWebsite,dispose};
  }catch(error){await dispose();throw error;}
 }

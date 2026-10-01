@@ -11,6 +11,7 @@ const metrics={
  compositionPlans:['composition_plans','user_id'],
  specificationProposals:['project_spec_proposals','user_id'],
  specificationSnapshots:['project_spec_versions','project_id IN (SELECT id FROM owned_projects)'],
+ specificationCreationReceipts:['project_spec_creations','user_id'],
  specificationSaveReceipts:['project_spec_applies','user_id'],
  serviceClientProposals:['service_client_proposals','user_id'],
  serviceClientSnapshots:['service_client_versions','project_id IN (SELECT id FROM owned_projects)'],

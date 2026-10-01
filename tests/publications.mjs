@@ -1,3 +1,4 @@
+import {createFixtureProject,changeFixtureWebsite} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -10,7 +11,7 @@ execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','mig
 const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
 async function account(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,?,'test',?)").bind(id,id+'@example.com','00',new Date().toISOString()).run();return id;}
 async function chat(user,content,id=crypto.randomUUID(),revision){const state=await readChat(db,user);return {id,result:await sendChat(db,user,{content,id,revision:revision??state.state.revision})};}
-async function create(user,name){await chat(user,'/new');await chat(user,'A synthetic '+name+' website.');const p=await chat(user,name);const v=await chat(user,`/build ocean ${p.id}`);assert.equal(v.result.status,200);return {project:p.id,version:v.id};}
+async function create(user,name){return createFixtureProject(db,user,name,'A synthetic '+name+' website.');}
 const url=id=>'https://'+id+'.whumpo.site/';
 const served=id=>host.fetch(new Request(url(id)),{DB:db});
 try{
@@ -24,7 +25,7 @@ try{
  assert.equal((await db.prepare('SELECT revision FROM publications WHERE project_id=?').bind(a.project).first()).revision,1);
  let second=await chat(user,'/publish '+b.version);assert.equal((await chat(user,'/confirm '+second.id)).result.status,409);assert.equal((await served(b.project)).status,404);
  // A new version remains private until exact review/confirmation.
- const newer=await chat(user,'/build forest '+a.project);assert.equal(await(await served(a.project)).text(),original);
+ const newer={id:await changeFixtureWebsite(db,user,a.project,[{type:'design.setTheme',theme:'forest'}])};assert.equal(await(await served(a.project)).text(),original);
  const stale=await chat(user,'/publish '+a.version);const fresh=await chat(user,'/publish '+newer.id);assert.equal((await chat(user,'/confirm '+fresh.id)).result.status,200);
  assert.notEqual(await(await served(a.project)).text(),original);assert.equal((await chat(user,'/confirm '+stale.id)).result.status,409);
  const restore=await chat(user,'/restore '+a.version);assert.equal((await chat(user,'/confirm '+restore.id)).result.status,200);assert.equal(await(await served(a.project)).text(),original);

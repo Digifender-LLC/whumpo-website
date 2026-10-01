@@ -2,8 +2,8 @@ import {backendFormConfig} from '../../../backend-form-config';
 import {backendFormScript,backendFormScriptPolicy,renderBackendForm} from '../../../backend-form-render';
 import type {BackendForm} from '../../../backend-form-shape';
 import {publishedHTML} from '../../../published-html';
-import {previewHeaders,renderSite,siteConfig} from '../../../components';
-import {canonicalJSON,copyJSON,jsonDigest,requireSpec as check,sha256,shape} from '../../v1/json';
+import {previewHeaders,renderSite,renderPhotoPage,siteConfig,photoConfig} from '../../../components';
+import {canonicalJSON,copyJSON,jsonDigest,requireSpec as check,sha256,shape} from '../../v2/json';
 
 /** A companion to content@1, not a reinterpretation of record-bound v1 forms. */
 export type ServiceClientSpecification={
@@ -48,11 +48,11 @@ export function validateServiceClientTarget(input:unknown):ServiceClientTarget {
 export async function renderServiceClients(input:unknown,targetInput:unknown,websiteInput:unknown){
  const specification=validateServiceClientSpecification(input),target=validateServiceClientTarget(targetInput);
  const website=copyJSON(websiteInput,49152);shape(website,['componentId','config','html'],'website');
- check(website.componentId==='site-page@1','UNSUPPORTED_DELIVERY','website.componentId');
+ check(['site-page@1','photo-page@1'].includes(String(website.componentId)),'UNSUPPORTED_DELIVERY','website.componentId');
  const html=website.html;
  check(typeof html==='string'&&new TextEncoder().encode(html).length<=32768,'INPUT_TOO_LARGE','website.html');
  check(await sha256(html)===target.website.digest,'ARTIFACT_MISMATCH','website.digest');
- try{const config=siteConfig(website.config);check(canonicalJSON(config)===canonicalJSON(website.config)&&renderSite(config)===html,'ARTIFACT_MISMATCH','website.config');}catch{check(false,'ARTIFACT_MISMATCH','website.config');}
+ try{const config=website.componentId==='photo-page@1'?photoConfig(website.config):siteConfig(website.config);check(canonicalJSON(config)===canonicalJSON(website.config)&&(website.componentId==='photo-page@1'?renderPhotoPage(photoConfig(website.config)):renderSite(config))===html,'ARTIFACT_MISMATCH','website.config');}catch{check(false,'ARTIFACT_MISMATCH','website.config');}
  check(!specification.statelessForm||target.backend!==null,'MISSING_AUTHORITY','statelessForm');
  const form=specification.statelessForm?{config_json:canonicalJSON(specification.statelessForm.config,4096),backend_publication_id:target.backend!.reviewId}:null;
  const candidate=publishedHTML(html,specification.contact!==null,target.projectId,form);

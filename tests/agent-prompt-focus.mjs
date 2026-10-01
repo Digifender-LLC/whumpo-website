@@ -7,7 +7,7 @@ for(const request of ['Edit my website','Create a new Copper Oven bakery website
 for(const request of ['Change the theme to forest','Change the headline to Fresh bread, every morning.','Add a Visit us section: Open Tuesday through Sunday.'])assert.equal(agentPromptFocus(request,true),'website');
 for(const request of ['Change the theme of my CMS','Add a Sign in section: Connect visitor accounts.','Change the description and backend function'])assert.notEqual(agentPromptFocus(request,true),'website');
 const website=agentPrompt(context,'website');
-for(const text of ['Only the USER confirms','Never request secrets','untrusted data','Never emit confirmation actions','Website actions','"kind":"edit"','"kind":"preview"','workspace_context'])assert.ok(website.includes(text),text);
+for(const text of ['Only the USER confirms','Never request secrets','untrusted data','Never emit confirmation actions','Website creation','"kind":"specification"','"operation":"create"','workspace_context'])assert.ok(website.includes(text),text);
 assert.equal(website.includes('unused backend canary'),false);assert.equal(website.includes('editStructuredDraft'),false);assert.equal(website.includes('Backend action'),false);
 assert.ok(Buffer.byteLength(website)<Buffer.byteLength(full)-6000,'Website work should avoid unrelated large service schemas');
 for(const text of ['Only the USER confirms','Never request secrets','untrusted data','Never emit confirmation actions','editStructuredDraft','readDraft','4096 bytes','User approval of the exact review','Chat is natural language only','"kind":"knowledge"','workspace_context'])assert.ok(focused.includes(text),text);
@@ -15,7 +15,8 @@ assert.equal(focused.includes('unused website canary'),false);assert.equal(focus
 assert.ok(!full.includes('unused website canary'));
 assert.ok(agentWorkspaceData(context,'website').includes('unused photo canary'));
 assert.ok(!agentWorkspaceData(context,'website').includes('unused backend canary'));
-assert.ok(!agentWorkspaceData(context,'cms').includes('unused website canary'));assert.ok(full.includes('Backend action'));assert.ok(full.includes('Website actions'));
-const bytes=new TextEncoder().encode(JSON.stringify([{role:'system',content:focused},{role:'user',content:agentWorkspaceData(context,'cms')},{role:'user',content:'Edit my CMS article'}])).length+512;
-assert.ok(Math.ceil((bytes*2+10000+2048*2*4)/1000)<=50);
-console.log(JSON.stringify({fullBytes:Buffer.byteLength(full),websiteBytes:Buffer.byteLength(website),cmsBytes:Buffer.byteLength(focused),boundedTwoCallUnits:Math.ceil((bytes*2+10000+2048*2*4)/1000)}));console.log('Prompt focus passed: full catalog fallback, explicit website scope and confirmed website follow-ups, retained approvals and content contract, no irrelevant asset context, conservative 50-unit CMS two-call bound.');
+assert.ok(!agentWorkspaceData(context,'cms').includes('unused website canary'));assert.ok(full.includes('Backend action'));assert.ok(full.includes('Website creation'));
+assert.ok(Buffer.byteLength(focused)<Buffer.byteLength(full),'A focused catalog omits unrelated actions');
+assert.ok(!website.includes('"kind":"preview"'));assert.ok(!website.includes('"kind":"edit"'));
+console.log(JSON.stringify({fullBytes:Buffer.byteLength(full),websiteBytes:Buffer.byteLength(website),cmsBytes:Buffer.byteLength(focused)}));
+console.log('Prompt catalog shape passed: explicit current website actions, retained approvals, focused context and no retired draft/edit instructions. Static prompt check only.');
