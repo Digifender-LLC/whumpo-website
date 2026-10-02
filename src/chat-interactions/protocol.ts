@@ -95,7 +95,9 @@ function field(f:Field,prior:Field[]) {
   if(own(f,'source')){shape(f.source,['binding','contentId','revision']);check(f.source?.binding==='site.content@1'&&(f.type==='text'||f.type==='long-text'),'BINDING');identifier(f.source.contentId);integer(f.source.revision,0,Number.MAX_SAFE_INTEGER);}
   if(own(f,'default')){
     const preset=f.default;shape(preset,['value','provenance']);check(preset,'SHAPE');check(['saved','user','suggested'].includes(preset.provenance),'PROVENANCE');
-    check(preset.provenance!=='saved'||!!f.source,'PROVENANCE');fieldValue(f,preset.value);
+    // Carried user drafts may be incomplete. Submission still validates the
+    // original required field; saved-site and suggested defaults stay complete.
+    check(preset.provenance!=='saved'||!!f.source,'PROVENANCE');fieldValue(preset.provenance==='user'?{...f,required:false}:f,preset.value);
   }
 }
 export function validateDefinition(input:unknown):Definition {

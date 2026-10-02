@@ -15,7 +15,7 @@ import {ChatProjectPicker} from './chat-project-picker';
 const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','owned.projects@1']};
 const route='/chat/interactions/v1/';
 const receipt=(requestId:string)=>send<InteractionReceipt>(route+'receipt',{version:1,requestId});
-function startingAnswers(form:InteractionRead):Answers{return form.submission?.answers??{...Object.fromEntries(form.envelope.definition.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value])),...form.draft};}
+function startingAnswers(form:InteractionRead):Answers{return form.submission?.answers??form.draft??Object.fromEntries(form.envelope.definition.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value]));}
 
 /** Only maintained content and information-only project templates are admitted. */
 export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInChat}:{id:string;owner:string;chatRevision:number;busy:boolean;onAnswerInChat:()=>void}){
@@ -30,7 +30,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   await verifyEnvelope(value.envelope);await requireCurrentClient(value.envelope,client);
   const content=value.envelope.definition.template==='content-change@1';
   if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||!['content-change@1','project-brief@1','project-select@1'].includes(value.envelope.definition.template)||(content?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||value.envelope.definition.continuationBinding!==null))||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
-  validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
+  if(value.draft!==null)validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
   return value;
  },staleTime:0,gcTime:0,refetchInterval:q=>['pending','unknown'].includes(q.state.data?.submission?.continuation?.state??'')?5000:false});
  const form=query.data,local=recovery.value,pending=local?.pending??null;
@@ -58,7 +58,12 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
  useEffect(()=>{
   if(unavailable&&recovery.current.current?.answers)recovery.save({...recovery.current.current,answers:null});
  },[unavailable,recovery.save,recovery.current]);
- function edit(key:string,value:string){if(!form||locked)return;recovery.save({...draftRecord(),answers:{...answers,[key]:value},updatedAt:Date.now()});setNotice('');setFieldError(null);}
+ function edit(key:string,value:string){
+  if(!form||locked)return;const next={...answers};
+  // An unselected resource is absent, never an empty or invented resource ID.
+  if(value===''&&form.envelope.definition.fields.find(f=>f.id===key)?.type==='resource')delete next[key];else next[key]=value;
+  recovery.save({...draftRecord(),answers:next,updatedAt:Date.now()});setNotice('');setFieldError(null);
+ }
  async function perform(action:()=>Promise<void>){if(busy)return;setBusy(true);setNotice('');try{await action();}catch(error){if(recovery.active.current){setNotice(error instanceof InteractionError?'Check the highlighted answer.':canRecoverChat(error)?'The request is unconfirmed. Check saved status; nothing will be sent automatically.':message(error));if(error instanceof InteractionError&&error.fieldId||error instanceof APIError&&error.fieldId){const key=error.fieldId!;setFieldError(key);requestAnimationFrame(()=>section.current?.querySelector<HTMLElement>('[data-field="'+CSS.escape(key)+'"]')?.focus());}}}finally{if(recovery.active.current)setBusy(false);}}
  async function followup(action:'continue'|'stop'|'reconcile',submissionId:string){
   try{await send(route+action,{version:1,submissionId,...(action==='continue'?{expectedChatRevision:chatRevision}:{})});}

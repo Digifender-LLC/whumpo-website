@@ -42,7 +42,7 @@ export async function readInteraction(db:D1Database,user:string,id:string):Promi
  // Recheck authority/ownership and the revision after the bounded multi-query read.
  const replacement=await db.prepare('SELECT id FROM chat_interactions WHERE previous_interaction_id=? AND user_id=?').bind(id,user).first<{id:string}>();
  const current=await row(db,user,id);await retainedEnvelope(current);if(current.answer_revision!==r.answer_revision)throw changed();
- return {version:1 as const,envelope,projectName:current.project_name,previousInteractionId:r.previous_interaction_id,replacementInteractionId:replacement?.id??null,state:r.state==='open'&&r.expires_at<=clock!.now?'expired' as const:r.state,answerRevision:r.answer_revision,draft:JSON.parse(r.draft_json) as Answers,
+ return {version:1 as const,envelope,projectName:current.project_name,previousInteractionId:r.previous_interaction_id,replacementInteractionId:replacement?.id??null,state:r.state==='open'&&r.expires_at<=clock!.now?'expired' as const:r.state,answerRevision:r.answer_revision,draft:r.draft_saved_at===null?null:JSON.parse(r.draft_json) as Answers,
   observedAt:clock!.now,draftRetainUntil:r.state==='submitted'?null:new Date(Date.parse(r.draft_saved_at??r.created_at)+7*24*60*60*1000).toISOString(),
   submission:submission?{id:submission.id,answers:JSON.parse(submission.answers_json) as Answers,answersDigest:submission.answers_digest,answerRevision:submission.answer_revision,createdAt:submission.created_at,
    continuation:submission.continuation_state?{id:submission.id,state:submission.continuation_state,resultTurnId:submission.result_turn_id,reason:submission.reason}:null}:null};
@@ -151,7 +151,9 @@ function contentIds(value:unknown):asserts value is string[]{
 function carriedAnswers(previous:InteractionRead):Answers{
  // A chain of untouched replacements must preserve explicit answers already
  // copied as user defaults. Saved-site/suggested defaults are not user answers.
- const answers=previous.submission?.answers??{...Object.fromEntries(previous.envelope.definition.fields.filter(f=>f.default?.provenance==='user').map(f=>[f.id,f.default!.value])),...previous.draft};
+ // A saved draft is the complete answer snapshot, including omitted fields.
+ // Only an untouched form inherits its user defaults.
+ const answers=previous.submission?.answers??previous.draft??Object.fromEntries(previous.envelope.definition.fields.filter(f=>f.default?.provenance==='user').map(f=>[f.id,f.default!.value]));
  return validateAnswers(previous.envelope.definition,answers,{partial:!previous.submission});
 }
 /** Server-maintained fields only. Model-authored questions/defaults are not an issuance API. */
@@ -202,9 +204,9 @@ async function prepareBrief(db:D1Database,user:string,request:ContentBriefReques
  const values=previous?carriedAnswers(previous):null;
  const fields:Field[]=request.contentIds.map((contentId,n)=>{
   const t=targets.get(contentId),content=spec.content.find(c=>c.id===contentId);if(!t||!content)throw new InteractionError('REFERENCE');
-  const old=previous?.envelope.definition.fields.find(f=>f.source?.contentId===contentId),retained=!!old&&!!values&&Object.hasOwn(values,old.id);
-  const value=retained?values![old!.id]:content.text;
-  return {id:`field-${n+1}`,type:t.max<=200?'text':'long-text',label:t.label,help:'',required:true,binding:'answer.value@1',constraints:{maxLength:t.max},source:{binding:'site.content@1',contentId,revision:current.revision},...(typeof value==='string'&&value.trim()?{default:{value,provenance:retained?'user' as const:'saved' as const}}:{})};
+  const old=previous?.envelope.definition.fields.find(f=>f.source?.contentId===contentId),retained=!!old&&!!values&&(Object.hasOwn(values,old.id)||previous!.draft!==null);
+  const value=retained?(Object.hasOwn(values!,old!.id)?values![old!.id]:''):content.text;
+  return {id:`field-${n+1}`,type:t.max<=200?'text':'long-text',label:t.label,help:'',required:true,binding:'answer.value@1',constraints:{maxLength:t.max},source:{binding:'site.content@1',contentId,revision:current.revision},...(typeof value==='string'&&(retained||value.trim())?{default:{value,provenance:retained?'user' as const:'saved' as const}}:{})};
  });
  const definition:Definition={version:1,kind:'form',template:'content-change@1',title:'Update your website text',summary:'Review the text, then prepare a private preview. Saving and publishing each require a separate review.',presentation:'inline',fields,cards:[],submitBinding:'interaction.answers@1',continuationBinding:'site.content-prepare@1'};
  return prepareIssuedInteraction(db,user,request,definition,issueHash,replacement,[interactionGuard(db,'EXISTS(SELECT 1 FROM project_spec_heads h JOIN projects p ON p.id=h.project_id WHERE h.project_id=? AND h.version_id=? AND h.revision=? AND h.draft_revision=p.site_draft_revision)',[request.projectId,current.versionId,current.revision])]);
