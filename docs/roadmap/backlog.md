@@ -1344,6 +1344,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/mvp.md](../../docs/mvp.md)
 - [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
+- [docs/protection-candidate.md](../../docs/protection-candidate.md)
 
 ### Execution coordination
 
@@ -1351,7 +1352,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-02 UTC: consume WH-117D candidate release 7c4f9344-bd6c-4fc7-a3ab-964e631ad8f3 and docs/protection-candidate.md for exact current schema/bindings/assets, stored-key readback, signed project-first HTTP checks and measured CPU/bytes/storage. This is actual deployed test evidence, not closed WH-117 or beta acceptance: independent/off-device custody, human enrollment/devices, real providers and full recovery retain their separate gates.
 
 ## WH-050 — Measure capacity, distributed abuse and tenant fairness
 
@@ -1979,6 +1980,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/restore-inventory-freshness.mjs](../../tests/restore-inventory-freshness.mjs)
 - [docs/protection-candidate.md](../../docs/protection-candidate.md)
 - [tests/remote-d1.mjs](../../tests/remote-d1.mjs)
+- [tests/release-provider.mjs](../../tests/release-provider.mjs)
+- [tools/release-provider.mjs](../../tools/release-provider.mjs)
 
 ### Execution coordination
 
@@ -2001,6 +2004,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/82. Planning owner: Unassigned
 - 2026-10-02 UTC: child #85 now exposes reviewed GitHub grant removal through the existing natural Chat catalogue and typed customer controls. Models can prepare/list/read only; immutable owned reply receipts attach current cards, while confirmation requires a signed recent passkey and the existing exclusive provider dispatch. The shared mobile-friendly card and saved results are also reachable in External connections with inference disabled. SQLite/local D1 Chat tests, the existing natural Chat suite and a full current-identity browser journey pass, including cancelled passkey, local cancellation, one synthetic deletion, no duplicate calls and reload. No real provider, physical-device or deployed acceptance is claimed. Unknown/expired grant recovery, independent suppression/custody and coordinated child D release still retain all original parent gates. The schema remains 165 tables and uses only the current contract.
 - 2026-10-02 UTC: child #85 operator inventory now captures archive record identities/digests and compares them to the current source on each evidence request. Missed session revocations and changed rows derive a complete atomic bounded constraint batch; missing/failed/obsolete sources, unresolved current effects, source/journal/withdrawal races and permanent-suppression identity reuse hold verification. Current operator-file schema version 2 replaces version 1 without migration or fallback. The source deadline and cancellation cannot wedge subsequent inventory status reads. Real read-only copied SQLite, persisted key-backup and metadata-canary fixtures cover this on-demand path; all serving/dispatch/retirement flags remain false. Continuous/disaster-time suppression operation, independent physical/offsite/anti-rollback custody, full provider reconciliation and child D acceptance remain required. No live data, key, provider state or deployment changed.
 - 2026-10-02 UTC: explicit DP-02/03/04 acceptance audit at 964fa38 maps every original child C criterion to actual handlers and synthetic/isolated verification, completing the bounded source/local scope. Parent and child D remain open for combined candidate, configured custody, measures and coordinated release; continuous suppression/whole-platform recovery retain their original WH-008/018/019/059 ownership. Fresh live metadata/count inventory found zero test users/projects/credential/provider/billing records, 156 tables and the obsolete single-key binding; the candidate has 165 tables and needs an explicit current-only reset/binding transition. The operator D1 adapter now supplies immutable statements and one batch request for the existing key initializer, with twelve synthetic refusal cases and real read-only batch verification. No remote mutation, key creation, deployment, CMS/scanner test or offsite-custody acceptance occurred.
+- 2026-10-02 UTC: WH-117D current test release 7c4f9344-bd6c-4fc7-a3ab-964e631ad8f3 (runtime source df90276) deployed all four Workers onto the exact 165-table/760-object schema. Actual current-key initialization and stored-capsule readback passed; deployed PKCE ciphertext decrypts with recovered material and matches its challenge. Thirty-nine assets and signed project-first/profile/Chat/session-refusal HTTP checks pass, with fixture cleanup and no provider authorization/model/CMS/scanner calls. Old key binding and unreferenced empty DB retired after all 13 Worker references and old table counts were checked; other databases preserved and fresh private invitation issued. Twenty bounded encryption writes plus sampled deployed CPU and account storage inventory are recorded in docs/protection-candidate.md. Status observation now follows the active platform database, with focused synthetic and live after-retirement verification. Off-device/independently operated custody and final D/parent acceptance remain open; no provider/device/confidential-inference or whole-platform recovery claim.
 
 # F2 — Useful websites and applications
 
