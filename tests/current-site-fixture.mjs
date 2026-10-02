@@ -23,7 +23,8 @@ export async function currentSiteFixtureHandlers(){
   export {ownedExport} from './src/exports';
   export {seal} from './src/connection-vault';
   export {sendAIChat,reconcileChat} from './src/ai-chat';
-  export {cleanPhoto,uploadPhoto,readPhoto,listPhotos,cleanupPhotos} from './src/files';
+  export {uploadPhoto,readPhotoUpload,readPhoto,listPhotos,cleanupPhotos} from './src/files';
+export {cleanPhoto} from './src/photo-format';
   export {compareVersions,compareReview,diffPage} from './src/version-diff';
   export {renderSite} from './src/components';
   export * as backend from './src/backend-versions';

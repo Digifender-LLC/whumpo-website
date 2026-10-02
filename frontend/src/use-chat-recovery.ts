@@ -1,3 +1,4 @@
+import {preparePhotoRecovery} from './lib/photo-upload-recovery';
 import {useCallback,useEffect,useRef,useState,type SetStateAction} from 'react';
 import {readRecovery,writeRecovery,type Recovery} from './lib/chat-recovery';
 import type {ChatRequest} from './lib/chat-delivery';
@@ -10,6 +11,7 @@ export function useChatRecovery(owner:string){
   try{value=readRecovery(sessionStorage,owner);}catch{failed=true;}
   // Failure cleaning up another store must not hide a valid pending Chat send.
   try{prepareInteractionRecovery(sessionStorage,owner);}catch{failed=true;}
+  try{preparePhotoRecovery(sessionStorage,owner);}catch{failed=true;}
   return {value,failed};
  });
  const current=useRef<Recovery>(initial.value??{draft:'',pending:null,updatedAt:Date.now()});

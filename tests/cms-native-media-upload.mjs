@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import {mkdtemp,readFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';
 export async function verifyNativeMediaUpload(env,vars){
- const b=await build({stdin:{contents:"export * from './src/cms-media-upload-bridge';export * from './src/cms-bridge';export {cleanPhoto} from './src/files';export {cmsRichDraftBody,cmsRichEditBody} from './src/cms-content-shape';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const b=await build({stdin:{contents:"export * from './src/cms-media-upload-bridge';export * from './src/cms-bridge';export {cleanPhoto} from './src/photo-format';export {cmsRichDraftBody,cmsRichEditBody} from './src/cms-content-shape';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
  const {signCMSMediaUpload,signCMSRequest,cleanPhoto,cmsRichDraftBody,cmsRichEditBody}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
  const config={projectId:vars.TOWNHELLO_CMS_PROJECT_ID,ownerId:vars.TOWNHELLO_CMS_OWNER_ID,origin:vars.TOWNHELLO_CMS_ORIGIN,secret:vars.TOWNHELLO_CMS_BRIDGE_KEY},id=crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-native-upload-');let item,retain=false;
  try{

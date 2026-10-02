@@ -28,7 +28,7 @@ async function interactionFacts(db:D1Database,user:string,turnIds:string[],inclu
   if(!row.envelope_json){entries.push([row.origin_turn_id,{...identity,state:'removed',removal:{reason:row.removal_reason??'inactive',completedAt:row.removed_at}}]);continue;}
   const {definition}=await verifyEnvelope(JSON.parse(row.envelope_json));
   if(row.state==='submitted'&&(!row.answers_json||!!definition.continuationBinding!==(row.continuation_state!==null)))throw new InteractionStoreError(503,'receipt_unavailable');
-  entries.push([row.origin_turn_id,{...identity,title:definition.title,summary:definition.summary,state:row.state==='open'&&row.expires_at<=row.now?'expired':row.state,
+  entries.push([row.origin_turn_id,{...identity,kind:definition.kind,title:definition.title,summary:definition.summary,state:row.state==='open'&&row.expires_at<=row.now?'expired':row.state,
    fields:definition.fields.map(f=>({id:f.id,label:f.label,help:f.help,type:f.type,required:f.required,...(f.default?(includeDrafts?{default:f.default}:{defaultProvenance:f.default.provenance}):{})})),
    ...(includeDrafts?{observedAt:row.now,draft:row.draft_saved_at&&row.draft_json?{answers:validateAnswers(definition,JSON.parse(row.draft_json),{partial:true}),savedAt:row.draft_saved_at,answerRevision:row.answer_revision}:null}:{}),
    submission:row.answers_json?{answers:JSON.parse(row.answers_json),submittedAt:row.submitted_at,continuation:row.continuation_state?{state:row.continuation_state,reason:row.reason}:null}:null}]);
