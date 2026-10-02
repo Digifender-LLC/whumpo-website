@@ -30,7 +30,12 @@ export async function currentSiteFixtureHandlers(){
   export {applicationChatActions} from './src/app-chat-actions';
   export {linkChatReviewReply} from './src/chat-review-receipts';
   export {readOnboarding,saveOnboarding,completeOnboarding} from './src/onboarding';
-  export {updateProfile} from './src/profile';
+  export {agentProfile,readProfile,updateProfile} from './src/profile';
+  export {describeConnections} from './src/connection-chat';
+  export * as serviceClientCompiler from './src/project-specification/service-clients/compiler';
+  export * as serviceClientOwned from './src/project-specification/service-clients/owned';
+  export {publicationCommand} from './src/publications';
+  export {versionRemovalCommand} from './src/version-removal';
   export * as contacts from './src/contacts';
   export * as directory from './src/directory';
   export {contactPage} from './src/contact-page';
