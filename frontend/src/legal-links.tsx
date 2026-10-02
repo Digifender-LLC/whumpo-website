@@ -22,9 +22,21 @@ export function LegalLinks() {
         </a>
         <a
           className="inline-flex min-h-11 items-center underline underline-offset-4"
+          href="https://digifender.com/legal/whumpo/cookies"
+        >
+          Draft cookie notice
+        </a>
+        <a
+          className="inline-flex min-h-11 items-center underline underline-offset-4"
           href="https://digifender.com/legal/whumpo"
         >
           More Whumpo policies
+        </a>
+        <a
+          className="inline-flex min-h-11 items-center underline underline-offset-4"
+          href="mailto:legal@digifender.com"
+        >
+          Legal contact
         </a>
       </nav>
     </div>
