@@ -1,12 +1,11 @@
-import assert from 'node:assert/strict';import {mkdtemp,readFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';import wrangler from 'wrangler';
+import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {build} from 'esbuild';
+import {databaseFixture} from './helpers/current-database.mjs';
 const b=await build({stdin:{contents:"export * from './src/gateway-spend';export * from './src/inference-routing';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {planInferenceRoute,inferenceRoutingPolicy,reserveGatewaySpend,dispatchGatewaySpend,releaseGatewaySpend,uncertainGatewaySpend,settleGatewaySpend}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const scenario=JSON.parse(await readFile('tests/fixtures/inference-routing-scenario.json','utf8'));
-const dir=await mkdtemp('/tmp/whumpo-gateway-spend-');let proxy;
+const store=await databaseFixture({d1:true}),db=store.db;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
- proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
- const owner=crypto.randomUUID(),other=crypto.randomUUID();for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'test','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
+ const owner=crypto.randomUUID(),other=crypto.randomUUID();for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").bind(user,user+'@example.test',new Date().toISOString()).run();
  const task=crypto.randomUUID(),now=Date.now(),expires=now+3600000;
  const candidate={...scenario.candidates[0],rateValidFrom:now-1,rateValidUntil:expires,benchmark:{...scenario.candidates[0].benchmark,validUntil:expires}};
  const req={...scenario.request,ownerId:owner,taskId:task,now};const decision=planInferenceRoute([candidate],req);
@@ -43,4 +42,4 @@ try{
  await assert.rejects(db.prepare('UPDATE gateway_spend_buckets SET limit_micros=5000 WHERE id=?').bind(buckets.approval).run());
  const invalidId=crypto.randomUUID(),before=(await balances()).results;await assert.rejects(reserveGatewaySpend(db,owner,invalidId,{...premium,selected:{...premium.selected,taskId:'other-task'}},buckets));assert.deepEqual((await balances()).results,before);assert.equal(await db.prepare('SELECT id FROM gateway_spend_attempts WHERE id=?').bind(invalidId).first(),null);
  console.log('Actual D1 gateway spend passed: atomic multi-budget admission, concurrent contention, owner/replay isolation, immutable receipts, dispatch/release race, unknown holds, overrun refusal, exact settlement and cumulative premium approval cap. No provider calls or purchased credits.');
-}finally{await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await store.close();}

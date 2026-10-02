@@ -56,3 +56,8 @@ The operator preview shows the current observation. Saving gathers a fresh snaps
 Disposable D1 checks verify snapshot privacy, explicit unknown expense, immutable snapshots, current-plan mismatch, exact replay after upgrade, and refusal when a higher plan is granted between observation and insertion. Existing preview, pagination, review conflict and ownership checks remain in the same suite. The collection is internal-only and does not change admission, send a warning or fund inference.
 
 Storage acceptance: only migration 0092 was pending in the isolated release. After applying it, independent remote reads confirmed the migration receipt, snapshot column and both new SQL guards, zero review rows and Monitor mode. Evidence: `.secrets/fair-use-review-snapshot-schema.json`. No Worker deployment, customer review or notice was created. `pnpm test:fair-use-reviews`, `pnpm check` and diff checks passed.
+
+
+## Current-schema verification
+
+`node --stack-trace-limit=0 tests/fair-use-observation.mjs`, `tests/fair-use-reviews.mjs` and `tests/usage-review-requests.mjs` pass on complete-schema local D1. Operator reports/review decisions keep separate internal authority; customer support reads and Chat commits use current admitted owner scopes. Synthetic entitlement receipts, immutable observations, exact operator preview/application digests, concurrent decisions, private support context and lost committed submissions are covered. Requested enforcement still remains Monitor without verified economics, and reviews do not change billing or restrictions. See [verification](verification.md#usage-operator-records-gateway-ledger-and-eligibility). No real financial data, provider calls or customer enforcement was introduced.
