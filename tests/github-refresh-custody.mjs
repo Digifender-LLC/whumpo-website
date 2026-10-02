@@ -17,14 +17,14 @@ const refreshToken='ghr_PRIVATE_REFRESH_CUSTODY_CANARY',accessToken='ghu_PRIVATE
 let refusals=0,journeys=0;
 const reject=async(f,pattern)=>{await assert.rejects(f,error=>{assert.ok(!String(error).includes(refreshToken));assert.ok(!String(error).includes(accessToken));return pattern?pattern.test(String(error)):true;});refusals++;};
 async function owner(){const owner=await workspaceFixture(db,m);await paidPlan(db,owner.account,'business');return owner;}
-async function run(owner,{duringExchange,duringUser,database,accessLifetime=3600,refreshLifetime=15897600,refresh=refreshToken,revokeStatus=204}={}){
+async function run(owner,{duringExchange,duringUser,database,accessLifetime=3600,refreshLifetime=15897600,refresh=refreshToken,revokeStatus=204,who={id:12345,login:'fixture'}}={}){
  const scope=database??await owner.scope(),begun=await g.startGitHub(scope,owner.account,config);let exchanges=0,revocations=0,users=0;
  const transport=async(url,init)=>{
   assert.ok(!String(init.body??'').includes(refreshToken),'Refresh material must never be sent by access/grant cleanup or API use');
   if(url==='https://github.com/login/oauth/access_token'){
    exchanges++;await duringExchange?.();return Response.json({access_token:accessToken,expires_in:accessLifetime,refresh_token:refresh,...(refreshLifetime!==undefined?{refresh_token_expires_in:refreshLifetime}:{}),token_type:'bearer',scope:''});
   }
-  if(url==='https://api.github.com/user'){users++;await duringUser?.();return Response.json({id:12345,login:'fixture'});}
+  if(url==='https://api.github.com/user'){users++;await duringUser?.();return Response.json(who);}
   if(url==='https://api.github.com/applications/'+config.clientId+'/token'){assert.equal(init.method,'DELETE');revocations++;return new Response(null,{status:revokeStatus});}
   assert.fail('Unexpected credential/provider operation');
  };
@@ -43,7 +43,7 @@ try{
  await r.initializeConnectionKeys(db,config.key,'refresh-review');
  const a=await owner(),flow=await run(a);assert.equal((await flow.finish()).connected,true);
  assert.deepEqual(flow.counts(),{exchanges:1,revocations:0,users:1});
- let saved=await row(a);assert.ok(saved);assert.equal(saved.client_id,config.clientId);assert.equal(saved.access_revoked_at,null);assert.ok(saved.expires_at>(await token(a)).expires_at);
+ let saved=await row(a);assert.ok(saved);assert.equal(saved.client_id,config.clientId);assert.equal(saved.github_user_id,'12345');assert.equal(saved.access_revoked_at,null);assert.ok(saved.expires_at>(await token(a)).expires_at);
  assert.equal(await v.unseal(config.key,`whumpo:github:refresh:${a.account}:${saved.token_id}`,saved.ciphertext),refreshToken);
  for(const context of [`whumpo:github:token:${a.account}:${saved.token_id}`,`whumpo:cloudflare:token:${a.account}:${saved.token_id}`,`whumpo:github:refresh:other:${saved.token_id}`,`whumpo:github:refresh:${a.account}:other`])await reject(()=>v.unseal(config.key,context,saved.ciphertext));
  await reject(()=>v.seal(config.key,`whumpo:cloudflare:refresh:${a.account}:${saved.token_id}`,refreshToken));
@@ -56,7 +56,9 @@ try{
  await r.registerConnectionKeys(db,next,'refresh-review-next');await r.beginConnectionRotation(db,next,{id:'refresh-rotation',reviewId:'refresh-review-next',expectedRevision:1});
  await r.rotateConnectionBatch(db,next,'refresh-rotation','refresh-batch');config.key=next;
  saved=await row(a);assert.equal(v.connectionCiphertextKeyId(saved.ciphertext),'refresh-next');assert.equal(await v.unseal(next,`whumpo:github:refresh:${a.account}:${saved.token_id}`,saved.ciphertext),refreshToken);
+ assert.equal(saved.github_user_id,'12345','Rotation preserves the provider identity of this grant');
  assert.equal((await restore()).status,'verified');
+ for(const statement of [db.prepare('UPDATE github_refresh_custody SET github_user_id=NULL WHERE token_id=?').bind(saved.token_id),db.prepare("UPDATE github_refresh_custody SET github_user_id='54321' WHERE token_id=?").bind(saved.token_id),db.prepare("UPDATE github_connections SET github_user_id='54321' WHERE user_id=?").bind(a.account)])await reject(()=>statement.run());
  for(const statement of [db.prepare('DELETE FROM github_refresh_custody WHERE token_id=?').bind(saved.token_id),db.prepare('DELETE FROM github_token_vault WHERE id=?').bind(saved.token_id),db.prepare("UPDATE github_refresh_custody SET client_id='other' WHERE token_id=?").bind(saved.token_id),db.prepare("UPDATE github_refresh_custody SET expires_at='2000-01-01' WHERE token_id=?").bind(saved.token_id)])await reject(()=>statement.run());
  // A single access-token 204 is recorded narrowly, with encrypted refresh custody retained.
  await g.disconnectGitHub(await a.scope(),a.account,config,flow.transport);
@@ -75,7 +77,7 @@ try{
  const c=await owner(),cancelled=await run(c,{duringExchange:()=>g.disconnectGitHub(cScope,c.account,undefined)}),cScope=await c.scope();
  await reject(cancelled.finish);assert.ok(await row(c));assert.equal((await token(c)).state,'revoking');assert.ok((await row(c)).access_revoked_at);
  // Signing out cannot prevent custody of an already issued refresh credential.
- const d=await owner(),signedOut=await run(d,{duringExchange:()=>d.revoke()});await reject(signedOut.finish);assert.ok(await row(d));assert.equal((await token(d)).state,'revoking');
+ const d=await owner(),signedOut=await run(d,{duringExchange:()=>d.revoke()});await reject(signedOut.finish);assert.ok(await row(d));assert.equal((await row(d)).github_user_id,null);assert.equal((await token(d)).state,'revoking');
  await g.cleanupGitHub(db,config,signedOut.transport,d.account);assert.ok((await row(d)).access_revoked_at);
  // Missing/invalid refresh lifetime is retained with unknown expiry, never activated.
  const e=await owner(),unknownLifetime=await run(e,{refreshLifetime:0});await reject(unknownLifetime.finish);assert.equal((await row(e)).expires_at,null);assert.ok((await row(e)).access_revoked_at);
@@ -99,6 +101,33 @@ try{
  assert.equal(failedFlow.counts().revocations,1);
  // Current table admission rejects fabricated/unowned refresh custody.
  await reject(()=>db.prepare('INSERT INTO github_refresh_custody(token_id,user_id,client_id,ciphertext) VALUES(?,?,?,?)').bind(id(),b.account,config.clientId,saved.ciphertext).run());
+ // New consent to another GitHub account must never relabel an older grant.
+ const switcher=await owner(),firstIdentity=await run(switcher,{who:{id:101,login:'first'}});await firstIdentity.finish();
+ const firstGrant=await row(switcher),secondIdentity=await run(switcher,{who:{id:202,login:'second'}});await secondIdentity.finish();
+ const grants=(await db.prepare('SELECT github_user_id,access_revoked_at FROM github_refresh_custody WHERE user_id=? ORDER BY github_user_id').bind(switcher.account).all()).results;
+ assert.deepEqual(grants.map(r=>r.github_user_id),['101','202']);assert.ok(grants[0].access_revoked_at);assert.equal(grants[1].access_revoked_at,null);
+ assert.equal((await db.prepare('SELECT github_user_id FROM github_connections WHERE user_id=?').bind(switcher.account).first()).github_user_id,'202');
+ assert.equal((await db.prepare('SELECT github_user_id FROM github_refresh_custody WHERE token_id=?').bind(firstGrant.token_id).first()).github_user_id,'101');
+ // A response already requested may record identity after local sign-out or
+ // disconnect, but its credentials must not regain workspace access.
+ const signedOutLookup=await owner(),lateIdentity=await run(signedOutLookup,{duringUser:()=>signedOutLookup.revoke()});
+ await reject(lateIdentity.finish);assert.equal((await row(signedOutLookup)).github_user_id,'12345');assert.equal((await token(signedOutLookup)).state,'revoking');
+ const disconnectedLookup=await owner(),lookupScope=await disconnectedLookup.scope(),lateDisconnected=await run(disconnectedLookup,{duringUser:()=>g.disconnectGitHub(lookupScope,disconnectedLookup.account,undefined)});
+ await reject(lateDisconnected.finish);assert.equal((await row(disconnectedLookup)).github_user_id,'12345');assert.equal((await token(disconnectedLookup)).state,'revoking');
+ // Lost identity-write acknowledgment reads back that exact token's identity.
+ const lostIdentityOwner=await owner();let identityReplyLost=false;
+ const lostIdentityScope=await lostIdentityOwner.scope(interceptDatabase(db,/UPDATE github_refresh_custody SET github_user_id/,async()=>{},async()=>{if(!identityReplyLost){identityReplyLost=true;throw Error('lost identity acknowledgment');}}));
+ const lostIdentity=await run(lostIdentityOwner,{database:lostIdentityScope});assert.equal((await lostIdentity.finish()).connected,true);assert.equal((await row(lostIdentityOwner)).github_user_id,'12345');assert.equal(lostIdentity.counts().users,1);
+ // A failed/invalid lookup or failed identity write leaves an unidentified
+ // obligation. Neither stored login nor later successful consent can fill it.
+ const invalidIdentityOwner=await owner(),invalidIdentity=await run(invalidIdentityOwner,{who:{id:0,login:'fixture'}});await reject(invalidIdentity.finish);assert.equal((await row(invalidIdentityOwner)).github_user_id,null);
+ const failedIdentityOwner=await owner(),failedIdentity=await run(failedIdentityOwner);
+ await db.prepare("CREATE TRIGGER synthetic_identity_failure BEFORE UPDATE OF github_user_id ON github_refresh_custody BEGIN SELECT RAISE(ABORT,'synthetic_identity_failure'); END").run();
+ try{await reject(failedIdentity.finish);assert.equal((await row(failedIdentityOwner)).github_user_id,null);assert.equal((await token(failedIdentityOwner)).state,'revoking');}
+ finally{await db.prepare('DROP TRIGGER synthetic_identity_failure').run();}
+ const unknownGrant=await row(failedIdentityOwner),knownLater=await run(failedIdentityOwner,{who:{id:303,login:'later'}});await knownLater.finish();
+ assert.equal((await db.prepare('SELECT github_user_id FROM github_refresh_custody WHERE token_id=?').bind(unknownGrant.token_id).first()).github_user_id,null);
+ assert.equal((await db.prepare('SELECT github_user_id FROM github_connections WHERE user_id=?').bind(failedIdentityOwner.account).first()).github_user_id,'303');
  // Retained grants from a previous app must not occupy the bounded cleanup
  // window forever and starve work for the currently configured app.
  const previousClient=[];
