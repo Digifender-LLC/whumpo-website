@@ -22,6 +22,6 @@ async function main(args){
  let journal;try{journal=await readJSON(join(directory,'journal.json'));}catch(e){if(e.code!=='ENOENT')throw e;journal=newJournal(manifest);}
  const observed=await driver.observe(manifest);let reconciliation='ready';
  try{reconcileRelease(manifest,structuredClone(journal),observed);}catch(error){reconciliation=error.message;}
- console.log(JSON.stringify({release:value,status:journal.status,reconciliation,workers:Object.fromEntries(Object.entries(observed.workers).map(([role,w])=>[role,{before:manifest.before.workers[role].id,live:w.id,candidateTagMatches:w.tag===manifest.workers[role].tag,step:journal.steps[role]}])),migrations:{applied:observed.migrations.length,target:manifest.migrations.files.length,step:journal.steps.migrations},cmsRegistryMatches:JSON.stringify(manifest.cms)===JSON.stringify(observed.cms)},null,2));
+ console.log(JSON.stringify({release:value,status:journal.status,reconciliation,workers:Object.fromEntries(Object.entries(observed.workers).map(([role,w])=>[role,{before:manifest.before.workers[role].id,live:w.id,candidateTagMatches:w.tag===manifest.workers[role].tag,step:journal.steps[role]}])),schema:{observed:observed.schema,target:manifest.schema.expected,step:journal.steps.schema},cmsRegistryMatches:JSON.stringify(manifest.cms)===JSON.stringify(observed.cms)},null,2));
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))main(process.argv.slice(2)).catch(error=>{console.error(error.message);process.exitCode=1;});

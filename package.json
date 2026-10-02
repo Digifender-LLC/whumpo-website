@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "node tools/build.mjs && wrangler dev --var ENVIRONMENT:local",
-    "db:local": "wrangler d1 migrations apply tellumo-control --local",
+    "db:local": "node tools/database.mjs initialize",
     "types": "wrangler types",
     "check": "node tools/generate-cms-native-schema.mjs --check && node tools/check-specification-compiler.mjs --check && node tools/check-service-client-compiler.mjs --check && tsc --noEmit && tsc -p tsconfig.frontend.json --noEmit",
     "test:specification-compiler": "node tests/specification-compiler.mjs",
@@ -15,7 +15,6 @@
     "test:gateway-inference": "node tests/gateway-inference.mjs",
     "report:gateway": "node tools/report-gateway.mjs",
     "deploy": "node tools/deploy.mjs",
-    "db:remote": "wrangler d1 migrations apply tellumo-control --remote",
     "invite": "node tools/create-invite.mjs",
     "test:chat": "node tests/chat.mjs",
     "build": "node tools/build.mjs",
@@ -176,7 +175,9 @@
     "test:identity-browser": "node tests/identity-browser.mjs --d1",
     "test:workspace-admission": "node tests/workspace-admission.mjs",
     "test:workspace-identity-browser": "node tests/workspace-identity-browser.mjs --d1",
-    "test:identity-current": "node tests/identity-authority.mjs && node tests/identity-ceremonies.mjs && node tests/identity-kits.mjs && node tests/identity-recovery.mjs && node tests/identity-http.mjs && node tests/workspace-admission.mjs"
+    "test:identity-current": "node tests/identity-authority.mjs && node tests/identity-ceremonies.mjs && node tests/identity-kits.mjs && node tests/identity-recovery.mjs && node tests/identity-http.mjs && node tests/workspace-admission.mjs",
+    "db:status": "node tools/database.mjs status",
+    "test:current-schema": "node tests/current-schema.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

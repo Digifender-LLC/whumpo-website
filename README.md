@@ -47,7 +47,7 @@ The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http:
 | Public website host | `src/site-host.ts`, `wrangler.sites.jsonc` |
 | Controlled visitor frontend | `web/visitor.js` → `public-app/visitor.js` |
 | Separate visitor/runtime services | `wrangler.apps.jsonc`, `wrangler.runtime.jsonc` |
-| Database changes | Numbered `migrations/` SQL files |
+| Database schema | `schema/platform.sql` and current identity SQL composed by `tools/current-schema.mjs` |
 
 Run `pnpm build` to generate assets. Never hand-edit bundles.
 
@@ -55,7 +55,7 @@ Run `pnpm build` to generate assets. Never hand-edit bundles.
 
 The owner authorized Workers Paid ($5/month) resources, with GitHub restricted to free-tier use. New paid services, purchases and customer deployments still require the applicable review. R2 `FILES` remains private; customer credentials never enter generated source or model context. Scope resource access by owner and preserve publication/activation confirmations.
 
-For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.json`, inspect the private archive, and use `pnpm deploy apply RELEASE_ID`. Preparation pins compiled bundles/assets, SQL, four previous versions and CMS registrations before mutation; application journals migrations and each Worker step for recovery. See the [release and recovery protocol](docs/releases.md), including the required compatibility review and uncertain-operation holds. The owner authorizes all pending migrations in this private test environment; all through 0117 are applied. Current typed Chat/schema-2 website changes (0118/0119) await the coordinated test cutover and obsolete-fixture reset described in [current version policy](docs/current-version-policy.md). Provider activation remains separate. The standalone `node tools/deploy-platform.mjs` retains its build guard and registered CMS bindings but does not create a four-Worker journal. Verify live behavior after deployment. See [deployment evidence](docs/deployment.md) and [domain boundaries](docs/whumpo-migration.md).
+For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.json`, inspect the private archive, and use `pnpm deploy apply RELEASE_ID`. The version-3 review pins the complete current schema; occupied old schemas reject, and reset initialization requires a distinct empty database. The journal records schema initialization and each Worker step. See the [release protocol](docs/releases.md). Current identity integration and schema delivery are source/local work; the live test environment remains on the prior schema pending the coordinated cutover. Remaining fixture conversion, external-resource cleanup, new-database selection and live verification are tracked in #72. Provider activation and CMS functional testing remain deferred. The standalone platform wrapper requires an already current database.
 
 `pnpm invite` creates a one-use invitation in ignored `.secrets/`. Share it privately. Never commit keys, session cookies, recovery codes or provider credentials. The supplied key files and `.secrets/` remain ignored.
 

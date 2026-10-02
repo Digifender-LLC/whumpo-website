@@ -1,88 +1,78 @@
 # Four-Worker releases and partial recovery
 
-**WH-002 implemented September 30; archive inputs and acceptance reverified October 1, 2026.** This is operator tooling for the private test platform. It does not publish customer code, provision a CMS, activate a provider or replace application acceptance. The archive/journal protocol is implemented; synthetic failure recovery and real local Wrangler bundle round trips are verified. The first completed live four-Worker release and a real interrupted-release reconciliation are recorded below and in [WH-066B deployment evidence](project-specification-storage.md#test-deployment-and-recovery). A deliberate live fault-injection or complete disaster-recovery drill remains unverified.
+**Current schema delivery contract, October 1, 2026.** Whumpo is a disposable private test platform. Current source uses review version 3 and archive format 2. It accepts one complete current schema, with no numbered migration replay or old account readers. The identity reset has not been deployed. Earlier dated release evidence below describes the prior deployment protocol; it is not an instruction to use it today.
 
 ## Prepare before changing anything
 
-`pnpm deploy` now exposes explicit `prepare`, `status` and `apply` commands. The old unjournaled migrate/build/deploy loop is removed. Preparation requires a successful current `pnpm build`; it performs local dry-run compilation and read-only provider/database inspection. Applying a release is the only new command that changes Cloudflare or D1.
-
-1. Keep one operator and a stable checkout. Review the actual source/configuration changes and old/new service contracts. Check current authorization and any schema/provider prerequisites.
-2. Run the appropriate feature checks and `pnpm build`.
-3. Write a private release review JSON. For a release with **no pending SQL**, its shape is:
+1. Keep one operator and a stable checkout. Review source, service contracts, provider obligations and the current database binding. Run the appropriate feature checks and `pnpm build`.
+2. Write a private review. For an unchanged current database:
 
    ```json
    {
-     "version": 2,
+     "version": 3,
      "environment": "test",
-     "buildInputs": "Copy inputs.sha256 from the reviewed .secrets/build-snapshot.json",
-     "review": "Commit/issue/document reference for the actual mixed-version contract review",
+     "buildInputs": "inputs.sha256 from .secrets/build-snapshot.json",
+     "review": "Actual source and mixed-Worker contract review",
      "mixedWorkersCompatible": true,
      "schemaChange": "none",
-     "migrations": []
+     "schemaSha256": "sqlSha256 from currentSchemaArtifact()"
    }
    ```
 
-   This is an operator attestation after review, not a template to approve arbitrary code. `buildInputs` binds it to the reviewed build inputs; changed inputs require a fresh review/build. The tools cannot establish compatibility or approval from the declaration strings themselves.
-4. `pnpm deploy prepare .secrets/release-review.json` prints a release UUID and private manifest location. Inspect the manifest and preserve the whole archive before applying it.
-5. `pnpm deploy status RELEASE_ID` reads the four live versions, schema names and CMS registration inventory. It never settles a journal or retries an operation.
-6. `pnpm deploy apply RELEASE_ID` applies only the archived pending SQL, then deploys runtime → apps → sites → platform. The platform still uses the binding-preserving wrapper, including master-key verification against registered instances. `apply` on the same release also resumes a safely reconciled partial release; it never automatically repeats an uncertain command.
-7. Verify live application behavior, public assets, authentication/ownership boundaries, routing and schedules against the expected change. Journal status `deployed` means command/version/binding readback succeeded, **not** that customer acceptance passed.
+   These declarations record an actual review, not an automatic approval. The build and complete SQL digests pin its inputs.
+3. `pnpm deploy prepare .secrets/release-review.json` compiles and archives the four Workers and reads the baseline; it performs no remote mutation. Preserve the complete private archive.
+4. `pnpm deploy status RELEASE_ID` reads current versions, exact database schema and CMS registration metadata. It never retries or settles a journal.
+5. `pnpm deploy apply RELEASE_ID` initializes an empty database if reviewed, then deploys runtime → apps → sites → platform. The platform wrapper checks the complete current schema and preserves registered services/keys. Each operation records intent and successful CLI completion before readback. Resume skips confirmed steps and refuses uncertain commands.
+6. Verify application behavior, assets, identity/ownership boundaries, routing and schedules separately. `deployed` confirms deployment identities; it does not mean customer, physical-device or restoration acceptance passed.
 
-The existing standalone platform wrapper remains available for narrowly reviewed platform-only work, with its source/build guard. It does not produce this four-Worker journal. Direct Wrangler operations and `pnpm db:remote` also bypass this protocol; record/reconcile them before the next managed release. Older deployment examples in chronological documents are historical.
+The standalone platform wrapper is for scoped work against an already current database. It refuses the old schema. `db:remote` and numbered migration settings are removed. `pnpm db:local` initializes an empty local database or confirms an exact current one; it does not overwrite occupied or drifted state. `pnpm db:status` inspects local schema. Use a fresh local persistence directory for a reset and use the same directory when starting development.
 
-## What the private archive contains
+## Current schema and account resets
 
-`.secrets/releases/UUID/manifest.json` plus its SHA-256 checksum records:
+`tools/current-schema.mjs` composes, in order:
 
-- Source commit and dirty-checkout flag, source/build digests, Node and Wrangler versions.
-- All four **before** Worker version IDs and secret **binding names**, with service targets; no secret values.
-- All four prepared Worker configurations and unique candidate tags. Candidate version IDs are assigned by Cloudflare later and are recorded in the journal.
-- Every archived file's byte length and SHA-256: actual compiled JavaScript/Wasm modules, platform and visitor static assets, migration SQL, source/configuration/lock files (including `compiler-locks/` since the October 1 correction) and release tooling.
-- Exact applied/pending migration names and SQL hashes; the remote applied set must be a prefix of the archive. Unknown migrations or a hole stop preparation.
-- CMS instance and deployment registration metadata, including owner/project/resource/version identities and existing source/secret **digests**. It contains no master key, derived secret, vault token, customer document or R2 object. This metadata is private operational data and stays out of GitHub.
-- The reviewed mixed-version/schema/recovery declarations.
+1. `src/workspace-identity/canonical-inputs.sql`
+2. `schema/platform.sql`
+3. `src/workspace-identity/schema.sql`
 
-Prepared Worker configurations use `no_bundle` and point only at archived modules/assets/migrations. `apply` does not compile from the working source. Changed/added/missing archive files or symlinks fail verification before mutation. All normal configuration keys used today are supported; a new build hook, resource type or bundling option requires an explicit archive implementation update. The installed Wrangler version and release helper code must match the archive when applying; restore the pinned toolchain/helpers to continue an older release.
+It validates SQL and seed foreign keys in disposable SQLite, hashes every source file and the complete SQL, and derives an exact inventory of tables, indexes, views and triggers. Readback uses the same catalog on D1. Application schema drift, including an obsolete migration ledger, fails. D1's reserved internal tables are outside application ownership. No account data is read for this fingerprint.
 
-Checksums detect accidental drift; they are not signatures or protection from an operator rewriting both the archive and checksum. There is no filesystem transaction spanning verification and provider upload. Keep the private archive stable for the entire operation. The compiled bytes are pinned, but the installed dependency tree is not separately attested by the lockfile or source digest.
+An occupied database with a different schema is refused. The current reset selects a **new empty D1 database** in all three control database bindings. Its ID must not be bound to any of the four active Workers. Use `schemaChange: "initialize"`, `testDataResetAuthorized: true`, the complete schema hash, and a concrete `cutoverReview`. A nonempty CMS registration inventory prevents this reset; it requires a separate resource-retirement decision, with no CMS functional testing implied.
 
-The journal records intent **before** each external operation using a synced temporary file, atomic rename and directory sync. A successful CLI completion is recorded separately from version readback. Failed commands keep fixed diagnostic categories in the journal; Wrangler detail remains in private logs. No automatic archive pruning is provided. Retain successful and interrupted archives, including previous releases. Copy the complete directory with restricted permissions to operator-controlled backup storage when establishing recovery readiness; local `.secrets/` is ignored by Git and is not a disaster backup.
+A database replacement isolates new account rows from requests still holding the old D1 binding. No old account or credential is copied. During the sequential deployment, some components may still use the retired test database; review this interval and the service contracts. It is not a zero-downtime claim. The deployment lease stays in the baseline database through completion. Deleting that database before the journal completes is invalid.
 
-## Current-only schema changes and test resets
+**Still required for the identity cutover:** complete obsolete fixture/operator conversion, review old provider credentials and external resources, create/select the new database, deploy and independently verify all current components, settle external cleanup, then retire the old database and obsolete secrets. The release tool does not create/delete databases, cancel third-party obligations or claim that old provider calls have stopped. The owner's testing-only data deletion authorization applies; no preservation migration or backward runtime is planned.
 
-**Owner directive, October 1, 2026:** all environments are testing; obsolete test data may be deleted. Release review version 2 is the only accepted format and requires `environment: "test"`. Old version-1 review files and old-Worker compatibility fields are rejected. Historical archives remain evidence, not supported deployment targets.
+## Private archive and journal
 
-Every pending SQL file still has an exact `{ "name": "0117_current_billing.sql", "sha256": "…" }` entry and `schemaReview`. The numbered SQL directory is the existing delivery mechanism for the current schema; it does not require data-preservation migrations. `schemaChange` is `none`, `update`, or `reset`. A reset additionally records `testDataResetAuthorized: true` and a `cutoverReview` describing the deleted data and temporary availability impact. Do not create a compatibility reader or restore old binaries to preserve discarded test fixtures.
+`.secrets/releases/UUID/` contains the manifest/checksum, source/build/compiler locks, exact compiled JavaScript/Wasm and assets, configurations, `payload/schema/current.sql`, baseline Worker identities and service/database/secret-binding names, current schema before/expected fingerprints, and CMS registration metadata. Secret values, customer rows, R2 objects and dependency directories are excluded. Registration metadata stays private.
 
-The cross-Worker service review remains necessary: tenant and credential boundaries cannot change mid-call. A reset may temporarily make the old platform unavailable between SQL application and the current platform deployment; the owner accepts temporary test rough edges. Record that interval honestly. Failure recovery inspects actual state and deploys a corrected current release. An uncertain provider write must still be reconciled before repeating it.
+Prepared configurations use archived modules/assets with `no_bundle`. Apply never builds from working source. File tampering, missing/extra files, symlinks, changed tools/toolchains, wrong database identities and schema drift stop release. Checksums detect drift; an operator able to rewrite both artifact and checksum is not excluded by this mechanism.
 
-## Recovery decision table
+The journal uses synced atomic writes before side effects. Successful CLI completion is distinct from remote readback. Fixed diagnostic categories are saved publicly in the journal; provider logs remain private. A command timeout, a matching schema or a matching Worker tag alone does not prove that an uncertain operation finished. Do not reset its status to pending. Inspect its original process/provider operation, establish terminal state, and make a reviewed forward repair. Old archives remain historical evidence, not supported deployment targets.
 
-First inspect the private logs, journal, `status` output and whether the original local Wrangler process is still alive. A timeout or old version still visible is not evidence that a provider action failed. Do not start another release while an earlier mutation might still be running. The shared platform deployment lease excludes cooperating release/CMS deployment tools, renews between steps and refuses an expired/replaced token. It cannot lock the Cloudflare dashboard or direct commands outside these tools.
+The shared deployment lease covers cooperating tools, not dashboard edits or direct API commands. Preserve the entire archive and original logs. `.secrets/` is ignored by Git and is not itself a disaster backup.
 
-| Failure point | Possible state | Required recovery |
-| --- | --- | --- |
-| Preparation | No new remote mutation; incomplete local archive may exist without a sealed manifest. | Fix the build/review/drift, prepare a new archive. Never apply an unsealed one. |
-| Migration command | Schema may be partially advanced; all Workers still on their old versions. | Read applied names. If all archived SQL is present, resume can settle it. Otherwise stop: inspect failed SQL and its transaction behavior, prove the previous process is terminal, then review an explicit forward repair. No automatic SQL replay or reverse migration. |
-| After runtime | New runtime with old apps/sites/platform. | If command completion was saved and tagged runtime/bindings match, resume skips runtime and continues apps. If unsafe, stop and prepare a corrected current release. |
-| After apps | New runtime/apps with old sites/platform. | Confirm both identities; resume starts sites. Repair forward with current components and the applied schema. |
-| After sites | New runtime/apps/sites with old platform. | Confirm three identities; resume starts the binding-preserving platform step. Retain every CMS registration and existing key. |
-| After platform | All four candidates may be active but final readback/journal completion may have failed. | Saved command completion plus four matching tags/version IDs, services, secret names, schema and unchanged CMS inventory allows settlement without another deployment. Perform application acceptance afterward. |
-| CLI outcome uncertain | Upload may have activated code before routes/schedules/settings finished. | Even a matching candidate tag is insufficient. The tool stops and does not set the operation back to pending. Prove the process terminal, inspect provider version, routing, schedule and asset state, then make an explicit reviewed repair/new release. Preserve the original unresolved journal as evidence; do not edit its completion flag to bypass the hold. |
-| CMS registry, unrelated Worker or schema drift | Another operation changed the baseline. | Stop and reconcile that operation. Prepare a newly reviewed release against the actual state; never silently discard/reconstruct CMS bindings from a stale manifest. |
+## Recovery decisions
 
-Recovery is forward-only. Prepare a corrected current release after inspecting the current schema, registrations and bindings. Preserve the existing `.secrets/cms/master.key` for registered instances; a reset of obsolete billing fixtures does not authorize changing unrelated credentials. Historical artifacts and journals are evidence, not a supported old-runtime deployment mode.
+| Failure | Required action |
+| --- | --- |
+| Preparation | Fix the build/review/drift and create a new sealed archive; no remote writes occurred. |
+| Schema initialization | Inspect the actual catalog and the original command. Never replay into a partially initialized database. A terminal failed attempt may be discarded in favor of a newly reviewed empty database. |
+| Worker completion saved, readback interrupted | Confirm its tag, version, service/database bindings and required secrets; resume only the remaining steps. |
+| CLI outcome uncertain | Establish whether the original operation ended, inspect routing/settings/assets as well as code, then review a forward repair. No automatic repeat. |
+| Outside schema/Worker/CMS change | Reconcile the other operation and prepare against the actual state. |
+| After all four Workers | Complete application acceptance and external-resource retirement separately. |
 
-Complete whole-platform/database/object/key recovery remains WH-008/019/059. This release mechanism does not by itself satisfy those tasks.
+Whole-platform database/object/key restoration remains its own roadmap gate. Historical source/build archives do not authorize restoring obsolete identity or billing authority.
 
-## Local verification — September 30, 2026
+## Verification for the current contract
 
-- `node tests/build-snapshot.mjs`: existing source/build guard and refusal before provider access.
-- `node tests/release-manifest.mjs`: disposable source/SQL/assets, fake provider. Checks immutable artifact/SQL pins, missing/extra/tampered files, symlink and secret exclusion, schema declarations, drift, persisted intent, interruption after **each** of the four Worker commands, one invocation per completed step after resume, repeat completion, migration uncertainty, unknown Worker command refusal even with a candidate tag, binding-name-only projection, and recoverable previous archive bytes.
-- `node tests/release-lock.mjs`: actual in-memory SQLite, lease renewal/concurrency/expiry/failure cleanup and preventing an old operator from releasing a replacement lock.
-- `pnpm build` plus `node tests/release-bundles.mjs`: actual Wrangler 4.143.0 dry-run compilation and archived `--no-bundle` re-ingestion for all four Workers. Exact executable-module byte equality, including runtime Wasm. Empty temporary HOME and allowlisted environment; no account/deployment/model call or functional CMS test.
+- `tests/release-manifest.mjs`: exact current schema, archived bytes, secret exclusion, empty/unbound initialization, active-database and occupied-schema refusal, binding drift, uncertain import hold, failures after all four Worker steps, no repeated confirmed operation, and nonempty CMS metadata preservation for ordinary releases. Uses a fake provider; performs no CMS operations.
+- `tests/current-schema.mjs`: current account shape, actual local D1 initialization/readback, immutable spent invitations, repeat without clearing rows, and schema drift refusal. No remote mutation.
+- `tests/build-snapshot.mjs`: complete current-schema/build/compiler inputs and source/asset drift.
 
-No TypeScript behavior changed; no `pnpm check` was needed for this tooling change. That original local verification performed no live Worker/schema/customer-content mutation, CMS test or paid service activation. The subsequent WH-066B live release and application evidence are recorded separately below; broader recovery drills remain separate. Wrangler's [dry-run, output and no-bundle commands](https://developers.cloudflare.com/workers/wrangler/commands/workers/) are the provider interface used here (checked September 30, 2026).
+Cloudflare's documented interface is [`d1 execute --file`](https://developers.cloudflare.com/d1/wrangler-commands/) with an existing target database; [import guidance](https://developers.cloudflare.com/d1/best-practices/import-export-data/) documents the SQL import and reserved D1 table. Checked October 1, 2026. Local or synthetic evidence does not establish that the live test environment has changed.
 
 ## Archive input correction and WH-002 acceptance — October 1, 2026
 
