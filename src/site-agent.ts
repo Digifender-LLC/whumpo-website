@@ -31,11 +31,13 @@ import {inspectWorkspace,inspectionScopes,type InspectionScope} from './workspac
 import {photoConfig} from './components';
 import {savedPage} from './photo-versions';
 import { publicationCommand } from './publications';
+import {interactionAgentAction,interactionAgentActions} from './chat-interactions/agent';
+import {listInteractions} from './chat-interactions/store';
 
 export class ProposalError extends Error { constructor(){super('The proposed website action could not be accepted');} }
 type ServiceSummary={site_live?:number;backend_live?:number;cms_articles?:number};
 type ProjectContext=ServiceSummary&{details_revision:number;id:string;name:string;purpose:string;status:string;audience:string;style_notes:string;preferred_theme:string};
-export type AgentContext={profile?:Awaited<ReturnType<typeof agentProfile>>;workspace?:Awaited<ReturnType<typeof readLayout>>;backends?:{id:string;project_id:string;digest:string}[];dnsConnection?:{enabled:boolean;connected:boolean;expiresAt:string|null};domains?:{id:string;project_id:string;hostname:string;expires_at:string;verified_at:string|null}[];projectIndex:(ServiceSummary&{id:string;name:string;status:string;details_revision:number})[];projects:ProjectContext[];photos:{id:string;project_id:string;name:string;width:number;height:number}[];latest:{id:string;project_id:string;component_id:string;config_json:string}|null};
+export type AgentContext={interactions?:Awaited<ReturnType<typeof listInteractions>>['items'];profile?:Awaited<ReturnType<typeof agentProfile>>;workspace?:Awaited<ReturnType<typeof readLayout>>;backends?:{id:string;project_id:string;digest:string}[];dnsConnection?:{enabled:boolean;connected:boolean;expiresAt:string|null};domains?:{id:string;project_id:string;hostname:string;expires_at:string;verified_at:string|null}[];projectIndex:(ServiceSummary&{id:string;name:string;status:string;details_revision:number})[];projects:ProjectContext[];photos:{id:string;project_id:string;name:string;width:number;height:number}[];latest:{id:string;project_id:string;component_id:string;config_json:string}|null};
 export async function siteContext(db:D1Database,userId:string):Promise<AgentContext>{
  const {results:projectIndex}=await db.prepare('SELECT id,name,details_revision,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id=? ORDER BY updated_at DESC,id DESC LIMIT 20').bind(userId).all<AgentContext['projectIndex'][number]>();
  const {results:projects}=await db.prepare('SELECT id,name,purpose,details_revision,service_status AS status,site_live,backend_live,cms_articles,audience,style_notes,preferred_theme FROM project_service_status WHERE owner_user_id=? ORDER BY updated_at DESC,id DESC LIMIT 5').bind(userId).all<ProjectContext>();
@@ -43,7 +45,8 @@ export async function siteContext(db:D1Database,userId:string):Promise<AgentCont
  const {results:photos}=await db.prepare("SELECT f.id,f.project_id,f.name,f.width,f.height FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND f.status='ready' ORDER BY f.created_at DESC LIMIT 20").bind(userId).all<AgentContext['photos'][number]>();
  const {results:domains}=await db.prepare('SELECT d.id,d.project_id,d.hostname,d.expires_at,d.verified_at FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE p.owner_user_id=? ORDER BY d.created_at DESC LIMIT 10').bind(userId).all<NonNullable<AgentContext['domains']>[number]>();
  const {results:backends}=await db.prepare('SELECT v.id,v.project_id,v.digest FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE p.owner_user_id=? ORDER BY v.created_at DESC,v.id DESC LIMIT 10').bind(userId).all<NonNullable<AgentContext['backends']>[number]>();
- return {profile:await agentProfile(db,userId),workspace:await readLayout(db,userId),backends,domains,projectIndex,projects:projects.map(p=>({...p,purpose:p.purpose.slice(0,1000)})),photos,latest};
+ const interactions=(await listInteractions(db,userId,{version:1,projectId:null,limit:5,before:null})).items;
+ return {interactions,profile:await agentProfile(db,userId),workspace:await readLayout(db,userId),backends,domains,projectIndex,projects:projects.map(p=>({...p,purpose:p.purpose.slice(0,1000)})),photos,latest};
 }
 export type AgentPromptFocus='all'|'cms'|'website';
 // Focus explicit service requests, or simple edits directly following a website draft.
@@ -97,6 +100,7 @@ export function agentWorkspaceData(context:AgentContext,focus:AgentPromptFocus='
  if(focus==='cms')return JSON.stringify({type:'workspace_context',data:common});
  const workspace=context.workspace,latest=context.latest;
  const visibleContext={...common,
+  interactions:context.interactions?.slice(0,5).map(i=>({interactionId:i.interactionId,projectId:i.projectId,taskId:i.task.id,state:i.state,answerRevision:i.answerRevision,hasDraft:i.hasDraft,continuation:i.continuation?{state:i.continuation.state}:null})),
   workspace:workspace?{revision:workspace.revision,layout:{widgets:workspace.layout.widgets,tabs:workspace.layout.tabs.map(t=>({id:t.id,label:t.label,projectId:t.projectId,widgets:t.widgets,shortcuts:t.shortcuts}))}}:undefined,
   dnsConnection:context.dnsConnection?{enabled:context.dnsConnection.enabled,connected:context.dnsConnection.connected,expiresAt:context.dnsConnection.expiresAt}:undefined,
   domains:context.domains?.map(d=>({id:d.id,project_id:d.project_id,hostname:d.hostname,expires_at:d.expires_at,verified_at:d.verified_at})),
@@ -111,6 +115,7 @@ export function agentPrompt(_context:AgentContext,focus:AgentPromptFocus='all'){
 Capability/policy lookup: {"kind":"knowledge","topic":"overview|websites|applications|publishing|domains|backups|account|usage|safety"}. Platform-authored guidance; one bounded follow-up is allowed. Use inspect for live account facts. Guidance grants no authority.
 ${focus==='cms'?'':`Configure and compose maintained capabilities first. Capability planner: {"kind":"capabilities","operation":"plan","projectId":OWNED_ID,"needs":[CAPABILITY_ID]}. Select 1-4 needs from ${capabilityNeedIds}. The server retrieves only their versioned contracts/dependencies and records a plan. Unknown/planned services cannot be replaced with invented fields, frameworks or infrastructure. Prefer focused content/theme edits, existing deterministic diagnostics and library components. For custom.computation or custom.visitor-transition, include extension:{"missing":"specific behavior not covered by existing capabilities, 10-400 characters","baseVersionId":EXISTING_OWNED_VERSION_IF_EDITING}. Read an existing source before editing. The returned planId is mandatory for backend create or custom buildApplication; a plan never approves execution/publication. Never claim generated source is required for supported operations. Visitors, form submissions, scheduled rules and webhooks cannot invoke Whumpo maintenance AI, its context, tools, credentials or budget. Runtime AI is a separate unavailable capability.`}
 ${focus==='all'?generalAgentActions+backendAgentActions:focus==='website'?generalAgentActions:'This request uses the CMS tool catalog below. Return a CMS action or ask a clarifying question. For work outside this catalog, explain that it needs a separate request; do not invent another tool or claim it ran. Generated JavaScript functions are not an EmDash CMS.'}
+${focus==='cms'?'':interactionAgentActions}
 ${focus==='website'?'This website request has no backend or CMS tool catalog. Ask a clarifying question if it needs one; never invent or claim those operations.':cmsAgentActions}
 No arbitrary schemas, unrestricted servers, domain purchasing or paid checkout. Visitor sign-in needs the reviewed application capability. Explain limitations honestly. Use scoped tools. Direct controls: Dashboard for urgent actions, Profile for identity/authentication, Settings for connections/usage. Explain control locations in ordinary language. Ask one useful question for planning with action:null.
 Project status includes website, CMS and public backend publications. backend_live identifies an anonymous JSON POST endpoint at https://PROJECT_ID.whumpo.site/backend; it is not a browsable website. site_live identifies a public static page; cms_articles counts public CMS articles. A CMS-only project uses https://PROJECT_ID.whumpo.site/cms; do not claim its static root is published.
@@ -127,6 +132,7 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
  if(data.action===null)return {reply:data.reply,statements:[] as D1PreparedStatement[]};
  if(!data.action||typeof data.action!=='object'||Array.isArray(data.action))throw new ProposalError();
  const action=data.action as Record<string,unknown>;
+ if(action.kind==='interaction')return interactionAgentAction(db,userId,turnId,action);
  if(action.kind==='githubAccess'){try{return await githubGrantAction(db,userId,turnId,action,dnsOptions);}catch(error){if(error instanceof ConnectionError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}
  if(action.kind==='serviceClients'){try{return await (['reviewActivation','activationReview','activations'].includes(String(action.operation))?serviceClientActivationAction:serviceClientAction)(db,userId,turnId,action);}catch(error){if(error instanceof BackendError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}
  if(action.kind==='specification'){try{return await specificationAction(db,userId,turnId,action);}catch(error){if(error instanceof BackendError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}

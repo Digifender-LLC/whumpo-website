@@ -4,6 +4,8 @@ import type {Field,Definition,Answers,OwnedResources,UnsignedInteraction,IssuedI
 export type * from './types';
 
 export const bounds = Object.freeze({requestBytes:32768,definitionBytes:24576,answerBytes:16384,depth:10,nodes:1024,fields:12,cards:8,choices:12});
+// One content field becomes one compiler operation; the current compiler accepts eight.
+export const contentFieldLimit=8;
 // Closed binding vocabulary. Registry entries never grant access or dispatch an action.
 export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'|'core.insights';source:string|null;handler:string|null;scope?:string;displays?:readonly string[]}>> = Object.freeze({
   'answer.value@1': {mode:'collect',feature:'core.editing',source:null,handler:null},
@@ -120,6 +122,7 @@ export function validateDefinition(input:unknown):Definition {
     if(d.template==='project-select@1')check(d.continuationBinding===null&&d.fields.length===1&&d.fields[0].id==='project'&&d.fields[0].type==='resource'&&d.fields[0].constraints.collection==='projects'&&!d.fields[0].constraints.multiple&&d.fields[0].required&&!d.fields[0].when,'TEMPLATE');
     if(d.template==='choice@1')check(d.continuationBinding===null&&d.fields.length===1&&['choice','multi-choice'].includes(d.fields[0].type)&&!d.fields[0].when,'TEMPLATE');
     if(d.continuationBinding){
+      check(d.fields.length<=contentFieldLimit,'CONTENT_MAPPING');
       check(d.fields.every(f=>f.source&&f.required&&!f.when&&'maxLength' in f.constraints&&f.constraints.maxLength<=1000),'CONTENT_MAPPING');
       unique(d.fields.map(f=>({id:f.source!.contentId})),'id');
       check(new Set(d.fields.map(f=>f.source!.revision)).size===1,'CONTENT_MAPPING');
