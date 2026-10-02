@@ -2,6 +2,12 @@
 
 **WH-065 — September 30, 2026. Implemented and deployed to test; verification scope is recorded below.** [Execution issue](https://github.com/zemdregon/whumpo/issues/13). This implements the discovery/planning layer after the [WH-064 specification decision](project-specification.md). Whole-project specification persistence, compilation and module runtime services remain WH-066–069. A catalog entry describes a contract, not an installed customer service.
 
+## Current account verification — October 2, 2026
+
+The planner and inspection fixtures now initialize the complete current schema and use admitted owner scopes from the same bundle as the domain handlers. Prepared draft statements commit through that same scope. Current D1 tests verify missing/foreign/stale/expired plans, exact replay, lost acknowledgment and atomic source/provenance/activity rollback after an intervening backend change. The supported website fixture makes two synthetic model calls, passes a 1,433-byte relevant lookup and generates no backend source. The private library application path remains separately verified through actual QuickJS.
+
+[Verification](verification.md#reusable-components-application-builds-and-bounded-planning) distinguishes synthetic inference from real runtime execution. Current application build/page-design checks pass; their optional live provider branches were not run. These tests add no provider activation or shared customer-source retrieval, and they do not complete the pending remote identity cutover.
+
 ## Owner experience
 
 Chat remains natural language. The agent first uses existing content/theme edits, deterministic diagnostics, shared contact/directory services or exact library helpers where they fit. It can request a capability plan for one to four needs and receive only those contracts and their dependencies in the existing bounded lookup continuation. The plan is a private receipt; it changes no website, setting, permission or service.

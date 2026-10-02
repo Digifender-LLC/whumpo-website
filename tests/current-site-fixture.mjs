@@ -13,7 +13,7 @@ export async function currentSiteFixtureHandlers(){
   export {admitWorkspace} from './src/workspace-identity/admission';
   export {resolveIdentity} from './src/workspace-identity/authority';
   export {createWebsite,prepareSpecification,readSpecificationProposal} from './src/project-specification/store';
-  export {readChat,sendChat,sendChatControl} from './src/chat';
+  export {readChat,sendChat,sendChatControl,chatState} from './src/chat';
   export {reviewBackup,confirmBackup,listBackups,githubRepositories} from './src/github-backups';
   export {ownedExport} from './src/exports';
   export {seal} from './src/connection-vault';
@@ -22,6 +22,16 @@ export async function currentSiteFixtureHandlers(){
   export {compareVersions,compareReview,diffPage} from './src/version-diff';
   export {renderSite} from './src/components';
   export * as backend from './src/backend-versions';
+  export * as backendLibrary from './src/backend-library';
+  export * as capabilityCatalog from './src/capability-catalog';
+  export * as compositionPlans from './src/composition-plans';
+  export * as backendNominations from './src/backend-nominations';
+  export * as appPageDesign from './src/app-page-design';
+  export {applicationChatActions} from './src/app-chat-actions';
+  export {linkChatReviewReply} from './src/chat-review-receipts';
+  export {readOnboarding,saveOnboarding,completeOnboarding} from './src/onboarding';
+  export {updateProfile} from './src/profile';
+  export {inspectionRequest,inspectionMessages} from './src/agent-inspection';
   export * as backendDiff from './src/backend-diff';
   export * as backendPublication from './src/backend-publication';
   export * as backendForms from './src/backend-forms';
