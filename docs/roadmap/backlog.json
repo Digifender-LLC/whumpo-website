@@ -254,7 +254,7 @@
         "Downloads, printing/Save as PDF and optional explanations work accessibly on the supported physical-device/provider matrix using disposable synthetic recovery material"
       ],
       "verification": [
-        "pnpm test:owner-recovery",
+        "pnpm test:identity-recovery",
         "pnpm test:app-auth",
         "Manual real-device checklist plus connected loopback baseline; live disposable account only with exact reviewed scope"
       ],
@@ -262,7 +262,7 @@
         "docs/owner-recovery.md",
         "docs/onboarding.md",
         "docs/app-data.md",
-        "tools/owner-recovery-browser.mjs",
+        "tests/identity-browser.mjs",
         "docs/roadmap/identity-and-data-protection.md",
         "docs/workspace-identity.md"
       ],
@@ -3896,7 +3896,7 @@
         "One-key signup and incomplete recovery cannot issue or exchange a normal native session; lost-all-keys recovery requires two replacement passkeys and fresh passkey verification before handoff"
       ],
       "verification": [
-        "Run pnpm check and the existing test:owner-recovery, test:passkeys and test:onboarding-welcome suites after inspecting their setup",
+        "Run pnpm check and the existing test:identity-recovery, test:identity-ceremonies and test:onboarding-welcome suites after inspecting their setup",
         "Add connected two-owner native identity/API fixtures covering challenge, PKCE, session/recovery races, Origin regression and recent-authentication boundaries",
         "Run Kotlin DTO/transport tests against the same sanitized fixtures; record signed App Link/passkey evidence separately from emulators"
       ],
@@ -5548,7 +5548,7 @@
         "Implementation/local acceptance is recorded separately from WH-005 physical-device and approved live recovery evidence"
       ],
       "verification": [
-        "Run pnpm check and inspect/run existing test:owner-recovery and test:passkeys fixture suites plus focused enrollment/native-handoff cases",
+        "Run pnpm check and inspect/run existing test:identity-recovery and test:identity-ceremonies fixture suites plus focused enrollment/native-handoff cases",
         "Use connected disposable D1/handler tests for restricted authority, rotation/replay/concurrency, session fencing and response loss",
         "Use quality-managed browser checks and inspect synthetic text download, print layout and saved PDF on desktop/mobile; manually verify keyboard and screen-reader operation"
       ],
@@ -5561,7 +5561,7 @@
         "src/index.ts",
         "frontend/src/identity/flow.tsx",
         "tests/identity-recovery.mjs",
-        "tools/owner-recovery-browser.mjs",
+        "tests/identity-browser.mjs",
         "docs/workspace-identity.md",
         "docs/identity-authority.md",
         "docs/identity-ceremonies.md",

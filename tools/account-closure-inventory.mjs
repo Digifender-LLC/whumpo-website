@@ -7,7 +7,17 @@ const metrics={
  featurePreviewGrants:['feature_preview_grants','user_id'],
  accounts:['users','id'], projects:['projects','owner_user_id'],
  liveProjects:['project_service_status','owner_user_id','site_live=1 OR backend_live=1 OR cms_articles>0'],
- sessions:['sessions','user_id'], chatTurns:['chat_turns','user_id'],
+ identityAccounts:['identity_accounts','account_id'],
+ identityAttempts:['identity_attempts','account_id'],
+ identityCredentials:['identity_credentials','account_id'],
+ identitySessions:['identity_sessions','account_id'],
+ identityGrants:['identity_grants','account_id'],
+ identityChallenges:['identity_challenges','account_id'],
+ identityCeremonyReceipts:['identity_ceremony_receipts','account_id'],
+ identityKitOffers:['identity_kit_offers','account_id'],
+ identityEffectReceipts:['identity_effect_receipts','account_id'],
+ identityRecoveryReviews:['identity_recovery_reviews','account_id'],
+ chatTurns:['chat_turns','user_id'],
  chatReviewReceipts:['chat_review_receipts','user_id'],
  compositionPlans:['composition_plans','user_id'],
  specificationProposals:['project_spec_proposals','user_id'],
@@ -55,6 +65,7 @@ export async function accountClosureInventory(db,userId=null){
   readyForDeletion:false,
   limitations:[
    'Read-only control-database snapshot; not a complete data export or deletion authorization.',
+   'Identity counts cover rows linked to extant accounts; anonymous login/signup challenges and detached effect receipts need separate platform retention.',
    'Provider resources, R2 objects and backups have not been reconciled. Row counts are not resource counts.',
    'Saved configuration/proposal counts include full content copies. Metadata receipt counts do not prove independent restore suppression or safe deletion order.',
    'No legal-hold or retention decision has been established; zero blocked records does not establish clearance.',
@@ -69,5 +80,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const api=cloudflareClient(config.account_id,fetch,credentials);
   const db=remoteD1(api,config.d1_databases.find(b=>b.binding==='DB').database_id);
   console.log(JSON.stringify(await accountClosureInventory(db),null,2));
- }catch{console.error('Account closure inventory unavailable. Check authorization and migrations. Nothing was changed.');process.exitCode=1;}
+ }catch{console.error('Account closure inventory unavailable. Check authorization and the complete current schema. Nothing was changed.');process.exitCode=1;}
 }
