@@ -3,7 +3,7 @@ import {featurePredicate,assertFeature} from '../feature-admission';
 import {canonicalJSON,jsonDigest,copyJSON} from '../project-specification/v2/json';
 import {readSpecification} from '../project-specification/store';
 import type {ProjectSpecification} from '../project-specification/v2/types';
-import {InteractionError,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers} from './protocol';
+import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
 
@@ -79,18 +79,26 @@ export async function listInteractions(db:D1Database,user:string,input:unknown){
 
 type ContentBriefRequest={originTurnId:string;projectId:string;contentIds:string[]};
 type ReplacementRequest={originTurnId:string;previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;contentIds:string[]};
+type BriefPlan={interactionId:string;originTurnId:string;issueHash:string;statements:D1PreparedStatement[]};
 function contentIds(value:unknown):asserts value is string[]{
- if(!Array.isArray(value)||value.length<1||value.length>12||new Set(value).size!==value.length||value.some(x=>typeof x!=='string'||!/^[a-z][a-z0-9-]{0,39}$/.test(x)))throw new InteractionError('SHAPE');
+ if(!Array.isArray(value)||value.length<1||value.length>contentFieldLimit||new Set(value).size!==value.length||value.some(x=>typeof x!=='string'||!/^[a-z][a-z0-9-]{0,39}$/.test(x)))throw new InteractionError('SHAPE');
 }
 /** Server-maintained fields only. Model-authored questions/defaults are not an issuance API. */
 export async function issueContentBrief(db:D1Database,user:string,input:ContentBriefRequest){
+ return persistBrief(db,user,await prepareContentBrief(db,user,input));
+}
+/** Compose these guarded writes with the pending Chat result, never before it. */
+export async function prepareContentBrief(db:D1Database,user:string,input:ContentBriefRequest):Promise<BriefPlan>{
  await assertWorkspace(db,user);const request=copyJSON(input,4096);
  if(!request||Object.keys(request).sort().join(',')!=='contentIds,originTurnId,projectId'||!identifier(request.originTurnId)||!identifier(request.projectId))throw new InteractionError('SHAPE');
- contentIds(request.contentIds);return issueBrief(db,user,request,null);
+ contentIds(request.contentIds);return prepareBrief(db,user,request,null);
 }
 /** The trusted Chat adapter supplies its current origin turn, never an arbitrary
  * form definition. A correction stays on the original owned project and task. */
 export async function replaceContentBrief(db:D1Database,user:string,input:ReplacementRequest){
+ return persistBrief(db,user,await prepareReplacementContentBrief(db,user,input));
+}
+export async function prepareReplacementContentBrief(db:D1Database,user:string,input:ReplacementRequest):Promise<BriefPlan>{
  await assertWorkspace(db,user);const request=copyJSON(input,4096);
  if(!request||Object.keys(request).sort().join(',')!=='contentIds,definitionDigest,expectedAnswerRevision,originTurnId,previousInteractionId'||!identifier(request.originTurnId)||!identifier(request.previousInteractionId)||typeof request.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(request.definitionDigest)||!Number.isSafeInteger(request.expectedAnswerRevision)||request.expectedAnswerRevision<0)throw new InteractionError('SHAPE');
  contentIds(request.contentIds);
@@ -99,16 +107,17 @@ export async function replaceContentBrief(db:D1Database,user:string,input:Replac
  const metadata=await row(db,user,request.previousInteractionId),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
  if(prior){
   const hash=await jsonDigest({originTurnId:request.originTurnId,projectId:metadata.project_id,contentIds:request.contentIds,replacement:request});
-  if(prior.issue_hash!==hash)throw new InteractionStoreError(409,'request_conflict');return readInteraction(db,user,prior.id);
+  if(prior.issue_hash!==hash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);
+  return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash:hash,statements:[]};
  }
  const previous=await readInteraction(db,user,request.previousInteractionId);
  if(!previous.envelope.scope.projectId||previous.envelope.definition.template!=='content-change@1')throw new InteractionStoreError(409,'adapter_unavailable');
- return issueBrief(db,user,{originTurnId:request.originTurnId,projectId:previous.envelope.scope.projectId,contentIds:request.contentIds},{request,previous});
+ return prepareBrief(db,user,{originTurnId:request.originTurnId,projectId:previous.envelope.scope.projectId,contentIds:request.contentIds},{request,previous});
 }
-async function issueBrief(db:D1Database,user:string,request:ContentBriefRequest,replacement:{request:ReplacementRequest;previous:Awaited<ReturnType<typeof readInteraction>>}|null){
+async function prepareBrief(db:D1Database,user:string,request:ContentBriefRequest,replacement:{request:ReplacementRequest;previous:InteractionRead}|null):Promise<BriefPlan>{
  const previous=replacement?.previous??null,issueHash=await jsonDigest(replacement?{...request,replacement:replacement.request}:request);
  const prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
- if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');return readInteraction(db,user,prior.id);}
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  if(replacement&&(previous!.envelope.definitionDigest!==replacement.request.definitionDigest||previous!.answerRevision!==replacement.request.expectedAnswerRevision||previous!.replacementInteractionId||['pending','unknown'].includes(previous!.submission?.continuation.state??'')))throw changed();
  await assertFeature(db,feature(user,request.projectId));
  const current=await readSpecification(db,user,request.projectId);
@@ -152,12 +161,15 @@ async function issueBrief(db:D1Database,user:string,request:ContentBriefRequest,
   db.prepare('INSERT OR IGNORE INTO chat_conversations(id,user_id) VALUES(?,?)').bind(conversationId,user),
   db.prepare('INSERT INTO chat_interaction_tasks(id,user_id,conversation_id,project_id,origin_turn_id) VALUES(?,?,?,?,?)').bind(taskId,user,conversationId,request.projectId,request.originTurnId));
  statements.push(db.prepare('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,previous_interaction_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,user,conversationId,taskId,request.projectId,request.originTurnId,previous?.envelope.id??null,canonicalJSON(envelope),envelope.definitionDigest,issueHash,clock!.now,clock!.expiry));
- try{await db.batch(statements);}catch(error){
-  const saved=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
-  if(saved){if(saved.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');return readInteraction(db,user,saved.id);}
+ return {interactionId:id,originTurnId:request.originTurnId,issueHash,statements};
+}
+async function persistBrief(db:D1Database,user:string,plan:BriefPlan){
+ try{if(plan.statements.length)await db.batch(plan.statements);}catch(error){
+  const saved=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(plan.originTurnId,user).first<{id:string;issue_hash:string}>();
+  if(saved){if(saved.issue_hash!==plan.issueHash)throw new InteractionStoreError(409,'request_conflict');return readInteraction(db,user,saved.id);}
   if(String(error).includes('chat_interaction_changed')||String(error).includes('UNIQUE constraint failed: chat_interaction_tasks')||String(error).includes('UNIQUE constraint failed: chat_interactions'))throw changed();throw error;
  }
- return readInteraction(db,user,id);
+ return readInteraction(db,user,plan.interactionId);
 }
 
 /** Saves only information. No AI, compiler, domain action or continuation dispatch. */

@@ -3299,6 +3299,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/chat-interactions/store.ts](../../src/chat-interactions/store.ts)
 - [src/chat-interactions/continuation.ts](../../src/chat-interactions/continuation.ts)
 - [tests/chat-interaction-storage.mjs](../../tests/chat-interaction-storage.mjs)
+- [src/chat-interactions/agent.ts](../../src/chat-interactions/agent.ts)
+- [tests/chat-interaction-agent.mjs](../../tests/chat-interaction-agent.mjs)
 
 ### Execution coordination
 
@@ -3313,6 +3315,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/87. Planning owner: Codex /roo
 - 2026-10-02 UTC: linked content-brief replacement, bounded owned resume index and explicit local-preview reconciliation implemented over aa0ee3e. Replacements preserve immutable prior answers, re-read current website baselines and atomically reject competing edits/claims or revoked authority. History/export include nonactionable correction links. Recovery fences interrupted local preparation without redispatch or inventing provider outcomes. Source only; issue #87 remains open for original lifecycle/resource/client and connected acceptance, with no deployment or deferred provider work.
 - 2026-10-02 UTC: owner approved LC-10, seven days of inactivity for unsubmitted Chat form drafts. Current source adds immediate cutoff filtering, fixed bounded hourly payload cleanup, immediate cancel/discard cleanup, retained replay metadata, draft-inclusive Chat exports and content-free maintenance backlog/health. Submitted answers and unresolved continuations remain excluded. Original account/attachment/restore/client and renderer/agent acceptance stays open; source only, no deployment or new retention policy for other classes.
 - 2026-10-02 UTC: current content-brief client connected under #87: owned Chat pointers, typed current readback, exact request-hash recovery, seven-day local drafts with independent unresolved retention, account-switch/sign-out clearing and late-response fencing. Inline validation/collapse/draft/discard and explicit private-preview continuation provide the first WH-107 handoff. Original generalized/resource/history/resume/agent, lifecycle/restore and reviewed deployment acceptance remains open; no new public issuer or provider activation.
+- 2026-10-02 UTC: maintained content-brief agent handoff under #87 connects requestContent/read/replaceContent to the existing bounded owner Chat loop. Prepared form writes commit with the final Chat result; model reads receive metadata only. Content forms now match the compiler limit of eight operations. Scripted actual HTTP/SQLite/local-D1 journeys cover lookup, correction, exact private preview/save, replay and late authority/base/answer changes. Broader custom/resource/lifecycle/restore and deployment acceptance remains open; no live inference or publication.
 
 ## WH-107 — Render accessible Chat forms and maintained interaction templates
 
@@ -3425,6 +3428,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/agent-inspection.ts](../../src/agent-inspection.ts)
 - [tests/agent-prompt-focus.mjs](../../tests/agent-prompt-focus.mjs)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [src/chat-interactions/agent.ts](../../src/chat-interactions/agent.ts)
+- [tests/chat-interaction-agent.mjs](../../tests/chat-interaction-agent.mjs)
 
 ### Execution coordination
 
@@ -3433,6 +3438,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
+- 2026-10-02 UTC: WH-106/#87 supplies the initial maintained content-change@1 agent adapter and bounded task metadata as a handoff from d9003a1. No WH-108 claim/completion: custom composition, prose-to-answer changes, eligible submitted-answer model continuation, real-model quality and full renderer/task acceptance remain in the original scope. WH-106/107 remain open; dependencies and readiness are unchanged.
 
 ## WH-109 — Compose and maintain dashboards and custom views through the agent
 
