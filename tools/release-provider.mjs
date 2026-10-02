@@ -38,9 +38,9 @@ export async function compileWorker(root,role,config,output,directory,options){
  await runWrangler(['deploy','--config',file,'--dry-run','--outdir',output],join(directory,role+'-build.log'),options);
  return basename(config.main).replace(/\.[^.]+$/,'.js');
 }
-export async function releaseProvider(root=process.cwd()){
+export async function releaseProvider(root=process.cwd(),{api:providedApi}={}){
  const configs=Object.fromEntries(await Promise.all(workerOrder.map(async role=>[role,await readJSON(join(root,configFiles[role]))])));
- const base=configs.platform,api=cloudflareClient(base.account_id),db=remoteD1(api,base.d1_databases.find(b=>b.binding==='DB').database_id);
+ const base=configs.platform,api=providedApi??cloudflareClient(base.account_id),db=remoteD1(api,base.d1_databases.find(b=>b.binding==='DB').database_id);
  return {
   configs,
   withLock:(manifest,work)=>withPlatformLock(remoteD1(api,manifest.before.workers.platform.databases.find(d=>d.binding==='DB').id),work),
@@ -60,10 +60,13 @@ export async function releaseProvider(root=process.cwd()){
     workers[role]={id:active.id,tag:version.annotations?.['workers/tag']??null,...bindingSummary(active.bindings)};
    }
    const schema=await inspectSchema(db);
-   const baselineId=manifest?.before.workers.platform.databases.find(d=>d.binding==='DB').id??workers.platform.databases.find(d=>d.binding==='DB')?.id;
-   if(!baselineId)throw Error('Active platform database binding is missing');
-   const cms=await cmsInventory(remoteD1(api,baselineId));
-   if(schema.objects&&baselineId!==base.d1_databases.find(b=>b.binding==='DB').database_id&& !same(cms,await cmsInventory(db)))throw Error('Replacement database CMS registry differs');
+   // Read the database selected by the actual active platform. Before cutover
+   // that is the baseline; afterwards it is the current target. A completed
+   // release must not depend on a retired database remaining readable.
+   const activeDatabaseId=workers.platform.databases.find(d=>d.binding==='DB')?.id;
+   if(!activeDatabaseId)throw Error('Active platform database binding is missing');
+   const cms=await cmsInventory(remoteD1(api,activeDatabaseId));
+   if(schema.objects&&activeDatabaseId!==base.d1_databases.find(b=>b.binding==='DB').database_id&& !same(cms,await cmsInventory(db)))throw Error('Replacement database CMS registry differs');
    return {workers,cms,schema};
   },
   compile:(role,config,output,directory)=>compileWorker(root,role,config,output,directory),
