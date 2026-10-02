@@ -1,10 +1,10 @@
 # Data retention, export and deletion contract
 
-**WH-009 decision packet, reconciled October 1, 2026 UTC; source baseline `0002632`, migrations 0001–0113. Proposed terms, not owner-approved policy or a compliance claim.** This document specifies the lifecycle work required before customer account closure or account-wide export can be offered. It does not turn on deletion, change existing retention, read customer data, or authorize external resource removal. The owner-approved boundaries below remain in force; the new time windows require a decision and implementation evidence.
+**WH-009 lifecycle decision, extended by WH-116 on October 2, 2026 UTC against the complete current schema at `bfe03a0`. Proposed retention terms, not owner-approved policy or a compliance claim.** This document specifies the lifecycle work required before customer account closure or account-wide export can be offered. It does not turn on deletion, change existing retention, read customer data, or authorize external resource removal. The owner-approved boundaries below remain in force; the new time windows require a decision and implementation evidence.
 
 ## Established decisions and open decisions
 
-Already established by the owner: US-based customers, private invite-only testing, agent-first controls with explicit human confirmation for destructive operations, standard AI without customer-unit charges, financial Monitor independent of mandatory content safety, no sexual/illegal content, current Muse Contributor testing, and deferred CMS testing/Stripe setup. These choices do not establish a data-retention schedule or legal-preservation process. US customer eligibility does not establish visitor residence or storage jurisdiction.
+Already established by the owner: US-based customers, private invite-only testing, agent-first controls with explicit human confirmation for destructive operations, standard AI without customer-unit charges, financial Monitor independent of mandatory content safety, no sexual/illegal content, current Muse Contributor testing, and deferred CMS testing. Stripe sandbox signup/billing is now implemented and authorized; real-money activation remains gated. These choices do not establish a data-retention schedule or legal-preservation process. US customer eligibility does not establish visitor residence or storage jurisdiction.
 
 | ID | Proposed decision | Status / required decision maker |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ Already established by the owner: US-based customers, private invite-only testin
 | LC-04 | On-demand account-export files expire after **24 hours**; interrupted/incomplete export staging expires on the same schedule. | Proposed owner target. Authorization must be checked at each download; possession of a URL is insufficient. |
 | LC-05 | Closed routine operational/safety-review metadata uses a **90-day target** where necessary, after payload minimization. Active customer content is retained while used unless explicitly removed; existing short windows such as contact messages remain. | Proposed; privacy/safety review must approve each class. This does not set statutory incident or tax-record retention. |
 | LC-06 | Separate restricted preservation from ordinary customer data; each case has a basis, exact scope, responsible person, review deadline and authorized release. | Required design; qualified US counsel and named safety operator must set applicability, reporting, preservation and disclosure procedures. No operator/service selected by this document. |
-| LC-07 | Retain only the financial records actually required for payments, refunds, disputes and taxes after closure. Resolve credits/cancellation separately. | Required accountant/legal/owner decision before Stripe activation; no invented fixed tax period. |
+| LC-07 | Retain only the financial records actually required for payments, refunds, disputes and taxes after closure. Resolve credits/cancellation separately. | Required accountant/legal/owner decision before real-money activation; no invented fixed tax period. |
 | LC-08 | Independently retained deletion suppressions must outlive every permitted restore source, then expire after a proposed 30-day reconciliation margin. Unknown or non-expiring backup sources prevent expiry. | Proposed architecture; WH-019/059 must prove this across recovery and key loss. |
 | LC-09 | Whole-account export includes owner/project content by default; visitor/contact data is a separately requested, authorized package. Restricted evidence and secrets are excluded. | Proposed owner/privacy contract; not a blanket denial of statutory access rights, which need a separate verified process. |
 
@@ -22,13 +22,13 @@ None of these proposals authorizes a timer to delete current data. Until decided
 
 ## Data and resource ownership map
 
-[data-lifecycle.json](data-lifecycle.json) is the explicit table-to-class register. Each class has a purpose, ownership scope, **current** retention, **proposed** retention, deletion authority, export boundary and source references. `node tools/lifecycle-catalog.mjs` rebuilds the complete empty current schema from its three source files and verifies every table has exactly one classification. `--json` includes columns and foreign-key paths/actions; it never reads application rows or contacts Cloudflare.
+[data-lifecycle.json](data-lifecycle.json) is the explicit table-to-class register. Each class has a purpose, ownership scope, **current** retention, **proposed** retention, deletion authority, export boundary and source references. Current catalogue version 2 adds the [WH-116 protection contract](data-protection.md): readers/processors, storage/key custody, transport, remaining exposure and separate account/content recovery. Planned classes name their implementing packets and claim no deployed storage. `node tools/lifecycle-catalog.mjs` rebuilds the complete empty current schema from its three source files and verifies every table has exactly one classification. `--json` includes columns, foreign-key paths/actions and resolved protection/recovery profiles; it never reads application rows or contacts Cloudflare.
 
-At this baseline, **148 control tables across 31 classes** are mapped. No prefix or wildcard silently classifies future tables. New/unmapped/duplicate tables, missing contracts and invalid source references fail validation. Foreign keys establish relationships, not a safe deletion order or permission to delete. The October 1 reconciliation adds the 15 tables introduced since migration 0107; the initial September 30 packet covered 133 tables/29 classes.
+At the October 2 review, **156 control tables across 37 current classes**, plus **eight planned extension classes**, are mapped. No prefix or wildcard silently classifies future tables. New/unmapped/duplicate tables, missing contracts and invalid source references fail validation. Foreign keys establish relationships, not a safe deletion order or permission to delete. The September 30 packet covered 133 tables/29 classes and the October 1 historical review covered 148/31. The current inventory includes passkey-only enrollment, admission, kits, invitations and receipt classes; it reconstructs the complete current schema rather than replaying those historical migrations.
 
 | Data family | Control-database classes / purpose | Lifecycle and authority boundary |
 | --- | --- | --- |
-| Owner/account | `owner-identity`, `owner-auth`, `profile-workspace` | Profile and authentication are separate. Revoke sessions/callbacks; retain only narrow cancellation access during any approved grace period. Passwords, recovery material and token hashes never enter exports. |
+| Owner/account | `owner-identity`, `owner-identity-progress`, `owner-identity-admission`, `owner-identity-kits`, `owner-identity-receipts`, `identity-invitations`, `identity-admission-assertion`, `profile-workspace` | Profile and authentication are separate. Revoke sessions/callbacks; retain only narrow cancellation access during any approved grace period. Current account rows contain no passwords; recovery material and token hashes never enter exports. |
 | Projects/conversation | `projects`, `conversation` | Delete briefs, workflow context, full Chat and copied inspections under closure; retain necessary unresolved-action identity independently. A saved model reply is not an authoritative action receipt. |
 | Websites/media | `site-versions`, `project-media` | Withdraw publication first. Preserve referenced versions/photos until reviewed removal; account purge must reconcile both R2 objects and every saved copy. Held material is not made exportable. |
 | Saved configurations/review authority | `project-configurations`, `configuration-authority` | Full website/service snapshots, proposal previews and comparisons have different lifecycles from metadata-only save/activation receipts. Expired review authority is not proof its payload was erased. Retained IDs/digests prevent replay but do not provide independent backup suppression. |
@@ -41,7 +41,7 @@ At this baseline, **148 control tables across 31 classes** are mapped. No prefix
 | AI/finance | `standard-ai`, `billing`, `premium-gateway`, `usage-reviews` | Standard-AI accounting is not customer billing. Resolve uncertain operations before releasing holds; strip unneeded payloads while preserving minimum finance/appeal authority. Monitor never blocks departure/export. |
 | Operations | `project-observability`, `platform-operations` | Customer-linked health/traffic expires or is purged; shared platform settings, locks and truly non-identifying counters survive. Never delete shared D1/R2/Workers for one account. |
 
-### Storage outside those 148 control tables
+### Storage outside those 156 control tables
 
 | Resource / owner | Contents and purpose | Proposed lifecycle / export / deletion authority |
 | --- | --- | --- |
@@ -58,11 +58,11 @@ At this baseline, **148 control tables across 31 classes** are mapped. No prefix
 
 ### Typed Chat action identity
 
-Current source schema 0118 adds `chat_turns.action_json`: bounded canonical control metadata (review/project identifiers, operation, exact digest/revision where required), null for human messages. It is immutable with the action's plain-language request label and follows the existing Chat turn lifecycle. It does not contain credentials or create another content-copy table. Transcript export remains human-readable; a future account export must separately decide which owned action identifiers belong in its allowlist. The browser stores current recovery version 2 under `whumpo.chat-recovery` and imports no retired recovery record. Schema deployment is pending; no existing customer data was purged by this source change.
+The complete current schema includes `chat_turns.action_json`: bounded canonical control metadata (review/project identifiers, operation, exact digest/revision where required), null for human messages. It is immutable with the action's plain-language request label and follows the existing Chat turn lifecycle. It does not contain credentials or create another content-copy table. Transcript export remains human-readable; a future account export must separately decide which owned action identifiers belong in its allowlist. The browser stores current recovery version 2 under `whumpo.chat-recovery` and imports no retired recovery record. The current schema was deployed in the [October 2 test cutover](identity-web.md#deployed-current-identity-and-retirement--october-2-2026). This metadata is not approval or restore authority.
 
 ### Saved configurations and new planning records
 
-Migrations 0108–0113 add records that an account purge/export must explicitly handle:
+The current schema contains the following saved records that an account purge/export must explicitly handle:
 
 - `chat_review_receipts` records review presentation identity and a reply digest. It cascades with its Chat turn but adds a direct non-cascading owner reference; it is neither full content nor confirmation authority.
 - `composition_plans` retains bounded private planning JSON. Its fifteen-minute execution expiry does not erase the plan. `backend_extension_uses` binds a generated backend to its plan and prevents premature provenance deletion while the backend remains. There is no age-based plan purge.
@@ -89,12 +89,12 @@ These requirements cover upcoming workflow features, **not additional implemente
 
 ## Verified current constraints
 
-- **21 direct account references use `NO ACTION` or `RESTRICT`**. These include application/CMS authority, domain connections, funded Gateway receipts, redeemed invitations and Chat review presentation receipts. Additional project/version and cyclic review relationships also require ordered lifecycle migrations. Raw `DELETE users` is not an implementation.
-- `auth_challenges` has application `user_id`/email ownership without a foreign key; signup challenges may precede an account. `file_cleanup` is keyed only by object key, without tenant linkage. Both need explicit ownership handling instead of assuming cascades cover them.
+- **21 direct account references use `NO ACTION` or `RESTRICT`**. These include application/CMS authority, domain connections, funded Gateway receipts, redeemed invitations and Chat review presentation receipts. Additional project/version and cyclic review relationships also require ordered lifecycle operations. Raw `DELETE users` is not an implementation.
+- `identity_challenges` has optional `account_id` ownership without a foreign key; signup challenges may precede an account. Current account deletion explicitly removes associated challenges, and unclaimed challenges expire after five minutes. `file_cleanup` is keyed only by object key, without tenant linkage. Both need explicit ownership handling instead of assuming cascades cover them.
 - Profile/project safety receipts and risk evidence currently cascade with accounts/files; profile replacement can remove its old safety row. Restricted preservation must precede ordinary deletion and exist outside those cascades. A blocked row is not automatically a statutory report/hold.
 - Existing visitor deletion can erase current and saved application copies, but its short-lived replay receipts and same-database state are **not** whole-platform restore suppression.
 - Current cleanup is selective: contact messages become inaccessible at 30 days and daily cleanup removes expired rows; traffic retains a 30-day UTC window; app usage is pruned by day after 35 days; site-health records after 30 days; removed-project fair-use observations after 90 days. Photo physical cleanup waits one hour and runs a bounded daily pass. OAuth/token cleanup and revocation have separate provider-dependent outcomes. No single account lifecycle currently covers all of these.
-- Most site/backend/CMS review snapshots, saved configurations, composition plans, Chat, inspections and immutable finance/safety receipts lack a general retention migration. Logical expiry does not prove physical deletion. The [maintenance inventory](maintenance.md) measures eligible queues, not a deletion guarantee.
+- Most site/backend/CMS review snapshots, saved configurations, composition plans, Chat, inspections and immutable finance/safety receipts lack a general retention executor. Logical expiry does not prove physical deletion. The [maintenance inventory](maintenance.md) measures eligible queues, not a deletion guarantee.
 
 ## Proposed closure state machine
 
