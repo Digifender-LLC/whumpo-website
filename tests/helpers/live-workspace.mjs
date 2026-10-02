@@ -14,7 +14,8 @@ export function liveWorkspaceBrowser(base='https://whumpo.com',transport=fetch){
  async function call(path,method='GET',data){
   const url=new URL(path,base);assert.equal(url.origin,base);assert.equal(url.pathname+url.search,path);
   const selected=[...cookies].filter(([name])=>name===session||url.pathname.startsWith(prefix));
-  const response=await transport(url.href,{method,headers:{origin:base,'content-type':'application/json',cookie:selected.map(([k,v])=>k+'='+v).join('; ')},...(data===undefined?{}:{body:JSON.stringify(data)}),signal:AbortSignal.timeout(90000),redirect:'error'});
+  // Observe callback redirects without following them or forwarding cookies.
+  const response=await transport(url.href,{method,headers:{origin:base,'content-type':'application/json',cookie:selected.map(([k,v])=>k+'='+v).join('; ')},...(data===undefined?{}:{body:JSON.stringify(data)}),signal:AbortSignal.timeout(90000),redirect:'manual'});
   for(const cookie of response.headers.getSetCookie()){
    const pair=cookie.split(';')[0],at=pair.indexOf('='),name=pair.slice(0,at),value=pair.slice(at+1);
    assert.ok([session,'__Secure-whumpo_identity_grant','__Secure-whumpo_identity_challenge'].includes(name),'Unexpected identity cookie');

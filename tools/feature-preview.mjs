@@ -15,5 +15,5 @@ try{
  const db=remoteD1(cloudflareClient(config.account_id),databaseId);
  console.log(JSON.stringify(await runFeaturePreviewOperator(service,db,input,{environment:'test',accountId:config.account_id,databaseId},args[3]),null,2));
 }catch{
- console.error('Preview-grant request unavailable. Check the private input, operator authorization and schema through 0120. Preview first; apply only its exact digest. An uncertain write must use readback or the same request ID. No customer action or provider call is authorized by inclusion alone.');process.exitCode=1;
+ console.error('Preview-grant request unavailable. Check the private input, operator authorization and complete current schema. Preview first; apply only its exact digest. An uncertain write must use readback or the same request ID. No customer action or provider call is authorized by inclusion alone.');process.exitCode=1;
 }
