@@ -10,7 +10,6 @@ interface Env {
   GITHUB_APP_SLUG?: string;
   CONNECTION_ENCRYPTION_KEY?: string;
   TURNSTILE_SECRET?: string;
-  PASSWORD_PEPPER?: string;
   AI_API_KEY?: string;
   STRIPE_SANDBOX_CATALOG?: string;
   STRIPE_TEST_KEY?: string;

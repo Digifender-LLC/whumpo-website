@@ -1,6 +1,8 @@
 # Verified passkey ceremonies and pending enrollment
 
-**WH-114B / [#71](https://github.com/zemdregon/whumpo/issues/71), October 1, 2026. Source implementation in isolation; not activated or deployed.** This extends the [current authority foundation](identity-authority.md). The [shared kit and completion implementation](identity-kits.md) now completes its backend enrollment/cancellation scope with connected disposable database checks. Parent [#68](https://github.com/zemdregon/whumpo/issues/68), recovery [#69](https://github.com/zemdregon/whumpo/issues/69) and coordinated cutover [#72](https://github.com/zemdregon/whumpo/issues/72) remain open.
+**WH-114B / [#71](https://github.com/zemdregon/whumpo/issues/71), October 1, 2026. Current source deployed to the private test platform October 2, 2026.** This extends the [current authority foundation](identity-authority.md). The [shared kit and completion implementation](identity-kits.md) now completes its backend enrollment/cancellation scope with connected disposable database checks. Parent [#68](https://github.com/zemdregon/whumpo/issues/68), recovery [#69](https://github.com/zemdregon/whumpo/issues/69) remain open for their parent acceptance; [#72](https://github.com/zemdregon/whumpo/issues/72) records the deployed integration.
+
+[Final release and retirement evidence](identity-web.md#deployed-current-identity-and-retirement--october-2-2026) records exact live verification. Earlier dated/local evidence below does not establish physical-device or human recovery acceptance.
 
 ## Implemented behavior
 
@@ -35,15 +37,15 @@ After a lost first-registration response, the saved passkey authenticates into t
 
 The authority [schema](../src/workspace-identity/schema.sql) now also defines challenges, immutable ceremony receipts and a current-key candidate view. Challenges have a global 5,000-row ceiling and twenty per reserved/current account. Receipts have a 50,000-row ceiling and seven-day retention. Maintenance deletes at most 500 expired rows per admission table and 500 old receipts per call; it never ages out a pending account's verified credential or attempt. Expiry removes authority before physical cleanup.
 
-These files stay outside automatic platform migrations. Tests use the actual target input schema plus authority schema, not synthetic password sentinels or a conversion reader. Neither schema is safe to apply alone over the existing platform database. #72 must reset the reviewed obsolete fixtures and switch schema, handlers, web client, lifecycle inventory and worker admission together. The platform inventory and deployment are unchanged by this packet.
+Current test databases initialize the complete canonical schema; there is no automatic migration chain. Tests and the deployed platform use the same current identity inputs, authority schema and platform schema. Applying any one part over an occupied obsolete database is unsupported. The coordinated schema/handler/client/lifecycle/Worker reset is recorded in [deployment evidence](identity-web.md).
 
 Challenge bindings temporarily contain normalized email, invitation verifier and account/credential references. They are restricted authentication data, not telemetry. Ceremony receipts retain only IDs, intent hashes and effect metadata; they contain no bearer token, private key, assertion body, Turnstile response or recovery key. Register these classes, invitation spending semantics, canonical user reset and bounded cleanup with the full lifecycle/cancellation work at #72.
 
 ## Remaining work
 
-The shared [kit lifecycle and enrollment completion](identity-kits.md) now implement two-key, saved-kit and fresh-assertion completion, terminal receipt behavior and authenticated pending cancellation with failure tests. WH-115 now has the [restricted recovery backend](identity-recovery.md); browser kit delivery remains open. Completing recovery must require a new replacement assertion after the kit-save step; a retained-key assertion or the general fresh-proof predicate is insufficient.
+The shared [kit lifecycle and enrollment completion](identity-kits.md) implement two-key, saved-kit and fresh-assertion completion, terminal receipts and authenticated pending cancellation. [Restricted recovery](identity-recovery.md) and browser kit download/copy/print are connected and deployed, with local signed/browser evidence. Recovery requires a new replacement assertion after the kit-save step; a retained-key assertion or the general fresh-proof predicate is insufficient.
 
-#72 now has the isolated [trusted identity-state/UI bootstrap and HTTP adapter](identity-web.md), including cookie selection, bounded/no-store bodies and rate-limit wiring. Removal of superseded routes, final HTTP/Chat/provider principal composition, lifecycle registration and the coordinated test cutover remain open. The active platform route tree does not import this module yet. Real Turnstile, actual owner/device enrollment and deployed acceptance remain separate from the local fixtures.
+The [trusted identity bootstrap and HTTP adapter](identity-web.md) is mounted in the active platform route tree. Superseded routes are removed; current HTTP/Chat/provider admission, lifecycle registration and the test cutover are deployed. Human Turnstile, physical owner enrollment and complete live recovery usability remain separate from local fixtures and the bounded live login/onboarding probe.
 
 ## Verification
 
@@ -58,4 +60,4 @@ Cases cover gate failures, wrong origin/RP/UV/signature/handle, cross-origin pro
 - Type checks, application build, roadmap validation/alignment/render verification and whitespace checks passed.
 - The D1 run exposed aggregate trigger-change counts; inserts now verify the returned row. The SQLite fixture now executes each batch without yielding between statements, matching D1 transaction isolation for concurrent ceremony tests.
 
-These ceremony-only results do not include a physical authenticator, live Turnstile token or deployed handler. Complete signup and ordinary rotation are now verified separately in the [kit suite](identity-kits.md); the [dedicated recovery suite](identity-recovery.md) now covers backend recovery; browser and deployed acceptance remain open.
+These ceremony-only results use real signatures with synthetic authenticators. They do not prove physical devices or human Turnstile. Complete signup/rotation and recovery have separate kit/recovery suites; current deployment and bounded live login/onboarding evidence are recorded in [identity integration](identity-web.md).

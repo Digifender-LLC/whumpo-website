@@ -1,6 +1,8 @@
 # Saved recovery kits and enrollment completion
 
-**WH-114B [#71](https://github.com/zemdregon/whumpo/issues/71) and WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Implemented and verified with the isolated [HTTP/browser flow](identity-web.md); not deployed.** This completes #71's backend enrollment path and implements the shared kit preparation, acknowledgment and ordinary rotation part of #69. The [restricted recovery backend](identity-recovery.md) now extends this source; common platform admission and the coordinated current-only test cutover remain open.
+**WH-114B [#71](https://github.com/zemdregon/whumpo/issues/71) and WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Implemented and verified with the [HTTP/browser flow](identity-web.md) and deployed to the private test platform October 2, 2026.** This completes #71's backend enrollment path and implements the shared kit preparation, acknowledgment and ordinary rotation part of #69. The [restricted recovery backend](identity-recovery.md) now extends this source; common admission and the current-only test cutover are now deployed.
+
+[Final release and retirement evidence](identity-web.md#deployed-current-identity-and-retirement--october-2-2026) records exact live verification. Earlier dated/local evidence below does not establish physical-device or human recovery acceptance.
 
 ## Current implementation
 
@@ -36,7 +38,7 @@ The isolated [schema](../src/workspace-identity/schema.sql) adds:
 - `identity_kit_offers`: at most one offer per account, immutable purpose/owner/review/verifier/deadline, with a single immutable save timestamp. The current-offer view rejects expired or stale state immediately.
 - `identity_effect_receipts`: immutable kind, intent hash and non-secret result IDs, with a 50,000-row bound. Deleting an account clears its owner reference; these anonymous terminal receipts cannot authenticate. Cleanup removes receipts older than seven days, at most 500 per call.
 
-The shared bounded cleanup also removes at most 500 expired offers per call. It never deletes pending verified keys or enrollment progress for age. Full platform lifecycle inventory, endpoint rate limits and scheduled cleanup wiring belong to #72; these isolated files remain outside automatic migrations until the current-only reset/cutover.
+The shared bounded cleanup removes at most 500 expired offers per call and preserves verified pending enrollment progress. Lifecycle inventory, rate limits and scheduled cleanup are connected in the deployed [current identity integration](identity-web.md). Databases initialize the complete current schema without numbered migration replay.
 
 ## Verification and remaining acceptance
 
@@ -46,6 +48,6 @@ Both runs passed **47 refusal/race checks**, plus positive enrollment, one-time 
 
 The existing **62** ceremony and **72** authority refusal/race suites also passed against SQLite and local D1. Type checks, application build, roadmap validation/alignment/render checks and whitespace checks passed.
 
-#69 now has the [restricted recovery backend](identity-recovery.md), including kit proof/review/secure, restricted kit replacement, replacement-bound completion and emergency key removal. The HTTP/client adapters and kit download/copy/print UI now pass isolated acceptance. #72 still owns central platform admission, lifecycle registration and removal of superseded authentication during one coordinated test reset. No remote schema, active route, real owner credential, physical device or deployment changed here.
+The [restricted recovery backend](identity-recovery.md), HTTP/client adapters, kit download/copy/print, central platform admission and lifecycle registration are deployed through the current-only test reset. Local signed/virtual-browser checks and bounded live login/onboarding checks remain distinct from physical-device enrollment and human recovery acceptance.
 
 The [current web packet](identity-web.md) now verifies one-time download/copy/print delivery and saved-progress UI against the isolated HTTP/backend flow. Its production route installation remains part of the coordinated #72 cutover.

@@ -144,7 +144,7 @@ Verification used the actual built React frontend and platform handlers with dis
 
 The welcome test now creates current identity authority and exercises the real Worker with the `__Host-whumpo_session` cookie, rather than using password sessions or applying old numbered SQL. Direct domain operations run through the same admitted database scope. SQLite and local D1 checks cover profile privacy, exact question persistence, invalid/missing checkpoint refusal, single-project creation under concurrent completion, lost-response readback, no early Chat/workspace/inference, and revocation immediately before the completion commit. A revoked session leaves the reviewed welcome intact and creates no project. Existing delivery checks still verify that an uncertain save triggers a read, never a repeated write.
 
-The complete current schema enforces question/stage consistency, and both API and React chapter-only fallbacks are removed. This is source/local evidence; it requires the coordinated identity/schema release described in [releases](releases.md). Physical-device acceptance remains separate.
+The complete current schema enforces question/stage consistency, and both API and React chapter-only fallbacks are removed. The coordinated identity/schema release is now deployed; local synthetic signup evidence remains distinct from live signed-login/onboarding checks and physical-device acceptance in [releases](releases.md). Physical-device acceptance remains separate.
 
 
 ### Current first-draft verification
