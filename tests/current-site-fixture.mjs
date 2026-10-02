@@ -15,6 +15,8 @@ export async function currentSiteFixtureHandlers(){
   export {createWebsite,prepareSpecification,readSpecificationProposal} from './src/project-specification/store';
   export {readChat,sendChat,sendChatControl,chatState} from './src/chat';
   export {reviewBackup,confirmBackup,listBackups,githubRepositories} from './src/github-backups';
+  export {ownedPreview} from './src/photo-versions';
+  export {reserveStorage} from './src/storage-budget';
   export {ownedExport} from './src/exports';
   export {seal} from './src/connection-vault';
   export {sendAIChat,reconcileChat} from './src/ai-chat';

@@ -213,3 +213,13 @@ Eight focused suites pass with `node --stack-trace-limit=0 tests/NAME.mjs`, each
 Customer support and conversation fixtures use current module-private admitted scopes. Operator, scheduled cleanup, dormant Gateway and trusted screening services retain independent internal authority; their fixture rows contain the current account schema. The eligibility suite replaces obsolete password/local-exemption expectations instead of adapting them. Runtime/frontend source and compiler locks are unchanged. No remote database/Worker changes, provider credentials, real charges/inference, scanner/provider activation or CMS functional testing occurred. Remaining media-policy/live/deferred fixtures, resource reconciliation and coordinated test cutover remain open.
 
 Checkpoint gates passed: `pnpm --config.verify-deps-before-run=false run check`, nine fixture syntax/current-setup checks, roadmap validation/alignment/render and whitespace checks. The CMS schema generator inside `check` verifies source consistency only; no CMS functional test ran.
+
+
+### Photo versions and removal under current identity
+
+`node --stack-trace-limit=0 tests/photo-versions.mjs` and `node --stack-trace-limit=0 tests/photo-removal.mjs` pass against disposable local D1/R2 initialized from the complete current schema. Owner operations share one module-private admission scope; public delivery and scheduled cleanup retain separate authority.
+
+- Removal: exact owner review/confirmation, no pre-approval deletion, replay tombstones, retained-version protection including races, concurrent confirmations, expiry immediately before the actual mutation, lost committed replies, late-upload orphan cleanup, pending-deletion capacity and owner deletion cascades.
+- Versions: current specification builders, private project/owner isolation, escaped alt text, sandboxed inline previews, exact publication dependencies, restoration/unpublication withdrawal, digest and R2-metadata tampering refusal, portable ZIP integrity/JPEG decoding, missing-asset failure and atomic storage limits. Synthetic expired/revoked clearance rows refuse reads, exports and publication without partial commits.
+
+The solid-color JPEGs, ready-account authority, clearance records and active custom-domain metadata are synthetic. These checks do not implement or call a scanner, verify detection, make DNS changes, publish a customer site, or accept physical-device behavior. Internal guided dispatch is exercised directly; public Chat remains natural-language only. CSAM integration, CMS functional testing and Daybreak remain deferred. No remote schema or Worker changed. Live/deferred fixture alignment and coordinated test cutover remain open.
