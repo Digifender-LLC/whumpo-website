@@ -2,7 +2,7 @@ export function LegalLinks() {
   return (
     <div className="flex flex-col gap-1 text-xs">
       <a
-        className="min-h-11 self-start inline-flex items-center text-[#526780] underline underline-offset-4"
+        className="min-h-11 self-start inline-flex items-center text-muted-foreground underline underline-offset-4"
         href="https://digifender.com/"
       >
         A Digifender product
