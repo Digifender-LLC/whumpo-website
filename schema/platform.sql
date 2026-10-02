@@ -4023,6 +4023,14 @@ BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
 CREATE TRIGGER chat_interaction_request_retained BEFORE DELETE ON chat_interaction_requests
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
 BEGIN SELECT RAISE(ABORT,'chat_interaction_receipt_retained'); END;
+-- Check before the account disappears: child cascades can no longer use the
+-- parent user row to retain custody once deletion has begun.
+CREATE TRIGGER chat_interaction_account_retained BEFORE DELETE ON users
+WHEN EXISTS(SELECT 1 FROM chat_interactions i
+ JOIN chat_interaction_submissions s ON s.interaction_id=i.id AND s.user_id=i.user_id
+ JOIN chat_interaction_continuations c ON c.id=s.id
+ WHERE i.user_id=OLD.id AND c.state IN ('pending','unknown'))
+BEGIN SELECT RAISE(ABORT,'chat_interaction_receipt_retained'); END;
 CREATE TRIGGER chat_interaction_retained BEFORE DELETE ON chat_interactions
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND (OLD.project_id IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)
  OR EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=OLD.id AND c.state IN ('pending','unknown')))

@@ -16,7 +16,7 @@ globalThis.fetch=async(url,init)=>{
  assert.equal(String(url),config.baseURL+'/responses','Unexpected external request');
  const request=JSON.parse(init.body);assert.equal(request.model,config.model);
  if(request.max_output_tokens===256){ackCalls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'{"intent":"editing"}'}]}],usage:{input_tokens:10,output_tokens:10}});}
- mainCalls++;requests.push(request);assert(queue.length,'Unexpected extra inference');const step=queue.shift();return response(typeof step==='function'?await step(request):step);
+ mainCalls++;requests.push(request);assert(queue.length,'Unexpected extra inference');const step=queue.shift(),value=typeof step==='function'?await step(request):step;return value instanceof Response?value:response(value);
 };
 const http=(o,path,data,database=db)=>worker.fetch(new Request('https://whumpo.com'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),{...env,DB:database},{waitUntil(p){background.push(p);}});
 async function json(o,path,data,database){const r=await http(o,path,data,database);assert.equal(r.status,200,await r.clone().text());return r.json();}
@@ -137,6 +137,24 @@ try{
   const o=intakeOwner,result=await chat(o,'Use the project brief I saved to help me plan the next step.',[body=>{assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE|INTAKE_PRIVATE_DRAFT/);return submitted(intake);},body=>{const text=JSON.stringify(body);assert.match(text,/INTAKE_SUBMITTED_NAME/);assert.match(text,/INTAKE_SUBMITTED_PURPOSE/);assert.doesNotMatch(text,/INTAKE_PRIVATE_DRAFT/);return null;}]);
   assert.equal(result.calls,2);assert.equal(result.turn.status,'completed');const saved=await row('SELECT result_text FROM agent_inspections WHERE turn_id=?',result.input.id);assert.deepEqual(JSON.parse(saved.result_text).data.answers,{name:'INTAKE_SUBMITTED_NAME',purpose:'INTAKE_SUBMITTED_PURPOSE'});
   const before=mainCalls;await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
+ });
+ await test('failed or uncertain model followup preserves submitted answers and exact receipt without redispatch',async()=>{
+  for(const expected of ['failed','uncertain']){
+   const o=await owner(),created=await chat(o,'Help me plan another project.',[intakeRequest('requestProjectBrief')]);let f=await readForm(o,created.turn.interaction_id);
+   const answers={name:'Retained garden',purpose:'Keep these details through an interrupted planning reply.'},input=mutate(f,'submit',answers),receipt=await json(o,'/api/chat/interactions/v1/mutate',input);f=await readForm(o,f.envelope.id);
+   const result=await chat(o,'Use my saved project brief.',[submitted(f),body=>{
+    assert.match(JSON.stringify(body),/Keep these details/);
+    if(expected==='uncertain')throw Error('Synthetic response lost');
+    return Response.json({error:{message:'Synthetic request rejected'}},{status:400});
+   }]);
+   assert.equal(result.calls,2);assert.equal(result.turn.status,expected);
+   const before=mainCalls;assert.deepEqual((await readForm(o,f.envelope.id)).submission,f.submission);
+   assert.deepEqual(await json(o,'/api/chat/interactions/v1/receipt',{version:1,requestId:input.requestId}),receipt);
+   assert.deepEqual(await json(o,'/api/chat/interactions/v1/mutate',input),receipt);
+   await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);
+   assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
+   assert.equal(await row('SELECT id FROM chat_interaction_continuations WHERE id=?',input.requestId),null);
+  }
  });
  await test('submitted lookup refuses mismatched identity, unowned forms, completed turns and forged action data',async()=>{
   const o=intakeOwner;
