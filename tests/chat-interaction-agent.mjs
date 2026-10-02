@@ -36,7 +36,7 @@ async function chat(o,content,steps,database){queue=steps;const input={id:id(),r
 const request=o=>({kind:'interaction',operation:'requestContent',projectId:o.project,contentIds:['headline','section-1-text']});
 const read=interactionId=>({kind:'interaction',operation:'read',interactionId});
 const replace=f=>({kind:'interaction',operation:'replaceContent',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,contentIds:['headline','section-1-text','about-text']});
-const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1']};
+const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1','project.status@1']};
 const readForm=(o,interactionId)=>json(o,'/api/chat/interactions/v1/read',{version:1,interactionId,client});
 const mutate=(f,operation,answers)=>({version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,operation,...(answers?{answers}:{})});
 try{

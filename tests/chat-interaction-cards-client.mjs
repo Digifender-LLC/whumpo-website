@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+Error.stackTraceLimit=0;
+const {outputFiles}=await build({stdin:{contents:"export {ProjectStatusDisplay} from './frontend/src/chat-interaction-cards';export {createElement} from 'react';export {renderToStaticMarkup} from 'react-dom/server';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',jsx:'automatic',tsconfig:'tsconfig.frontend.json',banner:{js:"import {createRequire as moduleRequire} from 'node:module';const require=moduleRequire(process.cwd()+'/package.json');"},write:false});
+const m=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const render=value=>m.renderToStaticMarkup(m.createElement(m.ProjectStatusDisplay,{value}));
+const c={version:1,interactionId:crypto.randomUUID(),definitionDigest:'a'.repeat(64),cardId:'project-status',binding:'project.status@1',source:'project_service_status',asOf:new Date().toISOString(),status:'ready',data:{projectId:crypto.randomUUID(),name:'<script>privateLeak()</script>',state:'draft',websitePublished:false}};
+const html=render(c);assert(html.includes('&lt;script&gt;'));assert(!html.includes('<script>'));assert(html.includes('Private draft'));assert(html.includes('Not published'));assert(html.includes('Checked'));assert(!html.includes('<button'));assert(!html.includes('<a '));assert(!html.includes('project_service_status'));
+for(const status of ['denied','unavailable']){const out=render({...c,status,data:null});assert(!out.includes('privateLeak'));assert(!out.includes('Not published'));assert(!out.includes('Private draft'));assert(out.includes(status==='denied'?'current access':'temporarily unavailable'));}
+for(const patch of [{version:0},{approve:true},{status:'unknown'},{data:{...c.data,url:'https://foreign.test'}}]){const out=render({...c,...patch});assert(out.includes('Update Whumpo'));assert(!out.includes('privateLeak'));assert(!out.includes('<button'));}
+console.log('Chat display renderer passed: escaped current facts, named saved states, checked time, distinct unavailable/denied states, unknown-shape refusal and no action/link authority. Browser verification is separate.');

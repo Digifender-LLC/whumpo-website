@@ -9,9 +9,10 @@ import {deliverInteraction,recoverInteraction} from './lib/interaction-delivery'
 import {useInteractionRecovery} from './use-interaction-recovery';
 import {Button} from './components/ui/button';
 import {isProjectIntakeTemplate} from '../../src/chat-interactions/maintained';
+import {ChatInteractionCards} from './chat-interaction-cards';
 import {ChatInteractionField} from './chat-interaction-field';
 
-const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','owned.projects@1']};
+const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','owned.projects@1','project.status@1']};
 const route='/chat/interactions/v1/';
 const receipt=(requestId:string)=>send<InteractionReceipt>(route+'receipt',{version:1,requestId});
 function startingAnswers(form:InteractionRead):Answers{return form.submission?.answers??form.draft??Object.fromEntries(form.envelope.definition.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value]));}
@@ -28,7 +29,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   if(value.version!==1||!Number.isSafeInteger(value.answerRevision)||value.answerRevision<0||!iso(value.observedAt)||!(value.draftRetainUntil===null||iso(value.draftRetainUntil))||!['open','submitted','canceled','superseded','expired'].includes(value.state))throw new APIError('Update Whumpo to open this form.',409,'client_update_required');
   await verifyEnvelope(value.envelope);await requireCurrentClient(value.envelope,client);
   const content=value.envelope.definition.template==='content-change@1';
-  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||(!content&&!isProjectIntakeTemplate(value.envelope.definition.template))||(content?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||value.envelope.definition.continuationBinding!==null))||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
+  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||(!content&&!isProjectIntakeTemplate(value.envelope.definition.template))||(content?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||value.envelope.definition.continuationBinding!==null))||value.envelope.definition.presentation!=='inline'||(content?value.envelope.definition.cards.length!==1||value.envelope.definition.cards.some(c=>c.id!=='project-status'||c.binding!=='project.status@1'||c.display!=='status'||c.limit!==1||c.reviewId!==null):value.envelope.definition.cards.length!==0))throw new APIError('This form needs a supported current template.',409,'client_update_required');
   if(value.draft!==null)validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
   return value;
  },staleTime:0,gcTime:0,refetchInterval:q=>['pending','unknown'].includes(q.state.data?.submission?.continuation?.state??'')?5000:false});
@@ -104,6 +105,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   {pending&&<div className="rounded-xl border bg-secondary/50 p-3 space-y-3 text-sm"><p>An interrupted {pending.operation==='submit'?'answer submission':pending.operation==='cancel'?'discard request':'draft save'} needs a status check. Nothing is sent automatically.</p><div className="flex flex-wrap gap-2"><Button variant="outline" className="min-h-11" disabled={busy} onClick={()=>void perform(()=>checkPending(pending))}>Check saved status</Button>{checked&&<Button variant="outline" className="min-h-11" disabled={busy||chatBusy} onClick={()=>void perform(()=>transmit(pending,false))}>Retry original request</Button>}</div></div>}
   {form&&!collapsed&&!unavailable&&<>
    <p className="text-sm text-muted-foreground break-words">{form.envelope.definition.summary}</p>
+   {content&&form.envelope.scope.projectId&&['open','submitted'].includes(form.state)&&!form.replacementInteractionId&&<ChatInteractionCards owner={owner} interactionId={id} digest={form.envelope.definitionDigest} projectId={form.envelope.scope.projectId}/>}
    {conflict&&<div role="alert" className="rounded-xl border p-3 space-y-3 text-sm"><p>This form changed after your local edits. Your edits are shown below and have not overwritten the saved version.</p><Button variant="outline" className="min-h-11" disabled={busy||!!pending} onClick={()=>recovery.save(null)}>Use latest saved answers</Button></div>}
    <form noValidate onSubmit={event=>{event.preventDefault();void perform(()=>mutate('submit'));}} className="space-y-5">
     {form.envelope.definition.fields.map(field=><ChatInteractionField key={field.id} field={field} owner={owner} interactionId={id} digest={form.envelope.definitionDigest} value={answers[field.id]} locked={locked} invalid={fieldError===field.id} onChange={value=>edit(field.id,value)} onResourceReady={onResourceReady}/>)}
