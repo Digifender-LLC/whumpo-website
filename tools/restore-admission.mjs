@@ -35,6 +35,7 @@ const effectReceipts={
  domain_connections:['state',['active','disconnected']],standard_ai_requests:['state',['completed','released']],
  inference_calls:['status',['observed','released']],gateway_spend_attempts:['status',['settled','released']],
  stripe_subscription_orders:['state',['complete','expired']],connection_oauth_exchanges:['state',['rejected','revoked']],
+ github_grant_revocations:['state',['revoked','cancelled']],
 };
 
 async function currentContract(){
@@ -242,6 +243,7 @@ async function checkKeys(state,contract,keyring){
   credentials++;
  }
  requireCheck(state.rows.get('connection_oauth_exchanges').length===0,'uncertain-effect');
+ requireCheck(!state.rows.get('github_grant_revocations').some(r=>['dispatching','uncertain'].includes(r.state)),'uncertain-effect');
  requireCheck(!state.rows.get('github_refresh_custody').some(r=>r.access_revoked_at!==null||state.rows.get('github_token_vault').some(t=>t.id===r.token_id&&t.state==='revoking')),'uncertain-effect');
  requireCheck(state.rows.get('github_revocation_claims').length===0&&!state.rows.get('cloudflare_token_vault').some(row=>row.revoke_attempt!==null),'uncertain-effect');
  requireCheck(state.rows.get('connection_rotation_guards').length===0&&!state.rows.get('connection_key_rotations').some(r=>r.state==='running'),'key-rotation-unsettled');

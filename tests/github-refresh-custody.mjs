@@ -50,7 +50,7 @@ try{
  const access=await g.githubAccess(await a.scope(),a.account,config,async(_url,init)=>{assert.equal(init.headers.authorization,'Bearer '+accessToken);return Response.json({ok:true});},{projectId:null,operation:'read'});
  await access.send('/user');
  const status=await g.connectionStatus(await a.scope(),a.account,config);assert.ok(!JSON.stringify(status).includes(refreshToken));assert.ok(!JSON.stringify(status).includes('ciphertext'));
- const before=await restore();assert.equal(before.status,'verified',JSON.stringify(before));assert.equal(before.keys.credentials,2);assert.equal(before.tables,164);
+ const before=await restore();assert.equal(before.status,'verified',JSON.stringify(before));assert.equal(before.keys.credentials,2);assert.equal(before.tables,165);
  // Rotation uses the existing CAS journal and the distinct refresh purpose.
  const next=fixtureKeyring('cd'.repeat(32),'refresh-next',JSON.parse(config.key).keys);
  await r.registerConnectionKeys(db,next,'refresh-review-next');await r.beginConnectionRotation(db,next,{id:'refresh-rotation',reviewId:'refresh-review-next',expectedRevision:1});

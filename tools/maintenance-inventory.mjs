@@ -24,6 +24,7 @@ export const backlogInventory={
  github_oauth:expiry('github_oauth_states'),
  github_staged:expiry('github_token_staging'),
  github_refresh_grants:queue('github_refresh_custody r JOIN github_token_vault t ON t.id=r.token_id LEFT JOIN github_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'COALESCE(r.access_revoked_at,h.requested_at)'),
+ github_grant_unknown:queue('github_grant_revocations',"state IN ('dispatching','uncertain')",'dispatched_at',600000),
  github_expired_tokens:queue('github_token_vault',"expires_at<=?1 AND NOT EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=github_token_vault.id)",'expires_at'),
  cloudflare_oauth:expiry('cloudflare_oauth_states'),
  cloudflare_expired_tokens:expiry('cloudflare_token_vault'),

@@ -164,3 +164,24 @@ export async function prepareOAuthCustody(db:D1Database,userId:string,provider:'
   },
  });
 }
+
+/** Settle only one already reviewed GitHub grant effect after its dispatch.
+ * This capability survives sign-out, contains no provider client, and cannot
+ * create/review/dispatch an action or change its immutable credential scope. */
+export async function githubGrantCustody(db:D1Database,userId:string,id:string){
+ const c=scope(db,userId);
+ if(!await db.prepare("SELECT 1 FROM github_grant_revocations WHERE id=? AND user_id=? AND state='review'").bind(id,userId).first())throw changed();
+ const saved=()=>c.db.prepare("SELECT 1 FROM github_grant_revocations WHERE id=? AND user_id=? AND state='revoked' AND http_status=204").bind(id,userId).first();
+ return Object.freeze({
+  async revoked(){
+   if(await saved())return;
+   try{await c.db.batch([
+    c.db.prepare("UPDATE github_grant_revocations SET state='revoked',http_status=204,settled_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND user_id=? AND state IN ('dispatching','uncertain')").bind(id,userId),
+    c.db.prepare("DELETE FROM github_refresh_custody WHERE user_id=? AND EXISTS(SELECT 1 FROM github_grant_revocations a WHERE a.id=? AND a.user_id=github_refresh_custody.user_id AND a.client_id=github_refresh_custody.client_id AND a.github_user_id=github_refresh_custody.github_user_id AND a.state='revoked' AND github_refresh_custody.token_id IN (SELECT value FROM json_each(a.token_ids)))").bind(userId,id),
+    c.db.prepare("DELETE FROM github_token_vault WHERE user_id=? AND state='revoking' AND id IN (SELECT value FROM github_grant_revocations a,json_each(a.token_ids) WHERE a.id=? AND a.user_id=? AND a.state='revoked')").bind(userId,id,userId),
+   ]);}catch{if(!await saved())throw new Error('GitHub grant outcome could not be saved.');}
+   if(!await saved())throw new Error('GitHub grant outcome could not be confirmed.');
+  },
+  async uncertain(){await c.db.prepare("UPDATE github_grant_revocations SET state='uncertain' WHERE id=? AND user_id=? AND state='dispatching'").bind(id,userId).run();},
+ });
+}
