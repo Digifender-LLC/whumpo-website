@@ -13,7 +13,7 @@ export function authenticator(origin='https://whumpo.com'){
  const {privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),jwk=publicKey.export({format:'jwk'}),id=randomBytes(32);
  const cose=cbor(new Map([[1,2],[3,-7],[-1,1],[-2,Buffer.from(jwk.x,'base64url')],[-3,Buffer.from(jwk.y,'base64url')]]));
  let userHandle;
- return {id:b64(id),
+ return {id:b64(id),publicKey:new Uint8Array(cose),
   registration(options,{atOrigin=origin,uv=true,rpID=options.rp.id,crossOrigin=false}={}){
    userHandle=options.user.id;
    const client=Buffer.from(JSON.stringify({type:'webauthn.create',challenge:options.challenge,origin:atOrigin,crossOrigin}));

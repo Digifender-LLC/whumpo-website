@@ -92,3 +92,19 @@ Eight additional complete-schema local D1 suites cover fair-use observation/revi
 The target schema is composed from `src/workspace-identity/canonical-inputs.sql`, `schema/platform.sql` and `src/workspace-identity/schema.sql` by `tools/current-schema.mjs`. It contains no retired workspace-auth tables. This is an empty-database target, not a compatibility conversion. Current release delivery now archives and validates this complete schema, initializes only a distinct empty database, and checks exact Worker database bindings. Remaining older test/operator fixtures, resource cleanup, new database selection and live cutover still need completion before release. Do not deploy this source against the old remote schema. Review/reset affected test identities and dependencies, preserve separately registered platform services/secrets, fence old in-flight work, and verify all current Workers together. No remote schema, provider registration, owner passkey or live deployment changed in this integration.
 
 Two further complete-schema D1/R2 suites pass for current photo versions and removal. Owner admission, immutable preview/export/publication dependencies, withdrawal, retention races, exact lost-response recovery and delayed cleanup are verified with synthetic images and clearance rows. [Verification](verification.md#photo-versions-and-removal-under-current-identity) records scope; scanner integration, deferred lanes and remote cutover remain open.
+
+Six opt-in AI/deployment harnesses now require current schema/authority. The shared deployment-probe support passes actual signed-login/welcome/logout and pre-write schema-refusal checks on local D1, with all live opt-ins disabled. [Verification](verification.md#current-identity-for-opt-in-live-probes). Remote probes remain unrun until coordinated cutover; synthetic ready identities do not establish enrollment or device acceptance. Remaining obsolete fixture hits are confined to the owner-deferred CMS/scanner lanes.
+
+
+### Read-only cutover resource inventory
+
+A fresh Cloudflare read at 2026-10-02T03:18:33.186Z confirms the existing control database still contains one test account and one project. The inspected GitHub/Cloudflare vault, staging, OAuth-state, connection/backup, domain-claim/connection, Stripe customer/subscription/order/paid-invoice, CMS-instance, photo and pending file-cleanup tables are empty. A complete metadata listing of the bound `tellumo-files` bucket returns zero objects. No file bodies, account messages or secret values were read.
+
+The four active Workers still use the existing control database where applicable. Version IDs observed:
+
+- `tellumo-platform`: `cea0fa86-7770-4255-a9f7-551ea462ecf7`
+- `tellumo-sites`: `dfdd629f-5265-48d0-a7ef-c2a383fa6b3a`
+- `tellumo-apps`: `575a9c63-5bad-45ee-8625-0faefa0e6fbf`
+- `tellumo-runtime`: `8dc4d06e-378f-46f3-b015-f1315bc2ee07`
+
+The platform version differs from the earlier favicon-release observation; refresh and reconcile active release source before preparing any cutover. Platform-wide inference, OAuth, encryption, Stripe and Turnstile secrets remain registered; `PASSWORD_PEPPER` is still present and is a retirement item only after current identity is deployed and verified. Existing unrelated account resources, including the separate CMS preview, are outside this reset scope. Empty platform registries do not prove every external account obligation is absent. No resource, secret, database or Worker was changed. Private metadata evidence is `.secrets/identity-cutover-inventory.json` (ignored by Git).
