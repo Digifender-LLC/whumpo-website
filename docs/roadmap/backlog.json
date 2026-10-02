@@ -5092,7 +5092,7 @@
         "docs/workspace-identity.md",
         "docs/plan-feature-contract.md",
         "docs/chat-interactions.md",
-        "tools/prototypes/chat-interactions.mjs",
+        "src/chat-interactions/protocol.ts",
         "tests/chat-interaction-contract.mjs",
         "tests/fixtures/chat-interactions.json"
       ],
@@ -5108,7 +5108,7 @@
       "title": "Persist and submit typed Chat interactions with exact readback",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "ready",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -5126,7 +5126,7 @@
         "Bind stable submission IDs to exact payloads and recover committed state after lost acknowledgements without automatic effect redispatch",
         "Extend history/export and lifecycle inventory for definitions, answers and attachment references; minimize model and local-device copies",
         "Implement the content-change-brief fixture through existing domain handlers rather than a generic command or network proxy",
-        "Enforce WH-090 current feature decisions when issuing, submitting and handing off interactions; protected history/readback remains scoped to current actor authority. Do not retrofit plan checks into a second interaction permission system later."
+        "Enforce WH-122 shared current feature decisions when issuing, submitting and handing off interactions; protected history/readback remains scoped to current actor authority. Do not retrofit plan checks into a second interaction permission system later."
       ],
       "acceptance": [
         "Atomic submission and exact same-ID replay produce one answer receipt and at most one admitted downstream operation; changed payloads conflict",
@@ -5150,14 +5150,19 @@
         "src/chat-transcript.ts",
         "frontend/src/lib/chat-delivery.ts",
         "docs/roadmap/alignment.md",
-        "docs/chat-interactions.md"
+        "docs/chat-interactions.md",
+        "src/chat-interactions/protocol.ts",
+        "src/chat-interactions/store.ts",
+        "src/chat-interactions/continuation.ts",
+        "tests/chat-interaction-storage.mjs"
       ],
-      "issue": null,
-      "owner": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/87",
+      "owner": "Codex /root (codex/identity-admission)",
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
         "2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature.",
-        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
+        "2026-10-02 UTC: claimed #87 from c87aa04 in codex/identity-admission. Current TypeScript protocol, bounded input, durable content-brief drafts/submissions/continuation, scoped HTTP and nonactionable history/export are implemented in source. Full packet acceptance remains open: generalized maintained/custom adapters, correction/resume and lifecycle/client integration, remaining race cases and deployment. WH-107/108 renderer and semantic agent admission are downstream; no custom credential collection is activated."
       ]
     },
     {

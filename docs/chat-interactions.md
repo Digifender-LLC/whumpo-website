@@ -1,6 +1,6 @@
 # Owner Chat interaction contract v1
 
-**WH-105 decision, October 1, 2026; source `26b9fa496aa34c304434b53352fd2dc1451c1711`.** [Issue #51](https://github.com/zemdregon/whumpo/issues/51). This freezes the protocol and implementation handoffs for [primary Chat](roadmap/chat-first-experience.md). The offline reference and fixtures are implemented; production persistence, adapters, rendering and customer acceptance remain WH-106–112. No endpoint, schema, model tool or permission is activated here.
+**WH-105 decision, October 1, 2026; source `26b9fa496aa34c304434b53352fd2dc1451c1711`.** [Issue #51](https://github.com/zemdregon/whumpo/issues/51). This freezes the protocol and implementation handoffs for [primary Chat](roadmap/chat-first-experience.md). The decision established the reference and fixtures. The October 2 WH-106 source checkpoint below implements current persistence and authenticated adapters; rendering, agent tools, full lifecycle acceptance and deployment remain open.
 
 The first complete journey is **existing-project content brief → private comparison/preview → exact private save → separate publication review**. It works with the delivered content compiler and requires neither CMS nor a new provider. The following preserves every current domain review, including the explicit review before saving a structured private version. Customer visitor forms and app presentation remain separate WH-067/070 contracts; a visitor never acquires owner Chat or maintainer inference.
 
@@ -22,7 +22,7 @@ WH-113's [identity decision](workspace-identity.md) and WH-089's [feature catalo
 
 ## Wire objects and digest
 
-The [offline reference](../tools/prototypes/chat-interactions.mjs) defines the closed v1 structural subset; [synthetic fixtures](../tests/fixtures/chat-interactions.json) are its readable examples. It performs no authorization, persistence, rendering, inference or network operation. Production code must enforce raw body limits **before** JSON parsing and use Workers-compatible hashing; importing this Node prototype into a Worker is not the implementation plan.
+The [shared TypeScript protocol](../src/chat-interactions/protocol.ts) defines the closed v1 structural subset; [synthetic fixtures](../tests/fixtures/chat-interactions.json) are readable examples. It uses Web Crypto and the maintained bounded canonical encoder. The [transport reader](../src/chat-interactions/input.ts) limits actual streamed UTF-8 bytes to 32 KiB before parsing. The former Node-only prototype was removed. Protocol validation alone grants no authority: domain storage and the current workspace capability enforce ownership, admission and exact state.
 
 An issued element contains exactly:
 
@@ -98,7 +98,7 @@ Human review bindings remain a **separate server-generated channel**, using the 
 
 1. Owner selects the detailing project or resolves ambiguity in Chat. `readSpecification` supplies revision 3 with `headline` and `services` content IDs. A current specification is required; do not route through a legacy page converter. Missing/noncurrent data requires the explicit forward cutover or new current project creation. If another draft diverged, show the conflict and require a current reviewed baseline.
 2. The server issues the fixture's content form with verified defaults and project/task scope. Customer edits `headline` and `services`, or asks for a natural-language correction that becomes proposed draft values. Plain “yes” never approves anything.
-3. Explicit **Prepare preview** submits the complete answer snapshot using the operation envelope below. The successful submission receipt means answers were saved. A separate continuation receipt prepares `{kind:"specification",operation:"change",projectId,expectedRevision:3,operations:[{type:"content.replace",contentId:"headline",text:…},{type:"content.replace",contentId:"services",text:…}]}`. The prototype checks this mapping against the actual compiler in the focused test.
+3. Explicit **Prepare preview** submits the complete answer snapshot using the operation envelope below. The successful submission receipt means answers were saved. A separate continuation receipt prepares `{kind:"specification",operation:"change",projectId,expectedRevision:3,operations:[{type:"content.replace",contentId:"headline",text:…},{type:"content.replace",contentId:"services",text:…}]}`. The shared protocol test checks this mapping against the actual compiler in the focused test.
 4. `prepareSpecification` rechecks current ownership/revision/draft/compiler/safety; its statements commit with the existing Chat turn. It returns the current ten-minute proposal and exact preview/comparison links. Form's seven-day answer lifetime never lengthens this review. If content changed while answering, retain the answers, show the conflict and explicitly prepare a fresh form/review against the new baseline.
 5. `specificationChatLinks` revalidates the immutable reply digest and current proposal before supplying `specification_review` metadata. The existing React review card uses `specificationApply` through `/api/chat/actions`; `recentSession` and the existing domain receipt/transaction apply exactly that private version. Answer submission cannot call this path. A lost reply reads the receipt, never creates another save.
 6. Customer sees the private result and can request publication. That creates the existing publication review; only its separate exact control updates the live site. Dashboard/current status reflects domain truth. General history shows the form/snapshot/result as read-only; export includes those customer-visible records without active controls.
@@ -131,7 +131,7 @@ Task context is a bounded pointer record: task UUID/revision, selected project, 
 
 ## Shared authority and eligibility
 
-At issue/read/draft/submit/continue/confirm/dispatch, consume WH-090's shared operation admission over WH-113 identity, current owner/member/project rights, stable feature ID, actual configuration/consent, implementation/readiness and current resource/review/funding policy. Registry metadata is not that resolver. Do not reconstruct eligibility from plan labels, form claims, stored grants or a cached view.
+At issue/read/draft/submit/continue/confirm/dispatch, consume WH-122's shared operation admission (WH-090 retains cumulative feature acceptance) over WH-113 identity, current owner/member/project rights, stable feature ID, actual configuration/consent, implementation/readiness and current resource/review/funding policy. Registry metadata is not that resolver. Do not reconstruct eligibility from plan labels, form claims, stored grants or a cached view.
 
 | Actor/state | Required behavior |
 | --- | --- |
@@ -152,13 +152,13 @@ WH-109 evolves `workspace_preferences` and its revision, not a second layout sto
 
 WH-107 and WH-081 send exactly the current protocol version and their field/binding support. The server requires the current version and all controls needed by the issued definition. Missing/unknown version, field type or binding yields `client_update_required` with a fixed **Update Whumpo** message. No simpler form, older decoder, text projection or browser downgrade is served. Unknown fields are rejected, not ignored. The reference's `requireCurrentClient` demonstrates this rejection; a current generic form still returns `canApprove:false`.
 
-Retained conversations use the current history/interaction schema. Schema changes require an explicit forward migration before serving retained rows; historical receipts may be archived as nonactionable facts in the current export format. Do not mutate immutable approval digests to make a historical action executable. Submitted/canceled/expired/superseded current elements are read-only because of their state, not their age. A current review action requires a new authenticated domain read. Native returns preserve task/interaction IDs and read current state; account changes clear client-held state. Trusted authentication/consent/preview handoffs are current product flows, never alternative protocol implementations.
+Retained conversations use the current history/interaction schema. Schema changes require the complete current schema and a reviewed disposable test reset; historical receipts may be archived as nonactionable facts in the current export format. Do not mutate immutable approval digests to make a historical action executable. Submitted/canceled/expired/superseded current elements are read-only because of their state, not their age. A current review action requires a new authenticated domain read. Native returns preserve task/interaction IDs and read current state; account changes clear client-held state. Trusted authentication/consent/preview handoffs are current product flows, never alternative protocol implementations.
 
 Keep Profile, Settings, sign-out, authentication/recovery, support and urgent take-down/recovery paths directly accessible without inference. Dashboard remains a separate view; Chat remains the default upper navigation item, not a permanent pane beside it. Routine capabilities move into Chat only after their replacement and inference-outage recovery journey pass WH-110/111. This decision removes no current route or control.
 
 ## Data lifecycle and model context
 
-Register these classes in WH-106/109 migrations, closure/export inventories and WH-116/117 protection before activation. This adds no approved retention SLA; [data lifecycle](data-lifecycle.md) still owns unresolved LC policy decisions.
+Register these classes in WH-106/109 current schema inputs, closure/export inventories and WH-116/117 protection before activation. This adds no approved retention SLA; [data lifecycle](data-lifecycle.md) still owns unresolved LC policy decisions.
 
 | Class | Handling |
 | --- | --- |
@@ -175,7 +175,7 @@ Only selected, explicitly submitted answers relevant to the active task may ente
 
 | Packet | Required next evidence |
 | --- | --- |
-| WH-106 | Depends on WH-105/090/116/009. Implement shared storage, closed validation, atomic draft/submission/continuation admission, ownership/privacy/export registration, concurrency and lost-reply cases in disposable D1. |
+| WH-106 | Depends on WH-105/004/009/116/122. Implement shared storage, closed validation, atomic draft/submission/continuation admission, ownership/privacy/export registration, concurrency and lost-reply cases in disposable D1. |
 | WH-107 / WH-108 | Render current elements with mobile/accessibility/version-rejection tests, then connect bounded agent capabilities and the complete content-change journey. Real handlers retain their authority. |
 | WH-109 | Revisioned views/bindings through the shared layout and admission engine; denial, stale data, restore, zero-inference refresh and cross-project/member tests. |
 | WH-110 / WH-111 / WH-112 | Move routine journeys onto the current handlers, preserve deterministic recovery, then accept current history/native handoffs. Remove superseded routes with the replacement; no legacy route adapters. |
@@ -188,3 +188,32 @@ Mandatory implementation scenarios: valid template/custom/view; malformed/deep/o
 The focused offline test validates all six fixture definitions, field vocabulary, malformed cases, scope/digest and strict client rejection, then maps the content answers through the **actual compiler**, checks the resulting private artifact and unchanged unrelated content, and validates existing exact `ChatControl`/layout/feature identifiers. These are schema/compiler decision checks; they do not prove D1 concurrency, deployed routes, renderer accessibility, provider or physical-device acceptance. Roadmap validation/rendering and local link/diff checks accompany the decision. Results are recorded in issue #51 when completed.
 
 **Decision verification after the owner amendment — October 1:** `node tests/chat-interaction-contract.mjs` passed 63 offline cases, including strict current-client rejection, with no network calls. The earlier compatibility projection and its tests were removed. Roadmap validation/alignment/rendering, local links and diff checks accompany the decision. No production interaction storage, renderer, application build or device acceptance is claimed.
+
+
+## WH-106 source checkpoint — October 2, 2026 UTC
+
+[Issue #87](https://github.com/zemdregon/whumpo/issues/87) remains open. The following is current source and disposable-fixture evidence, **not a deployment or full packet completion**. The existing deployed protection release remains on its 165-table schema. This source now composes 172 tables; a later reviewed empty-database cutover is required before deployment.
+
+- `src/chat-interactions/` provides the sole current protocol/types, raw request reader, scoped storage, deterministic continuation, HTTP adapter and historical projection. Closed typed validation rejects unknown shapes, stale versions, unsafe object hooks, hidden answers and wrong resource/value types. Errors expose bounded field IDs and fixed messages.
+- Seven current schema tables hold an always-empty transaction assertion, one conversation per current owner, bounded task pointers, immutable issued definitions, latest draft/revision, immutable submissions, request identities and separate continuation state. Six are content/metadata tables; the assertion holds no rows. Request identity/hash metadata remains after project content deletion, preventing reuse. Direct receipt deletion under an extant account is refused; project removal also refuses pending/unknown continuation outcomes.
+- The currently callable issuer is **server-maintained content change only**. It reads the owned current specification, derives fixed labels and actual component limits, and binds verified saved defaults and exact revision. No client/model can post an arbitrary definition or credential question. Custom semantic policy and other maintained template adapters remain work for the full WH-106/108 handoff; structural support is not their activation.
+- Issue and commit recheck the shared `core.editing` / `prepare` decision, actual workspace identity, welcome state, ownership, immutable digest, revision, expiry and quotas in the write transaction. A conversation admits five open forms; an account admits twenty. Drafts save at most once per second. Cancel and stopping unstarted work remain available to the current owner after feature eligibility ends; they grant no new work.
+- Submit atomically clears the editable draft and stores one immutable answer snapshot plus one `not-started` continuation. Duplicate exact submissions read the original receipt; changed payloads conflict. Reading, polling and history/export call no model and never start a continuation. Separate explicit continuation claims its identity once and uses the existing `prepareSpecification` builder, proposal constraints, Chat turn transaction and immutable review link. It does not apply a private save or publish. Current Chat revision/feature/expiry are rechecked at commit. Failed/unknown work retains the answer snapshot and cannot automatically redispatch.
+- `/api/chat/interactions/v1/{read,receipt,mutate,continue,stop}` are POST-only authenticated same-origin adapters behind the existing limiter/welcome/identity boundaries. Read requires the current complete client capability declaration. All responses use no-store. There is no arbitrary create-definition endpoint. Resume uses current readback of an open form; terminal forms are never reopened.
+- Current history and `whumpo-chat-v2` transcript downloads add allowlisted titles, field labels/default provenance, submitted answers and state. They omit active bindings, source selectors, scope, request hashes and approval controls. Latest unsubmitted drafts remain in scoped form readback; draft-inclusive account export and retention/purge are not completed.
+- Lifecycle/protection inventory classifies every new table as existing managed-readable Chat content/metadata or an empty assertion, and closure inventory counts pending/unknown continuations. No new application content key or customer unlock is introduced. Seven-day form expiry ends write authority; it is **not** a deletion promise.
+
+Verification recorded with this checkpoint: shared protocol/compiler checks, bounded HTTP input checks and connected storage tests use current code. Connected cases cover owner/foreign/session admission, actual component constraints, draft CAS, lost acknowledgement readback, submit/cancel races, late feature/session revocation, separate actual compiler/review preparation, failed/unknown/stopped continuations, current-only HTTP negotiation, nonactionable history/export, supersession, expiry, quota and retained request identities. The SQLite and local-D1 runs use synthetic accounts and no external model/provider calls. No CMS functional or CSAM/Daybreak work is included.
+
+Remaining original acceptance: additional maintained/admitted resource adapters, linked corrections/supersession/resume UX, attachment-copy removal, approved retention and complete export/deletion/restore handling, client logout/account-switch cache clearing, remaining expiry/ownership/review race cases, and end-to-end current renderer/agent handoffs. WH-107/108 remain separate renderer and semantic/tool tasks. Do not close #87 or claim customer/device/deployed acceptance from these fixtures.
+
+
+Checkpoint checks passed (synthetic local fixtures only):
+
+- `node tests/chat-interaction-contract.mjs` — 68 protocol/compiler/control cases.
+- `node tests/chat-interaction-input.mjs` — six bounded raw-body cases.
+- `node tests/chat-interaction-storage.mjs` and `node tests/chat-interaction-storage.mjs --d1` — 16 connected scenarios each, including actual authenticated HTTP and history/export.
+- `node tests/natural-chat.mjs`, `node tests/chat-history.mjs`, `node tests/chat-delivery.mjs`, `node tests/current-website-specifications.mjs`, `node tests/current-schema.mjs`, `node tests/account-closure-inventory.mjs`, `node tests/lifecycle-catalog.mjs`.
+- The full `package.json` check script (both TypeScript projects and generated contract/compiler checks), roadmap validate/alignment/render check, and `git diff --check`.
+
+The local D1 tests initialize isolated complete schemas without account credentials or external provider calls. Existing AI-driven specification proposals remain admitted; a guided turn without its exact submitted continuation is rejected. The new source is not eligible for the unchanged-schema standalone deployment wrapper.

@@ -1897,46 +1897,97 @@
       ]
     },
     {
-      "id": "chat-interactions",
-      "tables": [],
-      "scope": "owner",
-      "purpose": "Issued typed definitions, draft answers, immutable submissions and continuation receipts.",
-      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
-      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
-      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
-      "references": [
-        "docs/data-protection.md",
-        "docs/roadmap/backlog.json",
-        "docs/inference-privacy.md"
+      "id": "chat-interaction-assertion",
+      "tables": [
+        "chat_interaction_checks"
       ],
-      "storageStatus": "planned",
+      "scope": "platform",
+      "purpose": "Always-empty SQL assertion table used to atomically reject stale Chat interaction state, feature inclusion and revision checks.",
+      "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
+      "proposedRetention": "Remain empty in every deployment and restore.",
+      "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
+      "exportPolicy": "No data exists to export.",
+      "references": [
+        "schema/platform.sql",
+        "src/chat-interactions/store.ts",
+        "src/chat-interactions/continuation.ts",
+        "docs/chat-interactions.md"
+      ],
+      "storageStatus": "current",
       "protection": {
-        "profile": "planned-adapter",
+        "profile": "managed-readable",
         "storage": [
-          "not-admitted"
+          "control-d1"
         ],
         "readers": [
-          "Current actor/project and exact interaction revision."
+          "Internal SQL assertion mechanism; no customer data API"
         ],
         "processors": [
-          "Trusted renderer/domain validation; only necessary admitted answers enter maintenance context; no requested passwords/keys."
+          "Atomic admission predicates only"
         ],
         "remainingExposure": [
-          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+          "The table must remain empty; a successful SQL assertion is not a reusable capability."
         ],
-        "decision": "planned-adapter",
-        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
         "requirements": [
           "DP-02",
           "DP-03",
           "DP-04",
           "DP-05"
         ]
-      },
-      "implementationPackets": [
-        "WH-106"
-      ]
+      }
+    },
+    {
+      "id": "chat-interactions",
+      "tables": [
+        "chat_conversations",
+        "chat_interaction_tasks",
+        "chat_interactions",
+        "chat_interaction_requests",
+        "chat_interaction_submissions",
+        "chat_interaction_continuations"
+      ],
+      "scope": "owner",
+      "purpose": "Issued typed definitions, draft answers, immutable submissions and continuation receipts.",
+      "currentRetention": "Current schema/source, not deployed: private definitions and latest drafts are retained; explicit cancel or submit clears the draft. Expiry ends write authority, not storage retention. Immutable submitted answers and continuation receipts survive failure. Project deletion refuses pending/unknown continuations; otherwise it cascades content but account-bound request identity/hash tombstones remain until account removal.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Current scoped domain operations and database constraints. Direct receipt deletion while its account exists is refused. Account/project cascades are schema behavior, not a complete closure or restore-safe deletion workflow; unresolved outcome preservation and approved retention remain activation gates.",
+      "exportPolicy": "Current Chat history and v2 transcript export include allowlisted titles, field labels/default provenance, accepted answers and status only. No active bindings, digests, actor scope, preview links or approval controls. Unsubmitted draft export and full-account lifecycle orchestration remain open.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md",
+        "src/chat-interactions/store.ts",
+        "src/chat-interactions/history.ts",
+        "src/chat-interactions/continuation.ts",
+        "docs/chat-interactions.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-download"
+        ],
+        "readers": [
+          "Current owner, project ownership and current identity on domain/HTTP/history/export reads; no public or visitor access."
+        ],
+        "processors": [
+          "Deterministic trusted content form builder, schema validation and existing private preview compiler. No model receives these answers automatically. Agent interpretation is a later WH-108 adapter."
+        ],
+        "remainingExposure": [
+          "Defaults and submitted text are private content readable by authorized platform processors and privileged operators. Exports are customer-controlled copies. No browser form cache or generalized custom form issuance is activated. Retention/closure/restore suppression and renderer logout clearing remain incomplete."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Reuse managed-readable project/Chat protection, current workspace admission and bounded allowlisted projections; no additional customer unlock or copy of credentials.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
       "id": "staging-releases",

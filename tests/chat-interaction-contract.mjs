@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
-import {bindings,bounds,validateDefinition,validateAnswers,contentRequest,sealDefinition,verifyEnvelope,validateMutation,requireCurrentClient} from '../tools/prototypes/chat-interactions.mjs';
+Error.stackTraceLimit=0;
+const protocolBuild=await build({entryPoints:['src/chat-interactions/protocol.ts'],bundle:true,format:'esm',platform:'neutral',write:false});
+const {bindings,bounds,validateDefinition,validateAnswers,contentRequest,sealDefinition,verifyEnvelope,validateMutation,requireCurrentClient}=await import('data:text/javascript;base64,'+Buffer.from(protocolBuild.outputFiles[0].contents).toString('base64'));
 
-// Offline decision evidence. No D1, browser, inference, provider or real account.
+// Shared Worker protocol evidence. No D1, browser, inference, provider or real account.
 const fixture=JSON.parse(await readFile('tests/fixtures/chat-interactions.json','utf8'));
 const copy=x=>structuredClone(x),id=n=>`11111111-1111-4111-8111-${String(n).padStart(12,'0')}`;
 const answers={headline:'Care for your car, at your door.',services:'Interior refresh. Exterior detail. Ask for a quote.'};
@@ -13,16 +15,17 @@ const client={versions:[1],fieldTypes:['text','long-text','choice','multi-choice
 let count=0;
 async function test(name,fn){try{await fn();count++;}catch(e){console.error('Failed:',name);throw e;}}
 const rejects=(fn,code)=>assert.throws(fn,e=>e.code===code,code);
-async function invalid(name,mutate,code,key='contentChange'){await test(name,()=>{const d=copy(fixture[key]);mutate(d);rejects(()=>validateDefinition(d),code);});}
+const rejectsAsync=(fn,code)=>assert.rejects(fn,e=>e.code===code,code);
+async function invalid(name,mutate,code,key='contentChange'){await test(name,async()=>{const d=copy(fixture[key]);mutate(d);rejects(()=>validateDefinition(d),code);});}
 
 for(const [name,d] of Object.entries(fixture))await test('valid '+name,()=>assert.deepEqual(validateDefinition(d),d));
-await test('valid content/custom answers and no inferred defaults',()=>{
+await test('valid content/custom answers and no inferred defaults',async()=>{
   assert.deepEqual(validateAnswers(fixture.contentChange,answers),answers);
   assert.deepEqual(validateAnswers(fixture.custom,custom),custom);
   assert.deepEqual(validateAnswers(fixture.custom,{...custom,mobile:true,radius:30}),{...custom,mobile:true,radius:30});
   rejects(()=>validateAnswers(fixture.contentChange,{}),'REQUIRED');
 });
-await test('returns independent data',()=>{const d=validateDefinition(fixture.contentChange);d.fields[0].label='different';assert.notEqual(d.fields[0].label,fixture.contentChange.fields[0].label);});
+await test('returns independent data',async()=>{const d=validateDefinition(fixture.contentChange);d.fields[0].label='different';assert.notEqual(d.fields[0].label,fixture.contentChange.fields[0].label);});
 for(const [name,mutate,code] of [
   ['unknown envelope command',d=>d.command='/confirm anything','UNKNOWN_FIELD'],
   ['unsupported version',d=>d.version=2,'VERSION'],
@@ -62,17 +65,17 @@ await invalid('wrong view component',d=>d.cards[0].display='preview','BINDING','
 await invalid('unnecessary review identity',d=>d.cards[0].reviewId=id(9),'REFERENCE','view');
 await invalid('changed maintained brief field',d=>d.fields[0].id='password','TEMPLATE','projectBrief');
 await invalid('project selector cannot collect photos',d=>d.fields[0].constraints.collection='photos','TEMPLATE','projectSelection');
-await test('resource negotiation and maintained choices',()=>{
+await test('resource negotiation and maintained choices',async()=>{
   const c={...client,bindings:client.bindings.filter(b=>b!=='owned.projects@1')};
-  rejects(()=>requireCurrentClient(sealDefinition(envelope(fixture.projectSelection)),c),'CLIENT_UPDATE_REQUIRED');
+  await rejectsAsync(async()=>await requireCurrentClient(await sealDefinition(envelope(fixture.projectSelection)),c),'CLIENT_UPDATE_REQUIRED');
   validateAnswers(fixture.projectSelection,{project:id(4)},{owned:{projects:[id(4)]}});
   validateAnswers(fixture.choice,{tone:'friendly'});
 });
 await test('nested malicious data rejected before schema walk',()=>{
   const d=copy(fixture.custom);let a=d.extra={};for(let i=0;i<12;i++)a=a.child={};rejects(()=>validateDefinition(d),'COMPLEXITY');
 });
-await test('large node count rejected',()=>{const d=copy(fixture.custom);d.extra=Array(1025).fill(null);rejects(()=>validateDefinition(d),'COMPLEXITY');});
-await test('unknown and hidden values rejected',()=>{
+await test('large node count rejected',async()=>{const d=copy(fixture.custom);d.extra=Array(1025).fill(null);rejects(()=>validateDefinition(d),'COMPLEXITY');});
+await test('unknown and hidden values rejected',async()=>{
   rejects(()=>validateAnswers(fixture.contentChange,{...answers,approve:true}),'UNKNOWN_FIELD');
   rejects(()=>validateAnswers(fixture.custom,{...custom,radius:0}),'HIDDEN_VALUE');
   rejects(()=>validateAnswers(fixture.custom,{...custom,mobile:true}),'REQUIRED');
@@ -103,50 +106,81 @@ await test('remaining value types, optional empty and literal text',()=>{
   validateAnswers(single('text',{maxLength:80},false),{answer:''});
   rejects(()=>validateAnswers(single('text',{maxLength:80}),{answer:''}),'TEXT');
 });
-await test('canonical digest and independent immutable association',()=>{
+await test('canonical digest and independent immutable association',async()=>{
   const a=envelope(),b=Object.fromEntries(Object.entries(a).reverse());
-  assert.equal(sealDefinition(a).definitionDigest,sealDefinition(b).definitionDigest);
-  const s=sealDefinition(a);assert.deepEqual(verifyEnvelope(s),s);
+  assert.equal((await sealDefinition(a)).definitionDigest,(await sealDefinition(b)).definitionDigest);
+  const s=await sealDefinition(a);assert.deepEqual(await verifyEnvelope(s),s);
   for(const mutate of [x=>x.scope.projectId=id(99),x=>x.scope.actorId=id(99),x=>x.definition.fields.forEach(f=>f.source.revision=9),x=>x.expiresAt='2026-10-07T12:00:00.000Z']){
-    const altered=copy(s);mutate(altered);rejects(()=>verifyEnvelope(altered),'DIGEST');
+    const altered=copy(s);mutate(altered);await rejectsAsync(async()=>await verifyEnvelope(altered),'DIGEST');
   }
 });
-await test('issuance rejects shape, missing project, excessive expiry and forged digest',()=>{
-  const a=envelope();a.scope.projectId=null;rejects(()=>sealDefinition(a),'PROJECT');
-  const b=envelope();b.expiresAt='2026-10-09T12:00:00.000Z';rejects(()=>sealDefinition(b),'TIME');
-  const c=envelope();c.id=[id(1)];rejects(()=>sealDefinition(c),'ID');
-  const d=sealDefinition(envelope());d.action={type:'confirm'};rejects(()=>verifyEnvelope(d),'UNKNOWN_FIELD');
-  const e=sealDefinition(envelope());e.definitionDigest='a'.repeat(64);rejects(()=>verifyEnvelope(e),'DIGEST');
+await test('issuance rejects shape, missing project, excessive expiry and forged digest',async()=>{
+  const a=envelope();a.scope.projectId=null;await rejectsAsync(async()=>await sealDefinition(a),'PROJECT');
+  const b=envelope();b.expiresAt='2026-10-09T12:00:00.000Z';await rejectsAsync(async()=>await sealDefinition(b),'TIME');
+  const c=envelope();c.id=[id(1)];await rejectsAsync(async()=>await sealDefinition(c),'ID');
+  const d=await sealDefinition(envelope());d.action={type:'confirm'};await rejectsAsync(async()=>await verifyEnvelope(d),'UNKNOWN_FIELD');
+  const e=await sealDefinition(envelope());e.definitionDigest='a'.repeat(64);await rejectsAsync(async()=>await verifyEnvelope(e),'DIGEST');
 });
-await test('only the current complete client contract is accepted',()=>{
-  const e=sealDefinition(envelope());assert.deepEqual(requireCurrentClient(e,client),{canSubmit:true,canApprove:false});
-  for(const c of [{...client,versions:[]},{...client,versions:[1,2]},{...client,versions:[2]},{...client,bindings:[]},{...client,fieldTypes:['text']}])rejects(()=>requireCurrentClient(e,c),'CLIENT_UPDATE_REQUIRED');
-  assert.equal(requireCurrentClient(sealDefinition(envelope(fixture.view)),client).canSubmit,false);
+await test('only the current complete client contract is accepted',async()=>{
+  const e=await sealDefinition(envelope());assert.deepEqual(await requireCurrentClient(e,client),{canSubmit:true,canApprove:false});
+  for(const c of [{...client,versions:[]},{...client,versions:[1,2]},{...client,versions:[2]},{...client,bindings:[]},{...client,fieldTypes:['text']}])await rejectsAsync(async()=>await requireCurrentClient(e,c),'CLIENT_UPDATE_REQUIRED');
+  assert.equal((await requireCurrentClient(await sealDefinition(envelope(fixture.view)),client)).canSubmit,false);
 });
 await test('registered comparison and preview reference bindings',()=>{
   const d=copy(fixture.view);d.cards=[{id:'preview',binding:'site.preview@1',display:'preview',limit:1,reviewId:id(9)},{id:'diff',binding:'site.comparison@1',display:'comparison',limit:1,reviewId:id(9)}];validateDefinition(d);
   d.cards[0].reviewId=null;rejects(()=>validateDefinition(d),'REFERENCE');
 });
-await test('exact submission identity/hash and corrections',()=>{
-  const e=sealDefinition(envelope()),r={version:1,requestId:id(10),interactionId:e.id,definitionDigest:e.definitionDigest,expectedAnswerRevision:2,operation:'submit',answers};
-  const first=validateMutation(r,e);assert.equal(first.requestHash,validateMutation(copy(r),e).requestHash);
-  assert.notEqual(first.requestHash,validateMutation({...r,answers:{...answers,headline:'A correction'}},e).requestHash);
-  assert.notEqual(first.requestHash,validateMutation({...r,requestId:id(11)},e).requestHash);
+await test('exact submission identity/hash and corrections',async()=>{
+  const e=await sealDefinition(envelope()),r={version:1,requestId:id(10),interactionId:e.id,definitionDigest:e.definitionDigest,expectedAnswerRevision:2,operation:'submit',answers};
+  const first=await validateMutation(r,e);assert.equal(first.requestHash,(await validateMutation(copy(r),e)).requestHash);
+  assert.notEqual(first.requestHash,(await validateMutation({...r,answers:{...answers,headline:'A correction'}},e)).requestHash);
+  assert.notEqual(first.requestHash,(await validateMutation({...r,requestId:id(11)},e)).requestHash);
   // Hash mismatch lets the runtime reject same-ID/different-payload replay;
-  // this prototype intentionally has no receipt database.
-  rejects(()=>validateMutation({...r,projectId:id(99)},e),'UNKNOWN_FIELD');
-  rejects(()=>validateMutation({...r,definitionDigest:'a'.repeat(64)},e),'DIGEST');
-  rejects(()=>validateMutation({...r,interactionId:id(99)},e),'REFERENCE');
-  rejects(()=>validateMutation({...r,operation:'approve'},e),'OPERATION');
-  rejects(()=>validateMutation({...r,expectedAnswerRevision:'2'},e),'NUMBER');
+  // the shared protocol does not grant or persist authority by itself.
+  await rejectsAsync(async()=>await validateMutation({...r,projectId:id(99)},e),'UNKNOWN_FIELD');
+  await rejectsAsync(async()=>await validateMutation({...r,definitionDigest:'a'.repeat(64)},e),'DIGEST');
+  await rejectsAsync(async()=>await validateMutation({...r,interactionId:id(99)},e),'REFERENCE');
+  await rejectsAsync(async()=>await validateMutation({...r,operation:'approve'},e),'OPERATION');
+  await rejectsAsync(async()=>await validateMutation({...r,expectedAnswerRevision:'2'},e),'NUMBER');
 });
-await test('partial draft and explicit cancellation remain distinct from submission',()=>{
-  const e=sealDefinition(envelope()),r={version:1,requestId:id(10),interactionId:e.id,definitionDigest:e.definitionDigest,expectedAnswerRevision:0,operation:'save-draft',answers:{headline:answers.headline}};
-  validateMutation(r,e);rejects(()=>validateMutation({...r,operation:'submit'},e),'REQUIRED');
-  validateMutation({...r,answers:{headline:''}},e);
-  rejects(()=>validateMutation({...r,operation:'submit',answers:{...answers,headline:''}},e),'TEXT');
-  rejects(()=>validateMutation({...r,operation:'cancel'},e),'UNKNOWN_FIELD');
-  const {answers:_,...cancel}=r;validateMutation({...cancel,operation:'cancel'},e);
+await test('partial draft and explicit cancellation remain distinct from submission',async()=>{
+  const e=await sealDefinition(envelope()),r={version:1,requestId:id(10),interactionId:e.id,definitionDigest:e.definitionDigest,expectedAnswerRevision:0,operation:'save-draft',answers:{headline:answers.headline}};
+  await validateMutation(r,e);await rejectsAsync(async()=>await validateMutation({...r,operation:'submit'},e),'REQUIRED');
+  await validateMutation({...r,answers:{headline:''}},e);
+  await rejectsAsync(async()=>await validateMutation({...r,operation:'submit',answers:{...answers,headline:''}},e),'TEXT');
+  await rejectsAsync(async()=>await validateMutation({...r,operation:'cancel'},e),'UNKNOWN_FIELD');
+  const {answers:_,...cancel}=r;await validateMutation({...cancel,operation:'cancel'},e);
+});
+
+await test('object hooks are rejected without execution',()=>{
+  let executed=0;
+  for(const mutate of [d=>Object.defineProperty(d,'summary',{enumerable:true,get(){executed++;return 'Injected';}}),d=>d.toJSON=()=>{executed++;return {};},d=>d[Symbol('hidden')]=true,d=>delete d.fields[0]]){
+    const d=copy(fixture.contentChange);mutate(d);rejects(()=>validateDefinition(d),'SHAPE');
+  }
+  assert.equal(executed,0);
+});
+await test('answer errors identify the field without reflecting customer text',()=>{
+  assert.throws(()=>validateAnswers(fixture.contentChange,{...answers,headline:''}),e=>e.code==='TEXT'&&e.fieldId==='headline'&&!e.message.includes(answers.services));
+  assert.throws(()=>validateAnswers(fixture.custom,{...custom,radius:30}),e=>e.code==='HIDDEN_VALUE'&&e.fieldId==='radius');
+});
+await test('UTF-8 sizes and array ordering are exact',async()=>{
+  const d=copy(fixture.custom);d.extra='☁'.repeat(9000);rejects(()=>validateDefinition(d),'BYTES');
+  const first=envelope(),second=copy(first);second.definition.fields.reverse();
+  assert.notEqual((await sealDefinition(first)).definitionDigest,(await sealDefinition(second)).definitionDigest);
+  const composed=envelope(),decomposed=copy(composed);composed.definition.title='Café';decomposed.definition.title='Cafe\u0301';
+  assert.notEqual((await sealDefinition(composed)).definitionDigest,(await sealDefinition(decomposed)).definitionDigest);
+});
+await test('unsupported or duplicated client capabilities require an update',async()=>{
+  const e=await sealDefinition(envelope());
+  for(const c of [{...client,bindings:[...client.bindings,'site.publish@1']},{...client,bindings:[...client.bindings,client.bindings[0]]},{...client,fieldTypes:[...client.fieldTypes,'password']},{...client,fieldTypes:[...client.fieldTypes,'text']}])await rejectsAsync(()=>requireCurrentClient(e,c),'CLIENT_UPDATE_REQUIRED');
+});
+await test('malformed nested values always return protocol errors',()=>{
+  for(const key of ['fields','cards'])for(const value of [null,true,{},'wrong',[null],[false],[[]]]){
+    const d=copy(fixture.contentChange);d[key]=value;assert.throws(()=>validateDefinition(d),e=>typeof e.code==='string');
+  }
+  for(const key of ['constraints','source','default','when'])for(const value of [null,0,'wrong',[],{}]){
+    const d=copy(fixture.contentChange);d.fields[0][key]=value;assert.throws(()=>validateDefinition(d),e=>typeof e.code==='string');
+  }
 });
 
 const result=await build({stdin:{contents:`export * from './src/project-specification/compiler'; export {chatControl} from './src/chat-controls'; export {parseLayout} from './src/workspace-dashboard'; export {launchFeatureCatalogue} from './src/plan-features';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false});
@@ -161,7 +195,7 @@ try {
   });
   await test('first slice compiles through actual content compiler without publication',async()=>{
     const all=JSON.parse(await readFile('tests/fixtures/project-specification/detailing.json','utf8'));
-    const spec={...all,modules:[{id:'content',version:1}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};
+    const spec={...all,modules:[{id:'content',version:2}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};
     const request=contentRequest(fixture.contentChange,answers,id(4));
     assert.deepEqual(request,{kind:'specification',operation:'change',projectId:id(4),expectedRevision:3,operations:[{type:'content.replace',contentId:'headline',text:answers.headline},{type:'content.replace',contentId:'services',text:answers.services}]});
     const change=await real.compileSpecificationChange(spec,request.operations,real.currentCompilerLock());
@@ -171,14 +205,14 @@ try {
     assert.deepEqual(change.compiled.specification.pages,spec.pages);
     await assert.rejects(()=>real.compileSpecificationChange(spec,[{type:'content.replace',contentId:'foreign-content',text:'Not in this site'}],real.currentCompilerLock()));
   });
-  await test('only existing exact human review shape is admitted',()=>{
+  await test('only existing exact human review shape is admitted',async()=>{
     const action={type:'specificationApply',reviewId:id(9),proposalDigest:'a'.repeat(64),expectedRevision:3};
     assert.equal(real.chatControl(action).recentAuth,true);
     assert.equal(real.chatControl({...action,answers}),undefined);
     assert.equal(real.chatControl({type:'confirm',kind:'site',reviewId:id(9)}).action.kind,'site');
     assert.equal(real.chatControl({type:'interaction.answers@1',answers}),undefined);
   });
-  await test('existing saved view stays in its bounded layout and shortcut registry',()=>{
+  await test('existing saved view stays in its bounded layout and shortcut registry',async()=>{
     const layout={widgets:['projects','usage','activity'],tabs:[{id:'tab-detailing',label:'Detailing',projectId:id(4),widgets:['traffic','activity'],shortcuts:['project','versions']}]};
     assert.deepEqual(real.parseLayout(layout),layout);
     assert.throws(()=>real.parseLayout({...layout,tabs:[{...layout.tabs[0],shortcuts:['publish']}] }));
