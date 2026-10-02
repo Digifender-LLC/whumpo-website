@@ -17,7 +17,7 @@ export async function currentSiteFixtureHandlers(){
   export {reviewBackup,confirmBackup,listBackups,githubRepositories} from './src/github-backups';
   export {ownedExport} from './src/exports';
   export {seal} from './src/connection-vault';
-  export {sendAIChat} from './src/ai-chat';
+  export {sendAIChat,reconcileChat} from './src/ai-chat';
   export {cleanPhoto,uploadPhoto,readPhoto,listPhotos,cleanupPhotos} from './src/files';
   export {compareVersions,compareReview,diffPage} from './src/version-diff';
   export {renderSite} from './src/components';
@@ -31,6 +31,10 @@ export async function currentSiteFixtureHandlers(){
   export {linkChatReviewReply} from './src/chat-review-receipts';
   export {readOnboarding,saveOnboarding,completeOnboarding} from './src/onboarding';
   export {updateProfile} from './src/profile';
+  export * as contacts from './src/contacts';
+  export * as directory from './src/directory';
+  export {contactPage} from './src/contact-page';
+  export {welcomeDraftProject} from './src/first-draft';
   export {inspectionRequest,inspectionMessages} from './src/agent-inspection';
   export * as backendDiff from './src/backend-diff';
   export * as backendPublication from './src/backend-publication';
