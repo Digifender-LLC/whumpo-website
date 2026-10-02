@@ -25,6 +25,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
  const recovery=useInteractionRecovery(owner,id),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false),[resourceReady,setResourceReady]=useState(false);
  const onResourceReady=useCallback((ready:boolean)=>setResourceReady(ready),[]);
  const section=useRef<HTMLElement>(null),restored=useRef(false);
+ const result=useRef<HTMLParagraphElement>(null),followResult=useRef<HTMLParagraphElement>(null),discardButton=useRef<HTMLButtonElement>(null),keepButton=useRef<HTMLButtonElement>(null);
  const query=useQuery({queryKey:['chat-interaction',owner,id],queryFn:async({signal})=>{
   let value:InteractionRead;
   try{value=await api<InteractionRead>(route+'read',{method:'POST',body:JSON.stringify({version:1,interactionId:id,client}),signal});}catch(error){if(error instanceof APIError&&[404,410].includes(error.status))return null;throw error;}
@@ -67,7 +68,29 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   if(value===undefined||value===''&&form.envelope.definition.fields.find(f=>f.id===key)?.type==='resource')delete next[key];else next[key]=value;
   recovery.save({...draftRecord(),answers:next,updatedAt:Date.now()});setNotice('');setFieldError(null);
  }
- async function perform(action:()=>Promise<void>){if(busy)return;setBusy(true);setNotice('');try{await action();}catch(error){if(recovery.active.current){setNotice(error instanceof InteractionError?'Check the highlighted answer.':canRecoverChat(error)?'The request is unconfirmed. Check saved status; nothing will be sent automatically.':message(error));if(error instanceof InteractionError&&error.fieldId||error instanceof APIError&&error.fieldId){const key=error.fieldId!;setFieldError(key);requestAnimationFrame(()=>section.current?.querySelector<HTMLElement>('[data-field="'+CSS.escape(key)+'"]')?.focus());}}}finally{if(recovery.active.current)setBusy(false);}}
+ async function perform(action:()=>Promise<void>){
+  if(busy)return;
+  const origin=document.activeElement instanceof HTMLElement&&section.current?.contains(document.activeElement)?document.activeElement:null;
+  let moved=false,errorField:string|null=null;
+  const observeFocus=(event:FocusEvent)=>{if(event.target!==origin&&event.target!==document.body)moved=true;};
+  document.addEventListener('focusin',observeFocus);setBusy(true);setNotice('');
+  try{await action();}
+  catch(error){if(recovery.active.current){
+   setNotice(error instanceof InteractionError?'Check the highlighted answer.':canRecoverChat(error)?'The request is unconfirmed. Check saved status; nothing will be sent automatically.':message(error));
+   if(error instanceof InteractionError&&error.fieldId||error instanceof APIError&&error.fieldId){errorField=error.fieldId!;setFieldError(errorField);}
+  }}
+  finally{
+   if(recovery.active.current)setBusy(false);
+   requestAnimationFrame(()=>{
+    document.removeEventListener('focusin',observeFocus);
+    // A delayed reply must not steal focus after the user moved elsewhere.
+    if(!recovery.active.current||!origin||moved||![origin,document.body].includes(document.activeElement as HTMLElement))return;
+    if(errorField){section.current?.querySelector<HTMLElement>('[data-field="'+CSS.escape(errorField)+'"]')?.focus();return;}
+    if(!origin.isConnected||origin.matches(':disabled'))(followResult.current??result.current??section.current)?.focus();
+    else if(document.activeElement===document.body)origin.focus();
+   });
+  }
+ }
  async function followup(action:'continue'|'stop'|'reconcile',submissionId:string){
   try{await send(route+action,{version:1,submissionId,...(action==='continue'?{expectedChatRevision:chatRevision}:{})});}
   catch(error){if(!canRecoverChat(error))throw error;setNotice('The preview request is unconfirmed. Check saved status; it will not run again automatically.');}
@@ -104,7 +127,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   {unavailable&&<p className="text-sm">This form is no longer available. It may have been discarded or reached seven days of inactivity. Ask Whumpo for a new form.</p>}
   {query.isPending&&<p role="status" className="text-sm">Reading your saved form…</p>}
   {query.error&&<div role="alert" className="text-sm space-y-3"><p>{message(query.error)}</p>{!unavailable&&<Button variant="outline" disabled={busy||query.isFetching} onClick={()=>void query.refetch()}>Check saved form</Button>}</div>}
-  {notice&&<p role="status" className="text-sm break-words">{notice}</p>}
+  {notice&&<p ref={result} tabIndex={-1} role="status" className="text-sm break-words">{notice}</p>}
   {recovery.storageFailed&&<p role="alert" className="text-sm">This browser couldn’t save recovery details. Keep this tab open until your request is confirmed.</p>}
   {pending&&<div className="rounded-xl border bg-secondary/50 p-3 space-y-3 text-sm"><p>An interrupted {pending.operation==='submit'?'answer submission':pending.operation==='cancel'?'discard request':'draft save'} needs a status check. Nothing is sent automatically.</p><div className="flex flex-wrap gap-2"><Button variant="outline" className="min-h-11" disabled={busy} onClick={()=>void perform(()=>checkPending(pending))}>Check saved status</Button>{checked&&<Button variant="outline" className="min-h-11" disabled={busy||chatBusy} onClick={()=>void perform(()=>transmit(pending,false))}>Retry original request</Button>}</div></div>}
   {form&&!collapsed&&!unavailable&&<>
@@ -116,11 +139,11 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
     {form.envelope.definition.fields.map(field=><ChatInteractionField key={field.id} field={field} owner={owner} interactionId={id} digest={form.envelope.definitionDigest} value={answers[field.id]} locked={locked} invalid={fieldError===field.id} onChange={value=>edit(field.id,value)} onResourceReady={onResourceReady}/>)}
     {form.state==='open'&&<><p className="text-xs text-muted-foreground">{content?'Your changes stay private. Preparing a preview saves these answers; saving the website and publishing each need a separate review.':'Saving shares these answers with Whumpo for this conversation. It does not create a project or change your sites.'}</p><div className="flex flex-wrap gap-2"><Button type="submit" className="min-h-11" disabled={locked||(selection&&!resourceReady)}>{busy&&<LoaderCircle className="size-4 animate-spin"/>}{content?'Prepare preview':'Save answers'}</Button><Button type="button" variant="outline" className="min-h-11" disabled={locked||(selection&&!resourceReady)} onClick={()=>void perform(()=>mutate('save-draft'))}>Save draft</Button></div><p className="text-xs text-muted-foreground">Edits stay in this browser until saved. Unsubmitted drafts are kept for seven days of inactivity.</p></>}
    </form>}
-   {form.state==='open'&&<div className="flex flex-wrap items-center gap-2 border-t pt-3"><Button type="button" variant="link" className="min-h-11 px-0" onClick={onAnswerInChat}>{photo?'Back to Chat':'Answer in Chat'}</Button>{!discard?<Button variant="ghost" className="min-h-11 ml-auto" disabled={locked} onClick={()=>setDiscard(true)}>{photo?'Dismiss uploader':'Discard form'}</Button>:<div className="w-full rounded-xl border p-3 space-y-2"><p className="text-sm">{photo?'Close this photo uploader? Saved photos and unconfirmed upload recovery details are kept.':'Discard this form and its unsent answers?'}</p><div className="flex flex-wrap gap-2"><Button variant="destructive" className="min-h-11" disabled={locked} onClick={()=>void perform(()=>mutate('cancel'))}>{photo?'Dismiss this uploader':'Discard this form'}</Button><Button variant="outline" className="min-h-11" disabled={busy} onClick={()=>setDiscard(false)}>{photo?'Keep uploader open':'Keep editing'}</Button></div></div>}</div>}
+   {form.state==='open'&&<div className="flex flex-wrap items-center gap-2 border-t pt-3"><Button type="button" variant="link" className="min-h-11 px-0" onClick={onAnswerInChat}>{photo?'Back to Chat':'Answer in Chat'}</Button>{!discard?<Button ref={discardButton} variant="ghost" className="min-h-11 ml-auto" disabled={locked} onClick={()=>{setDiscard(true);requestAnimationFrame(()=>keepButton.current?.focus());}}>{photo?'Dismiss uploader':'Discard form'}</Button>:<div role="group" aria-labelledby={'form-'+id+'-discard'} className="w-full rounded-xl border p-3 space-y-2"><p id={'form-'+id+'-discard'} className="text-sm">{photo?'Close this photo uploader? Saved photos and unconfirmed upload recovery details are kept.':'Discard this form and its unsent answers?'}</p><div className="flex flex-wrap gap-2"><Button variant="destructive" className="min-h-11" disabled={locked} onClick={()=>void perform(()=>mutate('cancel'))}>{photo?'Dismiss this uploader':'Discard this form'}</Button><Button ref={keepButton} variant="outline" className="min-h-11" disabled={busy} onClick={()=>{setDiscard(false);requestAnimationFrame(()=>discardButton.current?.focus());}}>{photo?'Keep uploader open':'Keep editing'}</Button></div></div>}</div>}
    {form.state==='expired'&&<p className="text-sm">The answer window has closed. Ask Whumpo for a new form to continue.</p>}
    {(form.state==='superseded'||form.replacementInteractionId)&&<p className="text-sm">A newer form continues this task. These earlier answers are read-only.</p>}
    {form.state==='submitted'&&!form.replacementInteractionId&&!content&&!follow&&<div className="space-y-3 border-t pt-3 text-sm"><p>Your answers are saved for Chat. Tell Whumpo what you’d like to do next.</p><Button variant="outline" className="min-h-11" onClick={onAnswerInChat}>Continue in Chat</Button></div>}
-   {follow&&<div className="space-y-3 border-t pt-3 text-sm"><p>{follow.state==='succeeded'?'Your preview is ready in Chat. Review it before saving the website.':follow.state==='not-started'?'Your answers are saved. Preview preparation has not started.':follow.state==='failed'?follow.reason==='stopped'?'Preview preparation was stopped. Your submitted answers remain saved.':'A preview could not be prepared. Your answers are saved; ask Whumpo for a fresh form.':'Preview preparation is not yet confirmed. Checking status will not start another request.'}</p><div className="flex flex-wrap gap-2">{follow.state==='not-started'&&<><Button className="min-h-11" disabled={busy||chatBusy||!!pending} onClick={()=>void perform(()=>followup('continue',follow.id))}>Prepare saved answers</Button><Button variant="outline" className="min-h-11" disabled={busy||!!pending} onClick={()=>void perform(()=>followup('stop',follow.id))}>Stop preview preparation</Button></>}{['pending','unknown'].includes(follow.state)&&<Button variant="outline" className="min-h-11" disabled={busy||!!pending} onClick={()=>void perform(()=>followup('reconcile',follow.id))}>Resolve preview status</Button>}</div></div>}
+   {follow&&<div className="space-y-3 border-t pt-3 text-sm"><p ref={followResult} tabIndex={-1}>{follow.state==='succeeded'?'Your preview is ready in Chat. Review it before saving the website.':follow.state==='not-started'?'Your answers are saved. Preview preparation has not started.':follow.state==='failed'?follow.reason==='stopped'?'Preview preparation was stopped. Your submitted answers remain saved.':'A preview could not be prepared. Your answers are saved; ask Whumpo for a fresh form.':'Preview preparation is not yet confirmed. Checking status will not start another request.'}</p><div className="flex flex-wrap gap-2">{follow.state==='not-started'&&<><Button className="min-h-11" disabled={busy||chatBusy||!!pending} onClick={()=>void perform(()=>followup('continue',follow.id))}>Prepare saved answers</Button><Button variant="outline" className="min-h-11" disabled={busy||!!pending} onClick={()=>void perform(()=>followup('stop',follow.id))}>Stop preview preparation</Button></>}{['pending','unknown'].includes(follow.state)&&<Button variant="outline" className="min-h-11" disabled={busy||!!pending} onClick={()=>void perform(()=>followup('reconcile',follow.id))}>Resolve preview status</Button>}</div></div>}
   </>}
  </section>;
 }

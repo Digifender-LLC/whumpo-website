@@ -9,18 +9,27 @@ import {useWorkspace} from './workspace';
 export function useMobileViewport(){
  useEffect(()=>{
   const viewport=window.visualViewport,media=matchMedia('(max-width: 760px)');
-  let resting=window.innerHeight;
+  let resting=window.innerHeight,width=window.innerWidth,keyboard=false;
   const update=()=>{
-   if(!media.matches){document.documentElement.style.removeProperty('--workspace-height');document.documentElement.style.removeProperty('--keyboard-inset');document.documentElement.classList.remove('phone-keyboard');return;}
+   if(width!==window.innerWidth){width=window.innerWidth;resting=window.innerHeight;keyboard=false;}
+   if(!media.matches){resting=window.innerHeight;keyboard=false;document.documentElement.style.removeProperty('--workspace-height');document.documentElement.style.removeProperty('--workspace-bottom');document.documentElement.classList.remove('phone-keyboard');return;}
+   // Pinch zoom changes the visible region, not the workspace layout. Keep its
+   // unzoomed geometry so magnification does not move the user's target away.
+   if(viewport&&Math.abs(viewport.scale-1)>0.01)return;
    const height=viewport?.height??window.innerHeight;
+   const bottom=Math.max(0,window.innerHeight-height-(viewport?.offsetTop??0));
    const editing=document.activeElement instanceof HTMLElement&&document.activeElement.matches('textarea,input:not([type=checkbox]):not([type=radio]):not([type=file]),[contenteditable=true]');
-   if(!editing)resting=Math.max(height,window.innerHeight);
+   // Some current browsers resize the layout viewport as well. Retain its
+   // resting height until the keyboard closes, including after button focus.
+   keyboard=(bottom>120||resting-height>120)&&(editing||keyboard);
+   if(!keyboard&&!editing)resting=window.innerHeight;
    document.documentElement.style.setProperty('--workspace-height',height+'px');
-   document.documentElement.style.setProperty('--keyboard-inset',editing?Math.max(0,window.innerHeight-height-(viewport?.offsetTop??0))+'px':'0px');
-   document.documentElement.classList.toggle('phone-keyboard',editing&&resting-height>120);
+   document.documentElement.style.setProperty('--workspace-bottom',bottom+'px');
+   // The keyboard can remain visible after focus moves onto a sheet button.
+   document.documentElement.classList.toggle('phone-keyboard',keyboard);
   };
-  update();viewport?.addEventListener('resize',update);window.addEventListener('resize',update);document.addEventListener('focusin',update);document.addEventListener('focusout',update);media.addEventListener('change',update);
-  return()=>{viewport?.removeEventListener('resize',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);media.removeEventListener('change',update);document.documentElement.style.removeProperty('--workspace-height');document.documentElement.style.removeProperty('--keyboard-inset');document.documentElement.classList.remove('phone-keyboard')};
+  update();viewport?.addEventListener('resize',update);viewport?.addEventListener('scroll',update);window.addEventListener('resize',update);document.addEventListener('focusin',update);document.addEventListener('focusout',update);media.addEventListener('change',update);
+  return()=>{viewport?.removeEventListener('resize',update);viewport?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);media.removeEventListener('change',update);document.documentElement.style.removeProperty('--workspace-height');document.documentElement.style.removeProperty('--workspace-bottom');document.documentElement.classList.remove('phone-keyboard')};
  },[]);
 }
 export function MobileNavigation({view,avatar}:{view:string;avatar:string}){
