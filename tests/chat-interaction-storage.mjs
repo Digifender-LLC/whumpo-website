@@ -79,7 +79,7 @@ try{
   const request=mutation(first.form,'submit',1);let lost=false;
   const lossy=await a.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interaction_submissions/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost response after commit');}}));
   saved=await store.mutateInteraction(lossy,a.user,request);assert(lost);assert.deepEqual(await store.mutateInteraction(a.scope,a.user,request),saved);
-  const after=await store.readInteraction(a.scope,a.user,first.form.envelope.id);assert.equal(after.submission.id,request.requestId);assert.equal(after.submission.continuation.state,'not-started');assert.deepEqual(after.draft,{});assert.deepEqual(after.submission.answers,request.answers);
+  const after=await store.readInteraction(a.scope,a.user,first.form.envelope.id);assert.equal(after.submission.id,request.requestId);assert.equal(after.submission.continuation.state,'not-started');assert.equal(after.draft,null);assert.deepEqual(after.submission.answers,request.answers);
   await denies(()=>store.mutateInteraction(a.scope,a.user,{...request,answers:{...request.answers,'field-1':'Different'}}));
   await assert.rejects(()=>run("UPDATE chat_interaction_submissions SET answers_json='{}' WHERE id=?",request.requestId),/chat_interaction_immutable/);
  });
@@ -193,7 +193,7 @@ try{
   const before=await store.readInteraction(c.scope,c.user,form.envelope.id),request=await replacement(c,before);request.contentIds.reverse();
   const next=await store.replaceContentBrief(c.scope,c.user,request),old=await store.readInteraction(c.scope,c.user,form.envelope.id);
   assert.equal(next.previousInteractionId,form.envelope.id);assert.equal(old.replacementInteractionId,next.envelope.id);assert.equal(next.envelope.scope.taskId,form.envelope.scope.taskId);assert.equal(next.answerRevision,0);assert.equal(next.submission,null);
-  assert.equal(old.state,'superseded');assert.deepEqual(old.draft,draft.answers);assert.equal(next.envelope.definition.fields[0].default,undefined);assert.deepEqual(next.envelope.definition.fields[1].default,{value:'My corrected headline',provenance:'user'});
+  assert.equal(old.state,'superseded');assert.deepEqual(old.draft,draft.answers);assert.deepEqual(next.envelope.definition.fields[0].default,{value:'',provenance:'user'});assert.deepEqual(next.envelope.definition.fields[1].default,{value:'My corrected headline',provenance:'user'});
   assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',form.envelope.scope.taskId)).revision,1);
   await denies(()=>store.mutateInteraction(c.scope,c.user,mutation(form,'submit',before.answerRevision)));
   await assert.rejects(()=>store.mutateInteraction(c.scope,c.user,{...mutation(next),answers:{}}),e=>e.code==='REQUIRED');
@@ -207,10 +207,25 @@ try{
   await denies(()=>store.replaceContentBrief(c.scope,c.user,{...request,contentIds:['about-text']}));
   await denies(()=>store.replaceContentBrief(b.scope,b.user,request),404);
  });
- await test('untouched correction chains preserve user text by content ID and rederive other defaults',async()=>{
+ await test('untouched correction chains preserve edited and omitted answers by content ID',async()=>{
   const c=await owner(),{form}=await issue(c);await store.mutateInteraction(c.scope,c.user,{...mutation(form,'save-draft'),answers:{'field-1':'EXPLICIT_CHAIN_ANSWER'}});const before=await store.readInteraction(c.scope,c.user,form.envelope.id);
-  const second=await store.replaceContentBrief(c.scope,c.user,{...await replacement(c,before),contentIds:['section-1-text','headline']});assert.deepEqual(second.envelope.definition.fields[1].default,{value:'EXPLICIT_CHAIN_ANSWER',provenance:'user'});assert.equal(second.envelope.definition.fields[0].default.provenance,'saved');
-  const third=await store.replaceContentBrief(c.scope,c.user,{...await replacement(c,second),contentIds:['headline','section-1-text','about-text']});assert.deepEqual(third.envelope.definition.fields[0].default,{value:'EXPLICIT_CHAIN_ANSWER',provenance:'user'});assert(third.envelope.definition.fields.slice(1).every(f=>f.default.provenance==='saved'));assert.equal(third.envelope.scope.taskId,form.envelope.scope.taskId);
+  const second=await store.replaceContentBrief(c.scope,c.user,{...await replacement(c,before),contentIds:['section-1-text','headline']});assert.deepEqual(second.envelope.definition.fields[1].default,{value:'EXPLICIT_CHAIN_ANSWER',provenance:'user'});assert.deepEqual(second.envelope.definition.fields[0].default,{value:'',provenance:'user'});
+  const third=await store.replaceContentBrief(c.scope,c.user,{...await replacement(c,second),contentIds:['headline','section-1-text','about-text']});assert.deepEqual(third.envelope.definition.fields[0].default,{value:'EXPLICIT_CHAIN_ANSWER',provenance:'user'});assert.deepEqual(third.envelope.definition.fields[1].default,{value:'',provenance:'user'});assert.equal(third.envelope.definition.fields[2].default.provenance,'saved');assert.equal(third.envelope.scope.taskId,form.envelope.scope.taskId);
+ });
+ await test('empty draft snapshots and cleared content survive corrections and explicit export',async()=>{
+  const c=await owner(),{form}=await issue(c);assert.equal(form.draft,null);
+  await store.mutateInteraction(c.scope,c.user,mutation(form,'save-draft'));
+  const saved=await store.readInteraction(c.scope,c.user,form.envelope.id),next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,saved));
+  await store.mutateInteraction(c.scope,c.user,{...mutation(next,'save-draft'),answers:{}});
+  let cleared=await store.readInteraction(c.scope,c.user,next.envelope.id);assert.deepEqual(cleared.draft,{});
+  const exported=await(await http(c,'/api/chat/export')).json(),record=exported.turns.find(t=>t.id===next.envelope.scope.originTurnId).interaction;
+  assert.deepEqual(record.draft.answers,{});assert(record.draft.savedAt);
+  for(let n=0;n<2;n++){
+   cleared=await store.replaceContentBrief(c.scope,c.user,await replacement(c,cleared));
+   assert(cleared.envelope.definition.fields.every(f=>f.default.value===''&&f.default.provenance==='user'));
+   await assert.rejects(()=>store.mutateInteraction(c.scope,c.user,{...mutation(cleared),answers:{'field-1':'','field-2':''}}),e=>e.code==='TEXT');
+  }
+  assert.deepEqual((await store.readInteraction(c.scope,c.user,form.envelope.id)).draft,saved.draft);
  });
  await test('competing replacements and replacement versus draft each have one winner',async()=>{
   for(const competingDraft of [false,true]){
@@ -259,12 +274,12 @@ try{
   const recovered=await continuation.reconcileContentBrief(c.scope,c.user,submit.requestId);assert.equal(recovered.submission.continuation.state,'succeeded');assert.equal(recovered.submission.continuation.resultTurnId,submit.requestId);
   await denies(()=>site.readSpecificationProposal(c.scope,c.user,submit.requestId),404);
  });
- await test('correction uses the newly saved baseline and keeps only explicit earlier edits',async()=>{
+ await test('correction uses the newly saved revision and preserves the complete earlier draft',async()=>{
   const c=await owner(),{form}=await issue(c),draft={...mutation(form,'save-draft'),answers:{'field-1':'Keep my explicit edit'}};await store.mutateInteraction(c.scope,c.user,draft);
   const other=await issue(c),submit=mutation(other.form);await store.mutateInteraction(c.scope,c.user,submit);const firstPreview=await continuation.continueContentBrief(c.scope,c.user,submit.requestId,await revision(c));assert.equal(firstPreview.submission.continuation.state,'succeeded','first preview');await approve(c,submit.requestId);
   assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,2);
   const previous=await store.readInteraction(c.scope,c.user,form.envelope.id),next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,previous));
-  assert(next.envelope.definition.fields.every(f=>f.source.revision===2));assert.deepEqual(next.envelope.definition.fields[0].default,{value:'Keep my explicit edit',provenance:'user'});assert.deepEqual(next.envelope.definition.fields[1].default,{value:submit.answers['field-2'],provenance:'saved'});
+  assert(next.envelope.definition.fields.every(f=>f.source.revision===2));assert.deepEqual(next.envelope.definition.fields[0].default,{value:'Keep my explicit edit',provenance:'user'});assert.deepEqual(next.envelope.definition.fields[1].default,{value:'',provenance:'user'});
   const answers={...mutation(next),answers:{'field-1':'Keep my explicit edit','field-2':'A new seasonal service'}};await store.mutateInteraction(c.scope,c.user,answers);const nextPreview=await continuation.continueContentBrief(c.scope,c.user,answers.requestId,await revision(c));assert.equal(nextPreview.submission.continuation.state,'succeeded','replacement preview '+JSON.stringify(nextPreview.submission.continuation));assert.equal((await site.readSpecificationProposal(c.scope,c.user,answers.requestId)).expected_revision,2);
   assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,2);assert.equal(await row('SELECT version_id FROM publications WHERE project_id=?',c.project),null);
  });

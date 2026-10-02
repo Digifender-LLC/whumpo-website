@@ -151,6 +151,18 @@ await test('partial draft and explicit cancellation remain distinct from submiss
   await rejectsAsync(async()=>await validateMutation({...r,operation:'cancel'},e),'UNKNOWN_FIELD');
   const {answers:_,...cancel}=r;await validateMutation({...cancel,operation:'cancel'},e);
 });
+await test('carried user defaults preserve incomplete drafts without weakening submission types',()=>{
+  for(const value of ['', '   ']){
+    const d=copy(fixture.contentChange);d.fields[0].default={value,provenance:'user'};
+    assert.deepEqual(validateDefinition(d),d);validateAnswers(d,{headline:value},{partial:true});
+    rejects(()=>validateAnswers(d,{...answers,headline:value}),'TEXT');
+    for(const provenance of ['saved','suggested']){d.fields[0].default.provenance=provenance;rejects(()=>validateDefinition(d),'TEXT');}
+  }
+  const d=copy(fixture.projectSelection);d.fields[0].default={value:'',provenance:'user'};
+  rejects(()=>validateDefinition(d),'VALUE');rejects(()=>validateAnswers(fixture.projectSelection,{project:''},{partial:true}),'VALUE');
+  assert.deepEqual(validateAnswers(fixture.projectSelection,{},{partial:true}),{});
+  rejects(()=>validateAnswers(fixture.projectSelection,{}),'REQUIRED');
+});
 
 await test('object hooks are rejected without execution',()=>{
   let executed=0;

@@ -28,5 +28,5 @@ export type OwnedResources={projects?:readonly string[];photos?:readonly string[
 export type InteractionReceipt={version:1;requestId:string;requestDigest:string;interactionId:string;operation:Mutation['operation'];answerRevision:number;createdAt:string};
 export type Continuation={id:string;state:'not-started'|'pending'|'succeeded'|'failed'|'unknown';resultTurnId:string|null;reason:string|null};
 export type InteractionRead={version:1;envelope:IssuedInteraction;projectName:string|null;previousInteractionId:string|null;replacementInteractionId:string|null;
- state:'open'|'submitted'|'canceled'|'superseded'|'expired';answerRevision:number;draft:Answers;observedAt:string;draftRetainUntil:string|null;
+ state:'open'|'submitted'|'canceled'|'superseded'|'expired';answerRevision:number;draft:Answers|null;observedAt:string;draftRetainUntil:string|null;
  submission:null|{id:string;answers:Answers;answersDigest:string;answerRevision:number;createdAt:string;continuation:Continuation|null}};

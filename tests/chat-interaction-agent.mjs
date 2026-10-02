@@ -149,7 +149,7 @@ try{
  });
  await test('project selection resolves current ownership and never retargets existing forms',async()=>{
   const o=await owner(),created=await chat(o,'Which of my projects should we work on?', [intakeRequest('requestProjectSelection')]);let f=await readForm(o,created.turn.interaction_id);
-  assert.equal(f.envelope.definition.template,'project-select@1');assert.deepEqual(f.draft,{});
+  assert.equal(f.envelope.definition.template,'project-select@1');assert.equal(f.draft,null);
   await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{project:o.project}));f=await readForm(o,f.envelope.id);
   const resources=await json(o,'/api/chat/interactions/v1/resources',{version:1,interactionId:f.envelope.id,fieldId:'project',limit:20,before:null});assert.deepEqual(resources.items,[{id:o.project,name:'Garden'}]);
   const result=await chat(o,'What project did I choose?', [submitted(f),body=>{const lookup=JSON.parse(JSON.parse(body.input.at(-1).content).result);assert.deepEqual(lookup.data.selectedProject,{id:o.project,name:'Garden'});assert.equal(lookup.data.answers,undefined);return null;}]);assert.equal(result.calls,2);
