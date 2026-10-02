@@ -6,6 +6,7 @@ import {build} from 'esbuild';
 import {currentSchemaArtifact,inspectSchema} from './current-schema.mjs';
 import {checkSpecificationCompiler} from './check-specification-compiler.mjs';
 import {checkServiceClientCompiler} from './check-service-client-compiler.mjs';
+import {withRecoveredConnectionKeys} from './connection-key-backup.mjs';
 
 // An operator-only isolated verifier. There is deliberately no HTTP/Chat route,
 // global fetch, publisher, provider adapter, SQL writer or release authorization.
@@ -97,7 +98,7 @@ async function readEvidence(source,streamId,manifest,now){
  const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();void reader?.cancel().catch(()=>{});reject(new Hold('independent-evidence'));},10000);});
  try{
   body=await Promise.race([deadline,(async()=>{
-   const response=await source.fetch(new Request('https://restore-evidence.internal/v1/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({version:1,snapshotId:manifest.snapshotId,manifestDigest,challenge}),signal:controller.signal}));
+   const response=await source.fetch(new Request('https://restore-evidence.internal/v2/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({version:2,snapshotId:manifest.snapshotId,manifestDigest,challenge}),signal:controller.signal}));
    requireCheck(!controller.signal.aborted,'independent-evidence');
    requireCheck(response.status===200&&!response.redirected&&response.body,'independent-evidence');
    reader=response.body.getReader();const chunks=[];let length=0;
@@ -107,8 +108,9 @@ async function readEvidence(source,streamId,manifest,now){
   })()]);
  }catch(error){if(error instanceof Hold)throw error;throw new Hold('independent-evidence');}
  finally{clearTimeout(timer);}
- requireCheck(exact(body,['version','streamId','snapshotId','manifestDigest','challenge','archiveState','capturedSequence','baseSequence','currentSequence','issuedAt','expiresAt','events']),'evidence-contract');
- requireCheck(body.version===1&&body.streamId===streamId&&body.snapshotId===manifest.snapshotId&&body.manifestDigest===manifestDigest&&body.challenge===challenge&&body.archiveState==='permitted','evidence-binding');
+ requireCheck(exact(body,['version','streamId','snapshotId','manifestDigest','challenge','archiveState','capturedSequence','baseSequence','currentSequence','issuedAt','expiresAt','events','keyBackup']),'evidence-contract');
+ requireCheck(body.version===2&&body.streamId===streamId&&body.snapshotId===manifest.snapshotId&&body.manifestDigest===manifestDigest&&body.challenge===challenge&&body.archiveState==='permitted','evidence-binding');
+ requireCheck(exact(body.keyBackup,['backupId','sha256','keyIds'])&&id(body.keyBackup.backupId)&&sha(body.keyBackup.sha256)&&Array.isArray(body.keyBackup.keyIds)&&body.keyBackup.keyIds.length>0&&body.keyBackup.keyIds.length<=4&&body.keyBackup.keyIds.every(id)&&new Set(body.keyBackup.keyIds).size===body.keyBackup.keyIds.length,'evidence-contract');
  const current=now();
  requireCheck(sequence(body.issuedAt)&&sequence(body.expiresAt)&&body.issuedAt<=current&&body.issuedAt>=current-10000&&body.expiresAt>current&&body.expiresAt<=body.issuedAt+30000,'evidence-freshness');
  // This bounded interface requires the complete cumulative stream. A future
@@ -222,16 +224,24 @@ async function checkObjects(state,objects){
  * customer JSON receipt or the recovered database. It must authenticate its own
  * permitted-archive inventory and cumulative evidence before replying. No live
  * adapter/store has been activated by this isolated verifier. */
-export async function inspectIsolatedRestore({db,manifest,keyring,evidenceSource,expectedStreamId,objects,now=Date.now}){
+export async function inspectIsolatedRestore({db,manifest,keyBackup,evidenceSource,expectedStreamId,objects,now=Date.now,...unknown}){
  const result={version:1,scope:'isolated-current-restore',status:'held',servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,holds:[]};
  try{
+  requireCheck(Object.keys(unknown).length===0,'current-input');
   const contract=await currentContract(),before=await snapshot(db,contract);validateManifest(manifest,contract,before);
   const evidence=await readEvidence(evidenceSource,expectedStreamId,manifest,now);applyEvidence(evidence,before,contract);
   checkUnsettled(before);
-  const keys=await checkKeys(before,contract,keyring),objectCount=await checkObjects(before,objects);
+  requireCheck(keyBackup&&same({backupId:keyBackup.backupId,sha256:keyBackup.sha256,keyIds:keyBackup.keyIds},evidence.keyBackup),'key-backup-binding');
+  let recovered;
+  try{recovered=await withRecoveredConnectionKeys(keyBackup,async keyring=>{
+   try{return {keys:await checkKeys(before,contract,keyring)};}
+   catch(error){return {hold:error instanceof Hold?error.code:'key-backup-unavailable'};}
+  });}catch{throw new Hold('key-backup-unavailable');}
+  requireCheck(!recovered.hold,recovered.hold);const keys=recovered.keys,objectCount=await checkObjects(before,objects);
   const after=await snapshot(db,contract);requireCheck(same(before.inventory,after.inventory),'candidate-changed');
   const current=await readEvidence(evidenceSource,expectedStreamId,manifest,now);
-  requireCheck(same({sequence:evidence.currentSequence,events:evidence.events},{sequence:current.currentSequence,events:current.events}),'evidence-changed');
+  requireCheck(same({sequence:evidence.currentSequence,events:evidence.events,keyBackup:evidence.keyBackup},{sequence:current.currentSequence,events:current.events,keyBackup:current.keyBackup}),'evidence-changed');
+  try{await withRecoveredConnectionKeys(keyBackup,async()=>true);}catch{throw new Hold('key-backup-unavailable');}
   return {...result,status:'verified',manifestDigest:restoreManifestDigest(manifest),tables:before.inventory.length,keys,objects:objectCount,evidenceSequence:current.currentSequence};
  }catch(error){return {...result,holds:[error instanceof Hold?error.code:'verification-unavailable']};}
 }

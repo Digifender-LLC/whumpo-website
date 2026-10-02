@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync,backup} from 'node:sqlite';
 import {createHash} from 'node:crypto';
-import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {sqliteD1Adapter} from './sqlite-d1.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
@@ -9,6 +9,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {fixtureKeyring,initializeFixtureKeys,fixtureCiphertext} from './helpers/connection-keyring.mjs';
+import {keyBackupFixture} from './helpers/key-backup.mjs';
 import {captureRestoreManifest,inspectIsolatedRestore,restoreManifestDigest} from '../tools/restore-admission.mjs';
 
 Error.stackTraceLimit=0;
@@ -18,23 +19,31 @@ const rowHash=row=>hash(JSON.stringify(row,(_k,v)=>v instanceof Uint8Array?Array
 const keyring=fixtureKeyring(),canary='PRIVATE_RESTORE_CREDENTIAL_CANARY',objectKey='private-object-restore-canary',objectBytes=Buffer.from('Private synthetic object; never served or scanned.');
 // Independent synthetic service state: it is not included in the recovered D1
 // schema/rows. No production suppression store or provider acceptance is implied.
+const backupFixture=await keyBackupFixture(),primaryBackup=await backupFixture.create(keyring);let keyBackup=primaryBackup.proof;
 const journal=new DatabaseSync(':memory:');
-journal.exec('CREATE TABLE archive(id TEXT PRIMARY KEY,digest TEXT NOT NULL,sequence INTEGER NOT NULL); CREATE TABLE event(sequence INTEGER PRIMARY KEY,kind TEXT NOT NULL,data TEXT NOT NULL);');
+journal.exec('CREATE TABLE archive(id TEXT PRIMARY KEY,digest TEXT NOT NULL,sequence INTEGER NOT NULL,key_backup TEXT NOT NULL); CREATE TABLE event(sequence INTEGER PRIMARY KEY,kind TEXT NOT NULL,data TEXT NOT NULL);');
 const head=()=>journal.prepare('SELECT COUNT(*) n FROM event').get().n;
 const event=(kind,data)=>journal.prepare('INSERT INTO event VALUES(?,?,?)').run(head()+1,kind,JSON.stringify(data));
 const clear=()=>journal.exec('DELETE FROM event; DELETE FROM archive;');
 const streamId='synthetic-independent-stream';let now=Date.now(),calls=0;
 const evidenceSource={async fetch(request){
- calls++;assert.equal(request.method,'POST');assert.equal(new URL(request.url).origin,'https://restore-evidence.internal');
+ calls++;assert.equal(request.method,'POST');assert.equal(new URL(request.url).pathname,'/v2/check');assert.equal(new URL(request.url).origin,'https://restore-evidence.internal');
  const input=await request.json(),registered=journal.prepare('SELECT * FROM archive WHERE id=? AND digest=?').get(input.snapshotId,input.manifestDigest);
  if(!registered)return new Response(null,{status:404});
- return Response.json({version:1,streamId,snapshotId:input.snapshotId,manifestDigest:registered.digest,challenge:input.challenge,archiveState:'permitted',capturedSequence:registered.sequence,baseSequence:0,currentSequence:head(),issuedAt:now,expiresAt:now+10000,events:journal.prepare('SELECT * FROM event ORDER BY sequence').all().map(row=>({...row,data:JSON.parse(row.data)}))});
+ assert.equal(input.version,2);
+ return Response.json({version:2,keyBackup:JSON.parse(registered.key_backup),streamId,snapshotId:input.snapshotId,manifestDigest:registered.digest,challenge:input.challenge,archiveState:'permitted',capturedSequence:registered.sequence,baseSequence:0,currentSequence:head(),issuedAt:now,expiresAt:now+10000,events:journal.prepare('SELECT * FROM event ORDER BY sequence').all().map(row=>({...row,data:JSON.parse(row.data)}))});
 }};
 const objects={get:async key=>key===objectKey?{size:objectBytes.length,arrayBuffer:async()=>Uint8Array.from(objectBytes).buffer}:null};
 const capture=()=>captureRestoreManifest(db,{snapshotId:id(),streamId,sequence:head()});
-function permit(manifest){journal.prepare('INSERT INTO archive VALUES(?,?,?)').run(manifest.snapshotId,restoreManifestDigest(manifest),manifest.checkpoint.sequence);}
+const backupReference=proof=>({backupId:proof.backupId,sha256:proof.sha256,keyIds:proof.keyIds});
+function permit(manifest){journal.prepare('INSERT INTO archive VALUES(?,?,?,?)').run(manifest.snapshotId,restoreManifestDigest(manifest),manifest.checkpoint.sequence,JSON.stringify(backupReference(keyBackup)));}
+async function heldWithBackup(manifest,proof,code){
+ journal.prepare('UPDATE archive SET key_backup=? WHERE id=?').run(JSON.stringify(backupReference(proof)),manifest.snapshotId);
+ try{await held({...options(manifest),keyBackup:proof},code);}
+ finally{journal.prepare('UPDATE archive SET key_backup=? WHERE id=?').run(JSON.stringify(backupReference(keyBackup)),manifest.snapshotId);}
+}
 async function current(){const manifest=await capture();permit(manifest);return manifest;}
-const options=manifest=>({db,manifest,keyring,evidenceSource,expectedStreamId:streamId,objects,now:()=>now});
+const options=manifest=>({db,manifest,keyBackup,evidenceSource,expectedStreamId:streamId,objects,now:()=>now});
 let refusals=0;
 async function held(input,code){const report=await inspectIsolatedRestore(input);assert.deepEqual(report.holds,[code]);assert.equal(report.status,'held');assert.equal(report.servingAllowed,false);assert.equal(report.providerDispatchAllowed,false);assert.ok(!JSON.stringify(report).includes(canary));assert.ok(!JSON.stringify(report).includes(objectKey));refusals++;return report;}
 async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,163);return result;}
@@ -56,9 +65,17 @@ try{
  assert.ok(!JSON.stringify(manifest).includes(canary));assert.ok(!JSON.stringify(manifest).includes(objectKey));assert.ok(!JSON.stringify(manifest).includes(JSON.parse(keyring).keys[0].secret));
  await held(options(manifest),'independent-evidence');permit(manifest);
  const good=await passed(options(manifest));assert.equal(good.keys.credentials,4);assert.equal(good.objects,1);
- for(const key of [undefined,'{}',JSON.stringify({...JSON.parse(keyring),version:1})])await held({...options(manifest),keyring:key},'missing-keys');
- await held({...options(manifest),keyring:fixtureKeyring('cd'.repeat(32))},'key-identity');
- await held({...options(manifest),keyring:fixtureKeyring('ab'.repeat(32),'unregistered')},'key-policy');
+ for(const proof of [undefined,{},JSON.stringify(keyBackup)])await held({...options(manifest),keyBackup:proof},'key-backup-binding');
+ await held({...options(manifest),keyring,keyBackup:undefined},'current-input');
+ await held({...options(manifest),keyBackup:{...keyBackup}},'key-backup-unavailable');
+ await held({...options(manifest),evidenceSource:altered(b=>{b.keyBackup.sha256='a'.repeat(64);})},'key-backup-binding');
+ await held({...options(manifest),evidenceSource:altered(b=>{delete b.keyBackup;})},'evidence-contract');
+ await held({...options(manifest),evidenceSource:altered(b=>{b.version=1;})},'evidence-binding');
+ const savedCapsule=await readFile(primaryBackup.backupFile);
+ try{await held({...options(manifest),objects:{get:async path=>{await rm(primaryBackup.backupFile);return objects.get(path);}}},'key-backup-unavailable');}
+ finally{await writeFile(primaryBackup.backupFile,savedCapsule,{mode:0o600});}
+ await heldWithBackup(manifest,(await backupFixture.create(fixtureKeyring('cd'.repeat(32)))).proof,'key-identity');
+ await heldWithBackup(manifest,(await backupFixture.create(fixtureKeyring('ab'.repeat(32),'unregistered'))).proof,'key-policy');
  for(const source of [undefined,{approved:true},{independent:true,events:[]}])await held({...options(manifest),evidenceSource:source},'independent-evidence');
  await held({...options(manifest),expectedStreamId:'different-stream'},'independent-evidence');
  await held({...options(manifest),evidenceSource:{fetch:async()=>{throw Error(canary);}}},'independent-evidence');
@@ -101,6 +118,8 @@ try{
  clear();permit(manifest);event('record-suppressed',{table:'users; DELETE FROM users',key:{id:owner.account}});await held(options(manifest),'evidence-contract');
  clear();permit(manifest);
  let reads=0;await held({...options(manifest),evidenceSource:{fetch:async request=>{if(++reads===2)event('owner-erased',{ownerId:'an-unrelated-owner'});return evidenceSource.fetch(request);}}},'evidence-changed');
+ reads=0;clear();permit(manifest);
+ await held({...options(manifest),evidenceSource:altered(b=>{if(++reads===2)b.keyBackup.sha256='f'.repeat(64);})},'evidence-changed');
  clear();permit(manifest);
  let changed=false;const changing=interceptDatabase(db,/SELECT \* FROM "users"/,async()=>{if(changed)return;changed=true;await db.prepare("UPDATE users SET email='changed@example.invalid' WHERE id=?").bind(owner.account).run();});
  // Mutating during the object read occurs after the first admitted snapshot.
@@ -142,7 +161,7 @@ try{
    const path=join(directory,'current-snapshot.sqlite');await backup(fixture.sql,path);
    const bytes=await readFile(path);assert.ok(!bytes.includes(canary));assert.ok(!bytes.includes(JSON.parse(keyring).keys[0].secret));
    restored=new DatabaseSync(path,{readOnly:true});const copy=sqliteD1Adapter(restored);
-   await passed({...options(manifest),db:copy});await held({...options(manifest),db:copy,keyring:undefined},'missing-keys');
+   await passed({...options(manifest),db:copy});await held({...options(manifest),db:copy,keyBackup:undefined},'key-backup-binding');
    // Revoke in the current source after the archive exists. The independent
    // service records that action; the unchanged historical copy still has it.
    await owner.revoke();event('record-suppressed',{table:'identity_sessions',key:{id:owner.authority}});
@@ -158,10 +177,10 @@ try{
  const next=fixtureKeyring('cd'.repeat(32),'fixture-next',JSON.parse(keyring).keys);
  await rotation.registerConnectionKeys(db,next,'restore-rotation-review');
  await rotation.beginConnectionRotation(db,next,{id:'restore-rotation',reviewId:'restore-rotation-review',expectedRevision:1});
- clear();manifest=await current();
- await held({...options(manifest),keyring:fixtureKeyring('cd'.repeat(32),'fixture-next')},'credential-authentication');
- await held({...options(manifest),keyring:next},'key-rotation-unsettled');
+ keyBackup=(await backupFixture.create(next)).proof;clear();manifest=await current();
+ await heldWithBackup(manifest,(await backupFixture.create(fixtureKeyring('cd'.repeat(32),'fixture-next'))).proof,'credential-authentication');
+ await held(options(manifest),'key-rotation-unsettled');
  await rotation.rotateConnectionBatch(db,next,'restore-rotation','restore-batch');
- clear();manifest=await current();const rotated=await passed({...options(manifest),keyring:next});assert.deepEqual(rotated.keys.keyIds,['fixture-current','fixture-next']);
+ clear();manifest=await current();const rotated=await passed(options(manifest));assert.deepEqual(rotated.keys.keyIds,['fixture-current','fixture-next']);
  console.log(`Isolated current restore admission passed: ${refusals} holds, four authenticated credential stores, complete schema/compiler manifest, independent synthetic archive/event service, stale identity/deletion/review/publication/effect checks, private object integrity and readback races. No serving, provider dispatch, key retirement or operational backup claim.`);
-}finally{globalThis.fetch=originalFetch;journal.close();await fixture.close();}
+}finally{globalThis.fetch=originalFetch;journal.close();await backupFixture.close();await fixture.close();}

@@ -6,7 +6,7 @@ const denied=()=>Error('Private material is not allowed in source/build/release 
 export function assertArtifactPath(path){
  if(typeof path!=='string'||!path||path.includes('\\')||path.includes('\0'))throw denied();
  const parts=path.split('/');
- if(parts.some(p=>!p||p==='.'||p==='..'||/^(?:\.secrets|\.git|node_modules)$/i.test(p)||/^\.(?:env|dev\.vars)(?:\.|$)/i.test(p)||/\.(?:key|pem|p12|pfx|db|sqlite|sqlite3)(?:-(?:wal|shm|journal))?$/i.test(p)||/^(?:secrets|credentials|auth)(?:\.[^.]+)*\.json$/i.test(p)))throw denied();
+ if(parts.some(p=>!p||p==='.'||p==='..'||/^(?:\.secrets|\.git|node_modules)$/i.test(p)||/^\.(?:env|dev\.vars)(?:\.|$)/i.test(p)||/\.(?:key|pem|p12|pfx|db|sqlite|sqlite3|whumpo-key-backup)(?:-(?:wal|shm|journal))?$/i.test(p)||/^(?:secrets|credentials|auth)(?:\.[^.]+)*\.json$/i.test(p)))throw denied();
 }
 
 export function assertArtifactConfiguration(config){
