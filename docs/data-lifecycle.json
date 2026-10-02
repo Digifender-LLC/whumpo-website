@@ -546,7 +546,7 @@
       ],
       "scope": "project",
       "purpose": "Full private website/service configuration, compiler locks, manifests, target references, previews, release candidates and comparison copies, including forward-restored snapshots.",
-      "currentRetention": "Proposals expire after ten minutes; preparing another proposal clears expired project proposals and a bounded global batch. Expiry is not a timed purge. Saved full snapshots have count/byte bounds, not age expiry. Exact website removal cascades dependent full snapshots and removes associated proposal/comparison copies; current heads and unexpired unapplied/activation reviews retain dependencies.",
+      "currentRetention": "Proposals expire after ten minutes; preparing another proposal clears expired project proposals and a bounded global batch. Expiry is not a timed purge. Saved full snapshots have count/byte bounds, not age expiry. Exact website removal cascades dependent full snapshots and removes associated proposal/comparison copies; current heads and unexpired unapplied/activation reviews retain dependencies. Current Chat comparison reads are private/no-store, opened on demand and never persisted in sessionStorage, transcript exports or inference context. Their owner/review/digest/revision-scoped query has zero inactive retention; collapse/navigation/account reset clears it, and failed or refreshing reads hide earlier facts. The existing protected preview and exact approval remain separate.",
       "proposedRetention": "Retain active saved configurations until exact removal or closure. Enumerate every full snapshot, proposal, preview, comparison and Chat/inspection copy during erasure. Restore creates a forward version under current safety and ownership checks; deleted bytes cannot be recreated from metadata receipts.",
       "deletionAuthority": "Exact owner website/project/account review and current dependency/hold checks. Direct retained-head or review deletion is not a supported bypass; eligible parent cascades do not constitute a customer closure workflow.",
       "exportPolicy": "Allowlist owned cleared configurations, pinned compiler/version provenance and compatible artifacts. Label private desired settings separately from enabled services; exclude internal envelopes/authority digests, visitor records and credentials. Current whole-account export remains unimplemented.",
@@ -554,6 +554,8 @@
         "docs/project-specification.md",
         "docs/project-service-clients.md",
         "src/project-specification/store.ts",
+        "src/project-specification/review-display.ts",
+        "frontend/src/specification-review-details.tsx",
         "src/project-specification/service-clients/store.ts",
         "docs/version-retention.md",
         "docs/data-protection.md"
