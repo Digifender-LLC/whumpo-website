@@ -85,6 +85,32 @@ export async function captureRestoreManifest(db,identity){
 }
 export const restoreManifestDigest=manifest=>digest(canonical(manifest));
 
+export const restoreRecordIdentity=record=>canonical([record.table,Object.entries(record.key).sort(([a],[b])=>a.localeCompare(b))]);
+function recordInventory(contract,state){
+ const records=[];
+ for(const table of contract.tables)for(const row of state.rows.get(table.name)){
+  requireCheck(table.keys.length>0,'record-identity');
+  const key=Object.fromEntries(table.keys.map(k=>[k,row[k]]));
+  requireCheck(Object.values(key).every(v=>typeof v==='string'&&v.length<=1024||Number.isSafeInteger(v)),'record-identity');
+  records.push({table:table.name,key,sha256:digest(canonical(row))});
+ }
+ return records.sort((a,b)=>restoreRecordIdentity(a).localeCompare(restoreRecordIdentity(b)));
+}
+/** Capture record identities/hashes and the manifest from the SAME read transaction.
+ * Restricted operator metadata only: no row body or credential is returned. */
+export async function captureRestoreArchive(db,identity){
+ try{const contract=await currentContract(),state=await snapshot(db,contract);return {manifest:manifestFor(contract,state,identity),records:recordInventory(contract,state)};}
+ catch{throw new Error('Current restore archive could not be captured.');}
+}
+/** Live-source observation, not a disaster-recovery authority or provider check. */
+export async function captureRestoreRecordSnapshot(db){
+ try{
+  const contract=await currentContract(),state=await snapshot(db,contract);
+  checkUnsettled(state);checkCredentialObligations(state);
+  return {schema:contract.schema,records:recordInventory(contract,state),sha256:digest(canonical(state.inventory))};
+ }catch{throw new Error('Current recovery source could not be observed.');}
+}
+
 /** Read a recovery constraint from the operator-selected CURRENT source, never
  * from customer-supplied row bodies, digests or a recovered candidate. This is
  * a bounded observation, not execution of erasure or provider reconciliation. */
@@ -242,12 +268,16 @@ async function checkKeys(state,contract,keyring){
   try{await contract.vault.unseal(keyring,context,row[column]);}catch{throw new Hold('credential-authentication');}
   credentials++;
  }
+ checkCredentialObligations(state);
+ return {keyIds:metadata.keyIds.slice().sort(),credentials};
+}
+
+function checkCredentialObligations(state){
  requireCheck(state.rows.get('connection_oauth_exchanges').length===0,'uncertain-effect');
  requireCheck(!state.rows.get('github_grant_revocations').some(r=>['dispatching','uncertain'].includes(r.state)),'uncertain-effect');
  requireCheck(!state.rows.get('github_refresh_custody').some(r=>r.access_revoked_at!==null||state.rows.get('github_token_vault').some(t=>t.id===r.token_id&&t.state==='revoking')),'uncertain-effect');
  requireCheck(state.rows.get('github_revocation_claims').length===0&&!state.rows.get('cloudflare_token_vault').some(row=>row.revoke_attempt!==null),'uncertain-effect');
  requireCheck(state.rows.get('connection_rotation_guards').length===0&&!state.rows.get('connection_key_rotations').some(r=>r.state==='running'),'key-rotation-unsettled');
- return {keyIds:metadata.keyIds.slice().sort(),credentials};
 }
 
 async function checkObjects(state,objects){
