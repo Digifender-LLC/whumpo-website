@@ -19,11 +19,23 @@ async function owner(){
  await scope.batch([scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'Create my website',?,datetime('now'),'ai','pending')").bind(turn,user,prepared.reply),...prepared.statements,scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(turn),scope.prepare('UPDATE workspace_state SET revision=1 WHERE user_id=?').bind(user)]);
  return {authority,user,scope,project};
 }
+async function origin(o){
+ const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Change my page','Please review the text.',datetime('now') FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);return turn;
+}
 async function issue(o,database=o.scope){
- const origin=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Change my page','Please review the text.',datetime('now') FROM workspace_state WHERE user_id=?",origin,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
- const request={originTurnId:origin,projectId:o.project,contentIds:['headline','section-1-text']};
+ const request={originTurnId:await origin(o),projectId:o.project,contentIds:['headline','section-1-text']};
  return {request,form:await store.issueContentBrief(database,o.user,request)};
 }
+async function replacement(o,form){return {originTurnId:await origin(o),previousInteractionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:form.answerRevision,contentIds:['headline','section-1-text']};}
+const revision=o=>row('SELECT revision FROM workspace_state WHERE user_id=?',o.user).then(r=>r.revision);
+const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil:()=>{}};
+const http=(o,path,data)=>worker.fetch(new Request('https://whumpo.com'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',...(data?{'content-type':'application/json'}:{}),cookie:'__Host-whumpo_session='+o.authority.token},...(data?{body:JSON.stringify(data)}:{})}),env,ctx);
+async function approve(o,submissionId){
+ const review=await site.readSpecificationProposal(o.scope,o.user,submissionId),response=await http(o,'/api/chat/actions',{id:id(),revision:await revision(o),action:{type:'specificationApply',reviewId:review.id,proposalDigest:review.proposal_digest,expectedRevision:review.expected_revision}});
+ assert.equal(response.status,200,await response.text());
+}
+const listRequest=(projectId=null,limit=20,before=null)=>({version:1,projectId,limit,before});
+
 function mutation(form,operation='submit',revision=0){return {version:1,requestId:id(),interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:revision,operation,...(operation==='cancel'?{}:{answers:{'field-1':'Gardens, cared for.','field-2':'Seasonal care and planting.'}})};}
 const denies=(fn,status=409)=>assert.rejects(fn,e=>e.status===status);
 try{
@@ -134,14 +146,15 @@ try{
   await denies(()=>issue(c));assert.equal((await row("SELECT count(*) n FROM chat_interactions WHERE user_id=? AND state='open'",c.user)).n,5);
  });
  await test('expired current definitions remain readable but cannot submit or reopen',async()=>{
-  const c=await owner(),scope=structuredClone(first.form.envelope.scope);scope.accountId=c.user;scope.actorId=c.user;scope.projectId=c.project;scope.conversationId=id();scope.taskId=id();scope.originTurnId=id();
-  await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) VALUES(?,?,2,'Past brief','Past brief',datetime('now'))",scope.originTurnId,c.user);
+  const c=await owner(),scope=structuredClone(first.form.envelope.scope);scope.accountId=c.user;scope.actorId=c.user;scope.projectId=c.project;scope.conversationId=id();scope.taskId=id();scope.originTurnId=await origin(c);
   await run('INSERT INTO chat_conversations(id,user_id) VALUES(?,?)',scope.conversationId,c.user);
   await run('INSERT INTO chat_interaction_tasks(id,user_id,conversation_id,project_id,origin_turn_id) VALUES(?,?,?,?,?)',scope.taskId,c.user,scope.conversationId,c.project,scope.originTurnId);
   const envelope=await protocol.sealDefinition({version:1,id:id(),scope,definition:first.form.envelope.definition,createdAt:'2020-01-01T00:00:00.000Z',expiresAt:'2020-01-08T00:00:00.000Z'});
   await run('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',envelope.id,c.user,scope.conversationId,scope.taskId,c.project,scope.originTurnId,JSON.stringify(envelope),envelope.definitionDigest,'a'.repeat(64),envelope.createdAt,envelope.expiresAt);
   assert.equal((await store.readInteraction(c.scope,c.user,envelope.id)).state,'expired');await denies(()=>store.mutateInteraction(c.scope,c.user,mutation({envelope})));
   await assert.rejects(()=>run("UPDATE chat_interactions SET expires_at='2099-01-01T00:00:00.000Z',answer_revision=1 WHERE id=?",envelope.id),/chat_interaction_changed/);
+  assert.deepEqual((await store.listInteractions(c.scope,c.user,listRequest())).items,[]);
+  const next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,await store.readInteraction(c.scope,c.user,envelope.id)));assert.equal(next.previousInteractionId,envelope.id);assert.equal(next.state,'open');assert.notEqual(next.envelope.definitionDigest,envelope.definitionDigest);
  });
  await test('deleting project content leaves request identities; direct receipt deletion is refused',async()=>{
   const c=await owner(),{form}=await issue(c),request=mutation(form);await store.mutateInteraction(c.scope,c.user,request);
@@ -150,6 +163,140 @@ try{
   assert.equal(await row('SELECT id FROM chat_interactions WHERE id=?',form.envelope.id),null);assert.equal(await row('SELECT id FROM chat_interaction_submissions WHERE id=?',request.requestId),null);
   assert.equal((await row('SELECT request_id FROM chat_interaction_requests WHERE user_id=? AND request_id=?',c.user,request.requestId)).request_id,request.requestId);
   await denies(()=>store.readInteractionReceipt(c.scope,c.user,request.requestId),404);
+ });
+ await test('replacement keeps the task, copies edits by content ID and preserves the old snapshot',async()=>{
+  const c=await owner(),{form}=await issue(c),draft=mutation(form,'save-draft');draft.answers={'field-1':'My corrected headline','field-2':''};await store.mutateInteraction(c.scope,c.user,draft);
+  const before=await store.readInteraction(c.scope,c.user,form.envelope.id),request=await replacement(c,before);request.contentIds.reverse();
+  const next=await store.replaceContentBrief(c.scope,c.user,request),old=await store.readInteraction(c.scope,c.user,form.envelope.id);
+  assert.equal(next.previousInteractionId,form.envelope.id);assert.equal(old.replacementInteractionId,next.envelope.id);assert.equal(next.envelope.scope.taskId,form.envelope.scope.taskId);assert.equal(next.answerRevision,0);assert.equal(next.submission,null);
+  assert.equal(old.state,'superseded');assert.deepEqual(old.draft,draft.answers);assert.equal(next.envelope.definition.fields[0].default,undefined);assert.deepEqual(next.envelope.definition.fields[1].default,{value:'My corrected headline',provenance:'user'});
+  assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',form.envelope.scope.taskId)).revision,1);
+  await denies(()=>store.mutateInteraction(c.scope,c.user,mutation(form,'submit',before.answerRevision)));
+  await assert.rejects(()=>store.mutateInteraction(c.scope,c.user,{...mutation(next),answers:{}}),e=>e.code==='REQUIRED');
+  assert.equal((await store.readInteractionReceipt(c.scope,c.user,draft.requestId)).answerRevision,1);
+ });
+ await test('lost replacement response and same-origin replay return exactly one successor',async()=>{
+  const c=await owner(),{form}=await issue(c),request=await replacement(c,form);let lost=false;
+  const lossy=await c.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost replacement response');}}));
+  const next=await store.replaceContentBrief(lossy,c.user,request);assert(lost);assert.equal((await store.replaceContentBrief(c.scope,c.user,request)).envelope.id,next.envelope.id);
+  assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE previous_interaction_id=?',form.envelope.id)).n,1);
+  await denies(()=>store.replaceContentBrief(c.scope,c.user,{...request,contentIds:['about-text']}));
+  await denies(()=>store.replaceContentBrief(b.scope,b.user,request),404);
+ });
+ await test('competing replacements and replacement versus draft each have one winner',async()=>{
+  for(const competingDraft of [false,true]){
+   const c=await owner(),{form}=await issue(c),first=await replacement(c,form),second=competingDraft?mutation(form,'save-draft'):await replacement(c,form);
+   const results=await Promise.allSettled([store.replaceContentBrief(c.scope,c.user,first),competingDraft?store.mutateInteraction(c.scope,c.user,second):store.replaceContentBrief(c.scope,c.user,second)]);
+   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected'&&r.reason.status===409).length,1);
+  }
+ });
+ await test('replacing submitted answers stops only unstarted continuation and retains its receipt',async()=>{
+  const c=await owner(),{form}=await issue(c),submit=mutation(form);await store.mutateInteraction(c.scope,c.user,submit);const before=await store.readInteraction(c.scope,c.user,form.envelope.id);
+  const next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,before)),old=await store.readInteraction(c.scope,c.user,form.envelope.id);
+  assert.equal(old.state,'submitted');assert.equal(old.answerRevision,1);assert.deepEqual(old.submission.answers,submit.answers);assert.equal(old.submission.continuation.reason,'stopped');assert.equal(next.envelope.definition.fields[0].default.provenance,'user');
+  assert.equal((await continuation.continueContentBrief(c.scope,c.user,submit.requestId,await revision(c))).submission.continuation.state,'failed');assert.equal(await row('SELECT id FROM project_spec_proposals WHERE id=?',submit.requestId),null);
+ });
+ await test('lost continuation claim is recoverable without calling the compiler or retrying work',async()=>{
+  const c=await owner(),{form}=await issue(c),submit=mutation(form);await store.mutateInteraction(c.scope,c.user,submit);let dropped=false;
+  const lossy=await c.authority.scope(interceptDatabase(db,/^UPDATE chat_interaction_continuations SET state='pending'/,async()=>{},async()=>{if(!dropped){dropped=true;throw Error('Claim acknowledgement lost');}}));
+  const held=await continuation.continueContentBrief(lossy,c.user,submit.requestId,await revision(c));assert(dropped);assert.equal(held.submission.continuation.state,'pending');
+  await denies(async()=>store.replaceContentBrief(c.scope,c.user,await replacement(c,held)));
+  await denies(()=>continuation.reconcileContentBrief(b.scope,b.user,submit.requestId),404);
+  await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=?',c.user);
+  const recovered=await continuation.reconcileContentBrief(c.scope,c.user,submit.requestId);assert.equal(recovered.submission.continuation.state,'failed');assert.equal(recovered.submission.continuation.reason,'unavailable');assert.deepEqual(recovered.submission.answers,submit.answers);
+  assert.equal((await continuation.reconcileContentBrief(c.scope,c.user,submit.requestId)).submission.continuation.state,'failed');assert.equal(await row('SELECT id FROM chat_turns WHERE id=?',submit.requestId),null);
+ });
+ await test('explicit reconciliation fences an in-flight prepared transaction before it commits',async()=>{
+  const c=await owner(),{form}=await issue(c),submit=mutation(form);await store.mutateInteraction(c.scope,c.user,submit);let interrupted=false;
+  const paused=await c.authority.scope(interceptDatabase(db,/^INSERT INTO project_spec_proposals/,async()=>{interrupted=true;assert.equal((await continuation.reconcileContentBrief(c.scope,c.user,submit.requestId)).submission.continuation.state,'failed');}));
+  const result=await continuation.continueContentBrief(paused,c.user,submit.requestId,await revision(c));assert(interrupted);assert.equal(result.submission.continuation.state,'failed');assert.deepEqual(result.submission.answers,submit.answers);
+  assert.equal(await row('SELECT id FROM project_spec_proposals WHERE id=?',submit.requestId),null);assert.equal(await row('SELECT id FROM chat_turns WHERE id=?',submit.requestId),null);
+  assert.equal((await continuation.continueContentBrief(c.scope,c.user,submit.requestId,await revision(c))).submission.continuation.state,'failed');
+ });
+ await test('reconcile resolves an unknown local outcome but never mistakes conflicting rows for success',async()=>{
+  const c=await owner(),{form}=await issue(c),submit=mutation(form);await store.mutateInteraction(c.scope,c.user,submit);
+  const failed=await c.authority.scope(interceptDatabase(db,/^INSERT INTO project_spec_proposals/,async()=>{throw Error('Unavailable commit');}));
+  assert.equal((await continuation.continueContentBrief(failed,c.user,submit.requestId,await revision(c))).submission.continuation.state,'unknown');
+  await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Unrelated','Unrelated',datetime('now') FROM workspace_state WHERE user_id=?",submit.requestId,c.user);
+  await denies(()=>continuation.reconcileContentBrief(c.scope,c.user,submit.requestId));assert.equal((await store.readInteraction(c.scope,c.user,form.envelope.id)).submission.continuation.state,'unknown');
+  await run('DELETE FROM chat_turns WHERE id=?',submit.requestId);
+  const recovered=await continuation.reconcileContentBrief(c.scope,c.user,submit.requestId);assert.equal(recovered.submission.continuation.state,'failed');assert.deepEqual(recovered.submission.answers,submit.answers);
+  const next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,recovered));assert.equal(next.previousInteractionId,form.envelope.id);
+ });
+ await test('successful continuation readback remains truthful even if its preview later expires',async()=>{
+  const c=await owner(),{form}=await issue(c),submit=mutation(form);await store.mutateInteraction(c.scope,c.user,submit);
+  const prepared=await continuation.continueContentBrief(c.scope,c.user,submit.requestId,await revision(c));assert.equal(prepared.submission.continuation.state,'succeeded');
+  await run('DELETE FROM project_spec_proposals WHERE id=?',submit.requestId);
+  const recovered=await continuation.reconcileContentBrief(c.scope,c.user,submit.requestId);assert.equal(recovered.submission.continuation.state,'succeeded');assert.equal(recovered.submission.continuation.resultTurnId,submit.requestId);
+  await denies(()=>site.readSpecificationProposal(c.scope,c.user,submit.requestId),404);
+ });
+ await test('correction uses the newly saved baseline and keeps only explicit earlier edits',async()=>{
+  const c=await owner(),{form}=await issue(c),draft={...mutation(form,'save-draft'),answers:{'field-1':'Keep my explicit edit'}};await store.mutateInteraction(c.scope,c.user,draft);
+  const other=await issue(c),submit=mutation(other.form);await store.mutateInteraction(c.scope,c.user,submit);const firstPreview=await continuation.continueContentBrief(c.scope,c.user,submit.requestId,await revision(c));assert.equal(firstPreview.submission.continuation.state,'succeeded','first preview');await approve(c,submit.requestId);
+  assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,2);
+  const previous=await store.readInteraction(c.scope,c.user,form.envelope.id),next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,previous));
+  assert(next.envelope.definition.fields.every(f=>f.source.revision===2));assert.deepEqual(next.envelope.definition.fields[0].default,{value:'Keep my explicit edit',provenance:'user'});assert.deepEqual(next.envelope.definition.fields[1].default,{value:submit.answers['field-2'],provenance:'saved'});
+  const answers={...mutation(next),answers:{'field-1':'Keep my explicit edit','field-2':'A new seasonal service'}};await store.mutateInteraction(c.scope,c.user,answers);const nextPreview=await continuation.continueContentBrief(c.scope,c.user,answers.requestId,await revision(c));assert.equal(nextPreview.submission.continuation.state,'succeeded','replacement preview '+JSON.stringify(nextPreview.submission.continuation));assert.equal((await site.readSpecificationProposal(c.scope,c.user,answers.requestId)).expected_revision,2);
+  assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,2);assert.equal(await row('SELECT version_id FROM publications WHERE project_id=?',c.project),null);
+ });
+ await test('a website save racing replacement leaves the original draft and task intact',async()=>{
+  const c=await owner(),{form}=await issue(c),other=await issue(c),submit=mutation(other.form);await store.mutateInteraction(c.scope,c.user,submit);await continuation.continueContentBrief(c.scope,c.user,submit.requestId,await revision(c));
+  const request=await replacement(c,form);let changed=false;
+  const scope=await c.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{if(!changed){changed=true;await approve(c,submit.requestId);}}));
+  await denies(()=>store.replaceContentBrief(scope,c.user,request));assert(changed);assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,2);
+  const old=await store.readInteraction(c.scope,c.user,form.envelope.id);assert.equal(old.state,'open');assert.equal(old.replacementInteractionId,null);assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',old.envelope.scope.taskId)).revision,0);
+ });
+ await test('replacement and continuation claim cannot both admit work for the old form',async()=>{
+  const c=await owner(),{form}=await issue(c),submit=mutation(form);await store.mutateInteraction(c.scope,c.user,submit);
+  const previous=await store.readInteraction(c.scope,c.user,form.envelope.id),request=await replacement(c,previous);let claimed=false;
+  const claim=await c.authority.scope(interceptDatabase(db,/^UPDATE chat_interaction_continuations SET state='pending'/,async()=>{},async()=>{claimed=true;throw Error('Claim response lost');}));
+  const replacing=await c.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{assert.equal((await continuation.continueContentBrief(claim,c.user,submit.requestId,await revision(c))).submission.continuation.state,'pending');}));
+  await denies(()=>store.replaceContentBrief(replacing,c.user,request));assert(claimed);assert.equal((await store.readInteraction(c.scope,c.user,form.envelope.id)).replacementInteractionId,null);
+  await continuation.reconcileContentBrief(c.scope,c.user,submit.requestId);
+  assert.equal((await store.replaceContentBrief(c.scope,c.user,request)).previousInteractionId,form.envelope.id);
+ });
+ await test('replacement admission rolls back all changes after late feature or session revocation',async()=>{
+  for(const identity of [false,true]){
+   const c=await owner(),{form}=await issue(c),request=await replacement(c,form);let revoked=false;
+   const scope=await c.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{revoked=true;if(identity)await c.authority.revoke();else await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=?',c.user);}));
+   await assert.rejects(()=>store.replaceContentBrief(scope,c.user,request),e=>identity?['identity_changed','proof_required'].includes(e.code):e.status===409);assert(revoked);
+   assert.equal((await row('SELECT state FROM chat_interactions WHERE id=?',form.envelope.id)).state,'open');assert.equal(await row('SELECT id FROM chat_interactions WHERE previous_interaction_id=?',form.envelope.id),null);assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',form.envelope.scope.taskId)).revision,0);
+  }
+ });
+ await test('resume index pages through current task references without exposing answers or granting authority',async()=>{
+  const c=await owner(),original=await issue(c),next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,original.form));
+  await store.mutateInteraction(c.scope,c.user,mutation(next,'save-draft'));
+  const outstanding=await issue(c),submit=mutation(outstanding.form);await store.mutateInteraction(c.scope,c.user,submit);
+  const canceled=await issue(c);await store.mutateInteraction(c.scope,c.user,mutation(canceled.form,'cancel'));
+  const firstPage=await store.listInteractions(c.scope,c.user,listRequest(c.project,1));assert(firstPage.nextBefore);
+  const secondPage=await store.listInteractions(c.scope,c.user,listRequest(c.project,1,firstPage.nextBefore));assert.equal(secondPage.nextBefore,null);
+  const items=[...firstPage.items,...secondPage.items];assert.deepEqual(new Set(items.map(i=>i.interactionId)),new Set([next.envelope.id,outstanding.form.envelope.id]));assert.equal(items.find(i=>i.interactionId===next.envelope.id).hasDraft,true);assert.equal(items.find(i=>i.interactionId===next.envelope.id).task.revision,1);assert.equal(items.find(i=>i.interactionId===outstanding.form.envelope.id).continuation.state,'not-started');
+  assert.doesNotMatch(JSON.stringify(items),/Gardens|planting|answers|definitionDigest|Binding|source|requestHash/);
+  const before=await revision(c);await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=?',c.user);assert.equal((await store.listInteractions(c.scope,c.user,listRequest())).items.length,2);assert.equal(await revision(c),before);
+  await denies(()=>store.listInteractions(b.scope,b.user,listRequest(c.project)),404);
+  const exported=await (await http(c,'/api/chat/export')).json(),old=exported.turns.find(t=>t.id===original.request.originTurnId).interaction,replacementFacts=exported.turns.find(t=>t.id===next.envelope.scope.originTurnId).interaction;
+  assert.equal(old.id,original.form.envelope.id);assert.equal(old.replacementInteractionId,next.envelope.id);assert.equal(replacementFacts.previousInteractionId,old.id);assert.doesNotMatch(JSON.stringify([old,replacementFacts]),/definitionDigest|Binding|scope|requestHash|reviewId/);
+  await c.authority.revoke();await assert.rejects(()=>store.listInteractions(c.scope,c.user,listRequest()),e=>['identity_changed','proof_required'].includes(e.code));
+ });
+ await test('HTTP resume and explicit reconciliation remain owned, strict and read-only unless requested',async()=>{
+  const c=await owner(),{form}=await issue(c),submit=mutation(form);await store.mutateInteraction(c.scope,c.user,submit);
+  const failed=await c.authority.scope(interceptDatabase(db,/^INSERT INTO project_spec_proposals/,async()=>{throw Error('Commit interrupted');}));await continuation.continueContentBrief(failed,c.user,submit.requestId,await revision(c));
+  const path='/api/chat/interactions/v1/',listing=await http(c,path+'list',listRequest());assert.equal(listing.status,200);assert.match(listing.headers.get('cache-control'),/no-store/);assert.equal((await listing.json()).items[0].continuation.state,'unknown');
+  assert.equal((await store.readInteraction(c.scope,c.user,form.envelope.id)).submission.continuation.state,'unknown');
+  assert.equal((await http(c,path+'list',{...listRequest(),limit:21})).status,400);assert.equal((await http(c,path+'list',{...listRequest(),before:{createdAt:'2026-02-31T00:00:00.000Z',interactionId:id()}})).status,400);assert.equal((await http(c,path+'list',{...listRequest(),version:0})).status,409);
+  const request={version:1,submissionId:submit.requestId};assert.equal((await http(b,path+'reconcile',request)).status,404);assert.equal((await http(c,path+'reconcile',{...request,retry:true})).status,400);
+  const response=await http(c,path+'reconcile',request);assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/no-store/);assert.deepEqual(Object.keys(await response.json()).sort(),['continuation','submissionId','version']);
+  assert.deepEqual((await (await http(c,path+'list',listRequest())).json()).items,[]);assert.deepEqual((await store.readInteraction(c.scope,c.user,form.envelope.id)).submission.answers,submit.answers);
+ });
+ await test('project removal clears a replacement chain and readbacks but preserves request replay tombstones',async()=>{
+  const c=await owner(),{form}=await issue(c),submit=mutation(form);await store.mutateInteraction(c.scope,c.user,submit);
+  assert.equal((await http(c,'/api/projects',{name:'Another garden',purpose:'Keep the fixture workspace available after project removal'})).status,201);
+  const next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,await store.readInteraction(c.scope,c.user,form.envelope.id))),draft=mutation(next,'save-draft');await store.mutateInteraction(c.scope,c.user,draft);
+  await run('DELETE FROM projects WHERE id=?',c.project);
+  assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE user_id=?',c.user)).n,0);assert.equal((await row('SELECT count(*) n FROM chat_interaction_tasks WHERE user_id=?',c.user)).n,0);
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_requests WHERE user_id=?',c.user)).n,2);assert.deepEqual((await store.listInteractions(c.scope,c.user,listRequest())).items,[]);
+  await denies(()=>store.readInteraction(c.scope,c.user,next.envelope.id),404);await denies(()=>store.readInteractionReceipt(c.scope,c.user,submit.requestId),404);
+  assert((await (await http(c,'/api/chat/export')).json()).turns.every(t=>!t.interaction));
  });
  assert.equal(network,0);assert.equal((await row('SELECT count(*) n FROM chat_interaction_checks')).n,0);assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  console.log(`Chat interaction storage: ${cases} scenarios passed (${process.argv.includes('--d1')?'local D1':'SQLite'}), actual compiler/review handlers, zero inference/network calls. Authenticated HTTP/history/export checked; no UI/deployment acceptance claimed.`);

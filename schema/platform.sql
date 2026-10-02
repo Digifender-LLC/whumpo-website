@@ -3904,6 +3904,7 @@ CREATE TABLE chat_interactions (
  task_id TEXT NOT NULL,
  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
  origin_turn_id TEXT NOT NULL UNIQUE REFERENCES chat_turns(id) ON DELETE CASCADE,
+ previous_interaction_id TEXT UNIQUE REFERENCES chat_interactions(id) ON DELETE CASCADE,
  envelope_json TEXT NOT NULL CHECK(json_valid(envelope_json) AND length(CAST(envelope_json AS BLOB))<=32768),
  definition_digest TEXT NOT NULL CHECK(length(definition_digest)=64),
  issue_hash TEXT NOT NULL CHECK(length(issue_hash)=64),
@@ -3919,9 +3920,14 @@ CREATE TABLE chat_interactions (
 CREATE INDEX chat_interactions_history ON chat_interactions(user_id,created_at DESC,id DESC);
 CREATE INDEX chat_interactions_open ON chat_interactions(conversation_id,state,expires_at);
 CREATE TRIGGER chat_interaction_issue_scope BEFORE INSERT ON chat_interactions
-WHEN NOT EXISTS(SELECT 1 FROM chat_interaction_tasks t JOIN chat_turns c ON c.id=t.origin_turn_id
+WHEN NOT EXISTS(SELECT 1 FROM chat_interaction_tasks t JOIN chat_turns c ON c.id=NEW.origin_turn_id
  WHERE t.id=NEW.task_id AND t.user_id=NEW.user_id AND t.conversation_id=NEW.conversation_id
- AND t.project_id IS NEW.project_id AND t.origin_turn_id=NEW.origin_turn_id AND c.user_id=NEW.user_id)
+ AND t.project_id IS NEW.project_id AND c.user_id=NEW.user_id
+ AND ((NEW.previous_interaction_id IS NULL AND t.origin_turn_id=NEW.origin_turn_id)
+  OR EXISTS(SELECT 1 FROM chat_interactions previous WHERE previous.id=NEW.previous_interaction_id
+   AND previous.id!=NEW.id AND previous.user_id=NEW.user_id AND previous.project_id IS NEW.project_id
+   AND previous.task_id=NEW.task_id AND previous.conversation_id=NEW.conversation_id
+   AND previous.created_at<=NEW.created_at AND previous.state!='open')))
  OR (NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id))
  OR json_extract(NEW.envelope_json,'$.id') IS NOT NEW.id
  OR json_extract(NEW.envelope_json,'$.version') IS NOT 1
@@ -3939,6 +3945,7 @@ BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
 CREATE TRIGGER chat_interaction_fixed BEFORE UPDATE ON chat_interactions
 WHEN NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.conversation_id IS NOT OLD.conversation_id
  OR NEW.task_id IS NOT OLD.task_id OR NEW.project_id IS NOT OLD.project_id OR NEW.origin_turn_id IS NOT OLD.origin_turn_id
+ OR NEW.previous_interaction_id IS NOT OLD.previous_interaction_id
  OR NEW.envelope_json IS NOT OLD.envelope_json OR NEW.definition_digest IS NOT OLD.definition_digest
  OR NEW.issue_hash IS NOT OLD.issue_hash OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
  OR OLD.state!='open' OR NEW.answer_revision!=OLD.answer_revision+1
