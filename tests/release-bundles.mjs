@@ -8,6 +8,7 @@ import {compileWorker} from '../tools/release-provider.mjs';
 import {archivedConfig} from '../tools/prepare-release.mjs';
 import {workerOrder,configFiles,copyTree,fileInventory} from '../tools/release-manifest.mjs';
 import {runWrangler} from '../tools/cms-release.mjs';
+import {currentSchemaArtifact} from '../tools/current-schema.mjs';
 import {fixtureEnvironment} from '../tools/verify.mjs';
 
 const root=process.cwd(),directory=await mkdtemp(join(tmpdir(),'whumpo-release-bundles-'));
@@ -15,7 +16,7 @@ try{
  if((await readdir(root)).some(n=>/^\.(?:dev\.vars|env)(?:\.|$)/.test(n)))throw Error('Use a checkout without local .env/.dev.vars files');
  const env=fixtureEnvironment(process.env,join(directory,'home'));
  await mkdir(env.HOME);const payload=join(directory,'payload');await mkdir(join(payload,'config'),{recursive:true});
- await copyTree('dist',join(payload,'assets/platform'));await copyTree('public-app',join(payload,'assets/apps'));await copyTree('migrations',join(payload,'migrations'));
+ await copyTree('dist',join(payload,'assets/platform'));await copyTree('public-app',join(payload,'assets/apps'));await mkdir(join(payload,'schema'));await writeFile(join(payload,'schema/current.sql'),(await currentSchemaArtifact(root)).sql);
  for(const role of workerOrder){
   const base=JSON.parse(await readFile(configFiles[role],'utf8')),out=join(payload,'workers',role);
   const entry=await compileWorker(root,role,base,out,directory,{env});

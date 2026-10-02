@@ -890,9 +890,12 @@ CREATE TABLE welcome_onboarding (
  idea TEXT NOT NULL DEFAULT '' CHECK(length(idea)<=1000),
  audience TEXT NOT NULL DEFAULT '' CHECK(length(audience)<=1000),
  preferred_theme TEXT NOT NULL DEFAULT 'ocean' CHECK(preferred_theme IN ('ocean','clay','forest')),
- completed_at TEXT
-, prompt TEXT
- CHECK(prompt IS NULL OR prompt IN ('name','picture','bio','idea','project-name','audience','style','review')));
+ completed_at TEXT,
+ prompt TEXT NOT NULL DEFAULT 'name',
+ CHECK((stage='profile' AND prompt IN ('name','picture','bio'))
+  OR (stage='project' AND prompt IN ('idea','project-name','audience','style'))
+  OR (stage IN ('review','complete') AND prompt='review'))
+);
 
 CREATE TABLE domain_proof_removals (
  id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,

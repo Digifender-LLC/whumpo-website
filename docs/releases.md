@@ -71,6 +71,7 @@ Whole-platform database/object/key restoration remains its own roadmap gate. His
 - `tests/release-manifest.mjs`: exact current schema, archived bytes, secret exclusion, empty/unbound initialization, active-database and occupied-schema refusal, binding drift, uncertain import hold, failures after all four Worker steps, no repeated confirmed operation, and nonempty CMS metadata preservation for ordinary releases. Uses a fake provider; performs no CMS operations.
 - `tests/current-schema.mjs`: current account shape, actual local D1 initialization/readback, immutable spent invitations, repeat without clearing rows, and schema drift refusal. No remote mutation.
 - `tests/build-snapshot.mjs`: complete current-schema/build/compiler inputs and source/asset drift.
+- `tests/release-bundles.mjs`: actual local Wrangler compilation and archived `no_bundle` round trips for runtime, apps, sites and platform, with unchanged executable bytes. No deployment or provider credentials.
 
 Cloudflare's documented interface is [`d1 execute --file`](https://developers.cloudflare.com/d1/wrangler-commands/) with an existing target database; [import guidance](https://developers.cloudflare.com/d1/best-practices/import-export-data/) documents the SQL import and reserved D1 table. Checked October 1, 2026. Local or synthetic evidence does not establish that the live test environment has changed.
 
