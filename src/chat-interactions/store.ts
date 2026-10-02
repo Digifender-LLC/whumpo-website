@@ -105,10 +105,10 @@ export async function listInteractionResources(db:D1Database,user:string,input:u
  if(before!==null&&(!before||typeof before!=='object'||Array.isArray(before)||Object.keys(before).sort().join(',')!=='id,name'||!identifier(before.id)||typeof before.name!=='string'||!before.name.trim()||before.name.length>100))throw new InteractionError('SHAPE');
  const current=await readInteraction(db,user,request.interactionId);
  if(current.envelope.definition.template!=='project-select@1')throw new InteractionStoreError(409,'adapter_unavailable');
- if(current.state!=='open')throw changed();
+ if(!['open','submitted'].includes(current.state))throw changed();
  const {results}=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR name>? OR (name=? AND id>?)) ORDER BY name,id LIMIT ?').bind(user,before?.name??null,before?.name??null,before?.name??null,before?.id??null,request.limit+1).all<{id:string;name:string}>();
  const final=await readInteraction(db,user,request.interactionId);
- if(final.state!=='open'||final.answerRevision!==current.answerRevision)throw changed();
+ if(final.state!==current.state||final.answerRevision!==current.answerRevision)throw changed();
  const items=results.slice(0,request.limit),last=items.at(-1);
  return {version:1 as const,interactionId:current.envelope.id,definitionDigest:current.envelope.definitionDigest,fieldId:request.fieldId,items,nextBefore:results.length>request.limit&&last?{name:last.name,id:last.id}:null};
 }

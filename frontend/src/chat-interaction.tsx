@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {ChevronDown,ChevronUp,FileText,LoaderCircle} from 'lucide-react';
 import {InteractionError,requireCurrentClient,validateAnswers,verifyEnvelope} from '../../src/chat-interactions/protocol';
@@ -10,15 +10,17 @@ import {useInteractionRecovery} from './use-interaction-recovery';
 import {Button} from './components/ui/button';
 import {Textarea} from './components/ui/textarea';
 import {Input} from './components/ui/input';
+import {ChatProjectPicker} from './chat-project-picker';
 
-const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1']};
+const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','owned.projects@1']};
 const route='/chat/interactions/v1/';
 const receipt=(requestId:string)=>send<InteractionReceipt>(route+'receipt',{version:1,requestId});
 function startingAnswers(form:InteractionRead):Answers{return form.submission?.answers??{...Object.fromEntries(form.envelope.definition.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value])),...form.draft};}
 
-/** Only the maintained content brief is admitted in this first client slice. */
+/** Only maintained content and information-only project templates are admitted. */
 export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInChat}:{id:string;owner:string;chatRevision:number;busy:boolean;onAnswerInChat:()=>void}){
- const recovery=useInteractionRecovery(owner,id),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false);
+ const recovery=useInteractionRecovery(owner,id),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false),[resourceReady,setResourceReady]=useState(false);
+ const onResourceReady=useCallback((ready:boolean)=>setResourceReady(ready),[]);
  const section=useRef<HTMLElement>(null),restored=useRef(false);
  const query=useQuery({queryKey:['chat-interaction',owner,id],queryFn:async({signal})=>{
   let value:InteractionRead;
@@ -26,14 +28,15 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   const iso=(v:unknown):v is string=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
   if(value.version!==1||!Number.isSafeInteger(value.answerRevision)||value.answerRevision<0||!iso(value.observedAt)||!(value.draftRetainUntil===null||iso(value.draftRetainUntil))||!['open','submitted','canceled','superseded','expired'].includes(value.state))throw new APIError('Update Whumpo to open this form.',409,'client_update_required');
   await verifyEnvelope(value.envelope);await requireCurrentClient(value.envelope,client);
-  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100||value.envelope.definition.template!=='content-change@1'||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
+  const content=value.envelope.definition.template==='content-change@1';
+  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||!['content-change@1','project-brief@1','project-select@1'].includes(value.envelope.definition.template)||(content?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||value.envelope.definition.continuationBinding!==null))||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
   validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
   return value;
  },staleTime:0,gcTime:0,refetchInterval:q=>['pending','unknown'].includes(q.state.data?.submission?.continuation?.state??'')?5000:false});
  const form=query.data,local=recovery.value,pending=local?.pending??null;
  const answers=local?.answers??(form?startingAnswers(form):{}),collapsed=local?.dismissed??false;
  const conflict=!!(form&&local?.answers&&(local.definitionDigest!==form.envelope.definitionDigest||local.answerRevision!==form.answerRevision));
- const unavailable=query.data===null;
+ const unavailable=query.data===null,content=form?.envelope.definition.template==='content-change@1',selection=form?.envelope.definition.template==='project-select@1';
  const locked=busy||chatBusy||query.isFetching||!!pending||!!query.error||conflict||!form||form.state!=='open';
  const draftRecord=()=>({definitionDigest:form!.envelope.definitionDigest,answerRevision:form!.answerRevision,answers:local?.answers??null,updatedAt:local?.updatedAt??Date.now(),dismissed:collapsed,pending:null});
  function refreshChat(){void queryClient.invalidateQueries({queryKey:['chat',owner]});}
@@ -73,12 +76,12 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   if(prepare&&recovery.active.current)await followup('continue',request.requestId);
  }
  async function mutate(operation:Mutation['operation']){
-  if(!form||locked)return;
+  if(!form||locked||(operation!=='cancel'&&selection&&!resourceReady))return;
   if(operation!=='cancel')validateAnswers(form.envelope.definition,answers,{partial:operation==='save-draft'});
   const base={version:1 as const,requestId:crypto.randomUUID(),interactionId:id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:form.answerRevision};
   const request:Mutation=operation==='cancel'?{...base,operation}:{...base,operation,answers};
   recovery.save({...draftRecord(),answers:operation==='cancel'?local?.answers??null:answers,pending:request});setChecked(false);
-  await transmit(request,operation==='submit');
+  await transmit(request,operation==='submit'&&form.envelope.definition.continuationBinding==='site.content-prepare@1');
  }
  useEffect(()=>{
   if(!form?.draftRetainUntil)return;
@@ -87,8 +90,8 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   return()=>clearTimeout(timer);
  },[form?.draftRetainUntil,form?.observedAt,owner,id]);
  const follow=form?.submission?.continuation;
- return <section ref={section} tabIndex={-1} data-interaction-id={id} aria-label="Website change brief" className="mt-4 rounded-2xl border bg-card p-4 sm:p-5 space-y-4 min-w-0">
-  <header className="flex gap-3 items-start"><span className="rounded-xl bg-secondary p-2 shrink-0"><FileText className="size-5" aria-hidden="true"/></span><div className="min-w-0 flex-1"><h2 className="text-base font-semibold break-words">{form?.envelope.definition.title??'Website change brief'}</h2><p className="text-xs text-muted-foreground mt-1 break-words">{form?.projectName?'Project: '+form.projectName:'A private draft for your website'}</p></div>{form&&<Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={collapsed?'Resume form':'Collapse form'} aria-expanded={!collapsed} disabled={busy} onClick={()=>recovery.save({...draftRecord(),pending,dismissed:!collapsed})}>{collapsed?<ChevronDown className="size-4"/>:<ChevronUp className="size-4"/>}</Button>}</header>
+ return <section ref={section} tabIndex={-1} data-interaction-id={id} aria-label={content?'Website change brief':form?.envelope.definition.title??'Chat form'} className="mt-4 rounded-2xl border bg-card p-4 sm:p-5 space-y-4 min-w-0">
+  <header className="flex gap-3 items-start"><span className="rounded-xl bg-secondary p-2 shrink-0"><FileText className="size-5" aria-hidden="true"/></span><div className="min-w-0 flex-1"><h2 className="text-base font-semibold break-words">{form?.envelope.definition.title??'Chat form'}</h2><p className="text-xs text-muted-foreground mt-1 break-words">{form?.projectName?'Project: '+form.projectName:'Details for your conversation'}</p></div>{form&&<Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={collapsed?'Resume form':'Collapse form'} aria-expanded={!collapsed} disabled={busy} onClick={()=>recovery.save({...draftRecord(),pending,dismissed:!collapsed})}>{collapsed?<ChevronDown className="size-4"/>:<ChevronUp className="size-4"/>}</Button>}</header>
   {unavailable&&<p className="text-sm">This form is no longer available. It may have been discarded or reached seven days of inactivity. Ask Whumpo for a new form.</p>}
   {query.isPending&&<p role="status" className="text-sm">Reading your saved form…</p>}
   {query.error&&<div role="alert" className="text-sm space-y-3"><p>{message(query.error)}</p>{!unavailable&&<Button variant="outline" disabled={busy||query.isFetching} onClick={()=>void query.refetch()}>Check saved form</Button>}</div>}
@@ -102,13 +105,14 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
     {form.envelope.definition.fields.map(field=>{
      const name='form-'+id+'-'+field.id,invalid=fieldError===field.id,description=name+'-help';
      const props={id:name,'data-field':field.id,'aria-describedby':description+(invalid?' '+name+'-error':''),'aria-invalid':invalid,required:field.required,readOnly:locked,value:String(answers[field.id]??''),maxLength:'maxLength'in field.constraints?field.constraints.maxLength:2000,onChange:(event:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>)=>edit(field.id,event.target.value),autoComplete:'off',className:'min-h-11 text-base'};
-     return <div key={field.id} className="space-y-2"><label htmlFor={name} className="block text-sm font-medium break-words">{field.label} <span className="text-xs font-normal text-muted-foreground">{field.required?'Required':'Optional'}</span></label>{field.type==='long-text'?<Textarea {...props} rows={3}/>:<Input {...props}/>}<p id={description} className="text-xs text-muted-foreground break-words">{field.help}{field.default&&<span className="block mt-1">Starting value: {field.default.provenance==='saved'?'saved website text':field.default.provenance==='user'?'your earlier answer':'a suggestion to review'}.</span>}</p>{invalid&&<p id={name+'-error'} role="alert" className="text-sm text-destructive">{String(answers[field.id]??'').trim()?'Check this answer’s length and format.':'Add an answer before preparing the preview.'}</p>}</div>;
+     return <div key={field.id} className="space-y-2"><label htmlFor={name} className="block text-sm font-medium break-words">{field.label} <span className="text-xs font-normal text-muted-foreground">{field.required?'Required':'Optional'}</span></label>{field.type==='resource'?<ChatProjectPicker owner={owner} interactionId={id} digest={form.envelope.definitionDigest} id={name} description={props['aria-describedby']} invalid={invalid} required={field.required} locked={locked} value={props.value} onChange={value=>edit(field.id,value)} onReady={onResourceReady}/>:field.type==='long-text'?<Textarea {...props} rows={3}/>:<Input {...props}/>}<p id={description} className="text-xs text-muted-foreground break-words">{field.help}{field.default&&<span className="block mt-1">Starting value: {field.default.provenance==='saved'?'saved website text':field.default.provenance==='user'?'your earlier answer':'a suggestion to review'}.</span>}</p>{invalid&&<p id={name+'-error'} role="alert" className="text-sm text-destructive">{field.type==='resource'?'Choose a current project from the list.':String(answers[field.id]??'').trim()?'Check this answer’s length and format.':'Add an answer before continuing.'}</p>}</div>;
     })}
-    {form.state==='open'&&<><p className="text-xs text-muted-foreground">Your changes stay private. Preparing a preview saves these answers; saving the website and publishing each need a separate review.</p><div className="flex flex-wrap gap-2"><Button type="submit" className="min-h-11" disabled={locked}>{busy&&<LoaderCircle className="size-4 animate-spin"/>}Prepare preview</Button><Button type="button" variant="outline" className="min-h-11" disabled={locked} onClick={()=>void perform(()=>mutate('save-draft'))}>Save draft</Button></div><p className="text-xs text-muted-foreground">Edits stay in this browser until saved. Unsubmitted drafts are kept for seven days of inactivity.</p></>}
+    {form.state==='open'&&<><p className="text-xs text-muted-foreground">{content?'Your changes stay private. Preparing a preview saves these answers; saving the website and publishing each need a separate review.':'Saving shares these answers with Whumpo for this conversation. It does not create a project or change your sites.'}</p><div className="flex flex-wrap gap-2"><Button type="submit" className="min-h-11" disabled={locked||(selection&&!resourceReady)}>{busy&&<LoaderCircle className="size-4 animate-spin"/>}{content?'Prepare preview':'Save answers'}</Button><Button type="button" variant="outline" className="min-h-11" disabled={locked||(selection&&!resourceReady)} onClick={()=>void perform(()=>mutate('save-draft'))}>Save draft</Button></div><p className="text-xs text-muted-foreground">Edits stay in this browser until saved. Unsubmitted drafts are kept for seven days of inactivity.</p></>}
    </form>
    {form.state==='open'&&<div className="flex flex-wrap items-center gap-2 border-t pt-3"><Button type="button" variant="link" className="min-h-11 px-0" onClick={onAnswerInChat}>Answer in Chat</Button>{!discard?<Button variant="ghost" className="min-h-11 ml-auto" disabled={locked} onClick={()=>setDiscard(true)}>Discard form</Button>:<div className="w-full rounded-xl border p-3 space-y-2"><p className="text-sm">Discard this form and its unsent answers?</p><div className="flex flex-wrap gap-2"><Button variant="destructive" className="min-h-11" disabled={locked} onClick={()=>void perform(()=>mutate('cancel'))}>Discard this form</Button><Button variant="outline" className="min-h-11" disabled={busy} onClick={()=>setDiscard(false)}>Keep editing</Button></div></div>}</div>}
    {form.state==='expired'&&<p className="text-sm">The answer window has closed. Ask Whumpo for a new form to continue.</p>}
    {form.state==='superseded'&&<p className="text-sm">A newer form continues this task. These earlier answers are read-only.</p>}
+   {form.state==='submitted'&&!content&&!follow&&<div className="space-y-3 border-t pt-3 text-sm"><p>Your answers are saved for Chat. Tell Whumpo what you’d like to do next.</p><Button variant="outline" className="min-h-11" onClick={onAnswerInChat}>Continue in Chat</Button></div>}
    {follow&&<div className="space-y-3 border-t pt-3 text-sm"><p>{follow.state==='succeeded'?'Your preview is ready in Chat. Review it before saving the website.':follow.state==='not-started'?'Your answers are saved. Preview preparation has not started.':follow.state==='failed'?follow.reason==='stopped'?'Preview preparation was stopped. Your submitted answers remain saved.':'A preview could not be prepared. Your answers are saved; ask Whumpo for a fresh form.':'Preview preparation is not yet confirmed. Checking status will not start another request.'}</p><div className="flex flex-wrap gap-2">{follow.state==='not-started'&&<><Button className="min-h-11" disabled={busy||chatBusy||!!pending} onClick={()=>void perform(()=>followup('continue',follow.id))}>Prepare saved answers</Button><Button variant="outline" className="min-h-11" disabled={busy||!!pending} onClick={()=>void perform(()=>followup('stop',follow.id))}>Stop preview preparation</Button></>}{['pending','unknown'].includes(follow.state)&&<Button variant="outline" className="min-h-11" disabled={busy||!!pending} onClick={()=>void perform(()=>followup('reconcile',follow.id))}>Resolve preview status</Button>}</div></div>}
   </>}
  </section>;
