@@ -35,6 +35,14 @@ export async function currentSiteFixtureHandlers(){
   export * as appPages from './src/app-pages';
   export * as appGateway from './src/app-gateway';
   export * as appRecovery from './src/app-recovery';
+  export * as appDocumentRecovery from './src/app-document-recovery';
+  export * as appMigrationChecks from './src/app-migration-checks';
+  export * as appMigrationApproval from './src/app-migration-approval';
+  export * as appProgramRollback from './src/app-program-rollback';
+  export * as appMaintenanceList from './src/app-maintenance-list';
+  export {appRecoveryChatActions} from './src/app-recovery-chat-actions';
+  export {describeAppRestore} from './src/app-recovery-chat';
+  export {appMaintenanceChatActions} from './src/app-maintenance-chat-actions';
   export * as appLifecycle from './src/app-lifecycle';
   export {default as appHost} from './src/app-host';
   export {default as host} from './src/site-host';

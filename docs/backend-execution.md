@@ -10,7 +10,7 @@ Current source implements private tests, reviewed private state transitions, rev
 
 Fifteen focused suites now use the complete current schema with admitted owner authority. The application visitor session, public function gateway and scheduled import triage retain their independent authority. Actual cryptographic visitor sign-in and four loopback HTTP suites with the isolated workerd/QuickJS service pass. Fault injection targets committed operations, and read corruption passes through the actual admitted batch before digest verification. [Verification records the exact commands and limits](verification.md#backend-execution-and-visitor-authority).
 
-Executable HTTP fixtures first prove imported source remains quarantined, then create a separate trusted synthetic version. This does not approve imports or implement an external scanner. The current identity schema and account policy still await their coordinated test cutover; historical deployment receipts below do not establish that cutover. Remaining application recovery/build fixtures and physical-device acceptance stay open.
+Executable HTTP fixtures first prove imported source remains quarantined, then create a separate trusted synthetic version. This does not approve imports or implement an external scanner. The current identity schema and account policy still await their coordinated test cutover; historical deployment receipts below do not establish that cutover. The subsequent [recovery/lifecycle checkpoint](verification.md#application-recovery-upgrades-and-lifecycle) verifies document and retained-program recovery with current identity. Remaining application build/design fixtures and physical-device acceptance stay open.
 
 ## One-request private application build — September 30, 2026
 
