@@ -4,6 +4,10 @@ import {currentSchema} from '../tools/current-schema.mjs';
 export async function sqliteD1(){
  const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON');
  sql.exec(await currentSchema());
+ return {sql,db:sqliteD1Adapter(sql),close:()=>sql.close()};
+}
+/** The same query adapter can read an actual restored, read-only SQLite copy. */
+export function sqliteD1Adapter(sql){
  const prepare=query=>{
   const bound=params=>({query,params,
    run:async()=>{const r=sql.prepare(query).run(...params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}};},
@@ -15,5 +19,5 @@ export async function sqliteD1(){
  const db={prepare,batch:async statements=>{
   sql.exec('BEGIN');try{const results=[];for(const statement of statements){const q=sql.prepare(statement.query);if(q.columns().length)results.push({success:true,results:q.all(...statement.params),meta:{changes:0}});else{const r=q.run(...statement.params);results.push({success:true,results:[],meta:{changes:Number(r.changes)}});}}sql.exec('COMMIT');return results;}catch(error){sql.exec('ROLLBACK');throw error;}
  }};
- return {sql,db,close:()=>sql.close()};
+ return db;
 }
