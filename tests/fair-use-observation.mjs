@@ -1,17 +1,14 @@
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {databaseFixture} from './helpers/current-database.mjs';
+
 const bundle=await build({stdin:{contents:"export * from './src/fair-use-observation';export * from './src/fair-use-report';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {noteSourceExport,readFairUseObservation,cleanupFairUseObservations,fairUseReport}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-fair-use-');let proxy;
+const store=await databaseFixture({d1:true}),db=store.db;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
- proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
  const owner=crypto.randomUUID(),other=crypto.randomUUID(),created=new Date(Date.now()-60000).toISOString();
- for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'test','test',?)").bind(user,user+'@example.test',created).run();
+ for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").bind(user,user+'@example.test',created).run();
  const project=crypto.randomUUID(),version=crypto.randomUUID();
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,'Test',?,?)").bind(project,owner,created,created).run();
  const lifecycle=()=>db.prepare('SELECT * FROM fair_use_project_lifecycle WHERE project_id=?').bind(project).first();
@@ -52,5 +49,5 @@ try{
  report=await fairUseReport(readOnly,owner);assert.equal(report.byPlan.business.accounts,1);assert.equal(report.totals.observationCandidates,0);
  await db.prepare('DELETE FROM users WHERE id=?').bind(owner).run();assert.equal(await lifecycle(),null);
  console.log('Operator report passed: read-only queries, no identity/content exposure, current-period highest entitlement, old receipts excluded, Explore not misclassified, aggregate counts not multiplied, owner scoping and missing financial data explicit.');
- console.log('Actual D1 fair-use observation passed: owner isolation, AI provenance, export deduplication, immutable timestamps, version deletion exclusion, ordered project cycle, retention, account erasure and missing-finance Monitor fallback.');
-}finally{await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
+ console.log('Actual D1 fair-use observation passed: owner isolation, AI provenance, export deduplication, immutable timestamps, version deletion exclusion, ordered project cycle, retention, account erasure and Monitor pending verified economics.');
+}finally{await store.close();}
