@@ -2163,7 +2163,10 @@
       "references": [
         "docs/data-protection.md",
         "docs/releases.md",
-        "docs/account-closure.md"
+        "docs/account-closure.md",
+        "docs/restore-admission.md",
+        "tools/restore-admission.mjs",
+        "tests/restore-admission.mjs"
       ]
     },
     {

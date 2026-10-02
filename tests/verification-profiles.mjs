@@ -17,7 +17,7 @@ try{
  for(let i=0;i<2;i++)runProfile('site',{cwd,run:(_cmd,args,options)=>{assert.deepEqual(args,['tests/customer-site-journey.mjs']);homes.push(options.env.HOME);return {status:0};}});
  assert.notEqual(homes[0],homes[1]);assert.ok(homes.every(h=>!existsSync(h)));
  const protection=[];runProfile('protection',{cwd,run:(_cmd,args)=>{protection.push(args[0]);return {status:0};}});
- assert.deepEqual(protection,['tests/processing-boundaries.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs']);
+ assert.deepEqual(protection,['tests/processing-boundaries.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs','tests/restore-admission.mjs']);
  writeFileSync(join(cwd,'.dev.vars'),'SYNTHETIC=1');
  assert.throws(()=>runProfile('fast',{cwd,run:()=>assert.fail('Must not launch')}),/Local/);
 }finally{rmSync(cwd,{recursive:true,force:true});}

@@ -1952,6 +1952,13 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/connection-write-policy.ts](../../src/connection-write-policy.ts)
 - [tests/connection-rotation.mjs](../../tests/connection-rotation.mjs)
 - [tests/connection-rotation-custody.mjs](../../tests/connection-rotation-custody.mjs)
+- [tests/processing-boundaries.mjs](../../tests/processing-boundaries.mjs)
+- [tools/secret-custody.mjs](../../tools/secret-custody.mjs)
+- [tools/artifact-protection.mjs](../../tools/artifact-protection.mjs)
+- [tests/secret-custody.mjs](../../tests/secret-custody.mjs)
+- [docs/restore-admission.md](../../docs/restore-admission.md)
+- [tools/restore-admission.mjs](../../tools/restore-admission.mjs)
+- [tests/restore-admission.mjs](../../tests/restore-admission.mjs)
 
 ### Execution coordination
 
@@ -1964,6 +1971,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/82. Planning owner: Unassigned
 - 2026-10-02 UTC: parent #82 split into #83 current credential envelope/configuration, #84 fenced resumable rotation, #85 processing/isolated-restore/custody controls and #86 connected candidate/test-release acceptance. DP-01–05 and every original parent criterion remain required; no partial format deployment. Child #83 claimed at bee963a.
 - 2026-10-02 UTC: child #83 source uses only CONNECTION_ENCRYPTION_KEYRING/current wv2 envelopes, authenticates key ID and scoped context, and refuses missing/old/plaintext values with bounded HTTP errors. 164 primitive/configuration cases, actual retained-key PKCE/current-key token and missing-key revocation custody on local D1, affected provider/admission/backup/DNS tests, both TypeScript projects and build pass. No remote keys or data changed. Parent stays open for #84 rotation fences/journal, #85 processing/restore/custody and #86 candidate release acceptance.
 - 2026-10-02 UTC: child #84 source implements reviewed immutable key identity, forward-only D1 write fencing and bounded exact-CAS rotation/readback across four stores. Actual SQLite/local D1 checks cover stale/newer writers, interrupted/duplicate/lost-response batches, concurrent disconnect/revocation/flow replacement/deletion, and eight OAuth exchange-custody races. Unknown exchanges retain custody and block key activation; all key retirement remains refused pending independent restore/custody evidence. Local row/byte/runner-CPU measurements are documented; 162 current tables are classified. No remote key/schema/binding change or deployment. Parent #82 remains open for #85 DP-02/03/04 and #86 candidate acceptance.
+- 2026-10-02 UTC: child #85 source adds DP-02 field projection/private-boundary canaries, DP-04 nine-secret custody metadata and artifact exclusion, and DP-03 current-schema/compiler/key/data manifests with isolated restore checks. SQLite includes a real read-only backup copy refused after current-source session revocation; local D1 exercises the same verifier. Fresh independent evidence is supplied only by a separate synthetic archive/event service in these checks. Missing/stale/gapped evidence, revoked authority, unknown effects, nonterminal/mismatched receipts, missing objects/keys and candidate/evidence races refuse verification. Every result keeps serving, dispatch and key retirement disabled. Five-script protection profile passes; no live suppression store, key-backup custody, provider reconciliation or deployment is claimed. Child C remains open for independent custody and exact OAuth outcome reconciliation; child D and all parent acceptance remain required.
 
 # F2 — Useful websites and applications
 
