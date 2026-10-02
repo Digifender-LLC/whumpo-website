@@ -65,7 +65,7 @@ For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.js
 - [Workload placement contract](docs/workload-placement.md) — logical resources, scoped adapters and lifecycle/export requirements; broader hosting remains conditional
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
 - [Capability catalog and planner](docs/capability-planner.md) — reuse existing configuration and helpers; record bounded missing behavior before generating source
-- [Data lifecycle proposal](docs/data-lifecycle.md) and [background-job decision](docs/background-jobs.md) — retention/export/closure boundaries and durable recovery design
+- [Data lifecycle proposal](docs/data-lifecycle.md), [protection contract](docs/data-protection.md) and [background-job decision](docs/background-jobs.md) — storage access, key recovery, retention/export/closure and durable operations
 - [Customer benchmarks and inference privacy](docs/customer-benchmarks.md) — synthetic outcome checks, cost evidence and real-model evaluation gates
 - [Content safety and US customer eligibility](docs/content-safety.md) — CSAM scanning is planned and owner-deferred; existing holds are not detection. Wider safety acceptance remains open
 - [Chat tools and navigation](docs/workspace-agent.md)

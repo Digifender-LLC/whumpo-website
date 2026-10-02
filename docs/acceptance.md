@@ -31,7 +31,7 @@ Internal safety evidence/correction storage and an operator preview/apply tool a
 ## Current delivery priorities
 
 1. Continue the [execution roadmap](roadmap/README.md): the [authority audit and A1–A3 remediation](tenant-authority-audit.md) are complete to their defined scope; continue production-inference privacy/quality evidence, device/assistive-technology acceptance and incident/recovery operations. Implementation milestones do not close those acceptance gates.
-2. Resolve the proposed retention/deletion/export contract and verify whole-platform restore/deletion behavior before offering account erasure. The [inventory snapshot](data-lifecycle.md) covers 148 tables/31 classes at migration 0113; it does not execute deletion.
+2. Resolve the proposed retention/deletion/export contract and verify whole-platform restore/deletion behavior before offering account erasure. The [inventory snapshot](data-lifecycle.md) covers 156 tables/37 current classes and eight planned classes as of October 2. The [protection decision](data-protection.md) identifies WH-117 key lifecycle and restore work; the catalogue does not execute deletion.
 3. Complete customer provider setup/consent and reviewed resource journeys when exact prerequisites are available. Preserve Muse-only owner testing, zero standard-AI credits, Monitor mode and the free-only GitHub constraint.
 4. Keep **CSAM scanner implementation, Daybreak, CMS functional testing and real-money Stripe activation deferred**. Preserve applicable launch gates and continue independent work; no provider consent, purchase or customer publication is granted by this priority list.
 

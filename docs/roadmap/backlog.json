@@ -5655,7 +5655,7 @@
       "title": "Classify data protection, processing access and recovery requirements",
       "phase": "F1",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "ready",
       "kind": "decision",
       "size": "M",
       "dependsOn": [
@@ -5694,13 +5694,19 @@
         "docs/integrations/cloudflare-connection.md",
         "docs/integrations/github-connection.md",
         "src/connection-vault.ts",
-        "docs/workspace-identity.md"
+        "docs/workspace-identity.md",
+        "docs/data-protection.md",
+        "docs/inference-privacy.md",
+        "tools/lifecycle-catalog.mjs",
+        "tests/lifecycle-catalog.mjs",
+        "tests/connection-vault.mjs"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/81",
       "owner": null,
       "evidence": [
         "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
-        "2026-10-02 UTC: consume the explicit current privacy-processing handoff WH-121 instead of waiting for the full WH-020 real-model benchmark. Classification and WH-117 still cannot approve confidential routes; WH-020/021 and launch acceptance retain their original gates."
+        "2026-10-02 UTC: consume the explicit current privacy-processing handoff WH-121 instead of waiting for the full WH-020 real-model benchmark. Classification and WH-117 still cannot approve confidential routes; WH-020/021 and launch acceptance retain their original gates.",
+        "2026-10-02 UTC: WH-116 decision in docs/data-protection.md classifies all 156 current tables/37 current classes and eight planned classes in the one lifecycle catalogue. Current-version-only validation rejects 42 malformed contract/reference cases; actual AES-GCM primitive passes 73 synthetic isolation/corruption/key-loss checks. DP-01–04 remain WH-117 implementation; DP-05 supplies metadata drift checks. No deployed encryption, confidential-route approval, retention approval or operational restore claim."
       ]
     },
     {
@@ -5722,7 +5728,8 @@
         "Preserve tenant/purpose isolation, least privilege, private storage, scoped processing, short-lived credentials, retention minimization and redacted diagnostics",
         "Version current keys and encrypted records, restrict decryption authority and reset obsolete test encodings; current key rotation retains interruption/readback, without legacy readers or old-runtime rollback",
         "Cover key custody/rotation, backup recovery, missing/corrupt keys and restored revocation/deletion reconciliation; keep provider credentials out of exports and model context",
-        "Measure incremental compute/storage/support effects and verify existing AI/safety/search/publication/background jobs through their permitted data boundaries"
+        "Measure incremental compute/storage/support effects and verify existing AI/safety/search/publication/background jobs through their permitted data boundaries",
+        "Implement DP-01–04 and preserve DP-05 from docs/data-protection.md: bounded current key IDs and CAS rotation across GitHub/Cloudflare token/PKCE/staging/revocation paths; existing-selector minimization and export/diagnostic proof; isolated current restore admission; separately protected key/artifact custody. Split this L packet into implementation and connected/candidate acceptance children before execution without dropping the parent criteria."
       ],
       "acceptance": [
         "Each WH-116 requirement has implementation or documented existing-control evidence and a truthful statement of who can read the protected data",
@@ -5745,12 +5752,19 @@
         "docs/releases.md",
         "docs/integrations/cloudflare-connection.md",
         "src/connection-vault.ts",
-        "schema"
+        "schema",
+        "docs/data-protection.md",
+        "docs/data-lifecycle.json",
+        "docs/inference-privacy.md",
+        "tools/lifecycle-catalog.mjs",
+        "tests/lifecycle-catalog.mjs",
+        "tests/connection-vault.mjs"
       ],
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance."
+        "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
+        "2026-10-02 UTC: WH-116 supplies the concrete DP-01–05 handoff and current synthetic vault baseline. Additional blanket content encryption and routine unlock/PRF requirements are not selected. WH-117 remains implementation work; account closure and whole-platform operational restore remain WH-018/019/008/059."
       ]
     },
     {

@@ -1822,7 +1822,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/10. Planning owner: Unassigned
 
 ## WH-116 — Classify data protection, processing access and recovery requirements
 
-Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **planned**. Kind: decision. Size: M.
+Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: M.
 
 Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
@@ -1872,15 +1872,21 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/integrations/github-connection.md](../../docs/integrations/github-connection.md)
 - [src/connection-vault.ts](../../src/connection-vault.ts)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/inference-privacy.md](../../docs/inference-privacy.md)
+- [tools/lifecycle-catalog.mjs](../../tools/lifecycle-catalog.mjs)
+- [tests/lifecycle-catalog.mjs](../../tests/lifecycle-catalog.mjs)
+- [tests/connection-vault.mjs](../../tests/connection-vault.mjs)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/81. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 - 2026-10-02 UTC: consume the explicit current privacy-processing handoff WH-121 instead of waiting for the full WH-020 real-model benchmark. Classification and WH-117 still cannot approve confidential routes; WH-020/021 and launch acceptance retain their original gates.
+- 2026-10-02 UTC: WH-116 decision in docs/data-protection.md classifies all 156 current tables/37 current classes and eight planned classes in the one lifecycle catalogue. Current-version-only validation rejects 42 malformed contract/reference cases; actual AES-GCM primitive passes 73 synthetic isolation/corruption/key-loss checks. DP-01–04 remain WH-117 implementation; DP-05 supplies metadata drift checks. No deployed encryption, confidential-route approval, retention approval or operational restore claim.
 
 ## WH-117 — Implement transparent encryption and complementary protection controls
 
@@ -1901,6 +1907,7 @@ Admitted data paths have the justified WH-116 protections, verified current-key/
 - Version current keys and encrypted records, restrict decryption authority and reset obsolete test encodings; current key rotation retains interruption/readback, without legacy readers or old-runtime rollback
 - Cover key custody/rotation, backup recovery, missing/corrupt keys and restored revocation/deletion reconciliation; keep provider credentials out of exports and model context
 - Measure incremental compute/storage/support effects and verify existing AI/safety/search/publication/background jobs through their permitted data boundaries
+- Implement DP-01–04 and preserve DP-05 from docs/data-protection.md: bounded current key IDs and CAS rotation across GitHub/Cloudflare token/PKCE/staging/revocation paths; existing-selector minimization and export/diagnostic proof; isolated current restore admission; separately protected key/artifact custody. Split this L packet into implementation and connected/candidate acceptance children before execution without dropping the parent criteria.
 
 ### Acceptance criteria
 
@@ -1933,6 +1940,12 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
 - [src/connection-vault.ts](../../src/connection-vault.ts)
 - [schema](../../schema)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
+- [docs/inference-privacy.md](../../docs/inference-privacy.md)
+- [tools/lifecycle-catalog.mjs](../../tools/lifecycle-catalog.mjs)
+- [tests/lifecycle-catalog.mjs](../../tests/lifecycle-catalog.mjs)
+- [tests/connection-vault.mjs](../../tests/connection-vault.mjs)
 
 ### Execution coordination
 
@@ -1941,6 +1954,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
+- 2026-10-02 UTC: WH-116 supplies the concrete DP-01–05 handoff and current synthetic vault baseline. Additional blanket content encryption and routine unlock/PRF requirements are not selected. WH-117 remains implementation work; account closure and whole-platform operational restore remain WH-018/019/008/059.
 
 # F2 — Useful websites and applications
 
