@@ -43,14 +43,17 @@ try{
  sql.prepare('INSERT INTO fair_use_project_lifecycle(project_id,user_id,created_at,removed_at) VALUES(?,?,?,?)').run(id(),owner,at(-100*day),at(-93*day));
  sql.prepare('INSERT INTO site_health_budget VALUES(?,?)').run(at(-65*day).slice(0,10),1);
  const stage=id();ciphers.set(stage,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${owner}:${stage}`,'PRIVATE_CREDENTIAL_CANARY'));github(stage,'active');sql.prepare('INSERT INTO github_token_staging VALUES(?,?,?)').run(stage,'PRIVATE_STATE_CANARY',at(-2*day));
- sql.prepare("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,client_id,state_hash,key_id,revision,state,created_at) VALUES(?,?,'github','fixture','PRIVATE_STATE','fixture-current',1,'dispatched',?)").run(id(),owner,at(-2*day));
+ sql.prepare("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,client_id,state_hash,key_id,revision,state,created_at) VALUES(?,?,'github','fixture','PRIVATE_STATE','fixture-current',1,'dispatched',?)").run(newGH,owner,at(-2*day));
+ sql.prepare('INSERT INTO github_refresh_custody(token_id,user_id,client_id,ciphertext,expires_at) VALUES(?,?,?,?,?)').run(newGH,owner,'fixture',await fixtureCiphertext(fixtureKeyring(),`whumpo:github:refresh:${owner}:${newGH}`,'PRIVATE_REFRESH_CANARY'),at(180*day));
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());
- assert.equal(report.backlogs.length,29);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
+ assert.equal(report.backlogs.length,30);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
  for(const queue of ['contact_receipts','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='contact_receipts').oldestAgeMs>=2*day,true);
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
+ assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').count,1);
+ assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').unknownAgeCount,0);
  assert.equal(report.operations.length,4);assert.ok(report.operations.every(o=>o.state==='available'));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 29 read-only queues, four receipt families, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 30 read-only queues, four receipt families, retention eligibility and private data exclusion.');
 }finally{sql.close();}

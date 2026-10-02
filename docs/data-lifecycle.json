@@ -1152,11 +1152,12 @@
         "cloudflare_revocation_health",
         "connection_oauth_exchanges",
         "connection_oauth_outcomes",
-        "connection_rotation_guards"
+        "connection_rotation_guards",
+        "github_refresh_custody"
       ],
       "scope": "owner",
       "purpose": "Customer-authorized provider access and durable credential revocation.",
-      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction. Exact dispatch rejection/revocation receipts contain only bounded metadata and remain until account closure/independent retention reconciliation; a restored receipt alone grants no authority.",
+      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction. Exact dispatch rejection/revocation receipts contain only bounded metadata and remain until account closure/independent retention reconciliation; a restored receipt alone grants no authority. GitHub refresh credentials use a separate encrypted purpose and RESTRICT references; access expiry or single-token revocation cannot delete their pending grant custody. No refresh/grant-settlement adapter is active.",
       "proposedRetention": "Cancel callbacks/new consent on closure; revoke credentials before deleting ciphertext/key access. Keep unresolved revocation work in isolated minimal closure records, without preserving unrelated customer content.",
       "deletionAuthority": "Customer disconnect/closure authorizes access revocation, not deleting repositories/zones. Operator reconciles failed revocation.",
       "exportPolicy": "Provider names, customer connection status and selected resource metadata only. Never tokens, ciphertext, PKCE verifier, auth state or encryption material.",
@@ -1176,7 +1177,8 @@
         "tools/operator-private-files.mjs",
         "tools/restore-inventory.mjs",
         "tests/restore-inventory.mjs",
-        "docs/restore-admission.md"
+        "docs/restore-admission.md",
+        "tests/github-refresh-custody.mjs"
       ],
       "storageStatus": "current",
       "protection": {

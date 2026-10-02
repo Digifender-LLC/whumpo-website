@@ -130,6 +130,30 @@ CREATE TABLE github_token_vault (
  state TEXT NOT NULL CHECK(state IN ('active','revoking'))
 );
 
+-- Refresh credentials have their own encrypted purpose and survive access-token
+-- expiration/revocation. No automatic grant revocation or token refresh is implied.
+CREATE TABLE github_refresh_custody (
+ token_id TEXT PRIMARY KEY REFERENCES github_token_vault(id) ON DELETE RESTRICT,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ client_id TEXT NOT NULL CHECK(length(client_id) BETWEEN 1 AND 128),
+ ciphertext TEXT NOT NULL,
+ expires_at TEXT,
+ access_revoked_at TEXT
+);
+CREATE TRIGGER github_refresh_owner BEFORE INSERT ON github_refresh_custody
+WHEN NOT EXISTS(SELECT 1 FROM github_token_vault WHERE id=NEW.token_id AND user_id=NEW.user_id)
+ OR NOT EXISTS(SELECT 1 FROM connection_oauth_exchanges WHERE token_id=NEW.token_id AND user_id=NEW.user_id AND provider='github' AND client_id=NEW.client_id)
+BEGIN SELECT RAISE(ABORT,'github_refresh_custody_admission'); END;
+CREATE TRIGGER github_refresh_identity BEFORE UPDATE ON github_refresh_custody
+WHEN NEW.token_id!=OLD.token_id OR NEW.user_id!=OLD.user_id OR NEW.client_id!=OLD.client_id OR NEW.expires_at IS NOT OLD.expires_at
+ OR (NEW.access_revoked_at IS NOT OLD.access_revoked_at AND (OLD.access_revoked_at IS NOT NULL OR NEW.access_revoked_at IS NULL))
+BEGIN SELECT RAISE(ABORT,'github_refresh_immutable'); END;
+CREATE TRIGGER github_refresh_retained BEFORE DELETE ON github_refresh_custody
+BEGIN SELECT RAISE(ABORT,'github_refresh_grant_evidence_required'); END;
+CREATE TRIGGER github_refresh_no_reactivation BEFORE UPDATE OF state ON github_token_vault
+WHEN NEW.state='active' AND EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=NEW.id AND access_revoked_at IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'github_refresh_access_revoked'); END;
+
 CREATE TABLE github_connections (
  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  github_user_id TEXT NOT NULL,
@@ -3624,7 +3648,7 @@ CREATE TABLE connection_rotation_batches (
 -- a failed or interrupted transaction cannot leave a capability behind.
 CREATE TABLE connection_rotation_guards (
  batch_id TEXT NOT NULL REFERENCES connection_rotation_batches(id),
- store TEXT NOT NULL CHECK(store IN ('github_token_vault','cloudflare_token_vault','github_oauth_states','cloudflare_oauth_states')),
+ store TEXT NOT NULL CHECK(store IN ('github_token_vault','github_refresh_custody','cloudflare_token_vault','github_oauth_states','cloudflare_oauth_states')),
  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
  record_id TEXT NOT NULL,
  old_ciphertext TEXT NOT NULL,
@@ -3702,6 +3726,22 @@ WHEN NEW.ciphertext!=OLD.ciphertext
 BEGIN UPDATE connection_rotation_batches SET changed_count=changed_count+1 WHERE id IN (
  SELECT g.batch_id FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
  JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='github_token_vault' AND g.owner_id=OLD.user_id AND g.record_id=OLD.id AND g.old_ciphertext=OLD.ciphertext AND g.new_ciphertext=NEW.ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key); END;
+CREATE TRIGGER github_refresh_custody_write_key_insert BEFORE INSERT ON github_refresh_custody
+WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER github_refresh_custody_write_key_update BEFORE UPDATE OF ciphertext ON github_refresh_custody
+WHEN NEW.ciphertext!=OLD.ciphertext AND NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER github_refresh_custody_rotation_only BEFORE UPDATE OF ciphertext ON github_refresh_custody
+WHEN NEW.ciphertext!=OLD.ciphertext AND NOT EXISTS(
+ SELECT 1 FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='github_refresh_custody' AND g.owner_id=OLD.user_id AND g.record_id=OLD.token_id AND g.old_ciphertext=OLD.ciphertext AND g.new_ciphertext=NEW.ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key)
+BEGIN SELECT RAISE(ABORT,'connection_rotation_required'); END;
+CREATE TRIGGER github_refresh_custody_rotation_count AFTER UPDATE OF ciphertext ON github_refresh_custody
+WHEN NEW.ciphertext!=OLD.ciphertext
+BEGIN UPDATE connection_rotation_batches SET changed_count=changed_count+1 WHERE id IN (
+ SELECT g.batch_id FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='github_refresh_custody' AND g.owner_id=OLD.user_id AND g.record_id=OLD.token_id AND g.old_ciphertext=OLD.ciphertext AND g.new_ciphertext=NEW.ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key); END;
 CREATE TRIGGER cloudflare_token_vault_write_key_insert BEFORE INSERT ON cloudflare_token_vault
 WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
 BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;

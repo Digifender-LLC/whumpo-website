@@ -120,11 +120,15 @@ export async function prepareOAuthCustody(db:D1Database,userId:string,provider:'
   ? "SELECT 1 FROM github_connections WHERE user_id=? AND active_token_id=?"
   : "SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND id=? AND state='active'").bind(userId,tokenId).first();
  return Object.freeze({tokenId,confirmed,settle,
-  async remember(ciphertext:string,expiresAt:string){
+  async remember(ciphertext:string,expiresAt:string,refresh?:{ciphertext:string;expiresAt:string|null}){
    if(remembered||!ciphertext||ciphertext.length>16384||!Number.isFinite(Date.parse(expiresAt)))throw new Error('Invalid OAuth custody operation.');
+   if(refresh&&(provider!=='github'||!refresh.ciphertext||refresh.ciphertext.length>16384||refresh.expiresAt!==null&&!Number.isFinite(Date.parse(refresh.expiresAt))))throw new Error('Invalid OAuth refresh custody operation.');
    remembered=true;
    const vault=provider==='github'?'github_token_vault':'cloudflare_token_vault';
-   const saved=()=>c.db.prepare(`SELECT 1 FROM ${vault} WHERE id=? AND user_id=? AND expires_at=?`).bind(tokenId,userId,expiresAt).first();
+   const saved=async()=>{
+    if(!await c.db.prepare(`SELECT 1 FROM ${vault} WHERE id=? AND user_id=? AND expires_at=?`).bind(tokenId,userId,expiresAt).first())return false;
+    return !refresh||!!await c.db.prepare('SELECT 1 FROM github_refresh_custody WHERE token_id=? AND user_id=? AND client_id=? AND expires_at IS ?').bind(tokenId,userId,clientId,refresh.expiresAt).first();
+   };
    if(await saved()){await release().run();return;}
    // An issued token survives sign-out, disconnect and lost commit acknowledgment.
    // Its exact admission holds the current write key until ciphertext is durable.
@@ -132,6 +136,7 @@ export async function prepareOAuthCustody(db:D1Database,userId:string,provider:'
     c.db.prepare("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,'active')").bind(tokenId,userId,ciphertext,expiresAt),
     c.db.prepare("INSERT INTO github_token_staging(token_id,state_hash,expires_at) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 minute'))").bind(tokenId,stateHash),
    ]:[c.db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),'staged')").bind(tokenId,userId,ciphertext,expiresAt)];
+   if(refresh)statements.push(c.db.prepare('INSERT INTO github_refresh_custody(token_id,user_id,client_id,ciphertext,expires_at) VALUES(?,?,?,?,?)').bind(tokenId,userId,clientId,refresh.ciphertext,refresh.expiresAt));
    statements.push(release());
    try{await c.db.batch(statements);}catch(error){if(!await saved())throw error;}
   },
