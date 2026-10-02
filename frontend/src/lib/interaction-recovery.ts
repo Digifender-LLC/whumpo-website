@@ -12,10 +12,12 @@ function record(value:unknown,id:string):FormRecovery{
  if(!value||typeof value!=='object'||Array.isArray(value)||!exact(value,['definitionDigest','answerRevision','answers','updatedAt','dismissed','pending']))throw Error('Invalid form recovery');
  const v=value as FormRecovery;
  if(!/^[a-f0-9]{64}$/.test(v.definitionDigest)||!Number.isSafeInteger(v.answerRevision)||v.answerRevision<0||!Number.isSafeInteger(v.updatedAt)||v.updatedAt<0||typeof v.dismissed!=='boolean')throw Error('Invalid form recovery');
- // Maintained text answers and single owned project IDs are strings. No arbitrary structured data.
- const textAnswers=(answers:Answers)=>answers&&typeof answers==='object'&&!Array.isArray(answers)&&Object.entries(answers).length<=12&&Object.entries(answers).every(([key,a])=>/^[a-z][a-z0-9-]{0,39}$/.test(key)&&!['constructor','prototype','__proto__'].includes(key)&&typeof a==='string'&&a.length<=2000)&&new TextEncoder().encode(JSON.stringify(answers)).length<=16384;
- if(v.answers!==null&&!textAnswers(v.answers))throw Error('Invalid draft');
- if(v.pending!==null){const p=mutationHeader(v.pending);if(p.interactionId!==id||p.definitionDigest!==v.definitionDigest||p.expectedAnswerRevision!==v.answerRevision||(p.operation!=='cancel'&&!textAnswers(p.answers)))throw Error('Invalid pending request');}
+ // Current bounded answer values and raw unfinished number/time input. Domain
+ // field validation remains required before a pending wire mutation is created.
+ const answer=(a:unknown)=>typeof a==='string'?a.length<=2000:typeof a==='boolean'||typeof a==='number'&&Number.isFinite(a)&&Math.abs(a)<=1e9||Array.isArray(a)&&a.length<=12&&a.every(v=>typeof v==='string'&&v.length<=2000)&&new Set(a).size===a.length;
+ const answers=(values:Answers)=>values&&typeof values==='object'&&!Array.isArray(values)&&Object.entries(values).length<=12&&Object.entries(values).every(([key,a])=>/^[a-z][a-z0-9-]{0,39}$/.test(key)&&!['constructor','prototype','__proto__'].includes(key)&&answer(a))&&new TextEncoder().encode(JSON.stringify(values)).length<=16384;
+ if(v.answers!==null&&!answers(v.answers))throw Error('Invalid draft');
+ if(v.pending!==null){const p=mutationHeader(v.pending);if(p.interactionId!==id||p.definitionDigest!==v.definitionDigest||p.expectedAnswerRevision!==v.answerRevision||(p.operation!=='cancel'&&!answers(p.answers)))throw Error('Invalid pending request');}
  return v;
 }
 function readAll(store:StoragePort,owner:string,now:number):Saved{
