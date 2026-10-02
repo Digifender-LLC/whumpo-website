@@ -15,6 +15,7 @@ async function project(o,name='Garden'){const p=id();await run("INSERT INTO proj
 async function origin(o){const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Plan a project','Review these details',datetime('now') FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);return turn;}
 async function issue(o,template='project-brief@1',database=o.scope){const input={originTurnId:await origin(o),template};return {input,form:await store.issueProjectIntake(database,o.user,input)};}
 const request=(f,operation='submit',answers={name:'Garden',purpose:'A website about gardening.'},revision=f.answerRevision)=>({version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:revision,operation,...(operation==='cancel'?{}:{answers})});
+const replacement=async(o,f)=>({originTurnId:await origin(o),previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision});
 const resources=(f,before=null)=>({version:1,interactionId:f.envelope.id,fieldId:'project',limit:2,before});
 async function http(o,path,data){return worker.fetch(new Request('https://whumpo.com/api/chat/'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),env,ctx);}
 async function json(o,path,data,status=200){const r=await http(o,path,data),body=await r.json();assert.equal(r.status,status,JSON.stringify(body));if(path.startsWith('interactions/'))assert.match(r.headers.get('cache-control'),/no-store/);return body;}
@@ -86,6 +87,60 @@ try{
  await test('late session revocation refuses submission without changing stored answers',async()=>{
   const o=await owner(),{form}=await issue(o);let revoked=false;const scoped=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interaction_submissions/,async()=>{revoked=true;await o.authority.revoke();}));
   await assert.rejects(()=>store.mutateInteraction(scoped,o.user,request(form)));assert(revoked);assert.equal((await row('SELECT state FROM chat_interactions WHERE id=?',form.envelope.id)).state,'open');assert.equal(await row('SELECT id FROM chat_interaction_submissions WHERE interaction_id=?',form.envelope.id),null);
+ });
+ await test('partial draft correction preserves its task and user values across untouched replacements',async()=>{
+  const o=await owner();await project(o);const first=(await issue(o)).form;
+  await store.mutateInteraction(o.scope,o.user,request(first,'save-draft',{name:'PRIVATE_CORRECTION_CANARY'}));const before=await store.readInteraction(o.scope,o.user,first.envelope.id),input=await replacement(o,before),next=await store.replaceProjectIntake(o.scope,o.user,input);
+  assert.equal(next.previousInteractionId,first.envelope.id);assert.equal(next.envelope.scope.taskId,first.envelope.scope.taskId);assert.equal(next.envelope.scope.projectId,null);assert.deepEqual(next.envelope.definition.fields[0].default,{value:'PRIVATE_CORRECTION_CANARY',provenance:'user'});assert.equal(next.envelope.definition.fields[1].default,undefined);assert.deepEqual(next.draft,{});
+  const again=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,next));assert.deepEqual(again.envelope.definition.fields[0].default,next.envelope.definition.fields[0].default);assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',again.envelope.scope.taskId)).revision,2);
+  const history=await json(o,'history?before=10000');assert(!JSON.stringify(history).includes('PRIVATE_CORRECTION_CANARY'));assert((await json(o,'export')).turns.some(t=>JSON.stringify(t).includes('PRIVATE_CORRECTION_CANARY')));
+  const index=await store.listInteractions(o.scope,o.user,{version:1,projectId:null,limit:20,before:null});assert.deepEqual(index.items.map(i=>i.interactionId),[again.envelope.id]);
+  await denies(()=>store.mutateInteraction(o.scope,o.user,request(before)));
+ });
+ await test('correcting a submitted brief preserves its immutable receipt and starts no work',async()=>{
+  const o=await owner(),{form}=await issue(o),submit=request(form);const receipt=await store.mutateInteraction(o.scope,o.user,submit),before=await store.readInteraction(o.scope,o.user,form.envelope.id),input=await replacement(o,before),next=await store.replaceProjectIntake(o.scope,o.user,input);
+  assert.deepEqual(Object.fromEntries(next.envelope.definition.fields.map(f=>[f.id,f.default.value])),submit.answers);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission,before.submission);assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).replacementInteractionId,next.envelope.id);
+  assert.deepEqual(await store.mutateInteraction(o.scope,o.user,submit),receipt);const revised=request(next,'submit',{name:'Revised garden',purpose:'A new submitted description.'});await store.mutateInteraction(o.scope,o.user,revised);
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations')).n,0);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,0);
+  assert.equal((await store.replaceProjectIntake(o.scope,o.user,input)).envelope.id,next.envelope.id);await denies(()=>store.replaceProjectIntake(o.scope,o.user,{...input,expectedAnswerRevision:0}));
+ });
+ await test('correction carries owned selection but drops a removed or transferred default',async()=>{
+  for(const mode of ['owned','removed','transferred']){const o=await owner(),other=await owner(),p=await project(o),{form}=await issue(o,'project-select@1');await store.mutateInteraction(o.scope,o.user,request(form,'submit',{project:p}));const before=await store.readInteraction(o.scope,o.user,form.envelope.id);
+   if(mode==='removed')await run('DELETE FROM projects WHERE id=?',p);if(mode==='transferred')await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,p);
+   const next=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,before));assert.deepEqual(next.envelope.definition.fields[0].default,mode==='owned'?{value:p,provenance:'user'}:undefined);assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers.project,p);
+  }
+ });
+ await test('selection copied into correction rechecks ownership in the issuance transaction',async()=>{
+  const o=await owner(),other=await owner(),p=await project(o),{form}=await issue(o,'project-select@1');await store.mutateInteraction(o.scope,o.user,request(form,'save-draft',{project:p}));const before=await store.readInteraction(o.scope,o.user,form.envelope.id),input=await replacement(o,before);let changed=false;
+  const racing=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{changed=true;await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,p);}));
+  await denies(()=>store.replaceProjectIntake(racing,o.user,input));assert(changed);assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).state,'open');assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',before.envelope.scope.taskId)).revision,0);
+  const retried=await store.replaceProjectIntake(o.scope,o.user,input);assert.equal(retried.envelope.definition.fields[0].default,undefined);
+ });
+ await test('stale revision, foreign origin/owner and model-supplied correction values cannot issue',async()=>{
+  const o=await owner(),other=await owner(),{form}=await issue(o),input=await replacement(o,form);
+  for(const bad of [{...input,definitionDigest:'f'.repeat(64)},{...input,expectedAnswerRevision:1},{...input,originTurnId:await origin(other)}])await denies(()=>store.replaceProjectIntake(o.scope,o.user,bad));
+  await denies(async()=>store.replaceProjectIntake(other.scope,other.user,{...input,originTurnId:await origin(other)}),404);
+  for(const extra of [{answers:{name:'forged'}},{template:'project-select@1'},{projectId:id()},{questions:['Password?']}])await assert.rejects(()=>store.replaceProjectIntake(o.scope,o.user,{...input,...extra}),e=>e.code==='SHAPE');
+  assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).state,'open');
+ });
+ await test('late saved answer, competing correction and cancellation cannot be overwritten',async()=>{
+  for(const mode of ['answer','replacement','cancel']){const o=await owner(),{form}=await issue(o),input=await replacement(o,form);let changed=false,winner;
+   const racing=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{if(changed)return;changed=true;if(mode==='replacement')winner=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,form));else await store.mutateInteraction(o.scope,o.user,request(form,mode==='answer'?'save-draft':'cancel',{name:'LATE_ANSWER'}));}));
+   await denies(()=>store.replaceProjectIntake(racing,o.user,input));assert(changed);assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',input.originTurnId),null);
+   if(mode==='answer')assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).draft,{name:'LATE_ANSWER'});
+   if(mode==='replacement')assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).replacementInteractionId,winner.envelope.id);
+   if(mode==='cancel')await denies(()=>store.readInteraction(o.scope,o.user,form.envelope.id),410);
+  }
+ });
+ await test('lost correction response replays exact issue once without losing its task revision',async()=>{
+  const o=await owner(),{form}=await issue(o),input=await replacement(o,form);let lost=false;
+  const lossy=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost correction reply');}}));
+  const next=await store.replaceProjectIntake(lossy,o.user,input);assert(lost);assert.equal((await store.replaceProjectIntake(o.scope,o.user,input)).envelope.id,next.envelope.id);assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',next.envelope.scope.taskId)).revision,1);assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE user_id=?',o.user)).n,2);
+ });
+ for(const mode of ['feature','session'])await test('late '+mode+' revocation rolls back the complete correction',async()=>{
+  const o=await owner(),{form}=await issue(o),input=await replacement(o,form);let revoked=false;
+  const racing=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{revoked=true;if(mode==='session')await o.authority.revoke();else await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',o.grant);}));
+  await assert.rejects(()=>store.replaceProjectIntake(racing,o.user,input));assert(revoked);assert.equal((await row('SELECT state FROM chat_interactions WHERE id=?',form.envelope.id)).state,'open');assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',form.envelope.scope.taskId)).revision,0);assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',input.originTurnId),null);
  });
  assert.equal(network,0);assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);assert.equal((await row('SELECT count(*) n FROM chat_interaction_checks')).n,0);
  console.log(`Maintained project intake passed: ${cases} actual-handler cases (${process.argv.includes('--d1')?'local D1':'SQLite'}), owned paged selection, atomic scope/feature/session checks, exact loss/replay, null downstream work and real HTTP/history/export. No model/provider, project creation, activation, browser or deployment acceptance.`);

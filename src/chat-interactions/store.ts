@@ -93,6 +93,34 @@ export async function prepareProjectIntake(db:D1Database,user:string,input:Proje
  return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},projectIntakeDefinition(request.template),issueHash,null,[]);
 }
 
+export async function replaceProjectIntake(db:D1Database,user:string,input:ReplacementIdentity){
+ return persistInteraction(db,user,await prepareReplacementProjectIntake(db,user,input));
+}
+/** Reopen the same maintained task with user-derived defaults, never model values. */
+export async function prepareReplacementProjectIntake(db:D1Database,user:string,input:ReplacementIdentity):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,4096);
+ if(!request||Object.keys(request).sort().join(',')!=='definitionDigest,expectedAnswerRevision,originTurnId,previousInteractionId'||!identifier(request.originTurnId)||!identifier(request.previousInteractionId)||typeof request.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(request.definitionDigest)||!Number.isSafeInteger(request.expectedAnswerRevision)||request.expectedAnswerRevision<0)throw new InteractionError('SHAPE');
+ // Exact issue replay remains available when the predecessor's draft is removed.
+ await row(db,user,request.previousInteractionId);
+ const issueHash=await jsonDigest({adapter:'project-intake',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ const previous=await readInteraction(db,user,request.previousInteractionId),template=previous.envelope.definition.template;
+ if(previous.envelope.scope.projectId!==null||!['project-brief@1','project-select@1'].includes(template)||previous.envelope.definition.continuationBinding!==null)throw new InteractionStoreError(409,'adapter_unavailable');
+ if(previous.envelope.definitionDigest!==request.definitionDigest||previous.answerRevision!==request.expectedAnswerRevision||previous.replacementInteractionId||!['open','submitted','expired'].includes(previous.state))throw changed();
+ await assertFeature(db,feature(user,null));
+ const definition=projectIntakeDefinition(template as ProjectIntakeTemplate),answers=carriedAnswers(previous),guards:D1PreparedStatement[]=[];
+ for(const field of definition.fields){
+  if(!Object.hasOwn(answers,field.id))continue;
+  if(field.type==='resource'){
+   const selected=answers[field.id];
+   if(!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(selected,user).first())continue;
+   guards.push(interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)',[selected,user]));
+  }
+  field.default={value:answers[field.id],provenance:'user'};
+ }
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},definition,issueHash,{request,previous},guards);
+}
+
 /** Resource names are transient scoped reads, never embedded in the definition.
  * Selection only records an answer; submit rechecks ownership at commit. */
 export async function listInteractionResources(db:D1Database,user:string,input:unknown){
@@ -114,10 +142,17 @@ export async function listInteractionResources(db:D1Database,user:string,input:u
 }
 
 type ContentBriefRequest={originTurnId:string;projectId:string;contentIds:string[]};
-type ReplacementRequest={originTurnId:string;previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;contentIds:string[]};
+type ReplacementIdentity={originTurnId:string;previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number};
+type ReplacementRequest=ReplacementIdentity&{contentIds:string[]};
 type InteractionPlan={interactionId:string;originTurnId:string;issueHash:string;statements:D1PreparedStatement[]};
 function contentIds(value:unknown):asserts value is string[]{
  if(!Array.isArray(value)||value.length<1||value.length>contentFieldLimit||new Set(value).size!==value.length||value.some(x=>typeof x!=='string'||!/^[a-z][a-z0-9-]{0,39}$/.test(x)))throw new InteractionError('SHAPE');
+}
+function carriedAnswers(previous:InteractionRead):Answers{
+ // A chain of untouched replacements must preserve explicit answers already
+ // copied as user defaults. Saved-site/suggested defaults are not user answers.
+ const answers=previous.submission?.answers??{...Object.fromEntries(previous.envelope.definition.fields.filter(f=>f.default?.provenance==='user').map(f=>[f.id,f.default!.value])),...previous.draft};
+ return validateAnswers(previous.envelope.definition,answers,{partial:!previous.submission});
 }
 /** Server-maintained fields only. Model-authored questions/defaults are not an issuance API. */
 export async function issueContentBrief(db:D1Database,user:string,input:ContentBriefRequest){
@@ -164,7 +199,7 @@ async function prepareBrief(db:D1Database,user:string,request:ContentBriefReques
   target(page.headline,'Headline',160);target(page.description,'Introduction',1000);target(page.aboutTitle,'About heading',100);target(page.aboutText,'About text',1000);
   page.sections.forEach((section,n)=>{target(section.heading,`Section ${n+1} heading`,100);target(section.text,`Section ${n+1} text`,800);});
  }
- const values=previous?validateAnswers(previous.envelope.definition,previous.submission?.answers??previous.draft,{partial:!previous.submission}):null;
+ const values=previous?carriedAnswers(previous):null;
  const fields:Field[]=request.contentIds.map((contentId,n)=>{
   const t=targets.get(contentId),content=spec.content.find(c=>c.id===contentId);if(!t||!content)throw new InteractionError('REFERENCE');
   const old=previous?.envelope.definition.fields.find(f=>f.source?.contentId===contentId),retained=!!old&&!!values&&Object.hasOwn(values,old.id);
@@ -174,7 +209,7 @@ async function prepareBrief(db:D1Database,user:string,request:ContentBriefReques
  const definition:Definition={version:1,kind:'form',template:'content-change@1',title:'Update your website text',summary:'Review the text, then prepare a private preview. Saving and publishing each require a separate review.',presentation:'inline',fields,cards:[],submitBinding:'interaction.answers@1',continuationBinding:'site.content-prepare@1'};
  return prepareIssuedInteraction(db,user,request,definition,issueHash,replacement,[interactionGuard(db,'EXISTS(SELECT 1 FROM project_spec_heads h JOIN projects p ON p.id=h.project_id WHERE h.project_id=? AND h.version_id=? AND h.revision=? AND h.draft_revision=p.site_draft_revision)',[request.projectId,current.versionId,current.revision])]);
 }
-async function prepareIssuedInteraction(db:D1Database,user:string,request:{originTurnId:string;projectId:string|null},definition:Definition,issueHash:string,replacement:{request:ReplacementRequest;previous:InteractionRead}|null,guards:D1PreparedStatement[]):Promise<InteractionPlan>{
+async function prepareIssuedInteraction(db:D1Database,user:string,request:{originTurnId:string;projectId:string|null},definition:Definition,issueHash:string,replacement:{request:ReplacementIdentity;previous:InteractionRead}|null,guards:D1PreparedStatement[]):Promise<InteractionPlan>{
  const previous=replacement?.previous??null;
  const conversation=await db.prepare('SELECT id FROM chat_conversations WHERE user_id=?').bind(user).first<{id:string}>();
  const conversationId=previous?.envelope.scope.conversationId??conversation?.id??crypto.randomUUID(),taskId=previous?.envelope.scope.taskId??crypto.randomUUID(),id=crypto.randomUUID();
@@ -191,7 +226,7 @@ async function prepareIssuedInteraction(db:D1Database,user:string,request:{origi
  ];
  if(previous){
   statements.push(
-   interactionGuard(db,`EXISTS(SELECT 1 FROM chat_interactions i JOIN chat_interaction_tasks t ON t.id=i.task_id WHERE i.id=? AND i.user_id=? AND i.definition_digest=? AND i.answer_revision=? AND t.revision=?)
+   interactionGuard(db,`EXISTS(SELECT 1 FROM chat_interactions i JOIN chat_interaction_tasks t ON t.id=i.task_id WHERE i.id=? AND i.user_id=? AND i.definition_digest=? AND i.answer_revision=? AND t.revision=? AND i.removed_at IS NULL AND NOT (${draftRetentionDue}))
     AND NOT EXISTS(SELECT 1 FROM chat_interactions WHERE previous_interaction_id=?)
     AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=? AND c.state IN ('pending','unknown'))`,[previous.envelope.id,user,replacement!.request.definitionDigest,replacement!.request.expectedAnswerRevision,task!.revision,previous.envelope.id,previous.envelope.id]),
    db.prepare("UPDATE chat_interactions SET state='superseded',answer_revision=answer_revision+1 WHERE id=? AND user_id=? AND state='open'").bind(previous.envelope.id,user),

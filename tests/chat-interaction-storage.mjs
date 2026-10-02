@@ -207,6 +207,11 @@ try{
   await denies(()=>store.replaceContentBrief(c.scope,c.user,{...request,contentIds:['about-text']}));
   await denies(()=>store.replaceContentBrief(b.scope,b.user,request),404);
  });
+ await test('untouched correction chains preserve user text by content ID and rederive other defaults',async()=>{
+  const c=await owner(),{form}=await issue(c);await store.mutateInteraction(c.scope,c.user,{...mutation(form,'save-draft'),answers:{'field-1':'EXPLICIT_CHAIN_ANSWER'}});const before=await store.readInteraction(c.scope,c.user,form.envelope.id);
+  const second=await store.replaceContentBrief(c.scope,c.user,{...await replacement(c,before),contentIds:['section-1-text','headline']});assert.deepEqual(second.envelope.definition.fields[1].default,{value:'EXPLICIT_CHAIN_ANSWER',provenance:'user'});assert.equal(second.envelope.definition.fields[0].default.provenance,'saved');
+  const third=await store.replaceContentBrief(c.scope,c.user,{...await replacement(c,second),contentIds:['headline','section-1-text','about-text']});assert.deepEqual(third.envelope.definition.fields[0].default,{value:'EXPLICIT_CHAIN_ANSWER',provenance:'user'});assert(third.envelope.definition.fields.slice(1).every(f=>f.default.provenance==='saved'));assert.equal(third.envelope.scope.taskId,form.envelope.scope.taskId);
+ });
  await test('competing replacements and replacement versus draft each have one winner',async()=>{
   for(const competingDraft of [false,true]){
    const c=await owner(),{form}=await issue(c),first=await replacement(c,form),second=competingDraft?mutation(form,'save-draft'):await replacement(c,form);
