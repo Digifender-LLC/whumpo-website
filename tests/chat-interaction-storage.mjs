@@ -3,10 +3,11 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 Error.stackTraceLimit=0;
-const modules=await currentFixtureModules(['src/chat-interactions/store.ts','src/chat-interactions/continuation.ts','src/project-specification/store.ts','src/chat-interactions/protocol.ts','src/index.ts','src/chat-interactions/retention.ts','src/project-specification/v2/json.ts']);
+const modules=await currentFixtureModules(['src/chat-interactions/store.ts','src/chat-interactions/continuation.ts','src/project-specification/store.ts','src/chat-interactions/protocol.ts','src/index.ts','src/chat-interactions/retention.ts','src/project-specification/v2/json.ts','src/chat-interactions/history-shape.ts']);
 const store=await modules.module('src/chat-interactions/store.ts'),continuation=await modules.module('src/chat-interactions/continuation.ts'),site=await modules.module('src/project-specification/store.ts');
 const protocol=await modules.module('src/chat-interactions/protocol.ts'),worker=(await modules.module('src/index.ts')).default;
 const retention=await modules.module('src/chat-interactions/retention.ts'),codec=await modules.module('src/project-specification/v2/json.ts');
+const presentation=await modules.module('src/chat-interactions/history-shape.ts');
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();let cases=0,network=0;
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{network++;throw Error('Unexpected network');};
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
@@ -61,6 +62,7 @@ const denies=(fn,status=409)=>assert.rejects(fn,e=>e.status===status);
 try{
  const a=await owner(),b=await owner(),first=await issue(a);let saved;
  await test('server-owned defaults, target limits and idempotent issuance',async()=>{
+  assert.equal(first.form.projectName,'Garden');
   const e=first.form.envelope;assert.equal(e.scope.accountId,a.user);assert.equal(e.scope.projectId,a.project);assert.equal(e.definition.fields[0].constraints.maxLength,160);assert.equal(e.definition.fields[1].constraints.maxLength,800);assert.equal(e.definition.fields[0].default.value,'A greener neighborhood');
   assert.equal((await store.issueContentBrief(a.scope,a.user,first.request)).envelope.id,e.id);
   await denies(()=>store.issueContentBrief(a.scope,a.user,{...first.request,contentIds:['about-text']}));
@@ -156,7 +158,8 @@ try{
   const exported=await archive.json();assert.equal(exported.format,'whumpo-chat-v2');const facts=exported.turns.find(t=>t.id===first.request.originTurnId).interaction;
   assert.deepEqual(facts.submission.answers,{'field-1':'Gardens, cared for.','field-2':'Seasonal care and planting.'});
   assert.doesNotMatch(JSON.stringify(facts),/definitionDigest|Binding|requestHash|scope|resultTurnId|reviewId|site.content/);
-  const history=await worker.fetch(new Request('https://whumpo.com/api/chat/history?before=1000',{headers:{cookie:'__Host-whumpo_session='+a.authority.token}}),env,ctx);assert((await history.json()).turns.some(t=>t.interaction));
+  const history=await worker.fetch(new Request('https://whumpo.com/api/chat/history?before=1000',{headers:{cookie:'__Host-whumpo_session='+a.authority.token}}),env,ctx),data=await history.json();assert(data.turns.some(t=>t.interaction));
+  for(const t of data.turns.filter(t=>t.interaction))assert(presentation.readHistoryInteraction(t.interaction),'Current history projection validates');
  });
  await test('superseded forms refuse submission and quota counts only current open forms',async()=>{
   const c=await owner(),{form}=await issue(c);
@@ -364,5 +367,17 @@ try{
   await denies(()=>store.replaceContentBrief(c.scope,c.user,{...request,contentIds:['about-text']}));await denies(()=>store.replaceContentBrief(b.scope,b.user,request),404);
  });
  assert.equal(network,0);assert.equal((await row('SELECT count(*) n FROM chat_interaction_checks')).n,0);assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
+ await test('history omits copied draft defaults while export and fresh owned reads retain them',async()=>{
+  const c=await owner(),{form}=await issue(c),draft={...mutation(form,'save-draft'),answers:{'field-1':'UNSUBMITTED_HISTORY_CANARY'}};
+  await store.mutateInteraction(c.scope,c.user,draft);const current=await store.readInteraction(c.scope,c.user,form.envelope.id);
+  const next=await store.replaceContentBrief(c.scope,c.user,await replacement(c,current));
+  const history=await(await http(c,'/api/chat/history?before=10000')).json();assert.doesNotMatch(JSON.stringify(history),/UNSUBMITTED_HISTORY_CANARY|"default":|definitionDigest|submitBinding/);
+  const record=history.turns.find(t=>t.id===next.envelope.scope.originTurnId).interaction;assert(presentation.readHistoryInteraction(record));assert.equal(record.fields[0].defaultProvenance,'user');
+  const archive=await(await http(c,'/api/chat/export')).json();assert.match(JSON.stringify(archive),/UNSUBMITTED_HISTORY_CANARY/);
+  const list=await store.listInteractions(c.scope,c.user,listRequest());assert(presentation.readInteractionIndex(list));assert.equal(list.items[0].projectName,'Garden');assert.doesNotMatch(JSON.stringify(list),/UNSUBMITTED_HISTORY_CANARY|default|answers/);
+  await run("UPDATE projects SET name='Garden renewed' WHERE id=?",c.project);assert.equal((await store.readInteraction(c.scope,c.user,next.envelope.id)).projectName,'Garden renewed');
+  await store.mutateInteraction(c.scope,c.user,mutation(next,'cancel'));
+  const removed=(await(await http(c,'/api/chat/history?before=10000')).json()).turns.find(t=>t.id===next.envelope.scope.originTurnId).interaction;assert.equal(removed.state,'removed');assert(presentation.readHistoryInteraction(removed));
+ });
  console.log(`Chat interaction storage: ${cases} scenarios passed (${process.argv.includes('--d1')?'local D1':'SQLite'}), actual compiler/review handlers, zero inference/network calls. Authenticated HTTP/history/export checked; no UI/deployment acceptance claimed.`);
 }catch(error){console.error(error);process.exitCode=1;}finally{globalThis.fetch=originalFetch;await fixture.close();}

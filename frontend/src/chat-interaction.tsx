@@ -3,7 +3,7 @@ import {useQuery} from '@tanstack/react-query';
 import {ChevronDown,ChevronUp,FileText,LoaderCircle} from 'lucide-react';
 import {InteractionError,requireCurrentClient,validateAnswers,verifyEnvelope} from '../../src/chat-interactions/protocol';
 import type {Answers,ClientCapabilities,InteractionRead,InteractionReceipt,Mutation} from '../../src/chat-interactions/types';
-import {APIError,message,queryClient,send} from './lib/api';
+import {APIError,api,message,queryClient,send} from './lib/api';
 import {canRecoverChat} from './lib/chat-delivery';
 import {deliverInteraction,recoverInteraction} from './lib/interaction-delivery';
 import {useInteractionRecovery} from './use-interaction-recovery';
@@ -20,13 +20,13 @@ function startingAnswers(form:InteractionRead):Answers{return form.submission?.a
 export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInChat}:{id:string;owner:string;chatRevision:number;busy:boolean;onAnswerInChat:()=>void}){
  const recovery=useInteractionRecovery(owner,id),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false);
  const section=useRef<HTMLElement>(null),restored=useRef(false);
- const query=useQuery({queryKey:['chat-interaction',owner,id],queryFn:async()=>{
+ const query=useQuery({queryKey:['chat-interaction',owner,id],queryFn:async({signal})=>{
   let value:InteractionRead;
-  try{value=await send<InteractionRead>(route+'read',{version:1,interactionId:id,client});}catch(error){if(error instanceof APIError&&[404,410].includes(error.status))return null;throw error;}
+  try{value=await api<InteractionRead>(route+'read',{method:'POST',body:JSON.stringify({version:1,interactionId:id,client}),signal});}catch(error){if(error instanceof APIError&&[404,410].includes(error.status))return null;throw error;}
   const iso=(v:unknown):v is string=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
   if(value.version!==1||!Number.isSafeInteger(value.answerRevision)||value.answerRevision<0||!iso(value.observedAt)||!(value.draftRetainUntil===null||iso(value.draftRetainUntil))||!['open','submitted','canceled','superseded','expired'].includes(value.state))throw new APIError('Update Whumpo to open this form.',409,'client_update_required');
   await verifyEnvelope(value.envelope);await requireCurrentClient(value.envelope,client);
-  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||value.envelope.definition.template!=='content-change@1'||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
+  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100||value.envelope.definition.template!=='content-change@1'||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
   validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
   return value;
  },staleTime:0,gcTime:0,refetchInterval:q=>['pending','unknown'].includes(q.state.data?.submission?.continuation.state??'')?5000:false});
@@ -34,7 +34,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
  const answers=local?.answers??(form?startingAnswers(form):{}),collapsed=local?.dismissed??false;
  const conflict=!!(form&&local?.answers&&(local.definitionDigest!==form.envelope.definitionDigest||local.answerRevision!==form.answerRevision));
  const unavailable=query.data===null;
- const locked=busy||chatBusy||!!pending||!!query.error||conflict||!form||form.state!=='open';
+ const locked=busy||chatBusy||query.isFetching||!!pending||!!query.error||conflict||!form||form.state!=='open';
  const draftRecord=()=>({definitionDigest:form!.envelope.definitionDigest,answerRevision:form!.answerRevision,answers:local?.answers??null,updatedAt:local?.updatedAt??Date.now(),dismissed:collapsed,pending:null});
  function refreshChat(){void queryClient.invalidateQueries({queryKey:['chat',owner]});}
  async function settled(request:Mutation){
@@ -87,8 +87,8 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   return()=>clearTimeout(timer);
  },[form?.draftRetainUntil,form?.observedAt,owner,id]);
  const follow=form?.submission?.continuation;
- return <section ref={section} aria-label="Website change brief" className="mt-4 rounded-2xl border bg-card p-4 sm:p-5 space-y-4 min-w-0">
-  <header className="flex gap-3 items-start"><span className="rounded-xl bg-secondary p-2 shrink-0"><FileText className="size-5" aria-hidden="true"/></span><div className="min-w-0 flex-1"><h2 className="text-base font-semibold break-words">{form?.envelope.definition.title??'Website change brief'}</h2><p className="text-xs text-muted-foreground mt-1">A private draft for your website</p></div>{form&&<Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={collapsed?'Resume form':'Collapse form'} aria-expanded={!collapsed} disabled={busy} onClick={()=>recovery.save({...draftRecord(),pending,dismissed:!collapsed})}>{collapsed?<ChevronDown className="size-4"/>:<ChevronUp className="size-4"/>}</Button>}</header>
+ return <section ref={section} tabIndex={-1} data-interaction-id={id} aria-label="Website change brief" className="mt-4 rounded-2xl border bg-card p-4 sm:p-5 space-y-4 min-w-0">
+  <header className="flex gap-3 items-start"><span className="rounded-xl bg-secondary p-2 shrink-0"><FileText className="size-5" aria-hidden="true"/></span><div className="min-w-0 flex-1"><h2 className="text-base font-semibold break-words">{form?.envelope.definition.title??'Website change brief'}</h2><p className="text-xs text-muted-foreground mt-1 break-words">{form?.projectName?'Project: '+form.projectName:'A private draft for your website'}</p></div>{form&&<Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={collapsed?'Resume form':'Collapse form'} aria-expanded={!collapsed} disabled={busy} onClick={()=>recovery.save({...draftRecord(),pending,dismissed:!collapsed})}>{collapsed?<ChevronDown className="size-4"/>:<ChevronUp className="size-4"/>}</Button>}</header>
   {unavailable&&<p className="text-sm">This form is no longer available. It may have been discarded or reached seven days of inactivity. Ask Whumpo for a new form.</p>}
   {query.isPending&&<p role="status" className="text-sm">Reading your saved form…</p>}
   {query.error&&<div role="alert" className="text-sm space-y-3"><p>{message(query.error)}</p>{!unavailable&&<Button variant="outline" disabled={busy||query.isFetching} onClick={()=>void query.refetch()}>Check saved form</Button>}</div>}
