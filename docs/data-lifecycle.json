@@ -1950,7 +1950,7 @@
       ],
       "scope": "owner",
       "purpose": "Issued typed definitions, draft answers, immutable submissions and continuation receipts.",
-      "currentRetention": "Owner-approved LC-10, implemented in current source but not deployed: unsubmitted form payloads/defaults and drafts become unavailable seven days after the last saved edit (issuance when untouched); hourly maintenance erases up to 100 eligible payloads per pass. Explicit cancel erases its payload immediately. Minimal immutable identity/digest/request-hash metadata survives for replay protection. Submitted answers and unresolved continuations are excluded. Form authority expiry remains distinct from payload retention. Project deletion refuses pending/unknown continuations; otherwise it cascades content but request tombstones remain until account removal.",
+      "currentRetention": "Owner-approved LC-10, implemented in current source but not deployed: unsubmitted form payloads/defaults and drafts become unavailable seven days after the last saved edit (issuance when untouched); hourly maintenance erases up to 100 eligible payloads per pass. Explicit cancel erases its payload immediately. Minimal immutable identity/digest/request-hash metadata survives for replay protection. Submitted answers and unresolved continuations are excluded. Form authority expiry remains distinct from payload retention. Project deletion refuses pending/unknown continuations; otherwise it cascades content but request tombstones remain until account removal. The current maintained content-brief client expires local unsent answers after seven days since the last local edit, independently retains exact unresolved requests, and clears form recovery on detected account change/sign-out. A server-unavailable form clears its locally edited draft while preserving any unresolved request. Browser/query copies are excluded from PWA Cache Storage.",
       "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Current scoped cancel and the fixed seven-day LC-10 maintenance predicate, enforced by schema constraints. Direct receipt deletion and submitted-payload erasure are refused. Account/project cascades are not a complete closure or independently restore-safe erasure workflow; broader LC policies and backup suppression remain open.",
       "exportPolicy": "Current Chat v2 transcript export includes retained unsubmitted drafts with answer revision, saved/observed timestamps, alongside allowlisted titles, defaults, accepted answers, state and correction links. Ordinary history omits unsent draft values. Canceled/overdue payloads project only removal metadata, before and after physical cleanup. No active bindings, digests, actor scope, preview URLs or approval controls. Whole-account export remains separate.",
@@ -1962,14 +1962,18 @@
         "src/chat-interactions/history.ts",
         "src/chat-interactions/continuation.ts",
         "docs/chat-interactions.md",
-        "src/chat-interactions/retention.ts"
+        "src/chat-interactions/retention.ts",
+        "frontend/src/lib/interaction-recovery.ts",
+        "frontend/src/use-interaction-recovery.ts",
+        "frontend/src/chat-interaction.tsx"
       ],
       "storageStatus": "current",
       "protection": {
         "profile": "managed-readable",
         "storage": [
           "control-d1",
-          "browser-download"
+          "browser-download",
+          "browser-private-cache"
         ],
         "readers": [
           "Current owner, project ownership and current identity on domain/HTTP/history/export reads; no public or visitor access."
@@ -1978,7 +1982,7 @@
           "Deterministic trusted content form builder, schema validation and existing private preview compiler. No model receives these answers automatically. Agent interpretation is a later WH-108 adapter."
         ],
         "remainingExposure": [
-          "Defaults and submitted text are private content readable by authorized platform processors and privileged operators. Exports are customer-controlled copies. No browser form cache or generalized custom form issuance is activated. Retention/closure/restore suppression and renderer logout clearing remain incomplete."
+          "Defaults and submitted text are private content readable by authorized platform processors and privileged operators. The first maintained content-brief client keeps edited answers, exact unresolved requests and collapse metadata in account-bound sessionStorage (whumpo.chat-forms.v1), with a seven-day local draft timeout, account-mismatch and sign-out clearing, and late-response fencing. Same-origin JavaScript and browser session restore can access or copy these readable records; unresolved requests have separate retention. Current read results are transient query data and are removed on navigation/reset or the server-reported draft cutoff. No PWA cache, model processing or generalized custom-form issuance is added. Whole-account closure, submitted retention, attachment copies and independent restore suppression remain incomplete."
         ],
         "decision": "retain-and-verify",
         "rationale": "Reuse managed-readable project/Chat protection, current workspace admission and bounded allowlisted projections; no additional customer unlock or copy of credentials.",

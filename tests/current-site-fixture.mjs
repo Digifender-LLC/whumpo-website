@@ -14,6 +14,8 @@ export async function currentSiteFixtureHandlers(){
   export {resolveIdentity} from './src/workspace-identity/authority';
   export {createWebsite,prepareSpecification,readSpecificationProposal,readSpecification,specificationPreview,applySpecificationCommand} from './src/project-specification/store';
   export {readChat,sendChat,sendChatControl,sendConversation,chatState} from './src/chat';
+  export {chatControl,confirmationControls} from './src/chat-controls';
+  export {agentPrompt} from './src/site-agent';
   export {reviewBackup,confirmBackup,listBackups,githubRepositories} from './src/github-backups';
   export * from './src/project-specification/compiler';
   export {ownedPreview} from './src/photo-versions';

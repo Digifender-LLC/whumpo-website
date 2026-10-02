@@ -291,3 +291,22 @@ Final freshness fixture: 17 refusals, nine successful isolated checks and six re
 ### Operator D1 batch adapter
 
 `node tests/remote-d1.mjs` verifies immutable statement bindings, same-adapter batch capabilities, ordered complete results, twelve refusals, late SQLite rollback, transport/response-loss refusal without automatic mutation retry, and actual current key initialization through the synthetic REST shape. `node tests/cloudflare-token-refresh.mjs` separately retains the narrow confirmed-403 credential-refresh behavior. A real three-statement read-only D1 batch verified ordered independent parameters and zero test users; no remote mutation/rollback acceptance is claimed. See [candidate handoff](protection-candidate.md).
+
+### Maintained Chat form client — October 2, 2026 UTC
+
+WH-106/#87 now has its first connected maintained-content client and a bounded WH-107 handoff. `node tests/chat-interaction-client.mjs` passes seven-day local draft expiry, separate unresolved-request retention, current-format/account validation, quota-failure preservation, exact request-digest receipt matching, read-only recovery and shared sign-out clearing.
+
+`node tests/chat-interaction-browser.mjs --d1` builds the actual React workspace, starts the real current Worker on the identity contract's loopback origin, and uses a disposable complete-schema local D1. Synthetic identity rows and website briefs are fixture setup, not passkey-ceremony acceptance. It passes:
+
+- Required-answer validation and focus/error association; inspected 360/390-pixel mobile and 1280-pixel desktop screenshots, no horizontal overflow, and at least 44-pixel form controls.
+- Local edits surviving collapse, navigation and reload with zero automatic mutation requests.
+- A committed draft with a lost reply recovering by its exact receipt; concurrent changes refusing overwrite while retaining local edits.
+- A lost submission plus unavailable receipt read surviving reload, with no automatic continuation. Explicit readback then preparation produces the real compiler preview and the existing exact private-save review.
+- The exact private save through authenticated HTTP, with no publication. Its passkey-prompt UI remains covered by separate identity/domain work.
+- Linked server-issued corrections, discard payload erasure, account switching to an account with no forms, and sign-out while a committed response is delayed; late completion cannot recreate browser recovery state.
+
+No external inference/provider calls occur in that browser suite. Browser accessibility-tree/focus checks and mobile emulation do not establish spoken screen-reader use, a physical software keyboard, installed-PWA behavior or general renderer acceptance. The floating latest-message control initially overlapped form controls on mobile; it now uses the composer's left control slot. Final screenshots were inspected after that correction.
+
+The existing interaction suite passes all 35 cases in SQLite and local D1. Full package type/compiler checks, `node tools/build.mjs`, Chat recovery/delivery/reply/history, natural Chat, the synthetic customer-site journey, lifecycle catalogue and roadmap validate/alignment/render checks also pass. The natural Chat fixture now uses one compiled identity module with its website helpers. The 100-turn history regression exposed a D1 binding-limit error in the initial form-pointer lookup; two bounded 50-turn queries fix it and the actual local-D1 history/export suite passes. One concurrent local D1 proxy run ended with ECONNRESET; the complete subsequent interaction run passed. Browser harness setup initially used an unsupported local identity port and a relative request URL; both were corrected without changing runtime origin policy.
+
+Source only: no remote schema/Worker release, model tool activation, CMS functional test, scanner/Daybreak work, real billing, customer deployment or physical-device acceptance. The live test schema remains the earlier release. The current 172-table source and client/API must ship together through the separate reviewed empty-test-database cutover; no migration overlay, old decoder or compatibility route is introduced. WH-106 remains open for its original outstanding lifecycle/resource/restore and integrated handoffs; WH-107 retains its complete renderer scope.
