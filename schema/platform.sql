@@ -3296,7 +3296,12 @@ CREATE TRIGGER specification_site_added AFTER INSERT ON site_versions BEGIN UPDA
 
 CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposals BEGIN
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
-  SELECT 1 FROM projects p JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='ai' AND t.status='pending'
+  SELECT 1 FROM projects p JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.status='pending'
+   AND (t.mode='ai' OR (t.mode='guided' AND EXISTS(
+    SELECT 1 FROM chat_interaction_continuations c JOIN chat_interaction_submissions s ON s.id=c.id
+    JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
+    WHERE c.id=t.id AND c.state='pending' AND s.user_id=t.user_id AND i.project_id=NEW.project_id AND i.state='submitted'
+    AND json_extract(i.envelope_json,'$.definition.continuationBinding')='site.content-prepare@1')))
   LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=NEW.draft_revision
   AND coalesce(h.revision,0)=NEW.expected_revision AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
@@ -3870,3 +3875,151 @@ WHEN NEW.id!=OLD.id OR NEW.rotation_id!=OLD.rotation_id OR NEW.selected_count!=O
 BEGIN SELECT RAISE(ABORT,'connection_rotation_batch_identity'); END;
 CREATE TRIGGER connection_rotation_batch_retained BEFORE DELETE ON connection_rotation_batches
 BEGIN SELECT RAISE(ABORT,'connection_rotation_receipt_required'); END;
+
+-- WH-106: current owner Chat interactions. No user-provided form carries effect authority.
+CREATE TABLE chat_interaction_checks (denied INTEGER NOT NULL);
+CREATE TRIGGER chat_interaction_refuse BEFORE INSERT ON chat_interaction_checks
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+
+CREATE TABLE chat_conversations (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+ UNIQUE(id,user_id)
+);
+CREATE TABLE chat_interaction_tasks (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ conversation_id TEXT NOT NULL,
+ project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+ origin_turn_id TEXT NOT NULL UNIQUE REFERENCES chat_turns(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ summary TEXT NOT NULL DEFAULT '' CHECK(length(summary)<=1000),
+ FOREIGN KEY(conversation_id,user_id) REFERENCES chat_conversations(id,user_id) ON DELETE CASCADE,
+ UNIQUE(id,user_id,conversation_id)
+);
+CREATE TABLE chat_interactions (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ conversation_id TEXT NOT NULL,
+ task_id TEXT NOT NULL,
+ project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+ origin_turn_id TEXT NOT NULL UNIQUE REFERENCES chat_turns(id) ON DELETE CASCADE,
+ envelope_json TEXT NOT NULL CHECK(json_valid(envelope_json) AND length(CAST(envelope_json AS BLOB))<=32768),
+ definition_digest TEXT NOT NULL CHECK(length(definition_digest)=64),
+ issue_hash TEXT NOT NULL CHECK(length(issue_hash)=64),
+ created_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL CHECK(expires_at>created_at),
+ state TEXT NOT NULL DEFAULT 'open' CHECK(state IN ('open','submitted','canceled','superseded')),
+ answer_revision INTEGER NOT NULL DEFAULT 0 CHECK(answer_revision>=0),
+ draft_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(draft_json) AND json_type(draft_json)='object' AND length(CAST(draft_json AS BLOB))<=16384),
+ draft_saved_at TEXT,
+ FOREIGN KEY(task_id,user_id,conversation_id) REFERENCES chat_interaction_tasks(id,user_id,conversation_id) ON DELETE CASCADE,
+ UNIQUE(id,user_id)
+);
+CREATE INDEX chat_interactions_history ON chat_interactions(user_id,created_at DESC,id DESC);
+CREATE INDEX chat_interactions_open ON chat_interactions(conversation_id,state,expires_at);
+CREATE TRIGGER chat_interaction_issue_scope BEFORE INSERT ON chat_interactions
+WHEN NOT EXISTS(SELECT 1 FROM chat_interaction_tasks t JOIN chat_turns c ON c.id=t.origin_turn_id
+ WHERE t.id=NEW.task_id AND t.user_id=NEW.user_id AND t.conversation_id=NEW.conversation_id
+ AND t.project_id IS NEW.project_id AND t.origin_turn_id=NEW.origin_turn_id AND c.user_id=NEW.user_id)
+ OR (NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id))
+ OR json_extract(NEW.envelope_json,'$.id') IS NOT NEW.id
+ OR json_extract(NEW.envelope_json,'$.version') IS NOT 1
+ OR json_extract(NEW.envelope_json,'$.scope.accountId') IS NOT NEW.user_id
+ OR json_extract(NEW.envelope_json,'$.scope.actorId') IS NOT NEW.user_id
+ OR json_extract(NEW.envelope_json,'$.scope.conversationId') IS NOT NEW.conversation_id
+ OR json_extract(NEW.envelope_json,'$.scope.taskId') IS NOT NEW.task_id
+ OR json_extract(NEW.envelope_json,'$.scope.projectId') IS NOT NEW.project_id
+ OR json_extract(NEW.envelope_json,'$.scope.originTurnId') IS NOT NEW.origin_turn_id
+ OR json_extract(NEW.envelope_json,'$.createdAt') IS NOT NEW.created_at
+ OR json_extract(NEW.envelope_json,'$.expiresAt') IS NOT NEW.expires_at
+ OR json_extract(NEW.envelope_json,'$.definitionDigest') IS NOT NEW.definition_digest
+ OR NEW.state!='open' OR NEW.answer_revision!=0 OR NEW.draft_json!='{}' OR NEW.draft_saved_at IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+CREATE TRIGGER chat_interaction_fixed BEFORE UPDATE ON chat_interactions
+WHEN NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.conversation_id IS NOT OLD.conversation_id
+ OR NEW.task_id IS NOT OLD.task_id OR NEW.project_id IS NOT OLD.project_id OR NEW.origin_turn_id IS NOT OLD.origin_turn_id
+ OR NEW.envelope_json IS NOT OLD.envelope_json OR NEW.definition_digest IS NOT OLD.definition_digest
+ OR NEW.issue_hash IS NOT OLD.issue_hash OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
+ OR OLD.state!='open' OR NEW.answer_revision!=OLD.answer_revision+1
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+
+CREATE TABLE chat_interaction_requests (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ request_id TEXT NOT NULL,
+ interaction_id TEXT NOT NULL,
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ operation TEXT NOT NULL CHECK(operation IN ('save-draft','submit','cancel')),
+ answer_revision INTEGER NOT NULL CHECK(answer_revision>0),
+ created_at TEXT NOT NULL,
+ PRIMARY KEY(user_id,request_id),
+ UNIQUE(interaction_id,answer_revision)
+);
+CREATE TRIGGER chat_interaction_request_fixed BEFORE UPDATE ON chat_interaction_requests
+BEGIN SELECT RAISE(ABORT,'chat_interaction_immutable'); END;
+CREATE TABLE chat_interaction_submissions (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ interaction_id TEXT NOT NULL UNIQUE,
+ answers_json TEXT NOT NULL CHECK(json_valid(answers_json) AND json_type(answers_json)='object' AND length(CAST(answers_json AS BLOB))<=16384),
+ answers_digest TEXT NOT NULL CHECK(length(answers_digest)=64),
+ answer_revision INTEGER NOT NULL CHECK(answer_revision>0),
+ created_at TEXT NOT NULL,
+ FOREIGN KEY(user_id,id) REFERENCES chat_interaction_requests(user_id,request_id) ON DELETE CASCADE,
+ FOREIGN KEY(interaction_id,user_id) REFERENCES chat_interactions(id,user_id) ON DELETE CASCADE
+);
+CREATE TRIGGER chat_interaction_submission_scope BEFORE INSERT ON chat_interaction_submissions
+WHEN NOT EXISTS(SELECT 1 FROM chat_interaction_requests r JOIN chat_interactions i ON i.id=r.interaction_id
+ WHERE r.user_id=NEW.user_id AND r.request_id=NEW.id AND r.operation='submit' AND r.interaction_id=NEW.interaction_id
+ AND r.answer_revision=NEW.answer_revision AND i.state='submitted' AND i.answer_revision=NEW.answer_revision)
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+CREATE TRIGGER chat_interaction_submission_fixed BEFORE UPDATE ON chat_interaction_submissions
+BEGIN SELECT RAISE(ABORT,'chat_interaction_immutable'); END;
+CREATE TABLE chat_interaction_continuations (
+ id TEXT PRIMARY KEY REFERENCES chat_interaction_submissions(id) ON DELETE CASCADE,
+ state TEXT NOT NULL DEFAULT 'not-started' CHECK(state IN ('not-started','pending','succeeded','failed','unknown')),
+ result_turn_id TEXT REFERENCES chat_turns(id) ON DELETE SET NULL,
+ reason TEXT CHECK(reason IN ('stopped','changed','unavailable')),
+ started_at TEXT,
+ finished_at TEXT,
+ CHECK((state='not-started' AND started_at IS NULL AND finished_at IS NULL AND result_turn_id IS NULL AND reason IS NULL)
+  OR (state IN ('pending','unknown') AND started_at IS NOT NULL AND finished_at IS NULL AND result_turn_id IS NULL AND reason IS NULL)
+  OR (state='succeeded' AND started_at IS NOT NULL AND finished_at IS NOT NULL AND reason IS NULL)
+  OR (state='failed' AND finished_at IS NOT NULL AND result_turn_id IS NULL AND reason IS NOT NULL))
+);
+CREATE TRIGGER chat_interaction_continuation_transition BEFORE UPDATE ON chat_interaction_continuations
+WHEN NEW.id IS NOT OLD.id OR NOT (
+ (OLD.state='not-started' AND NEW.state IN ('pending','failed'))
+ OR (OLD.state='pending' AND NEW.state IN ('succeeded','failed','unknown') AND NEW.started_at IS OLD.started_at)
+ OR (OLD.state='unknown' AND NEW.state IN ('succeeded','failed') AND NEW.started_at IS OLD.started_at)
+ OR (OLD.state='succeeded' AND NEW.state='succeeded' AND OLD.result_turn_id IS NOT NULL AND NEW.result_turn_id IS NULL AND NEW.started_at IS OLD.started_at AND NEW.finished_at IS OLD.finished_at))
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+
+-- Metadata identities outlive discarded project content, preventing request reuse.
+CREATE TRIGGER chat_interaction_request_scope BEFORE INSERT ON chat_interaction_requests
+WHEN NOT EXISTS(SELECT 1 FROM chat_interactions WHERE id=NEW.interaction_id AND user_id=NEW.user_id AND answer_revision=NEW.answer_revision
+ AND state=CASE NEW.operation WHEN 'save-draft' THEN 'open' WHEN 'submit' THEN 'submitted' ELSE 'canceled' END)
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+CREATE TRIGGER chat_interaction_request_retained BEFORE DELETE ON chat_interaction_requests
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN SELECT RAISE(ABORT,'chat_interaction_receipt_retained'); END;
+CREATE TRIGGER chat_interaction_retained BEFORE DELETE ON chat_interactions
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND (OLD.project_id IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)
+ OR EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=OLD.id AND c.state IN ('pending','unknown')))
+BEGIN SELECT RAISE(ABORT,'chat_interaction_receipt_retained'); END;
+CREATE TRIGGER chat_interaction_submission_retained BEFORE DELETE ON chat_interaction_submissions
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM chat_interactions WHERE id=OLD.interaction_id)
+BEGIN SELECT RAISE(ABORT,'chat_interaction_receipt_retained'); END;
+CREATE TRIGGER chat_interaction_continuation_retained BEFORE DELETE ON chat_interaction_continuations
+WHEN EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN users u ON u.id=s.user_id JOIN chat_interactions i ON i.id=s.interaction_id WHERE s.id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'chat_interaction_receipt_retained'); END;
+
+CREATE TRIGGER chat_interaction_continuation_new BEFORE INSERT ON chat_interaction_continuations
+WHEN NEW.state!='not-started'
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+CREATE TRIGGER chat_interaction_continuation_result BEFORE UPDATE ON chat_interaction_continuations
+WHEN NEW.state='succeeded' AND NEW.result_turn_id IS NOT NULL AND NOT EXISTS(
+ SELECT 1 FROM chat_interaction_submissions s JOIN chat_turns t ON t.id=NEW.result_turn_id AND t.user_id=s.user_id
+ JOIN project_spec_chat_links l ON l.turn_id=t.id AND l.proposal_id=t.id
+ WHERE s.id=NEW.id AND t.id=s.id AND t.status='completed')
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;

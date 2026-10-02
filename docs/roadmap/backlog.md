@@ -3229,7 +3229,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 - [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
-- [tools/prototypes/chat-interactions.mjs](../../tools/prototypes/chat-interactions.mjs)
+- [src/chat-interactions/protocol.ts](../../src/chat-interactions/protocol.ts)
 - [tests/chat-interaction-contract.mjs](../../tests/chat-interaction-contract.mjs)
 - [tests/fixtures/chat-interactions.json](../../tests/fixtures/chat-interactions.json)
 
@@ -3244,7 +3244,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/51. Planning owner: Unassigned
 
 ## WH-106 — Persist and submit typed Chat interactions with exact readback
 
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: M.
 
 Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
@@ -3261,7 +3261,7 @@ Forms and their submitted answers survive reloads and interrupted requests witho
 - Bind stable submission IDs to exact payloads and recover committed state after lost acknowledgements without automatic effect redispatch
 - Extend history/export and lifecycle inventory for definitions, answers and attachment references; minimize model and local-device copies
 - Implement the content-change-brief fixture through existing domain handlers rather than a generic command or network proxy
-- Enforce WH-090 current feature decisions when issuing, submitting and handing off interactions; protected history/readback remains scoped to current actor authority. Do not retrofit plan checks into a second interaction permission system later.
+- Enforce WH-122 shared current feature decisions when issuing, submitting and handing off interactions; protected history/readback remains scoped to current actor authority. Do not retrofit plan checks into a second interaction permission system later.
 
 ### Acceptance criteria
 
@@ -3295,16 +3295,21 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/lib/chat-delivery.ts](../../frontend/src/lib/chat-delivery.ts)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [src/chat-interactions/protocol.ts](../../src/chat-interactions/protocol.ts)
+- [src/chat-interactions/store.ts](../../src/chat-interactions/store.ts)
+- [src/chat-interactions/continuation.ts](../../src/chat-interactions/continuation.ts)
+- [tests/chat-interaction-storage.mjs](../../tests/chat-interaction-storage.mjs)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/87. Planning owner: Codex /root (codex/identity-admission). Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
 - 2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature.
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-02 UTC: claimed #87 from c87aa04 in codex/identity-admission. Current TypeScript protocol, bounded input, durable content-brief drafts/submissions/continuation, scoped HTTP and nonactionable history/export are implemented in source. Full packet acceptance remains open: generalized maintained/custom adapters, correction/resume and lifecycle/client integration, remaining race cases and deployment. WH-107/108 renderer and semantic agent admission are downstream; no custom credential collection is activated.
 
 ## WH-107 — Render accessible Chat forms and maintained interaction templates
 
