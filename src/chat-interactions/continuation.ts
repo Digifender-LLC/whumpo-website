@@ -65,3 +65,25 @@ export async function stopInteractionContinuation(db:D1Database,user:string,subm
  if(current.submission.continuation.state==='not-started')await db.prepare("UPDATE chat_interaction_continuations SET state='failed',reason='stopped',finished_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND state='not-started'").bind(submissionId).run();
  return submitted(db,user,submissionId);
 }
+
+/** Explicit recovery for this local atomic adapter only. Fencing its pending
+ * state and proving the absence of its domain rows happen in one transaction.
+ * An in-flight preparer can no longer commit after this succeeds. This never
+ * retries work or reconciles an external provider's unknown outcome. */
+export async function reconcileContentBrief(db:D1Database,user:string,submissionId:string){
+ const current=await submitted(db,user,submissionId);
+ if(!['pending','unknown'].includes(current.submission.continuation.state))return current;
+ if(current.envelope.definition.template!=='content-change@1'||current.envelope.definition.continuationBinding!=='site.content-prepare@1')throw new InteractionStoreError(409,'adapter_unavailable');
+ try{await db.batch([
+  interactionGuard(db,`EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id JOIN projects p ON p.id=i.project_id AND p.owner_user_id=s.user_id WHERE s.id=? AND s.user_id=?)
+   AND NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=?)
+   AND NOT EXISTS(SELECT 1 FROM project_spec_proposals WHERE id=?)
+   AND NOT EXISTS(SELECT 1 FROM project_spec_chat_links WHERE turn_id=? OR proposal_id=?)`,[submissionId,user,submissionId,submissionId,submissionId,submissionId]),
+  db.prepare("UPDATE chat_interaction_continuations SET state='failed',reason='unavailable',finished_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND state IN ('pending','unknown')").bind(submissionId)
+ ]);}catch(error){
+  const observed=await submitted(db,user,submissionId);
+  if(!['pending','unknown'].includes(observed.submission.continuation.state))return observed;
+  if(String(error).includes('chat_interaction_changed'))throw new InteractionStoreError(409,'interaction_changed');throw error;
+ }
+ return submitted(db,user,submissionId);
+}

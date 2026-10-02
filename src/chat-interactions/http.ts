@@ -1,8 +1,8 @@
 import {SpecificationError} from '../project-specification/v2/json';
 import {readInteractionInput} from './input';
 import {InteractionError,requireCurrentClient} from './protocol';
-import {readInteraction,readInteractionReceipt,mutateInteraction,InteractionStoreError} from './store';
-import {continueContentBrief,stopInteractionContinuation} from './continuation';
+import {listInteractions,readInteraction,readInteractionReceipt,mutateInteraction,InteractionStoreError} from './store';
+import {continueContentBrief,stopInteractionContinuation,reconcileContentBrief} from './continuation';
 const prefix='/api/chat/interactions/';
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'private, no-store','pragma':'no-cache','x-content-type-options':'nosniff','referrer-policy':'no-referrer'};
 const respond=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
@@ -18,6 +18,7 @@ export async function handleInteractionRequest(request:Request,db:D1Database,use
   if(!url.pathname.startsWith(prefix+'v1/'))throw new InteractionError('VERSION');
   if(request.method!=='POST'||url.search)throw new InteractionError('BODY');
   const data=await readInteractionInput(request),action=url.pathname.slice((prefix+'v1/').length);
+  if(action==='list')return respond(await listInteractions(db,user,data));
   if(action==='read'){
    exact(data,['version','interactionId','client']);id(data.interactionId);
    const interaction=await readInteraction(db,user,data.interactionId);await requireCurrentClient(interaction.envelope,data.client);return respond(interaction);
@@ -26,9 +27,9 @@ export async function handleInteractionRequest(request:Request,db:D1Database,use
    exact(data,['version','requestId']);id(data.requestId);return respond(await readInteractionReceipt(db,user,data.requestId));
   }
   if(action==='mutate')return respond(await mutateInteraction(db,user,data));
-  if(action==='continue'||action==='stop'){
+  if(action==='continue'||action==='stop'||action==='reconcile'){
    exact(data,action==='continue'?['version','submissionId','expectedChatRevision']:['version','submissionId']);id(data.submissionId);
-   const result=action==='continue'?await continueContentBrief(db,user,data.submissionId,data.expectedChatRevision as number):await stopInteractionContinuation(db,user,data.submissionId);
+   const result=action==='continue'?await continueContentBrief(db,user,data.submissionId,data.expectedChatRevision as number):action==='stop'?await stopInteractionContinuation(db,user,data.submissionId):await reconcileContentBrief(db,user,data.submissionId);
    return respond({version:1,submissionId:result.submission.id,continuation:result.submission.continuation});
   }
   return respond({error:'Chat interaction route not found.',code:'not_found'},404);
