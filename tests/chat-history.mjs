@@ -1,15 +1,16 @@
 Error.stackTraceLimit=0;
 // Connected handler acceptance: actual platform HTTP boundary and visitor host, disposable D1.
-import assert from 'node:assert/strict';import {mkdtemp,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';import {unzipSync,strFromU8} from 'fflate';import wrangler from 'wrangler';
-const b=await build({stdin:{contents:"export {default as platform} from './src/index';export {default as host} from './src/site-host';export {hashToken} from './src/security';export {sendChat} from './src/chat';export {exportChatTranscript} from './src/chat-transcript';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const {platform,host,hashToken,sendChat,exportChatTranscript}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-customer-journey-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
-const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){throw Error('No external work expected')}};
-async function account(){const id=crypto.randomUUID(),token=(crypto.randomUUID()+crypto.randomUUID()).replaceAll('-',''),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(id,id+'@example.test',now).run();await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(token),id,new Date(Date.now()+3600000).toISOString(),now).run();return {id,token};}
-const call=(a,path,method='GET',body,origin='http://localhost')=>platform.fetch(new Request('http://localhost'+path,{method,headers:{origin,cookie:'tellumo_session='+(a?.token??''),'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,ctx);
+import assert from 'node:assert/strict';import {build} from 'esbuild';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture} from './helpers/workspace-identity.mjs';
+const b=await build({stdin:{contents:"export {default as platform} from './src/index';export {default as host} from './src/site-host';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {sendChat} from './src/chat';export {exportChatTranscript} from './src/chat-transcript';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+const {platform,sendChat,exportChatTranscript}=m;
+const fixture=await databaseFixture({d1:true}),db=fixture.db,scopes=new Map(),scope=user=>scopes.get(user);
+const env={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){throw Error('No external work expected')}};
+async function account(){const a=await workspaceFixture(db,m);scopes.set(a.account,await a.scope());return {...a,id:a.account};}
+const call=(a,path,method='GET',body,origin='http://localhost')=>platform.fetch(new Request('http://localhost'+path,{method,headers:{origin,cookie:'__Host-whumpo_session='+(a?.token??''),'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,ctx);
 async function json(a,path,method='GET',body){const r=await call(a,path,method,body);assert.equal(r.status,200,await r.clone().text());return r.json();}
-async function chat(a,content){const state=await json(a,'/api/chat'),input={id:crypto.randomUUID(),revision:state.state.revision,content};return {input,data:await json(a,'/api/chat','POST',input)};}
-const served=p=>host.fetch(new Request('https://'+p+'.whumpo.site/'),{DB:db,FILES:proxy.env.FILES});
 try{
  const owner=await account(),foreign=await account(),now=new Date().toISOString();
  // New accounts cannot bypass welcome through history or search.
@@ -56,7 +57,7 @@ try{
  assert.equal((await (await call(foreign,'/api/chat/export')).json()).turns.length,1);
  await json(owner,'/api/chat');await db.prepare("UPDATE workspace_state SET revision=157,step='ready',brief_stage=NULL WHERE user_id=?").bind(owner.id).run();
  const command={id:crypto.randomUUID(),revision:157,content:'download my chat history'};
- await sendChat(db,owner.id,command,{baseURL:'https://invalid.example',apiKey:'synthetic-must-not-call',model:'synthetic'});
+ await sendChat(scope(owner.id),owner.id,command,{baseURL:'https://invalid.example',apiKey:'synthetic-must-not-call',model:'synthetic'});
  const state=await json(owner,'/api/chat');assert.equal(state.turns.at(-1).chat_transcript_download,true);
  assert.equal((await db.prepare('SELECT ai_context_allowed FROM chat_turns WHERE id=?').bind(command.id).first()).ai_context_allowed,0);
  assert.equal((await db.prepare('SELECT count(*) n FROM inference_calls').first()).n,0);
@@ -64,7 +65,7 @@ try{
  await db.prepare("UPDATE chat_turns SET assistant_text='Forged download prose' WHERE id=?").bind(command.id).run();assert.equal((await json(owner,'/api/chat')).turns.at(-1).chat_transcript_download,undefined);
  let pages=0;
  const failing=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{if(sql.includes('revision>?')&&++pages===2)throw Error('Synthetic export read failure');return target.prepare(sql);};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
- const interrupted=await exportChatTranscript(new Request('http://localhost/api/chat/export'),failing,owner.id);await assert.rejects(()=>interrupted.text(),/interrupted/);
+ const interrupted=await exportChatTranscript(new Request('http://localhost/api/chat/export'),await owner.scope(failing),owner.id);await assert.rejects(()=>interrupted.text(),/interrupted/);
  console.log('Chat download passed: complete multi-page export, fixed upper revision, private owner scope, private-review inclusion, strict projection, safe attachment headers, guided/no-inference action metadata, and explicit stream failure.');
  console.log('Chat history passed: authenticated HTTP, tenant isolation, bounded complete pagination, concurrent new messages, strict cursors read-only transcript fields, literal search, search pagination and welcome gating.');
-}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await fixture.close();}

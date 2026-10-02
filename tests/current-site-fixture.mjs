@@ -6,7 +6,34 @@ import {build} from 'esbuild';
 // are module-private and cannot be passed between separately bundled runtimes.
 let module;
 export async function currentSiteFixtureHandlers(){
- if(!module){const b=await build({stdin:{contents:"export {default as worker} from './src/index';export {comparisonErrorResponse} from './src/comparison-page';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {createWebsite,prepareSpecification,readSpecificationProposal} from './src/project-specification/store';export {readChat,sendChat,sendChatControl} from './src/chat';export {reviewBackup,confirmBackup,listBackups,githubRepositories} from './src/github-backups';export {ownedExport} from './src/exports';export {seal} from './src/connection-vault';export {sendAIChat} from './src/ai-chat';export {getBilling} from './src/billing';export {saveCapacity,readCapacity} from './src/workspace-dashboard';export {plans,publicPlans,quoteDomainBenefit} from './src/plans';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});module=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].contents).toString('base64'));}
+ if(!module){const b=await build({stdin:{contents:`
+  export {default as worker} from './src/index';
+  export {comparisonErrorResponse} from './src/comparison-page';
+  export {hashToken,newSessionToken} from './src/security';
+  export {admitWorkspace} from './src/workspace-identity/admission';
+  export {resolveIdentity} from './src/workspace-identity/authority';
+  export {createWebsite,prepareSpecification,readSpecificationProposal} from './src/project-specification/store';
+  export {readChat,sendChat,sendChatControl} from './src/chat';
+  export {reviewBackup,confirmBackup,listBackups,githubRepositories} from './src/github-backups';
+  export {ownedExport} from './src/exports';
+  export {seal} from './src/connection-vault';
+  export {sendAIChat} from './src/ai-chat';
+  export {default as host} from './src/site-host';
+  export {hostname,verifyDNS,listDomains} from './src/domains';
+  export {reviewHosting,confirmHosting,disconnectHosting,refreshHosting,hostingConnections} from './src/domain-hosting';
+  export {inspectRecovery,applyRecovery} from './src/domain-recovery';
+  export {listDNSActions} from './src/cloudflare-dns';
+  export {siteContext,prepareSiteAction} from './src/site-agent';
+  export {checkHealth,listHealth,maintainHealth} from './src/site-health';
+  export {readTraffic,recordTraffic,cleanupTraffic} from './src/site-traffic';
+  export {getBilling} from './src/billing';
+  export {readLayout,saveLayout,saveCapacity,readCapacity,dashboardData,workspaceAction} from './src/workspace-dashboard';
+  export {readProjectDetails,saveProjectDetails} from './src/project-details';
+  export {inspectWorkspace} from './src/workspace-read';
+  export {shortcutCommand,workspaceShortcuts} from './src/workspace-shortcuts';
+  export {planChangeQuote,capacityNotice,overageNotice,recommendPlan} from './src/capacity-policy';
+  export {plans,publicPlans,quoteDomainBenefit} from './src/plans';
+ `,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});module=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].contents).toString('base64'));}
  return module;
 }
 async function saveProposal(db,user,turn,prepared){

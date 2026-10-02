@@ -79,3 +79,21 @@ The smoke suite no longer requires a running password-based dev server. Its sign
 Private Chat handler dispatch strings in these domain fixtures are internal test inputs. The public natural-language boundary remains covered by `tests/natural-chat.mjs`; no customer slash-command interface is restored. Fault injection now targets the specific SQL operation before admission or after its actual commit, rather than counting batches that identity checks can change.
 
 These passes do not establish live Stripe/provider acceptance, a Stripe API-version upgrade, owner/device acceptance or a remote cutover. The source adapter's explicit Stripe version remains unchanged. Older domain/operator fixtures still need conversion before the coordinated test deployment; the current release must never target the obsolete database. No customer publication, real provider mutation, paid service or remote reset occurred.
+
+### Domains, website changes and workspace follow-through
+
+Fourteen additional suites pass on disposable local D1 with the complete current schema. Owner handlers use the admitted current identity scope from the same bundled module; visitor serving, scheduled maintenance and operator recovery retain their separate authority. Website fixtures use actual current specification transactions. None of these suites replays numbered migrations or creates retired workspace sessions.
+
+| Command | Verified local scope |
+| --- | --- |
+| `node tests/domains.mjs`, `node tests/domain-agent.mjs` | Exact bounded TXT proofs, owner isolation, expiry/renewal, replay, quotas, model proof-token exclusion, rejected purchase/connect authority, lost-result readback and zero standard-AI customer charges |
+| `node tests/domain-proof-removal.mjs` | Typed owner confirmation, raw/model refusal, exact proof generation, hosting/DNS reference races, atomic rollback, concurrency/replay and replacement-proof protection |
+| `node tests/domain-hosting.mjs`, `node tests/domain-recovery.mjs` | Synthetic provider create/certificate/routing checks, publication boundaries, one concurrent create, uncertain-write holds, disconnect/cleanup races, exact operator evidence, immutable recovery audit and stale refresh/proof fencing |
+| `node tests/dns-agent.mjs`, `node tests/hosting-chat.mjs` | Review-only model authority, owner-approved provider operations, foreign/stale/replayed turns, lost claim/transcript replies, no uncertain resend and credential exclusion |
+| `node tests/specification-journey.mjs` | Actual Worker HTTP create/change/preview/export/publish to the local visitor host, exact recent-auth approval, concurrent approval, expiry/deletion/safety holds, immutable versions, lost approval reply, forward restoration and removal/tombstones |
+| `node tests/project-details.mjs` | HTTP/Origin/owner checks, validation, revision conflicts, no-op audit behavior, model receipts and concurrent onboarding edits |
+| `node tests/workspace-dashboard.mjs`, `node tests/workspace-read.mjs` | Closed layout/shortcut schema, injection refusal, revisioned owner edits, non-authorizing plan preferences, honest unavailable measurements, read-only server-derived inspection, complete bounded project index and replay without inference resend |
+| `node tests/site-health.mjs`, `node tests/site-traffic.mjs` | Fixed-origin bounded health checks, generation fences, photo availability, scheduled budgets, exact concurrent visitor HTML counters, request exclusions, owner isolation, retention, deletion and counter-failure isolation |
+| `node tests/chat-history.mjs` | Authenticated pagination/search/export, stable revision boundaries, literal search, owner/first-project gates, strict field projection, private download headers, no inference and explicit interrupted-stream failure |
+
+Synthetic Cloudflare, DNS and model transports do not establish provider activation or real inference acceptance. The specification journey publishes only to its isolated local visitor handler. A photo availability fixture contains no scanner implementation or provider call; layout schema validation of a CMS widget identifier is not CMS functional testing. Fault injection matches the actual committed SQL operation, and aged-proof cases issue a distinct session. Physical-device acceptance and the coordinated remote reset/deployment remain open under #72.
