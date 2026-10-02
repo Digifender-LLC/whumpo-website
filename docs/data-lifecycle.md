@@ -1,12 +1,12 @@
 # Data retention, export and deletion contract
 
-**WH-009 lifecycle decision, extended by WH-116 on October 2, 2026 UTC against the complete current schema at `bfe03a0`. Proposed retention terms, not owner-approved policy or a compliance claim.** This document specifies the lifecycle work required before customer account closure or account-wide export can be offered. It does not turn on deletion, change existing retention, read customer data, or authorize external resource removal. The owner-approved boundaries below remain in force; the new time windows require a decision and implementation evidence.
+**WH-009 lifecycle decision, extended by WH-116 on October 2, 2026 UTC against the complete current schema at `bfe03a0`. General lifecycle terms remain proposed; the later LC-10 unsubmitted Chat draft policy is owner-approved. No compliance claim.** This document specifies the lifecycle work required before customer account closure or account-wide export can be offered. It does not turn on deletion, change existing retention, read customer data, or authorize external resource removal. The owner-approved boundaries below remain in force; the broader LC-01–09 windows still require decisions and implementation evidence.
 
 ## Established decisions and open decisions
 
 Already established by the owner: US-based customers, private invite-only testing, agent-first controls with explicit human confirmation for destructive operations, standard AI without customer-unit charges, financial Monitor independent of mandatory content safety, no sexual/illegal content, current Muse Contributor testing, and deferred CMS testing. Stripe sandbox signup/billing is now implemented and authorized; real-money activation remains gated. These choices do not establish a data-retention schedule or legal-preservation process. US customer eligibility does not establish visitor residence or storage jurisdiction.
 
-| ID | Proposed decision | Status / required decision maker |
+| ID | Decision | Status / required decision maker |
 | --- | --- | --- |
 | LC-01 | Immediately disable new work and withdraw public services after a confirmed ordinary closure; allow **7 days to cancel closure**, with no automatic republishing/reconnection. | Proposed; owner choice between seven days and no cancellation window. Emergency/safety withdrawal is immediate in either case. |
 | LC-02 | Ordinary primary data deleted **within 30 days of confirmed closure**, subject to separately explained unresolved operations and lawful preservation. Seven-day cancellation, if approved, fits inside that window. | Proposed owner target; not an implemented SLA. Verify cleanup capacity and failure monitoring before publishing. |
@@ -17,8 +17,9 @@ Already established by the owner: US-based customers, private invite-only testin
 | LC-07 | Retain only the financial records actually required for payments, refunds, disputes and taxes after closure. Resolve credits/cancellation separately. | Required accountant/legal/owner decision before real-money activation; no invented fixed tax period. |
 | LC-08 | Independently retained deletion suppressions must outlive every permitted restore source, then expire after a proposed 30-day reconciliation margin. Unknown or non-expiring backup sources prevent expiry. | Proposed architecture; WH-019/059 must prove this across recovery and key loss. |
 | LC-09 | Whole-account export includes owner/project content by default; visitor/contact data is a separately requested, authorized package. Restricted evidence and secrets are excluded. | Proposed owner/privacy contract; not a blanket denial of statutory access rights, which need a separate verified process. |
+| LC-10 | Unsubmitted Chat form drafts and copied definition/default payloads expire after **7 days of inactivity**, measured from the last accepted draft edit, or issuance if untouched. Explicit cancel discards the unsubmitted payload immediately. Accepted submissions and unresolved operations follow separate rules. | **Owner approved October 2, 2026.** Current-source implementation in WH-106; bounded hourly cleanup, retained minimal replay metadata and read/export expiry filtering. Not yet deployed. |
 
-None of these proposals authorizes a timer to delete current data. Until decided and implemented, describe the feature as unavailable and keep existing feature-specific behavior honest. A failed/unknown cleanup remains visible; do not translate it into a completion promise.
+LC-01–09 remain proposed and do not authorize a general deletion timer. Until those broader policies are decided and implemented, describe the feature as unavailable and keep existing feature-specific behavior honest. A failed/unknown cleanup remains visible; do not translate it into a completion promise.
 
 ## Data and resource ownership map
 

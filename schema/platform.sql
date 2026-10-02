@@ -1271,7 +1271,7 @@ CREATE TABLE content_risk_reversals (
 );
 
 CREATE TABLE maintenance_health (
- job TEXT PRIMARY KEY CHECK(job IN ('identity','imports','hosting','health','fair_use','traffic','applications','contacts','photos','github','cloudflare')),
+ job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','applications','contacts','photos','github','cloudflare')),
  run_id TEXT NOT NULL,
  started_at INTEGER NOT NULL CHECK(started_at>=0),
  finished_at INTEGER,
@@ -3905,7 +3905,7 @@ CREATE TABLE chat_interactions (
  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
  origin_turn_id TEXT NOT NULL UNIQUE REFERENCES chat_turns(id) ON DELETE CASCADE,
  previous_interaction_id TEXT UNIQUE REFERENCES chat_interactions(id) ON DELETE CASCADE,
- envelope_json TEXT NOT NULL CHECK(json_valid(envelope_json) AND length(CAST(envelope_json AS BLOB))<=32768),
+ envelope_json TEXT CHECK(envelope_json IS NULL OR (json_valid(envelope_json) AND length(CAST(envelope_json AS BLOB))<=32768)),
  definition_digest TEXT NOT NULL CHECK(length(definition_digest)=64),
  issue_hash TEXT NOT NULL CHECK(length(issue_hash)=64),
  created_at TEXT NOT NULL,
@@ -3914,11 +3914,17 @@ CREATE TABLE chat_interactions (
  answer_revision INTEGER NOT NULL DEFAULT 0 CHECK(answer_revision>=0),
  draft_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(draft_json) AND json_type(draft_json)='object' AND length(CAST(draft_json AS BLOB))<=16384),
  draft_saved_at TEXT,
+ removed_at TEXT,
+ removal_reason TEXT CHECK(removal_reason IN ('discarded','inactive')),
+ CHECK(state!='canceled' OR removed_at IS NOT NULL),
+ CHECK((removed_at IS NULL AND removal_reason IS NULL AND envelope_json IS NOT NULL)
+  OR (removed_at IS NOT NULL AND removal_reason IS NOT NULL AND envelope_json IS NULL AND draft_json='{}' AND draft_saved_at IS NULL AND state!='submitted')),
  FOREIGN KEY(task_id,user_id,conversation_id) REFERENCES chat_interaction_tasks(id,user_id,conversation_id) ON DELETE CASCADE,
  UNIQUE(id,user_id)
 );
 CREATE INDEX chat_interactions_history ON chat_interactions(user_id,created_at DESC,id DESC);
 CREATE INDEX chat_interactions_open ON chat_interactions(conversation_id,state,expires_at);
+CREATE INDEX chat_interactions_retention ON chat_interactions(COALESCE(draft_saved_at,created_at),id) WHERE removed_at IS NULL AND state!='submitted';
 CREATE TRIGGER chat_interaction_issue_scope BEFORE INSERT ON chat_interactions
 WHEN NOT EXISTS(SELECT 1 FROM chat_interaction_tasks t JOIN chat_turns c ON c.id=NEW.origin_turn_id
  WHERE t.id=NEW.task_id AND t.user_id=NEW.user_id AND t.conversation_id=NEW.conversation_id
@@ -3940,15 +3946,22 @@ WHEN NOT EXISTS(SELECT 1 FROM chat_interaction_tasks t JOIN chat_turns c ON c.id
  OR json_extract(NEW.envelope_json,'$.createdAt') IS NOT NEW.created_at
  OR json_extract(NEW.envelope_json,'$.expiresAt') IS NOT NEW.expires_at
  OR json_extract(NEW.envelope_json,'$.definitionDigest') IS NOT NEW.definition_digest
- OR NEW.state!='open' OR NEW.answer_revision!=0 OR NEW.draft_json!='{}' OR NEW.draft_saved_at IS NOT NULL
+ OR NEW.state!='open' OR NEW.answer_revision!=0 OR NEW.draft_json!='{}' OR NEW.draft_saved_at IS NOT NULL OR NEW.removed_at IS NOT NULL OR NEW.removal_reason IS NOT NULL
 BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
 CREATE TRIGGER chat_interaction_fixed BEFORE UPDATE ON chat_interactions
 WHEN NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.conversation_id IS NOT OLD.conversation_id
  OR NEW.task_id IS NOT OLD.task_id OR NEW.project_id IS NOT OLD.project_id OR NEW.origin_turn_id IS NOT OLD.origin_turn_id
  OR NEW.previous_interaction_id IS NOT OLD.previous_interaction_id
- OR NEW.envelope_json IS NOT OLD.envelope_json OR NEW.definition_digest IS NOT OLD.definition_digest
+ OR NEW.definition_digest IS NOT OLD.definition_digest
  OR NEW.issue_hash IS NOT OLD.issue_hash OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
- OR OLD.state!='open' OR NEW.answer_revision!=OLD.answer_revision+1
+ OR OLD.removed_at IS NOT NULL OR NEW.answer_revision!=OLD.answer_revision+1
+ OR NOT (
+  (OLD.state='open' AND NEW.envelope_json IS OLD.envelope_json AND NEW.removed_at IS NULL AND NEW.removal_reason IS NULL)
+  OR (OLD.state!='submitted' AND NEW.envelope_json IS NULL AND NEW.draft_json='{}' AND NEW.draft_saved_at IS NULL
+   AND NEW.removed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+   AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions WHERE interaction_id=OLD.id)
+   AND ((OLD.state='open' AND NEW.state='canceled' AND NEW.removal_reason='discarded')
+    OR (NEW.state=OLD.state AND NEW.removal_reason='inactive' AND strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(OLD.draft_saved_at,OLD.created_at),'+7 days')<=strftime('%Y-%m-%dT%H:%M:%fZ','now')))))
 BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
 
 CREATE TABLE chat_interaction_requests (

@@ -32,7 +32,7 @@ The operator report labels an observed run `stalled` after 15 minutes and a sche
 
 ## Backlogs and recovery
 
-The report covers **31 queues**, including expired GitHub staging leases, visitor deletion reviews and unresolved OAuth exchanges. Exchanges older than ten minutes require attention; the age threshold never expires an uncertain provider outcome or authorizes key activation. This new queue is current-source only until the WH-117 coordinated test cutover. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
+The report covers **32 queues**, including expired GitHub staging leases, visitor deletion reviews and unresolved OAuth exchanges. Exchanges older than ten minutes require attention; the age threshold never expires an uncertain provider outcome or authorizes key activation. This new queue is current-source only until the WH-117 coordinated test cutover. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
 
 | Group | Covered work | Attention rule |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ Exit codes: `0` means the covered observations do not currently require attentio
 
 ## Acceptance and WH-006 completion
 
-`node tests/maintenance.mjs` initializes the complete current schema in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 31 queries against the current schema, four receipt families, exact new revocation clocks, missing/unknown telemetry, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use, health budgets and expired GitHub staging; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
+`node tests/maintenance.mjs` initializes the complete current schema in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 32 queries against the current schema, four receipt families, exact new revocation clocks, missing/unknown telemetry, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use, health budgets and expired GitHub staging; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
 
 The previously outstanding natural daily execution evidence is now recorded below alongside the first hourly run. WH-006 acceptance is complete; wider incident alerting and unresolved-operation remediation remain separate work. The backlog and recovery-pointer coverage listed above is implemented; historical timestamps absent from source records remain explicitly unknown. No CMS functional testing or new activation is authorized by this inventory. Monitoring/alert delivery is not installed.
 
@@ -61,6 +61,10 @@ The previously outstanding natural daily execution evidence is now recorded belo
 All three local maintenance suites pass with the complete current schema and no numbered migration replay. The scheduled-handler suite uses transactional SQLite batches, expires an old session and enrollment grant, retains a current session and verified unfinished enrollment, and verifies independent traffic-failure/recovery and hourly dispatch. Identity cleanup now uses its actual hourly interval for overdue reporting; daily jobs keep their separate deadlines. The read-only inventory still excludes private content and credentials. No provider fetch or live scheduled invocation is performed by these tests.
 
 This source checkpoint is part of the pending coordinated identity/schema cutover (#72). The dated remote records below prove the earlier schedule only; they do not prove the new identity job has run remotely.
+
+## Chat draft retention source checkpoint — October 2, 2026 UTC
+
+Owner-approved LC-10 adds `chat_drafts` to both scheduled passes, with an hourly health interval. Each pass removes at most 100 eligible unsubmitted form payloads after seven days of inactivity; accepted submissions and unresolved continuation receipts are excluded. Read/export filtering applies at the cutoff even before cleanup. The new `chat_drafts` backlog measures age from eligibility, with a two-hour attention threshold. Counts/timestamps contain no form text or defaults. This source uses the complete current schema; none of the historical remote schedule evidence below proves execution of this new job.
 
 ## Private-test deployment evidence
 

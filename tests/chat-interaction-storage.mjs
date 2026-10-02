@@ -3,9 +3,10 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 Error.stackTraceLimit=0;
-const modules=await currentFixtureModules(['src/chat-interactions/store.ts','src/chat-interactions/continuation.ts','src/project-specification/store.ts','src/chat-interactions/protocol.ts','src/index.ts']);
+const modules=await currentFixtureModules(['src/chat-interactions/store.ts','src/chat-interactions/continuation.ts','src/project-specification/store.ts','src/chat-interactions/protocol.ts','src/index.ts','src/chat-interactions/retention.ts','src/project-specification/v2/json.ts']);
 const store=await modules.module('src/chat-interactions/store.ts'),continuation=await modules.module('src/chat-interactions/continuation.ts'),site=await modules.module('src/project-specification/store.ts');
 const protocol=await modules.module('src/chat-interactions/protocol.ts'),worker=(await modules.module('src/index.ts')).default;
+const retention=await modules.module('src/chat-interactions/retention.ts'),codec=await modules.module('src/project-specification/v2/json.ts');
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();let cases=0,network=0;
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{network++;throw Error('Unexpected network');};
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
@@ -35,6 +36,25 @@ async function approve(o,submissionId){
  assert.equal(response.status,200,await response.text());
 }
 const listRequest=(projectId=null,limit=20,before=null)=>({version:1,projectId,limit,before});
+
+// Historical current-schema fixtures, with real sealed definitions and receipt hashes.
+async function aged(o,definition,{createdDays=9,editedDays=8,submitted=false,unknown=false}={}){
+ const originTurnId=await origin(o),conversationId=(await row('SELECT id FROM chat_conversations WHERE user_id=?',o.user))?.id??id(),taskId=id();
+ await run('INSERT OR IGNORE INTO chat_conversations(id,user_id) VALUES(?,?)',conversationId,o.user);
+ await run('INSERT INTO chat_interaction_tasks(id,user_id,conversation_id,project_id,origin_turn_id) VALUES(?,?,?,?,?)',taskId,o.user,conversationId,o.project,originTurnId);
+ const clock=await row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now',?) createdAt,strftime('%Y-%m-%dT%H:%M:%fZ','now',?) expiresAt,strftime('%Y-%m-%dT%H:%M:%fZ','now',?) savedAt",'-'+createdDays+' days','-'+(createdDays-7)+' days','-'+editedDays+' days');
+ const envelope=await protocol.sealDefinition({version:1,id:id(),scope:{accountId:o.user,actorId:o.user,conversationId,taskId,projectId:o.project,originTurnId},definition,createdAt:clock.createdAt,expiresAt:clock.expiresAt});
+ await run('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',envelope.id,o.user,conversationId,taskId,o.project,originTurnId,JSON.stringify(envelope),envelope.definitionDigest,'a'.repeat(64),envelope.createdAt,envelope.expiresAt);
+ const request={...mutation({envelope},submitted?'submit':'save-draft'),answers:{'field-1':'PRIVATE_DRAFT_CANARY','field-2':'PRIVATE_DETAILS_CANARY'}},{requestHash}=await protocol.validateMutation(request,envelope);
+ await run('UPDATE chat_interactions SET state=?,answer_revision=1,draft_json=?,draft_saved_at=? WHERE id=?',submitted?'submitted':'open',submitted?'{}':JSON.stringify(request.answers),submitted?null:clock.savedAt,envelope.id);
+ await run('INSERT INTO chat_interaction_requests(user_id,request_id,interaction_id,request_hash,operation,answer_revision,created_at) VALUES(?,?,?,?,?,1,?)',o.user,request.requestId,envelope.id,requestHash,request.operation,clock.savedAt);
+ if(submitted){
+  await run('INSERT INTO chat_interaction_submissions(id,user_id,interaction_id,answers_json,answers_digest,answer_revision,created_at) VALUES(?,?,?,?,?,1,?)',request.requestId,o.user,envelope.id,JSON.stringify(request.answers),await codec.jsonDigest(request.answers),clock.savedAt);
+  await run('INSERT INTO chat_interaction_continuations(id) VALUES(?)',request.requestId);
+  if(unknown){await run("UPDATE chat_interaction_continuations SET state='pending',started_at=? WHERE id=?",clock.savedAt,request.requestId);await run("UPDATE chat_interaction_continuations SET state='unknown' WHERE id=?",request.requestId);}
+ }
+ return {envelope,request,clock};
+}
 
 function mutation(form,operation='submit',revision=0){return {version:1,requestId:id(),interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:revision,operation,...(operation==='cancel'?{}:{answers:{'field-1':'Gardens, cared for.','field-2':'Seasonal care and planting.'}})};}
 const denies=(fn,status=409)=>assert.rejects(fn,e=>e.status===status);
@@ -80,7 +100,7 @@ try{
   for(const operations of [['submit','cancel'],['save-draft','save-draft']]){
    const {form}=await issue(a),requests=operations.map(op=>mutation(form,op));
    const results=await Promise.allSettled(requests.map(r=>store.mutateInteraction(a.scope,a.user,r)));assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected'&&r.reason.status===409).length,1);
-   assert.equal((await store.readInteraction(a.scope,a.user,form.envelope.id)).answerRevision,1);
+   assert.equal((await row('SELECT answer_revision FROM chat_interactions WHERE id=?',form.envelope.id)).answer_revision,1);
    if(operations[0]==='save-draft')await store.mutateInteraction(a.scope,a.user,mutation(form,'cancel',1));
   }
  });
@@ -149,7 +169,8 @@ try{
   const c=await owner(),scope=structuredClone(first.form.envelope.scope);scope.accountId=c.user;scope.actorId=c.user;scope.projectId=c.project;scope.conversationId=id();scope.taskId=id();scope.originTurnId=await origin(c);
   await run('INSERT INTO chat_conversations(id,user_id) VALUES(?,?)',scope.conversationId,c.user);
   await run('INSERT INTO chat_interaction_tasks(id,user_id,conversation_id,project_id,origin_turn_id) VALUES(?,?,?,?,?)',scope.taskId,c.user,scope.conversationId,c.project,scope.originTurnId);
-  const envelope=await protocol.sealDefinition({version:1,id:id(),scope,definition:first.form.envelope.definition,createdAt:'2020-01-01T00:00:00.000Z',expiresAt:'2020-01-08T00:00:00.000Z'});
+  const clock=await row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 days') createdAt,strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day') expiresAt");
+  const envelope=await protocol.sealDefinition({version:1,id:id(),scope,definition:first.form.envelope.definition,...clock});
   await run('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',envelope.id,c.user,scope.conversationId,scope.taskId,c.project,scope.originTurnId,JSON.stringify(envelope),envelope.definitionDigest,'a'.repeat(64),envelope.createdAt,envelope.expiresAt);
   assert.equal((await store.readInteraction(c.scope,c.user,envelope.id)).state,'expired');await denies(()=>store.mutateInteraction(c.scope,c.user,mutation({envelope})));
   await assert.rejects(()=>run("UPDATE chat_interactions SET expires_at='2099-01-01T00:00:00.000Z',answer_revision=1 WHERE id=?",envelope.id),/chat_interaction_changed/);
@@ -297,6 +318,50 @@ try{
   assert.equal((await row('SELECT count(*) n FROM chat_interaction_requests WHERE user_id=?',c.user)).n,2);assert.deepEqual((await store.listInteractions(c.scope,c.user,listRequest())).items,[]);
   await denies(()=>store.readInteraction(c.scope,c.user,next.envelope.id),404);await denies(()=>store.readInteractionReceipt(c.scope,c.user,submit.requestId),404);
   assert((await (await http(c,'/api/chat/export')).json()).turns.every(t=>!t.interaction));
+ });
+ await test('explicit cancel removes copied defaults and draft payload while exact receipts still replay',async()=>{
+  const c=await owner(),{form}=await issue(c),draft=mutation(form,'save-draft');await store.mutateInteraction(c.scope,c.user,draft);const cancel=mutation(form,'cancel',1),receipt=await store.mutateInteraction(c.scope,c.user,cancel);
+  const removed=await row('SELECT envelope_json,draft_json,removed_at,removal_reason FROM chat_interactions WHERE id=?',form.envelope.id);assert.equal(removed.envelope_json,null);assert.equal(removed.draft_json,'{}');assert(removed.removed_at);assert.equal(removed.removal_reason,'discarded');
+  await denies(()=>store.readInteraction(c.scope,c.user,form.envelope.id),410);assert.deepEqual(await store.mutateInteraction(c.scope,c.user,cancel),receipt);assert.equal((await store.mutateInteraction(c.scope,c.user,draft)).requestId,draft.requestId);
+  await denies(()=>store.mutateInteraction(c.scope,c.user,{...draft,answers:{'field-1':'Changed replay'}}));await denies(()=>store.mutateInteraction(c.scope,c.user,mutation(form)),410);
+  const facts=(await (await http(c,'/api/chat/export')).json()).turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction;assert.equal(facts.state,'removed');assert.equal(facts.removal.reason,'discarded');assert.doesNotMatch(JSON.stringify(facts),/headline|Gardens|fields|default|answers/);
+ });
+ await test('inactive drafts are hidden before cleanup; latest edits and accepted snapshots have separate retention',async()=>{
+  const c=await owner(),{form}=await issue(c),definition=structuredClone(form.envelope.definition);definition.fields[0].default={value:'PRIVATE_DEFAULT_CANARY',provenance:'user'};
+  const old=await aged(c,definition),recent=await aged(c,definition,{createdDays:8,editedDays:2}),accepted=await aged(c,definition,{submitted:true,unknown:true});
+  const {maintenanceReport}=await import('../tools/report-maintenance.mjs'),report=await maintenanceReport(db),backlog=report.backlogs.find(q=>q.queue==='chat_drafts');assert.equal(backlog.count,1);assert.equal(backlog.state,'attention');assert.doesNotMatch(JSON.stringify(report),/PRIVATE_|PRIVATE_DEFAULT_CANARY/);
+  await denies(()=>store.readInteraction(c.scope,c.user,old.envelope.id),410);await denies(()=>store.readInteraction(b.scope,b.user,old.envelope.id),404);
+  assert.equal((await store.readInteraction(c.scope,c.user,recent.envelope.id)).state,'expired');assert.equal((await store.readInteraction(c.scope,c.user,accepted.envelope.id)).submission.continuation.state,'unknown');
+  const archive=await (await http(c,'/api/chat/export')).json(),oldFacts=archive.turns.find(t=>t.id===old.envelope.scope.originTurnId).interaction,recentFacts=archive.turns.find(t=>t.id===recent.envelope.scope.originTurnId).interaction;
+  assert.equal(oldFacts.state,'removed');assert.equal(oldFacts.removal.completedAt,null);assert.doesNotMatch(JSON.stringify(oldFacts),/PRIVATE_|answers|fields/);
+  assert.deepEqual(recentFacts.draft.answers,recent.request.answers);assert.equal(recentFacts.draft.answerRevision,1);assert.equal(recentFacts.draft.savedAt,recent.clock.savedAt);assert(recentFacts.observedAt);
+  const history=await (await http(c,'/api/chat/history?before=10000')).json();assert.equal(history.turns.find(t=>t.id===recent.envelope.scope.originTurnId).interaction.draft,undefined);
+  assert.equal((await retention.cleanupInteractionDrafts(db)).removed,1);assert.equal((await retention.cleanupInteractionDrafts(db)).removed,0);
+  const erased=await row('SELECT envelope_json,draft_json,removed_at,removal_reason FROM chat_interactions WHERE id=?',old.envelope.id);assert.equal(erased.envelope_json,null);assert.equal(erased.draft_json,'{}');assert(erased.removed_at);assert.equal(erased.removal_reason,'inactive');
+  assert.equal((await store.mutateInteraction(c.scope,c.user,old.request)).requestId,old.request.requestId);await denies(()=>store.mutateInteraction(c.scope,c.user,{...old.request,answers:{'field-1':'Different'}}));
+  assert.deepEqual((await store.readInteraction(c.scope,c.user,accepted.envelope.id)).submission.answers,accepted.request.answers);assert.equal((await store.readInteraction(c.scope,c.user,accepted.envelope.id)).submission.continuation.state,'unknown');
+  await assert.rejects(()=>run("UPDATE chat_interactions SET envelope_json=NULL,draft_json='{}',draft_saved_at=NULL,removed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),removal_reason='inactive',answer_revision=answer_revision+1 WHERE id=?",recent.envelope.id),/chat_interaction_changed/);
+  await assert.rejects(()=>run("UPDATE chat_interactions SET envelope_json=NULL,draft_json='{}',draft_saved_at=NULL,removed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),removal_reason='inactive',answer_revision=answer_revision+1 WHERE id=?",accepted.envelope.id),/chat_interaction_changed/);
+ });
+ await test('scheduled cleanup reports failures and removes only eligible form payloads on retry',async()=>{
+  const c=await owner(),{form}=await issue(c),old=await aged(c,form.envelope.definition);let failed=true;
+  const interrupted=interceptDatabase(db,/^UPDATE chat_interactions SET envelope_json=NULL/,async()=>{if(failed)throw Error('PRIVATE_MAINTENANCE_CANARY');});
+  await assert.rejects(()=>worker.scheduled({cron:'47 * * * *'},{...env,DB:interrupted}),/Scheduled maintenance or telemetry failed/);assert.equal((await row("SELECT status FROM maintenance_health WHERE job='chat_drafts'")).status,'failed');assert.notEqual((await row('SELECT envelope_json FROM chat_interactions WHERE id=?',old.envelope.id)).envelope_json,null);
+  failed=false;await worker.scheduled({cron:'47 * * * *'},{...env,DB:interrupted});assert.equal((await row("SELECT status FROM maintenance_health WHERE job='chat_drafts'")).status,'completed');assert.equal((await row('SELECT envelope_json FROM chat_interactions WHERE id=?',old.envelope.id)).envelope_json,null);
+  assert.equal((await store.readInteraction(c.scope,c.user,form.envelope.id)).state,'open');
+ });
+ await test('a correction receipt remains readable when its predecessor payload later expires',async()=>{
+  const c=await owner(),{form}=await issue(c),old=await aged(c,form.envelope.definition),originTurnId=await origin(c);
+  const request={originTurnId,previousInteractionId:old.envelope.id,definitionDigest:old.envelope.definitionDigest,expectedAnswerRevision:1,contentIds:['headline','section-1-text']};
+  const clock=await row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 days') createdAt,strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 days') expiresAt");
+  const envelope=await protocol.sealDefinition({version:1,id:id(),scope:{...old.envelope.scope,originTurnId},definition:old.envelope.definition,...clock}),hash=await codec.jsonDigest({originTurnId,projectId:c.project,contentIds:request.contentIds,replacement:request});
+  // A current-schema historical successor issued while the parent was retained.
+  await run("UPDATE chat_interactions SET state='superseded',answer_revision=answer_revision+1 WHERE id=?",old.envelope.id);
+  await run('UPDATE chat_interaction_tasks SET revision=1 WHERE id=?',old.envelope.scope.taskId);
+  await run('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,previous_interaction_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',envelope.id,c.user,envelope.scope.conversationId,envelope.scope.taskId,c.project,originTurnId,old.envelope.id,JSON.stringify(envelope),envelope.definitionDigest,hash,envelope.createdAt,envelope.expiresAt);
+  await retention.cleanupInteractionDrafts(db);assert.equal((await row('SELECT envelope_json FROM chat_interactions WHERE id=?',old.envelope.id)).envelope_json,null);
+  assert.equal((await store.replaceContentBrief(c.scope,c.user,request)).envelope.id,envelope.id);
+  await denies(()=>store.replaceContentBrief(c.scope,c.user,{...request,contentIds:['about-text']}));await denies(()=>store.replaceContentBrief(b.scope,b.user,request),404);
  });
  assert.equal(network,0);assert.equal((await row('SELECT count(*) n FROM chat_interaction_checks')).n,0);assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  console.log(`Chat interaction storage: ${cases} scenarios passed (${process.argv.includes('--d1')?'local D1':'SQLite'}), actual compiler/review handlers, zero inference/network calls. Authenticated HTTP/history/export checked; no UI/deployment acceptance claimed.`);

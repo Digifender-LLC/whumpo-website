@@ -1950,10 +1950,10 @@
       ],
       "scope": "owner",
       "purpose": "Issued typed definitions, draft answers, immutable submissions and continuation receipts.",
-      "currentRetention": "Current schema/source, not deployed: private definitions and latest drafts are retained; explicit cancel or submit clears the draft. Expiry ends write authority, not storage retention. Immutable submitted answers and continuation receipts survive failure. Project deletion refuses pending/unknown continuations; otherwise it cascades content but account-bound request identity/hash tombstones remain until account removal.",
+      "currentRetention": "Owner-approved LC-10, implemented in current source but not deployed: unsubmitted form payloads/defaults and drafts become unavailable seven days after the last saved edit (issuance when untouched); hourly maintenance erases up to 100 eligible payloads per pass. Explicit cancel erases its payload immediately. Minimal immutable identity/digest/request-hash metadata survives for replay protection. Submitted answers and unresolved continuations are excluded. Form authority expiry remains distinct from payload retention. Project deletion refuses pending/unknown continuations; otherwise it cascades content but request tombstones remain until account removal.",
       "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
-      "deletionAuthority": "Current scoped domain operations and database constraints. Direct receipt deletion while its account exists is refused. Account/project cascades are schema behavior, not a complete closure or restore-safe deletion workflow; unresolved outcome preservation and approved retention remain activation gates.",
-      "exportPolicy": "Current Chat history and v2 transcript export include allowlisted titles, field labels/default provenance, accepted answers and status only. No active bindings, digests, actor scope, preview links or approval controls. Unsubmitted draft export and full-account lifecycle orchestration remain open.",
+      "deletionAuthority": "Current scoped cancel and the fixed seven-day LC-10 maintenance predicate, enforced by schema constraints. Direct receipt deletion and submitted-payload erasure are refused. Account/project cascades are not a complete closure or independently restore-safe erasure workflow; broader LC policies and backup suppression remain open.",
+      "exportPolicy": "Current Chat v2 transcript export includes retained unsubmitted drafts with answer revision, saved/observed timestamps, alongside allowlisted titles, defaults, accepted answers, state and correction links. Ordinary history omits unsent draft values. Canceled/overdue payloads project only removal metadata, before and after physical cleanup. No active bindings, digests, actor scope, preview URLs or approval controls. Whole-account export remains separate.",
       "references": [
         "docs/data-protection.md",
         "docs/roadmap/backlog.json",
@@ -1961,7 +1961,8 @@
         "src/chat-interactions/store.ts",
         "src/chat-interactions/history.ts",
         "src/chat-interactions/continuation.ts",
-        "docs/chat-interactions.md"
+        "docs/chat-interactions.md",
+        "src/chat-interactions/retention.ts"
       ],
       "storageStatus": "current",
       "protection": {
