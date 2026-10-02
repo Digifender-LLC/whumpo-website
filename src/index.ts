@@ -57,6 +57,7 @@ import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHos
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
 import {ConnectionVaultError} from './connection-vault';
 import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubInstallations} from './github-connection';
+import {githubGrantReviews,reviewGitHubGrant,confirmGitHubGrant,cancelGitHubGrant} from './github-grant-revocation';
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
 import { StorageLimitError } from './storage-budget';
@@ -409,6 +410,17 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
   }
   if (method === "POST" && pathname === "/api/connections/github/disconnect") return json(await disconnectGitHub(env.DB,user.id,githubConfig(env)));
+  if(method==='GET'&&pathname==='/api/connections/github/grant-reviews')return json(await githubGrantReviews(env.DB,user.id));
+  if(method==='POST'&&pathname==='/api/connections/github/grant-reviews'){
+    const data=await body(request);if(!data||Object.keys(data).join(',')!=='id'||typeof data.id!=='string')return error(400,'Choose a unique GitHub access review ID.');
+    return json(await reviewGitHubGrant(env.DB,user.id,data.id,githubConfig(env)));
+  }
+  const grantReview=pathname.match(/^\/api\/connections\/github\/grant-reviews\/([0-9a-f-]{36})\/(confirm|cancel)$/);
+  if(method==='POST'&&grantReview){
+    if(grantReview[2]==='cancel')return json(await cancelGitHubGrant(env.DB,user.id,grantReview[1]));
+    const data=await body(request);if(!data||Object.keys(data).join(',')!=='confirmation'||data.confirmation!=='REVOKE_APP_ACCESS')return error(400,'Explicitly confirm the reviewed app-wide GitHub access removal.');
+    return json(await confirmGitHubGrant(env.DB,user.id,grantReview[1],data.confirmation,githubConfig(env),transport));
+  }
   if (method === "GET" && pathname === "/api/connections/github/installations") return json(await githubInstallations(env.DB,user.id,githubConfig(env)));
   if (method === "GET" && pathname === "/api/connections/github/repositories") {
     const params=new URL(request.url).searchParams;

@@ -152,6 +152,7 @@ WHEN NEW.token_id!=OLD.token_id OR NEW.user_id!=OLD.user_id OR NEW.client_id!=OL
  OR (NEW.access_revoked_at IS NOT OLD.access_revoked_at AND (OLD.access_revoked_at IS NOT NULL OR NEW.access_revoked_at IS NULL))
 BEGIN SELECT RAISE(ABORT,'github_refresh_immutable'); END;
 CREATE TRIGGER github_refresh_retained BEFORE DELETE ON github_refresh_custody
+WHEN NOT EXISTS(SELECT 1 FROM github_grant_revocations a WHERE a.state='revoked' AND a.user_id=OLD.user_id AND a.client_id=OLD.client_id AND a.github_user_id=OLD.github_user_id AND OLD.token_id IN (SELECT value FROM json_each(a.token_ids)))
 BEGIN SELECT RAISE(ABORT,'github_refresh_grant_evidence_required'); END;
 CREATE TRIGGER github_refresh_no_reactivation BEFORE UPDATE OF state ON github_token_vault
 WHEN NEW.state='active' AND EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=NEW.id AND access_revoked_at IS NOT NULL)
@@ -172,6 +173,48 @@ CREATE TRIGGER github_connection_refresh_identity_update BEFORE UPDATE ON github
 WHEN EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=NEW.active_token_id)
  AND NOT EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=NEW.active_token_id AND user_id=NEW.user_id AND github_user_id=NEW.github_user_id)
 BEGIN SELECT RAISE(ABORT,'github_connection_refresh_identity'); END;
+
+-- An explicitly reviewed app-wide effect. Terminal metadata survives deletion
+-- of the exact retired credential set; unknown dispatch has no TTL/retry escape.
+CREATE TABLE github_grant_revocations (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ client_id TEXT NOT NULL,
+ github_user_id TEXT NOT NULL,
+ login TEXT NOT NULL,
+ token_id TEXT NOT NULL,
+ token_ids TEXT NOT NULL CHECK(json_valid(token_ids) AND json_type(token_ids)='array' AND json_array_length(token_ids) BETWEEN 1 AND 10 AND length(token_ids)<=1024),
+ state TEXT NOT NULL CHECK(state IN ('review','dispatching','uncertain','revoked','cancelled')),
+ created_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ dispatched_at TEXT,
+ settled_at TEXT,
+ http_status INTEGER,
+ CHECK((state IN ('review','cancelled') AND dispatched_at IS NULL AND settled_at IS NULL AND http_status IS NULL) OR (state IN ('dispatching','uncertain') AND dispatched_at IS NOT NULL AND settled_at IS NULL AND http_status IS NULL) OR (state='revoked' AND dispatched_at IS NOT NULL AND settled_at IS NOT NULL AND http_status=204))
+);
+CREATE UNIQUE INDEX github_grant_pending_client ON github_grant_revocations(client_id) WHERE state IN ('dispatching','uncertain');
+CREATE TRIGGER github_grant_review BEFORE INSERT ON github_grant_revocations
+WHEN NEW.state!='review' OR (SELECT COUNT(*) FROM github_grant_revocations WHERE user_id=NEW.user_id)>=100
+ OR NOT EXISTS(SELECT 1 FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id JOIN github_refresh_custody r ON r.token_id=t.id WHERE c.user_id=NEW.user_id AND t.user_id=NEW.user_id AND t.state='active' AND t.expires_at>NEW.created_at AND t.id=NEW.token_id AND r.client_id=NEW.client_id AND r.github_user_id=NEW.github_user_id AND c.github_user_id=NEW.github_user_id AND c.login=NEW.login)
+BEGIN SELECT RAISE(ABORT,'github_grant_review'); END;
+CREATE TRIGGER github_grant_identity BEFORE UPDATE ON github_grant_revocations
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.client_id!=OLD.client_id OR NEW.github_user_id!=OLD.github_user_id OR NEW.login!=OLD.login OR NEW.token_id!=OLD.token_id OR NEW.token_ids!=OLD.token_ids OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at
+ OR NOT ((OLD.state='review' AND NEW.state IN ('dispatching','cancelled')) OR (OLD.state='dispatching' AND NEW.state IN ('uncertain','revoked')) OR (OLD.state='uncertain' AND NEW.state='revoked'))
+ OR (OLD.dispatched_at IS NOT NULL AND NEW.dispatched_at IS NOT OLD.dispatched_at)
+BEGIN SELECT RAISE(ABORT,'github_grant_immutable'); END;
+CREATE TRIGGER github_grant_retained BEFORE DELETE ON github_grant_revocations
+BEGIN SELECT RAISE(ABORT,'github_grant_receipt_required'); END;
+CREATE TRIGGER github_grant_dispatch BEFORE UPDATE OF state ON github_grant_revocations
+WHEN NEW.state='dispatching' AND (
+ NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+ OR NOT EXISTS(SELECT 1 FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id JOIN github_refresh_custody r ON r.token_id=t.id WHERE c.user_id=NEW.user_id AND c.github_user_id=NEW.github_user_id AND t.id=NEW.token_id AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND r.client_id=NEW.client_id AND r.github_user_id=NEW.github_user_id)
+ OR NEW.token_ids!=(SELECT json_group_array(token_id) FROM (SELECT token_id FROM github_refresh_custody WHERE user_id=NEW.user_id AND client_id=NEW.client_id AND github_user_id=NEW.github_user_id ORDER BY token_id))
+ OR EXISTS(SELECT 1 FROM github_refresh_custody WHERE client_id=NEW.client_id AND (github_user_id IS NULL OR (github_user_id=NEW.github_user_id AND user_id!=NEW.user_id)))
+ OR EXISTS(SELECT 1 FROM connection_oauth_exchanges WHERE provider='github' AND client_id=NEW.client_id)
+ OR EXISTS(SELECT 1 FROM github_token_vault t WHERE t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=t.id))
+ OR EXISTS(SELECT 1 FROM github_revocation_claims WHERE token_id IN (SELECT value FROM json_each(NEW.token_ids)))
+ )
+BEGIN SELECT RAISE(ABORT,'github_grant_scope_changed'); END;
 
 CREATE TABLE github_backups (
  id TEXT PRIMARY KEY,
@@ -3685,6 +3728,12 @@ WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE active_key=NEW.key_id 
 BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
 CREATE TRIGGER connection_oauth_exchange_identity BEFORE UPDATE ON connection_oauth_exchanges
 BEGIN SELECT RAISE(ABORT,'connection_exchange_identity'); END;
+CREATE TRIGGER github_grant_exchange_fence BEFORE INSERT ON connection_oauth_exchanges
+WHEN NEW.provider='github' AND EXISTS(SELECT 1 FROM github_grant_revocations WHERE client_id=NEW.client_id AND state IN ('dispatching','uncertain'))
+BEGIN SELECT RAISE(ABORT,'github_grant_in_progress'); END;
+CREATE TRIGGER github_grant_cleanup_fence BEFORE INSERT ON github_revocation_claims
+WHEN EXISTS(SELECT 1 FROM github_grant_revocations WHERE state IN ('dispatching','uncertain') AND NEW.token_id IN (SELECT value FROM json_each(token_ids)))
+BEGIN SELECT RAISE(ABORT,'github_grant_in_progress'); END;
 -- Metadata from the exact dispatch response. No code, credential, response body
 -- or provider error description is retained. A restored receipt is not independent evidence.
 CREATE TABLE connection_oauth_outcomes (

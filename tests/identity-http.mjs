@@ -54,9 +54,9 @@ try{
  const legacy=new Browser();legacy.cookies.set('whumpo_session','f'.repeat(64));assert.equal(await legacy.state(),null);await assert.rejects(()=>workspaceIdentity(new Request('https://whumpo.com/api/profile',{headers:{cookie:legacy.header()}}),env),e=>e.code==='proof_required');cases++;
  limited=true;await b.no('login/options',{version:1},429);assert.equal(await b.state(),null);limited=false;apiLimited=true;await b.no('state',{version:1},429);apiLimited=false;
  phase='enrollment and strict authority';
- for(const path of ['/profile','/projects','/chat']){assert.equal((await workspaceCall(b,path)).status,401);cases++;}
+ for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(b,path)).status,401);cases++;}
  const f=await signup(b),firstState=await b.state();assert.equal(firstState.purpose,'enrollment');assert(!b.cookies.has(identityCookies.session));assert(!b.cookies.has(identityCookies.challenge));
- for(const path of ['/profile','/projects','/chat']){assert.equal((await workspaceCall(b,path)).status,401);cases++;}
+ for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(b,path)).status,401);cases++;}
  await assert.rejects(()=>workspaceIdentity(new Request('https://whumpo.com/api/profile',{headers:{cookie:b.header()}}),env),e=>e.code==='proof_required');cases++;
  const duplicate=await b.call('state',{version:1},{headers:{origin:'https://whumpo.com','content-type':'application/json',cookie:`${b.header()}; ${b.header()}`}});assert.equal(duplicate.status,400);cases++;
  const ambiguous=new Browser();ambiguous.cookies=new Map(b.cookies);ambiguous.cookies.set(identityCookies.session,'f'.repeat(64));await ambiguous.no('state',{version:1},400);
@@ -68,6 +68,15 @@ try{
  const profile=await workspaceCall(b,'/profile');assert.equal(profile.status,200);const publicProfile=await profile.json();assert.equal(publicProfile.onboardingComplete,false);assert(!Object.hasOwn(publicProfile,'passwordEnabled'));
  assert.equal((await workspaceCall(b,'/chat')).status,409);assert.equal((await workspaceCall(b,'/workspace/dashboard')).status,409);
  for(const path of ['/auth/login','/auth/register','/auth/recover','/auth/passkeys/login/options','/auth/logout']){assert.equal((await workspaceCall(b,path,{})).status,404);cases++;}
+ const accessReviews=await workspaceCall(b,'/connections/github/grant-reviews');assert.equal(accessReviews.status,200);assert.deepEqual(await accessReviews.json(),{reviews:[]});cases++;
+ for(const [path,payload,status] of [
+  ['/connections/github/grant-reviews',{id:id(),extra:true},400],
+  ['/connections/github/grant-reviews',{id:id()},503],
+  ['/connections/github/grant-reviews/'+id()+'/confirm',{confirmation:'yes'},400],
+  ['/connections/github/grant-reviews/'+id()+'/confirm',{confirmation:'REVOKE_APP_ACCESS'},404],
+  ['/connections/github/grant-reviews/'+id()+'/cancel',{},404],
+ ]){assert.equal((await workspaceCall(b,path,payload)).status,status);cases++;}
+ const crossOriginGrant=await handleIdentityRequest(new Request('https://whumpo.com/api/connections/github/grant-reviews',{method:'POST',headers:{cookie:b.header(),origin:'https://elsewhere.invalid','content-type':'application/json'},body:JSON.stringify({id:id()})}),env);assert.equal(crossOriginGrant.status,403);cases++;
  const ordinary=b.cookies.get(identityCookies.session);await workspaceIdentity(new Request('https://whumpo.com/api/profile',{headers:{cookie:b.header()}}),env);
  const expiredGrant=new Browser();expiredGrant.cookies.set(identityCookies.grant,held);await expiredGrant.no('state',{version:1},401);
  phase='recovery and lost replies';
@@ -75,7 +84,7 @@ try{
  const stillOrdinary=new Browser();stillOrdinary.cookies.set(identityCookies.session,ordinary);assert.equal((await stillOrdinary.state()).purpose,'workspace');
  let s=await b.state();await b.ok('recovery/review',{...b.intent(s),mode:'all',lostIds:s.keys.map(k=>k.id)});const replacement=await b.kit();s=await b.state();const intent={...b.intent(s),offerId:replacement.offer.id,generation:replacement.offer.generation,reviewId:s.recovery.review.id,confirmation:'secure-account'};
  const lostReply=await b.ok('recovery/secure',intent);assert(lostReply.receipt);
- for(const path of ['/profile','/projects','/chat']){assert.equal((await workspaceCall(stillOrdinary,path)).status,401);cases++;}await stillOrdinary.no('state',{version:1},401);
+ for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(stillOrdinary,path)).status,401);cases++;}await stillOrdinary.no('state',{version:1},401);
  b.cookies.clear();await b.ok('recovery/start',{version:1,email:f.email,key:replacement.key});s=await b.state();assert.equal(s.recovery.status,'secured');assert.equal(s.keys.length,0);assert.equal((await b.ok('recovery/secure',intent)).receipt.operationId,intent.requestId);
  await b.no('recovery/start',{version:1,email:f.email,key:kit.key},401);
  await b.add('Replacement one');const replacementKey=await b.add('Replacement two');s=await b.state();assert.equal(s.recovery.canComplete,true);
