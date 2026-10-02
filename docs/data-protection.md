@@ -2,6 +2,8 @@
 
 **WH-116 / [#81](https://github.com/zemdregon/whumpo/issues/81), October 2, 2026 UTC; decision source review `bfe03a0`, with the WH-117A source extension below.** This decision extends the one [lifecycle catalogue](data-lifecycle.json). It records current controls and the required WH-117 implementation. It does not deploy encryption, activate a provider, approve retention windows or claim full backup restoration. All environments remain private testing environments.
 
+Current source acceptance and the pending coordinated test release are tracked in [the protection candidate audit](protection-candidate.md). Earlier dated checkpoints below retain their historical scope; the audit identifies completed source requirements and remaining release/operational gates.
+
 ## Decision
 
 Retain managed D1/R2 protection, current identity/tenant checks, private object serving and narrowly selected processing. Strengthen the existing provider-credential vault with a current key-versioned format, controlled rotation and isolated restore checks. Do not add blanket application encryption to every content column or require customers to unlock a vault during ordinary work. For the current server-readable product, broad additional encryption would leave the authorized processing Worker able to read the same data while adding key-loss and recovery complexity. Restricting who can invoke those reads, minimizing what leaves the platform and preserving current authority are necessary controls regardless of encryption.
