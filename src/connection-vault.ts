@@ -1,7 +1,7 @@
 const encoder=new TextEncoder();
 export const CONNECTION_VAULT_FORMAT='wv2';
 const keyId=/^[a-z][a-z0-9-]{0,31}$/;
-const contextPattern=/^whumpo:(github|cloudflare):(token|pkce):[A-Za-z0-9_-]{1,128}:[A-Za-z0-9_-]{1,128}$/;
+const contextPattern=/^whumpo:(?:(?:github|cloudflare):(?:token|pkce)|github:refresh):[A-Za-z0-9_-]{1,128}:[A-Za-z0-9_-]{1,128}$/;
 const maxBytes=8192;
 type Keyring={version:2;active:string;keys:{id:string;secret:string}[]};
 export class ConnectionVaultError extends Error{

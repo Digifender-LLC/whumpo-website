@@ -22,6 +22,7 @@ function requireCheck(value,code){if(!value)throw new Hold(code);}
 const limits={rowsPerTable:10000,totalBytes:64*1024*1024,evidenceBytes:262144,events:512};
 const sourceRoot=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const stores=[
+ ['github_refresh_custody','ciphertext','token_id','github','refresh'],
  ['github_token_vault','ciphertext','id','github','token'],
  ['cloudflare_token_vault','ciphertext','id','cloudflare','token'],
  ['github_oauth_states','verifier_ciphertext','state_hash','github','pkce'],
@@ -241,6 +242,7 @@ async function checkKeys(state,contract,keyring){
   credentials++;
  }
  requireCheck(state.rows.get('connection_oauth_exchanges').length===0,'uncertain-effect');
+ requireCheck(!state.rows.get('github_refresh_custody').some(r=>r.access_revoked_at!==null||state.rows.get('github_token_vault').some(t=>t.id===r.token_id&&t.state==='revoking')),'uncertain-effect');
  requireCheck(state.rows.get('github_revocation_claims').length===0&&!state.rows.get('cloudflare_token_vault').some(row=>row.revoke_attempt!==null),'uncertain-effect');
  requireCheck(state.rows.get('connection_rotation_guards').length===0&&!state.rows.get('connection_key_rotations').some(r=>r.state==='running'),'key-rotation-unsettled');
  return {keyIds:metadata.keyIds.slice().sort(),credentials};

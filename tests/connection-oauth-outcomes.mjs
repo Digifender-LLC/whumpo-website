@@ -20,6 +20,13 @@ try{
   const reasons=provider==='github'?['incorrect_client_credentials','redirect_uri_mismatch','bad_verification_code','unverified_user_email']:['invalid_request','invalid_client','invalid_grant','unauthorized_client','unsupported_grant_type','invalid_scope'];
   for(const reason of reasons){const value=await m.readOAuthTokenResponse(provider,json({error:reason,error_description:privateText},provider==='github'?200:400));assert.equal(value.kind,'rejected');assert.equal(value.settlement.reason,reason);assert.ok(!JSON.stringify(value).includes(privateText));}
   for(const response of [rejectResponse(provider,{access_token:null}),rejectResponse(provider,{refresh_token:privateText}),rejectResponse(provider,{unknown:'value'}),json({error:'unknown_error'}),json({error:reasons[0]},503),json({error:reasons[0]},429),raw('{"error":"bad_verification_code","error":"bad_verification_code"}'),raw('{"error":"bad_verification_code","\\u0065rror":"bad_verification_code"}'),raw('{"error":"bad_verification_code",}'),raw('{"error":'+privateText),raw('x'.repeat(16385)),new Response('<html>error</html>'),new Response(null,{status:302})])await refused(m.readOAuthTokenResponse(provider,response));
+  for(const body of [
+   '{"access_token":"ghu_first","access_token":"ghu_second"}',
+   '{"access_token":"ghu_synthetic","refresh_token":"ghr_first","refresh_token":"ghr_second"}',
+   '{"access_token":"ghu_synthetic","refresh_token":"ghr_first","\\u0072efresh_token":"ghr_second"}',
+  ])await refused(m.readOAuthTokenResponse(provider,raw(body)));
+  const nested=await m.readOAuthTokenResponse(provider,raw('{"access_token":"synthetic","extra":{"refresh_token":"nested"},"note":"refresh_token: \\"quoted\\""}'));
+  assert.equal(nested.kind,'token');
   for(const scenario of ['rejected','signed-out-rejected','lost-settlement-ack','settlement-rollback','unknown','mixed-response','revoked','revocation-failed',...(provider==='github'?['refresh-revocation-unproven']:[])]){
    const owner=await workspaceFixture(db,m),scope=await owner.scope();await paidPlan(db,owner.account,'business');
    const config={clientId:'synthetic-client',clientSecret:'synthetic-secret',appId:123,slug:'fixture',key};

@@ -7,6 +7,25 @@ const errors={
 };
 const unavailable=()=>new Error('OAuth token response could not be classified.');
 
+// JSON.parse accepts duplicate names by discarding earlier values. A discarded
+// refresh credential would escape custody. Scan top-level keys after syntax
+// validation; quoted content and nested values cannot masquerade as field names.
+function uniqueResponseFields(text:string){
+ const names=new Set<string>();let depth=0;
+ for(let i=0;i<text.length;i++){
+  const c=text[i];
+  if(c==='{'||c==='['){depth++;continue;}
+  if(c==='}'||c===']'){depth--;continue;}
+  if(c!=='"')continue;
+  const start=i++;
+  while(i<text.length&&text[i]!=='"'){if(text[i]==='\\')i++;i++;}
+  let next=i+1;while(/\s/.test(text[next]??'')&&next<text.length)next++;
+  if(depth===1&&text[next]===':'){
+   const name:string=JSON.parse(text.slice(start,i+1));if(names.has(name))throw unavailable();names.add(name);
+  }
+ }
+}
+
 // A denial has only string fields. Parse each pair so duplicate/escaped names,
 // credentials mixed with errors, and unknown fields cannot be hidden by JSON.parse.
 function denialFields(text:string){
@@ -42,6 +61,7 @@ export async function readOAuthTokenResponse(provider:OAuthProvider,response:Res
   })()]);
   const data:unknown=JSON.parse(text);
   if(!data||typeof data!=='object'||Array.isArray(data))throw unavailable();
+  uniqueResponseFields(text);
   if(Object.hasOwn(data,'error')){
    const fields=denialFields(text),reason=fields.error;
    // GitHub documents its JSON error envelope; Cloudflare uses the RFC 6749
