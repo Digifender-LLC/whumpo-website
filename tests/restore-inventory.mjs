@@ -53,10 +53,11 @@ try{
  assert.equal((await inspect(repaired,current,inventory)).status,'verified','Later suppression supersedes earlier record-current evidence');
  // Restart the reader and a completely new process. Persisted permissions and
  // tombstones, rather than an in-memory fixture map, govern verification.
- const reader=await open(null);await held(archive,manifest,reader,'suppressed-record');
+ const offline=await open(null);await held(archive,manifest,offline,'independent-evidence');
+ const reader=await open();await held(archive,manifest,reader,'suppressed-record');
  assert.equal((await inspect(repaired,current,reader)).status,'verified');
- await reject(()=>reader.observe({operationId:id(),selection:{kind:'owner-erased',ownerId:'absent'}}));
- await reject(()=>reader.withdrawArchive({snapshotId:current.snapshotId}));
+ await reject(()=>offline.observe({operationId:id(),selection:{kind:'owner-erased',ownerId:'absent'}}));
+ await reject(()=>offline.withdrawArchive({snapshotId:current.snapshotId}));
  const run=spawnSync(process.execPath,['tools/restore-inventory.mjs','inspect',inventoryFile,streamId],{encoding:'utf8'});
  assert.equal(run.status,0,run.stderr);const report=JSON.parse(run.stdout);assert.equal(report.currentSequence,2);assert.equal(report.archives,2);assert.equal(report.servingAllowed,false);
  assert.ok(!run.stdout.includes(owner.account));assert.ok(!run.stdout.includes(owner.authority));assert.ok(!run.stdout.includes(directory));
