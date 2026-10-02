@@ -1,9 +1,8 @@
 // Synthetic planning setup for tests whose focus is the downstream lifecycle.
 // The connected planner suite separately verifies missing/foreign/stale plan rejection.
-import {build} from 'esbuild';
-const bundle=await build({entryPoints:['src/composition-plans.ts'],bundle:true,format:'esm',platform:'node',write:false});
-const {prepareCompositionPlan}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+import {currentSiteFixtureHandlers} from '../current-site-fixture.mjs';
 export async function fixtureExtensionPlan(db,user,project,turn,scope='custom.computation',baseVersionId){
+ const {compositionPlans:{prepareCompositionPlan}}=await currentSiteFixtureHandlers();
  const existing=await db.prepare('SELECT id FROM composition_plans WHERE id=? AND user_id=? AND project_id=?').bind(turn,user,project).first();
  if(existing)return turn;
  if(!baseVersionId)baseVersionId=(await db.prepare('SELECT id FROM backend_versions WHERE project_id=? ORDER BY created_at DESC,id DESC LIMIT 1').bind(project).first())?.id;
