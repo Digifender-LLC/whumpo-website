@@ -32,7 +32,7 @@ The operator report labels an observed run `stalled` after 15 minutes and a sche
 
 ## Backlogs and recovery
 
-The report covers **28 queues**, including expired GitHub staging leases and visitor deletion reviews. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
+The report covers **29 queues**, including expired GitHub staging leases, visitor deletion reviews and unresolved OAuth exchanges. Exchanges older than ten minutes require attention; the age threshold never expires an uncertain provider outcome or authorizes key activation. This new queue is current-source only until the WH-117 coordinated test cutover. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
 
 | Group | Covered work | Attention rule |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ Exit codes: `0` means the covered observations do not currently require attentio
 
 ## Acceptance and WH-006 completion
 
-`node tests/maintenance.mjs` initializes the complete current schema in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 28 queries against the current schema, four receipt families, exact new revocation clocks, missing/unknown telemetry, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use, health budgets and expired GitHub staging; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
+`node tests/maintenance.mjs` initializes the complete current schema in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 29 queries against the current schema, four receipt families, exact new revocation clocks, missing/unknown telemetry, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use, health budgets and expired GitHub staging; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
 
 The previously outstanding natural daily execution evidence is now recorded below alongside the first hourly run. WH-006 acceptance is complete; wider incident alerting and unresolved-operation remediation remain separate work. The backlog and recovery-pointer coverage listed above is implemented; historical timestamps absent from source records remain explicitly unknown. No CMS functional testing or new activation is authorized by this inventory. Monitoring/alert delivery is not installed.
 

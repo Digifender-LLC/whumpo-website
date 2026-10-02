@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -14,6 +14,7 @@ function provider(){const p={records:[],posts:0,lose:false,async send(url,init){
 const review=(a,p,id=crypto.randomUUID(),connection=scope(a.user))=>reviewTXT(connection,a.user,id,a.claim,zone,config,p.send);
 const confirm=(a,p,id,connection=scope(a.user))=>confirmDNS(connection,a.user,id,config,p.send);
 try{
+ await initializeFixtureKeys(db,config.key);
  const owner=await account(),other=await account(),p=provider();const r=await review(owner,p);assert.equal(r.state,'review');assert.equal(p.posts,0);assert.equal((await listDNSActions(scope(other.user),other.user)).actions.length,0);await assert.rejects(confirm(other,p,r.id),{status:404});await assert.rejects(reviewTXT(scope(other.user),other.user,crypto.randomUUID(),owner.claim,zone,config,p.send),{status:404});await assert.rejects(reviewTXT(scope(owner.user),owner.user,r.id,other.claim,zone,config,p.send),{status:409});
  assert.equal((await confirm(owner,p,r.id)).state,'applied');assert.equal((await confirm(owner,p,r.id)).state,'applied');assert.equal(p.posts,1);assert.equal((await db.prepare("SELECT COUNT(*) n FROM activity_events WHERE id=?").bind('cf-dns:'+r.id).first()).n,1);assert.equal((await db.prepare('SELECT verified_at FROM domain_claims WHERE id=?').bind(owner.claim).first()).verified_at,null);
  const already=await review(owner,p);assert.equal((await confirm(owner,p,already.id)).state,'unchanged');assert.equal(p.posts,1);

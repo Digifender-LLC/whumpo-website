@@ -1149,11 +1149,13 @@
         "github_revocation_health",
         "cloudflare_token_vault",
         "cloudflare_oauth_states",
-        "cloudflare_revocation_health"
+        "cloudflare_revocation_health",
+        "connection_oauth_exchanges",
+        "connection_rotation_guards"
       ],
       "scope": "owner",
       "purpose": "Customer-authorized provider access and durable credential revocation.",
-      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely.",
+      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction.",
       "proposedRetention": "Cancel callbacks/new consent on closure; revoke credentials before deleting ciphertext/key access. Keep unresolved revocation work in isolated minimal closure records, without preserving unrelated customer content.",
       "deletionAuthority": "Customer disconnect/closure authorizes access revocation, not deleting repositories/zones. Operator reconciles failed revocation.",
       "exportPolicy": "Provider names, customer connection status and selected resource metadata only. Never tokens, ciphertext, PKCE verifier, auth state or encryption material.",
@@ -1163,7 +1165,9 @@
         "docs/maintenance.md",
         "src/connection-vault.ts",
         "docs/data-protection.md",
-        "docs/connection-key-lifecycle.md"
+        "docs/connection-key-lifecycle.md",
+        "src/connection-rotation.ts",
+        "src/connection-write-policy.ts"
       ],
       "storageStatus": "current",
       "protection": {
@@ -1180,7 +1184,7 @@
           "OAuth PKCE/token exchange, current scoped provider calls and recorded read-only uncertain recovery; no credential in model context"
         ],
         "remainingExposure": [
-          "Authorized Worker plus a retained exact key can decrypt tokens. Current key IDs do not yet provide managed storage rotation or key-retirement evidence; provider revocation remains an external outcome."
+          "Authorized Worker plus the retained exact key can decrypt tokens. Local fenced rotation does not establish independent key custody, permitted restore admission or deployed cutover. Unknown provider outcomes retain recovery obligations."
         ],
         "decision": "extend-key-lifecycle",
         "rationale": "Database-only exposure must not supply reusable provider access; extend the existing authenticated vault, not customer unlock UX.",
@@ -1654,11 +1658,15 @@
         "site_health_budget",
         "site_traffic_metadata",
         "maintenance_health",
-        "cms_platform_deploy_lock"
+        "cms_platform_deploy_lock",
+        "connection_key_registry",
+        "connection_key_policy",
+        "connection_key_rotations",
+        "connection_rotation_batches"
       ],
       "scope": "platform",
       "purpose": "Shared product policy, aggregate counters and operator coordination/health.",
-      "currentRetention": "Shared singleton/period metadata; health budget older than 62 days is pruned. No per-customer deletion authority.",
+      "currentRetention": "Shared singleton/period metadata; health budget older than 62 days is pruned. No per-customer deletion authority. Key identities, policy revisions and aggregate rotation receipts are operator records without plaintext or owner identifiers; key identity deletion is blocked pending independent custody/restore proof.",
       "proposedRetention": "Retain platform configuration and bounded aggregate operating records; never put raw personal data or credentials into these global rows.",
       "deletionAuthority": "Operator maintenance only; account closure never deletes shared platform resources or policy.",
       "exportPolicy": "Only applicable public plan/policy version; no internal aggregate costs, locks or cross-account state.",
@@ -1666,7 +1674,9 @@
         "src/maintenance.ts",
         "tools/maintenance-inventory.mjs",
         "docs/maintenance.md",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "src/connection-rotation.ts",
+        "src/connection-write-policy.ts"
       ],
       "storageStatus": "current",
       "protection": {
@@ -1699,7 +1709,7 @@
       "scope": "project",
       "purpose": "Versioned brand assets, shared styles and reusable sections.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -1741,7 +1751,7 @@
       "scope": "mixed",
       "purpose": "Expiring accountless preview comments and guest-link authority.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -1783,7 +1793,7 @@
       "scope": "project",
       "purpose": "Private lead stages, notes and due dates derived from admitted submissions.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -1825,7 +1835,7 @@
       "scope": "owner",
       "purpose": "Bounded external mailbox/calendar/CRM content and reviewed action receipts.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -1867,7 +1877,7 @@
       "scope": "owner",
       "purpose": "Issued typed definitions, draft answers, immutable submissions and continuation receipts.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -1909,7 +1919,7 @@
       "scope": "project",
       "purpose": "Private release candidates, environments and exact promotion receipts.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -1951,7 +1961,7 @@
       "scope": "mixed",
       "purpose": "Membership, role and approval relationships between accounts and workspaces.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -1993,7 +2003,7 @@
       "scope": "mixed",
       "purpose": "Exact domain intent, actor/resource pins and durable delivery/recovery metadata. WH-052 supplies the shared decision; the first implementing domain registers its exact journal/outbox storage here, with later domains extending that same contract.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -2092,7 +2102,7 @@
         "account": "Current signed-in/recovered identity can access only retained data under present ownership and policy; account recovery is not content reconstruction.",
         "content": "Authorized provider adapter can decrypt only the exact owner/provider/purpose/record context using the platform-held key; recovery kit does not reconstruct it.",
         "backup": "Data backups do not contain the Worker key. DP-03/04 require separately protected current key custody and matching key IDs for every admitted restore source.",
-        "rotation": "Current source has a wv2 envelope with authenticated key IDs and active/retained key selection. WH-117B still requires atomic stale-writer fencing and resumable CAS rotation before any key retirement; source format support is not operational rotation.",
+        "rotation": "Current source has authenticated wv2 key IDs, immutable material identity, atomic forward-only write fencing, durable OAuth exchange holds and bounded CAS rotation/readback. SQLite/local D1 acceptance is recorded in the key-lifecycle contract. Independent restore/custody and coordinated deployment remain WH-117C/D; live zero-reference counts never authorize key retirement.",
         "missingKey": "Unseal/configuration fails; retained encrypted revocation obligations must stay visible. Do not reconnect, mark remote revocation complete, or use plaintext automatically.",
         "restore": "Current schema and independent revocation/deletion/withdrawal evidence must be reconciled before serving or dispatch. Restored receipts create no authority."
       },

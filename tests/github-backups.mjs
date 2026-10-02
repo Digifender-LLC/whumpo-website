@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {createFixtureProject,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
@@ -14,6 +14,7 @@ const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug
 async function account(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
 const denied=async()=>{throw Error('Unexpected network');};
 try{
+ await initializeFixtureKeys(db,config.key);
  const user=await account(),other=await account(),token=crypto.randomUUID();
  await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(token,user,await seal(config.key,`whumpo:github:token:${user}:${token}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
  await db.prepare('INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) VALUES(?,?,?,?,?)').bind(user,'44','test',token,now).run();
@@ -64,7 +65,7 @@ try{
  const request=(path,method='GET',authenticated=true,origin='https://whumpo.com')=>worker.fetch(new Request('https://whumpo.com/api'+path,{method,headers:{...(authenticated?{cookie:'__Host-whumpo_session='+session}:{}),origin,'content-type':'application/json'},...(method==='POST'?{body:'{}'}:{})}),env);
  assert.equal((await request('/github/backups','GET',false)).status,401);assert.deepEqual(await(await request('/github/backups')).json(),{backups:[]});
  assert.equal((await request('/github/backups/'+r.id+'/confirm','POST')).status,404);assert.equal((await request('/github/backups/review','POST',true,'https://evil.test')).status,403);assert.equal((await request('/github/backups/review','POST')).status,400);
- reset();const expiry=await review();await db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE id=?").bind(token).run();await assert.rejects(()=>confirm(expiry.id));assert.equal(writes,5);
+ reset();const expiry=await review();await assert.rejects(db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE id=?").bind(token).run(),/github_vault_immutable/);await db.prepare("UPDATE github_token_vault SET state='revoking' WHERE id=?").bind(token).run();await assert.rejects(()=>confirm(expiry.id));assert.equal(writes,5);
  // Local history remains readable when provider authorization has expired/disconnected.
  await db.prepare('UPDATE github_connections SET active_token_id=NULL WHERE user_id=?').bind(user).run();
  const ownerSession=identities.get(user).token;

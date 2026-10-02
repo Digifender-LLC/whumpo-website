@@ -1,3 +1,4 @@
+import {sealConnectionWrite} from './connection-write-policy';
 import {assertWorkspace,workspacePrincipal,prepareOAuthCustody} from './workspace-identity/admission';
 import {hashToken,newSessionToken} from './security';
 import {seal,unseal,connectionKeyringMetadata} from './connection-vault';
@@ -57,9 +58,10 @@ export async function connectionStatus(db:D1Database,userId:string,config:GitHub
  return {github:{enabled:!!config,inclusion,connected,expired:!!config&&c?.state==='active'&&!!c.expires_at&&c.expires_at<=new Date().toISOString(),login:c?.login??null,expiresAt:c?.expires_at??null,revocationPending:!!pending?.n,installURL:config&&inclusion.read?'https://github.com/apps/'+config.slug+'/installations/new':null,backupEnabled:connected&&inclusion.read},cloudflare:{enabled:false,connected:false}};
 }
 export async function startGitHub(db:D1Database,userId:string,configuration:GitHubConfig|undefined){
+ if(await db.prepare("SELECT 1 FROM connection_oauth_exchanges WHERE user_id=? AND provider='github'").bind(userId).first())throw new ConnectionError(409,'A previous connection is awaiting provider recovery.');
  const config=required(configuration),scope=connectionFeature(userId,'github',null,'connect'),gate=featurePredicate(db,scope);await requireFeature(db,scope);await db.prepare('DELETE FROM github_token_vault WHERE user_id=? AND expires_at<=?').bind(userId,new Date().toISOString()).run();const count=await db.prepare('SELECT COUNT(*) AS n FROM github_token_vault WHERE user_id=? AND expires_at>?').bind(userId,new Date().toISOString()).first<{n:number}>();if((count?.n??0)>=5)throw new ConnectionError(429,'Finish pending GitHub disconnects or wait for existing access to expire before reconnecting.');
  const state=newSessionToken(),stateHash=await hashToken(state),verifier=newSessionToken();const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));const challenge=btoa(Array.from(digest,b=>String.fromCharCode(b)).join('')).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
- const inserted=await db.prepare(`INSERT INTO github_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at) SELECT ?,?,?,?,? WHERE ${gate.sql} ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,authority_id=excluded.authority_id,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,claimed=0`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await seal(config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),...gate.params).run();
+ const inserted=await db.prepare(`INSERT INTO github_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at) SELECT ?,?,?,?,? WHERE ${gate.sql} ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,authority_id=excluded.authority_id,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,claimed=0`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await sealConnectionWrite(db,config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),...gate.params).run();
  if(inserted.meta.changes!==1){await assertFeature(db,scope);throw new ConnectionError(409,'GitHub authorization was not started.');}
  const url=new URL('https://github.com/login/oauth/authorize');url.searchParams.set('client_id',config.clientId);url.searchParams.set('redirect_uri',callback);url.searchParams.set('state',state);url.searchParams.set('code_challenge',challenge);url.searchParams.set('code_challenge_method','S256');
  return {url:url.href};
@@ -72,9 +74,9 @@ export async function finishGitHub(db:D1Database,userId:string,state:string,code
  const config=required(configuration);if(!/^[0-9a-f]{64}$/.test(state)||!code||code.length>512)throw new ConnectionError(400,'Invalid GitHub authorization response.');
  const scope=connectionFeature(userId,'github',null,'connect'),gate=featurePredicate(db,scope);await requireFeature(db,scope);
  const stateHash=await hashToken(state);const flow=await db.prepare(`UPDATE github_oauth_states SET claimed=1 WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=0 AND expires_at>? AND ${gate.sql} RETURNING verifier_ciphertext`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,new Date().toISOString(),...gate.params).first<{verifier_ciphertext:string}>();if(!flow)throw new ConnectionError(400,'This GitHub authorization expired or was already used. Start again.');
- const custody=await prepareOAuthCustody(db,userId,'github',stateHash);
  const verifier=await unseal(config.key,aad(userId,stateHash,'pkce'),flow.verifier_ciphertext);
  await assertFeature(db,scope);
+ const custody=await prepareOAuthCustody(db,userId,'github',stateHash,config.key);
  const data=await readJSON(await request('https://github.com/login/oauth/access_token',{method:'POST',headers:{accept:'application/json','content-type':'application/json'},body:JSON.stringify({client_id:config.clientId,client_secret:config.clientSecret,code,redirect_uri:callback,code_verifier:verifier})},transport));
  if(typeof data.access_token!=='string'||!/^gh[uo]_[A-Za-z0-9_]{1,4090}$/.test(data.access_token))throw new ConnectionError(503,'GitHub returned an invalid access token.');
  const validLifetime=Number.isSafeInteger(data.expires_in)&&Number(data.expires_in)>0&&Number(data.expires_in)<=28800;
@@ -82,7 +84,7 @@ export async function finishGitHub(db:D1Database,userId:string,state:string,code
  // Store the encrypted credential and its staging lease atomically. An active
  // vault row grants no access without the separately guarded connection pointer.
  try{await custody.remember(await seal(config.key,aad(userId,tokenId,'token'),data.access_token),expires);}
- catch{try{await revoke(config,data.access_token,transport);}catch{}throw new ConnectionError(503,'GitHub access could not be saved. Revoke the app in GitHub settings before reconnecting.');}
+ catch{try{if(await revoke(config,data.access_token,transport))await custody.settle();}catch{}throw new ConnectionError(503,'GitHub access could not be saved. Revoke the app in GitHub settings before reconnecting.');}
  try{
   if(!validLifetime||!data.access_token.startsWith('ghu_'))throw new ConnectionError(503,'GitHub must return an expiring GitHub App user token. Check the app configuration.');
   await assertFeature(db,scope);

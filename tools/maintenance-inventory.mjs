@@ -6,6 +6,7 @@ const date=(column,modifier)=>`strftime('%Y-%m-%dT%H:%M:%fZ',${column},'${modifi
 const aged=(table,column,modifier)=>queue(table,`${date(column,modifier)}<=?1`,date(column,modifier));
 const healthMatch=`h.project_id=p.id AND h.publication_revision=s.revision AND h.contact_revision=COALESCE(c.revision,-1) AND h.form_review_id IS (SELECT id FROM backend_live_forms WHERE project_id=p.id)`;
 export const backlogInventory={
+ connection_exchanges:queue('connection_oauth_exchanges',"state='dispatched'",'created_at',600000),
  imports:queue('backend_imports',"state='pending'",'created_at',3600000),
  photos:queue('file_cleanup','1=1','created_at'),
  github:queue('github_token_vault t LEFT JOIN github_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'h.requested_at'),

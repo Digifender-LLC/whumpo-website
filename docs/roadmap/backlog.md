@@ -1948,6 +1948,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/connection-vault.mjs](../../tests/connection-vault.mjs)
 - [docs/connection-key-lifecycle.md](../../docs/connection-key-lifecycle.md)
 - [tests/connection-keyrings.mjs](../../tests/connection-keyrings.mjs)
+- [src/connection-rotation.ts](../../src/connection-rotation.ts)
+- [src/connection-write-policy.ts](../../src/connection-write-policy.ts)
+- [tests/connection-rotation.mjs](../../tests/connection-rotation.mjs)
+- [tests/connection-rotation-custody.mjs](../../tests/connection-rotation-custody.mjs)
 
 ### Execution coordination
 
@@ -1959,6 +1963,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/82. Planning owner: Unassigned
 - 2026-10-02 UTC: WH-116 supplies the concrete DP-01–05 handoff and current synthetic vault baseline. Additional blanket content encryption and routine unlock/PRF requirements are not selected. WH-117 remains implementation work; account closure and whole-platform operational restore remain WH-018/019/008/059.
 - 2026-10-02 UTC: parent #82 split into #83 current credential envelope/configuration, #84 fenced resumable rotation, #85 processing/isolated-restore/custody controls and #86 connected candidate/test-release acceptance. DP-01–05 and every original parent criterion remain required; no partial format deployment. Child #83 claimed at bee963a.
 - 2026-10-02 UTC: child #83 source uses only CONNECTION_ENCRYPTION_KEYRING/current wv2 envelopes, authenticates key ID and scoped context, and refuses missing/old/plaintext values with bounded HTTP errors. 164 primitive/configuration cases, actual retained-key PKCE/current-key token and missing-key revocation custody on local D1, affected provider/admission/backup/DNS tests, both TypeScript projects and build pass. No remote keys or data changed. Parent stays open for #84 rotation fences/journal, #85 processing/restore/custody and #86 candidate release acceptance.
+- 2026-10-02 UTC: child #84 source implements reviewed immutable key identity, forward-only D1 write fencing and bounded exact-CAS rotation/readback across four stores. Actual SQLite/local D1 checks cover stale/newer writers, interrupted/duplicate/lost-response batches, concurrent disconnect/revocation/flow replacement/deletion, and eight OAuth exchange-custody races. Unknown exchanges retain custody and block key activation; all key retirement remains refused pending independent restore/custody evidence. Local row/byte/runner-CPU measurements are documented; 162 current tables are classified. No remote key/schema/binding change or deployment. Parent #82 remains open for #85 DP-02/03/04 and #86 candidate acceptance.
 
 # F2 — Useful websites and applications
 

@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -12,6 +12,7 @@ let fixture,passed=0,failed=0;
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}};
 try{
  fixture=await databaseFixture({d1:true});const db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
+ await initializeFixtureKeys(db,config.key);
  async function owner(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
  const active=user=>db.prepare('SELECT c.active_token_id,t.state FROM github_connections c LEFT JOIN github_token_vault t ON t.id=c.active_token_id WHERE c.user_id=?').bind(user).first();
  function provider(token,{onUser,onRevoke,revokeStatus=204}={}){return async(url,init)=>{

@@ -6,7 +6,7 @@ const maxBytes=8192;
 type Keyring={version:2;active:string;keys:{id:string;secret:string}[]};
 export class ConnectionVaultError extends Error{
  readonly status=503;
- constructor(readonly code:'configuration'|'ciphertext'|'missing-key'|'authentication'){
+ constructor(readonly code:'configuration'|'ciphertext'|'missing-key'|'authentication'|'write-key'){
   super('Saved connection access is unavailable. Platform recovery is required.');
  }
 }
@@ -30,6 +30,11 @@ function keyring(secret:unknown):Keyring{
 /** Metadata only. Never return key material in status, diagnostics or exports. */
 export function connectionKeyringMetadata(secret:unknown){
  const ring=keyring(secret);return {version:ring.version,active:ring.active,keyIds:ring.keys.map(k=>k.id)};
+}
+/** Internal identity commitment, never raw key material. Registration is operator-only. */
+export async function connectionKeyFingerprints(secret:unknown){
+ const ring=keyring(secret);
+ return Promise.all(ring.keys.map(async entry=>({id:entry.id,fingerprint:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode('whumpo:connection-key:'+entry.secret))),b=>b.toString(16).padStart(2,'0')).join('')})));
 }
 function base64(value:Uint8Array){return btoa(Array.from(value,b=>String.fromCharCode(b)).join('')).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');}
 function bytes(value:string){

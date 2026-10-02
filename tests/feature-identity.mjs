@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import assert from 'node:assert/strict';
 import {timingSafeEqual} from 'node:crypto';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
@@ -84,6 +84,7 @@ async function restricted(f,account,project,purpose){
  assert.match(await dnsChatCommand(db,account,project,'/dns-zones',{config:cf})(),/will not be dispatched again/);checks++;
 }
 try{
+ await initializeFixtureKeys(db,gh.key);
  for(const funding of ['business','business-pro','preview']){
   phase=funding+' enrollment';
   const f=client(),email=id()+'@example.invalid',code=id(),first=authenticator();

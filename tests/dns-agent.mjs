@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
@@ -15,6 +15,7 @@ let modelCalls=0,cfReads=0;
 function model(action){return async(url,init)=>{modelCalls++;const body=JSON.parse(init.body),prompt=JSON.stringify(body);assert.ok(prompt.includes('dnsConnection'));assert.ok(!prompt.includes('fixture-secret'));assert.ok(!prompt.includes('fixture-access'));return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'I changed every record and connected hosting.',action})}]}],usage:{input_tokens:100,output_tokens:200}});};}
 async function send(a,action,options={},database=scope(a.user)){const state=await readChat(scope(a.user),a.user),id=crypto.randomUUID();const result=await sendAIChat(database,a.user,id,state.state.revision,'Review my domain TXT proof',ai,model(action),options);assert.equal(result.status,200);return {id,revision:state.state.revision,turn:(await readChat(scope(a.user),a.user)).turns.at(-1)};}
 try{
+ await initializeFixtureKeys(db,config.key);
  const owner=await account(),other=await account(),p=provider();
  const transport=async(url,init)=>{assert.notEqual(init.method,'POST');cfReads++;if(new URL(url).pathname==='/client/v4/zones')return Response.json({success:true,result:[{id:zone,name:'example.com',status:'active'}],result_info:{total_pages:2}});return p.send(url,init);};
  const options={config,transport};
