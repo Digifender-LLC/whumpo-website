@@ -20,7 +20,7 @@ The twelve-script protection profile, final inventory reruns, lifecycle catalogu
 
 **Child C's bounded source/local implementation can close. Parent WH-117 and child D stay open.** Unknown external operations remain unavailable. This does not authorize key retirement or move any parent requirement out of its acceptance gate. Continuous suppression operation, deletion execution and whole-platform recovery retain WH-008/018/019/059 as stated in the original DP-03 contract.
 
-## Current test environment inventory
+## Test environment before cutover
 
 Read-only observation completed at **2026-10-02T10:48:53.765Z**:
 
@@ -48,3 +48,17 @@ The operator REST adapter now supports immutable bound statements and one curren
 `tests/remote-d1.mjs` exercises 12 refusals, binding isolation, a late SQLite rollback, response loss without redispatch and the actual current key initializer through a synthetic REST boundary. The real test database additionally passed a read-only three-statement batch with ordered independent bindings and a zero-user count. No remote key-policy write, transaction-failure probe, database creation or deployment occurred. The synthetic rollback does not claim a live provider fault-injection result.
 
 Official interfaces checked October 2, 2026: [D1 REST batch body](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/query/), [D1 batch transaction semantics](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch), and [secret upload/deletion deployment behavior](https://developers.cloudflare.com/workers/configuration/secrets/). Existing tools keep raw provider errors and authentication material out of normal output.
+
+## Test cutover preparation — October 2, 2026 UTC
+
+The distinct replacement database `whumpo-control-protection-test` (`15f87c0c-8c4f-491f-a349-ff9c2c8a62b8`) has been created and independently checked empty. All three control bindings now select it in source. The sealed release must initialize its exact current schema; no old rows or schema are copied.
+
+One unused invitation was removed under the platform deployment lock. Repeated live checks confirm zero users/invitations; the account, project, session, credential, provider, publication and billing obligation counts are zero. The private R2 bucket has no objects. Historical releases/provider time travel are not permitted restore authority for this reset; there is no old-format restore reader. No actual account or credential was deleted.
+
+Fresh key ID `test-20261002` has an encrypted capsule and distinct recovery file outside all repositories. Actual capsule readback passed in a separate process. These remain local copies; off-device/independently operated custody has not been accepted, and retirement is not enabled. Private metadata is in `.secrets/protection-key-custody.json`.
+
+The explicit Wrangler secret bulk operation completed and active metadata confirms `CONNECTION_ENCRYPTION_KEYRING` configured, obsolete `CONNECTION_ENCRYPTION_KEY` removed, and other secret names preserved. That operation deployed platform version `da49fc20-59e7-46f2-a102-e06de64c6294` with the preceding code; it is the new release baseline, not acceptance of the candidate. The private transition journal records CLI completion and readback. No enrolled customer can enter during the interval.
+
+Combined current-source checks passed: both TypeScript projects/compiler gates, keyrings on disposable D1, rotation (29 refusals), and eight actual handler journeys for cancellation/disconnection/unknown OAuth outcomes. Local rotation measured 432 encrypted bytes before/after, 18 batch SQL statements, 64 D1 rows read/13 written, 3 ms crypto elapsed and 117855 µs Node runner CPU. These measurements do not establish deployed Worker billed CPU.
+
+Mixed-Worker review: runtime → apps → sites → platform retains existing service interfaces. The old database has no admitted customers, publications or provider work; the replacement starts without invitations or accounts. Current key policy will be initialized with the actual domain handler and verified capsule only after the complete release is verified, before issuing an invitation. Missing policy refuses credential work. Keep the old database until the release lock is released and no active Worker refers to it. Actual release/schema/key-policy/asset readback remains pending at this preparation checkpoint.
