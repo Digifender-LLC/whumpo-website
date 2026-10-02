@@ -83,6 +83,43 @@ export async function captureRestoreManifest(db,identity){
 }
 export const restoreManifestDigest=manifest=>digest(canonical(manifest));
 
+/** Read a recovery constraint from the operator-selected CURRENT source, never
+ * from customer-supplied row bodies, digests or a recovered candidate. This is
+ * a bounded observation, not execution of erasure or provider reconciliation. */
+export async function captureRestoreConstraint(db,selection){
+ try{
+  const contract=await currentContract(),state=await snapshot(db,contract);
+  const find=(table,key)=>{
+   const shape=contract.tables.find(t=>t.name===table);
+   requireCheck(shape&&shape.keys.length>0&&exact(key,shape.keys)&&Object.values(key).every(v=>typeof v==='string'&&v.length<=1024||Number.isSafeInteger(v)),'constraint');
+   return state.rows.get(table).find(row=>shape.keys.every(k=>row[k]===key[k]));
+  };
+  const s=selection;let kind,data;
+  if(exact(s,['kind','ownerId'])&&s.kind==='owner-erased'&&id(s.ownerId)){
+   requireCheck(!find('users',{id:s.ownerId}),'constraint');kind=s.kind;data={ownerId:s.ownerId};
+  }else if(exact(s,['kind','ownerId'])&&s.kind==='identity-epoch'&&id(s.ownerId)){
+   const row=find('identity_accounts',{account_id:s.ownerId});requireCheck(row&&sequence(row.auth_epoch)&&row.auth_epoch>0,'constraint');
+   kind=s.kind;data={ownerId:s.ownerId,epoch:row.auth_epoch};
+  }else if(exact(s,['kind','table','key'])&&s.kind==='record'){
+   const row=find(s.table,s.key);kind=row?'record-current':'record-suppressed';
+   data={table:s.table,key:s.key,...(row?{sha256:digest(canonical(row))}:{})};
+  }else if(exact(s,['kind','projectId','surface'])&&s.kind==='publication-withdrawn'&&id(s.projectId)&&['site','backend','app'].includes(s.surface)){
+   const row=find({site:'publications',backend:'backend_publications',app:'app_page_settings'}[s.surface],{project_id:s.projectId});
+   requireCheck(!row||(s.surface==='app'?row.review_id===null:row.version_id===null),'constraint');
+   kind=s.kind;data={projectId:s.projectId,surface:s.surface};
+  }else if(exact(s,['kind','store','effectId'])&&s.kind==='external-effect'&&Object.hasOwn(effectReceipts,s.store)&&id(s.effectId)){
+   const oauth=s.store==='connection_oauth_exchanges';
+   const row=find(oauth?'connection_oauth_outcomes':s.store,{id:s.effectId}),[column,terminal]=effectReceipts[s.store];
+   const pending=oauth?find(s.store,{token_id:s.effectId}):null;
+   requireCheck(row||pending,'constraint');
+   const reconciled=!!row&&terminal.includes(row[column])&&!pending;
+   kind=s.kind;data={effectId:s.effectId,store:s.store,state:reconciled?'reconciled':'unknown',receipt:reconciled?{sha256:digest(canonical(row))}:null};
+  }else throw new Error('constraint');
+  // Detach selected keys from the caller before any asynchronous persistence.
+  return JSON.parse(canonical({kind,data}));
+ }catch{throw new Error('Current recovery constraint could not be observed. Inspect the authoritative source locally.');}
+}
+
 function validateManifest(manifest,contract,state){
  requireCheck(exact(manifest,['version','environment','snapshotId','checkpoint','schema','compilers','cipherFormat','keyIds','tables'])&&manifest.version===1&&manifest.environment==='test','manifest');
  requireCheck(exact(manifest.checkpoint,['streamId','sequence']),'manifest');
@@ -138,6 +175,7 @@ function applyEvidence(evidence,state,contract){
   }else if(kind==='record-suppressed'){
    requireCheck(exact(data,['table','key']),'evidence-contract');
    requireCheck(!rowFor(data.table,data.key),'suppressed-record');
+   currentRecords.delete(recordIdentity(data.table,data.key));
   }else if(kind==='record-current'){
    requireCheck(exact(data,['table','key','sha256'])&&sha(data.sha256),'evidence-contract');
    rowFor(data.table,data.key);currentRecords.set(recordIdentity(data.table,data.key),{kind,data});

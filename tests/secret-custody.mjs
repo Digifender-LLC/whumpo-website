@@ -28,7 +28,7 @@ for(const path of ['src/secrets.d.ts','tools/secret-custody.mjs','dist/assets/ic
 const root=await mkdtemp('/tmp/whumpo-custody-');
 try{
  await mkdir(join(root,'source'));await writeFile(join(root,'source/normal.ts'),'export const answer=42;');
- for(const name of ['provider.key','credentials.json','.env.test','state.sqlite','private.whumpo-key-backup']){
+ for(const name of ['provider.key','credentials.json','.env.test','state.sqlite','private.whumpo-key-backup','private.whumpo-restore-inventory','private.whumpo-restore-inventory-journal']){
   await writeFile(join(root,'source',name),canary);
   await assert.rejects(()=>copyTree(join(root,'source'),join(root,'target')),e=>!e.message.includes(canary));refused++;
   await rm(join(root,'source',name));
