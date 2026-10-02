@@ -1151,11 +1151,12 @@
         "cloudflare_oauth_states",
         "cloudflare_revocation_health",
         "connection_oauth_exchanges",
+        "connection_oauth_outcomes",
         "connection_rotation_guards"
       ],
       "scope": "owner",
       "purpose": "Customer-authorized provider access and durable credential revocation.",
-      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction.",
+      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction. Exact dispatch rejection/revocation receipts contain only bounded metadata and remain until account closure/independent retention reconciliation; a restored receipt alone grants no authority.",
       "proposedRetention": "Cancel callbacks/new consent on closure; revoke credentials before deleting ciphertext/key access. Keep unresolved revocation work in isolated minimal closure records, without preserving unrelated customer content.",
       "deletionAuthority": "Customer disconnect/closure authorizes access revocation, not deleting repositories/zones. Operator reconciles failed revocation.",
       "exportPolicy": "Provider names, customer connection status and selected resource metadata only. Never tokens, ciphertext, PKCE verifier, auth state or encryption material.",
@@ -1167,7 +1168,9 @@
         "docs/data-protection.md",
         "docs/connection-key-lifecycle.md",
         "src/connection-rotation.ts",
-        "src/connection-write-policy.ts"
+        "src/connection-write-policy.ts",
+        "src/connection-oauth-response.ts",
+        "tests/connection-oauth-outcomes.mjs"
       ],
       "storageStatus": "current",
       "protection": {
@@ -1676,7 +1679,9 @@
         "docs/maintenance.md",
         "docs/data-protection.md",
         "src/connection-rotation.ts",
-        "src/connection-write-policy.ts"
+        "src/connection-write-policy.ts",
+        "src/connection-oauth-response.ts",
+        "tests/connection-oauth-outcomes.mjs"
       ],
       "storageStatus": "current",
       "protection": {

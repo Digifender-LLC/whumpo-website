@@ -45,10 +45,13 @@ try{
  await refuses(r.beginConnectionRotation(db,a,request('same-key',1)),/unavailable/);
  await refuses(r.beginConnectionRotation(db,b,request('wrong-revision',2)),/unavailable/);
  // Already dispatched exchanges survive flow deletion, sign-out and elapsed time.
- const exchange=id();await run("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,state_hash,key_id,revision,state,created_at) VALUES(?,?,'github','unknown','key-a',1,'dispatched','2000-01-01')",exchange,owner.account);
+ const exchange=id();await run("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,client_id,state_hash,key_id,revision,state,created_at) VALUES(?,?,'github','fixture','unknown','key-a',1,'dispatched','2000-01-01')",exchange,owner.account);
  await refuses(r.beginConnectionRotation(db,b,request('first',1)),/unavailable/);
  assert.equal((await r.connectionKeyRetirementStatus(db,'key-a')).unsettledExchanges,1);
- await run('DELETE FROM connection_oauth_exchanges WHERE token_id=?',exchange); // Synthetic independent settlement, not automatic TTL cleanup.
+ await refuses(run('DELETE FROM connection_oauth_exchanges WHERE token_id=?',exchange),/connection_outcome_required/);
+ // Synthetic terminal provider response fixture, never expiry or independent proof.
+ await run("INSERT INTO connection_oauth_outcomes(id,user_id,provider,client_id,state_hash,key_id,revision,state,reason,http_status,dispatched_at) SELECT token_id,user_id,provider,client_id,state_hash,key_id,revision,'rejected','bad_verification_code',200,created_at FROM connection_oauth_exchanges WHERE token_id=?",exchange);
+ await run('DELETE FROM connection_oauth_exchanges WHERE token_id=?',exchange);
  const corrupt='000-corrupt';await run("INSERT INTO github_token_vault VALUES(?,?,?,'2099-01-01','revoking')",corrupt,owner.account,'wv2.key-a.not-a-valid-iv.corrupt');
  const lostBegin=interceptDatabase(db,/INSERT INTO connection_key_rotations/,async()=>{},async()=>{throw Error('lost activation reply');});
  assert.equal((await r.beginConnectionRotation(lostBegin,b,request('first',1))).revision,2);

@@ -32,7 +32,7 @@ const effectReceipts={
  github_backups:['state',['complete','failed']],cloudflare_dns_actions:['state',['applied','unchanged','observed']],
  domain_connections:['state',['active','disconnected']],standard_ai_requests:['state',['completed','released']],
  inference_calls:['status',['observed','released']],gateway_spend_attempts:['status',['settled','released']],
- stripe_subscription_orders:['state',['complete','expired']],connection_oauth_exchanges:null,
+ stripe_subscription_orders:['state',['complete','expired']],connection_oauth_exchanges:['state',['rejected','revoked']],
 };
 
 async function currentContract(){
@@ -165,7 +165,7 @@ function applyEvidence(evidence,state,contract){
  }
  for(const effect of external.values()){
   requireCheck(effect.state==='reconciled','uncertain-effect');
-  const row=rowFor(effect.store,{id:effect.effectId}),[column,terminal]=effectReceipts[effect.store];
+  const row=rowFor(effect.store==='connection_oauth_exchanges'?'connection_oauth_outcomes':effect.store,{id:effect.effectId}),[column,terminal]=effectReceipts[effect.store];
   requireCheck(row&&terminal.includes(row[column])&&digest(canonical(row))===effect.receipt.sha256,'uncertain-effect');
  }
 }

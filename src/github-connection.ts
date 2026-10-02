@@ -1,4 +1,5 @@
 import {sealConnectionWrite} from './connection-write-policy';
+import {readOAuthTokenResponse} from './connection-oauth-response';
 import {assertWorkspace,workspacePrincipal,prepareOAuthCustody} from './workspace-identity/admission';
 import {hashToken,newSessionToken} from './security';
 import {seal,unseal,connectionKeyringMetadata} from './connection-vault';
@@ -76,15 +77,19 @@ export async function finishGitHub(db:D1Database,userId:string,state:string,code
  const stateHash=await hashToken(state);const flow=await db.prepare(`UPDATE github_oauth_states SET claimed=1 WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=0 AND expires_at>? AND ${gate.sql} RETURNING verifier_ciphertext`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,new Date().toISOString(),...gate.params).first<{verifier_ciphertext:string}>();if(!flow)throw new ConnectionError(400,'This GitHub authorization expired or was already used. Start again.');
  const verifier=await unseal(config.key,aad(userId,stateHash,'pkce'),flow.verifier_ciphertext);
  await assertFeature(db,scope);
- const custody=await prepareOAuthCustody(db,userId,'github',stateHash,config.key);
- const data=await readJSON(await request('https://github.com/login/oauth/access_token',{method:'POST',headers:{accept:'application/json','content-type':'application/json'},body:JSON.stringify({client_id:config.clientId,client_secret:config.clientSecret,code,redirect_uri:callback,code_verifier:verifier})},transport));
+ const custody=await prepareOAuthCustody(db,userId,'github',stateHash,config.key,config.clientId);
+ const response=await readOAuthTokenResponse('github',await request('https://github.com/login/oauth/access_token',{method:'POST',headers:{accept:'application/json','content-type':'application/json'},body:JSON.stringify({client_id:config.clientId,client_secret:config.clientSecret,code,redirect_uri:callback,code_verifier:verifier})},transport)).catch(()=>{throw new ConnectionError(503,'GitHub returned an unreadable token response. Provider recovery is required.');});
+ if(response.kind==='rejected'){await custody.settle(response.settlement);throw new ConnectionError(400,'GitHub rejected this authorization. Start a new connection after checking your account and app configuration.');}
+ const data=response.data;
  if(typeof data.access_token!=='string'||!/^gh[uo]_[A-Za-z0-9_]{1,4090}$/.test(data.access_token))throw new ConnectionError(503,'GitHub returned an invalid access token.');
  const validLifetime=Number.isSafeInteger(data.expires_in)&&Number(data.expires_in)>0&&Number(data.expires_in)<=28800;
  const tokenId=custody.tokenId,expires=validLifetime?new Date(Date.now()+Number(data.expires_in)*1000).toISOString():'9999-12-31T23:59:59.999Z';
  // Store the encrypted credential and its staging lease atomically. An active
  // vault row grants no access without the separately guarded connection pointer.
+ // A failed save that returned a refresh credential needs separate grant evidence;
+ // revoking only the access token cannot create an all-credentials-settled receipt.
  try{await custody.remember(await seal(config.key,aad(userId,tokenId,'token'),data.access_token),expires);}
- catch{try{if(await revoke(config,data.access_token,transport))await custody.settle();}catch{}throw new ConnectionError(503,'GitHub access could not be saved. Revoke the app in GitHub settings before reconnecting.');}
+ catch{try{if(await revoke(config,data.access_token,transport)&&!Object.hasOwn(data,'refresh_token'))await custody.settle({state:'revoked',reason:'provider_revoked',httpStatus:204});}catch{}throw new ConnectionError(503,'GitHub access could not be saved. Provider recovery is required; revoke the app in GitHub settings.');}
  try{
   if(!validLifetime||!data.access_token.startsWith('ghu_'))throw new ConnectionError(503,'GitHub must return an expiring GitHub App user token. Check the app configuration.');
   await assertFeature(db,scope);

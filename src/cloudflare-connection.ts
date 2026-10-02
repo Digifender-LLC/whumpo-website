@@ -1,4 +1,5 @@
 import {sealConnectionWrite} from './connection-write-policy';
+import {readOAuthTokenResponse} from './connection-oauth-response';
 import {assertWorkspace,workspacePrincipal,prepareOAuthCustody} from './workspace-identity/admission';
 import {hashToken,newSessionToken} from './security';
 import {seal,unseal,connectionKeyringMetadata} from './connection-vault';
@@ -80,15 +81,17 @@ export async function finishCloudflare(db:D1Database,userId:string,state:string,
  if(!flow)throw new ConnectionError(400,'This Cloudflare authorization expired, was cancelled or was already used.');
  const verifier=await unseal(config.key,aad(userId,stateHash,'pkce'),flow.verifier_ciphertext);
  await assertFeature(db,scope);
- const custody=await prepareOAuthCustody(db,userId,'cloudflare',stateHash,config.key);
- const data=await json(await request('https://dash.cloudflare.com/oauth2/token',{method:'POST',headers:oauthHeaders(config),body:new URLSearchParams({grant_type:'authorization_code',code,redirect_uri:callback,code_verifier:verifier})},transport));
+ const custody=await prepareOAuthCustody(db,userId,'cloudflare',stateHash,config.key,config.clientId);
+ const response=await readOAuthTokenResponse('cloudflare',await request('https://dash.cloudflare.com/oauth2/token',{method:'POST',headers:oauthHeaders(config),body:new URLSearchParams({grant_type:'authorization_code',code,redirect_uri:callback,code_verifier:verifier})},transport)).catch(()=>{throw new ConnectionError(503,'Cloudflare returned an unreadable token response. Provider recovery is required.');});
+ if(response.kind==='rejected'){await custody.settle(response.settlement);throw new ConnectionError(400,'Cloudflare rejected this authorization. Start a new connection after checking your account and app configuration.');}
+ const data=response.data;
  const validToken=(value:unknown):value is string=>typeof value==='string'&&/^[\x21-\x7e]{1,3500}$/.test(value);
  if(!validToken(data.access_token)||data.refresh_token!==undefined&&!validToken(data.refresh_token))throw new ConnectionError(503,'Cloudflare returned an invalid credential. Revoke the application in Cloudflare settings before trying again.');
  const tokens:Tokens={access:data.access_token,...(typeof data.refresh_token==='string'?{refresh:data.refresh_token}:{})};
  const validLifetime=Number.isSafeInteger(data.expires_in)&&Number(data.expires_in)>0&&Number(data.expires_in)<=28800;
  const expiry=validLifetime&&!tokens.refresh?new Date(Date.now()+Number(data.expires_in)*1000).toISOString():'9999-12-31T23:59:59.999Z',tokenId=custody.tokenId;
  try{await custody.remember(await seal(config.key,aad(userId,tokenId,'token'),JSON.stringify(tokens)),expiry);}
- catch{try{if(await revoke(config,tokens,transport))await custody.settle();}catch{}throw new ConnectionError(503,'Cloudflare access could not be saved. Revoke the application in Cloudflare settings before reconnecting.');}
+ catch{try{if(await revoke(config,tokens,transport))await custody.settle({state:'revoked',reason:'provider_revoked',httpStatus:200});}catch{}throw new ConnectionError(503,'Cloudflare access could not be saved. Provider recovery is required; revoke the application in Cloudflare settings.');}
  try{
   // RFC 6749: omitted scope means exactly the originally requested scope.
   const granted=data.scope===undefined?scopes:typeof data.scope==='string'?data.scope.split(/\s+/).filter(Boolean):[];
