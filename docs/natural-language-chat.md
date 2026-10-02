@@ -93,3 +93,10 @@ The agent can request a maintained name/purpose brief for a later project or a n
 
 
 Saved project briefs and selections now support a natural-language request to revise the same task. The agent reads metadata and offers a linked replacement with saved user answers; the owner enters and submits corrections. Earlier submissions stay in history, and an unavailable project needs a fresh selection. Repeated corrections preserve user answers without adding them to ordinary model context. No direct correction command or automatic task execution is introduced. See [the maintained correction contract](chat-interactions.md#corrections-across-maintained-forms--october-2-2026-utc).
+
+
+## Prose corrections to saved Chat forms — October 2, 2026 UTC
+
+The owner can ask in ordinary prose for a correction to an existing website, project brief, project selection or writing-style form. After the current metadata lookup, `proposeAnswers` prepares a linked version of the same task with **suggested** values. The renderer labels their origin and the owner edits/reviews/submits them explicitly. Untouched suggestions retain their provenance through further revisions; unsubmitted drafts/defaults stay out of model reads and ordinary history. Exact submission, compiler preview, website save and publication keep separate receipts/reviews.
+
+This reuses the existing bounded inference loop and capability catalog. No extra model route, form-submission inference or new approval path is added. Fixed fields/options/constraints and current ownership/revision checks reject forged or stale proposals. The model receives approved field types/constraints to produce valid suggestions, never the form's private draft/default values. General custom-form issuance and separately receipted answer continuation remain WH-108 work; deterministic scripted acceptance does not prove real-model interpretation quality.

@@ -1,10 +1,14 @@
 import type {Answer,Answers,Field} from '../../../src/chat-interactions/types';
+import {isFieldVisible} from '../../../src/chat-interactions/protocol';
 
 /** Number editing retains raw text locally, including unfinished input. Only
  * an explicit save/submission converts complete decimal text into a wire number. */
 export function fieldAnswerSnapshot(fields:Field[],answers:Answers):Answers{
  const snapshot={...answers};
  for(const f of fields){
+  // Keep the editor's hidden draft, but never send it. Unknown keys remain so
+  // validation rejects them rather than silently accepting a malformed record.
+  if(!isFieldVisible(f,answers)){delete snapshot[f.id];continue;}
   const value=snapshot[f.id];
   if(f.type==='number'&&typeof value==='string'&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim())){
    const number=Number(value);if(Number.isFinite(number))snapshot[f.id]=number;

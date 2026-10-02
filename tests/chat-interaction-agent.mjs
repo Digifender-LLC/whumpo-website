@@ -71,7 +71,7 @@ try{
   context.interactions[0].draft={secret:'PRIVATE_UNSUBMITTED_CANARY'};context.interactions[0].task.answers='PRIVATE_UNSUBMITTED_CANARY';
   assert.doesNotMatch(agent.agentWorkspaceData(context),/PRIVATE_UNSUBMITTED_CANARY/);assert(!JSON.parse(agent.agentWorkspaceData(context,'cms')).data.interactions);
   const result=await forms.interactionAgentAction(a.scope,a.user,id(),read(form.envelope.id));const metadata=JSON.parse(result.inspection).data;
-  assert.deepEqual(Object.keys(metadata.fields[0]).sort(),['contentId','id','label','revision']);assert.equal(metadata.answerRevision,1);
+  assert.deepEqual(Object.keys(metadata.fields[0]).sort(),['constraints','contentId','id','label','required','revision','type']);assert.equal(metadata.answerRevision,1);
   assert.doesNotMatch(result.inspection,/PRIVATE_UNSUBMITTED_CANARY|A greener neighborhood|default|draft|answers/);
   assert.equal(result.statements.length,0);
  });
@@ -198,7 +198,7 @@ try{
   const o=await owner(),created=await chat(o,'Show me a few choices for how my website should sound.',[intakeRequest('requestWritingStyle')]);assert.equal(created.calls,1);
   let f=await readForm(o,created.turn.interaction_id);assert.equal(f.envelope.definition.template,'choice@1');assert.equal(f.envelope.definition.fields[0].default,undefined);
   await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'save-draft',{tone:'friendly'}));f=await readForm(o,f.envelope.id);
-  const draftMetadata=await forms.interactionAgentAction(o.scope,o.user,id(),read(f.envelope.id));assert.equal(JSON.parse(draftMetadata.inspection).data.template,'choice@1');assert.doesNotMatch(draftMetadata.inspection,/friendly|default|answers/);
+  const draftMetadata=await forms.interactionAgentAction(o.scope,o.user,id(),read(f.envelope.id));assert.equal(JSON.parse(draftMetadata.inspection).data.template,'choice@1');assert.doesNotMatch(draftMetadata.inspection,/default|\"answers\"/);assert.deepEqual(JSON.parse(draftMetadata.inspection).data.fields[0].constraints.options.map(o=>o.id),['friendly','professional','straightforward']);
   assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted({...f,submission:{id:id()}}))).inspection,undefined);
   const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{tone:'friendly'}));f=await readForm(o,f.envelope.id);assert.equal(mainCalls,before);assert.equal(f.submission.continuation,null);
   const references=JSON.parse(agent.agentWorkspaceData(await agent.siteContext(o.scope,o.user))).data.submittedIntakes;
@@ -236,6 +236,44 @@ try{
  await test('lost Chat correction acknowledgment preserves one successor without redispatch',async()=>{
   const o=await owner(),created=await chat(o,'Help me plan another project.',[intakeRequest('requestProjectBrief')]),f=await readForm(o,created.turn.interaction_id);let lost=false;
   const lossy=interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost correction Chat result');}}),result=await chat(o,'Reopen that project brief.',[replaceIntake(f)],lossy);assert(lost);assert(result.turn.interaction_id);assert.equal(result.turn.status,'completed');
+  const before=mainCalls;await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE previous_interaction_id=?',f.envelope.id)).n,1);
+ });
+ const proposal=(f,changes)=>({kind:'interaction',operation:'proposeAnswers',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,changes});
+ await test('prose corrections use one metadata lookup and create unapproved scoped suggestions',async()=>{
+  const o=await owner(),created=await chat(o,'Help with the headline and service text.',[request(o)]);let f=await readForm(o,created.turn.interaction_id);
+  await store.mutateInteraction(o.scope,o.user,mutate(f,'save-draft',{'field-1':'PRIVATE_ORIGINAL_HEADLINE','field-2':'PRIVATE_RETAINED_SERVICE'}));f=await readForm(o,f.envelope.id);
+  const result=await chat(o,'Propose a shorter headline for that form.',[read(f.envelope.id),body=>{assert.doesNotMatch(JSON.stringify(body),/PRIVATE_ORIGINAL_HEADLINE|PRIVATE_RETAINED_SERVICE/);return proposal(f,{'field-1':'PROPOSED_HEADLINE_CANARY'});}]);
+  assert.equal(result.calls,2);assert.doesNotMatch(result.turn.assistant_text,/UNTRUSTED_MODEL_PROSE/);assert.match(result.turn.assistant_text,/Review the suggestions/);
+  let next=await readForm(o,result.turn.interaction_id);assert.equal(next.previousInteractionId,f.envelope.id);assert.equal(next.envelope.scope.taskId,f.envelope.scope.taskId);assert.equal(next.envelope.scope.projectId,o.project);assert.equal(next.submission,null);assert.equal(next.draft,null);
+  assert.deepEqual(next.envelope.definition.fields.map(x=>x.default),[{value:'PROPOSED_HEADLINE_CANARY',provenance:'suggested'},{value:'PRIVATE_RETAINED_SERVICE',provenance:'user'}]);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);
+  const context=agent.agentWorkspaceData(await agent.siteContext(o.scope,o.user));assert.doesNotMatch(context,/PRIVATE_ORIGINAL_HEADLINE|PRIVATE_RETAINED_SERVICE|PROPOSED_HEADLINE_CANARY/);
+  assert.doesNotMatch(await (await http(o,'/api/chat/history?before=10000')).text(),/PRIVATE_ORIGINAL_HEADLINE|PRIVATE_RETAINED_SERVICE|PROPOSED_HEADLINE_CANARY/);
+  const chain=await chat(o,'Also suggest a shorter services description.',[read(next.envelope.id),body=>{assert.doesNotMatch(JSON.stringify(body),/PRIVATE_RETAINED_SERVICE|PROPOSED_HEADLINE_CANARY/);return proposal(next,{'field-2':'PROPOSED_SERVICES_CANARY'});}]);
+  next=await readForm(o,chain.turn.interaction_id);assert(next.envelope.definition.fields.every(x=>x.default.provenance==='suggested'));
+  const before=mainCalls;await json(o,'/api/chat',chain.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM chat_interaction_submissions WHERE interaction_id=?',next.envelope.id)).n,0);
+  const answers={'field-1':'PROPOSED_HEADLINE_CANARY','field-2':'PROPOSED_SERVICES_CANARY'},saved=mutate(next,'submit',answers);await json(o,'/api/chat/interactions/v1/mutate',saved);assert.equal(mainCalls,before);
+  await json(o,'/api/chat/interactions/v1/continue',{version:1,submissionId:saved.requestId,expectedChatRevision:await revision(o)});assert.equal(mainCalls,before);assert.match(await(await site.specificationPreview(o.scope,o.user,saved.requestId)).text(),/PROPOSED_HEADLINE_CANARY/);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);
+ });
+ await test('proposed intake answers stay distinct from immutable submitted information',async()=>{
+  const o=await owner(),created=await chat(o,'Help plan another project.',[intakeRequest('requestProjectBrief')]);let f=await readForm(o,created.turn.interaction_id);
+  await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{name:'Original garden',purpose:'PRIVATE_PURPOSE_BEFORE_PROPOSAL'}));f=await readForm(o,f.envelope.id);
+  const result=await chat(o,'Change the proposed name to Garden Studio.',[read(f.envelope.id),()=>proposal(f,{name:'Garden Studio'})]),next=await readForm(o,result.turn.interaction_id);
+  assert.deepEqual(next.envelope.definition.fields.map(x=>x.default),[{value:'Garden Studio',provenance:'suggested'},{value:'PRIVATE_PURPOSE_BEFORE_PROPOSAL',provenance:'user'}]);assert.equal(next.submission,null);assert.equal(next.envelope.scope.projectId,null);
+  assert.deepEqual((await readForm(o,f.envelope.id)).submission,f.submission);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
+  assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted(f))).inspection,undefined);
+  assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted({...next,submission:{id:id()}}))).inspection,undefined);
+ });
+ await test('proposal action rejects injection, stale versions, invalid values and forged scope',async()=>{
+  const o=await owner(),created=await chat(o,'Choose a writing style.',[intakeRequest('requestWritingStyle')]),f=await readForm(o,created.turn.interaction_id);
+  for(const bad of [{...proposal(f,{tone:'friendly'}),projectId:b.project},{...proposal(f,{tone:'friendly'}),labels:['Recovery key?']},proposal(f,{}),proposal(f,{tone:'invented'}),proposal(f,{tone:['friendly']}),proposal(f,{password:'secret'}),proposal(f,{tone:null}),{...proposal(f,{tone:'friendly'}),expectedAnswerRevision:5},{...proposal(f,{tone:'friendly'}),definitionDigest:'0'.repeat(64)},proposal(form,{'field-1':'foreign'})]){
+   const result=await forms.interactionAgentAction(o.scope,o.user,id(),bad);assert.equal(result.statements.length,0);assert.equal(result.inspection,undefined);
+  }
+  assert.equal(inspection.inspectionRequest(JSON.stringify({reply:'Propose',action:proposal(f,{tone:'professional'})})),false);
+  const result=await chat(o,'Make it professional.',[read(f.envelope.id),()=>proposal(f,{tone:'professional'})]),next=await readForm(o,result.turn.interaction_id);assert.deepEqual(next.envelope.definition.fields[0].default,{value:'professional',provenance:'suggested'});
+ });
+ await test('lost proposal Chat acknowledgment recovers one successor without another inference',async()=>{
+  const o=await owner(),created=await chat(o,'Help plan another project.',[intakeRequest('requestProjectBrief')]),f=await readForm(o,created.turn.interaction_id);let lost=false;
+  const lossy=interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost proposal Chat result');}}),result=await chat(o,'Suggest Garden Studio as the name.',[proposal(f,{name:'Garden Studio'})],lossy);assert(lost);assert(result.turn.interaction_id);assert.equal(result.turn.status,'completed');
   const before=mainCalls;await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE previous_interaction_id=?',f.envelope.id)).n,1);
  });
  await Promise.all(background);assert.equal(queue.length,0);

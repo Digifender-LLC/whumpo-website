@@ -3,7 +3,7 @@ import {featurePredicate,assertFeature} from '../feature-admission';
 import {canonicalJSON,jsonDigest,copyJSON} from '../project-specification/v2/json';
 import {readSpecification} from '../project-specification/store';
 import type {ProjectSpecification} from '../project-specification/v2/types';
-import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers} from './protocol';
+import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers,validateDefinition} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
 import {isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
@@ -108,27 +108,33 @@ export async function preparePhotoIntake(db:D1Database,user:string,input:{origin
 export async function replaceProjectIntake(db:D1Database,user:string,input:ReplacementIdentity){
  return persistInteraction(db,user,await prepareReplacementProjectIntake(db,user,input));
 }
-/** Reopen the same maintained task with user-derived defaults, never model values. */
+/** Reopen the same maintained task with retained answer provenance. */
 export async function prepareReplacementProjectIntake(db:D1Database,user:string,input:ReplacementIdentity):Promise<InteractionPlan>{
+ return prepareIntakeCorrection(db,user,input);
+}
+async function prepareIntakeCorrection(db:D1Database,user:string,input:ReplacementIdentity,proposal?:AnswerProposal):Promise<InteractionPlan>{
  await assertWorkspace(db,user);const request=copyJSON(input,4096);
  if(!request||Object.keys(request).sort().join(',')!=='definitionDigest,expectedAnswerRevision,originTurnId,previousInteractionId'||!identifier(request.originTurnId)||!identifier(request.previousInteractionId)||typeof request.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(request.definitionDigest)||!Number.isSafeInteger(request.expectedAnswerRevision)||request.expectedAnswerRevision<0)throw new InteractionError('SHAPE');
  // Exact issue replay remains available when the predecessor's draft is removed.
  await row(db,user,request.previousInteractionId);
- const issueHash=await jsonDigest({adapter:'project-intake',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ const issueHash=proposal?.issueHash??await jsonDigest({adapter:'project-intake',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  const previous=await readInteraction(db,user,request.previousInteractionId),template=previous.envelope.definition.template;
  if(previous.envelope.scope.projectId!==null||!isProjectIntakeTemplate(template)||previous.envelope.definition.continuationBinding!==null)throw new InteractionStoreError(409,'adapter_unavailable');
  if(previous.envelope.definitionDigest!==request.definitionDigest||previous.answerRevision!==request.expectedAnswerRevision||previous.replacementInteractionId||!['open','submitted','expired'].includes(previous.state))throw changed();
  await assertFeature(db,feature(user,null));
- const definition=projectIntakeDefinition(template),answers=carriedAnswers(previous),guards:D1PreparedStatement[]=[];
+ let definition=projectIntakeDefinition(template);const defaults=carriedDefaults(previous),guards:D1PreparedStatement[]=[];
+ for(const field of definition.fields)if(Object.hasOwn(defaults,field.id))field.default=defaults[field.id];
+ if(proposal)definition=proposedDefinition(definition,proposal.changes);
  for(const field of definition.fields){
-  if(!Object.hasOwn(answers,field.id))continue;
-  if(field.type==='resource'){
-   const selected=answers[field.id];
-   if(!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(selected,user).first())continue;
+  if(field.type==='resource'&&field.default){
+   const selected=field.default.value;
+   if(!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(selected,user).first()){
+    if(proposal&&Object.hasOwn(proposal.changes,field.id))throw new InteractionError('RESOURCE_UNAVAILABLE',field.id);
+    delete field.default;continue;
+   }
    guards.push(interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)',[selected,user]));
   }
-  field.default={value:answers[field.id],provenance:'user'};
  }
  return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},definition,issueHash,{request,previous},guards);
 }
@@ -159,16 +165,42 @@ type ContentBriefRequest={originTurnId:string;projectId:string;contentIds:string
 type ReplacementIdentity={originTurnId:string;previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number};
 type ReplacementRequest=ReplacementIdentity&{contentIds:string[]};
 type InteractionPlan={interactionId:string;originTurnId:string;issueHash:string;statements:D1PreparedStatement[]};
+type AnswerProposal={changes:Answers;issueHash:string};
+type ProposedAnswersRequest=ReplacementIdentity&{changes:Answers};
 function contentIds(value:unknown):asserts value is string[]{
  if(!Array.isArray(value)||value.length<1||value.length>contentFieldLimit||new Set(value).size!==value.length||value.some(x=>typeof x!=='string'||!/^[a-z][a-z0-9-]{0,39}$/.test(x)))throw new InteractionError('SHAPE');
 }
-function carriedAnswers(previous:InteractionRead):Answers{
- // A chain of untouched replacements must preserve explicit answers already
- // copied as user defaults. Saved-site/suggested defaults are not user answers.
- // A saved draft is the complete answer snapshot, including omitted fields.
- // Only an untouched form inherits its user defaults.
- const answers=previous.submission?.answers??previous.draft??Object.fromEntries(previous.envelope.definition.fields.filter(f=>f.default?.provenance==='user').map(f=>[f.id,f.default!.value]));
- return validateAnswers(previous.envelope.definition,answers,{partial:!previous.submission});
+function carriedDefaults(previous:InteractionRead):Record<string,NonNullable<Field['default']>>{
+ // A saved draft is a complete snapshot. An untouched correction keeps each
+ // default's provenance; an unsubmitted suggestion never becomes a user answer.
+ const answers=previous.submission?.answers??previous.draft;
+ if(answers===null||answers===undefined)return Object.fromEntries(previous.envelope.definition.fields.filter(f=>f.default&&f.default.provenance!=='saved').map(f=>[f.id,f.default!]));
+ return Object.fromEntries(Object.entries(validateAnswers(previous.envelope.definition,answers,{partial:!previous.submission})).map(([id,value])=>[id,{value,provenance:'user' as const}]));
+}
+function proposedDefinition(definition:Definition,changes:Answers):Definition{
+ // Validate submitted field identities/types, then validate complete suggested
+ // defaults too. Partial editing text is not a valid model-generated suggestion.
+ validateAnswers(definition,changes,{partial:true});
+ return validateDefinition({...definition,fields:definition.fields.map(field=>Object.hasOwn(changes,field.id)?{...field,default:{value:changes[field.id],provenance:'suggested'}}:field)});
+}
+export async function proposeAnswers(db:D1Database,user:string,input:ProposedAnswersRequest){
+ return persistInteraction(db,user,await prepareProposedAnswers(db,user,input));
+}
+/** Suggestions use the existing correction transaction, not a second submit or
+ * approval path. The model sees metadata only; retained private values stay here. */
+export async function prepareProposedAnswers(db:D1Database,user:string,input:ProposedAnswersRequest):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,24576);
+ if(!request||Object.keys(request).sort().join(',')!=='changes,definitionDigest,expectedAnswerRevision,originTurnId,previousInteractionId'||!identifier(request.originTurnId)||!identifier(request.previousInteractionId)||typeof request.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(request.definitionDigest)||!Number.isSafeInteger(request.expectedAnswerRevision)||request.expectedAnswerRevision<0||!request.changes||typeof request.changes!=='object'||Array.isArray(request.changes)||!Object.keys(request.changes).length||Object.keys(request.changes).length>12)throw new InteractionError('SHAPE');
+ await row(db,user,request.previousInteractionId);
+ const issueHash=await jsonDigest({adapter:'answer-proposal',...request},32768),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ const previous=await readInteraction(db,user,request.previousInteractionId),{changes,...identity}=request,proposal={changes,issueHash};
+ if(previous.envelope.definition.template==='content-change@1'){
+  const projectId=previous.envelope.scope.projectId;if(!projectId)throw unavailable();
+  return prepareBrief(db,user,{originTurnId:request.originTurnId,projectId,contentIds:previous.envelope.definition.fields.map(f=>f.source!.contentId)},{request:{...identity,contentIds:previous.envelope.definition.fields.map(f=>f.source!.contentId)},previous},proposal);
+ }
+ if(isProjectIntakeTemplate(previous.envelope.definition.template))return prepareIntakeCorrection(db,user,identity,proposal);
+ throw new InteractionStoreError(409,'adapter_unavailable');
 }
 /** Server-maintained fields only. Model-authored questions/defaults are not an issuance API. */
 export async function issueContentBrief(db:D1Database,user:string,input:ContentBriefRequest){
@@ -201,8 +233,8 @@ export async function prepareReplacementContentBrief(db:D1Database,user:string,i
  if(!previous.envelope.scope.projectId||previous.envelope.definition.template!=='content-change@1')throw new InteractionStoreError(409,'adapter_unavailable');
  return prepareBrief(db,user,{originTurnId:request.originTurnId,projectId:previous.envelope.scope.projectId,contentIds:request.contentIds},{request,previous});
 }
-async function prepareBrief(db:D1Database,user:string,request:ContentBriefRequest,replacement:{request:ReplacementRequest;previous:InteractionRead}|null):Promise<InteractionPlan>{
- const previous=replacement?.previous??null,issueHash=await jsonDigest(replacement?{...request,replacement:replacement.request}:request);
+async function prepareBrief(db:D1Database,user:string,request:ContentBriefRequest,replacement:{request:ReplacementRequest;previous:InteractionRead}|null,proposal?:AnswerProposal):Promise<InteractionPlan>{
+ const previous=replacement?.previous??null,issueHash=proposal?.issueHash??await jsonDigest(replacement?{...request,replacement:replacement.request}:request);
  const prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  if(replacement&&(previous!.envelope.definitionDigest!==replacement.request.definitionDigest||previous!.answerRevision!==replacement.request.expectedAnswerRevision||previous!.replacementInteractionId||['pending','unknown'].includes(previous!.submission?.continuation?.state??'')))throw changed();
@@ -215,15 +247,15 @@ async function prepareBrief(db:D1Database,user:string,request:ContentBriefReques
   target(page.headline,'Headline',160);target(page.description,'Introduction',1000);target(page.aboutTitle,'About heading',100);target(page.aboutText,'About text',1000);
   page.sections.forEach((section,n)=>{target(section.heading,`Section ${n+1} heading`,100);target(section.text,`Section ${n+1} text`,800);});
  }
- const values=previous?carriedAnswers(previous):null;
+ const values=previous?carriedDefaults(previous):null;
  const fields:Field[]=request.contentIds.map((contentId,n)=>{
   const t=targets.get(contentId),content=spec.content.find(c=>c.id===contentId);if(!t||!content)throw new InteractionError('REFERENCE');
   const old=previous?.envelope.definition.fields.find(f=>f.source?.contentId===contentId),retained=!!old&&!!values&&(Object.hasOwn(values,old.id)||previous!.draft!==null);
-  const value=retained?(Object.hasOwn(values!,old!.id)?values![old!.id]:''):content.text;
-  return {id:`field-${n+1}`,type:t.max<=200?'text':'long-text',label:t.label,help:'',required:true,binding:'answer.value@1',constraints:{maxLength:t.max},source:{binding:'site.content@1',contentId,revision:current.revision},...(typeof value==='string'&&(retained||value.trim())?{default:{value,provenance:retained?'user' as const:'saved' as const}}:{})};
+  const preset=retained?(values![old!.id]??{value:'',provenance:'user' as const}):{value:content.text,provenance:'saved' as const};
+  return {id:`field-${n+1}`,type:t.max<=200?'text':'long-text',label:t.label,help:'',required:true,binding:'answer.value@1',constraints:{maxLength:t.max},source:{binding:'site.content@1',contentId,revision:current.revision},...(typeof preset.value==='string'&&(retained||preset.value.trim())?{default:preset}:{})};
  });
  const definition:Definition={version:1,kind:'form',template:'content-change@1',title:'Update your website text',summary:'Review the text, then prepare a private preview. Saving and publishing each require a separate review.',presentation:'inline',fields,cards:[{id:'project-status',binding:'project.status@1',display:'status',limit:1,reviewId:null}],submitBinding:'interaction.answers@1',continuationBinding:'site.content-prepare@1'};
- return prepareIssuedInteraction(db,user,request,definition,issueHash,replacement,[interactionGuard(db,'EXISTS(SELECT 1 FROM project_spec_heads h JOIN projects p ON p.id=h.project_id WHERE h.project_id=? AND h.version_id=? AND h.revision=? AND h.draft_revision=p.site_draft_revision)',[request.projectId,current.versionId,current.revision])]);
+ return prepareIssuedInteraction(db,user,request,proposal?proposedDefinition(definition,proposal.changes):definition,issueHash,replacement,[interactionGuard(db,'EXISTS(SELECT 1 FROM project_spec_heads h JOIN projects p ON p.id=h.project_id WHERE h.project_id=? AND h.version_id=? AND h.revision=? AND h.draft_revision=p.site_draft_revision)',[request.projectId,current.versionId,current.revision])]);
 }
 async function prepareIssuedInteraction(db:D1Database,user:string,request:{originTurnId:string;projectId:string|null},definition:Definition,issueHash:string,replacement:{request:ReplacementIdentity;previous:InteractionRead}|null,guards:D1PreparedStatement[]):Promise<InteractionPlan>{
  const previous=replacement?.previous??null;
