@@ -1,5 +1,7 @@
 # Payments
 
+Public homepage presentation: [sandbox pricing tables](stripe-pricing-tables.md). Anonymous table checkout remains separate from the authenticated subscription flow below.
+
 **Current contract — October 1, 2026.** Whumpo runs only in testing environments. Optional Stripe sandbox subscriptions are the single payment path; see [Stripe sandbox signup and billing](stripe-sandbox.md). Real payments remain disabled.
 
 ## Current authority
