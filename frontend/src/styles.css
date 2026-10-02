@@ -47,7 +47,7 @@
  .workspace-main button,.workspace-main a[class*="inline-flex"],.workspace-dialog button{min-height:44px;white-space:normal;line-height:1.35;height:auto;padding-top:10px;padding-bottom:10px}
  .workspace-main input:not([type=checkbox]):not([type=radio]),.workspace-main select,.workspace-main textarea,.workspace-dialog input,.workspace-dialog select,.workspace-dialog textarea{font-size:16px;max-width:100%;min-width:0}
  input[type=checkbox],input[type=radio]{min-width:20px;min-height:20px}
- .workspace-dialog{left:0;right:0;top:auto;bottom:0;width:100%;max-width:none;max-height:calc(var(--workspace-height,100dvh) - 20px - env(safe-area-inset-top));transform:none;border-radius:26px 26px 0 0;padding:28px 22px max(24px,env(safe-area-inset-bottom));animation:none!important}
+ .workspace-dialog{left:0;right:0;top:auto;bottom:var(--workspace-bottom,0px);width:100%;max-width:none;max-height:calc(var(--workspace-height,100dvh) - 20px - env(safe-area-inset-top));transform:none;border-radius:26px 26px 0 0;padding:28px 22px max(24px,env(safe-area-inset-bottom));animation:none!important;transition:none!important}
  .workspace-dialog::before{content:'';position:absolute;width:36px;height:4px;top:9px;left:calc(50% - 18px);border-radius:9px;background:var(--border)}
  .workspace-dialog>button:last-child{min-width:44px;min-height:44px;right:8px;top:12px;display:grid;place-items:center}
  .mobile-pages-sheet{padding-bottom:max(28px,env(safe-area-inset-bottom))}
@@ -91,7 +91,6 @@
 .control-back{margin-top:-16px;margin-left:-12px}
 @media(max-width:760px){
  .workspace-main{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
- .workspace-dialog{bottom:var(--keyboard-inset,0px)}
  .workspace-main input:not([type=checkbox]):not([type=radio]),.workspace-main select{min-height:48px}
  .workspace-main label:has(input[type=checkbox]),.workspace-main label:has(input[type=radio]){min-height:44px;align-items:center}
  .workspace-main button[class*="size-"],.chat-composer button[type=submit]{min-width:44px;flex-shrink:0}

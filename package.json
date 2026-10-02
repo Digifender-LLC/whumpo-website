@@ -11,6 +11,7 @@
     "test:specification-journey": "node tests/specification-journey.mjs",
     "test:specification-review": "node tests/specification-review-details.mjs && node tests/specification-review-display.mjs",
     "test:chat-fields": "node tests/chat-interaction-fields.mjs && node tests/chat-interaction-fields-browser.mjs",
+    "test:chat-screen-reader": "node tests/chat-screen-reader.mjs",
     "test:chat-resources": "node tests/chat-resource-options.mjs && node tests/chat-interaction-intake.mjs",
     "test:smoke": "node tests/identity-http.mjs --d1 && node tests/smoke.mjs",
     "test:ai": "node tests/ai.mjs",
