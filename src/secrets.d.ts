@@ -9,6 +9,7 @@ interface Env {
   GITHUB_APP_ID?: string;
   GITHUB_APP_SLUG?: string;
   CONNECTION_ENCRYPTION_KEYRING?: string;
+  CMS_BRIDGE_MASTER_KEY?: string;
   TURNSTILE_SECRET?: string;
   AI_API_KEY?: string;
   STRIPE_SANDBOX_CATALOG?: string;
