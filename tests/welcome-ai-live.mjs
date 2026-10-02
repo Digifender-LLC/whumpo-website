@@ -17,7 +17,7 @@ try{
  await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();
  await updateProfile(db,user,{revision:0,name:'River',about_me:'Synthetic personal bio marker: lavender telescope',share_context:false,avatar_id:'moon'});
  let welcome=await readOnboarding(db,user);const project=welcome.state.project_id;
- welcome=await saveOnboarding(db,user,{revision:welcome.state.revision,stage:'review',project_name:'Copper Oven',idea:'A neighborhood bakery website presenting sourdough bread and pastries. It should feel welcoming and make it easy for neighbors to learn what we bake. Use a clear introduction, a short description of our bread, and a separate section with useful visitor information. The opening hours are Tuesday through Sunday, 7am to 2pm. No online ordering yet.',audience:'Neighbors looking for fresh bread and a friendly local bakery',preferred_theme:'clay'});
+ welcome=await saveOnboarding(db,user,{revision:welcome.state.revision,stage:'review',prompt:'review',project_name:'Copper Oven',idea:'A neighborhood bakery website presenting sourdough bread and pastries. It should feel welcoming and make it easy for neighbors to learn what we bake. Use a clear introduction, a short description of our bread, and a separate section with useful visitor information. The opening hours are Tuesday through Sunday, 7am to 2pm. No online ordering yet.',audience:'Neighbors looking for fresh bread and a friendly local bakery',preferred_theme:'clay'});
  await completeOnboarding(db,user,{revision:welcome.state.revision});
  const {state,firstDraft}=await readChat(db,user,true),turn=crypto.randomUUID();
  assert.equal(firstDraft?.id,project,'Chat must offer the saved welcome project');

@@ -20,7 +20,7 @@ try{
   assert.equal(await welcomeDraftProject(db,user),null);
   await updateProfile(db,user,{revision:0,name:'River',about_me:'Never share lavender telescope',share_context:false});
   const state=await readOnboarding(db,user);
-  await saveOnboarding(db,user,{revision:0,stage:'review',project_name:'Copper Oven',idea:'A bakery website. '+ 'Fresh bread. '.repeat(30)+'Opening hours Tuesday through Sunday, 7am to 2pm.',audience:'Neighbors',preferred_theme:'clay'});
+  await saveOnboarding(db,user,{revision:0,stage:'review',prompt:'review',project_name:'Copper Oven',idea:'A bakery website. '+ 'Fresh bread. '.repeat(30)+'Opening hours Tuesday through Sunday, 7am to 2pm.',audience:'Neighbors',preferred_theme:'clay'});
   await completeOnboarding(db,user,{revision:1});return {user,project:state.state.project_id};
  }
  async function run(owner,transport,store=db){const {state}=await readChat(db,owner.user,true),id=crypto.randomUUID(),content='/first-draft '+owner.project;return {id,revision:state.revision,content,result:await sendAIChat(store,owner.user,id,state.revision,content,config,transport)};}

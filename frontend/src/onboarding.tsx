@@ -13,7 +13,7 @@ import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';
 import {Label} from './components/ui/label';
 import {ProfilePicturePicker,profilePicture,avatarChoices} from './profile-picture-picker';
-import {welcomePrompts,welcomeStage,firstWelcomePrompt,type WelcomePrompt} from '../../src/welcome-prompts';
+import {welcomePrompts,welcomeStage,type WelcomePrompt} from '../../src/welcome-prompts';
 const themes=[['ocean','Fresh & bright','#60B5FF'],['clay','Warm & cozy','#e7ab89'],['forest','Calm & natural','#78b9a1']] as const;
 export function Onboarding({profile}:{profile:Profile}){
  const state=useQuery({queryKey:['onboarding'],queryFn:()=>api<Welcome>('/onboarding')});
@@ -25,7 +25,7 @@ export function Onboarding({profile}:{profile:Profile}){
 function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  const [draft,setDraft]=useState(initial),[name,setName]=useState(profile.name),[bio,setBio]=useState(profile.about_me),[share,setShare]=useState(!!profile.share_context),[busy,setBusy]=useState(false),[photoBusy,setPhotoBusy]=useState(false),[error,setError]=useState(''),[returnToReview,setReturnToReview]=useState(false);
  const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),mounted=useRef(false),lock=useRef(false),errorPanel=useRef<HTMLDivElement>(null);
- const prompt=draft.prompt??firstWelcomePrompt(draft.stage),index=welcomePrompts.indexOf(prompt),chapter=['profile','project','review'].indexOf(welcomeStage(prompt)),waiting=busy||photoBusy;
+ const prompt=draft.prompt,index=welcomePrompts.indexOf(prompt),chapter=['profile','project','review'].indexOf(welcomeStage(prompt)),waiting=busy||photoBusy;
  useEffect(()=>{if(mounted.current){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'center',behavior:'instant'});}mounted.current=true;},[prompt]);
  useEffect(()=>{if(error){const panel=errorPanel.current;if(panel&&(document.activeElement===document.body||panel.closest('form')?.contains(document.activeElement)))panel.focus();}},[error]);
  async function persist(nextPrompt:WelcomePrompt){
