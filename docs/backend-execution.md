@@ -2,9 +2,15 @@
 
 **Current generation contract:** the [capability planner](capability-planner.md) requires a saved, current missing-capability plan for new maintainer-generated source. Application builds can also use the exact shared task-list reference with no generated source. Custom onboarding builds may use one planning lookup before their build. These requirements supersede earlier one-call/source-only milestone descriptions below; historical receipts and the existing isolated runtime/reviews remain valid.
 
-The full MVP needs generated backend behavior, durable project data and recovery. Existing contact and directory components do not satisfy arbitrary backend execution. This work adds the execution boundary first; data capabilities, generated-app publication, migrations and recovery must build on it before claiming that broader requirement is delivered.
+**Current interface and identity contract, October 2, 2026:** customer Chat accepts natural language. The agent prepares work through registered tools; consequential changes use exact owner-approved controls. Historical slash-command examples and AI-unit charges below describe earlier milestones, not a supported customer interface or billing policy. Standard owner assistance follows unlimited fair use with internal cost accounting; visitor execution never calls the maintainer model. See [natural-language Chat](natural-language-chat.md), [current identity](identity-web.md), and [pricing policy](pricing-and-model-policy.md).
 
-Current status: private tests, reviewed private state transitions, reviewed public stateless JSON endpoints and number/text/checkbox website forms are implemented. [Application visitor identity and persistent data](app-data.md) covers the separate controlled visitor host, passkeys, per-visitor state and owner-approved application pages. Richer generated interfaces, visitor-data migrations and whole-app recovery remain open. The sections below record implementation milestones.
+Current source implements private tests, reviewed private state transitions, reviewed public stateless JSON endpoints and bounded website forms. [Application visitor identity and persistent data](app-data.md) covers the separate controlled visitor host, passkeys, per-visitor state, owner-approved pages, reviewed document transformations and retained program/document recovery. Those bounded recovery paths do not restore provider infrastructure, credentials or the entire control database. Broader application/operations acceptance remains open.
+
+### Current account and backend verification
+
+Fifteen focused suites now use the complete current schema with admitted owner authority. The application visitor session, public function gateway and scheduled import triage retain their independent authority. Actual cryptographic visitor sign-in and four loopback HTTP suites with the isolated workerd/QuickJS service pass. Fault injection targets committed operations, and read corruption passes through the actual admitted batch before digest verification. [Verification records the exact commands and limits](verification.md#backend-execution-and-visitor-authority).
+
+Executable HTTP fixtures first prove imported source remains quarantined, then create a separate trusted synthetic version. This does not approve imports or implement an external scanner. The current identity schema and account policy still await their coordinated test cutover; historical deployment receipts below do not establish that cutover. Remaining application recovery/build fixtures and physical-device acceptance stay open.
 
 ## One-request private application build — September 30, 2026
 
@@ -46,7 +52,7 @@ QuickJS/Wasm is an additional containment layer, not a claim that an interpreter
 - Conversational generation, test results, preview and source export.
 - Full app recovery and operations acceptance.
 
-The first two gates are verified below. The deployed service has also been reached through a private service binding, but the authenticated gateway now exists (see below), with live authenticated invocation still to verify. All later application gates remain open; a standalone interpreter is not a complete generated application platform.
+The sections below record bounded implementation and earlier local/deployed evidence for these gates. The current account cutover has separate release and owner-device acceptance requirements; consult the current verification checkpoint above and [MVP acceptance](acceptance.md) before claiming completion.
 
 ## Execution evidence — September 29, 2026
 
@@ -184,28 +190,28 @@ Deployment: migration 0049 applied remotely; public host `fb0c3657-d9bc-42f2-b3e
 
 ## Compare saved backend versions
 
-`/backend-diff NEW_VERSION_ID ORIGINAL_VERSION_ID` reads two immutable versions from the same owned project. The agent can request the same operation using `{kind:"backend",operation:"compare",versionId,baselineId}`. The authenticated API is `GET /api/backend-versions/:new/compare/:original`.
+The agent reads two immutable versions from the same owned project using `{kind:"backend",operation:"compare",versionId,baselineId}`. The authenticated API is `GET /api/backend-versions/:new/compare/:original`.
 
 The response verifies both source hashes, reports exact version IDs/digests and the latest saved test status for the new version, and identifies one exact replacement block between the equal prefix and suffix. This linear-time comparison avoids quadratic work on adversarial source. It is not necessarily a minimal diff: unchanged lines between separate edits remain visible on both sides. Newlines, Unicode and an unchanged source are preserved. Missing, foreign and cross-project comparisons return the same not-found response.
 
-Test status is explicitly untested, passed, failed or unknown. A completed failing example supersedes an earlier passing example when it is the latest saved test. No test inputs or result data are included. Passing one example does not establish correctness for all inputs. Reading a comparison does not execute code, create a test receipt, publish a version or alter project data. The deterministic chat command uses no AI units; model interpretation remains metered.
+Test status is explicitly untested, passed, failed or unknown. A completed failing example supersedes an earlier passing example when it is the latest saved test. No test inputs or result data are included. Passing one example does not establish correctness for all inputs. Reading a comparison does not execute code, create a test receipt, publish a version or alter project data. The comparison itself makes no inference call. Standard owner assistance uses internal cost accounting without a customer AI debit.
 
-Verification: `test:backend-diff` covers reconstruction, edge cases, account/project isolation, integrity failure, latest test status and read-only chat/model actions. `node tests/backend-diff-http.mjs` uses a local Worker and synthetic accounts to verify unauthenticated/foreign denial, source comparison, chat response and unchanged unit allowance.
+Verification: `test:backend-diff` covers reconstruction, edge cases, account/project isolation, integrity failure, latest test status and read-only chat/model actions. `node tests/backend-diff-http.mjs` uses a local Worker and synthetic accounts to verify unauthenticated/foreign denial, source comparison, public literal-command refusal when inference is unavailable, unchanged Chat revision and zero inference calls.
 
 Comparison release: platform `724acaf2-f57c-49d0-8f5d-7d35ef9e3493` verified active. The live comparison route rejects anonymous requests with 401. No production source versions or test runs were created for this acceptance check.
 
 
 ### Expected-output checks
 
-`/check-backend VERSION_ID {"input":{"value":2},"expected":3}` executes one synthetic example and compares the entire returned JSON value with an expected answer. The model action is `{"kind":"backend","operation":"check","versionId":"…","input":…,"expected":…}`. The existing authenticated POST backend test endpoint accepts an optional `expected` member, including JSON null. `/test-backend` remains an execution-only test for compatibility.
+An expected-output check executes one synthetic example and compares the entire returned JSON value with an expected answer. The model action is `{"kind":"backend","operation":"check","versionId":"…","input":…,"expected":…}`. The existing authenticated POST backend test endpoint accepts an optional `expected` member, including JSON null. Omitting `expected` selects an execution-only test in this same current API; the receipt distinguishes execution from an expected-output verdict.
 
 Object member order is ignored, array order and types must match, and numeric comparisons have no tolerance. Expected JSON is limited to 16 KiB; input remains 8 KiB, with existing overall chat/API body limits also applying. No expected data is sent to guest code. The private receipt contains the actual result, verdict and SHA-256 fingerprint of serialized expected JSON; it does not duplicate the expected payload. This hash is an integrity reference, not encryption or anonymization. Use synthetic examples only. The request fingerprint binds the expectation to the invocation, so changing or removing it under the same ID conflicts. Identical retries never execute again; an uncertain reservation remains pending.
 
-A mismatch sets `ok:false`, `error:"expectation_failed"`, and `check.status:"failed"`. Existing database publication and application-activation gates therefore reject that receipt. A runtime failure records `check.status:"not_run"`; a matching result records `passed`. All test attempts share the existing backend allowance. The deterministic chat command consumes no AI units; asking the model to choose a test uses the normal AI allowance. Tests do not apply state changes or publish code. Agent-written expectations are still only examples and do not prove requirements were understood correctly.
+A mismatch sets `ok:false`, `error:"expectation_failed"`, and `check.status:"failed"`. Existing database publication and application-activation gates therefore reject that receipt. A runtime failure records `check.status:"not_run"`; a matching result records `passed`. All test attempts share the existing backend allowance. The deterministic test does not call inference; model-assisted test selection follows standard owner fair-use accounting. Tests do not apply state changes or publish code. Agent-written expectations are still only examples and do not prove requirements were understood correctly.
 
-Source comparisons now identify whether the latest receipt verified expected output or only completed execution. Existing execution-only successful receipts remain valid under the existing review policy; expected-output checking is not a new mandatory publication gate for every historical version.
+Source comparisons now identify whether the latest receipt verified expected output or only completed execution. The current review policy accepts successful execution-only receipts as well as passing expected-output receipts. A failed expected-output verdict is refused.
 
-Verification: `npm run test:backend-checks` covers JSON equality semantics (including deep nesting and special property names), payload bounds, immutable replay/conflicts, concurrent execution once, lost reservation acknowledgment, ownership, model/chat routing, and database rejection of failed assertions for publication/activation. `tests/backend-http.mjs` checks the actual bound QuickJS runtime through the authenticated API and deterministic chat, including correct and wrong answers, preserved AI balance, and failed publication review.
+Verification: `npm run test:backend-checks` covers JSON equality semantics (including deep nesting and special property names), payload bounds, immutable replay/conflicts, concurrent execution once, lost reservation acknowledgment, ownership, model/chat routing, and database rejection of failed assertions for publication/activation. `tests/backend-http.mjs` checks the actual bound QuickJS runtime through the authenticated API, including correct and wrong answers, zero inference calls, and failed publication review.
 
 ## Quarantine-aware HTTP acceptance — September 30, 2026
 
@@ -218,7 +224,7 @@ Current suites:
 - `node tests/backend-http.mjs`: sessions/ownership/origin checks, actual QuickJS execution and runaway recovery, immutable replay/conflicts, state review/confirmation/history/restore, expected-output checks, failed-test publication denial, anonymous public invocation and reviewed withdrawal. Public-host acceptance now always runs.
 - `node tests/backend-form-http.mjs`: calculator execution, form publication review and origin boundaries, and public HTML before/after confirmation. No persistent browser fixture is created.
 - `node tests/app-activation-http.mjs`: transition receipt, private activation review, owner/origin enforcement, guided enable/disable and historical confirmation without unintended reactivation.
-- `node tests/backend-diff-http.mjs`: source comparison, anonymous/foreign denial, Chat inspection and unchanged usage allowance.
+- `node tests/backend-diff-http.mjs`: source comparison, anonymous/foreign denial, public literal-command refusal and zero inference calls.
 
 No deployment, provider inference, customer publication or CMS acceptance is performed by these tests.
 
