@@ -3309,7 +3309,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/chat-interactions/maintained.ts](../../src/chat-interactions/maintained.ts)
 - [tests/chat-interaction-intake.mjs](../../tests/chat-interaction-intake.mjs)
 - [src/chat-interactions/intake-context.ts](../../src/chat-interactions/intake-context.ts)
-- [frontend/src/chat-project-picker.tsx](../../frontend/src/chat-project-picker.tsx)
+- [frontend/src/chat-resource-picker.tsx](../../frontend/src/chat-resource-picker.tsx)
 
 ### Execution coordination
 
@@ -3389,6 +3389,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/lib/interaction-fields.ts](../../frontend/src/lib/interaction-fields.ts)
 - [tests/chat-interaction-fields.mjs](../../tests/chat-interaction-fields.mjs)
 - [tests/chat-interaction-fields-browser.mjs](../../tests/chat-interaction-fields-browser.mjs)
+- [frontend/src/chat-resource-picker.tsx](../../frontend/src/chat-resource-picker.tsx)
+- [src/chat-interactions/resource-options.ts](../../src/chat-interactions/resource-options.ts)
+- [src/chat-interactions/resource-shape.ts](../../src/chat-interactions/resource-shape.ts)
+- [tests/chat-resource-options.mjs](../../tests/chat-resource-options.mjs)
 
 ### Execution coordination
 
@@ -3405,6 +3409,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/90. Planning owner: Unassigned
 - 2026-10-02 UTC: WH-107/#90 adds the maintained project-status panel to current website briefs through the existing interaction API and shared Dashboard projection. Ten actual-handler scenarios on SQLite/local D1 cover ownership, exact binding, unavailable/denied reads, late revocation/transfer and no side effects. Built-workspace HTTP/D1 browser evidence covers closed-by-default behavior, keyboard open, 360/390px targets, refresh/recovery, stale-data hiding and private cache eviction. Type/build, protocol/history/lifecycle and Chat/site-journey checks pass. Broader fields, summary/comparison/preview displays and full presentation/accessibility acceptance remain open. No schema or deployment change; WH-109 continues to own persistent views.
 - 2026-10-02 UTC: WH-107/#90 adds the shared exact website comparison display inside Chat, reusing existing immutable proposals, current owner/feature/identity/safety/base checks and protected previews. Nine actual-handler scenarios pass on SQLite/local D1; built-workspace browser covers keyboard/mobile before-after facts, outage recovery, closed reload, private cache eviction and no approval on rendering. Existing specification and Chat/site journeys, type/build, protocol and lifecycle checks pass. Summary/comparison and owned preview presentation now have current local evidence; broader bounded fields and complete presentation/accessibility acceptance remain open. No new schema or deployment; custom composition/views retain WH-108/109 scope.
 - 2026-10-02 UTC: WH-107/#90 adds shared multiple-choice, explicit boolean, number, date and zoned date/time controls. Explicit snapshots validate typed wire values while local recovery retains unfinished input, zero, false and empty lists. Helper/protocol/recovery checks cover ranges, exact receipts and skipped/repeated local times; the actual shared components pass keyboard, 360/390px, reload, clearing and no-effect checks in Chromium with a different device timezone. The existing maintained-form HTTP/local-D1 journey and Chat/site/type/build checks pass. These components do not enable runtime custom issuance or new agent actions. Owned photo/attachment and multiple-resource adapters plus complete presentation/accessibility acceptance remain open. No schema change or deployment; WH-108 owns custom composition.
+- 2026-10-02 UTC: WH-107/#90 replaces the single-purpose project chooser with shared single/multiple resource and metadata-only photo controls. The maintained project route now requires the current digest and registered read eligibility, refuses replaced forms and checks fresh owned metadata; the shared domain adapter reuses the existing photo inventory clearance predicate. Seven domain/shape cases pass on SQLite/local D1 and 23 maintained intake cases cover current HTTP contracts. Component browser checks cover keyboard, caps, literal metadata, clearing/reload, no image requests and 360/390px touch layout. Runtime photo/custom issuance remains refused pending connected intake, submit and copy-lifecycle admission. Complete WH-107 presentation/accessibility remains open; no schema, scanner or deployment change.
 
 ## WH-108 — Let the agent compose bounded custom forms and use task-scoped answers
 
