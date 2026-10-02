@@ -1162,7 +1162,8 @@
         "src/cloudflare-connection.ts",
         "docs/maintenance.md",
         "src/connection-vault.ts",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "docs/connection-key-lifecycle.md"
       ],
       "storageStatus": "current",
       "protection": {
@@ -1179,7 +1180,7 @@
           "OAuth PKCE/token exchange, current scoped provider calls and recorded read-only uncertain recovery; no credential in model context"
         ],
         "remainingExposure": [
-          "Authorized Worker plus key can decrypt tokens. Single-key format lacks managed rotation; provider revocation remains an external outcome."
+          "Authorized Worker plus a retained exact key can decrypt tokens. Current key IDs do not yet provide managed storage rotation or key-retirement evidence; provider revocation remains an external outcome."
         ],
         "decision": "extend-key-lifecycle",
         "rationale": "Database-only exposure must not supply reusable provider access; extend the existing authenticated vault, not customer unlock UX.",
@@ -2083,7 +2084,7 @@
       "applicationEncoding": "mixed-aead-and-metadata",
       "providerAtRest": "Cloudflare-managed D1/R2 protection where those products store admitted records; not end-to-end encryption.",
       "transit": "HTTPS for browser/provider APIs and protected Cloudflare bindings; local fixtures are isolated loopback. External destinations require the exact domain contract.",
-      "keyCustody": "CONNECTION_ENCRYPTION_KEY is a Worker secret. Selected token/PKCE fields use AES-GCM; surrounding status, owner, scope and destination metadata stays readable.",
+      "keyCustody": "Current source uses CONNECTION_ENCRYPTION_KEYRING as a Worker secret with explicit retained key IDs. Selected token/PKCE fields use AES-GCM; surrounding status, owner, scope and destination metadata stays readable. Child WH-117D must accept the deployed binding/current-format cutover.",
       "serverReadable": true,
       "endToEndEncrypted": false,
       "customerUnlockRequired": false,
@@ -2091,12 +2092,13 @@
         "account": "Current signed-in/recovered identity can access only retained data under present ownership and policy; account recovery is not content reconstruction.",
         "content": "Authorized provider adapter can decrypt only the exact owner/provider/purpose/record context using the platform-held key; recovery kit does not reconstruct it.",
         "backup": "Data backups do not contain the Worker key. DP-03/04 require separately protected current key custody and matching key IDs for every admitted restore source.",
-        "rotation": "Current single-key v1 envelope has no key ID or rotation journal. DP-01 requires one current keyed format and resumable compare-and-swap rotation before key retirement.",
+        "rotation": "Current source has a wv2 envelope with authenticated key IDs and active/retained key selection. WH-117B still requires atomic stale-writer fencing and resumable CAS rotation before any key retirement; source format support is not operational rotation.",
         "missingKey": "Unseal/configuration fails; retained encrypted revocation obligations must stay visible. Do not reconnect, mark remote revocation complete, or use plaintext automatically.",
         "restore": "Current schema and independent revocation/deletion/withdrawal evidence must be reconciled before serving or dispatch. Restored receipts create no authority."
       },
       "references": [
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "docs/connection-key-lifecycle.md"
       ]
     },
     {

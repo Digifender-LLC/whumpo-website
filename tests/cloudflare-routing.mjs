@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -7,13 +8,13 @@ const b=await build({stdin:{contents:"export {reviewCNAME,reviewTXT,confirmDNS,l
 const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const {reviewCNAME,reviewTXT,confirmDNS,listDNSActions,seal,reviewHosting,sendChat,readChat,sendAIChat,getBilling}=m;
 const fixture=await databaseFixture({d1:true}),db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
-const config={clientId:'fixture',clientSecret:'fixture-secret',key:'a'.repeat(64)},zone='b'.repeat(32),target='hosting.whumpo.site',now=()=>new Date().toISOString();
+const config={clientId:'fixture',clientSecret:'fixture-secret',key:fixtureKeyring('a'.repeat(64))},zone='b'.repeat(32),target='hosting.whumpo.site',now=()=>new Date().toISOString();
 async function account(apex=false){
  const identity=await workspaceFixture(db,m),user=identity.account,project=crypto.randomUUID(),claim=crypto.randomUUID(),tokenId=crypto.randomUUID(),connection=crypto.randomUUID(),proof=crypto.randomUUID(),hostname=apex?'example.com':'test-'+user+'.example.com';
  identities.set(user,identity);scopes.set(user,await identity.scope());await paidPlan(db,user,'business');
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Routing fixture','Testing','draft',?,?)").bind(project,user,now(),now()).run();
  await db.prepare('INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at) VALUES(?,?,?,?,?,?)').bind(claim,project,hostname,proof,new Date(Date.now()+86400000).toISOString(),now()).run();
- await db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,?,'active')").bind(tokenId,user,await seal(config.key,`tellumo:cloudflare:token:${user}:${tokenId}`,JSON.stringify({access:'fixture-access'})),new Date(Date.now()+3600000).toISOString(),now()).run();
+ await db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,?,'active')").bind(tokenId,user,await seal(config.key,`whumpo:cloudflare:token:${user}:${tokenId}`,JSON.stringify({access:'fixture-access'})),new Date(Date.now()+3600000).toISOString(),now()).run();
  await reviewHosting(scope(user),user,connection,claim,{token:'synthetic',zone:'8d46ee4e394514402479acf16579f7b5',target});
  await db.prepare("UPDATE domain_connections SET state='provisioning',provider_id=? WHERE id=?").bind(crypto.randomUUID(),connection).run();
  return {user,project,claim,tokenId,connection,proof,hostname};

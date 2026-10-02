@@ -55,6 +55,7 @@ import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns'
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
+import {ConnectionVaultError} from './connection-vault';
 import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubInstallations} from './github-connection';
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
@@ -391,7 +392,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if(method==='GET'&&pathname==='/api/connections/cloudflare/callback'){
     const params=new URL(request.url).searchParams;let destination='/workspace/?connection=cloudflare';
     try{if(params.has('error')){await cancelCloudflare(env.DB,user.id,params.get('state')??'');throw new ConnectionError(400,'Cloudflare authorization cancelled.');}await finishCloudflare(env.DB,user.id,params.get('state')??'',params.get('code')??'',cloudflareConfig(env));}
-    catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
+    catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof ConnectionVaultError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
   }
   if(method==='POST'&&pathname==='/api/connections/cloudflare/disconnect')return json(await disconnectCloudflare(env.DB,user.id,cloudflareConfig(env)));
@@ -404,7 +405,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     const params=new URL(request.url).searchParams;
     let destination='/workspace/?connection=github';
     try{if(params.has('error')){await cancelGitHub(env.DB,user.id,params.get('state')??'');throw new ConnectionError(400,'GitHub authorization was cancelled.');}await finishGitHub(env.DB,user.id,params.get('state')??'',params.get('code')??'',githubConfig(env));}
-    catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
+    catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof ConnectionVaultError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
   }
   if (method === "POST" && pathname === "/api/connections/github/disconnect") return json(await disconnectGitHub(env.DB,user.id,githubConfig(env)));
@@ -505,7 +506,7 @@ export default {
       return env.ASSETS.fetch(request);
     } catch (cause) {
       if(cause instanceof IdentityError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
-      if (cause instanceof FeatureInclusionError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
+      if (cause instanceof FeatureInclusionError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));
     }

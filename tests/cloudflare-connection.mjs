@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -7,7 +8,7 @@ const built=await build({stdin:{contents:"export * from './src/cloudflare-connec
 const m=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const {startCloudflare,finishCloudflare,disconnectCloudflare,cancelCloudflare,cloudflareZones,cloudflareStatus,cleanupCloudflare,cloudflareConfig,unseal,worker}=m;
 const fixture=await databaseFixture({d1:true}),db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
-const config={clientId:'fixture-client',clientSecret:'fixture-secret',key:'a'.repeat(64)};let exchanges=0,revocations=0,lastForm;
+const config={clientId:'fixture-client',clientSecret:'fixture-secret',key:fixtureKeyring('a'.repeat(64))};let exchanges=0,revocations=0,lastForm;
 const provider=async(url,init={})=>{const u=new URL(url);assert.equal(init.redirect,'manual');assert.ok(init.signal);if(u.pathname==='/oauth2/token'){exchanges++;lastForm=new URLSearchParams(init.body);assert.equal(lastForm.get('grant_type'),'authorization_code');assert.equal(lastForm.get('redirect_uri'),'https://whumpo.com/api/connections/cloudflare/callback');assert.ok(!u.search);return Response.json({access_token:'fixture-access',token_type:'Bearer',expires_in:3600,scope:'zone.read dns.read dns.write'});}if(u.pathname==='/oauth2/revoke'){revocations++;assert.equal(new URLSearchParams(init.body).get('token'),'fixture-access');return new Response(null,{status:200});}if(u.pathname==='/client/v4/zones'){assert.equal(init.headers.authorization,'Bearer fixture-access');assert.equal(u.searchParams.get('per_page'),'50');return Response.json({success:true,result:[{id:'c'.repeat(32),name:'example.com',status:'active'},{id:'bad',name:'ignore',status:'active'}],result_info:{total_pages:2}});}throw Error('Unexpected provider path');};
 async function user(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
 async function begin(id){const r=await startCloudflare(scope(id),id,config),url=new URL(r.url);assert.equal(url.origin,'https://dash.cloudflare.com');assert.equal(url.pathname,'/oauth2/auth');assert.equal(url.searchParams.get('scope'),'zone.read dns.read dns.write');assert.equal(url.searchParams.get('code_challenge_method'),'S256');return {state:url.searchParams.get('state'),challenge:url.searchParams.get('code_challenge')};}
@@ -18,7 +19,7 @@ try{
  await finishCloudflare(scope(owner),owner,flow.state,'code',config,provider);assert.equal(exchanges,1);const digest=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(lastForm.get('code_verifier')))).toString('base64url');assert.equal(digest,flow.challenge);
  await assert.rejects(finishCloudflare(scope(owner),owner,flow.state,'code',config,provider),{status:400});assert.equal(exchanges,1);
  const status=await cloudflareStatus(scope(owner),owner,config);assert.equal(status.connected,true);assert.equal(status.dnsChangesEnabled,true);assert.ok(!JSON.stringify(status).includes('fixture-access'));
- const row=await db.prepare('SELECT * FROM cloudflare_token_vault WHERE user_id=?').bind(owner).first();assert.ok(!row.ciphertext.includes('fixture-access'));assert.match(await unseal(config.key,`tellumo:cloudflare:token:${owner}:${row.id}`,row.ciphertext),/fixture-access/);await assert.rejects(unseal(config.key,`tellumo:cloudflare:token:${other}:${row.id}`,row.ciphertext));await assert.rejects(unseal('c'.repeat(64),`tellumo:cloudflare:token:${owner}:${row.id}`,row.ciphertext));
+ const row=await db.prepare('SELECT * FROM cloudflare_token_vault WHERE user_id=?').bind(owner).first();assert.ok(!row.ciphertext.includes('fixture-access'));assert.match(await unseal(config.key,`whumpo:cloudflare:token:${owner}:${row.id}`,row.ciphertext),/fixture-access/);await assert.rejects(unseal(config.key,`whumpo:cloudflare:token:${other}:${row.id}`,row.ciphertext));await assert.rejects(unseal(fixtureKeyring('c'.repeat(64)),`whumpo:cloudflare:token:${owner}:${row.id}`,row.ciphertext));
  const zones=await cloudflareZones(scope(owner),owner,config,1,provider);assert.deepEqual(zones.zones,[{id:'c'.repeat(32),name:'example.com',status:'active'}]);assert.equal(zones.hasMore,true);await assert.rejects(cloudflareZones(scope(other),other,config,1,provider),{status:401});await assert.rejects(cloudflareZones(scope(owner),owner,config,0,provider),{status:400});
  await assert.rejects(startCloudflare(scope(owner),owner,config),{status:409});
  // Provider revocation failure keeps access disabled and reconnect blocked.
@@ -49,7 +50,7 @@ try{
  await disconnectCloudflare(scope(lostUser),lostUser,undefined);let release,entered;const enteredPromise=new Promise(r=>entered=r),gate=new Promise(r=>release=r);let sends=0;const slow=async(url,init)=>{sends++;entered();await gate;return provider(url,init);};const cleaning=cleanupCloudflare(db,config,slow);await enteredPromise;await cleanupCloudflare(db,config,provider);release();await cleaning;assert.equal(sends,1);
  // Worker boundary: anonymous, Origin and recent-login checks; callback errors use a fixed redirect.
  const gateUser=await user(),gateIdentity=identities.get(gateUser),stale=await workspaceSession(db,m,gateIdentity,-3600);
- const env={...fixture.env,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},CLOUDFLARE_CLIENT_ID:config.clientId,CLOUDFLARE_CLIENT_SECRET:config.clientSecret,CONNECTION_ENCRYPTION_KEY:config.key};
+ const env={...fixture.env,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},CLOUDFLARE_CLIENT_ID:config.clientId,CLOUDFLARE_CLIENT_SECRET:config.clientSecret,CONNECTION_ENCRYPTION_KEYRING:config.key};
  let cookie='__Host-whumpo_session='+stale.token,base='https://whumpo.com';
  assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/zones'),env)).status,401);
  assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/start',{method:'POST',headers:{cookie,origin:'https://evil.test'}}),env)).status,403);

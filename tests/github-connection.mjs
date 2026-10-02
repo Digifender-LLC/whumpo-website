@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -7,7 +8,7 @@ const built=await build({stdin:{contents:"export * from './src/github-connection
 const m=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const {startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,githubInstallations,githubAccess,cleanupGitHub,seal,unseal}=m;
 const fixture=await databaseFixture({d1:true}),db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
-const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'tellumo-test',key:'ab'.repeat(32)};
+const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'tellumo-test',key:fixtureKeyring('ab'.repeat(32))};
 async function account(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
 const denied=async()=>{throw Error('No transport expected');};let calls=0,exchanges=0,revocations=[];
 function provider(start,{token='ghu_synthetic',expires=28800,revokeStatus=204,userStatus=200,beforeUser}={}){return async(url,init={})=>{calls++;assert.equal(init.redirect,'manual');assert.ok(init.signal);const parsed=new URL(url);
@@ -21,7 +22,7 @@ async function finish(user,s,transport,admitted=scope(user)){return finishGitHub
 try{
  const user=await account(),other=await account();
  assert.equal((await connectionStatus(scope(user),user,undefined)).github.enabled,false);await assert.rejects(()=>startGitHub(scope(user),user,undefined));
- const ciphertext=await seal(config.key,'user-one','secret');assert.ok(!ciphertext.includes('secret'));assert.equal(await unseal(config.key,'user-one',ciphertext),'secret');await assert.rejects(()=>unseal(config.key,'user-two',ciphertext));await assert.rejects(()=>unseal('cd'.repeat(32),'user-one',ciphertext));
+ const ciphertext=await seal(config.key,'whumpo:github:token:user-one:record-one','secret');assert.ok(!ciphertext.includes('secret'));assert.equal(await unseal(config.key,'whumpo:github:token:user-one:record-one',ciphertext),'secret');await assert.rejects(()=>unseal(config.key,'whumpo:github:token:user-two:record-one',ciphertext));await assert.rejects(()=>unseal(fixtureKeyring('cd'.repeat(32)),'whumpo:github:token:user-one:record-one',ciphertext));
  const s=await start(user);assert.equal(new URL(s.url).origin,'https://github.com');assert.equal(new URL(s.url).searchParams.get('code_challenge_method'),'S256');assert.equal(new URL(s.url).searchParams.get('scope'),null);
  await assert.rejects(()=>finish(other,s,denied));const differentSession=await workspaceSession(db,m,identities.get(user));const differentScope=await differentSession.scope();await assert.rejects(()=>finish(user,s,denied,differentScope));
  await finish(user,s,provider(s));let status=await connectionStatus(scope(user),user,config);assert.equal(status.github.connected,true);assert.equal(status.github.login,'synthetic-user');assert.ok(!JSON.stringify(status).includes('ghu_'));assert.equal((await connectionStatus(scope(other),other,config)).github.connected,false);

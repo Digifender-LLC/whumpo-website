@@ -1890,7 +1890,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/81. Planning owner: Unassigned
 
 ## WH-117 — Implement transparent encryption and complementary protection controls
 
-Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
+Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: L.
 
 Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
@@ -1946,15 +1946,19 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tools/lifecycle-catalog.mjs](../../tools/lifecycle-catalog.mjs)
 - [tests/lifecycle-catalog.mjs](../../tests/lifecycle-catalog.mjs)
 - [tests/connection-vault.mjs](../../tests/connection-vault.mjs)
+- [docs/connection-key-lifecycle.md](../../docs/connection-key-lifecycle.md)
+- [tests/connection-keyrings.mjs](../../tests/connection-keyrings.mjs)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/82. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 - 2026-10-02 UTC: WH-116 supplies the concrete DP-01–05 handoff and current synthetic vault baseline. Additional blanket content encryption and routine unlock/PRF requirements are not selected. WH-117 remains implementation work; account closure and whole-platform operational restore remain WH-018/019/008/059.
+- 2026-10-02 UTC: parent #82 split into #83 current credential envelope/configuration, #84 fenced resumable rotation, #85 processing/isolated-restore/custody controls and #86 connected candidate/test-release acceptance. DP-01–05 and every original parent criterion remain required; no partial format deployment. Child #83 claimed at bee963a.
+- 2026-10-02 UTC: child #83 source uses only CONNECTION_ENCRYPTION_KEYRING/current wv2 envelopes, authenticates key ID and scoped context, and refuses missing/old/plaintext values with bounded HTTP errors. 164 primitive/configuration cases, actual retained-key PKCE/current-key token and missing-key revocation custody on local D1, affected provider/admission/backup/DNS tests, both TypeScript projects and build pass. No remote keys or data changed. Parent stays open for #84 rotation fences/journal, #85 processing/restore/custody and #86 candidate release acceptance.
 
 # F2 — Useful websites and applications
 

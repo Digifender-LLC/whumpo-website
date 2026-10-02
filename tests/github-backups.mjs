@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {createFixtureProject,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
@@ -9,12 +10,12 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),{reviewBackup,confirmBackup,listBackups,githubRepositories,worker,ownedExport,seal}=m;
 const fixture=await databaseFixture({d1:true,r2:true}),db=fixture.db,dir=await mkdtemp('/tmp/whumpo-backups-'),identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
-const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'test',key:'ab'.repeat(32)},now=new Date().toISOString();
+const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'test',key:fixtureKeyring('ab'.repeat(32))},now=new Date().toISOString();
 async function account(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
 const denied=async()=>{throw Error('Unexpected network');};
 try{
  const user=await account(),other=await account(),token=crypto.randomUUID();
- await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(token,user,await seal(config.key,`tellumo:github:token:${user}:${token}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
+ await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(token,user,await seal(config.key,`whumpo:github:token:${user}:${token}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
  await db.prepare('INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) VALUES(?,?,?,?,?)').bind(user,'44','test',token,now).run();
  const {version}=await createFixtureProject(scope(user),user,'Bakery','A local bakery','clay');
  const archive=await ownedExport(scope(user),user,version),files=unzipSync(archive),gitdir=dir+'/git';await mkdir(gitdir);
@@ -55,7 +56,7 @@ try{
  reset();const stale=await review();mode='stale';assert.equal((await confirm(stale.id)).state,'uncertain');await confirm(stale.id);assert.equal(writes,4);
  reset();const lost=await review();let dropped=false;const lossy=await identities.get(user).scope(interceptDatabase(db,/UPDATE github_backups SET state='complete'/,async()=>{},async()=>{if(!dropped){dropped=true;throw Error('Lost database acknowledgement');}}));assert.equal((await confirm(lost.id,lossy)).state,'complete');assert.ok(dropped);assert.equal(writes,5);
  reset();const changedToken=await review();
- const replacement=crypto.randomUUID();await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(replacement,user,await seal(config.key,`tellumo:github:token:${user}:${replacement}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
+ const replacement=crypto.randomUUID();await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(replacement,user,await seal(config.key,`whumpo:github:token:${user}:${replacement}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
  await db.prepare('UPDATE github_connections SET active_token_id=? WHERE user_id=?').bind(replacement,user).run();await assert.rejects(()=>confirm(changedToken.id),/connection changed/);
  await db.prepare('UPDATE github_connections SET active_token_id=? WHERE user_id=?').bind(token,user).run();
  const session=identities.get(other).token;

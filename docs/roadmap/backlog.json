@@ -5714,7 +5714,7 @@
       "title": "Implement transparent encryption and complementary protection controls",
       "phase": "F1",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "ready",
       "kind": "implementation",
       "size": "L",
       "dependsOn": [
@@ -5758,13 +5758,17 @@
         "docs/inference-privacy.md",
         "tools/lifecycle-catalog.mjs",
         "tests/lifecycle-catalog.mjs",
-        "tests/connection-vault.mjs"
+        "tests/connection-vault.mjs",
+        "docs/connection-key-lifecycle.md",
+        "tests/connection-keyrings.mjs"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/82",
       "owner": null,
       "evidence": [
         "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
-        "2026-10-02 UTC: WH-116 supplies the concrete DP-01–05 handoff and current synthetic vault baseline. Additional blanket content encryption and routine unlock/PRF requirements are not selected. WH-117 remains implementation work; account closure and whole-platform operational restore remain WH-018/019/008/059."
+        "2026-10-02 UTC: WH-116 supplies the concrete DP-01–05 handoff and current synthetic vault baseline. Additional blanket content encryption and routine unlock/PRF requirements are not selected. WH-117 remains implementation work; account closure and whole-platform operational restore remain WH-018/019/008/059.",
+        "2026-10-02 UTC: parent #82 split into #83 current credential envelope/configuration, #84 fenced resumable rotation, #85 processing/isolated-restore/custody controls and #86 connected candidate/test-release acceptance. DP-01–05 and every original parent criterion remain required; no partial format deployment. Child #83 claimed at bee963a.",
+        "2026-10-02 UTC: child #83 source uses only CONNECTION_ENCRYPTION_KEYRING/current wv2 envelopes, authenticates key ID and scoped context, and refuses missing/old/plaintext values with bounded HTTP errors. 164 primitive/configuration cases, actual retained-key PKCE/current-key token and missing-key revocation custody on local D1, affected provider/admission/backup/DNS tests, both TypeScript projects and build pass. No remote keys or data changed. Parent stays open for #84 rotation fences/journal, #85 processing/restore/custody and #86 candidate release acceptance."
       ]
     },
     {

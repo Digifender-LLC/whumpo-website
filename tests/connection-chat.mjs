@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import assert from 'node:assert/strict';
 import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
@@ -8,7 +9,7 @@ const {describeConnections,sendChat,chatState}=m,previousFetch=globalThis.fetch;
 try{
  const user=crypto.randomUUID(),other=crypto.randomUUID(),now=new Date().toISOString(),future=new Date(Date.now()+3600000).toISOString();
  for(const id of [user,other]){await accountAuthority(id);await chatState(scope(id),id);}
- const options={github:{clientId:'test',clientSecret:'CONFIG_SECRET_CANARY',key:'0'.repeat(64),appId:1,slug:'test'},config:{clientId:'test',clientSecret:'CF_SECRET_CANARY',key:'0'.repeat(64)}};
+ const options={github:{clientId:'test',clientSecret:'CONFIG_SECRET_CANARY',key:fixtureKeyring('0'.repeat(64)),appId:1,slug:'test'},config:{clientId:'test',clientSecret:'CF_SECRET_CANARY',key:fixtureKeyring('0'.repeat(64))}};
  assert.match(await describeConnections(scope(user),user),/GitHub: not available/);assert.match(await describeConnections(scope(user),user,options),/GitHub: not connected/);
  for(const id of [user,other]){await db.prepare("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,'active')").bind('gh-'+id,id,'TOKEN_CANARY',future).run();await db.prepare('INSERT INTO github_connections VALUES(?,?,?,?,?)').bind(id,'123','LOGIN_CANARY','gh-'+id,now).run();await db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,?,'active')").bind('cf-'+id,id,'TOKEN_CANARY',future,now).run();}
  globalThis.fetch=()=>{throw Error('Connection status must not call AI or providers');};
