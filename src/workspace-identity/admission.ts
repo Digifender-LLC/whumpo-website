@@ -140,6 +140,17 @@ export async function prepareOAuthCustody(db:D1Database,userId:string,provider:'
    statements.push(release());
    try{await c.db.batch(statements);}catch(error){if(!await saved())throw error;}
   },
+  async identifyGitHub(githubUserId:number){
+   // Only the direct authenticated /user response for this exact issued token
+   // may identify its retained grant. A later connection/login is not evidence.
+   if(provider!=='github'||!remembered||!Number.isSafeInteger(githubUserId)||githubUserId<1)throw new Error('Invalid GitHub custody identity.');
+   const identity=String(githubUserId);
+   const saved=()=>c.db.prepare('SELECT 1 FROM github_refresh_custody WHERE token_id=? AND user_id=? AND client_id=? AND github_user_id=?').bind(tokenId,userId,clientId,identity).first();
+   if(await saved())return;
+   try{await c.db.prepare('UPDATE github_refresh_custody SET github_user_id=? WHERE token_id=? AND user_id=? AND client_id=? AND github_user_id IS NULL').bind(identity,tokenId,userId,clientId).run();}
+   catch{if(!await saved())throw new Error('GitHub custody identity could not be saved.');}
+   if(!await saved())throw new Error('GitHub custody identity could not be confirmed.');
+  },
   async retire(){
    // Exact settlement survives sign-out. Never retire an activated credential.
    await c.db.batch(provider==='github'?[

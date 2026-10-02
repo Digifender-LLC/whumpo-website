@@ -106,6 +106,7 @@ export async function finishGitHub(db:D1Database,userId:string,state:string,code
   await assertFeature(db,scope);
   const who=await readJSON(await request(API+'/user',{headers:{...apiHeaders,authorization:'Bearer '+data.access_token}},transport));
   if(!Number.isSafeInteger(who.id)||Number(who.id)<1||typeof who.login!=='string'||! /^[A-Za-z0-9-]{1,39}$/.test(who.login))throw new ConnectionError(503,'GitHub returned an invalid account.');
+  if(refreshToken)await custody.identifyGitHub(Number(who.id));
   let results;try{results=await db.batch([
    db.prepare(`INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) SELECT t.user_id,?,?,t.id,strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM github_token_vault t JOIN github_token_staging s ON s.token_id=t.id JOIN github_oauth_states f ON f.user_id=t.user_id AND f.state_hash=s.state_hash WHERE t.id=? AND t.user_id=? AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND s.state_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND f.authority_id=? AND f.claimed=1 AND f.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND ${gate.sql} ON CONFLICT(user_id) DO UPDATE SET github_user_id=excluded.github_user_id,login=excluded.login,active_token_id=excluded.active_token_id,connected_at=excluded.connected_at`).bind(String(who.id),who.login,tokenId,userId,stateHash,workspacePrincipal(db,userId).authorityId,...gate.params),
    // Retire old usable credentials only after the replacement pointer wins.

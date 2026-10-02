@@ -3,7 +3,7 @@ import {assertMaintenanceDatabase} from './workspace-identity/admission';
 
 // Fixed actual stores; operator input never becomes an SQL identifier.
 const stores=[
- {table:'github_refresh_custody',provider:'github',purpose:'refresh',id:'token_id',cipher:'ciphertext',fields:['token_id','user_id','client_id','ciphertext','expires_at','access_revoked_at']},
+ {table:'github_refresh_custody',provider:'github',purpose:'refresh',id:'token_id',cipher:'ciphertext',fields:['token_id','user_id','client_id','github_user_id','ciphertext','expires_at','access_revoked_at']},
  {table:'github_token_vault',provider:'github',purpose:'token',id:'id',cipher:'ciphertext',fields:['id','user_id','ciphertext','expires_at','state']},
  {table:'cloudflare_token_vault',provider:'cloudflare',purpose:'token',id:'id',cipher:'ciphertext',fields:['id','user_id','ciphertext','expires_at','created_at','revoke_attempt','revoke_after','state']},
  {table:'github_oauth_states',provider:'github',purpose:'pkce',id:'state_hash',cipher:'verifier_ciphertext',fields:['user_id','state_hash','authority_id','verifier_ciphertext','expires_at','claimed']},

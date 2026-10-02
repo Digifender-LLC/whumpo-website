@@ -136,16 +136,19 @@ CREATE TABLE github_refresh_custody (
  token_id TEXT PRIMARY KEY REFERENCES github_token_vault(id) ON DELETE RESTRICT,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
  client_id TEXT NOT NULL CHECK(length(client_id) BETWEEN 1 AND 128),
+ github_user_id TEXT CHECK(github_user_id IS NULL OR (length(github_user_id) BETWEEN 1 AND 16 AND github_user_id NOT GLOB '*[^0-9]*' AND substr(github_user_id,1,1)!='0' AND CAST(github_user_id AS INTEGER)<=9007199254740991)),
  ciphertext TEXT NOT NULL,
  expires_at TEXT,
  access_revoked_at TEXT
 );
 CREATE TRIGGER github_refresh_owner BEFORE INSERT ON github_refresh_custody
-WHEN NOT EXISTS(SELECT 1 FROM github_token_vault WHERE id=NEW.token_id AND user_id=NEW.user_id)
+WHEN NEW.github_user_id IS NOT NULL
+ OR NOT EXISTS(SELECT 1 FROM github_token_vault WHERE id=NEW.token_id AND user_id=NEW.user_id)
  OR NOT EXISTS(SELECT 1 FROM connection_oauth_exchanges WHERE token_id=NEW.token_id AND user_id=NEW.user_id AND provider='github' AND client_id=NEW.client_id)
 BEGIN SELECT RAISE(ABORT,'github_refresh_custody_admission'); END;
 CREATE TRIGGER github_refresh_identity BEFORE UPDATE ON github_refresh_custody
 WHEN NEW.token_id!=OLD.token_id OR NEW.user_id!=OLD.user_id OR NEW.client_id!=OLD.client_id OR NEW.expires_at IS NOT OLD.expires_at
+ OR (NEW.github_user_id IS NOT OLD.github_user_id AND OLD.github_user_id IS NOT NULL)
  OR (NEW.access_revoked_at IS NOT OLD.access_revoked_at AND (OLD.access_revoked_at IS NOT NULL OR NEW.access_revoked_at IS NULL))
 BEGIN SELECT RAISE(ABORT,'github_refresh_immutable'); END;
 CREATE TRIGGER github_refresh_retained BEFORE DELETE ON github_refresh_custody
@@ -161,6 +164,14 @@ CREATE TABLE github_connections (
  active_token_id TEXT REFERENCES github_token_vault(id) ON DELETE SET NULL,
  connected_at TEXT NOT NULL
 );
+CREATE TRIGGER github_connection_refresh_identity_insert BEFORE INSERT ON github_connections
+WHEN EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=NEW.active_token_id)
+ AND NOT EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=NEW.active_token_id AND user_id=NEW.user_id AND github_user_id=NEW.github_user_id)
+BEGIN SELECT RAISE(ABORT,'github_connection_refresh_identity'); END;
+CREATE TRIGGER github_connection_refresh_identity_update BEFORE UPDATE ON github_connections
+WHEN EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=NEW.active_token_id)
+ AND NOT EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=NEW.active_token_id AND user_id=NEW.user_id AND github_user_id=NEW.github_user_id)
+BEGIN SELECT RAISE(ABORT,'github_connection_refresh_identity'); END;
 
 CREATE TABLE github_backups (
  id TEXT PRIMARY KEY,
