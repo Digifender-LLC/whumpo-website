@@ -26,6 +26,7 @@ async function owner(){
  await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
  await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Garden','Landscaping','draft',datetime('now'),datetime('now'))",project,user);
  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing','prepare','private-test-acceptance','synthetic interaction fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),user,project);
+ await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','prepare','private-test-acceptance','synthetic intake fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),user);
  const turn=id(),prepared=await site.createWebsite(scope,user,turn,project,{name:'Garden',headline:'A greener neighborhood',description:'Care for local gardens',theme:'ocean',aboutTitle:'Our work',aboutText:'Seasonal planting.',sections:[{heading:'Services',text:'Planting and care.'},{heading:'Seasons',text:'Year round.'},{heading:'Area',text:'Our neighborhood.'}],photos:[]});
  await scope.batch([scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'Create my website',?,datetime('now'),'ai','pending')").bind(turn,user,prepared.reply),...prepared.statements,scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(turn),scope.prepare('UPDATE workspace_state SET revision=1 WHERE user_id=?').bind(user)]);
  return {authority,user,scope,project};
@@ -35,7 +36,7 @@ async function chat(o,content,steps,database){queue=steps;const input={id:id(),r
 const request=o=>({kind:'interaction',operation:'requestContent',projectId:o.project,contentIds:['headline','section-1-text']});
 const read=interactionId=>({kind:'interaction',operation:'read',interactionId});
 const replace=f=>({kind:'interaction',operation:'replaceContent',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,contentIds:['headline','section-1-text','about-text']});
-const client={versions:[1],fieldTypes:['text','long-text'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1']};
+const client={versions:[1],fieldTypes:['text','long-text','resource'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1']};
 const readForm=(o,interactionId)=>json(o,'/api/chat/interactions/v1/read',{version:1,interactionId,client});
 const mutate=(f,operation,answers)=>({version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,operation,...(answers?{answers}:{})});
 try{
@@ -118,6 +119,44 @@ try{
   const result=await chat(o,'Add my about text to this form.',[replace(f)],racing);assert(changed);assert.equal(result.turn.status,'failed');
   const kept=await readForm(o,f.envelope.id);assert.equal(kept.state,'open');assert.equal(kept.replacementInteractionId,null);assert.deepEqual(kept.draft,{'field-1':'LATE_USER_ANSWER'});
   assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE user_id=?',o.user)).n,1);
+ });
+ const intakeRequest=operation=>({kind:'interaction',operation}),submitted=f=>({kind:'interaction',operation:'readSubmittedIntake',interactionId:f.envelope.id,taskId:f.envelope.scope.taskId,submissionId:f.submission.id});
+ let intakeOwner,intake;
+ await test('project brief issuance and submission add no automatic work or answer context',async()=>{
+  intakeOwner=await owner();const o=intakeOwner,created=await chat(o,'Help me plan a second project.',[intakeRequest('requestProjectBrief')]);assert.equal(created.calls,1);
+  intake=await readForm(o,created.turn.interaction_id);assert.equal(intake.envelope.definition.template,'project-brief@1');assert.equal(intake.envelope.scope.projectId,null);assert(intake.envelope.definition.fields.every(f=>!f.default));
+  await json(o,'/api/chat/interactions/v1/mutate',mutate(intake,'save-draft',{name:'INTAKE_PRIVATE_DRAFT'}));intake=await readForm(o,intake.envelope.id);
+  const metadata=await forms.interactionAgentAction(o.scope,o.user,id(),read(intake.envelope.id));assert.doesNotMatch(metadata.inspection,/INTAKE_PRIVATE_DRAFT/);
+  const invalid=await forms.interactionAgentAction(o.scope,o.user,id(),{...submitted({...intake,submission:{id:id()}})});assert.equal(invalid.inspection,undefined);
+  const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutate(intake,'submit',{name:'INTAKE_SUBMITTED_NAME',purpose:'INTAKE_SUBMITTED_PURPOSE'}));intake=await readForm(o,intake.envelope.id);assert.equal(mainCalls,before);assert.equal(intake.submission.continuation,null);
+  assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
+  const context=await agent.siteContext(o.scope,o.user);assert.equal(context.submittedIntakes.length,1);context.submittedIntakes[0].answers='INTAKE_SUBMITTED_PURPOSE';
+  const projected=agent.agentWorkspaceData(context);assert.doesNotMatch(projected,/INTAKE_PRIVATE_DRAFT|INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE/);assert(projected.includes(intake.submission.id));assert(!JSON.parse(agent.agentWorkspaceData(context,'cms')).data.submittedIntakes);
+ });
+ await test('explicit submitted intake lookup shares only that snapshot in one bounded followup',async()=>{
+  const o=intakeOwner,result=await chat(o,'Use the project brief I saved to help me plan the next step.',[body=>{assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE|INTAKE_PRIVATE_DRAFT/);return submitted(intake);},body=>{const text=JSON.stringify(body);assert.match(text,/INTAKE_SUBMITTED_NAME/);assert.match(text,/INTAKE_SUBMITTED_PURPOSE/);assert.doesNotMatch(text,/INTAKE_PRIVATE_DRAFT/);return null;}]);
+  assert.equal(result.calls,2);assert.equal(result.turn.status,'completed');const saved=await row('SELECT result_text FROM agent_inspections WHERE turn_id=?',result.input.id);assert.deepEqual(JSON.parse(saved.result_text).data.answers,{name:'INTAKE_SUBMITTED_NAME',purpose:'INTAKE_SUBMITTED_PURPOSE'});
+  const before=mainCalls;await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
+ });
+ await test('submitted lookup refuses mismatched identity, unowned forms, completed turns and forged action data',async()=>{
+  const o=intakeOwner;
+  for(const bad of [{...submitted(intake),taskId:id()},{...submitted(intake),submissionId:id()},{...submitted(intake),answers:{name:'forged'}},{...intakeRequest('requestProjectBrief'),questions:['Secret?']},{...intakeRequest('requestProjectSelection'),projectId:b.project}]){
+   assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),bad)).inspection,undefined);
+  }
+  assert.equal((await forms.interactionAgentAction(b.scope,b.user,id(),submitted(intake))).inspection,undefined);
+  assert.equal((await forms.interactionAgentAction(o.scope,o.user,intake.envelope.scope.originTurnId,submitted(intake))).inspection,undefined);
+  const result=await chat(o,'Use my saved brief.',[{...submitted(intake),submissionId:id()},body=>{assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE/);return null;}]);assert.equal(result.calls,2);
+ });
+ await test('project selection resolves current ownership and never retargets existing forms',async()=>{
+  const o=await owner(),created=await chat(o,'Which of my projects should we work on?', [intakeRequest('requestProjectSelection')]);let f=await readForm(o,created.turn.interaction_id);
+  assert.equal(f.envelope.definition.template,'project-select@1');assert.deepEqual(f.draft,{});
+  await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{project:o.project}));f=await readForm(o,f.envelope.id);
+  const resources=await json(o,'/api/chat/interactions/v1/resources',{version:1,interactionId:f.envelope.id,fieldId:'project',limit:20,before:null});assert.deepEqual(resources.items,[{id:o.project,name:'Garden'}]);
+  const result=await chat(o,'What project did I choose?', [submitted(f),body=>{const lookup=JSON.parse(JSON.parse(body.input.at(-1).content).result);assert.deepEqual(lookup.data.selectedProject,{id:o.project,name:'Garden'});assert.equal(lookup.data.answers,undefined);return null;}]);assert.equal(result.calls,2);
+  await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Another project','Keep workspace admission','draft',datetime('now'),datetime('now'))",id(),o.user);
+  await run('UPDATE projects SET owner_user_id=? WHERE id=?',b.user,o.project);
+  const removed=await chat(o,'Use the project I selected.',[submitted(f),body=>{assert.doesNotMatch(JSON.stringify(body),/selectedProject/);return null;}]);assert.equal(removed.calls,2);
+  assert.equal((await store.readInteraction(o.scope,o.user,f.envelope.id)).submission.answers.project,o.project);
  });
  await Promise.all(background);assert.equal(queue.length,0);
  assert.equal((await json(a,'/api/billing')).standardAI.creditCharge,0);

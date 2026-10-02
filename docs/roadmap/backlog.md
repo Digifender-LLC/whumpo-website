@@ -3308,6 +3308,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/chat-interaction-browser.mjs](../../tests/chat-interaction-browser.mjs)
 - [src/chat-interactions/maintained.ts](../../src/chat-interactions/maintained.ts)
 - [tests/chat-interaction-intake.mjs](../../tests/chat-interaction-intake.mjs)
+- [src/chat-interactions/intake-context.ts](../../src/chat-interactions/intake-context.ts)
+- [frontend/src/chat-project-picker.tsx](../../frontend/src/chat-project-picker.tsx)
 
 ### Execution coordination
 
@@ -3325,6 +3327,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/87. Planning owner: Codex /roo
 - 2026-10-02 UTC: maintained content-brief agent handoff under #87 connects requestContent/read/replaceContent to the existing bounded owner Chat loop. Prepared form writes commit with the final Chat result; model reads receive metadata only. Content forms now match the compiler limit of eight operations. Scripted actual HTTP/SQLite/local-D1 journeys cover lookup, correction, exact private preview/save, replay and late authority/base/answer changes. Broader custom/resource/lifecycle/restore and deployment acceptance remains open; no live inference or publication.
 - 2026-10-02 UTC: current content-form history and paged resume connected under #87. Read-only submitted/removal facts exclude copied unsubmitted defaults; the unfinished index locates forms beyond 100 Chat turns and opens only current scoped readback. Existing-card navigation avoids duplicate editors; dialog dismissal preserves eligible local edits and evicts private queries. Full original lifecycle/resource/restore and coordinated deployment acceptance remains open.
 - 2026-10-02 UTC: maintained project-brief/project-select storage and scoped project-resource HTTP reads extend the same issuance/mutation handlers. Information-only submission has no continuation, project creation or automatic task retargeting. Fresh selected-resource ownership is rechecked inside the write transaction, with exact loss/replay and truthful history/export. Initial trusted storage handoff only; renderer/agent activation, broader resource/custom/lifecycle/restore and deployment acceptance remain open.
+- 2026-10-02 UTC: maintained project brief/selection renderer and closed agent issuers connect the prior storage handoff. Native owned-project picker, shared drafts/exact recovery and information-only submission start no automatic work. Subsequent owner Chat can inspect an exact submitted intake through the existing bounded lookup; ordinary context stays metadata-only. Agent inspection/provider copies are registered in lifecycle docs. General custom/resource/device/model-quality/lifecycle/restore and coordinated deployment acceptance remain open.
 
 ## WH-107 — Render accessible Chat forms and maintained interaction templates
 
@@ -3388,6 +3391,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
 - 2026-10-02 UTC: WH-106/#87 delivers the initial inline content-change@1 client and connected transport/recovery fixture as a bounded handoff. This is not a claim/completion of WH-107: broader maintained templates/cards, historical renderer, resource/custom adapters, dialogs, full accessibility/device acceptance and agent integration remain under the original packet. WH-106 is still open; dependencies and planning readiness are unchanged.
 - 2026-10-02 UTC: WH-106/#87 adds the bounded content-form historical renderer and existing-dialog resume handoff. Actual HTTP/local-D1 browser evidence covers 110 later turns, pagination, dismissal/recovery, private cache eviction, current removal and mobile/focus behavior. General templates/cards, resource/custom adapters, spoken screen-reader and physical-device acceptance remain under the original WH-107 packet; no claim or completion, dependency/readiness unchanged.
+- 2026-10-02 UTC: WH-106/#87 supplies maintained project-brief/project-select renderer and agent handoffs, including native owned selection and exact submitted-intake inspection. This does not claim or complete this task; original broader scope, dependencies and readiness remain unchanged.
 
 ## WH-108 — Let the agent compose bounded custom forms and use task-scoped answers
 
@@ -3452,6 +3456,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
 - 2026-10-02 UTC: WH-106/#87 supplies the initial maintained content-change@1 agent adapter and bounded task metadata as a handoff from d9003a1. No WH-108 claim/completion: custom composition, prose-to-answer changes, eligible submitted-answer model continuation, real-model quality and full renderer/task acceptance remain in the original scope. WH-106/107 remain open; dependencies and readiness are unchanged.
+- 2026-10-02 UTC: WH-106/#87 supplies maintained project-brief/project-select renderer and agent handoffs, including native owned selection and exact submitted-intake inspection. This does not claim or complete this task; original broader scope, dependencies and readiness remain unchanged.
 
 ## WH-109 — Compose and maintain dashboards and custom views through the agent
 
