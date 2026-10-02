@@ -9,7 +9,7 @@ const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();le
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{network++;throw Error('Unexpected inference/provider request');};
 const run=(sql,...v)=>db.prepare(sql).bind(...v).run(),row=(sql,...v)=>db.prepare(sql).bind(...v).first();
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){}};
-const client={versions:[1],fieldTypes:['text','long-text','resource'],bindings:['answer.value@1','interaction.answers@1','owned.projects@1']};
+const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','interaction.answers@1','owned.projects@1']};
 async function owner(){const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);const grant=id();await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','prepare','private-test-acceptance','synthetic intake fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",grant,user);return {authority,user,scope,grant};}
 async function project(o,name='Garden'){const p=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,?,'Private purpose canary','draft',datetime('now'),datetime('now'))",p,o.user,name);return p;}
 async function origin(o){const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Plan a project','Review these details',datetime('now') FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);return turn;}
@@ -33,8 +33,8 @@ try{
   }
  });
  await test('a complete empty draft removes inherited answers throughout a correction chain',async()=>{
-  for(const template of ['project-brief@1','project-select@1']){
-   const o=await owner(),p=await project(o),{form}=await issue(o,template),answers=template==='project-select@1'?{project:p}:{name:'Old name',purpose:'Old purpose'};
+  for(const template of ['project-brief@1','project-select@1','choice@1']){
+   const o=await owner(),p=await project(o),{form}=await issue(o,template),answers=template==='project-select@1'?{project:p}:template==='choice@1'?{tone:'friendly'}:{name:'Old name',purpose:'Old purpose'};
    await store.mutateInteraction(o.scope,o.user,request(form,'submit',answers));
    const submitted=await store.readInteraction(o.scope,o.user,form.envelope.id),next=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,submitted));
    await store.mutateInteraction(o.scope,o.user,request(next,'save-draft',{}));
@@ -45,6 +45,30 @@ try{
    const again=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,revised));assert(again.envelope.definition.fields.every(f=>!f.default));
    assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission,submitted.submission);
   }
+ });
+ await test('maintained writing choices reject forged options, unsupported clients and invalid selections',async()=>{
+  const o=await owner(),other=await owner();await project(o);await project(other);const {form,input}=await issue(o,'choice@1');
+  assert.equal(form.envelope.definition.template,'choice@1');assert.equal(form.envelope.scope.projectId,null);
+  assert.deepEqual(form.envelope.definition.fields[0].constraints.options.map(v=>v.id),['friendly','professional','straightforward']);assert.equal(form.envelope.definition.fields[0].default,undefined);
+  assert.equal((await store.issueProjectIntake(o.scope,o.user,input)).envelope.id,form.envelope.id);
+  for(const extra of [{questions:['Password?']},{options:[{id:'secret',label:'Recovery key'}]},{answers:{tone:'friendly'}}])await assert.rejects(()=>store.issueProjectIntake(o.scope,o.user,{...input,...extra}),e=>e.code==='SHAPE');
+  await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client:{...client,fieldTypes:['text','long-text','resource']}},409);
+  for(const operation of ['save-draft','submit'])for(const tone of ['',true,['friendly'],'invented'])await json(o,'interactions/v1/mutate',request(form,operation,{tone}),422);
+  await json(o,'interactions/v1/mutate',request(form,'submit',{}),422);
+  await json(other,'interactions/v1/mutate',request(form,'submit',{tone:'friendly'}),404);
+  assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).draft,null);
+ });
+ await test('writing preferences retain exact receipts and readable history without starting work',async()=>{
+  const o=await owner();await project(o);const {form}=await issue(o,'choice@1'),input=request(form,'submit',{tone:'professional'}),before=await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user);
+  const receipt=await json(o,'interactions/v1/mutate',input);assert.deepEqual(await json(o,'interactions/v1/mutate',input),receipt);
+  const current=await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client});assert.deepEqual(current.submission.answers,{tone:'professional'});assert.equal(current.submission.continuation,null);
+  await json(o,'interactions/v1/mutate',{...input,answers:{tone:'friendly'}},409);
+  await json(o,'interactions/v1/continue',{version:1,submissionId:input.requestId,expectedChatRevision:before.revision},409);
+  assert.deepEqual(await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user),before);
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations WHERE id=?',input.requestId)).n,0);
+  const history=await json(o,'history?before=10000'),fact=history.turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction;
+  assert(presentation.readHistoryInteraction(fact));assert.deepEqual(fact.submission.answers,{tone:'professional'});
+  assert.deepEqual((await json(o,'export')).turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction.submission.answers,{tone:'professional'});
  });
  await test('fixed maintained issuance and exact origin replay',async()=>{
   const o=await owner(),{form,input}=await issue(o);assert.equal(form.projectName,null);assert.equal(form.envelope.scope.projectId,null);assert.equal(form.envelope.definition.continuationBinding,null);assert.deepEqual(form.envelope.definition.fields.map(f=>f.id),['name','purpose']);

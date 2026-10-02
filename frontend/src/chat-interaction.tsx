@@ -8,11 +8,10 @@ import {canRecoverChat} from './lib/chat-delivery';
 import {deliverInteraction,recoverInteraction} from './lib/interaction-delivery';
 import {useInteractionRecovery} from './use-interaction-recovery';
 import {Button} from './components/ui/button';
-import {Textarea} from './components/ui/textarea';
-import {Input} from './components/ui/input';
-import {ChatProjectPicker} from './chat-project-picker';
+import {isProjectIntakeTemplate} from '../../src/chat-interactions/maintained';
+import {ChatInteractionField} from './chat-interaction-field';
 
-const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','owned.projects@1']};
+const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','owned.projects@1']};
 const route='/chat/interactions/v1/';
 const receipt=(requestId:string)=>send<InteractionReceipt>(route+'receipt',{version:1,requestId});
 function startingAnswers(form:InteractionRead):Answers{return form.submission?.answers??form.draft??Object.fromEntries(form.envelope.definition.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value]));}
@@ -29,7 +28,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   if(value.version!==1||!Number.isSafeInteger(value.answerRevision)||value.answerRevision<0||!iso(value.observedAt)||!(value.draftRetainUntil===null||iso(value.draftRetainUntil))||!['open','submitted','canceled','superseded','expired'].includes(value.state))throw new APIError('Update Whumpo to open this form.',409,'client_update_required');
   await verifyEnvelope(value.envelope);await requireCurrentClient(value.envelope,client);
   const content=value.envelope.definition.template==='content-change@1';
-  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||!['content-change@1','project-brief@1','project-select@1'].includes(value.envelope.definition.template)||(content?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||value.envelope.definition.continuationBinding!==null))||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
+  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||(!content&&!isProjectIntakeTemplate(value.envelope.definition.template))||(content?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||value.envelope.definition.continuationBinding!==null))||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
   if(value.draft!==null)validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
   return value;
  },staleTime:0,gcTime:0,refetchInterval:q=>['pending','unknown'].includes(q.state.data?.submission?.continuation?.state??'')?5000:false});
@@ -58,10 +57,10 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
  useEffect(()=>{
   if(unavailable&&recovery.current.current?.answers)recovery.save({...recovery.current.current,answers:null});
  },[unavailable,recovery.save,recovery.current]);
- function edit(key:string,value:string){
+ function edit(key:string,value:string|undefined){
   if(!form||locked)return;const next={...answers};
   // An unselected resource is absent, never an empty or invented resource ID.
-  if(value===''&&form.envelope.definition.fields.find(f=>f.id===key)?.type==='resource')delete next[key];else next[key]=value;
+  if(value===undefined||value===''&&form.envelope.definition.fields.find(f=>f.id===key)?.type==='resource')delete next[key];else next[key]=value;
   recovery.save({...draftRecord(),answers:next,updatedAt:Date.now()});setNotice('');setFieldError(null);
  }
  async function perform(action:()=>Promise<void>){if(busy)return;setBusy(true);setNotice('');try{await action();}catch(error){if(recovery.active.current){setNotice(error instanceof InteractionError?'Check the highlighted answer.':canRecoverChat(error)?'The request is unconfirmed. Check saved status; nothing will be sent automatically.':message(error));if(error instanceof InteractionError&&error.fieldId||error instanceof APIError&&error.fieldId){const key=error.fieldId!;setFieldError(key);requestAnimationFrame(()=>section.current?.querySelector<HTMLElement>('[data-field="'+CSS.escape(key)+'"]')?.focus());}}}finally{if(recovery.active.current)setBusy(false);}}
@@ -107,11 +106,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
    <p className="text-sm text-muted-foreground break-words">{form.envelope.definition.summary}</p>
    {conflict&&<div role="alert" className="rounded-xl border p-3 space-y-3 text-sm"><p>This form changed after your local edits. Your edits are shown below and have not overwritten the saved version.</p><Button variant="outline" className="min-h-11" disabled={busy||!!pending} onClick={()=>recovery.save(null)}>Use latest saved answers</Button></div>}
    <form noValidate onSubmit={event=>{event.preventDefault();void perform(()=>mutate('submit'));}} className="space-y-5">
-    {form.envelope.definition.fields.map(field=>{
-     const name='form-'+id+'-'+field.id,invalid=fieldError===field.id,description=name+'-help';
-     const props={id:name,'data-field':field.id,'aria-describedby':description+(invalid?' '+name+'-error':''),'aria-invalid':invalid,required:field.required,readOnly:locked,value:String(answers[field.id]??''),maxLength:'maxLength'in field.constraints?field.constraints.maxLength:2000,onChange:(event:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>)=>edit(field.id,event.target.value),autoComplete:'off',className:'min-h-11 text-base'};
-     return <div key={field.id} className="space-y-2"><label htmlFor={name} className="block text-sm font-medium break-words">{field.label} <span className="text-xs font-normal text-muted-foreground">{field.required?'Required':'Optional'}</span></label>{field.type==='resource'?<ChatProjectPicker owner={owner} interactionId={id} digest={form.envelope.definitionDigest} id={name} description={props['aria-describedby']} invalid={invalid} required={field.required} locked={locked} value={props.value} onChange={value=>edit(field.id,value)} onReady={onResourceReady}/>:field.type==='long-text'?<Textarea {...props} rows={3}/>:<Input {...props}/>}<p id={description} className="text-xs text-muted-foreground break-words">{field.help}{field.default&&<span className="block mt-1">Starting value: {field.default.provenance==='saved'?'saved website text':field.default.provenance==='user'?'your earlier answer':'a suggestion to review'}.</span>}</p>{invalid&&<p id={name+'-error'} role="alert" className="text-sm text-destructive">{field.type==='resource'?'Choose a current project from the list.':String(answers[field.id]??'').trim()?'Check this answer’s length and format.':'Add an answer before continuing.'}</p>}</div>;
-    })}
+    {form.envelope.definition.fields.map(field=><ChatInteractionField key={field.id} field={field} owner={owner} interactionId={id} digest={form.envelope.definitionDigest} value={answers[field.id]} locked={locked} invalid={fieldError===field.id} onChange={value=>edit(field.id,value)} onResourceReady={onResourceReady}/>)}
     {form.state==='open'&&<><p className="text-xs text-muted-foreground">{content?'Your changes stay private. Preparing a preview saves these answers; saving the website and publishing each need a separate review.':'Saving shares these answers with Whumpo for this conversation. It does not create a project or change your sites.'}</p><div className="flex flex-wrap gap-2"><Button type="submit" className="min-h-11" disabled={locked||(selection&&!resourceReady)}>{busy&&<LoaderCircle className="size-4 animate-spin"/>}{content?'Prepare preview':'Save answers'}</Button><Button type="button" variant="outline" className="min-h-11" disabled={locked||(selection&&!resourceReady)} onClick={()=>void perform(()=>mutate('save-draft'))}>Save draft</Button></div><p className="text-xs text-muted-foreground">Edits stay in this browser until saved. Unsubmitted drafts are kept for seven days of inactivity.</p></>}
    </form>
    {form.state==='open'&&<div className="flex flex-wrap items-center gap-2 border-t pt-3"><Button type="button" variant="link" className="min-h-11 px-0" onClick={onAnswerInChat}>Answer in Chat</Button>{!discard?<Button variant="ghost" className="min-h-11 ml-auto" disabled={locked} onClick={()=>setDiscard(true)}>Discard form</Button>:<div className="w-full rounded-xl border p-3 space-y-2"><p className="text-sm">Discard this form and its unsent answers?</p><div className="flex flex-wrap gap-2"><Button variant="destructive" className="min-h-11" disabled={locked} onClick={()=>void perform(()=>mutate('cancel'))}>Discard this form</Button><Button variant="outline" className="min-h-11" disabled={busy} onClick={()=>setDiscard(false)}>Keep editing</Button></div></div>}</div>}

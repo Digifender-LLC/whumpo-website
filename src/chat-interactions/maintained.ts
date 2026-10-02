@@ -1,8 +1,17 @@
 import type {Definition} from './types';
-export type ProjectIntakeTemplate='project-brief@1'|'project-select@1';
+export const projectIntakeTemplates=['project-brief@1','project-select@1','choice@1'] as const;
+export type ProjectIntakeTemplate=typeof projectIntakeTemplates[number];
+export const isProjectIntakeTemplate=(value:unknown):value is ProjectIntakeTemplate=>projectIntakeTemplates.some(template=>template===value);
 /** Fixed information requests. No model questions, defaults or effect bindings. */
 export function projectIntakeDefinition(template:ProjectIntakeTemplate):Definition{
  const base={version:1 as const,kind:'form' as const,template,presentation:'inline' as const,cards:[],submitBinding:'interaction.answers@1' as const,continuationBinding:null};
+ if(template==='choice@1')return {...base,title:'Choose a writing style',summary:'Choose how your website should sound. You can refine it in Chat.',fields:[
+  {id:'tone',type:'choice',label:'Writing style',help:'Choose the closest fit for this conversation.',required:true,binding:'answer.value@1',constraints:{options:[
+   {id:'friendly',label:'Friendly and welcoming'},
+   {id:'professional',label:'Professional and confident'},
+   {id:'straightforward',label:'Simple and straightforward'}
+  ]}}
+ ]};
  return template==='project-brief@1'?{...base,title:'Tell Whumpo about your next project',summary:'Save a name and a short description to continue planning in Chat. This does not create or publish a project.',fields:[
   {id:'name',type:'text',label:'Project name',help:'A working name is fine.',required:true,binding:'answer.value@1',constraints:{maxLength:100}},
   {id:'purpose',type:'long-text',label:'What would you like to build?',help:'Describe who it is for and what it should help them do. Do not include passwords, recovery codes or payment details.',required:true,binding:'answer.value@1',constraints:{maxLength:1000}}
