@@ -6,13 +6,13 @@ Whumpo is an invitation-only AI website and application platform in private test
 
 For future work, use the [product and delivery roadmap](docs/roadmap/README.md), the [architecture and sequencing alignment](docs/roadmap/alignment.md), its [prioritized task backlog](docs/roadmap/backlog.md), and [agent execution guide](docs/roadmap/execution.md). Run `node tools/roadmap.mjs next` for planning candidates, then check their linked GitHub issues for current ownership and completion evidence.
 
-Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. Current client, Chat, website and CMS contracts are deployed with schema 0119; CMS functional testing remains deferred.
+Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. The test platform runs the complete current schema and shared workspace identity/admission contract; see [verified deployment evidence](docs/identity-web.md). CMS functional testing remains deferred.
 
 ## Current product
 
 - [Installable workspace](docs/dashboard-pwa.md) with phone home-screen icons, browser installation guidance and a public offline reconnect screen.
 - React workspace with Chat first, a separate dashboard, workflow pages, mobile navigation, and separate Profile and Settings screens. Chat accepts natural-language messages, retains account-scoped drafts/interrupted requests across reloads, and uses explicit review controls for critical actions.
-- Passkeys by default, invite/Turnstile signup, optional password sign-in, recovery codes and revocable sessions. Guided conversational onboarding persists without requiring AI or an external account.
+- Passkey-only workspace access, invite/Turnstile signup, two-key enrollment, a downloadable recovery kit and revocable sessions. Restricted recovery cannot access the workspace. Guided conversational onboarding persists without requiring AI or an external account.
 - Muse-assisted current specification drafts, exact reviews for private edits/restores, saved versions, source export, and separate publication reviews. Supported static/photo sites publish to customer subdomains.
 - Maintained capability lookup and versioned private project/service settings with pinned compilers and exact owner reviews; saving configuration does not publish or activate a service.
 - Bounded customer backend execution in a separate QuickJS Worker, reviewed application activation, controlled visitor pages and scoped visitor accounts/data. This is not a general-purpose VPS or unrestricted deployment environment.

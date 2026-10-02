@@ -4519,6 +4519,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
 - [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
 - [docs/feature-admission.md](../../docs/feature-admission.md)
+- [docs/feature-acceptance.md](../../docs/feature-acceptance.md)
 
 ### Execution coordination
 
@@ -4528,6 +4529,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/62. Planning owner: Unassigned
 
 - 2026-10-01: split into #63 current inclusion/preview-grant interface, #64 enforcement and #65 connected acceptance/test release. The foundation extends current invoice coverage rather than creating paid-plan truth. Parent stays open; inclusion alone is not authorization and no current handler is represented as gated until its adapter acceptance.
 - 2026-10-01: #64 source adapters enforce current inclusion at GitHub/Cloudflare OAuth, provider reads, exact review/confirmation and dispatch boundaries; protected uncertain recovery is bound to recorded read-only destinations. Full #64/#65 acceptance still requires the shared WH-114/115 principal runtime, session/epoch/restricted-purpose revocation and future membership/job adapters. Source implementation is not a deployed or full-authorization claim.
+- 2026-10-02 UTC: current owner GitHub/Cloudflare admission and shared identity handoff accepted for #64/#65. Current-schema SQLite and local D1: 434 composed identity checks, 728 inclusion decisions, 37 provider refusal/race cases, real invoice/preview expiry with retained publication/export, and connection UI. Independent deployed four-Worker/schema/39-asset readback plus signed synthetic login, five digest-reviewed preview grants, explicit revocation and scoped cleanup passed. No provider exchange, inference or real billing. Parent remains open for broader planned feature/collaboration acceptance; physical devices and future provider/job adapters keep their own gates. See docs/feature-acceptance.md.
 
 ## WH-096 — Deliver requested Gmail reads and reviewed send or reply actions
 
