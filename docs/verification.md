@@ -57,3 +57,25 @@ Additional local passes: natural-language Chat, profile, welcome on actual local
 Actual mobile Chromium checks pass for workspace shortcuts, billing reads, draft plan preferences with reload, and current/expired/missing/signed-out comparison documents. The comparison fixture permits only GET and the two read-only identity POST endpoints, and verifies unchanged reviews, versions and publications. A current identity refusal now retains the comparison's HTML error page; JSON callers retain the structured identity code.
 
 The obsolete owner-recovery browser tool has been removed; use `tests/identity-browser.mjs` and `tests/workspace-identity-browser.mjs` for the current flow. Service-settings/activation and owner-journey browser harnesses now use current identity setup; their full interactive journeys were not rerun in this conversion. Other older domain fixtures still require conversion. This is not a claim that the entire repository suite passes. CMS functional testing, CSAM and Daybreak remain deferred. No remote schema reset or Worker release occurred.
+
+### Billing, provider and inference follow-through
+
+The following additional checks use the complete current schema. Owner-facing domain calls use current admitted scopes from the same bundle as their handlers. Fixture setup, signed Stripe webhook processing, operator reports and scheduled credential cleanup intentionally retain their separate database authority. No old password/session rows or numbered SQL replay are involved in these checks.
+
+| Command | Verified local scope |
+| --- | --- |
+| `node tests/billing.mjs` | SQLite: immutable current plans, exact paid coverage, zero standard-AI customer debits, retired-table/route refusal and missing-receipt refusal |
+| `node tests/plan-periods.mjs` | D1: paid intervals, highest current tier, expiry, non-authorizing draft preferences, publication slots and domain quote policy |
+| `node tests/subscriptions.mjs` | D1 and synthetic Stripe: checkout concurrency/replay, signed events, exact paid invoices, failed renewal, annual boundaries, cancellation, unknown write holds, deletion and HTTP gates |
+| `node tests/github-connection.mjs`, `node tests/github-token-lifecycle.mjs`, `node tests/cloudflare-connection.mjs` | D1 and synthetic providers: actual distinct-session binding, PKCE, cancellation/replacement/revocation, staged credential custody, late reads, expiry and lost activation replies; GitHub lifecycle has 13 explicit cases |
+| `node tests/github-backups.mjs`, `node tests/backup-chat.mjs` | D1/R2 and synthetic GitHub: independent Git tree equality, reviewed destination/source/visibility, concurrent confirmation, no repeated uncertain write, exact readback, safe Chat controls, lost claim/transcript and secret exclusion from synthetic model context |
+| `node tests/cloudflare-dns.mjs`, `node tests/cloudflare-routing.mjs` | D1 and synthetic Cloudflare/DNS: exact TXT/CNAME reviews, conflict preservation, owner/configuration gates, proof/connection/credential races, single dispatch, uncertain readback and review-only model authority |
+| `node tests/standard-ai-usage.mjs`, `node tests/standard-ai-chat.mjs`, `node tests/standard-ai-recovery.mjs`, `node tests/standard-ai-history.mjs`, `node tests/model-costs.mjs` | D1 and synthetic inference: atomic admission, no customer ledger, immutable receipts, failed-work cost retention, uncertain holds, saved-answer recovery, no resend, metadata-only history, separate acknowledgment accounting and privacy-limited operator reports |
+| `node tests/identity-ceremonies.mjs --d1` | Current isolated identity schema, initialized directly: 62 refusal/race checks and actual cryptographic journeys |
+| `pnpm test:smoke` | Signed current identity HTTP followed by actual Worker workspace calls on disposable D1: health, first-project gate, two-owner isolation, Origin, concurrent project quota, activity atomicity, cookie expiry, session revocation and retired-route refusal |
+
+The smoke suite no longer requires a running password-based dev server. Its signed HTTP step proves cryptographic ceremony behavior; synthetic ready owners isolate the subsequent workspace checks. Logout verification checks the current `Expires` cookie contract and independently proves the revoked session cannot read or create projects.
+
+Private Chat handler dispatch strings in these domain fixtures are internal test inputs. The public natural-language boundary remains covered by `tests/natural-chat.mjs`; no customer slash-command interface is restored. Fault injection now targets the specific SQL operation before admission or after its actual commit, rather than counting batches that identity checks can change.
+
+These passes do not establish live Stripe/provider acceptance, a Stripe API-version upgrade, owner/device acceptance or a remote cutover. The source adapter's explicit Stripe version remains unchanged. Older domain/operator fixtures still need conversion before the coordinated test deployment; the current release must never target the obsolete database. No customer publication, real provider mutation, paid service or remote reset occurred.
