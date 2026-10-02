@@ -30,13 +30,9 @@ try{
  // Completion is historical: removing the first project must not restart welcome.
  await db.prepare('DELETE FROM projects WHERE id=?').bind(project.id).run();assert.equal((await readProfile(ownerDB,user)).onboardingComplete,true);
  const savedProfile=await readProfile(otherDB,other);await updateProfile(otherDB,other,{revision:savedProfile.revision,name:'Other',avatar_id:'leaf'});await saveOnboarding(otherDB,other,{...draft});
- let lose=false;
- const interception=interceptDatabase(db,/UPDATE welcome_onboarding.*stage='complete'/,()=>{lose=true;});
- const lost=new Proxy(interception,{get(target,key){
-  if(key==='batch')return async statements=>{const result=await target.batch(statements);if(lose){lose=false;throw Error('Lost completion reply');}return result;};
-  const value=target[key];return typeof value==='function'?value.bind(target):value;
- }});
- assert.equal((await completeOnboarding(await otherOwner.scope(lost),other,{revision:1})).complete,true);
+ let lostReplies=0;
+ const lost=interceptDatabase(db,/UPDATE welcome_onboarding.*stage='complete'/,()=>{},()=>{if(lostReplies===0){lostReplies++;throw Error('Lost completion reply');}});
+ assert.equal((await completeOnboarding(await otherOwner.scope(lost),other,{revision:1})).complete,true);assert.equal(lostReplies,1);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM projects WHERE owner_user_id=?').bind(other).first()).n,1);
  const fresh=id(),freshOwner=await workspaceFixture(db,m,fresh),token=freshOwner.token;
  const env={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})}};

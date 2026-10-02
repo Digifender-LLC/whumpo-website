@@ -467,7 +467,7 @@ Actual customers can enroll, return, recover and revoke credentials across suppo
 
 ### Verification
 
-- pnpm test:owner-recovery
+- pnpm test:identity-recovery
 - pnpm test:app-auth
 - Manual real-device checklist plus connected loopback baseline; live disposable account only with exact reviewed scope
 
@@ -482,7 +482,7 @@ Planning dependencies: WH-001, WH-115. Verify completion in current issue eviden
 - [docs/owner-recovery.md](../../docs/owner-recovery.md)
 - [docs/onboarding.md](../../docs/onboarding.md)
 - [docs/app-data.md](../../docs/app-data.md)
-- [tools/owner-recovery-browser.mjs](../../tools/owner-recovery-browser.mjs)
+- [tests/identity-browser.mjs](../../tests/identity-browser.mjs)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
@@ -1618,7 +1618,7 @@ Users can save or print an account recovery kit and replace lost passkeys withou
 
 ### Verification
 
-- Run pnpm check and inspect/run existing test:owner-recovery and test:passkeys fixture suites plus focused enrollment/native-handoff cases
+- Run pnpm check and inspect/run existing test:identity-recovery and test:identity-ceremonies fixture suites plus focused enrollment/native-handoff cases
 - Use connected disposable D1/handler tests for restricted authority, rotation/replay/concurrency, session fencing and response loss
 - Use quality-managed browser checks and inspect synthetic text download, print layout and saved PDF on desktop/mobile; manually verify keyboard and screen-reader operation
 
@@ -1638,7 +1638,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/index.ts](../../src/index.ts)
 - [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
 - [tests/identity-recovery.mjs](../../tests/identity-recovery.mjs)
-- [tools/owner-recovery-browser.mjs](../../tools/owner-recovery-browser.mjs)
+- [tests/identity-browser.mjs](../../tests/identity-browser.mjs)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 - [docs/identity-authority.md](../../docs/identity-authority.md)
 - [docs/identity-ceremonies.md](../../docs/identity-ceremonies.md)
@@ -6704,7 +6704,7 @@ An Android owner can authenticate and reach supported platform services through 
 
 ### Verification
 
-- Run pnpm check and the existing test:owner-recovery, test:passkeys and test:onboarding-welcome suites after inspecting their setup
+- Run pnpm check and the existing test:identity-recovery, test:identity-ceremonies and test:onboarding-welcome suites after inspecting their setup
 - Add connected two-owner native identity/API fixtures covering challenge, PKCE, session/recovery races, Origin regression and recent-authentication boundaries
 - Run Kotlin DTO/transport tests against the same sanitized fixtures; record signed App Link/passkey evidence separately from emulators
 

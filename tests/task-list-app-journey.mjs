@@ -7,7 +7,7 @@ export async function taskListAppJourney({db,account,call,host,env,setupChat,exe
  async function json(path,body,status=200,method){const response=await call(owner,path,body,method);assert.equal(response.status,status,await response.clone().text());return response.json();}
  async function chat(content){return (await setupChat(owner,content)).turns.at(-1);}
  await json('/profile',{revision:0,name:'Task owner',avatar_id:'leaf'},200,'PATCH');await json('/onboarding');
- await json('/onboarding',{revision:0,stage:'review',project_name:'Private tasks',idea:'A separate task list for each invited visitor',audience:'Our group',preferred_theme:'forest'},200,'PUT');await json('/onboarding/complete',{revision:1});
+ await json('/onboarding',{revision:0,stage:'review',prompt:'review',project_name:'Private tasks',idea:'A separate task list for each invited visitor',audience:'Our group',preferred_theme:'forest'},200,'PUT');await json('/onboarding/complete',{revision:1});
  const project=(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(owner.user).first()).id,path='/projects/'+project,origin='https://app-'+project+'.whumpo.site';
  const copied=await chat('/use-backend '+project+' private-task-list@1'),version=copied.id;assert.match(copied.assistant_text,/Copied private-task-list@1/);assert.equal(executions(),startExecutions);
  const provenance=await db.prepare('SELECT component_id,component_version FROM backend_component_instances WHERE version_id=?').bind(version).first();assert.deepEqual(provenance,{component_id:'private-task-list',component_version:1});

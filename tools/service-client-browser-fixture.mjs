@@ -5,11 +5,11 @@ import {createInterface} from 'node:readline';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {resolve,sep} from 'node:path';
 export async function serviceClientBrowser({platform,env,db,account,review,ctx}){
- const origin='http://localhost:8173',root=resolve('dist'),requests=[];let done;const finished=new Promise(resolve=>{done=resolve});
+ const origin='http://localhost:8787',root=resolve('dist'),requests=[];let done;const finished=new Promise(resolve=>{done=resolve});
  const server=createServer(async(req,res)=>{try{
-  if(req.headers.host!=='localhost:8173'){res.writeHead(403).end();return;}
+  if(req.headers.host!=='localhost:8787'){res.writeHead(403).end();return;}
   const url=new URL(req.url,origin);
-  if(url.pathname==='/_acceptance/start'){res.writeHead(302,{'set-cookie':'tellumo_session='+account.token+'; HttpOnly; SameSite=Lax; Path=/','location':'/workspace'}).end();return;}
+  if(url.pathname==='/_acceptance/start'){res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+account.token+'; Secure; HttpOnly; SameSite=Lax; Path=/','location':'/workspace'}).end();return;}
   if(url.pathname==='/_acceptance/finish'){res.writeHead(200,{'content-type':'text/plain'}).end('Checking the disposable review.');done();return;}
   if(url.pathname.startsWith('/api/')){
    const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>1048576){res.writeHead(413).end();return;}chunks.push(chunk);}const body=Buffer.concat(chunks);
@@ -23,7 +23,7 @@ export async function serviceClientBrowser({platform,env,db,account,review,ctx})
  }catch{res.writeHead(500,{'content-type':'application/json'}).end('{"error":"Local fixture failed"}');}});
  const input=createInterface({input:process.stdin});input.on('line',line=>{if(line.trim()==='finish')done();});
  try{
-  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(8173,'127.0.0.1',resolve);});
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(8787,'127.0.0.1',resolve);});
   console.log('Service settings browser ready: '+origin+'/_acceptance/start . Inspect both review links, save with the keyboard, then visit /_acceptance/finish.');
   await finished;
   const approved=requests.filter(r=>r.path==='/api/chat/actions'&&r.method==='POST');assert.equal(approved.length,1);assert.equal(approved[0].status,200);assert.deepEqual(approved[0].action,{type:'serviceClientApply',reviewId:review.id,proposalDigest:review.proposalDigest,expectedRevision:review.expectedRevision});
