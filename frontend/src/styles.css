@@ -111,9 +111,7 @@
  .cms-writing-block textarea{resize:vertical}
 }
 
-.chat-latest{position:absolute;left:50%;top:0;transform:translate(-50%,-100%);z-index:10;box-shadow:0 3px 16px #0f2d5b18;border:1px solid var(--border);border-radius:999px;white-space:nowrap}
 @media(max-width:760px){
  .chat-composer{padding-bottom:max(12px,env(safe-area-inset-bottom))}
- .chat-latest{margin-top:-8px}
  .chat-scroll{overflow-anchor:none}
 }

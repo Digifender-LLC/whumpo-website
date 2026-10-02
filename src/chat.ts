@@ -1,3 +1,4 @@
+import {interactionChatLinks} from './chat-interactions/links';
 import {assertWorkspace,workspaceTransport,requireFreshWorkspace} from './workspace-identity/admission';
 import {serviceClientActivationChatLinks} from './project-specification/service-clients/activation';
 import {linkChatReviewReply,readChatReviewReceipts,backendReviewChatActions} from './chat-review-receipts';
@@ -88,6 +89,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   await serviceClientChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   await serviceClientActivationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
   await specificationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
+  await interactionChatLinks(db,userId,result[1].results as {id:unknown;[key:string]:unknown}[]);
   const firstDraft=await welcomeDraftProject(db,userId);
   return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0] };
 }

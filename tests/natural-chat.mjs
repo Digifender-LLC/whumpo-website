@@ -1,13 +1,13 @@
-import {createFixtureWebsite} from './current-site-fixture.mjs';
+import {createFixtureWebsite,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
-import {build} from 'esbuild';
-const bundle=await build({stdin:{contents:"export {saveBackend,testBackend} from './src/backend-versions';export {default as platform} from './src/index';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {sendConversation,sendChatControl,sendChat,readChat} from './src/chat';export {chatControl,confirmationControls} from './src/chat-controls';export {prepareSiteAction,siteContext,agentPrompt} from './src/site-agent';export {inspectWorkspace} from './src/workspace-read';export {readAgentKnowledge,knowledgeTopics} from './src/agent-knowledge';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
-const {saveBackend,testBackend,platform,sendConversation,sendChatControl,sendChat,readChat,chatControl,confirmationControls,prepareSiteAction,siteContext,agentPrompt,inspectWorkspace,readAgentKnowledge,knowledgeTopics}=m;
+// Share one compiled authority module with the current website fixture helpers.
+const m=await currentSiteFixtureHandlers();
+const {worker:platform,sendConversation,sendChatControl,sendChat,readChat,chatControl,confirmationControls,prepareSiteAction,siteContext,agentPrompt,inspectWorkspace,readAgentKnowledge,knowledgeTopics}=m;
+const {saveBackend,testBackend}=m.backend;
 const fixture=await databaseFixture({d1:true,r2:true}),rawDB=fixture.db;const originalFetch=globalThis.fetch;
 try{
  const user=crypto.randomUUID(),project=crypto.randomUUID(),other=crypto.randomUUID();

@@ -4,7 +4,7 @@ import {canonicalJSON,jsonDigest,copyJSON} from '../project-specification/v2/jso
 import {readSpecification} from '../project-specification/store';
 import type {ProjectSpecification} from '../project-specification/v2/types';
 import {InteractionError,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers} from './protocol';
-import type {Definition,Field} from './types';
+import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
 
 export class InteractionStoreError extends Error {
@@ -31,22 +31,23 @@ async function receipt(db:D1Database,user:string,id:string){
  await assertWorkspace(db,user);if(!identifier(id))throw new InteractionError('ID');
  return db.prepare(`SELECT r.request_id,r.interaction_id,r.request_hash,r.operation,r.answer_revision,r.created_at FROM chat_interaction_requests r JOIN chat_interactions i ON i.id=r.interaction_id AND i.user_id=r.user_id WHERE r.user_id=? AND r.request_id=? AND ${ownership}`).bind(user,id).first<Receipt>();
 }
-export async function readInteraction(db:D1Database,user:string,id:string){
+export async function readInteraction(db:D1Database,user:string,id:string):Promise<InteractionRead>{
  const r=await row(db,user,id),envelope=await retainedEnvelope(r);
- const submission=await db.prepare('SELECT s.id,s.answers_json,s.answers_digest,s.answer_revision,s.created_at,c.state continuation_state,c.result_turn_id,c.reason FROM chat_interaction_submissions s JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=? AND s.user_id=?').bind(id,user).first<{id:string;answers_json:string;answers_digest:string;answer_revision:number;created_at:string;continuation_state:string;result_turn_id:string|null;reason:string|null}>();
+ const submission=await db.prepare('SELECT s.id,s.answers_json,s.answers_digest,s.answer_revision,s.created_at,c.state continuation_state,c.result_turn_id,c.reason FROM chat_interaction_submissions s JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=? AND s.user_id=?').bind(id,user).first<{id:string;answers_json:string;answers_digest:string;answer_revision:number;created_at:string;continuation_state:Continuation['state'];result_turn_id:string|null;reason:string|null}>();
  if(r.state==='submitted'&&!submission)throw new InteractionStoreError(503,'receipt_unavailable');
  if(submission&&await jsonDigest(JSON.parse(submission.answers_json),16384)!==submission.answers_digest)throw new InteractionStoreError(503,'receipt_unavailable');
  const clock=await db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now') now").first<{now:string}>();
  // Recheck authority/ownership and the revision after the bounded multi-query read.
  const replacement=await db.prepare('SELECT id FROM chat_interactions WHERE previous_interaction_id=? AND user_id=?').bind(id,user).first<{id:string}>();
  const current=await row(db,user,id);await retainedEnvelope(current);if(current.answer_revision!==r.answer_revision)throw changed();
- return {version:1 as const,envelope,previousInteractionId:r.previous_interaction_id,replacementInteractionId:replacement?.id??null,state:r.state==='open'&&r.expires_at<=clock!.now?'expired' as const:r.state,answerRevision:r.answer_revision,draft:JSON.parse(r.draft_json) as Record<string,unknown>,
-  submission:submission?{id:submission.id,answers:JSON.parse(submission.answers_json) as Record<string,unknown>,answersDigest:submission.answers_digest,answerRevision:submission.answer_revision,createdAt:submission.created_at,
+ return {version:1 as const,envelope,previousInteractionId:r.previous_interaction_id,replacementInteractionId:replacement?.id??null,state:r.state==='open'&&r.expires_at<=clock!.now?'expired' as const:r.state,answerRevision:r.answer_revision,draft:JSON.parse(r.draft_json) as Answers,
+  observedAt:clock!.now,draftRetainUntil:r.state==='submitted'?null:new Date(Date.parse(r.draft_saved_at??r.created_at)+7*24*60*60*1000).toISOString(),
+  submission:submission?{id:submission.id,answers:JSON.parse(submission.answers_json) as Answers,answersDigest:submission.answers_digest,answerRevision:submission.answer_revision,createdAt:submission.created_at,
    continuation:{id:submission.id,state:submission.continuation_state,resultTurnId:submission.result_turn_id,reason:submission.reason}}:null};
 }
-export async function readInteractionReceipt(db:D1Database,user:string,requestId:string){
+export async function readInteractionReceipt(db:D1Database,user:string,requestId:string):Promise<InteractionReceipt>{
  const r=await receipt(db,user,requestId);if(!r)throw unavailable();
- return {version:1 as const,requestId:r.request_id,interactionId:r.interaction_id,operation:r.operation,answerRevision:r.answer_revision,createdAt:r.created_at};
+ return {version:1 as const,requestId:r.request_id,requestDigest:r.request_hash,interactionId:r.interaction_id,operation:r.operation,answerRevision:r.answer_revision,createdAt:r.created_at};
 }
 
 type InteractionListRequest={version:1;projectId:string|null;limit:number;before:{createdAt:string;interactionId:string}|null};

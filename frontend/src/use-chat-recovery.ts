@@ -1,10 +1,17 @@
 import {useCallback,useEffect,useRef,useState,type SetStateAction} from 'react';
 import {readRecovery,writeRecovery,type Recovery} from './lib/chat-recovery';
 import type {ChatRequest} from './lib/chat-delivery';
+import {prepareInteractionRecovery} from './lib/interaction-recovery';
 
 /** Mount a fresh instance for each authenticated account. Never resends anything. */
 export function useChatRecovery(owner:string){
- const [initial]=useState(()=>{try{return {value:readRecovery(sessionStorage,owner),failed:false};}catch{return {value:null,failed:true};}});
+ const [initial]=useState(()=>{
+  let value:Recovery|null=null,failed=false;
+  try{value=readRecovery(sessionStorage,owner);}catch{failed=true;}
+  // Failure cleaning up another store must not hide a valid pending Chat send.
+  try{prepareInteractionRecovery(sessionStorage,owner);}catch{failed=true;}
+  return {value,failed};
+ });
  const current=useRef<Recovery>(initial.value??{draft:'',pending:null,updatedAt:Date.now()});
  const pending=useRef<ChatRequest|null>(current.current.pending);
  const [draft,setDraftState]=useState(current.current.draft);
