@@ -3387,7 +3387,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/90. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3395,6 +3395,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-02 UTC: WH-106/#87 delivers the initial inline content-change@1 client and connected transport/recovery fixture as a bounded handoff. This is not a claim/completion of WH-107: broader maintained templates/cards, historical renderer, resource/custom adapters, dialogs, full accessibility/device acceptance and agent integration remain under the original packet. WH-106 is still open; dependencies and planning readiness are unchanged.
 - 2026-10-02 UTC: WH-106/#87 adds the bounded content-form historical renderer and existing-dialog resume handoff. Actual HTTP/local-D1 browser evidence covers 110 later turns, pagination, dismissal/recovery, private cache eviction, current removal and mobile/focus behavior. General templates/cards, resource/custom adapters, spoken screen-reader and physical-device acceptance remain under the original WH-107 packet; no claim or completion, dependency/readiness unchanged.
 - 2026-10-02 UTC: WH-106/#87 supplies maintained project-brief/project-select renderer and agent handoffs, including native owned selection and exact submitted-intake inspection. This does not claim or complete this task; original broader scope, dependencies and readiness remain unchanged.
+- 2026-10-02 source cecef97: WH-106/#87 closed after its original storage/privacy/lifecycle audit. Existing maintained website/project forms, linked corrections, exact receipt recovery and mobile browser checks are reusable partial WH-107 evidence; broader bounded field/display and maintained choice coverage, accessibility and text alternatives remain this packet. Execution claimed by the current root on codex/identity-admission in issue #90. No deployment or full renderer/device acceptance claimed.
 
 ## WH-108 — Let the agent compose bounded custom forms and use task-scoped answers
 
