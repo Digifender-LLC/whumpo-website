@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -7,7 +8,7 @@ const b=await build({stdin:{contents:"export {reviewCNAME,reviewTXT,confirmDNS,l
 const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const {reviewCNAME,reviewTXT,confirmDNS,listDNSActions,seal,reviewHosting,sendChat,readChat,sendAIChat,getBilling}=m;
 const fixture=await databaseFixture({d1:true}),db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
-const config={clientId:'fixture',clientSecret:'fixture-secret',key:'a'.repeat(64)},zone='b'.repeat(32),target='hosting.whumpo.site',now=()=>new Date().toISOString();
+const config={clientId:'fixture',clientSecret:'fixture-secret',key:fixtureKeyring('a'.repeat(64))},zone='b'.repeat(32),target='hosting.whumpo.site',now=()=>new Date().toISOString();
 async function account(apex=false){
  const identity=await workspaceFixture(db,m),user=identity.account,project=crypto.randomUUID(),claim=crypto.randomUUID(),tokenId=crypto.randomUUID(),connection=crypto.randomUUID(),proof=crypto.randomUUID(),hostname=apex?'example.com':'test-'+user+'.example.com';
  identities.set(user,identity);scopes.set(user,await identity.scope());await paidPlan(db,user,'business');

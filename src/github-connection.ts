@@ -1,6 +1,6 @@
 import {assertWorkspace,workspacePrincipal,prepareOAuthCustody} from './workspace-identity/admission';
 import {hashToken,newSessionToken} from './security';
-import {seal,unseal} from './connection-vault';
+import {seal,unseal,connectionKeyringMetadata} from './connection-vault';
 import {connectionFeature,connectionInclusion,requireFeature,assertFeature,featurePredicate,type ConnectionUse} from './feature-admission';
 import {backupRecoveryRead} from './connection-recovery';
 export class ConnectionError extends Error{constructor(public status:number,message:string){super(message);}}
@@ -9,9 +9,10 @@ const callback='https://whumpo.com/api/connections/github/callback';
 const API='https://api.github.com';
 const apiHeaders={'accept':'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'Whumpo-test'};
 export function githubConfig(env:Env):GitHubConfig|undefined{
- if(!env.GITHUB_CLIENT_ID||!env.GITHUB_CLIENT_SECRET||!env.GITHUB_APP_ID||!env.GITHUB_APP_SLUG||!env.CONNECTION_ENCRYPTION_KEY)return;
- if(!/^[A-Za-z0-9_.-]{1,100}$/.test(env.GITHUB_CLIENT_ID)||!/^[a-z0-9-]{1,100}$/.test(env.GITHUB_APP_SLUG)||!/^[0-9a-f]{64}$/.test(env.CONNECTION_ENCRYPTION_KEY)||!Number.isSafeInteger(Number(env.GITHUB_APP_ID))||Number(env.GITHUB_APP_ID)<1)return;
- return {clientId:env.GITHUB_CLIENT_ID,clientSecret:env.GITHUB_CLIENT_SECRET,appId:Number(env.GITHUB_APP_ID),slug:env.GITHUB_APP_SLUG,key:env.CONNECTION_ENCRYPTION_KEY};
+ if(!env.GITHUB_CLIENT_ID||!env.GITHUB_CLIENT_SECRET||!env.GITHUB_APP_ID||!env.GITHUB_APP_SLUG||!env.CONNECTION_ENCRYPTION_KEYRING)return;
+ if(!/^[A-Za-z0-9_.-]{1,100}$/.test(env.GITHUB_CLIENT_ID)||!/^[a-z0-9-]{1,100}$/.test(env.GITHUB_APP_SLUG)||!Number.isSafeInteger(Number(env.GITHUB_APP_ID))||Number(env.GITHUB_APP_ID)<1)return;
+ try{connectionKeyringMetadata(env.CONNECTION_ENCRYPTION_KEYRING);}catch{return;}
+ return {clientId:env.GITHUB_CLIENT_ID,clientSecret:env.GITHUB_CLIENT_SECRET,appId:Number(env.GITHUB_APP_ID),slug:env.GITHUB_APP_SLUG,key:env.CONNECTION_ENCRYPTION_KEYRING};
 }
 function required(config:GitHubConfig|undefined){if(!config)throw new ConnectionError(503,'GitHub connection is not configured yet.');return config;}
 function aad(user:string,id:string,purpose:string){return `whumpo:github:${purpose}:${user}:${id}`;}

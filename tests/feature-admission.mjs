@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -7,7 +8,7 @@ import {createFixtureProject} from './current-site-fixture.mjs';
 const b=await build({stdin:{resolveDir:process.cwd(),contents:"export * from './src/feature-admission';export * from './src/workspace-identity/admission';export * from './src/workspace-identity/authority';export * from './src/feature-preview-grants';export * from './src/github-connection';export * from './src/cloudflare-connection';export * from './src/cloudflare-dns';export * from './src/github-backups';export * from './src/connection-vault';export * from './src/connection-recovery';export * from './src/security';export * from './src/backup-chat';export * from './src/dns-chat';export {default as worker} from './src/index';"},bundle:true,format:'esm',platform:'node',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID(),now=()=>new Date().toISOString(),seconds=()=>Math.floor(Date.now()/1000),later=()=>new Date(Date.now()+3600000).toISOString();
-const gh={clientId:'Iv1.fixture',clientSecret:'fixture',appId:123,slug:'fixture',key:'a'.repeat(64)},cf={clientId:'fixture',clientSecret:'fixture',key:'a'.repeat(64)},zone='a'.repeat(32);
+const gh={clientId:'Iv1.fixture',clientSecret:'fixture',appId:123,slug:'fixture',key:fixtureKeyring('a'.repeat(64))},cf={clientId:'fixture',clientSecret:'fixture',key:fixtureKeyring('a'.repeat(64))},zone='a'.repeat(32);
 const deny=async()=>{throw Error('Unexpected provider request');};let checks=0;
 async function rejected(p,status=403){await assert.rejects(p,e=>e.status===status);checks++;}
 const identities=new Map();
@@ -29,7 +30,7 @@ try{
   assert.match(await m.backupChatCommand(await scoped(u),u,id(),'/github-installations',{github:gh,githubTransport:deny})(),/requires Business/);
   assert.match(await m.dnsChatCommand(await scoped(u),u,id(),'/dns-zones',{config:cf,transport:deny})(),/requires Business/);
   const session=identities.get(u).token;
-  const env={DB:db,ENVIRONMENT:'local',GITHUB_CLIENT_ID:gh.clientId,GITHUB_CLIENT_SECRET:gh.clientSecret,GITHUB_APP_ID:String(gh.appId),GITHUB_APP_SLUG:gh.slug,CONNECTION_ENCRYPTION_KEY:gh.key,CLOUDFLARE_CLIENT_ID:cf.clientId,CLOUDFLARE_CLIENT_SECRET:cf.clientSecret,API_LIMITER:{limit:async()=>({success:true})}};
+  const env={DB:db,ENVIRONMENT:'local',GITHUB_CLIENT_ID:gh.clientId,GITHUB_CLIENT_SECRET:gh.clientSecret,GITHUB_APP_ID:String(gh.appId),GITHUB_APP_SLUG:gh.slug,CONNECTION_ENCRYPTION_KEYRING:gh.key,CLOUDFLARE_CLIENT_ID:cf.clientId,CLOUDFLARE_CLIENT_SECRET:cf.clientSecret,API_LIMITER:{limit:async()=>({success:true})}};
   for(const provider of ['github','cloudflare']){const r=await m.worker.fetch(new Request('https://whumpo.com/api/connections/'+provider+'/start',{method:'POST',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+session}}),env);assert.equal(r.status,403);assert.match((await r.json()).error,/requires Business/);}
   await m.disconnectGitHub(await scoped(u),u,gh,async()=>new Response(null,{status:204}));await m.disconnectCloudflare(await scoped(u),u,cf,async()=>new Response(null,{status:200}));
  }

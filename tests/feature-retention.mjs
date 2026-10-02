@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import assert from 'node:assert/strict';
 import {setTimeout} from 'node:timers/promises';
 import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
@@ -10,7 +11,7 @@ const {issueFeaturePreviewGrant}=await modules.module('src/feature-preview-grant
 const fixture=await databaseFixture(),{db}=fixture,base='https://whumpo.com';
 const env={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},
  GITHUB_CLIENT_ID:'fixture',GITHUB_CLIENT_SECRET:'synthetic',GITHUB_APP_ID:'1',GITHUB_APP_SLUG:'fixture',
- CLOUDFLARE_CLIENT_ID:'fixture',CLOUDFLARE_CLIENT_SECRET:'synthetic',CONNECTION_ENCRYPTION_KEY:'a'.repeat(64)};
+ CLOUDFLARE_CLIENT_ID:'fixture',CLOUDFLARE_CLIENT_SECRET:'synthetic',CONNECTION_ENCRYPTION_KEYRING:fixtureKeyring('a'.repeat(64))};
 const originalFetch=globalThis.fetch;let transports=0;
 globalThis.fetch=async()=>{transports++;throw Error('No provider or inference transport is allowed');};
 const call=(actor,path,method='GET')=>m.worker.fetch(new Request(base+'/api'+path,{method,headers:{origin:base,cookie:'__Host-whumpo_session='+actor.token}}),env);

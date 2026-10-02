@@ -3,8 +3,8 @@ import {pathToFileURL} from 'node:url';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 
 const required={
- github:['GITHUB_APP_ID','GITHUB_APP_SLUG','GITHUB_CLIENT_ID','GITHUB_CLIENT_SECRET','CONNECTION_ENCRYPTION_KEY'],
- cloudflare:['CLOUDFLARE_CLIENT_ID','CLOUDFLARE_CLIENT_SECRET','CONNECTION_ENCRYPTION_KEY'],
+ github:['GITHUB_APP_ID','GITHUB_APP_SLUG','GITHUB_CLIENT_ID','GITHUB_CLIENT_SECRET','CONNECTION_ENCRYPTION_KEYRING'],
+ cloudflare:['CLOUDFLARE_CLIENT_ID','CLOUDFLARE_CLIENT_SECRET','CONNECTION_ENCRYPTION_KEYRING'],
 };
 
 // Presence is deliberately not credential validation or proof of provider consent.
@@ -22,11 +22,11 @@ export async function connectionReadiness(api,db,worker){
   providers[provider]={bindingPresence:missing.length?'incomplete':'present_unvalidated',missing,
    callback:`https://whumpo.com/api/connections/${provider}/callback`,
    retainedCredentials:row.total,pendingRevocations:row.revoking,
-   recoveryRequired:row.total>0&&!names.has('CONNECTION_ENCRYPTION_KEY'),
+   recoveryRequired:row.total>0&&!names.has('CONNECTION_ENCRYPTION_KEYRING'),
    nextStep:missing.length?'Complete operator setup before offering customer consent.':'Verify registered callback, permissions, real consent and disconnect; names alone do not validate credentials.'};
  }
  return {observedAt:new Date().toISOString(),worker,scope:'Secret names and aggregate vault counts only; no provider consent or writes.',providers,
-  vaultGuidance:'Preserve an existing encryption key. If encrypted rows exist without it, recover the original key; never generate a replacement as a repair.'};
+  vaultGuidance:'Preserve every required keyring version. Binding presence does not verify key IDs or ciphertext. If encrypted rows lack their exact key, recover that key; generating a replacement cannot repair them.'};
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){

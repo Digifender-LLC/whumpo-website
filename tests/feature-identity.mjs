@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import assert from 'node:assert/strict';
 import {timingSafeEqual} from 'node:crypto';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
@@ -23,12 +24,12 @@ const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();
 const run=(sql,...args)=>db.prepare(sql).bind(...args).run();
 const row=(sql,...args)=>db.prepare(sql).bind(...args).first();
 const base='https://whumpo.com',identityPath='/api/auth/identity/v1/';
-const gh={clientId:'fixture',clientSecret:'synthetic',appId:1,slug:'fixture',key:'a'.repeat(64)};
+const gh={clientId:'fixture',clientSecret:'synthetic',appId:1,slug:'fixture',key:fixtureKeyring('a'.repeat(64))};
 const cf={clientId:'fixture',clientSecret:'synthetic',key:gh.key};
 const env={DB:db,ENVIRONMENT:'test',TURNSTILE_SECRET:'synthetic',TURNSTILE_SITE_KEY:'synthetic',
  AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},
  GITHUB_CLIENT_ID:gh.clientId,GITHUB_CLIENT_SECRET:gh.clientSecret,GITHUB_APP_ID:'1',GITHUB_APP_SLUG:gh.slug,
- CLOUDFLARE_CLIENT_ID:cf.clientId,CLOUDFLARE_CLIENT_SECRET:cf.clientSecret,CONNECTION_ENCRYPTION_KEY:gh.key};
+ CLOUDFLARE_CLIENT_ID:cf.clientId,CLOUDFLARE_CLIENT_SECRET:cf.clientSecret,CONNECTION_ENCRYPTION_KEYRING:gh.key};
 const originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
 crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
 let checks=0,phase='enrollment',externalCalls=0;

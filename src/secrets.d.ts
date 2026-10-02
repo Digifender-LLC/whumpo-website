@@ -8,7 +8,7 @@ interface Env {
   GITHUB_CLIENT_SECRET?: string;
   GITHUB_APP_ID?: string;
   GITHUB_APP_SLUG?: string;
-  CONNECTION_ENCRYPTION_KEY?: string;
+  CONNECTION_ENCRYPTION_KEYRING?: string;
   TURNSTILE_SECRET?: string;
   AI_API_KEY?: string;
   STRIPE_SANDBOX_CATALOG?: string;

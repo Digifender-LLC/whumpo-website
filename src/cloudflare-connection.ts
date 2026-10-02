@@ -1,6 +1,6 @@
 import {assertWorkspace,workspacePrincipal,prepareOAuthCustody} from './workspace-identity/admission';
 import {hashToken,newSessionToken} from './security';
-import {seal,unseal} from './connection-vault';
+import {seal,unseal,connectionKeyringMetadata} from './connection-vault';
 import {ConnectionError} from './github-connection';
 import {connectionFeature,connectionInclusion,requireFeature,assertFeature,featurePredicate,type ConnectionUse} from './feature-admission';
 import {dnsRecoveryRead} from './connection-recovery';
@@ -10,9 +10,10 @@ const scopes=['zone.read','dns.read','dns.write'];
 const now=()=>new Date().toISOString();
 const aad=(user:string,id:string,purpose:string)=>`whumpo:cloudflare:${purpose}:${user}:${id}`;
 export function cloudflareConfig(env:Env):CloudflareConfig|undefined{
- if(!env.CLOUDFLARE_CLIENT_ID||!env.CLOUDFLARE_CLIENT_SECRET||!env.CONNECTION_ENCRYPTION_KEY)return;
- if(!/^[A-Za-z0-9_.-]{1,128}$/.test(env.CLOUDFLARE_CLIENT_ID)||! /^[0-9a-f]{64}$/.test(env.CONNECTION_ENCRYPTION_KEY))return;
- return {clientId:env.CLOUDFLARE_CLIENT_ID,clientSecret:env.CLOUDFLARE_CLIENT_SECRET,key:env.CONNECTION_ENCRYPTION_KEY};
+ if(!env.CLOUDFLARE_CLIENT_ID||!env.CLOUDFLARE_CLIENT_SECRET||!env.CONNECTION_ENCRYPTION_KEYRING)return;
+ if(!/^[A-Za-z0-9_.-]{1,128}$/.test(env.CLOUDFLARE_CLIENT_ID))return;
+ try{connectionKeyringMetadata(env.CONNECTION_ENCRYPTION_KEYRING);}catch{return;}
+ return {clientId:env.CLOUDFLARE_CLIENT_ID,clientSecret:env.CLOUDFLARE_CLIENT_SECRET,key:env.CONNECTION_ENCRYPTION_KEYRING};
 }
 function required(config:CloudflareConfig|undefined){if(!config)throw new ConnectionError(503,'Cloudflare connection is awaiting platform configuration.');return config;}
 async function request(url:string,init:RequestInit,transport:typeof fetch){

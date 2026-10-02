@@ -1,3 +1,4 @@
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -6,7 +7,7 @@ import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mj
 const built=await build({stdin:{contents:"export * from './src/github-connection';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const {startGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubAccess}=m;
-const config={clientId:'Iv1.test',clientSecret:'synthetic',appId:123,slug:'fixture',key:'ab'.repeat(32)};
+const config={clientId:'Iv1.test',clientSecret:'synthetic',appId:123,slug:'fixture',key:fixtureKeyring('ab'.repeat(32))};
 let fixture,passed=0,failed=0;
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}};
 try{
