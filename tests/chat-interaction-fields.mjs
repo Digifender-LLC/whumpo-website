@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const {outputFiles}=await build({stdin:{contents:"export * from './frontend/src/lib/interaction-fields';export {validateAnswers,validateDefinition} from './src/chat-interactions/protocol';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const m=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const fields=[{id:'amount',type:'number',label:'Amount',help:'',required:true,binding:'answer.value@1',constraints:{min:-10,max:10,step:0.5}},{id:'enabled',type:'boolean',label:'Enabled',help:'',required:true,binding:'answer.value@1',constraints:{}},{id:'items',type:'multi-choice',label:'Items',help:'',required:false,binding:'answer.value@1',constraints:{options:[{id:'one',label:'One'},{id:'two',label:'Two'}]}}];
+const d=m.validateDefinition({version:1,kind:'form',template:'custom@1',title:'Field fixture',summary:'Component contract only',presentation:'inline',fields,cards:[],submitBinding:'interaction.answers@1',continuationBinding:null});
+for(const [raw,number] of [['0',0],['-1.5',-1.5],['.5',0.5],['1.',1],['5e-1',0.5]]){const a={amount:raw,enabled:false,items:[]},snapshot=m.fieldAnswerSnapshot(fields,a);assert.equal(a.amount,raw);assert.deepEqual(m.validateAnswers(d,snapshot),{amount:number,enabled:false,items:[]});}
+for(const raw of ['-','1e','NaN','Infinity','0x10','1,000','11','0.3'])assert.throws(()=>m.validateAnswers(d,m.fieldAnswerSnapshot(fields,{amount:raw,enabled:false,items:[]})));
+assert.throws(()=>m.validateAnswers(d,{amount:'0',enabled:false,items:[]}),'Wire validation still rejects numeric strings');
+assert.throws(()=>m.validateAnswers(d,{amount:0,enabled:'false',items:[]}));assert.throws(()=>m.validateAnswers(d,{amount:0,enabled:false,items:['one','one']}));
+const instants=(wall,zone)=>m.dateTimeCandidates(wall,zone).map(v=>v.instant);
+assert.deepEqual(instants('2026-03-08T02:30','America/Chicago'),[]);
+assert.deepEqual(instants('2026-11-01T01:30','America/Chicago'),['2026-11-01T06:30:00.000Z','2026-11-01T07:30:00.000Z']);
+assert.deepEqual(m.dateTimeCandidates('2026-11-01T01:30','America/Chicago').map(v=>v.offset),['UTC−05:00','UTC−06:00']);
+assert.deepEqual(instants('2026-06-15T09:45:12.345','Asia/Kathmandu'),['2026-06-15T04:00:12.345Z']);
+assert.deepEqual(instants('2026-04-05T01:45','Australia/Lord_Howe'),['2026-04-04T14:45:00.000Z','2026-04-04T15:15:00.000Z']);
+assert.deepEqual(instants('2011-12-30T12:00','Pacific/Apia'),[]);
+assert.deepEqual(instants('2028-02-29T00:00','UTC'),['2028-02-29T00:00:00.000Z']);
+for(const wall of ['','2026-02-29T10:00','2026-06-01T24:00','2026-06-01T10:60','2026-06-01T10:00:60','0000-01-01T10:00','2026-06-01T','2026-06-01T10:00Z'])assert.deepEqual(instants(wall,'UTC'),[]);
+assert.deepEqual(m.dateTimeInput('2026-11-01T07:30:00.123Z','America/Chicago'),{date:'2026-11-01',time:'01:30:00.123'});
+assert.deepEqual(m.dateTimeInput('2026-03-08T02:30','America/Chicago'),{date:'2026-03-08',time:'02:30'});
+assert.deepEqual(m.dateTimeInput('2026-03-08T','America/Chicago'),{date:'2026-03-08',time:''});
+console.log('Typed field adapters passed: strict explicit numeric snapshots, preserved zero/false/empty lists, invalid-step/raw input refusal, zoned wall-time round trips, repeated/skipped/half-hour/day transitions, leap dates and millisecond precision. No runtime custom-form admission.');

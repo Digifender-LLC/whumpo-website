@@ -61,8 +61,12 @@ function fieldValue(f:Field,v:unknown,owned?:OwnedResources) {
   }else if(f.type==='choice')check(f.constraints.options.some(o=>o.id===v),'VALUE');
   else if(f.type==='multi-choice'){
     list(v,f.constraints.options.length);check(new Set(v).size===v.length&&(!f.required||v.length>0)&&v.every(x=>f.constraints.options.some(o=>o.id===x)),'VALUE');
-  }else if(f.type==='date')check(typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v+'T00:00:00.000Z'))&&new Date(v+'T00:00:00.000Z').toISOString().slice(0,10)===v,'VALUE');
-  else if(f.type==='datetime')check(typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v)&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v,'VALUE');
+  }else if(f.type==='date')check(typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!v.startsWith('0000-')&&Number.isFinite(Date.parse(v+'T00:00:00.000Z'))&&new Date(v+'T00:00:00.000Z').toISOString().slice(0,10)===v,'VALUE');
+  else if(f.type==='datetime'){
+    check(typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v)&&!v.startsWith('0000-')&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v,'VALUE');
+    const local=new Intl.DateTimeFormat('en-US',{timeZone:f.constraints.zone,calendar:'gregory',numberingSystem:'latn',era:'short',year:'numeric'}).formatToParts(new Date(v));
+    check(local.find(p=>p.type==='era')?.value==='AD'&&Number(local.find(p=>p.type==='year')?.value)<=9999,'VALUE');
+  }
   else if(f.type==='resource'||f.type==='attachment') {
     const values=f.constraints.multiple?v:[v];list(values,f.constraints.maxItems);
     check(new Set(values).size===values.length&&(!f.required||values.length>0)&&values.every(x=>typeof x==='string'&&uuid.test(x)),'VALUE');

@@ -11,8 +11,10 @@ import {Button} from './components/ui/button';
 import {isProjectIntakeTemplate} from '../../src/chat-interactions/maintained';
 import {ChatInteractionCards} from './chat-interaction-cards';
 import {ChatInteractionField} from './chat-interaction-field';
+import {fieldAnswerSnapshot} from './lib/interaction-fields';
+import type {Answer} from '../../src/chat-interactions/types';
 
-const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','owned.projects@1','project.status@1']};
+const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource','choice','multi-choice','boolean','number','date','datetime'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','owned.projects@1','project.status@1']};
 const route='/chat/interactions/v1/';
 const receipt=(requestId:string)=>send<InteractionReceipt>(route+'receipt',{version:1,requestId});
 function startingAnswers(form:InteractionRead):Answers{return form.submission?.answers??form.draft??Object.fromEntries(form.envelope.definition.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value]));}
@@ -58,7 +60,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
  useEffect(()=>{
   if(unavailable&&recovery.current.current?.answers)recovery.save({...recovery.current.current,answers:null});
  },[unavailable,recovery.save,recovery.current]);
- function edit(key:string,value:string|undefined){
+ function edit(key:string,value:Answer|undefined){
   if(!form||locked)return;const next={...answers};
   // An unselected resource is absent, never an empty or invented resource ID.
   if(value===undefined||value===''&&form.envelope.definition.fields.find(f=>f.id===key)?.type==='resource')delete next[key];else next[key]=value;
@@ -82,9 +84,10 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
  }
  async function mutate(operation:Mutation['operation']){
   if(!form||locked||(operation!=='cancel'&&selection&&!resourceReady))return;
-  if(operation!=='cancel')validateAnswers(form.envelope.definition,answers,{partial:operation==='save-draft'});
+  const snapshot=fieldAnswerSnapshot(form.envelope.definition.fields,answers);
+  if(operation!=='cancel')validateAnswers(form.envelope.definition,snapshot,{partial:operation==='save-draft'});
   const base={version:1 as const,requestId:crypto.randomUUID(),interactionId:id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:form.answerRevision};
-  const request:Mutation=operation==='cancel'?{...base,operation}:{...base,operation,answers};
+  const request:Mutation=operation==='cancel'?{...base,operation}:{...base,operation,answers:snapshot};
   recovery.save({...draftRecord(),answers:operation==='cancel'?local?.answers??null:answers,pending:request});setChecked(false);
   await transmit(request,operation==='submit'&&form.envelope.definition.continuationBinding==='site.content-prepare@1');
  }

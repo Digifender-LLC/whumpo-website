@@ -10,6 +10,7 @@
     "test:specification-compiler": "node tests/specification-compiler.mjs",
     "test:specification-journey": "node tests/specification-journey.mjs",
     "test:specification-review": "node tests/specification-review-details.mjs && node tests/specification-review-display.mjs",
+    "test:chat-fields": "node tests/chat-interaction-fields.mjs && node tests/chat-interaction-fields-browser.mjs",
     "test:smoke": "node tests/identity-http.mjs --d1 && node tests/smoke.mjs",
     "test:ai": "node tests/ai.mjs",
     "test:ai-gateway": "node tests/ai-gateway.mjs",

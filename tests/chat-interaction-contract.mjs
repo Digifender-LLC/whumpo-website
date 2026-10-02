@@ -94,8 +94,12 @@ function single(type,constraints,required=true){return {...copy(fixture.custom),
 await test('calendar dates and explicit zone instants',()=>{
   const date=single('date',{});assert.equal(validateAnswers(date,{answer:'2028-02-29'}).answer,'2028-02-29');
   rejects(()=>validateAnswers(date,{answer:'2026-02-29'}),'VALUE');
+  rejects(()=>validateAnswers(date,{answer:'0000-01-01'}),'VALUE');
   const time=single('datetime',{zone:'America/Chicago'});validateAnswers(time,{answer:'2026-11-01T07:30:00.000Z'});
   rejects(()=>validateAnswers(time,{answer:'2026-11-01T01:30:00'}),'VALUE');
+  rejects(()=>validateAnswers(time,{answer:'0000-01-01T00:00:00.000Z'}),'VALUE');
+  rejects(()=>validateAnswers(time,{answer:'0001-01-01T00:00:00.000Z'}),'VALUE');
+  rejects(()=>validateAnswers(single('datetime',{zone:'Pacific/Kiritimati'}),{answer:'9999-12-31T23:00:00.000Z'}),'VALUE');
   rejects(()=>validateDefinition(single('datetime',{zone:'imaginary-zone'})),'ZONE');
 });
 await test('remaining value types, optional empty and literal text',()=>{
