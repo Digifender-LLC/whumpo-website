@@ -1,21 +1,21 @@
+import {currentSchema,currentSchemaFiles} from './current-schema.mjs';
 import {DatabaseSync} from 'node:sqlite';
-import {readFile,readdir,stat} from 'node:fs/promises';
+import {readFile,stat} from 'node:fs/promises';
 import {resolve,dirname,isAbsolute,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const scopes=['owner','project','visitor','mixed','platform'];
 const unlinkedOwnership={
- auth_challenges:'Application-owned user_id/email; also pre-account signup data. No FK. Closure must invalidate matching challenge identities explicitly.',
+ identity_challenges:'Pre-account signup challenges and account-bound ceremonies have no FK. The current schema deletes matching account_id challenges before users deletion; unclaimed rows expire after five minutes and bounded cleanup removes them.',
  file_cleanup:'Physical object deletion queue, keyed by object_key only. Recover tenant association from a separately retained object manifest; never expose keys in customer reports.'
 };
-export async function migratedLifecycleSchema(directory=root){
+export async function currentLifecycleSchema(directory=root){
  const db=new DatabaseSync(':memory:');
  try{
-  const files=(await readdir(resolve(directory,'migrations'))).filter(n=>n.endsWith('.sql')).sort();
-  for(const file of files)db.exec(await readFile(resolve(directory,'migrations',file),'utf8'));
+  db.exec(await currentSchema(directory));
   db.exec('PRAGMA query_only=ON');
-  return {db,migrations:files};
+  return {db,schemaFiles:currentSchemaFiles};
  }catch(error){db.close();throw error;}
 }
 export function inspectLifecycleSchema(db,catalog){
@@ -63,13 +63,13 @@ export async function validateLifecycleReferences(catalog,directory=root){
 export async function lifecycleReport(directory=root){
  const catalog=JSON.parse(await readFile(resolve(directory,'docs/data-lifecycle.json'),'utf8'));
  await validateLifecycleReferences(catalog,directory);
- const {db,migrations}=await migratedLifecycleSchema(directory);
- try{return {...inspectLifecycleSchema(db,catalog),migrationCount:migrations.length};}finally{db.close();}
+ const {db,schemaFiles}=await currentLifecycleSchema(directory);
+ try{return {...inspectLifecycleSchema(db,catalog),schemaFileCount:schemaFiles.length};}finally{db.close();}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   if(process.argv.length>3||(process.argv[2]&&process.argv[2]!=='--json'))throw Error('Usage: node tools/lifecycle-catalog.mjs [--json]');
   const report=await lifecycleReport();
-  console.log(process.argv[2]?JSON.stringify(report,null,2):`Lifecycle catalog: ${report.tableCount} tables, ${report.classCount} data classes, ${report.migrationCount} migrations; ${report.directOwnerBlocks.length} direct non-cascading account references and ${report.unlinkedOwnership.length} explicit unlinked ownership cases. Proposed policy only; no deletion authorized.`);
+  console.log(process.argv[2]?JSON.stringify(report,null,2):`Lifecycle catalog: ${report.tableCount} tables, ${report.classCount} data classes, ${report.schemaFileCount} current schema sources; ${report.directOwnerBlocks.length} direct non-cascading account references and ${report.unlinkedOwnership.length} explicit unlinked ownership cases. Proposed policy only; no deletion authorized.`);
  }catch(error){console.error(error.message);process.exitCode=1;}
 }

@@ -6,7 +6,7 @@ import {verifyBuildSnapshot} from './build-snapshot.mjs';
 import {workerOrder,copyTree,digest,same,fileInventory,migrationPlan,validateCompatibility,sealRelease,configFiles} from './release-manifest.mjs';
 import {cmsServices} from './release-provider.mjs';
 
-const sourceTrees=['src','frontend','web','tools','compiler-locks'];
+const sourceTrees=['src','frontend','web','tools','compiler-locks','schema'];
 const sourceFiles=['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json',...Object.values(configFiles)];
 const supportedKeys=['$schema','name','account_id','main','compatibility_date','compatibility_flags','workers_dev','preview_urls','routes','vars','assets','d1_databases','services','r2_buckets','ratelimits','observability','triggers'];
 

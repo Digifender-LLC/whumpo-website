@@ -1,6 +1,6 @@
 # Current identity transport and trusted web flow
 
-**WH-114C [#72](https://github.com/zemdregon/whumpo/issues/72) / WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Implemented and verified against the isolated current schema. Not installed in the deployed platform route tree.** The [shared backend](identity-recovery.md) remains the only implementation of ceremonies, kits and recovery effects. The coordinated current-policy switch still needs common HTTP/Chat/provider admission, lifecycle registration, the test reset and deployed acceptance.
+**WH-114C [#72](https://github.com/zemdregon/whumpo/issues/72) / WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Integrated into the current source route tree and verified locally; not deployed.** The shared backend remains the only implementation of ceremonies, kits and recovery effects. HTTP, Chat and provider admission now carry the current principal. The complete schema, lifecycle catalog and bounded cleanup are connected. Current-schema release/reset delivery, remaining platform fixture updates and deployed/owner-device acceptance are still open.
 
 ## Browser transport
 
@@ -36,8 +36,33 @@ Plaintext stays in component memory only for the returned offer. Saving, superse
 
 ## Verification and remaining cutover
 
-- `node tests/identity-http.mjs` and `node tests/identity-http.mjs --d1`: actual adapter/backend/schema with independently signed ES256 credentials. Twenty-two refusal checks cover version/origin/method/body/query limits, cookie ambiguity, stale/retired tokens, restricted workspace access, rate separation and replay, plus complete enrollment, lost secure-reply resumption, recovery completion, rotation, cancellation, removal and server-side logout revocation. Response checks reject bearer/principal/verifier leakage.
+- `node tests/identity-http.mjs` and `node tests/identity-http.mjs --d1`: actual platform handler/backend/complete current schema with independently signed ES256 credentials. Thirty-six refusal checks cover version/origin/method/body/query limits, cookie ambiguity, stale/retired tokens, restricted workspace access, rate separation and replay, plus complete enrollment, lost secure-reply resumption, recovery completion, rotation, cancellation, removal and server-side logout revocation. Response checks reject bearer/principal/verifier leakage.
 - `node tests/identity-browser.mjs --d1`: disposable local D1 plus Chromium virtual authenticators and the actual React/HTTP flow. Mobile signup, cancelled second prompt without lost progress, separate passkeys, kit download/copy/print equality, reload/resumption, partial recovery after an intentionally lost secure reply, replacement-only completion, removal/sign-out, keyboard confirmation, cookie privacy and empty persistent browser storage pass. Mobile/desktop screenshots were inspected. Turnstile and one cancelled browser prompt are synthetic; successful WebAuthn and the verifier are real. No physical-device, real Turnstile, OS print dialog, native app or deployed acceptance is claimed.
 - `pnpm check`, production build and roadmap checks apply to this source packet. Existing core backend behavior is unchanged.
 
 The fixture entry is outside the production route tree. Neither `src/index.ts` nor the production workspace imports the adapter/gate yet. #72 must replace retired routes and cookies together with common committing admission, lifecycle/export/erasure/cleanup registration and the current schema reset. Do not deploy this schema or mount only this router as a parallel policy. #69/#68/#72 remain open until connected cutover evidence is recorded; actual owner/device acceptance remains separate.
+
+## Workspace admission integration — October 1, 2026
+
+`src/index.ts` now installs the versioned identity router and resolves only the current ordinary cookie before workspace access. Password routes, old session/recovery readers and the old owner-auth frontend/module are removed. `IdentityGate` precedes the actual profile query and first-project welcome. Profile no longer exposes password settings. Provider connection and sensitive Chat controls request an actual fresh passkey assertion.
+
+`admitWorkspace` in `src/workspace-identity/admission.ts` passes the same server capability through domain helpers. Each prepared statement or batch runs with an identity assertion in the **same D1 transaction**. Its always-empty assertion table aborts the entire batch after session/epoch/purpose/proof-age loss. A failed precondition cannot leave a later unconditional statement committed. Callers retain their exact resource, feature, consent and review predicates. A raw DB, forged/cloned principal, another owner's ID or foreign prepared statement cannot acquire this scope. No generic raw-database escape is exposed.
+
+Feature predicates now compose the current principal. OAuth states bind the initiating authority ID; a different current session cannot complete that flow. Exact uncertain-backup/DNS reconciliation can survive lost plan inclusion, but still requires current identity and current provider consent. Storage/service bindings and Chat inference/provider transports recheck before dispatch; local persistence rechecks at commit. Scheduled cleanup uses its own bounded system path.
+
+One narrow OAuth-custody capability survives revocation: it can remember and retire only the credential returned by its already-claimed flow. It cannot activate credentials, read unrelated tokens or send provider work. Activation remains session/feature/flow guarded. If sign-out happens during exchange, encrypted cleanup survives and the scheduled owner-scoped revoker can finish. Already-sent external writes retain their dispatched/uncertain receipt; they are never automatically resent to repair an interrupted reply.
+
+The client closes workspace access on current identity refusal, clears cached account data, fences late replies by client generation and stops Chat recovery persistence before old mutation callbacks settle. Account/epoch changes remount the workspace. An ordinary same-session reload preserves the account-bound unsent draft.
+
+### Current source verification
+
+- `tests/identity-http.mjs` passes 36 refusal cases plus complete signed enrollment/recovery/rotation/removal through the actual Worker handler and complete schema, on SQLite and local D1.
+- `tests/workspace-admission.mjs` passes 21 checks on both engines, including revocation immediately before real batch admission, no partial commit, actual HTTP project creation, Chat refusal, proof age, epoch and no post-revocation transport send.
+- `tests/feature-admission.mjs` passes 37 refusal cases on both engines. Actual HTTP/Chat/OAuth adapters, feature loss during asynchronous work, exact review/dispatch, read-only recovery, revoked callback custody and scheduled cleanup use synthetic transports only.
+- `tests/workspace-identity-browser.mjs --d1` passes the real mobile app entry with Chromium WebAuthn: two keys, one-time kit, identity-before-profile, first-project welcome, current Chat, draft reload, and workspace closure with no new Chat turn after revocation. This does not establish physical-device acceptance.
+- Lifecycle validation covers all 156 current tables in 37 classes using metadata only. Expired identity records have bounded scheduled cleanup; verified pending enrollment/recovery is retained.
+- Service-client compiler **v3** replaces v2 in the current catalog because password utility removal changed a pinned dependency. Its new immutable lock and independent reproduction test pass; old manifests cannot acquire current compiler authority.
+
+### Remaining coordinated cutover
+
+The target schema is composed from `src/workspace-identity/canonical-inputs.sql`, `schema/platform.sql` and `src/workspace-identity/schema.sql` by `tools/current-schema.mjs`. It contains no retired workspace-auth tables. This is an empty-database target, not a compatibility conversion. The numbered release delivery and remaining older test fixtures still need alignment before release. Do not deploy this source against the old remote schema. Review/reset affected test identities and dependencies, preserve separately registered platform services/secrets, fence old in-flight work, and verify all current Workers together. No remote schema, provider registration, owner passkey or live deployment changed in this integration.

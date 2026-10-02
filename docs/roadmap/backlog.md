@@ -1481,7 +1481,7 @@ Implementers have a source-grounded contract for passkey-only ordinary workspace
 
 ### Verification
 
-- Trace src/passkeys.ts, src/index.ts, frontend/src/auth.tsx and existing recovery/onboarding/native contracts using credential-free examples
+- Trace src/workspace-identity/ceremonies.ts, src/index.ts, frontend/src/identity/flow.tsx and existing recovery/onboarding/native contracts using credential-free examples
 - Review duplicate credentials, cancelled second enrollment, competing recovery, lost replies and current-only reset/cutover as state transitions
 - Run roadmap validate/render/render --check, local-reference checks and git diff --check
 
@@ -1498,9 +1498,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/onboarding.md](../../docs/onboarding.md)
 - [docs/android-app.md](../../docs/android-app.md)
 - [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
-- [src/passkeys.ts](../../src/passkeys.ts)
+- [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
 - [src/index.ts](../../src/index.ts)
-- [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
+- [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
@@ -1560,8 +1560,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/onboarding.md](../../docs/onboarding.md)
 - [docs/android-app.md](../../docs/android-app.md)
 - [src/index.ts](../../src/index.ts)
-- [src/passkeys.ts](../../src/passkeys.ts)
-- [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
+- [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
+- [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
 - [migrations](../../migrations)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 - [docs/identity-authority.md](../../docs/identity-authority.md)
@@ -1582,6 +1582,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned
 - 2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change.
 - 2026-10-01: #69 source now implements current-kit restricted entry, exact all/some/none review, saved-kit securing/revocation, replacement-specific assertion completion, restricted kit rotation and emergency removal including compromised staged keys. It reuses the shared authority, verification, offers and receipts; recovery-commit grants preserve original proof time/expiry. Actual cryptographic journeys and 64 refusal/race checks pass on SQLite/local D1, with 47 kit/62 ceremony/72 authority regressions. Browser kit delivery, HTTP/admission/lifecycle and the coordinated current-only test reset remain open; no remote schema, active auth or deployment change.
 - 2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open.
+- 2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation.
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 
@@ -1630,10 +1631,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/owner-recovery.md](../../docs/owner-recovery.md)
 - [docs/onboarding.md](../../docs/onboarding.md)
 - [docs/android-app.md](../../docs/android-app.md)
-- [src/passkeys.ts](../../src/passkeys.ts)
+- [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
 - [src/index.ts](../../src/index.ts)
-- [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
-- [tests/owner-recovery-concurrency.mjs](../../tests/owner-recovery-concurrency.mjs)
+- [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
+- [tests/identity-recovery.mjs](../../tests/identity-recovery.mjs)
 - [tools/owner-recovery-browser.mjs](../../tools/owner-recovery-browser.mjs)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 - [docs/identity-authority.md](../../docs/identity-authority.md)
@@ -1653,6 +1654,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned
 - 2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change.
 - 2026-10-01: #69 source now implements current-kit restricted entry, exact all/some/none review, saved-kit securing/revocation, replacement-specific assertion completion, restricted kit rotation and emergency removal including compromised staged keys. It reuses the shared authority, verification, offers and receipts; recovery-commit grants preserve original proof time/expiry. Actual cryptographic journeys and 64 refusal/race checks pass on SQLite/local D1, with 47 kit/62 ceremony/72 authority regressions. Browser kit delivery, HTTP/admission/lifecycle and the coordinated current-only test reset remain open; no remote schema, active auth or deployment change.
 - 2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open.
+- 2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation.
 
 ## WH-024 — Audit the supported owner journey for usability and accessibility
 
@@ -2836,7 +2838,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/owner-recovery.md](../../docs/owner-recovery.md)
 - [docs/deployment.md](../../docs/deployment.md)
 - [docs/account-closure.md](../../docs/account-closure.md)
-- [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
+- [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
 - [frontend/src/profile-picture-picker.tsx](../../frontend/src/profile-picture-picker.tsx)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
 
@@ -5418,8 +5420,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/owner-recovery.md](../../docs/owner-recovery.md)
 - [docs/android-app.md](../../docs/android-app.md)
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-- [src/passkeys.ts](../../src/passkeys.ts)
-- [frontend/src/auth.tsx](../../frontend/src/auth.tsx)
+- [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
+- [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
 ### Execution coordination
@@ -6579,7 +6581,7 @@ Android implementers have a source-grounded v1 operation contract and a bounded 
 
 ### Verification
 
-- Trace the operation matrix against src/index.ts, src/passkeys.ts, src/chat-controls.ts and the current feature contracts
+- Trace the operation matrix against src/index.ts, src/workspace-identity/ceremonies.ts, src/chat-controls.ts and the current feature contracts
 - Review sanitized API examples for ownership, replay, stale-state and unsupported-client rejection without real credentials or provider calls
 - Run roadmap validate, render, render --check and git diff --check; verify local references
 
@@ -6716,7 +6718,7 @@ Planning dependencies: WH-081, WH-115. Verify completion in current issue eviden
 - [docs/onboarding.md](../../docs/onboarding.md)
 - [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
 - [src/index.ts](../../src/index.ts)
-- [src/passkeys.ts](../../src/passkeys.ts)
+- [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
 - [src/security.ts](../../src/security.ts)
 - [migrations](../../migrations)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)

@@ -1,3 +1,4 @@
+import {assertWorkspace,workspaceTransport,requireFreshWorkspace} from './workspace-identity/admission';
 import {serviceClientActivationChatLinks} from './project-specification/service-clients/activation';
 import {linkChatReviewReply,readChatReviewReceipts,backendReviewChatActions} from './chat-review-receipts';
 import {chatControl} from './chat-controls';
@@ -90,7 +91,8 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
 }
 
 /** Public messages have no command interpreter, including slash-prefixed text. */
-export function sendConversation(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+export async function sendConversation(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+  await assertWorkspace(db,userId);
   if(Object.keys(input).some(k=>!['id','revision','content'].includes(k)))return Promise.resolve({status:400,error:'Send a plain chat message.'});
   // Private operator statements and transcript exports must never enter inference.
   const content=typeof input.content==='string'?input.content.trim():'';
@@ -98,9 +100,11 @@ export function sendConversation(db:D1Database,userId:string,input:Record<string
   return sendChat(db,userId,input,ai,options,!privateRequest);
 }
 /** Only authenticated UI actions may reach the internal receipt adapters. */
-export function sendChatControl(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+export async function sendChatControl(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+  await assertWorkspace(db,userId);
   const control=chatControl(input.action);
   if(!control||Object.keys(input).some(k=>!['id','revision','action'].includes(k)))return Promise.resolve({status:400,error:'Choose a valid reviewed action.'});
+  if(control.recentAuth)await requireFreshWorkspace(db,userId);
   return sendChat(db,userId,{id:input.id,revision:input.revision,content:control.command},ai,options,false,control);
 }
 /** Internal action adapter retained for existing validated handlers and offline fixtures. */
@@ -108,6 +112,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const content = typeof input.content === 'string' ? input.content.trim() : '';
   if (!content || content.length > 1000 || !Number.isSafeInteger(input.revision) || typeof input.id !== 'string' || !/^[0-9a-f-]{36}$/.test(input.id))
     return { status: 400, error: 'Send a message of 1 to 1,000 characters with a valid request ID.' };
+  await assertWorkspace(db,userId);
+  dnsOptions={...dnsOptions,transport:workspaceTransport(db,userId,dnsOptions?.transport),githubTransport:workspaceTransport(db,userId,dnsOptions?.githubTransport),hostingTransport:workspaceTransport(db,userId,dnsOptions?.hostingTransport),healthTransport:workspaceTransport(db,userId,dnsOptions?.healthTransport)};
   const storedText=control?control.label:content,actionJSON=control?JSON.stringify(control.action):null;
   const matches=(row:{user_text:string;action_json:string|null;revision:number}|null)=>row!==null&&row.user_text===storedText&&row.action_json===actionJSON&&row.revision===Number(input.revision)+1;
   const previous = await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string;action_json:string|null;revision:number }>();

@@ -19,8 +19,6 @@
     "invite": "node tools/create-invite.mjs",
     "test:chat": "node tests/chat.mjs",
     "build": "node tools/build.mjs",
-    "test:passkeys": "node tests/passkeys.mjs",
-    "test:owner-recovery": "node tests/owner-recovery-concurrency.mjs && node tests/owner-passkeys-http.mjs && node tests/owner-credential-authority.mjs",
     "test:billing-ui": "node tests/billing-ui.mjs",
     "test:billing": "node tests/billing.mjs",
     "test:runtime-ai": "node tests/runtime-ai.mjs",
@@ -175,7 +173,10 @@
     "test:identity-kits": "node tests/identity-kits.mjs",
     "test:identity-recovery": "node tests/identity-recovery.mjs",
     "test:identity-http": "node tests/identity-http.mjs",
-    "test:identity-browser": "node tests/identity-browser.mjs --d1"
+    "test:identity-browser": "node tests/identity-browser.mjs --d1",
+    "test:workspace-admission": "node tests/workspace-admission.mjs",
+    "test:workspace-identity-browser": "node tests/workspace-identity-browser.mjs --d1",
+    "test:identity-current": "node tests/identity-authority.mjs && node tests/identity-ceremonies.mjs && node tests/identity-kits.mjs && node tests/identity-recovery.mjs && node tests/identity-http.mjs && node tests/workspace-admission.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

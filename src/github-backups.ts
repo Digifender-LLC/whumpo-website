@@ -46,7 +46,7 @@ export async function reviewBackup(db:D1Database,bucket:R2Bucket|undefined,userI
  const requestHash=await hashToken(JSON.stringify([input.versionId,input.owner,input.repo,input.repoId]));
  const prior=await db.prepare('SELECT * FROM github_backups WHERE id=? AND user_id=?').bind(input.id,userId).first<Backup>();if(prior){if(prior.request_hash!==requestHash)throw new ConnectionError(409,'This review request ID was already used.');return view(await owned(db,userId,prior.id));}
  const version=await db.prepare('SELECT v.project_id FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(input.versionId,userId).first<{project_id:string}>();if(!version)throw new ConnectionError(404,'Saved version not found.');
- const scope=connectionFeature(userId,'github',version.project_id,'prepare'),gate=featurePredicate(scope);
+ const scope=connectionFeature(userId,'github',version.project_id,'prepare'),gate=featurePredicate(db,scope);
  const access=await githubAccess(db,userId,config,transport,{projectId:version.project_id,operation:'prepare'}),repo=await repository(access,input.owner,input.repo);if(repo.id!==input.repoId)throw new ConnectionError(409,'The repository identity changed. Select it again.');
  const archive=await ownedExport(db,userId,input.versionId,bucket);if(!archive)throw new ConnectionError(404,'Saved version not found.');
  const tree=await sourceTree(archive),baseHead=await branchHead(access,repo);
@@ -76,7 +76,7 @@ async function completeBackup(db:D1Database,userId:string,b:Backup,commit:string
 export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,userId:string,id:string,config:GitHubConfig|undefined,transport:typeof fetch=fetch){
  const b=await owned(db,userId,id);if(['complete','failed'].includes(b.state))return view(b);
  if(b.state==='pending'&&b.expires_at<=new Date().toISOString())throw new ConnectionError(409,'This backup review expired. Prepare a fresh review.');
- const scope=connectionFeature(userId,'github',b.project_id,'confirm'),gate=featurePredicate(scope),dispatchScope=connectionFeature(userId,'github',b.project_id,'dispatch'),dispatchGate=featurePredicate(dispatchScope);
+ const scope=connectionFeature(userId,'github',b.project_id,'confirm'),gate=featurePredicate(db,scope),dispatchScope=connectionFeature(userId,'github',b.project_id,'dispatch'),dispatchGate=featurePredicate(db,dispatchScope);
  const access=await githubAccess(db,userId,config,transport,b.state==='pending'?{projectId:b.project_id,operation:'confirm'}:{recoveryId:b.id});if(access.githubUserId!==b.github_user_id||b.state==='pending'&&access.tokenId!==b.token_id)throw new ConnectionError(409,'The GitHub connection changed. Prepare a fresh review.');
  const repo=await repository(access,b.repo_owner,b.repo_name);
  if(repo.id!==b.repo_id||repo.private!==!!b.repo_private||repo.branch!==b.branch)throw new ConnectionError(409,'Repository identity, visibility or default branch changed. Prepare a fresh review.');

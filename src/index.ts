@@ -1,3 +1,7 @@
+import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
+import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
+import {IdentityError} from './workspace-identity/authority';
+import {admitWorkspace,workspaceBindings,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
 import {FeatureInclusionError} from './feature-inclusion';
 import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubscriptions,startSubscription,billingPortal} from './stripe-billing';
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
@@ -6,7 +10,6 @@ import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
 import {serviceClientPreview,savedServiceClientPreview} from './project-specification/service-clients/store';
 import {specificationPreview} from './project-specification/store';
-import {acceptsCustomerEligibility,customerEligibilityMessage,customerEligibilityStatement} from './content-policy';
 import {eraseRevokedVisitor} from './app-owner-erasure';
 import {chatHistory} from './chat-history';
 import {readOnboarding,saveOnboarding,completeOnboarding,onboardingComplete} from './onboarding';
@@ -59,33 +62,21 @@ import { StorageLimitError } from './storage-budget';
 import { FileError, uploadPhoto, listPhotos, readPhoto, cleanupPhotos } from './files';
 import { ownedExport } from './exports';
 import { componentCatalog, previewHeaders } from './components';
-import { hashPassword, hashToken, newSessionToken, verifyPassword } from "./security";
 import { publicPlans, domainBenefit } from "./plans";
 import { launchFeatureCatalogue } from "./plan-features";
 import { readChat, sendConversation, sendChatControl } from "./chat";
 import {chatControl} from "./chat-controls";
-import { AuthError, passkeyOptions, passkeyVerify, recoverAccount, recoveryPasskeys } from "./passkeys";
 import { BillingError, getBilling } from "./billing";
 import { configuredAI } from "./ai-chat";
 
 type User = { id: string; email: string };
 type Project = { id: string; name: string; purpose: string; status: string; created_at: string; updated_at: string };
-const sessionDays = 7;
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy":"no-referrer" };
 
 function json(data: unknown, status = 200, headers?: HeadersInit): Response {
   return new Response(JSON.stringify(data), { status, headers: { ...jsonHeaders, ...headers } });
 }
 function error(status: number, message: string): Response { return json({ error: message }, status); }
-function cookie(token: string, request: Request): string {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `whumpo_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${sessionDays * 86400}${secure}`;
-}
-function clearCookie(request: Request): string { return cookie("", request).replace(/Max-Age=\d+/, "Max-Age=0"); }
-function sessionToken(request: Request): string | null {
-  const value = request.headers.get("cookie")?.match(/(?:^|;\s*)whumpo_session=([0-9a-f]{64})(?:;|$)/);
-  return value?.[1] ?? null;
-}
 async function body(request: Request): Promise<Record<string, unknown> | null> {
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return null;
   if (Number(request.headers.get("content-length") ?? 0) > 16_384) return null;
@@ -112,131 +103,32 @@ async function body(request: Request): Promise<Record<string, unknown> | null> {
 function localMode(request: Request, env: Env): boolean {
   return String(env.ENVIRONMENT) === "local";
 }
-function passwordPepper(request: Request, env: Env): string {
-  return localMode(request, env) ? "local-development-only-pepper-not-for-production" : env.PASSWORD_PEPPER ?? "";
-}
 function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   return origin !== null && origin === new URL(request.url).origin;
 }
-async function currentUser(request: Request, env: Env): Promise<User | null> {
-  const token = sessionToken(request);
-  if (!token) return null;
-  return env.DB.prepare("SELECT users.id, users.email FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?")
-    .bind(await hashToken(token), new Date().toISOString()).first<User>();
-}
-async function recentSession(request: Request, env: Env): Promise<boolean> {
-  const token = sessionToken(request);
-  if (!token) return false;
-  const session = await env.DB.prepare("SELECT token_hash FROM sessions WHERE token_hash = ? AND expires_at > ? AND created_at > ?").bind(await hashToken(token), new Date().toISOString(), new Date(Date.now() - 600000).toISOString()).first();
-  return !!session;
-}
-async function issueSession(request: Request, env: Env, user: User, recoveryCode?: string, expectedPasswordHash?: string, expectedPasskeyId?: string): Promise<Response> {
-  const token = newSessionToken();
-  const now = new Date();
-  const expiry = new Date(now.getTime() + sessionDays * 86400_000).toISOString();
-  await env.DB.prepare("INSERT INTO sessions (token_hash,user_id,expires_at,created_at) SELECT ?,id,?,? FROM users WHERE id=? AND (? IS NULL OR password_hash=?) AND (? IS NULL OR EXISTS (SELECT 1 FROM passkeys WHERE id=? AND user_id=users.id)) AND (? IS NULL OR EXISTS (SELECT 1 FROM recovery_codes WHERE user_id=users.id AND code_hash=?))")
-    .bind(await hashToken(token),expiry,now.toISOString(),user.id,expectedPasswordHash??null,expectedPasswordHash??null,expectedPasskeyId??null,expectedPasskeyId??null,recoveryCode ? await hashToken(recoveryCode) : null,recoveryCode ? await hashToken(recoveryCode) : null).run();
-  if(!await env.DB.prepare('SELECT token_hash FROM sessions WHERE token_hash=? AND user_id=?').bind(await hashToken(token),user.id).first())return error(401,'Credentials changed. Sign in again.');
-  return json({ user, ...(recoveryCode ? { recoveryCode } : {}) }, 200, { "set-cookie": cookie(token, request) });
-}
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const { pathname } = new URL(request.url);
   const method = request.method;
+  const identity=await handleIdentityRequest(request,env);if(identity)return identity;
   if (method === "GET" && pathname === "/api/health") return json({ status: "ok" });
-  if (method === "GET" && pathname === "/api/config") return json({ inviteRequired: !localMode(request, env), turnstileSiteKey: localMode(request, env) ? null : env.TURNSTILE_SITE_KEY });
   if (method === "POST" && pathname === "/api/stripe/webhook") return json(await stripeBillingWebhook(request, env.DB, env));
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && !sameOrigin(request)) return error(403, "Origin check failed");
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
   if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, featureCatalogue: launchFeatureCatalogue, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", currency: "USD", draft: true, checkoutMode: "test", subscriptionsEnabled: subscriptionsEnabled(env) });
-  if (method === "POST" && pathname.startsWith("/api/auth/") && pathname !== "/api/auth/logout") {
-    if (!(await env.AUTH_LIMITER.limit({ key: ip })).success) return error(429, "Too many sign-in attempts. Try again in a minute.");
-  }
-
-  const passkeyRoute = pathname.match(/^\/api\/auth\/passkeys\/(signup|login|add)\/(options|verify)$/);
-  if (method === "POST" && passkeyRoute) {
-    const data = await body(request);
-    if (!data) return error(400, "A JSON request is required");
-    const kind = passkeyRoute[1] as "signup" | "login" | "add";
-    const signedIn = await currentUser(request, env);
-    if (kind === "add" && !(await recentSession(request, env))) return error(401, "Sign in again before adding a passkey");
-    if (passkeyRoute[2] === "options") {
-      const result = await passkeyOptions(request, env, kind, data, signedIn);
-      return json({ options: result.options }, 200, { "set-cookie": result.cookie });
-    }
-    const result = await passkeyVerify(request, env, kind, data, signedIn);
-    return kind === "add" ? json({ ok: true }) : issueSession(request, env, result.user, result.recoveryCode, undefined, result.credentialId);
-  }
-  if (method === "POST" && pathname === "/api/auth/recover/passkeys") {
-    const data = await body(request);
-    if (!data) return error(400, "A JSON request is required");
-    return json(await recoveryPasskeys(env, data));
-  }
-  if (method === "POST" && pathname === "/api/auth/recover") {
-    const data = await body(request);
-    if (!data) return error(400, "A JSON request is required");
-    const result = await recoverAccount(env, data);
-    return issueSession(request, env, result.user, result.recoveryCode);
-  }
-
-  if (method === "POST" && pathname === "/api/auth/register") {
-    const data = await body(request);
-    if (!localMode(request, env) && !acceptsCustomerEligibility(data)) return error(403, customerEligibilityMessage);
-    const email = typeof data?.email === "string" ? data.email.trim().toLowerCase() : "";
-    const password = data?.password;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || typeof password !== "string" || password.length < 12 || password.length > 128)
-      return error(400, "Use a valid email and a password of 12 to 128 characters");
-    const local = localMode(request, env);
-    const now = new Date().toISOString();
-    const inviteHash = typeof data?.inviteCode === "string" ? await hashToken(data.inviteCode.trim()) : "";
-    if (!local && !(await env.DB.prepare("SELECT code_hash FROM invitations WHERE code_hash = ? AND used_by IS NULL AND expires_at > ?").bind(inviteHash, now).first())) return error(403, "A valid unused invitation is required");
-    const turnstileSecret = env.TURNSTILE_SECRET;
-    if (!local && turnstileSecret) {
-      if (typeof data?.turnstileToken !== "string") return error(400, "Verification required");
-      const form = new FormData();
-      form.set("secret", turnstileSecret); form.set("response", data.turnstileToken);
-      form.set("remoteip", ip);
-      const check = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: form, signal: AbortSignal.timeout(10_000) });
-      const result = await check.json<{ success: boolean; hostname?: string; action?: string }>();
-      if (!result.success || result.hostname !== new URL(request.url).hostname || result.action !== "register") return error(400, "Verification failed. Please try again.");
-    } else if (!local) {
-      return error(503, "Registration is not configured");
-    }
-    const passwordInfo = await hashPassword(password, passwordPepper(request, env));
-    const user = { id: crypto.randomUUID(), email };
-    try {
-      const insert = local
-        ? env.DB.prepare("INSERT INTO users (id, email, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?, ?)").bind(user.id, user.email, passwordInfo.salt, passwordInfo.hash, now)
-        : env.DB.prepare("INSERT INTO users (id, email, password_salt, password_hash, created_at) SELECT ?, ?, ?, ?, ? FROM invitations WHERE code_hash = ? AND used_by IS NULL AND expires_at > ?").bind(user.id, user.email, passwordInfo.salt, passwordInfo.hash, now, inviteHash, now);
-      const result = await env.DB.batch([
-        insert,
-        ...(acceptsCustomerEligibility(data) ? [customerEligibilityStatement(env.DB,user.id,'password')] : []),
-        env.DB.prepare("UPDATE invitations SET used_by = ? WHERE code_hash = ? AND used_by IS NULL AND EXISTS (SELECT 1 FROM users WHERE id = ?)").bind(user.id, inviteHash, user.id),
-        env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, id, 'user.created', 'Account created', ? FROM users WHERE id = ?").bind(crypto.randomUUID(), now, user.id)
-      ]);
-      if (result[0].meta.changes !== 1) return error(403, "Invitation already used or expired");
-    } catch (cause) {
-      if (String(cause).includes("user_quota")) return error(409, "The test platform has reached its account limit");
-      if (String(cause).includes("UNIQUE constraint failed: users.email")) return error(409, "An account with this email already exists");
-      throw cause;
-    }
-    return issueSession(request, env, user,undefined,passwordInfo.hash);
-  }
-  if (method === "POST" && pathname === "/api/auth/login") {
-    const data = await body(request);
-    const email = typeof data?.email === "string" ? data.email.trim().toLowerCase() : "";
-    const password = data?.password;
-    if (!email || email.length > 254 || typeof password !== "string" || password.length > 128) return error(400, "Email and password required");
-    const row = await env.DB.prepare("SELECT id, email, password_salt, password_hash FROM users WHERE email = ?")
-      .bind(email).first<User & { password_salt: string; password_hash: string }>();
-    const valid = await verifyPassword(password, row?.password_salt ?? "00".repeat(16), row?.password_hash ?? "", passwordPepper(request, env));
-    if (!row || !valid) return error(401, "Invalid email or password");
-    return issueSession(request, env, { id: row.id, email: row.email },undefined,row.password_hash);
-  }
-
-  const user = await currentUser(request, env);
-  if (!user) return error(401, "Sign in required");
+  if(pathname.startsWith('/api/auth/'))return error(404,'Not found');
+  const principal=await workspaceIdentity(request,env);
+  const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
+  const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
+  if(!user)throw new IdentityError(401,'proof_required','Sign in to continue.');
+  const response=await handleWorkspace(request,scoped,ctx,user);
+  try{await assertWorkspace(scoped.DB,user.id);}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
+  return response;
+}
+async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user:User):Promise<Response>{
+  const {pathname}=new URL(request.url),method=request.method;
+  const transport=workspaceTransport(env.DB,user.id);
   // Check persisted completion before reading workspace data or dispatching Chat work.
   if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before opening your workspace.',code:'onboarding_required'},409);
   if(pathname==='/api/onboarding'){
@@ -252,24 +144,6 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if(method==='GET')return profilePhoto(env.DB,user.id);
     if(method==='PUT'||method==='DELETE')return json(await updateProfilePhoto(env.DB,user.id,request));
   }
-  if(pathname==='/api/profile/password'&&method==='POST'){
-    if(!await recentSession(request,env))return error(401,'Sign in again before changing your password');
-    if(!(await env.AUTH_LIMITER.limit({key:'password:'+user.id})).success)return error(429,'Too many attempts. Try again in a minute.');
-    const data=await body(request);
-    if(typeof data?.newPassword!=='string'||data.newPassword.length<12||data.newPassword.length>128)return error(400,'Use a password of 12 to 128 characters');
-    const row=await env.DB.prepare('SELECT password_hash,password_salt FROM users WHERE id=?').bind(user.id).first<{password_hash:string;password_salt:string}>();
-    if(!row)return error(404,'Account not found');
-    if(row.password_hash!=='passkey-only'&&(typeof data.currentPassword!=='string'||data.currentPassword.length>128||!await verifyPassword(data.currentPassword,row.password_salt,row.password_hash,passwordPepper(request,env))))return error(400,'Current password is incorrect');
-    const next=await hashPassword(data.newPassword,passwordPepper(request,env));
-    const now=new Date(),tokenHash=await hashToken(sessionToken(request)!);
-    const updated=await env.DB.batch([
-      env.DB.prepare('UPDATE users SET password_hash=?,password_salt=? WHERE id=? AND password_hash=? AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND user_id=users.id AND expires_at>? AND created_at>?)').bind(next.hash,next.salt,user.id,row.password_hash,tokenHash,now.toISOString(),new Date(now.getTime()-600000).toISOString()),
-      env.DB.prepare('DELETE FROM sessions WHERE user_id=? AND EXISTS(SELECT 1 FROM users WHERE id=? AND password_hash=?)').bind(user.id,user.id,next.hash)
-    ]);
-    if(updated[0].meta.changes!==1)return error(409,'Your sign-in or password changed. Sign in again.');
-    return issueSession(request,env,user,undefined,next.hash);
-  }
-
   if(method==='GET'&&pathname==='/api/workspace/dashboard')return json(await dashboardData(env.DB,user.id));
   if(pathname==='/api/workspace/layout'){
     if(method==='GET')return json(await readLayout(env.DB,user.id));
@@ -384,7 +258,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const [,project,kind,id,action]=accessRoute;
     if(method==='GET'&&!kind)return json(await readAppAccess(env.DB,user.id,project));
     if(method==='POST'){
-      if(!await recentSession(request,env))return error(401,'Sign in again before changing visitor access');
+      await requireFreshWorkspace(env.DB,user.id);
       if(!(await env.AUTH_LIMITER.limit({key:'app-access:'+user.id})).success)return error(429,'Too many access changes. Try again in a minute.');
       const data=await body(request);
       if(kind==='visitors'&&id&&action==='erase')return json(await eraseRevokedVisitor(env.DB,user.id,project,id,data??{}));
@@ -485,41 +359,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     return json({versions:results});
   }
   if (method === 'GET' && pathname === '/api/billing/subscription') return json(await subscriptionStatus(env.DB,env,user.id));
-  if (method === 'POST' && pathname === '/api/billing/subscription/refresh') return json(await refreshSubscriptions(env.DB,env,user.id));
-  if (method === 'POST' && pathname === '/api/billing/subscription/checkout') return json(await startSubscription(env.DB,env,user.id,(await body(request))??{}));
-  if (method === 'POST' && pathname === '/api/billing/portal') return json(await billingPortal(env.DB,env,user.id));
+  if (method === 'POST' && pathname === '/api/billing/subscription/refresh') return json(await refreshSubscriptions(env.DB,env,user.id,transport));
+  if (method === 'POST' && pathname === '/api/billing/subscription/checkout') return json(await startSubscription(env.DB,env,user.id,(await body(request))??{},transport));
+  if (method === 'POST' && pathname === '/api/billing/portal') return json(await billingPortal(env.DB,env,user.id,transport));
   if (method === "GET" && pathname === "/api/billing") return json({ ...await getBilling(env.DB, user.id), checkoutMode: "test" });
-  if (method === "GET" && pathname === "/api/passkeys") {
-    const { results } = await env.DB.prepare("SELECT id, name, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY created_at").bind(user.id).all();
-    return json({ passkeys: results });
-  }
-  if (method === "POST" && pathname === "/api/auth/passkeys/remove") {
-    if (!(await recentSession(request, env))) return error(401, "Sign in again before removing a passkey");
-    const data = await body(request);
-    if (typeof data?.id !== "string") return error(400, "Passkey ID required");
-    const eventId = crypto.randomUUID(), tokenHash = await hashToken(sessionToken(request)!);
-    // The receipt admits the entire transaction. Recheck this exact session at
-    // database time so a paused request cannot outlive recovery or sign-out.
-    const removed = await env.DB.batch([
-      env.DB.prepare("INSERT INTO activity_events (id, user_id, action, summary, created_at) SELECT ?, user_id, 'passkey.removed', 'Passkey removed; all sessions signed out', strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM passkeys WHERE id = ? AND user_id = ? AND ((SELECT COUNT(*) FROM passkeys WHERE user_id = ?) > 1 OR EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash != 'passkey-only')) AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ? AND user_id = passkeys.user_id AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ','now','-10 minutes'))").bind(eventId, data.id, user.id, user.id, user.id, tokenHash),
-      env.DB.prepare("DELETE FROM passkeys WHERE id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM activity_events WHERE id = ?)").bind(data.id, user.id, eventId),
-      env.DB.prepare("DELETE FROM sessions WHERE user_id = ? AND EXISTS (SELECT 1 FROM activity_events WHERE id = ?)").bind(user.id, eventId)
-    ]);
-    if (removed[0].meta.changes !== 1) {
-      if (!(await recentSession(request, env))) return error(401, "Sign in again before removing a passkey");
-      return error(409, "Add another passkey before removing your last one, or refresh if it was already removed");
-    }
-    return json({ ok: true, signedOut: true }, 200, { "set-cookie": clearCookie(request) });
-  }
-  if (method === "POST" && pathname === "/api/auth/recovery-code") {
-    if (!(await recentSession(request, env))) return error(401, "Sign in again before replacing a recovery code");
-    const recoveryCode = newSessionToken();
-    // The SELECT gates both insertion and replacement; no plaintext code is
-    // returned unless the same recent session still authorizes the write.
-    const replaced = await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, created_at) SELECT user_id, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM sessions WHERE token_hash = ? AND user_id = ? AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ','now','-10 minutes') ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, created_at = excluded.created_at").bind(await hashToken(recoveryCode), await hashToken(sessionToken(request)!), user.id).run();
-    if (replaced.meta.changes !== 1) return error(401, "Sign in again before replacing a recovery code");
-    return json({ recoveryCode });
-  }
   if (method === "GET" && pathname === "/api/connections") return json({...await connectionStatus(env.DB,user.id,githubConfig(env)),cloudflare:await cloudflareStatus(env.DB,user.id,cloudflareConfig(env))});
   const directoryHistoryRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory\/history$/);
   if(method==='GET'&&directoryHistoryRoute)return json(await directoryHistory(env.DB,user.id,directoryHistoryRoute[1]));
@@ -537,30 +380,30 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   }
   if(method==='POST'&&pathname==='/api/cloudflare/dns/routing-review'){
     const data=await body(request);if(!data||Object.keys(data).some(k=>!['id','connectionId','zoneId'].includes(k))||typeof data.id!=='string'||typeof data.connectionId!=='string'||typeof data.zoneId!=='string')return error(400,'Choose a hosting connection and Cloudflare zone.');
-    return json(await reviewCNAME(env.DB,user.id,data.id,data.connectionId,data.zoneId,cloudflareConfig(env),fetch,!!hostingConfig(env)));
+    return json(await reviewCNAME(env.DB,user.id,data.id,data.connectionId,data.zoneId,cloudflareConfig(env),transport,!!hostingConfig(env)));
   }
   const dnsConfirmation=pathname.match(/^\/api\/cloudflare\/dns\/([0-9a-f-]{36})\/confirm$/);
-  if(method==='POST'&&dnsConfirmation)return json(await confirmDNS(env.DB,user.id,dnsConfirmation[1],cloudflareConfig(env),fetch,!!hostingConfig(env)));
+  if(method==='POST'&&dnsConfirmation)return json(await confirmDNS(env.DB,user.id,dnsConfirmation[1],cloudflareConfig(env),transport,!!hostingConfig(env)));
   if(method==='POST'&&pathname==='/api/connections/cloudflare/start'){
-    if(!(await recentSession(request,env)))return error(401,'Sign in again before connecting Cloudflare.');
-    return json(await startCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),cloudflareConfig(env)));
+    await requireFreshWorkspace(env.DB,user.id);
+    return json(await startCloudflare(env.DB,user.id,cloudflareConfig(env)));
   }
   if(method==='GET'&&pathname==='/api/connections/cloudflare/callback'){
     const params=new URL(request.url).searchParams;let destination='/workspace/?connection=cloudflare';
-    try{if(params.has('error')){await cancelCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'');throw new ConnectionError(400,'Cloudflare authorization cancelled.');}await finishCloudflare(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'',params.get('code')??'',cloudflareConfig(env));}
+    try{if(params.has('error')){await cancelCloudflare(env.DB,user.id,params.get('state')??'');throw new ConnectionError(400,'Cloudflare authorization cancelled.');}await finishCloudflare(env.DB,user.id,params.get('state')??'',params.get('code')??'',cloudflareConfig(env));}
     catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
   }
   if(method==='POST'&&pathname==='/api/connections/cloudflare/disconnect')return json(await disconnectCloudflare(env.DB,user.id,cloudflareConfig(env)));
   if(method==='GET'&&pathname==='/api/connections/cloudflare/zones')return json(await cloudflareZones(env.DB,user.id,cloudflareConfig(env),Number(new URL(request.url).searchParams.get('page')??1)));
   if (method === "POST" && pathname === "/api/connections/github/start") {
-    if(!(await recentSession(request,env)))return error(401,'Sign in again before connecting GitHub.');
-    return json(await startGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),githubConfig(env)));
+    await requireFreshWorkspace(env.DB,user.id);
+    return json(await startGitHub(env.DB,user.id,githubConfig(env)));
   }
   if (method === "GET" && pathname === "/api/connections/github/callback") {
     const params=new URL(request.url).searchParams;
     let destination='/workspace/?connection=github';
-    try{if(params.has('error')){await cancelGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'');throw new ConnectionError(400,'GitHub authorization was cancelled.');}await finishGitHub(env.DB,user.id,await hashToken(sessionToken(request)!),params.get('state')??'',params.get('code')??'',githubConfig(env));}
+    try{if(params.has('error')){await cancelGitHub(env.DB,user.id,params.get('state')??'');throw new ConnectionError(400,'GitHub authorization was cancelled.');}await finishGitHub(env.DB,user.id,params.get('state')??'',params.get('code')??'',githubConfig(env));}
     catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
   }
@@ -590,16 +433,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const control=explicitAction?chatControl(data.action):undefined;
     if(explicitAction&&!control)return error(400,'Choose a valid reviewed action.');
     if(control?.recentAuth){
-      if(!await recentSession(request,env))return error(401,'Sign in again before applying this reviewed change');
+      await requireFreshWorkspace(env.DB,user.id);
       if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)return error(429,'Too many recovery changes. Try again in a minute.');
     }
-    const result = await (explicitAction?sendChatControl:sendConversation)(env.DB, user.id, data, configuredAI(env),{background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
+    const result = await (explicitAction?sendChatControl:sendConversation)(env.DB, user.id, data, configuredAI(env),{transport,githubTransport:transport,background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
     return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
-  }
-  if (method === "POST" && pathname === "/api/auth/logout") {
-    const token = sessionToken(request);
-    if (token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await hashToken(token)).run();
-    return json({ ok: true }, 200, { "set-cookie": clearCookie(request) });
   }
   if (method === "GET" && pathname === "/api/projects") {
     const { results } = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles,created_at,updated_at FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 100")
@@ -643,9 +481,11 @@ export default {
   async scheduled(_event: ScheduledController, env: Env) {
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
-      await runMaintenance(env.DB,[imports,{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)}]);return;
+      await runMaintenance(env.DB,[imports,
+      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)}]);return;
     }
     await runMaintenance(env.DB,[imports,
+      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:()=>cleanupTraffic(env.DB)},
       {name:'applications',run:()=>cleanupAppLifecycle(env.DB)},
@@ -664,7 +504,8 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return comparisonErrorResponse(request,await handle(request, env, ctx));
       return env.ASSETS.fetch(request);
     } catch (cause) {
-      if (cause instanceof FeatureInclusionError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof AuthError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
+      if(cause instanceof IdentityError)return json({error:cause.message,code:cause.code},cause.status);
+      if (cause instanceof FeatureInclusionError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof DomainError || cause instanceof IdentityError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, cause: String(cause) }));
       return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));
     }

@@ -34,8 +34,8 @@ const reset=()=>{live=baseline();counts=Object.fromEntries(['migrations',...work
 let review;
 const prepare=()=>prepareRelease(root,driver,review,{git:()=>({commit:'a'.repeat(40),dirty:false})});
 try{
- for(const dir of ['src','frontend','web','public-app','tools','dist','migrations','node_modules/wrangler','compiler-locks'])await mkdir(join(root,dir),{recursive:true});
- for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v2.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v2.json'])await writeFile(join(root,name),'fixture');
+ for(const dir of ['src','frontend','web','public-app','tools','dist','migrations','node_modules/wrangler','compiler-locks','schema'])await mkdir(join(root,dir),{recursive:true});
+ for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v2.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v3.json'])await writeFile(join(root,name),'fixture');
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
  for(const role of workerOrder){
   configs[role]={name:'whumpo-'+role,account_id:'a'.repeat(32),main:'src/index.ts',vars:{ENVIRONMENT:'test'},workers_dev:false,preview_urls:false,...(role==='runtime'?{}:{d1_databases:[{binding:'DB',database_name:'whumpo-control',database_id:'1'.repeat(36),migrations_dir:'./migrations'}]}),...(['apps','platform'].includes(role)?{assets:{directory:role==='apps'?'./public-app':'./dist'}}:{})};
@@ -58,11 +58,11 @@ try{
  assert.deepEqual(expectedServiceBindings([{binding:'TEST',service:'worker',entrypoint:'API'}]),[{binding:'TEST',service:'worker',environment:'production',entrypoint:'API'}]);
  assert.throws(()=>expectedServiceBindings([{binding:'TEST',service:'worker',props:{unexpected:true}}]),/archive support/);
  assert.ok(manifest.files.some(f=>f.path==='workers/runtime/runtime.wasm'));
- for(const name of ['project-content-v2.json','project-service-clients-v2.json'])assert.ok(manifest.files.some(f=>f.path==='source/compiler-locks/'+name),'Required compiler lock missing from archived source: '+name);
+ for(const name of ['project-content-v2.json','project-service-clients-v3.json'])assert.ok(manifest.files.some(f=>f.path==='source/compiler-locks/'+name),'Required compiler lock missing from archived source: '+name);
  assert.ok(!JSON.stringify(manifest).includes('DO_NOT_ARCHIVE'));
  assert.ok(!manifest.files.some(f=>f.path.includes('.secrets')||f.path.includes('node_modules')));
  assert.equal((await readJSON(join(first.directory,'payload/config/platform.json'))).assets.directory,'../assets/platform');
- for(const path of ['workers/runtime/index.js','workers/runtime/runtime.wasm','assets/platform/index.html','migrations/'+sql[1],'config/platform.json','source/pnpm-lock.yaml','source/compiler-locks/project-content-v2.json','source/compiler-locks/project-service-clients-v2.json']){
+ for(const path of ['workers/runtime/index.js','workers/runtime/runtime.wasm','assets/platform/index.html','migrations/'+sql[1],'config/platform.json','source/pnpm-lock.yaml','source/compiler-locks/project-content-v2.json','source/compiler-locks/project-service-clients-v3.json']){
   const file=join(first.directory,'payload',path),bytes=await readFile(file);await writeFile(file,'changed');await assert.rejects(()=>applyRelease(first.directory,driver),/mismatch/);assert.equal(mutations,0);await writeFile(file,bytes);
  }
  await writeFile(join(first.directory,'payload/unexpected'),'extra');await assert.rejects(()=>verifyRelease(first.directory));await rm(join(first.directory,'payload/unexpected'));

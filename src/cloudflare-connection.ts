@@ -1,3 +1,4 @@
+import {assertWorkspace,workspacePrincipal,prepareOAuthCustody} from './workspace-identity/admission';
 import {hashToken,newSessionToken} from './security';
 import {seal,unseal} from './connection-vault';
 import {ConnectionError} from './github-connection';
@@ -32,10 +33,10 @@ async function revoke(config:CloudflareConfig,tokens:Tokens,transport:typeof fet
  }
  return complete;
 }
-export async function cleanupCloudflare(db:D1Database,config:CloudflareConfig|undefined,transport:typeof fetch=fetch){
+export async function cleanupCloudflare(db:D1Database,config:CloudflareConfig|undefined,transport:typeof fetch=fetch,userId:string|null=null){
  if(!config)return;
- await db.batch([db.prepare("UPDATE cloudflare_token_vault SET state='revoking' WHERE state='staged' AND created_at<?").bind(new Date(Date.now()-120000).toISOString()),db.prepare('DELETE FROM cloudflare_oauth_states WHERE expires_at<=?').bind(now()),db.prepare('DELETE FROM cloudflare_token_vault WHERE expires_at<=?').bind(now())]);
- const {results}=await db.prepare("SELECT id,user_id,ciphertext FROM cloudflare_token_vault WHERE state='revoking' AND (revoke_after IS NULL OR revoke_after<=strftime('%Y-%m-%dT%H:%M:%fZ','now')) LIMIT 5").all<{id:string;user_id:string;ciphertext:string}>();
+ await db.batch([db.prepare("UPDATE cloudflare_token_vault SET state='revoking' WHERE state='staged' AND created_at<? AND (? IS NULL OR user_id=?)").bind(new Date(Date.now()-120000).toISOString(),userId,userId),db.prepare('DELETE FROM cloudflare_oauth_states WHERE expires_at<=? AND (? IS NULL OR user_id=?)').bind(now(),userId,userId),db.prepare('DELETE FROM cloudflare_token_vault WHERE expires_at<=? AND (? IS NULL OR user_id=?)').bind(now(),userId,userId)]);
+ const {results}=await db.prepare("SELECT id,user_id,ciphertext FROM cloudflare_token_vault WHERE state='revoking' AND (? IS NULL OR user_id=?) AND (revoke_after IS NULL OR revoke_after<=strftime('%Y-%m-%dT%H:%M:%fZ','now')) LIMIT 5").bind(userId,userId).all<{id:string;user_id:string;ciphertext:string}>();
  for(const row of results){
   const attempt=crypto.randomUUID();
   const claimed=await db.prepare("UPDATE cloudflare_token_vault SET revoke_attempt=?,revoke_after=? WHERE id=? AND state='revoking' AND (revoke_after IS NULL OR revoke_after<=?)").bind(attempt,new Date(Date.now()+120000).toISOString(),row.id,now()).run();
@@ -51,29 +52,30 @@ export async function cloudflareStatus(db:D1Database,userId:string,config:Cloudf
  const inclusion=await connectionInclusion(db,userId,'cloudflare');
  return {enabled:!!config,inclusion,connected,expired:!!config&&expired,expiresAt:row?.expires_at??null,connectedAt:row?.created_at??null,revocationPending:!!pending?.n,dnsChangesEnabled:connected&&inclusion.read};
 }
-export async function startCloudflare(db:D1Database,userId:string,sessionHash:string,configuration:CloudflareConfig|undefined){
- const config=required(configuration),scope=connectionFeature(userId,'cloudflare',null,'connect'),gate=featurePredicate(scope);await requireFeature(db,scope);
+export async function startCloudflare(db:D1Database,userId:string,configuration:CloudflareConfig|undefined){
+ const config=required(configuration),scope=connectionFeature(userId,'cloudflare',null,'connect'),gate=featurePredicate(db,scope);await requireFeature(db,scope);
  const state=newSessionToken(),stateHash=await hashToken(state),verifier=newSessionToken();
  const challenge=btoa(Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))),b=>String.fromCharCode(b)).join('')).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
  const stamp=now();
  await db.prepare('DELETE FROM cloudflare_token_vault WHERE user_id=? AND expires_at<=?').bind(userId,stamp).run();
- const result=await db.prepare(`INSERT INTO cloudflare_oauth_states(user_id,state_hash,session_hash,verifier_ciphertext,expires_at)
+ const result=await db.prepare(`INSERT INTO cloudflare_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at)
  SELECT ?,?,?,?,? WHERE ${gate.sql} AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)
- ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,session_hash=excluded.session_hash,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,claimed=0,cancelled=0
- WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)`).bind(userId,stateHash,sessionHash,await seal(config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),...gate.params,userId,stamp,stamp,userId,stamp).run();
+ ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,authority_id=excluded.authority_id,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,claimed=0,cancelled=0
+ WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await seal(config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),...gate.params,userId,stamp,stamp,userId,stamp).run();
  if(result.meta.changes!==1){await assertFeature(db,scope);throw new ConnectionError(409,'Disconnect existing Cloudflare access and finish pending authorization or revocation before connecting again. An interrupted authorization may take ten minutes to expire.');}
  const url=new URL('https://dash.cloudflare.com/oauth2/auth');for(const [k,v] of Object.entries({client_id:config.clientId,response_type:'code',redirect_uri:callback,scope:scopes.join(' '),state,code_challenge:challenge,code_challenge_method:'S256'}))url.searchParams.set(k,v);
  return {url:url.href};
 }
-export async function cancelCloudflare(db:D1Database,userId:string,sessionHash:string,state:string){
+export async function cancelCloudflare(db:D1Database,userId:string,state:string){
  if(!/^[0-9a-f]{64}$/.test(state))return;
- await db.prepare('UPDATE cloudflare_oauth_states SET cancelled=1 WHERE user_id=? AND session_hash=? AND state_hash=?').bind(userId,sessionHash,await hashToken(state)).run();
+ await db.prepare('UPDATE cloudflare_oauth_states SET cancelled=1 WHERE user_id=? AND authority_id=? AND state_hash=?').bind(userId,workspacePrincipal(db,userId).authorityId,await hashToken(state)).run();
 }
-export async function finishCloudflare(db:D1Database,userId:string,sessionHash:string,state:string,code:string,configuration:CloudflareConfig|undefined,transport:typeof fetch=fetch){
+export async function finishCloudflare(db:D1Database,userId:string,state:string,code:string,configuration:CloudflareConfig|undefined,transport:typeof fetch=fetch){
  const config=required(configuration);if(!/^[0-9a-f]{64}$/.test(state)||!code||code.length>2048||/[\x00-\x20\x7f]/.test(code))throw new ConnectionError(400,'Invalid Cloudflare authorization response.');
- const scope=connectionFeature(userId,'cloudflare',null,'connect'),gate=featurePredicate(scope);await requireFeature(db,scope);
- const stateHash=await hashToken(state),flow=await db.prepare(`UPDATE cloudflare_oauth_states SET claimed=1 WHERE user_id=? AND state_hash=? AND session_hash=? AND claimed=0 AND cancelled=0 AND expires_at>? AND ${gate.sql} RETURNING verifier_ciphertext`).bind(userId,stateHash,sessionHash,now(),...gate.params).first<{verifier_ciphertext:string}>();
+ const scope=connectionFeature(userId,'cloudflare',null,'connect'),gate=featurePredicate(db,scope);await requireFeature(db,scope);
+ const stateHash=await hashToken(state),flow=await db.prepare(`UPDATE cloudflare_oauth_states SET claimed=1 WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=0 AND cancelled=0 AND expires_at>? AND ${gate.sql} RETURNING verifier_ciphertext`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,now(),...gate.params).first<{verifier_ciphertext:string}>();
  if(!flow)throw new ConnectionError(400,'This Cloudflare authorization expired, was cancelled or was already used.');
+ const custody=await prepareOAuthCustody(db,userId,'cloudflare',stateHash);
  const verifier=await unseal(config.key,aad(userId,stateHash,'pkce'),flow.verifier_ciphertext);
  await assertFeature(db,scope);
  const data=await json(await request('https://dash.cloudflare.com/oauth2/token',{method:'POST',headers:oauthHeaders(config),body:new URLSearchParams({grant_type:'authorization_code',code,redirect_uri:callback,code_verifier:verifier})},transport));
@@ -81,25 +83,25 @@ export async function finishCloudflare(db:D1Database,userId:string,sessionHash:s
  if(!validToken(data.access_token)||data.refresh_token!==undefined&&!validToken(data.refresh_token))throw new ConnectionError(503,'Cloudflare returned an invalid credential. Revoke the application in Cloudflare settings before trying again.');
  const tokens:Tokens={access:data.access_token,...(typeof data.refresh_token==='string'?{refresh:data.refresh_token}:{})};
  const validLifetime=Number.isSafeInteger(data.expires_in)&&Number(data.expires_in)>0&&Number(data.expires_in)<=28800;
- const expiry=validLifetime&&!tokens.refresh?new Date(Date.now()+Number(data.expires_in)*1000).toISOString():'9999-12-31T23:59:59.999Z',tokenId=crypto.randomUUID();
- try{await db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,?,'staged')").bind(tokenId,userId,await seal(config.key,aad(userId,tokenId,'token'),JSON.stringify(tokens)),expiry,now()).run();}
- catch{const saved=await db.prepare('SELECT id FROM cloudflare_token_vault WHERE id=? AND user_id=?').bind(tokenId,userId).first();if(!saved){try{await revoke(config,tokens,transport);}catch{}throw new ConnectionError(503,'Cloudflare access could not be saved. Revoke the application in Cloudflare settings.');}}
+ const expiry=validLifetime&&!tokens.refresh?new Date(Date.now()+Number(data.expires_in)*1000).toISOString():'9999-12-31T23:59:59.999Z',tokenId=custody.tokenId;
+ try{await custody.remember(await seal(config.key,aad(userId,tokenId,'token'),JSON.stringify(tokens)),expiry);}
+ catch{try{await revoke(config,tokens,transport);}catch{}throw new ConnectionError(503,'Cloudflare access could not be saved. Revoke the application in Cloudflare settings before reconnecting.');}
  try{
   // RFC 6749: omitted scope means exactly the originally requested scope.
   const granted=data.scope===undefined?scopes:typeof data.scope==='string'?data.scope.split(/\s+/).filter(Boolean):[];
   if(!validLifetime||tokens.refresh||String(data.token_type).toLowerCase()!=='bearer'||scopes.some(s=>!granted.includes(s))||granted.some(s=>!scopes.includes(s)))throw new ConnectionError(503,'Cloudflare must grant only the requested DNS/zone scopes with an expiring bearer token and no refresh token.');
   let applied;
   try{applied=await db.batch([
-   db.prepare(`UPDATE cloudflare_token_vault SET state='active' WHERE id=? AND user_id=? AND state='staged' AND ${gate.sql} AND EXISTS(SELECT 1 FROM cloudflare_oauth_states WHERE user_id=? AND state_hash=? AND session_hash=? AND claimed=1 AND cancelled=0 AND expires_at>?)`).bind(tokenId,userId,...gate.params,userId,stateHash,sessionHash,now()),
+   db.prepare(`UPDATE cloudflare_token_vault SET state='active' WHERE id=? AND user_id=? AND state='staged' AND ${gate.sql} AND EXISTS(SELECT 1 FROM cloudflare_oauth_states WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=1 AND cancelled=0 AND expires_at>?)`).bind(tokenId,userId,...gate.params,userId,stateHash,workspacePrincipal(db,userId).authorityId,now()),
    db.prepare('DELETE FROM cloudflare_oauth_states WHERE user_id=? AND state_hash=?').bind(userId,stateHash)
-  ]);}catch{if(await db.prepare("SELECT id FROM cloudflare_token_vault WHERE id=? AND user_id=? AND state='active'").bind(tokenId,userId).first())return {connected:true};throw new ConnectionError(503,'Cloudflare connection could not be confirmed. Refresh its status.');}
+  ]);}catch{if(await custody.confirmed()){await assertWorkspace(db,userId);return {connected:true};}throw new ConnectionError(503,'Cloudflare connection could not be confirmed. Refresh its status.');}
   if(applied[0].meta.changes!==1){await assertFeature(db,scope);throw new ConnectionError(409,'Cloudflare authorization was cancelled before it completed.');}
   return {connected:true};
- }finally{await db.prepare("UPDATE cloudflare_token_vault SET state='revoking' WHERE id=? AND state='staged'").bind(tokenId).run();await cleanupCloudflare(db,config,transport);}
+ }finally{await custody.retire();await cleanupCloudflare(db,config,transport,userId);}
 }
 export async function disconnectCloudflare(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,transport:typeof fetch=fetch){
  await db.batch([db.prepare('UPDATE cloudflare_oauth_states SET cancelled=1 WHERE user_id=?').bind(userId),db.prepare("UPDATE cloudflare_token_vault SET state='revoking' WHERE user_id=?").bind(userId)]);
- await cleanupCloudflare(db,configuration,transport);return cloudflareStatus(db,userId,configuration);
+ await cleanupCloudflare(db,configuration,transport,userId);return cloudflareStatus(db,userId,configuration);
 }
 export async function cloudflareZones(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,page=1,transport:typeof fetch=fetch){
  const config=required(configuration),scope=connectionFeature(userId,'cloudflare',null,'read');await requireFeature(db,scope);if(!Number.isSafeInteger(page)||page<1||page>100)throw new ConnectionError(400,'Choose a valid zone page.');
@@ -118,11 +120,12 @@ export async function cloudflareAccess(db:D1Database,userId:string,configuration
  const row=await db.prepare("SELECT id FROM cloudflare_token_vault WHERE user_id=? AND state='active' AND expires_at>?").bind(userId,now()).first<{id:string}>();
  if(!row||expectedToken&&row.id!==expectedToken)throw new ConnectionError(401,'Cloudflare access changed. Connect and prepare a fresh DNS review.');
  async function assertCurrent(operation='recoveryId' in use?null:use.operation){
+  await assertWorkspace(db,userId);
   if('recoveryId' in use){
    const a=await db.prepare("SELECT a.zone_id,a.record_name FROM cloudflare_dns_actions a JOIN projects p ON p.id=a.project_id JOIN cloudflare_token_vault t ON t.user_id=a.user_id WHERE a.id=? AND a.user_id=? AND p.owner_user_id=? AND a.state IN ('sending','uncertain') AND t.id=? AND t.state='active' AND t.expires_at>?").bind(use.recoveryId,userId,userId,row!.id,now()).first<{zone_id:string;record_name:string}>();
    if(!a)throw new ConnectionError(403,'Only an owned uncertain DNS action with current provider consent can be reconciled.');return a;
   }
-  const gate=featurePredicate(connectionFeature(userId,'cloudflare',use.projectId,operation!));
+  const gate=featurePredicate(db,connectionFeature(userId,'cloudflare',use.projectId,operation!));
   const active=await db.prepare(`SELECT ${gate.sql} AS included FROM cloudflare_token_vault WHERE id=? AND user_id=? AND state='active' AND expires_at>?`).bind(...gate.params,row!.id,userId,now()).first<{included:number}>();
   if(!active)throw new ConnectionError(401,'Cloudflare access changed. Refresh its status.');
   if(active.included!==1)throw new ConnectionError(403,'Feature eligibility or project ownership changed. Prepare a new review.');

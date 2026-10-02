@@ -178,7 +178,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/4",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001–0113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
+        "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001\u20130113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
       ]
     },
     {
@@ -454,7 +454,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.",
-        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001–0113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7.",
+        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001\u20130113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7.",
         "2026-10-01 alignment: foundation completion remains historical. WH-116 and each new Chat/module/connector/member feature must register new data classes, retention/export/deletion and key custody; they do not inherit complete coverage from issue #7."
       ]
     },
@@ -508,7 +508,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/8",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001–0113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011–017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
+        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001\u20130113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011\u2013017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
         "2026-10-01 UTC test release 20d37ba0-fca6-4003-a9c8-280f2b23edff from source 3417ea2 deploys the corrected agent knowledge. Readback verified four candidate versions, unchanged service/secret-binding names and CMS registry, 113 applied migrations / none pending, 16 matching platform assets, home/health 200 and anonymous Chat/profile 401. See docs/safety-coverage.md and docs/releases.md. No real-model moderation evaluation, detector connection, CMS functional test or customer publication."
       ]
     },
@@ -2221,7 +2221,7 @@
         "Choose supported website/app paths and a small cohort size based on measured capacity",
         "Review gate matrix, open risks, support ownership and rollback",
         "Keep unavailable provider/CMS/payment paths explicitly disabled",
-        "Require WH-117 transparent data-protection acceptance and the WH-113–115 owner identity/recovery policy through WH-005; WH-118 feasibility is outside beta prerequisites"
+        "Require WH-117 transparent data-protection acceptance and the WH-113\u2013115 owner identity/recovery policy through WH-005; WH-118 feasibility is outside beta prerequisites"
       ],
       "acceptance": [
         "All required gate evidence refers to the candidate release and admitted paths",
@@ -2612,7 +2612,7 @@
       "blockers": [],
       "outcome": "All selected connections reuse server-controlled explicit bounded reads, reviewed actions, scoped consent, current eligibility and reliable reconciliation.",
       "scope": [
-        "Define common capabilities for GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot; new adapter delivery belongs to WH-096–100",
+        "Define common capabilities for GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot; new adapter delivery belongs to WH-096\u2013100",
         "Reuse encrypted scoped credentials, account binding, refresh/revocation, current eligibility and durable dispatch/readback receipts",
         "Define request-bound lookup/data-use consent and allowlisted operations; exclude arbitrary outbound fetch, continuous sync and visitor-triggered maintainer",
         "Keep WH-036 platform delivery independent of customer mailbox OAuth; split contract/implementation/conformance children without depending on provider children or WH-049",
@@ -2936,7 +2936,7 @@
         "docs/owner-recovery.md",
         "docs/deployment.md",
         "docs/account-closure.md",
-        "frontend/src/auth.tsx",
+        "frontend/src/identity/flow.tsx",
         "frontend/src/profile-picture-picker.tsx",
         "docs/roadmap/identity-and-data-protection.md"
       ],
@@ -3035,7 +3035,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/13",
       "owner": null,
       "evidence": [
-        "2026-10-01 alignment: live GitHub completion evidence re-read. Catalog/planner implementation completed in b457f6b and issue #13 with local and deployed readback evidence. General service modules remain WH-067–069."
+        "2026-10-01 alignment: live GitHub completion evidence re-read. Catalog/planner implementation completed in b457f6b and issue #13 with local and deployed readback evidence. General service modules remain WH-067\u2013069."
       ]
     },
     {
@@ -3085,7 +3085,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 issue readback for the tier extension: parent #14 remains open; #15 compiler/schema and #16 durable private proposal/apply/restore are closed with recorded source and synthetic acceptance. Forms/API child #17 remains open; content-only compilation is not complete WH-066/067 delivery. Source at review: 628c16f. This roadmap update does not verify a deployment.",
-        "2026-10-01 alignment: live GitHub completion evidence re-read. Initial supported compiler scope completed through #15/#16/#17 and merged PR #18 (0002632). Content, fixed contact intake and reviewed stateless clients have deterministic/private apply/restore and scoped connected evidence. General records/access/files and notification/rule services remain WH-067–069."
+        "2026-10-01 alignment: live GitHub completion evidence re-read. Initial supported compiler scope completed through #15/#16/#17 and merged PR #18 (0002632). Content, fixed contact intake and reviewed stateless clients have deterministic/private apply/restore and scoped connected evidence. General records/access/files and notification/rule services remain WH-067\u2013069."
       ]
     },
     {
@@ -3797,7 +3797,7 @@
         "Incomplete signup/recovery cannot exchange into ordinary native access; web and native adapters use the same policy without requiring the Android shell to wait for the web implementation"
       ],
       "verification": [
-        "Trace the operation matrix against src/index.ts, src/passkeys.ts, src/chat-controls.ts and the current feature contracts",
+        "Trace the operation matrix against src/index.ts, src/workspace-identity/ceremonies.ts, src/chat-controls.ts and the current feature contracts",
         "Review sanitized API examples for ownership, replay, stale-state and unsupported-client rejection without real credentials or provider calls",
         "Run roadmap validate, render, render --check and git diff --check; verify local references"
       ],
@@ -3906,7 +3906,7 @@
         "docs/onboarding.md",
         "docs/security-risk-actions.md",
         "src/index.ts",
-        "src/passkeys.ts",
+        "src/workspace-identity/ceremonies.ts",
         "src/security.ts",
         "migrations",
         "docs/roadmap/identity-and-data-protection.md",
@@ -4441,7 +4441,7 @@
         "Expose scheduled/completed/failed/cancelled/uncertain receipts; recheck rule/connection/feature authority before each unsent step",
         "Wire provider-backed recipes only through their accepted adapters; split workflow core, selected adapters and connected acceptance children",
         "Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.",
-        "Initial automatic notifications use the approved WH-036/068 platform sender. Customer mailbox/calendar/CRM recipes require a separately supported adapter operation and reviewed rule authority; WH-096–100 owner-request consent alone never enables unattended sends or polling."
+        "Initial automatic notifications use the approved WH-036/068 platform sender. Customer mailbox/calendar/CRM recipes require a separately supported adapter operation and reviewed rule authority; WH-096\u2013100 owner-request consent alone never enables unattended sends or polling."
       ],
       "acceptance": [
         "Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary",
@@ -4949,7 +4949,7 @@
         "WH-080"
       ],
       "blockers": [
-        "Real provider approvals, consenting accounts and accepted production privacy remain required; see WH-031/032 and WH-096–100.",
+        "Real provider approvals, consenting accounts and accepted production privacy remain required; see WH-031/032 and WH-096\u2013100.",
         "Stripe sandbox is deployed and owner-authorized; real-money activation and CMS testing remain gated. Local/connected evidence never authorizes commercial activation."
       ],
       "outcome": "One candidate release proves every selected tier benefit and all seven provider journeys before commercial presentation or paid activation.",
@@ -5045,7 +5045,7 @@
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
-        "2026-10-01: WH-105 source-grounded interaction v1 decision and offline reference/fixtures prepared against 26b9fa4 under issue #51. WH-113/#42 and WH-089/#44 completion evidence refreshed before claim. Owner amendment removes legacy/unsupported-client fallback; current-version-only rejection replaces downgrade rendering. 63 offline contract/compiler/control cases pass. Production storage/admission/rendering remain WH-106–112; no runtime or deployment change."
+        "2026-10-01: WH-105 source-grounded interaction v1 decision and offline reference/fixtures prepared against 26b9fa4 under issue #51. WH-113/#42 and WH-089/#44 completion evidence refreshed before claim. Owner amendment removes legacy/unsupported-client fallback; current-version-only rejection replaces downgrade rendering. 63 offline contract/compiler/control cases pass. Production storage/admission/rendering remain WH-106\u2013112; no runtime or deployment change."
       ]
     },
     {
@@ -5433,7 +5433,7 @@
         "Sanitized state/API examples separate account recovery from content-key recovery, include browser/native compatibility and name required real-device evidence; policy acceptance is not implementation acceptance"
       ],
       "verification": [
-        "Trace src/passkeys.ts, src/index.ts, frontend/src/auth.tsx and existing recovery/onboarding/native contracts using credential-free examples",
+        "Trace src/workspace-identity/ceremonies.ts, src/index.ts, frontend/src/identity/flow.tsx and existing recovery/onboarding/native contracts using credential-free examples",
         "Review duplicate credentials, cancelled second enrollment, competing recovery, lost replies and current-only reset/cutover as state transitions",
         "Run roadmap validate/render/render --check, local-reference checks and git diff --check"
       ],
@@ -5443,9 +5443,9 @@
         "docs/onboarding.md",
         "docs/android-app.md",
         "docs/security-risk-actions.md",
-        "src/passkeys.ts",
+        "src/workspace-identity/ceremonies.ts",
         "src/index.ts",
-        "frontend/src/auth.tsx",
+        "frontend/src/identity/flow.tsx",
         "docs/workspace-identity.md"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/42",
@@ -5495,8 +5495,8 @@
         "docs/onboarding.md",
         "docs/android-app.md",
         "src/index.ts",
-        "src/passkeys.ts",
-        "frontend/src/auth.tsx",
+        "src/workspace-identity/ceremonies.ts",
+        "frontend/src/identity/flow.tsx",
         "migrations",
         "docs/workspace-identity.md",
         "docs/identity-authority.md",
@@ -5513,7 +5513,8 @@
         "2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed.",
         "2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change.",
         "2026-10-01: #69 source now implements current-kit restricted entry, exact all/some/none review, saved-kit securing/revocation, replacement-specific assertion completion, restricted kit rotation and emergency removal including compromised staged keys. It reuses the shared authority, verification, offers and receipts; recovery-commit grants preserve original proof time/expiry. Actual cryptographic journeys and 64 refusal/race checks pass on SQLite/local D1, with 47 kit/62 ceremony/72 authority regressions. Browser kit delivery, HTTP/admission/lifecycle and the coordinated current-only test reset remain open; no remote schema, active auth or deployment change.",
-        "2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open."
+        "2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open.",
+        "2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation."
       ]
     },
     {
@@ -5554,10 +5555,10 @@
         "docs/owner-recovery.md",
         "docs/onboarding.md",
         "docs/android-app.md",
-        "src/passkeys.ts",
+        "src/workspace-identity/ceremonies.ts",
         "src/index.ts",
-        "frontend/src/auth.tsx",
-        "tests/owner-recovery-concurrency.mjs",
+        "frontend/src/identity/flow.tsx",
+        "tests/identity-recovery.mjs",
         "tools/owner-recovery-browser.mjs",
         "docs/workspace-identity.md",
         "docs/identity-authority.md",
@@ -5573,7 +5574,8 @@
         "2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed.",
         "2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change.",
         "2026-10-01: #69 source now implements current-kit restricted entry, exact all/some/none review, saved-kit securing/revocation, replacement-specific assertion completion, restricted kit rotation and emergency removal including compromised staged keys. It reuses the shared authority, verification, offers and receipts; recovery-commit grants preserve original proof time/expiry. Actual cryptographic journeys and 64 refusal/race checks pass on SQLite/local D1, with 47 kit/62 ceremony/72 authority regressions. Browser kit delivery, HTTP/admission/lifecycle and the coordinated current-only test reset remain open; no remote schema, active auth or deployment change.",
-        "2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open."
+        "2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open.",
+        "2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation."
       ]
     },
     {
@@ -5716,8 +5718,8 @@
         "docs/owner-recovery.md",
         "docs/android-app.md",
         "docs/data-lifecycle.md",
-        "src/passkeys.ts",
-        "frontend/src/auth.tsx",
+        "src/workspace-identity/ceremonies.ts",
+        "frontend/src/identity/flow.tsx",
         "docs/workspace-identity.md"
       ],
       "issue": null,

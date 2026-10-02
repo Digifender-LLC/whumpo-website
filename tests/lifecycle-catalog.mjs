@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {inspectLifecycleSchema,migratedLifecycleSchema,validateLifecycleReferences} from '../tools/lifecycle-catalog.mjs';
+import {inspectLifecycleSchema,currentLifecycleSchema,validateLifecycleReferences} from '../tools/lifecycle-catalog.mjs';
 
 const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8'));
 await validateLifecycleReferences(catalog);
-const {db,migrations}=await migratedLifecycleSchema();
+const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,149);assert.equal(report.classCount,32);assert.equal(migrations.length,120);
+ assert.equal(report.tableCount,156);assert.equal(report.classCount,37);assert.equal(schemaFiles.length,3);
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
- assert.equal(report.directOwnerBlocks.length,21);
- assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['auth_challenges','file_cleanup']);
+
+ assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['file_cleanup','identity_challenges']);
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='domain_connections'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='gateway_spend_attempts'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='chat_review_receipts'&&t.onDelete==='NO ACTION'));
@@ -31,7 +31,7 @@ try{
  }
  // No data reads: synthetic private row changes cannot affect this report.
  db.exec('PRAGMA query_only=OFF');
- db.exec("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES('PRIVATE_OWNER','PRIVATE_EMAIL','PRIVATE_SALT','PRIVATE_HASH','2026-09-30')");
+ db.exec("INSERT INTO users(id,email,created_at) VALUES('PRIVATE_OWNER','PRIVATE_EMAIL','2026-10-01')");
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
