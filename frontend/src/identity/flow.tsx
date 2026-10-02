@@ -6,6 +6,7 @@ import {Button} from '../components/ui/button';
 import {Input} from '../components/ui/input';
 import {Label} from '../components/ui/label';
 import {Brand} from '../components/brand';
+import {LegalLinks} from '../legal-links';
 import {IdentityKit} from './kit';
 import {IdentityClientError,identityRequest,identityState,identityIntent,identityCeremony,sameIdentityReview,type IdentityState,type PreparedIdentityKit} from '../lib/identity';
 
@@ -23,7 +24,7 @@ type Control=ReturnType<typeof useIdentity>;
 const IdentityContext=createContext<Control|null>(null);
 function Help(){return <details className="border-t pt-5 text-sm text-muted-foreground"><summary className="cursor-pointer font-medium text-foreground">Passkeys and recovery help</summary><div className="mt-4 space-y-3"><p>Use two distinct passkeys. A synced copy of the same passkey counts once. For the second, choose a different passkey provider or an optional security key. No hardware purchase is required.</p><p>If a step is interrupted, sign in with a saved passkey to resume. During secured recovery, your saved new kit can also resume progress.</p><p>If the only passkey from unfinished signup is lost, there is no active kit to recover that pending account. Email, invitations, and support cannot unlock it.</p></div></details>}
 function Status({control:c}:{control:Control}){return <>{c.busy&&<p role="status" className="text-sm text-muted-foreground">One moment…</p>}{c.error&&<div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-3"><p>{c.error}</p><Button variant="outline" disabled={c.busy} onClick={()=>void c.run(c.reload)}>Check saved progress</Button></div>}</>}
-function Frame({children}:{children:ReactNode}){return <div className="auth-screen min-h-dvh grid lg:grid-cols-2"><section className="p-5 sm:p-10 flex flex-col"><Brand/><main className="max-w-md w-full mx-auto py-10 sm:py-16 space-y-6">{children}</main></section><aside className="hero-sky hidden lg:flex items-center justify-center flex-col px-12"><img src="/brand/whumpo-mascot.png" className="max-w-[460px] w-full" alt=""/><h2 className="text-3xl font-extrabold text-[#0f2d5b] mt-8">Your ideas belong here.</h2><p className="text-[#526780] mt-3">Big ideas. Less work.</p></aside></div>}
+function Frame({children}:{children:ReactNode}){return <div className="auth-screen min-h-dvh grid lg:grid-cols-2"><section className="p-5 sm:p-10 flex flex-col"><Brand/><main className="max-w-md w-full mx-auto py-10 sm:py-16 space-y-6">{children}<LegalLinks/></main></section><aside className="hero-sky hidden lg:flex items-center justify-center flex-col px-12"><img src="/brand/whumpo-mascot.png" className="max-w-[460px] w-full" alt=""/><h2 className="text-3xl font-extrabold text-[#0f2d5b] mt-8">Your ideas belong here.</h2><p className="text-[#526780] mt-3">Big ideas. Less work.</p></aside></div>}
 /** Identity resolves before profile, welcome or workspace components mount. */
 export function IdentityGate({children,signup=false}:{children:ReactNode;signup?:boolean}){
  const c=useIdentity(),[initialSignup,setInitialSignup]=useState(signup);
