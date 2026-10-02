@@ -20,16 +20,19 @@ export async function verifyChatJourney({db,id,browser,workspaceToken,release}){
  const request={version:1,requestId:crypto.randomUUID(),interactionId:content.envelope.id,definitionDigest:content.envelope.definitionDigest,expectedAnswerRevision:0,operation:'save-draft',answers:{'field-1':'Garden care for our neighbors','field-2':'Seasonal planting and cleanup.'}};
  const receipt=await browser.json(route+'mutate','POST',request);assert.deepEqual(await browser.json(route+'mutate','POST',request),receipt);assert.deepEqual(await browser.json(route+'receipt','POST',{version:1,requestId:request.requestId}),receipt);assert.deepEqual((await read(content.envelope.id)).draft,request.answers);
  assert.equal((await browser.call(route+'read','POST',{version:1,interactionId:content.envelope.id,client:{...client,versions:[2]}})).status,409);
+ const savedSource=await read(content.envelope.id),suggestedHeadline='Gardens, cared for.',proposal=await store.proposeAnswers(scope,id,{originTurnId:await nextTurn(),previousInteractionId:content.envelope.id,definitionDigest:content.envelope.definitionDigest,expectedAnswerRevision:savedSource.answerRevision,changes:{'field-1':suggestedHeadline}});
+ const proposedRead=await read(proposal.envelope.id);assert.equal(proposedRead.submission,null);assert.deepEqual(proposedRead.envelope.definition.fields[0].default,{value:suggestedHeadline,provenance:'suggested'});assert.deepEqual(proposedRead.envelope.definition.fields[1].default,{value:request.answers['field-2'],provenance:'user'});
+
  const app=await chromium.launch({headless:true});let observedBrowser;
  try{
   const context=await app.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addCookies([{name:'__Host-whumpo_session',value:workspaceToken,domain:'whumpo.com',path:'/',secure:true,httpOnly:true,sameSite:'Lax'}]);
   const page=await context.newPage(),errors=[];page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(e.message));await page.goto('https://whumpo.com/workspace');
-  const headline=page.locator('#form-'+content.envelope.id+'-field-1');await headline.waitFor();assert.equal(await headline.inputValue(),request.answers['field-1']);
-  await page.reload();await headline.waitFor();assert.equal(await headline.inputValue(),request.answers['field-1']);
-  const card=page.locator('section[aria-label="Website change brief"]');
+  const headline=page.locator('#form-'+proposal.envelope.id+'-field-1');await headline.waitFor();assert.equal(await headline.inputValue(),suggestedHeadline);
+  await page.reload();await headline.waitFor();assert.equal(await headline.inputValue(),suggestedHeadline);
+  const card=page.locator('section[aria-label="Website change brief"]').filter({has:headline});await card.getByText('Starting value: suggested by Whumpo. Review before saving.',{exact:true}).waitFor();
   await card.getByRole('button',{name:'Prepare preview',exact:true}).click();await card.getByText('Your preview is ready in Chat. Review it before saving the website.',{exact:true}).waitFor({timeout:60000});
-  const saved=await read(content.envelope.id),review=await site.readSpecificationProposal(scope,id,saved.submission.id);assert.equal(saved.submission.continuation.state,'succeeded');assert.equal((await site.readSpecification(scope,id,project)).revision,1);
-  const preview=await browser.call('/api/specification-reviews/'+review.id+'/preview');assert.equal(preview.status,200);assert.match(await preview.text(),/Garden care for our neighbors/);
+  const saved=await read(proposal.envelope.id),review=await site.readSpecificationProposal(scope,id,saved.submission.id);assert.equal(saved.submission.continuation.state,'succeeded');assert.equal((await site.readSpecification(scope,id,project)).revision,1);
+  const preview=await browser.call('/api/specification-reviews/'+review.id+'/preview');assert.equal(preview.status,200);assert.match(await preview.text(),/Gardens, cared for/);
   const details=await browser.call('/api/specification-reviews/'+review.id+'/details');assert.equal(details.status,200);await details.arrayBuffer();
   revision=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(id).first()).revision;
   await browser.json('/api/chat/actions','POST',{id:crypto.randomUUID(),revision,action:{type:'specificationApply',reviewId:review.id,proposalDigest:review.proposal_digest,expectedRevision:review.expected_revision}});assert.equal((await site.readSpecification(scope,id,project)).revision,2);
@@ -37,11 +40,11 @@ export async function verifyChatJourney({db,id,browser,workspaceToken,release}){
   const choices=page.locator('section[aria-label="Choose a writing style"]');await choices.getByRole('radio',{name:'Friendly and welcoming'}).check();await choices.getByRole('button',{name:'Save answers',exact:true}).click();await choices.getByText('Your answers are saved for Chat. Tell Whumpo what you’d like to do next.',{exact:true}).waitFor();assert.deepEqual((await read(choice.envelope.id)).submission.answers,{tone:'friendly'});
   await choices.screenshot({path:'/tmp/whumpo-live-choice-390.png'});
   const open=page.getByRole('button',{name:'Find past messages',exact:true});await open.click();const heading=page.getByRole('heading',{name:'Past messages & forms',exact:true});await heading.waitFor();assert(await heading.evaluate(e=>document.activeElement===e));await page.keyboard.press('Escape');await page.waitForTimeout(100);assert(await open.evaluate(e=>document.activeElement===e));
-  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);observedBrowser={mobileWidth:390,privateDraftReload:true,previewPreparedThroughUI:true,exactSave:true,choiceSubmission:true,historyFocusReturn:true,pageErrors:0};
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);observedBrowser={mobileWidth:390,privateDraftReload:true,proposedAnswersReviewed:true,previewPreparedThroughUI:true,exactSave:true,choiceSubmission:true,historyFocusReturn:true,pageErrors:0};
  }finally{await app.close();}
  const upload=await store.preparePhotoIntake(scope,id,{originTurnId:await nextTurn(),projectId:project});await scope.batch(upload.statements);const view=await read(upload.interactionId);assert.equal(view.envelope.definition.kind,'view');assert.equal(view.envelope.definition.cards[0].binding,'project.photos@1');
  assert.deepEqual(await browser.json('/api/projects/'+project+'/files/'+crypto.randomUUID()),{version:1,photo:null});
  await browser.json(route+'mutate','POST',{version:1,requestId:crypto.randomUUID(),interactionId:view.envelope.id,definitionDigest:view.envelope.definitionDigest,expectedAnswerRevision:0,operation:'cancel'});
- const counts=await db.prepare('SELECT (SELECT COUNT(*) FROM publications) publications,(SELECT COUNT(*) FROM inference_calls) inference,(SELECT COUNT(*) FROM standard_ai_requests) standardRequests,(SELECT COUNT(*) FROM project_files) photos').first();assert.deepEqual(counts,{publications:0,inference:0,standardRequests:0,photos:0});
+ const counts=await db.prepare('SELECT (SELECT COUNT(*) FROM publications WHERE project_id=?) publications,(SELECT COUNT(*) FROM inference_calls WHERE user_id=?) inference,(SELECT COUNT(*) FROM standard_ai_requests WHERE user_id=?) standardRequests,(SELECT COUNT(*) FROM project_files WHERE project_id=?) photos').bind(project,id,id,project).first();assert.deepEqual(counts,{publications:0,inference:0,standardRequests:0,photos:0});
  return {signedHTTP:true,...observedBrowser,exactDraftReplay:true,unsupportedClientRefused:true,photoHandoffAndReadback:true,...counts};
 }

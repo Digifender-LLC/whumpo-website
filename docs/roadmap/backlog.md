@@ -3479,13 +3479,15 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/93. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
 - 2026-10-02 UTC: WH-106/#87 supplies the initial maintained content-change@1 agent adapter and bounded task metadata as a handoff from d9003a1. No WH-108 claim/completion: custom composition, prose-to-answer changes, eligible submitted-answer model continuation, real-model quality and full renderer/task acceptance remain in the original scope. WH-106/107 remain open; dependencies and readiness are unchanged.
 - 2026-10-02 UTC: WH-106/#87 supplies maintained project-brief/project-select renderer and agent handoffs, including native owned selection and exact submitted-intake inspection. This does not claim or complete this task; original broader scope, dependencies and readiness remain unchanged.
+- 2026-10-02 UTC: WH-107/#90 is accepted to its original renderer scope after criterion-by-criterion audit at 33e8f70. Current root claims WH-108 in https://github.com/zemdregon/whumpo/issues/93; reuse current templates, typed storage/receipts and bounded agent loop. Complete original conditional/custom semantic admission, task context, prose proposals and continuation scope; source/local/live/device evidence stays distinct.
+- 2026-10-02 UTC: shared conditional rendering and explicit snapshot exclusion plus same-task prose answer proposals are implemented. Existing current receipts, revision/ownership guards and bounded owner inference loop are reused; suggested defaults remain unapproved and private until submission. Focused protocol, numeric/conditional, SQLite/local D1, scripted agent, natural Chat, actual built component/full workspace browser, type/compiler and build checks passed. Full custom purpose/question admission, minimized task context and separately receipted model continuation remain open; no WH-108 completion claim. See docs/chat-interactions.md.
 
 ## WH-109 — Compose and maintain dashboards and custom views through the agent
 

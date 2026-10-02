@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-const {outputFiles}=await build({stdin:{contents:"export * from './frontend/src/lib/interaction-fields';export {validateAnswers,validateDefinition} from './src/chat-interactions/protocol';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const {outputFiles}=await build({stdin:{contents:"export * from './frontend/src/lib/interaction-fields';export {validateAnswers,validateDefinition,isFieldVisible} from './src/chat-interactions/protocol';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const fields=[{id:'amount',type:'number',label:'Amount',help:'',required:true,binding:'answer.value@1',constraints:{min:-10,max:10,step:0.5}},{id:'enabled',type:'boolean',label:'Enabled',help:'',required:true,binding:'answer.value@1',constraints:{}},{id:'items',type:'multi-choice',label:'Items',help:'',required:false,binding:'answer.value@1',constraints:{options:[{id:'one',label:'One'},{id:'two',label:'Two'}]}}];
 const d=m.validateDefinition({version:1,kind:'form',template:'custom@1',title:'Field fixture',summary:'Component contract only',presentation:'inline',fields,cards:[],submitBinding:'interaction.answers@1',continuationBinding:null});
@@ -21,3 +21,18 @@ assert.deepEqual(m.dateTimeInput('2026-11-01T07:30:00.123Z','America/Chicago'),{
 assert.deepEqual(m.dateTimeInput('2026-03-08T02:30','America/Chicago'),{date:'2026-03-08',time:'02:30'});
 assert.deepEqual(m.dateTimeInput('2026-03-08T','America/Chicago'),{date:'2026-03-08',time:''});
 console.log('Typed field adapters passed: strict explicit numeric snapshots, preserved zero/false/empty lists, invalid-step/raw input refusal, zoned wall-time round trips, repeated/skipped/half-hour/day transitions, leap dates and millisecond precision. No runtime custom-form admission.');
+
+const conditional=m.validateDefinition({...d,fields:[fields[1],{...fields[0],when:{fieldId:'enabled',equals:true}},{...fields[2],when:{fieldId:'enabled',equals:false}}]});
+for(const value of [undefined,false,true,'false',0]){
+ const answers=value===undefined?{}:{enabled:value};
+ assert.equal(m.isFieldVisible(conditional.fields[1],answers),value===true);
+ assert.equal(m.isFieldVisible(conditional.fields[2],answers),value===false);
+}
+const hiddenDraft={enabled:false,amount:'-',items:[]},hiddenSnapshot=m.fieldAnswerSnapshot(conditional.fields,hiddenDraft);
+assert.deepEqual(hiddenSnapshot,{enabled:false,items:[]});assert.equal(hiddenDraft.amount,'-');assert.deepEqual(m.validateAnswers(conditional,hiddenSnapshot),hiddenSnapshot);
+for(const partial of [true,false])assert.throws(()=>m.validateAnswers(conditional,hiddenDraft,{partial}),e=>e.code==='HIDDEN_VALUE'&&e.fieldId==='amount');
+assert.throws(()=>m.validateAnswers(conditional,m.fieldAnswerSnapshot(conditional.fields,{...hiddenDraft,unknown:'unexpected'})),e=>e.code==='UNKNOWN_FIELD');
+assert.throws(()=>m.validateAnswers(conditional,m.fieldAnswerSnapshot(conditional.fields,{enabled:true,amount:'-'})));
+assert.deepEqual(m.validateAnswers(conditional,m.fieldAnswerSnapshot(conditional.fields,{enabled:true,amount:'0',items:['one']})),{enabled:true,amount:0});
+assert.equal(m.isFieldVisible(conditional.fields[2],Object.create({enabled:false})),false);
+console.log('Conditional snapshot checks passed: shared explicit equality, no inherited/default controller, retained hidden drafts, hidden invalid values excluded only at the client boundary, direct hidden/unknown wire values rejected.');

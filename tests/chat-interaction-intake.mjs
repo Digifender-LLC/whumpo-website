@@ -197,6 +197,36 @@ try{
   const racing=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{revoked=true;if(mode==='session')await o.authority.revoke();else await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',o.grant);}));
   await assert.rejects(()=>store.replaceProjectIntake(racing,o.user,input));assert(revoked);assert.equal((await row('SELECT state FROM chat_interactions WHERE id=?',form.envelope.id)).state,'open');assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',form.envelope.scope.taskId)).revision,0);assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',input.originTurnId),null);
  });
+ const proposalAccounts=[];
+ async function proposalOwner(){const o=await owner();proposalAccounts.push(o.user);return o;}
+ async function proposalTest(name,fn){await test(name,async()=>{try{await fn();}finally{for(const user of proposalAccounts.splice(0))await run('DELETE FROM users WHERE id=?',user);}});}
+ await proposalTest('unsubmitted proposal chains retain suggested provenance and exact replay',async()=>{
+  const o=await proposalOwner(),{form}=await issue(o),input={...await replacement(o,form),changes:{name:'Suggested garden'}};
+  let next=await store.proposeAnswers(o.scope,o.user,input);assert.deepEqual(next.envelope.definition.fields[0].default,{value:'Suggested garden',provenance:'suggested'});assert.equal(next.submission,null);
+  next=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,next));assert.deepEqual(next.envelope.definition.fields[0].default,{value:'Suggested garden',provenance:'suggested'});
+  next=await store.proposeAnswers(o.scope,o.user,{...await replacement(o,next),changes:{purpose:'An editable proposed purpose.'}});assert(next.envelope.definition.fields.every(f=>f.default.provenance==='suggested'));
+  await store.mutateInteraction(o.scope,o.user,request(next,'save-draft',{}));next=await store.readInteraction(o.scope,o.user,next.envelope.id);next=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,next));assert(next.envelope.definition.fields.every(f=>!f.default));
+  const replay=await store.proposeAnswers(o.scope,o.user,input);assert.equal(replay.previousInteractionId,form.envelope.id);await denies(()=>store.proposeAnswers(o.scope,o.user,{...input,changes:{name:'Different proposal'}}));
+ });
+ await proposalTest('proposal validation refuses unknown fields, incomplete required values and malformed authority',async()=>{
+  const o=await proposalOwner(),other=await proposalOwner(),{form}=await issue(o),input={...await replacement(o,form),changes:{name:'Garden'}};
+  for(const changes of [{},{name:''},{name:'x'.repeat(101)},{name:3},{name:['Garden']},{name:null},{password:'private'}])await assert.rejects(()=>store.proposeAnswers(o.scope,o.user,{...input,changes}));
+  for(const extra of [{projectId:id()},{fields:[]},{template:'custom@1'}])await assert.rejects(()=>store.proposeAnswers(o.scope,o.user,{...input,...extra}),e=>e.code==='SHAPE');
+  await denies(()=>store.proposeAnswers(other.scope,other.user,{...input,originTurnId:id()}),404);await denies(async()=>store.proposeAnswers(o.scope,o.user,{...input,originTurnId:await origin(other)}));
+  assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).state,'open');
+ });
+ await proposalTest('proposed project selection requires fresh ownership at preparation and commit',async()=>{
+  const o=await proposalOwner(),other=await proposalOwner(),p=await project(o),foreign=await project(other),{form}=await issue(o,'project-select@1'),input={...await replacement(o,form),changes:{project:p}};
+  await assert.rejects(()=>store.proposeAnswers(o.scope,o.user,{...input,changes:{project:foreign}}),e=>e.code==='RESOURCE_UNAVAILABLE');
+  let changed=false;const racing=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{changed=true;await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,p);}));
+  await denies(()=>store.proposeAnswers(racing,o.user,input));assert(changed);assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).state,'open');assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',form.envelope.scope.taskId)).revision,0);
+ });
+ for(const mode of ['answer','cancel','feature','session'])await proposalTest('late '+mode+' change rolls back an answer proposal',async()=>{
+  const o=await proposalOwner(),{form}=await issue(o),input={...await replacement(o,form),changes:{name:'Suggested name'}};let changed=false;
+  const racing=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{changed=true;if(mode==='session')await o.authority.revoke();else if(mode==='feature')await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',o.grant);else await store.mutateInteraction(o.scope,o.user,request(form,mode==='answer'?'save-draft':'cancel',{name:'Late user answer'}));}));
+  await assert.rejects(()=>store.proposeAnswers(racing,o.user,input));assert(changed);assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',input.originTurnId),null);assert.equal((await row('SELECT revision FROM chat_interaction_tasks WHERE id=?',form.envelope.scope.taskId)).revision,0);
+  if(mode==='answer')assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).draft,{name:'Late user answer'});
+ });
  assert.equal(network,0);assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);assert.equal((await row('SELECT count(*) n FROM chat_interaction_checks')).n,0);
  console.log(`Maintained project intake passed: ${cases} actual-handler cases (${process.argv.includes('--d1')?'local D1':'SQLite'}), owned paged selection, atomic scope/feature/session checks, exact loss/replay, null downstream work and real HTTP/history/export. No model/provider, project creation, activation, browser or deployment acceptance.`);
 }catch(error){console.error(error);process.exitCode=1;}finally{globalThis.fetch=originalFetch;await fixture.close();}

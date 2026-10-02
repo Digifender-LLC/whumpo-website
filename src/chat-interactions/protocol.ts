@@ -137,12 +137,17 @@ export function validateDefinition(input:unknown):Definition {
   }
   return d;
 }
+/** A validated definition permits only an earlier unconditional choice/boolean
+ * controller. No implicit defaults, coercion, expression evaluation or cascades. */
+export function isFieldVisible(field:Field,answers:Answers):boolean{
+  return !field.when||(own(answers,field.when.fieldId)&&answers[field.when.fieldId]===field.when.equals);
+}
 export function validateAnswers(definition:unknown,input:unknown,{owned,partial=false}:{owned?:OwnedResources;partial?:boolean}={}):Answers{
   const d=validateDefinition(definition),a=copyJSON<Answers>(input,bounds.answerBytes);
   check(d.kind==='form','KIND');shape(a,[],d.fields.map(f=>f.id));
   for(const f of d.fields){
     try{
-      const visible=!f.when||(own(a,f.when.fieldId)&&a[f.when.fieldId]===f.when.equals);
+      const visible=isFieldVisible(f,a);
       if(!visible){check(!own(a,f.id),'HIDDEN_VALUE');continue;}
       check(partial||!f.required||own(a,f.id),'REQUIRED');if(own(a,f.id))fieldValue(partial?{...f,required:false}:f,a[f.id],owned);
     }catch(error){if(error instanceof InteractionError)throw new InteractionError(error.code,f.id);throw error;}
