@@ -1,10 +1,8 @@
-import {constants} from 'node:fs';
-import {open,realpath,lstat} from 'node:fs/promises';
-import {resolve,dirname,isAbsolute,relative} from 'node:path';
+import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {execFileSync} from 'node:child_process';
 import {createHash,randomBytes} from 'node:crypto';
 import {build} from 'esbuild';
+import {pathCheck,readPrivate,writePrivate,contains} from './operator-private-files.mjs';
 
 // Operator-only current key backup. No HTTP route, provider client, Worker
 // binding writer or database exporter. Errors never include inputs or paths.
@@ -15,7 +13,6 @@ const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&
 const id=value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(value);
 const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-const contains=(a,b)=>{const r=relative(a,b);return !r||r!=='..'&&!r.startsWith('../')&&!isAbsolute(r);};
 const proofs=new WeakMap();
 let vaultModule;
 async function vault(){
@@ -25,44 +22,10 @@ async function vault(){
  })();
  return vaultModule;
 }
-function checkoutRoots(){
- const output=execFileSync('git',['-C',root,'worktree','list','--porcelain','-z'],{encoding:'utf8',maxBuffer:1024*1024,stdio:['ignore','pipe','ignore']});
- const roots=output.split('\0').filter(line=>line.startsWith('worktree ')).map(line=>resolve(line.slice(9)));
- if(!roots.includes(root))throw denied();return roots;
-}
-async function pathCheck(path,{external=false,parent=false}={}){
- if(typeof path!=='string'||!isAbsolute(path)||resolve(path)!==path||path.includes('\0'))throw denied();
- const target=parent?dirname(path):path;
- if(await realpath(target)!==target)throw denied();
- if(external&&checkoutRoots().some(r=>contains(r,path)))throw denied();
- if(parent){const stat=await lstat(target);if(!stat.isDirectory()||stat.uid!==process.getuid()||(stat.mode&0o077)!==0)throw denied();}
-}
 async function separate(backupFile,recoveryKeyFile){
  await pathCheck(backupFile,{external:true,parent:true});await pathCheck(recoveryKeyFile,{external:true,parent:true});
  if(contains(dirname(backupFile),dirname(recoveryKeyFile))||contains(dirname(recoveryKeyFile),dirname(backupFile)))throw denied();
  if(!backupFile.endsWith('.whumpo-key-backup'))throw denied();
-}
-async function readPrivate(path,limit){
- await pathCheck(path);let file;
- try{
-  file=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);
-  const before=await file.stat();
-  if(!before.isFile()||before.nlink!==1||before.uid!==process.getuid()||(before.mode&0o077)!==0||before.size<1||before.size>limit)throw denied();
-  const bytes=Buffer.alloc(before.size);let offset=0;
-  while(offset<bytes.length){const {bytesRead}=await file.read(bytes,offset,bytes.length-offset,offset);if(!bytesRead)throw denied();offset+=bytesRead;}
-  const after=await file.stat();
-  if(after.size!==before.size||after.mtimeMs!==before.mtimeMs||after.ctimeMs!==before.ctimeMs||after.nlink!==1||(after.mode&0o077)!==0)throw denied();
-  return bytes;
- }finally{await file?.close();}
-}
-async function writePrivate(path,bytes){
- await pathCheck(path,{external:true,parent:true});let file;
- try{file=await open(path,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);await file.writeFile(bytes);await file.sync();}
- finally{await file?.close();}
- const directory=await open(dirname(path),constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);
- try{await directory.sync();}finally{await directory.close();}
- // Never overwrite/delete an existing key or backup, including on an uncertain
- // write. The operator can inspect and verify the exact saved file afterward.
 }
 async function recoveryKey(path){
  const bytes=await readPrivate(path,65);

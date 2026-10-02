@@ -1172,7 +1172,11 @@
         "src/connection-oauth-response.ts",
         "tests/connection-oauth-outcomes.mjs",
         "tools/connection-key-backup.mjs",
-        "tests/connection-key-backup.mjs"
+        "tests/connection-key-backup.mjs",
+        "tools/operator-private-files.mjs",
+        "tools/restore-inventory.mjs",
+        "tests/restore-inventory.mjs",
+        "docs/restore-admission.md"
       ],
       "storageStatus": "current",
       "protection": {
@@ -1685,7 +1689,11 @@
         "src/connection-oauth-response.ts",
         "tests/connection-oauth-outcomes.mjs",
         "tools/connection-key-backup.mjs",
-        "tests/connection-key-backup.mjs"
+        "tests/connection-key-backup.mjs",
+        "tools/operator-private-files.mjs",
+        "tools/restore-inventory.mjs",
+        "tests/restore-inventory.mjs",
+        "docs/restore-admission.md"
       ],
       "storageStatus": "current",
       "protection": {

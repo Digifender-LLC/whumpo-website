@@ -18,7 +18,7 @@ try{
  assert.ok(!(await readFile(join(dir,'.secrets/build-snapshot.json'),'utf8')).includes('PRIVATE_FIXTURE'));
  // A private file misplaced under an allowed tree must not become a build input
  // or public asset. Failure messages themselves must never contain its contents.
- for(const path of ['src/misplaced.key','frontend/.env.local','dist/credentials.json','public-app/private.sqlite-wal','dist/private.whumpo-key-backup']){
+ for(const path of ['src/misplaced.key','frontend/.env.local','dist/credentials.json','public-app/private.sqlite-wal','dist/private.whumpo-key-backup','dist/private.whumpo-restore-inventory']){
   await writeFile(join(dir,path),'PRIVATE_FIXTURE');
   await assert.rejects(()=>saveBuildSnapshot(dir),e=>/Private material/.test(e.message)&&!e.message.includes('PRIVATE_FIXTURE'));
   await rm(join(dir,path));assert.deepEqual(await verifyBuildSnapshot(dir),first);
