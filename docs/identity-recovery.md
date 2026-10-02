@@ -1,6 +1,8 @@
 # Restricted recovery and emergency passkey removal
 
-**WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Backend source and the [current HTTP/browser flow](identity-web.md) are implemented and verified in isolation; not deployed.** This extends the shared [authority](identity-authority.md), [ceremonies](identity-ceremonies.md) and [saved kits](identity-kits.md). Common platform admission/lifecycle integration and the single current-only test cutover remain required under #69/#72. Real owner/device and native acceptance remain separate.
+**WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Backend source and the [current HTTP/browser flow](identity-web.md) are implemented, verified locally and deployed to the private test platform October 2, 2026.** This extends the shared [authority](identity-authority.md), [ceremonies](identity-ceremonies.md) and [saved kits](identity-kits.md). Common platform admission/lifecycle and the current-only test cutover are deployed. Real owner/device and native acceptance remain separate.
+
+[Final release and retirement evidence](identity-web.md#deployed-current-identity-and-retirement--october-2-2026) records exact live verification. Earlier dated/local evidence below does not establish physical-device or human recovery acceptance.
 
 ## Entry and loss review
 
@@ -56,7 +58,7 @@ No support/email/password path restores access. An owner without a usable key or
 
 The isolated [schema](../src/workspace-identity/schema.sql) adds one owned recovery-review row per attempt, immutable reviewed ID snapshots and saved-kit metadata, plus a current completion-readiness view. The same current grants, credentials, challenges, kit offers and effect receipts serve enrollment and recovery. Kit state is read in one guarded database snapshot, so a concurrent rotation cannot mix its generation and offer metadata. [effects.ts](../src/workspace-identity/effects.ts) shares exact intent/readback/receipt fencing; `ceremonies.ts` shares challenge handling and cryptographic verification. There is no old-policy reader, password conversion or second session system.
 
-The existing bounded cleanup removes expired admission/offers and seven-day terminal receipts. Verified pending/recovery progress persists until an explicit lifecycle action. The [current web packet](identity-web.md) now verifies body/rate limits, no-store HTTP responses, cookie selection, logout and trusted browser entry. Full inventory classification, scheduled cleanup and common platform admission remain #72 integration work. These files stay outside automatic migrations until the single test reset switches schemas, routes, clients and admission together.
+Bounded cleanup removes expired admission/offers and seven-day terminal receipts while retaining verified pending/recovery progress until an explicit lifecycle action. Inventory classification, scheduled maintenance, common admission, body/rate limits, private HTTP cookies and trusted browser entry are connected in the deployed [current web integration](identity-web.md). This uses the complete current schema; there is no automatic migration chain.
 
 ## Verification
 

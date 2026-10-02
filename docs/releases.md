@@ -1,6 +1,6 @@
 # Four-Worker releases and partial recovery
 
-**Current schema delivery contract, October 1, 2026.** Whumpo is a disposable private test platform. Current source uses review version 3 and archive format 2. It accepts one complete current schema, with no numbered migration replay or old account readers. The identity reset has not been deployed. Earlier dated release evidence below describes the prior deployment protocol; it is not an instruction to use it today.
+**Current schema delivery contract, October 1, 2026.** Whumpo is a disposable private test platform. Current source uses review version 3 and archive format 2. It accepts one complete current schema, with no numbered migration replay or old account readers. The identity reset was deployed and independently verified on October 2, 2026; see [final cutover evidence](identity-web.md#deployed-current-identity-and-retirement--october-2-2026). Earlier dated release evidence below describes the prior deployment protocol; it is not an instruction to use it today.
 
 ## Prepare before changing anything
 
@@ -41,7 +41,7 @@ An occupied database with a different schema is refused. The current reset selec
 
 A database replacement isolates new account rows from requests still holding the old D1 binding. No old account or credential is copied. During the sequential deployment, some components may still use the retired test database; review this interval and the service contracts. It is not a zero-downtime claim. The deployment lease stays in the baseline database through completion. Deleting that database before the journal completes is invalid.
 
-**Still required for the identity cutover:** refresh the recorded provider/resource inventory, create/select the new database, deploy and independently verify all current components, settle external cleanup, then retire the old database and obsolete secrets. The release tool does not create/delete databases, cancel third-party obligations or claim that old provider calls have stopped. The owner's testing-only data deletion authorization applies; no preservation migration or backward runtime is planned.
+**Identity cutover completed:** the complete current schema was initialized in a distinct empty database, all four Workers were deployed and verified, the old test identity/database and password secret were retired. [Evidence and remaining physical-device limits](identity-web.md#deployed-current-identity-and-retirement--october-2-2026). The release tool does not create/delete databases or cancel third-party obligations; those separately reviewed operator actions are recorded there. Future resets follow this same current-only contract.
 
 ## Private archive and journal
 

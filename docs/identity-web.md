@@ -1,6 +1,7 @@
 # Current identity transport and trusted web flow
 
-**WH-114C [#72](https://github.com/zemdregon/whumpo/issues/72) / WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), October 1, 2026. Integrated into the current source route tree and verified locally; not deployed.** The shared backend remains the only implementation of ceremonies, kits and recovery effects. HTTP, Chat and provider admission now carry the current principal. The complete schema, lifecycle catalog and bounded cleanup are connected. Current-schema release/reset delivery, remaining platform fixture updates and deployed/owner-device acceptance are still open.
+**WH-114C [#72](https://github.com/zemdregon/whumpo/issues/72) / WH-115 [#69](https://github.com/zemdregon/whumpo/issues/69), deployed to the private test platform October 2, 2026.** Current identity, two-key enrollment and restricted recovery are connected to HTTP, Chat, provider admission and the trusted web entry. Complete-schema release, obsolete account reset and resource retirement are verified below. Physical owner/device enrollment, live recovery usability and native acceptance remain separate. Earlier checkpoint sections record the path to this release; their then-outstanding deployment steps are superseded by the final evidence.
+
 
 ## Browser transport
 
@@ -127,3 +128,25 @@ Before release, the old database's one disposable account/project was reset unde
 During the reviewed runtime → apps → sites → platform interval, unchanged service protocols can call newly bound empty hosts, with no published customer content to maintain. Old owner access is fenced before this interval. The database switch isolates old in-flight bindings from new state. Keep the old database only for the managed deployment lease until the journal confirms completion, then retire it; it is never a fallback. Platform secrets and unrelated resources are retained, with only `PASSWORD_PEPPER` scheduled for removal after current identity verification.
 
 `pnpm check` and `pnpm build` pass with the new bindings and latest pricing. Independent exact schema, Worker/secret/service/route/schedule/assets and signed current-identity verification follows release. Synthetic account probes do not establish physical passkey enrollment, human Turnstile or real-model usefulness. Fresh owner signup needs a new invitation and two distinct passkeys. Private preflight/reset evidence lives under `.secrets/identity-cutover-*`, `.secrets/identity-test-database.json` and `.secrets/identity-old-fence.json`; credentials are excluded from public evidence.
+
+
+### Deployed current identity and retirement — October 2, 2026
+
+Managed release `40e45c39-037a-42da-802c-5eacc75bde77`, source `6c73ac5`, completed empty-schema initialization and runtime → apps → sites → platform at 03:51:35 UTC. All commands and readbacks were confirmed; no uncertain mutation was replayed. The archive's dirty flag is only the shared dependency symlink. Its exact schema has 156 tables and 702 catalog objects, fingerprint `4d5e8d0a37a8d0039d543cdbad9109078fe05042813f1d15c9e835c2cddd42ad`.
+
+| Worker | Final verified version |
+| --- | --- |
+| runtime | `7c902e8b-287e-4e63-b08a-eacf370eb801` |
+| apps | `4900069c-cc00-44a3-97ee-96f9db4d26aa` |
+| sites | `c60d6775-bb22-43a0-8bdc-76b2d7196720` |
+| platform | `64b7ea36-10bd-4f57-a642-66ea5c9eb826` |
+
+Independent verification at 03:54:21 UTC matched all 39 public build assets, exact schema and Worker/database/service/secret inventories, empty CMS registry, sandbox plan mode, home/workspace/health responses and private endpoint denials. Retired register/password/passkey routes return 404; the old cookie cannot authenticate. Foreign-origin identity requests return the current 400 `invalid_identity_request`. A nonexistent customer subdomain resolves to the site host and returns 404.
+
+A disposable account with two locally generated independent ES256 keys obtained actual signed sessions from the deployed login route. Profile editing, exact welcome completion, first project, Chat admission, logout, second-key login and direct session revocation passed. The fixture and all its account/project/session rows were removed; inference calls stayed zero. This seeds a synthetic completed identity: it does not test human signup/Turnstile, actual passkey providers or full live recovery. The mobile 390px Chromium entry passed no-overflow/no-password-field/manifest/page-error checks; its screenshot was inspected.
+
+After the release journal completed, `PASSWORD_PEPPER` was deleted. This changed platform version from release candidate `8c05475e-d50b-46bf-b9ec-43e488c055e9` to the final version above while preserving the script etag, remaining bindings and secrets. The obsolete `whumpo-control` database was deleted at 03:56:08 UTC after confirming no active Worker still bound it. Subsequent current-schema, Worker, health and anonymous identity readback passed. The existing daily `17 3 * * *` and hourly `47 * * * *` schedules are retained. The old archive remains historical evidence; its deleted baseline database and candidate platform version are not current deployment targets.
+
+A fresh seven-day, single-use owner invitation was saved privately using the configured current `DB` binding. The operator can open the locally reported invitation file and start new enrollment. No secret or invitation appears in this documentation. Existing Stripe sandbox, inference and OAuth registrations remain configured; no real charge, model call, customer publication, CMS functional test or scanner activation occurred. CSAM and Daybreak remain deferred.
+
+Private evidence: `.secrets/identity-release-verification.json`, `.secrets/identity-release-probe-cleanup.json`, `.secrets/identity-live-browser.json`, `.secrets/identity-live-mobile.png`, `.secrets/identity-retirement.json`, `.secrets/identity-post-retirement.json` and the immutable release archive. The verification harness initially expected noncanonical `.html` asset paths and the wrong foreign-origin status; those read-only expectations were corrected to the current contract before the successful full run. No application fix or mutation replay was needed.
