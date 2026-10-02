@@ -909,7 +909,9 @@
       "readiness": "ready",
       "kind": "verification",
       "size": "M",
-      "dependsOn": [],
+      "dependsOn": [
+        "WH-121"
+      ],
       "blockers": [],
       "outcome": "Model choice and commercial estimates use reproducible completion quality, total task cost and appropriate data handling.",
       "scope": [
@@ -943,7 +945,8 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/9",
       "owner": null,
       "evidence": [
-        "2026-09-30: offline benchmark foundation passed seven scripted fixture families with unchanged source manifest; all-call inference receipt accounting and unknown total expense preserved. Provider privacy comparison recorded. No real-provider quality/cost or confidential beta acceptance; see docs/customer-benchmarks.md."
+        "2026-09-30: offline benchmark foundation passed seven scripted fixture families with unchanged source manifest; all-call inference receipt accounting and unknown total expense preserved. Provider privacy comparison recorded. No real-provider quality/cost or confidential beta acceptance; see docs/customer-benchmarks.md.",
+        "2026-10-02 UTC: current seven-family synthetic cohort passed at 9d64b9a with source fingerprint unchanged. The completed offline/privacy deliverable is extracted as WH-121 for WH-116. Parent remains open for the real-provider cohort, quality adjudication and complete cost/uncertainty evidence; no model switch or confidential-beta approval."
       ]
     },
     {
@@ -1452,7 +1455,7 @@
       "dependsOn": [
         "WH-004",
         "WH-001",
-        "WH-090",
+        "WH-122",
         "WH-056"
       ],
       "blockers": [
@@ -1488,7 +1491,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-032",
@@ -1501,7 +1506,7 @@
       "dependsOn": [
         "WH-004",
         "WH-001",
-        "WH-090",
+        "WH-122",
         "WH-056"
       ],
       "blockers": [
@@ -1536,7 +1541,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-033",
@@ -1549,7 +1556,7 @@
       "dependsOn": [
         "WH-007",
         "WH-004",
-        "WH-090"
+        "WH-122"
       ],
       "blockers": [],
       "outcome": "An owned customer hostname serves the approved site with working TLS and recoverable disconnect.",
@@ -1579,7 +1586,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-034",
@@ -1929,7 +1938,7 @@
       "size": "L",
       "dependsOn": [
         "WH-022",
-        "WH-090"
+        "WH-122"
       ],
       "blockers": [],
       "outcome": "Paid entitlements follow authoritative financial events and can recover duplicate, reordered or missing delivery.",
@@ -1967,7 +1976,8 @@
       "owner": null,
       "evidence": [
         "Sandbox slice authorized independently of commercial cost-period gates: optional onboarding Checkout, exact paid invoice coverage, renewal reconciliation and restricted billing portal. WH-022/023 remain prerequisites for real-money activation. Proration, refunds/disputes and resource-wallet funding remain open.",
-        "2026-10-01: PR31 merged, release fcb8723b deployed 114 migrations/four Workers/16 assets. Synthetic owner completed mobile onboarding against deployed APIs and a real Stripe sandbox test-card Checkout; webhook independently recorded one paid invoice before any refresh. Paid state did not bypass project-first gate. Invoice portal and end-of-period cancellation accepted; paid access preserved, standard AI/customer credits zero, fixture cleaned. Detailed scoped evidence in docs/stripe-sandbox.md. Full commercial lifecycle remains open."
+        "2026-10-01: PR31 merged, release fcb8723b deployed 114 migrations/four Workers/16 assets. Synthetic owner completed mobile onboarding against deployed APIs and a real Stripe sandbox test-card Checkout; webhook independently recorded one paid invoice before any refresh. Paid state did not bypass project-first gate. Invoice portal and end-of-period cancellation accepted; paid access preserved, standard AI/customer credits zero, fixture cleaned. Detailed scoped evidence in docs/stripe-sandbox.md. Full commercial lifecycle remains open.",
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
       ]
     },
     {
@@ -1980,7 +1990,7 @@
       "size": "L",
       "dependsOn": [
         "WH-022",
-        "WH-090"
+        "WH-122"
       ],
       "blockers": [],
       "outcome": "Customers see authoritative measured capacity and separately funded balances instead of scenario estimates.",
@@ -2012,7 +2022,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-044",
@@ -2512,7 +2524,7 @@
       "dependsOn": [
         "WH-004",
         "WH-009",
-        "WH-090",
+        "WH-122",
         "WH-115",
         "WH-105",
         "WH-116"
@@ -2553,7 +2565,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-055",
@@ -2610,7 +2624,7 @@
         "WH-004",
         "WH-009",
         "WH-052",
-        "WH-090",
+        "WH-122",
         "WH-105",
         "WH-116"
       ],
@@ -2653,7 +2667,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-057",
@@ -3108,7 +3124,7 @@
         "WH-010",
         "WH-071",
         "WH-116",
-        "WH-090",
+        "WH-122",
         "WH-105"
       ],
       "blockers": [],
@@ -3149,7 +3165,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-068",
@@ -3496,7 +3514,7 @@
         "WH-050",
         "WH-052",
         "WH-113",
-        "WH-090",
+        "WH-122",
         "WH-116"
       ],
       "blockers": [],
@@ -3531,7 +3549,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-076",
@@ -4227,7 +4247,23 @@
       "dependsOn": [
         "WH-089",
         "WH-004",
-        "WH-113"
+        "WH-113",
+        "WH-122",
+        "WH-054",
+        "WH-056",
+        "WH-091",
+        "WH-092",
+        "WH-093",
+        "WH-094",
+        "WH-095",
+        "WH-096",
+        "WH-097",
+        "WH-098",
+        "WH-099",
+        "WH-100",
+        "WH-101",
+        "WH-102",
+        "WH-103"
       ],
       "blockers": [],
       "outcome": "Every admission path uses authoritative current eligibility without confusing planned inclusion or an OAuth token with usable authority.",
@@ -4271,7 +4307,8 @@
       "evidence": [
         "2026-10-01: split into #63 current inclusion/preview-grant interface, #64 enforcement and #65 connected acceptance/test release. The foundation extends current invoice coverage rather than creating paid-plan truth. Parent stays open; inclusion alone is not authorization and no current handler is represented as gated until its adapter acceptance.",
         "2026-10-01: #64 source adapters enforce current inclusion at GitHub/Cloudflare OAuth, provider reads, exact review/confirmation and dispatch boundaries; protected uncertain recovery is bound to recorded read-only destinations. Full #64/#65 acceptance still requires the shared WH-114/115 principal runtime, session/epoch/restricted-purpose revocation and future membership/job adapters. Source implementation is not a deployed or full-authorization claim.",
-        "2026-10-02 UTC: current owner GitHub/Cloudflare admission and shared identity handoff accepted for #64/#65. Current-schema SQLite and local D1: 434 composed identity checks, 728 inclusion decisions, 37 provider refusal/race cases, real invoice/preview expiry with retained publication/export, and connection UI. Independent deployed four-Worker/schema/39-asset readback plus signed synthetic login, five digest-reviewed preview grants, explicit revocation and scoped cleanup passed. No provider exchange, inference or real billing. Parent remains open for broader planned feature/collaboration acceptance; physical devices and future provider/job adapters keep their own gates. See docs/feature-acceptance.md."
+        "2026-10-02 UTC: current owner GitHub/Cloudflare admission and shared identity handoff accepted for #64/#65. Current-schema SQLite and local D1: 434 composed identity checks, 728 inclusion decisions, 37 provider refusal/race cases, real invoice/preview expiry with retained publication/export, and connection UI. Independent deployed four-Worker/schema/39-asset readback plus signed synthetic login, five digest-reviewed preview grants, explicit revocation and scoped cleanup passed. No provider exchange, inference or real billing. Parent remains open for broader planned feature/collaboration acceptance; physical devices and future provider/job adapters keep their own gates. See docs/feature-acceptance.md.",
+        "2026-10-02 UTC: preserved all scope/acceptance and made the remaining cumulative adapter gate explicit. Completed current foundation is WH-122/#65; WH-090 now waits for collaboration, connector and WH-091–103 feature delivery. Implementers consume WH-122 so they do not wait on their own parent acceptance. WH-104 still requires full WH-090."
       ]
     },
     {
@@ -4288,7 +4325,7 @@
         "WH-070",
         "WH-009",
         "WH-010",
-        "WH-090"
+        "WH-122"
       ],
       "blockers": [],
       "outcome": "Creators reuse their own versioned brand assets, shared styles and supported page sections through explicit recoverable project changes.",
@@ -4325,7 +4362,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-092",
@@ -4341,7 +4380,7 @@
         "WH-004",
         "WH-009",
         "WH-010",
-        "WH-090",
+        "WH-122",
         "WH-105",
         "WH-116"
       ],
@@ -4379,7 +4418,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-093",
@@ -4393,7 +4434,7 @@
         "WH-089",
         "WH-067",
         "WH-009",
-        "WH-090"
+        "WH-122"
       ],
       "blockers": [],
       "outcome": "Business owners track accepted enquiries through stages, notes and due dates while retaining submission identity and private record ownership.",
@@ -4427,7 +4468,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+      ]
     },
     {
       "id": "WH-094",
@@ -5070,7 +5113,7 @@
         "WH-004",
         "WH-009",
         "WH-116",
-        "WH-090"
+        "WH-122"
       ],
       "blockers": [],
       "outcome": "Forms and their submitted answers survive reloads and interrupted requests without duplicate work or lost authority boundaries.",
@@ -5110,7 +5153,8 @@
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
-        "2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature."
+        "2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature.",
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
       ]
     },
     {
@@ -5617,7 +5661,7 @@
       "dependsOn": [
         "WH-113",
         "WH-009",
-        "WH-020"
+        "WH-121"
       ],
       "blockers": [],
       "outcome": "Each admitted data class has an honest protection and processing-access contract, with justified transparent improvements and separate account/content recovery promises.",
@@ -5655,7 +5699,8 @@
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance."
+        "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
+        "2026-10-02 UTC: consume the explicit current privacy-processing handoff WH-121 instead of waiting for the full WH-020 real-model benchmark. Classification and WH-117 still cannot approve confidential routes; WH-020/021 and launch acceptance retain their original gates."
       ]
     },
     {
@@ -5862,6 +5907,95 @@
         "2026-10-01 current identity release foundation: review v3/archive v2 pins the complete 156-table schema and exact database bindings, removes numbered SQL replay from deployment/local initialization, refuses occupied or active-database reset targets, and initializes only a distinct empty database. Actual local D1/SQLite catalog and current identity invariants, no-write reinitialization, drift refusal, release interruption/no-replay and build/lifecycle checks pass. No remote mutation; fixture/operator conversion, external cleanup, new database selection, coordinated live cutover and owner/device acceptance remain open in #72. See docs/releases.md and draft PR #79.",
         "2026-10-02: Removed 120 retired platform migrations and preservation-only fixture; complete-schema initialization passes SQLite/local D1. Current content-risk/operator, eligibility, 728 feature-inclusion decisions (SQLite/D1), website specification and signed probe-loader checks pass. Deferred CMS/scanner setup is source-aligned and syntax-checked only, not functionally accepted. Imported exact already-shipped Stripe pricing overlay 18e9e88 as 0c8fa8c and reconciled live JSON. See docs/verification.md and docs/identity-web.md. New empty database selection, coordinated test cutover and physical-device acceptance remain open under #72.",
         "2026-10-02: #72 current-only test cutover completed with release 40e45c39-037a-42da-802c-5eacc75bde77 (6c73ac5). New empty D1 has exact 156-table/702-object schema; four Workers, all 39 served assets and binding/secret inventories pass independent readback. Live signed synthetic two-key login, welcome/first-project, logout and revocation pass with fixture cleanup and zero inference. Mobile entry screenshot inspected. Old test account/database and PASSWORD_PEPPER retired, remaining script/bindings unchanged; fresh owner invite saved privately. Physical-device enrollment, human Turnstile/live recovery and native/parent beta gates remain open. CSAM, Daybreak and CMS testing remain deferred. See docs/identity-web.md final release evidence."
+      ]
+    },
+    {
+      "id": "WH-121",
+      "title": "Accept inference privacy and offline benchmark handoff",
+      "phase": "F1",
+      "priority": "P0",
+      "readiness": "ready",
+      "kind": "decision",
+      "size": "M",
+      "dependsOn": [],
+      "blockers": [],
+      "outcome": "Data-protection implementation receives a dated current provider-processing boundary without waiting for real-model quality benchmarking.",
+      "scope": [
+        "Extract the completed offline evidence and provider privacy decision from WH-020 while preserving its real-cohort, quality and cost acceptance",
+        "Reconcile current synthetic journeys and complete receipt accounting; reject incomplete or contradictory reports and retain unknown actual expense",
+        "Define current Contributor data eligibility and the exact evidence required before confidential inference, using existing lifecycle classes and route ownership"
+      ],
+      "acceptance": [
+        "Current seven-family synthetic baseline and all-call evidence remain distinct from real-model quality, customer latency and verified expense",
+        "Current Muse Contributor training and retention statements are dated and confidential beta content remains ineligible",
+        "Workers AI and Gateway are candidate processing boundaries only; exact model, contract, region, storage, logging and auxiliary processors require admission evidence",
+        "The WH-116 handoff names current data classes, account/content recovery distinctions and revoked/expired route behavior without creating a second catalogue or activating providers"
+      ],
+      "verification": [
+        "Run the complete current offline cohort and benchmark-evidence checks",
+        "Read current official Go/Zen, Workers AI data-use and Gateway logging sources",
+        "Check referenced lifecycle classes and roadmap dependency/render consistency"
+      ],
+      "references": [
+        "docs/inference-privacy.md",
+        "docs/customer-benchmarks.md",
+        "docs/data-lifecycle.json",
+        "tools/benchmark.mjs",
+        "tools/benchmark-evidence.mjs",
+        "tests/benchmark-evidence.mjs",
+        "tests/fixtures/customer-benchmark.json"
+      ],
+      "issue": "https://github.com/zemdregon/whumpo/issues/80",
+      "owner": null,
+      "evidence": [
+        "2026-10-02 UTC: extracted from open WH-020/#9 to supply its privacy foundation to WH-116. Current seven-family cohort at 9d64b9a passed with unchanged sources, 35 retained receipts and zero real-provider samples. Official model/privacy terms were rechecked. Current source adds closed evidence validation and compiler-lock fingerprinting; final connected rerun is recorded in the execution issue. Real-model comparison, confidential-route approval and provider activation remain open under WH-020/021.",
+        "2026-10-02 UTC final acceptance: strict report admission rejected 19 malformed/contradictory inputs; full current cohort passed 7/7 at 04:58:18–05:01:04 UTC with unchanged 542-file fingerprint and 35 receipts (7 acknowledgments, 1 uncertain, 1 released). Real-provider samples remain zero; actual cost/latency remain unknown. Source digest and private run ID are in docs/customer-benchmarks.md. Fourteen roadmap dependency regressions and current graph checks passed. No runtime/provider activation or confidential-customer approval."
+      ]
+    },
+    {
+      "id": "WH-122",
+      "title": "Accept shared feature admission foundation for implementing adapters",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "ready",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-089",
+        "WH-004",
+        "WH-113"
+      ],
+      "blockers": [],
+      "outcome": "Future feature implementations consume one accepted current inclusion and identity-admission foundation while cumulative adapter acceptance remains in WH-090.",
+      "scope": [
+        "Name the completed WH-090A/B/C interface, implemented owner/provider enforcement and connected acceptance as a reusable handoff",
+        "Retain one invoice-coverage and scoped-preview resolver, shared current identity, current dispatch predicates and protected history/recovery",
+        "Require each future feature to register its own role, resource, Chat/job and provider adapters before the full WH-090 acceptance gate"
+      ],
+      "acceptance": [
+        "Current inclusion matrix, owned GitHub/Cloudflare API/Chat paths and current identity/restricted-purpose/epoch boundaries are verified",
+        "Actual invoice and preview expiry block new actions while owned history/export/disconnect and already published sites retain their intended behavior",
+        "Exact uncertain readback never repeats a write, temporary test grants are explicitly revoked and synthetic identities are cleaned up",
+        "Deployed current schema/Worker/assets and configuration/readiness presentation have independent evidence; future features remain unavailable until implemented",
+        "Parent WH-090 stays open for all cumulative tier and collaboration adapters; consuming this handoff neither narrows that acceptance nor activates a paid subscription"
+      ],
+      "verification": [
+        "Review completed #63/#64/#65 and docs/feature-acceptance.md criterion evidence at e21a106",
+        "Preserve the recorded 434 identity, 728 inclusion, 37 refusal/race, retention and live probe verification limits",
+        "Validate the graph rejects waiting for cumulative feature acceptance before implementing those features"
+      ],
+      "references": [
+        "docs/feature-acceptance.md",
+        "docs/feature-admission.md",
+        "docs/plan-feature-contract.md",
+        "docs/roadmap/alignment.md",
+        "tests/feature-identity.mjs",
+        "tests/feature-retention.mjs"
+      ],
+      "issue": "https://github.com/zemdregon/whumpo/issues/65",
+      "owner": null,
+      "evidence": [
+        "2026-10-02 UTC: maps the already completed WH-090C/#65 handoff without reopening it or expanding its historical acceptance. e21a106 verified current schema/identity/provider boundaries and live cleanup; e27e088 later changed only favicon assets. Future tier/collaboration adapters remain required by parent WH-090/#62."
       ]
     }
   ]

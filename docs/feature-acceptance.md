@@ -2,6 +2,8 @@
 
 WH-090B / [#64](https://github.com/zemdregon/whumpo/issues/64), WH-090C / [#65](https://github.com/zemdregon/whumpo/issues/65). Evidence recorded October 2, 2026 (UTC).
 
+**Reusable handoff:** WH-122 maps the already completed #65 packet. Feature implementers depend on that foundation; parent WH-090/#62 retains cumulative adapter acceptance. See the [October 2 dependency alignment](roadmap/alignment.md#completed-foundations-versus-cumulative-acceptance--october-2-2026-utc). This names the existing deliverable and does not expand its verification scope.
+
 ## Accepted scope
 
 The current owner GitHub and Cloudflare operations combine the deployed workspace identity boundary with invoice-derived inclusion or an exact operator preview grant. Inclusion cannot elevate enrollment/recovery, forge a workspace principal, preserve a revoked session, replace provider consent or authorize an unreviewed effect. Local history, supported source downloads, disconnect and exact uncertain-effect readback retain their own ownership/identity checks after feature loss. Existing published sites remain served.

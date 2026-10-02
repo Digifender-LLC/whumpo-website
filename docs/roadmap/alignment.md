@@ -128,3 +128,19 @@ No additional product decision is needed for these sequencing fixes. Existing un
 [Shared job/outbox contract](../job-envelope.md) and the [reconciled ADR](../background-jobs.md) freeze current tenant/actor/resource pins, exact domain intent, distinct attempt/delivery identities and uncertain-effect recovery. D1 state with bounded scheduled passes remains the initial design; the reference is offline and adds no runtime dispatcher or service. WH-018/036/068/069/074/086 implement adapters over this contract and prove actual current authority, D1 transactions, fairness, privacy and provider outcomes in their own packets. Jobs and restored receipts cannot create workspace or provider authority. CSAM and Daybreak remain deferred.
 
 Active WH-083 and WH-106 scope also now uses the complete current schema and disposable test fixtures/reviewed empty databases. Two stale numbered-migration requirements were removed; task dependencies, feature acceptance and prior historical evidence remain intact.
+
+
+## Completed foundations versus cumulative acceptance — October 2, 2026 UTC
+
+The live execution audit found two overly broad dependency edges. WH-090/#62 retains planned collaboration and cumulative feature-adapter acceptance, while those implementations themselves depended on WH-090. WH-116 needs WH-020's privacy decision, but its remaining real-model cohort is not a prerequisite to classifying stored data. These were execution deadlocks despite the previous JSON graph being acyclic.
+
+Two explicit handoff packets preserve the parent outcomes and all existing acceptance criteria:
+
+| Handoff | Evidence and implementing consumers | Parent remainder |
+| --- | --- | --- |
+| **WH-121 — inference privacy/offline foundation** | [Current processing decision](../inference-privacy.md), dated official terms, complete synthetic cohort and honest unknown-cost accounting. WH-116 consumes this packet instead of full WH-020. | WH-020/#9 remains open for real-provider quality and cost evidence; WH-021 and beta/commercial/provider acceptance still require the full relevant gates. |
+| **WH-122 — shared feature admission** | Already completed #63/#64/#65 and [current acceptance](../feature-acceptance.md). Maps existing #65; no second implementation or reopened historical scope. Feature/module/connector/capacity/Chat implementers consume this accepted foundation. | WH-090/#62 now explicitly waits for WH-054/056 and WH-091–103 adapters. WH-104 still requires full WH-090 and all cumulative benefits. |
+
+No parent scope, acceptance criterion or historical evidence was deleted. The additional IDs name completed reusable deliverables, not replacement product goals. Downstream implementation still proves its own current identity, feature, resource, role, dispatch and recovery checks. Native/human identity, provider consent, actual quality/cost, safety and paid-launch acceptance remain independent gates.
+
+The persistent alignment check requires these paths and rejects a dependency from either foundation back to its parent acceptance, or a classification dependency on the real-cohort gate. `tests/roadmap-alignment.mjs` exercises missing foundations, missing cumulative feature acceptance, downstream dependencies and actual cycles. Read current issue evidence before treating a packet as complete; planning readiness still does not imply execution status.

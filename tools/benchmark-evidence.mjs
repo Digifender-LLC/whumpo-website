@@ -6,6 +6,7 @@ import {join} from 'node:path';
 const count=n=>Number.isSafeInteger(n)&&n>=0;
 const requireValid=ok=>{if(!ok)throw Error('Invalid benchmark evidence');};
 const categories=['inference','acknowledgments','tools','safety','infrastructure','allocation'];
+const shape=(value,keys)=>requireValid(value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key)));
 export function totalTaskCost(components) {
   requireValid(Array.isArray(components)&&components.length===categories.length);
   const seen=new Set(),unknown=[];let knownMicros=0;
@@ -39,6 +40,34 @@ export function summarizeInference(rows) {
     unknownUsageCalls:unknownUsage,subscriptionShadowMicros:shadow,heldShadowMicros:heldShadow,
     actualProviderExpenseMicros:null,usageIsSynthetic:true};
 }
+// Reports are evidence, not permission to rank or activate a provider. Reject
+// incomplete/outdated fixture output instead of counting a green child exit.
+export function validateFixtureBenchmark(e,expectedId) {
+  shape(e,['version','id','mode','inference','transportCalls','runtimeCalls','turnStates','costs','realProviderSamples','customerQualityScore','limitations']);
+  requireValid(e.version===1&&e.id===expectedId&&e.mode==='synthetic'&&e.realProviderSamples===0&&e.customerQualityScore===null);
+  const i=e.inference;
+  shape(i,['receipts','roles','states','models','observedInputTokens','observedOutputTokens','unknownUsageCalls','subscriptionShadowMicros','heldShadowMicros','actualProviderExpenseMicros','usageIsSynthetic']);
+  for(const key of ['receipts','observedInputTokens','observedOutputTokens','unknownUsageCalls','subscriptionShadowMicros','heldShadowMicros'])requireValid(count(i[key]));
+  requireValid(i.receipts<=5000&&i.actualProviderExpenseMicros===null&&i.usageIsSynthetic===true);
+  const counts=(values,keys)=>{
+    requireValid(values!==null&&typeof values==='object'&&!Array.isArray(values));
+    let total=0;for(const [key,value] of Object.entries(values)){requireValid(keys.includes(key)&&count(value)&&value>0);total+=value;requireValid(count(total));}return total;
+  };
+  requireValid(counts(i.roles,['orchestrator','ack'])===i.receipts);
+  requireValid(counts(i.states,['reserved','dispatched','observed','released','uncertain'])===i.receipts);
+  requireValid(i.unknownUsageCalls===(i.states.reserved??0)+(i.states.dispatched??0)+(i.states.uncertain??0));
+  requireValid(Array.isArray(i.models)&&i.models.length<=i.receipts&&new Set(i.models).size===i.models.length&&i.models.every(model=>typeof model==='string'&&/^[a-zA-Z0-9_.:/-]{1,100}$/.test(model)));
+  requireValid(i.receipts===0?i.models.length===0:i.models.length>0);
+  if(!(i.states.observed??0))requireValid(i.observedInputTokens===0&&i.observedOutputTokens===0&&i.subscriptionShadowMicros===0);
+  if(i.unknownUsageCalls===0)requireValid(i.heldShadowMicros===0);
+  requireValid([e.transportCalls,e.runtimeCalls].every(value=>value===null||count(value)));
+  if(e.transportCalls!==null)requireValid(e.transportCalls===i.receipts-(i.states.reserved??0)-(i.states.released??0));
+  counts(e.turnStates,['pending','completed','failed','uncertain']);
+  shape(e.costs,['knownMicros','unknown','complete','totalMicros']);
+  requireValid(e.costs.knownMicros===0&&e.costs.complete===false&&e.costs.totalMicros===null&&Array.isArray(e.costs.unknown)&&e.costs.unknown.length===categories.length&&categories.every(category=>e.costs.unknown.includes(category)));
+  requireValid(Array.isArray(e.limitations)&&e.limitations.length>0&&e.limitations.length<=10&&e.limitations.every(value=>typeof value==='string'&&value.length>0&&value.length<=300));
+  return e;
+}
 export async function recordFixtureBenchmark(db,id,{transportCalls=null,runtimeCalls=null}={}) {
   if(!process.env.WHUMPO_BENCHMARK_DIR)return;
   requireValid(/^[a-z0-9-]+$/.test(id)&&[transportCalls,runtimeCalls].every(n=>n===null||count(n)));
@@ -58,5 +87,6 @@ export async function recordFixtureBenchmark(db,id,{transportCalls=null,runtimeC
       'Includes every retained fixture inference receipt, including acknowledgments, failures and uncertain calls; no success-only cost selection.',
       'Fixture assertion/negative-case overhead is included; harness duration is not customer request latency.',
       'Tools, safety, infrastructure and subscription allocation are unpriced; unknown is not zero.']};
+  validateFixtureBenchmark(evidence,id);
   await writeFile(join(process.env.WHUMPO_BENCHMARK_DIR,id+'.json'),JSON.stringify(evidence,null,2)+'\n',{flag:'wx',mode:0o600});
 }
