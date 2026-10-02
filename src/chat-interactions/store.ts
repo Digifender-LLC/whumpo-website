@@ -15,7 +15,7 @@ const identifier=(v:unknown):v is string=>typeof v==='string'&&uuid.test(v);
 const changed=()=>new InteractionStoreError(409,'interaction_changed');
 const unavailable=()=>new InteractionStoreError(404,'not_found');
 const feature=(userId:string,projectId:string|null)=>({userId,projectId,featureId:'core.editing' as const,operation:'prepare' as const});
-type Row={id:string;user_id:string;project_id:string|null;previous_interaction_id:string|null;envelope_json:string|null;definition_digest:string;issue_hash:string;created_at:string;expires_at:string;state:'open'|'submitted'|'canceled'|'superseded';answer_revision:number;draft_json:string;draft_saved_at:string|null;removed_at:string|null;removal_reason:string|null;draft_due:number};
+type Row={id:string;user_id:string;project_id:string|null;project_name:string|null;previous_interaction_id:string|null;envelope_json:string|null;definition_digest:string;issue_hash:string;created_at:string;expires_at:string;state:'open'|'submitted'|'canceled'|'superseded';answer_revision:number;draft_json:string;draft_saved_at:string|null;removed_at:string|null;removal_reason:string|null;draft_due:number};
 type Receipt={request_id:string;interaction_id:string;request_hash:string;operation:'save-draft'|'submit'|'cancel';answer_revision:number;created_at:string};
 const ownership="(i.project_id IS NULL OR EXISTS(SELECT 1 FROM projects p WHERE p.id=i.project_id AND p.owner_user_id=i.user_id))";
 export function interactionGuard(db:D1Database,sql:string,params:unknown[]=[]){
@@ -23,7 +23,7 @@ export function interactionGuard(db:D1Database,sql:string,params:unknown[]=[]){
 }
 async function row(db:D1Database,user:string,id:string){
  await assertWorkspace(db,user);if(!identifier(id))throw new InteractionError('ID');
- const r=await db.prepare(`SELECT i.*,(${draftRetentionDue}) draft_due FROM chat_interactions i WHERE i.id=? AND i.user_id=? AND ${ownership}`).bind(id,user).first<Row>();
+ const r=await db.prepare(`SELECT i.*,(SELECT name FROM projects p WHERE p.id=i.project_id AND p.owner_user_id=i.user_id) project_name,(${draftRetentionDue}) draft_due FROM chat_interactions i WHERE i.id=? AND i.user_id=? AND ${ownership}`).bind(id,user).first<Row>();
  if(!r)throw unavailable();return r;
 }
 function retainedEnvelope(r:Row){if(r.removed_at||r.draft_due||!r.envelope_json)throw new InteractionStoreError(410,'draft_removed');return verifyEnvelope(JSON.parse(r.envelope_json));}
@@ -40,7 +40,7 @@ export async function readInteraction(db:D1Database,user:string,id:string):Promi
  // Recheck authority/ownership and the revision after the bounded multi-query read.
  const replacement=await db.prepare('SELECT id FROM chat_interactions WHERE previous_interaction_id=? AND user_id=?').bind(id,user).first<{id:string}>();
  const current=await row(db,user,id);await retainedEnvelope(current);if(current.answer_revision!==r.answer_revision)throw changed();
- return {version:1 as const,envelope,previousInteractionId:r.previous_interaction_id,replacementInteractionId:replacement?.id??null,state:r.state==='open'&&r.expires_at<=clock!.now?'expired' as const:r.state,answerRevision:r.answer_revision,draft:JSON.parse(r.draft_json) as Answers,
+ return {version:1 as const,envelope,projectName:current.project_name,previousInteractionId:r.previous_interaction_id,replacementInteractionId:replacement?.id??null,state:r.state==='open'&&r.expires_at<=clock!.now?'expired' as const:r.state,answerRevision:r.answer_revision,draft:JSON.parse(r.draft_json) as Answers,
   observedAt:clock!.now,draftRetainUntil:r.state==='submitted'?null:new Date(Date.parse(r.draft_saved_at??r.created_at)+7*24*60*60*1000).toISOString(),
   submission:submission?{id:submission.id,answers:JSON.parse(submission.answers_json) as Answers,answersDigest:submission.answers_digest,answerRevision:submission.answer_revision,createdAt:submission.created_at,
    continuation:{id:submission.id,state:submission.continuation_state,resultTurnId:submission.result_turn_id,reason:submission.reason}}:null};
@@ -61,7 +61,7 @@ export async function listInteractions(db:D1Database,user:string,input:unknown){
  const before=request.before;
  if(before!==null&&(!before||typeof before!=='object'||Array.isArray(before)||Object.keys(before).sort().join(',')!=='createdAt,interactionId'||!identifier(before.interactionId)||typeof before.createdAt!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt)||!Number.isFinite(Date.parse(before.createdAt))||new Date(before.createdAt).toISOString()!==before.createdAt))throw new InteractionError('SHAPE');
  if(request.projectId&&!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(request.projectId,user).first())throw unavailable();
- const {results}=await db.prepare(`SELECT i.id,i.project_id,i.task_id,t.revision task_revision,i.origin_turn_id,i.created_at,i.expires_at,i.state,i.answer_revision,i.draft_saved_at,s.id submission_id,c.state continuation_state,c.reason
+ const {results}=await db.prepare(`SELECT i.id,i.project_id,(SELECT name FROM projects p WHERE p.id=i.project_id AND p.owner_user_id=i.user_id) project_name,i.task_id,t.revision task_revision,i.origin_turn_id,i.created_at,i.expires_at,i.state,i.answer_revision,i.draft_saved_at,s.id submission_id,c.state continuation_state,c.reason
   FROM chat_interactions i JOIN chat_interaction_tasks t ON t.id=i.task_id AND t.user_id=i.user_id
   LEFT JOIN chat_interaction_submissions s ON s.interaction_id=i.id AND s.user_id=i.user_id
   LEFT JOIN chat_interaction_continuations c ON c.id=s.id
@@ -70,10 +70,10 @@ export async function listInteractions(db:D1Database,user:string,input:unknown){
    AND ((i.state='open' AND i.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     OR c.state IN ('pending','unknown') OR (i.state='submitted' AND c.state='not-started' AND i.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')))
    AND (? IS NULL OR i.created_at<? OR (i.created_at=? AND i.id<?))
-  ORDER BY i.created_at DESC,i.id DESC LIMIT ?`).bind(user,request.projectId,request.projectId,before?.createdAt??null,before?.createdAt??null,before?.createdAt??null,before?.interactionId??null,request.limit+1).all<{id:string;project_id:string|null;task_id:string;task_revision:number;origin_turn_id:string;created_at:string;expires_at:string;state:string;answer_revision:number;draft_saved_at:string|null;submission_id:string|null;continuation_state:string|null;reason:string|null}>();
+  ORDER BY i.created_at DESC,i.id DESC LIMIT ?`).bind(user,request.projectId,request.projectId,before?.createdAt??null,before?.createdAt??null,before?.createdAt??null,before?.interactionId??null,request.limit+1).all<{id:string;project_id:string|null;project_name:string|null;task_id:string;task_revision:number;origin_turn_id:string;created_at:string;expires_at:string;state:string;answer_revision:number;draft_saved_at:string|null;submission_id:string|null;continuation_state:string|null;reason:string|null}>();
  const page=results.slice(0,request.limit),last=page.at(-1);
  await assertWorkspace(db,user);
- return {version:1 as const,items:page.map(r=>({interactionId:r.id,projectId:r.project_id,task:{id:r.task_id,revision:r.task_revision},originTurnId:r.origin_turn_id,createdAt:r.created_at,expiresAt:r.expires_at,state:r.state,answerRevision:r.answer_revision,hasDraft:r.draft_saved_at!==null,
+ return {version:1 as const,items:page.map(r=>({interactionId:r.id,projectId:r.project_id,projectName:r.project_name,task:{id:r.task_id,revision:r.task_revision},originTurnId:r.origin_turn_id,createdAt:r.created_at,expiresAt:r.expires_at,state:r.state,answerRevision:r.answer_revision,hasDraft:r.draft_saved_at!==null,
   continuation:r.submission_id?{id:r.submission_id,state:r.continuation_state,reason:r.reason}:null})),nextBefore:results.length>request.limit&&last?{createdAt:last.created_at,interactionId:last.id}:null};
 }
 

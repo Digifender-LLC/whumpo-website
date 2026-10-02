@@ -3301,6 +3301,11 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/chat-interaction-storage.mjs](../../tests/chat-interaction-storage.mjs)
 - [src/chat-interactions/agent.ts](../../src/chat-interactions/agent.ts)
 - [tests/chat-interaction-agent.mjs](../../tests/chat-interaction-agent.mjs)
+- [src/chat-interactions/history-shape.ts](../../src/chat-interactions/history-shape.ts)
+- [frontend/src/chat-interaction-history.tsx](../../frontend/src/chat-interaction-history.tsx)
+- [frontend/src/chat-history-dialog.tsx](../../frontend/src/chat-history-dialog.tsx)
+- [tests/chat-interaction-history.mjs](../../tests/chat-interaction-history.mjs)
+- [tests/chat-interaction-browser.mjs](../../tests/chat-interaction-browser.mjs)
 
 ### Execution coordination
 
@@ -3316,6 +3321,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/87. Planning owner: Codex /roo
 - 2026-10-02 UTC: owner approved LC-10, seven days of inactivity for unsubmitted Chat form drafts. Current source adds immediate cutoff filtering, fixed bounded hourly payload cleanup, immediate cancel/discard cleanup, retained replay metadata, draft-inclusive Chat exports and content-free maintenance backlog/health. Submitted answers and unresolved continuations remain excluded. Original account/attachment/restore/client and renderer/agent acceptance stays open; source only, no deployment or new retention policy for other classes.
 - 2026-10-02 UTC: current content-brief client connected under #87: owned Chat pointers, typed current readback, exact request-hash recovery, seven-day local drafts with independent unresolved retention, account-switch/sign-out clearing and late-response fencing. Inline validation/collapse/draft/discard and explicit private-preview continuation provide the first WH-107 handoff. Original generalized/resource/history/resume/agent, lifecycle/restore and reviewed deployment acceptance remains open; no new public issuer or provider activation.
 - 2026-10-02 UTC: maintained content-brief agent handoff under #87 connects requestContent/read/replaceContent to the existing bounded owner Chat loop. Prepared form writes commit with the final Chat result; model reads receive metadata only. Content forms now match the compiler limit of eight operations. Scripted actual HTTP/SQLite/local-D1 journeys cover lookup, correction, exact private preview/save, replay and late authority/base/answer changes. Broader custom/resource/lifecycle/restore and deployment acceptance remains open; no live inference or publication.
+- 2026-10-02 UTC: current content-form history and paged resume connected under #87. Read-only submitted/removal facts exclude copied unsubmitted defaults; the unfinished index locates forms beyond 100 Chat turns and opens only current scoped readback. Existing-card navigation avoids duplicate editors; dialog dismissal preserves eligible local edits and evicts private queries. Full original lifecycle/resource/restore and coordinated deployment acceptance remains open.
 
 ## WH-107 — Render accessible Chat forms and maintained interaction templates
 
@@ -3366,6 +3372,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/components/ui/dialog.tsx](../../frontend/src/components/ui/dialog.tsx)
 - [docs/verification.md](../../docs/verification.md)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [frontend/src/chat-interaction-history.tsx](../../frontend/src/chat-interaction-history.tsx)
+- [tests/chat-interaction-history.mjs](../../tests/chat-interaction-history.mjs)
+- [tests/chat-interaction-browser.mjs](../../tests/chat-interaction-browser.mjs)
 
 ### Execution coordination
 
@@ -3375,6 +3384,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
 - 2026-10-02 UTC: WH-106/#87 delivers the initial inline content-change@1 client and connected transport/recovery fixture as a bounded handoff. This is not a claim/completion of WH-107: broader maintained templates/cards, historical renderer, resource/custom adapters, dialogs, full accessibility/device acceptance and agent integration remain under the original packet. WH-106 is still open; dependencies and planning readiness are unchanged.
+- 2026-10-02 UTC: WH-106/#87 adds the bounded content-form historical renderer and existing-dialog resume handoff. Actual HTTP/local-D1 browser evidence covers 110 later turns, pagination, dismissal/recovery, private cache eviction, current removal and mobile/focus behavior. General templates/cards, resource/custom adapters, spoken screen-reader and physical-device acceptance remain under the original WH-107 packet; no claim or completion, dependency/readiness unchanged.
 
 ## WH-108 — Let the agent compose bounded custom forms and use task-scoped answers
 
