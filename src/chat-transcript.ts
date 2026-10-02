@@ -13,7 +13,7 @@ export async function exportChatTranscript(request:Request,db:D1Database,userId:
    try{
     const {results}=await db.prepare('SELECT id,revision,user_text,assistant_text,created_at,status FROM chat_turns WHERE user_id=? AND revision>? AND revision<=? ORDER BY revision LIMIT 50').bind(userId,after,upper).all<TranscriptTurn>();
     if(cancelled)return;
-    if(results.length){controller.enqueue(encoder.encode((first?'':',')+results.map(t=>JSON.stringify(t)).join(',')));first=false;after=results[results.length-1].revision;}
+    if(results.length){controller.enqueue(encoder.encode((first?'':',')+results.map(t=>JSON.stringify({id:t.id,revision:t.revision,user_text:t.user_text,assistant_text:t.assistant_text,created_at:t.created_at,status:t.status})).join(',')));first=false;after=results[results.length-1].revision;}
     if(results.length<50){controller.enqueue(encoder.encode('],"complete":true}'));controller.close();}
    }catch{if(!cancelled)controller.error(new Error('Chat download interrupted. Request a fresh download.'));}
   },

@@ -75,7 +75,9 @@ export async function currentSiteFixtureHandlers(){
   export {reviewHosting,confirmHosting,disconnectHosting,refreshHosting,hostingConnections} from './src/domain-hosting';
   export {inspectRecovery,applyRecovery} from './src/domain-recovery';
   export {listDNSActions} from './src/cloudflare-dns';
-  export {siteContext,prepareSiteAction} from './src/site-agent';
+  export {siteContext,prepareSiteAction,agentWorkspaceData} from './src/site-agent';
+  export {readAgentKnowledge,knowledgeTopics} from './src/agent-knowledge';
+  export {exportChatTranscript} from './src/chat-transcript';
   export {checkHealth,listHealth,maintainHealth} from './src/site-health';
   export {readTraffic,recordTraffic,cleanupTraffic} from './src/site-traffic';
   export {getBilling} from './src/billing';
