@@ -19,13 +19,14 @@ The isolated bound is 10,000 rows per table and 64 MiB of serialized row data. O
 
 `inspectIsolatedRestore` receives an **operator/server-selected service capability** and an independently configured stream ID. There is no customer/model endpoint for supplying a source, URL, approval flag or receipt. The service must own an authenticated, separately retained permitted-archive inventory and current suppression/outcome history. The restored D1 copy is not that authority. No deployed adapter/store or live backup registration is configured by this work.
 
-The checker sends a read request to the fixed internal `/v1/check` path, with the snapshot ID, exact manifest digest and a fresh challenge. The response must contain exactly:
+The checker sends a current version-2 read request to the fixed internal `/v2/check` path, with the snapshot ID, exact manifest digest and a fresh challenge. The response must contain exactly:
 
 | Field | Required meaning |
 | --- | --- |
-| `version`, `streamId` | Current protocol and the independently configured source identity |
+| `version`, `streamId` | Version `2` only and the independently configured source identity |
 | `snapshotId`, `manifestDigest`, `challenge` | The exact registered archive and this fresh request |
 | `archiveState` | `permitted`; expired, unknown or withdrawn sources fail |
+| `keyBackup` | Exact independently registered encrypted backup ID, SHA-256 digest and key IDs for this archive; no values, file paths or recovery key |
 | `capturedSequence` | The archive's registered checkpoint, matching its manifest |
 | `baseSequence`, `currentSequence`, `events` | Complete cumulative sequence `1…currentSequence`, starting from base zero; at most 512 events / 256 KiB. Missing, reordered, truncated or compacted history fails. A future compacted baseline requires a separately reviewed current contract. |
 | `issuedAt`, `expiresAt` | Millisecond timestamps: issued no more than ten seconds ago, not in the future; unexpired, with at most a 30-second lifetime |
@@ -45,11 +46,11 @@ The checker also refuses actual unresolved credential exchanges/revocation claim
 
 ## Keys, objects and final readback
 
-The supplied keyring comes through the separate trusted operator channel. Its active ID must match current policy, supplied ID/material fingerprints must match immutable registration, and all four token/PKCE stores must authenticate with the actual current vault primitive and owner/provider/purpose/record context. Missing/wrong/unknown keys and substitutions fail. An interrupted rotation cannot claim readiness; retaining an old current-format key permits authentication but does not settle its journal. No plaintext or old-format reader exists.
+The operator supplies a process-local `keyBackup` capability returned by `verifyConnectionKeyBackup`, after reading/decrypting a private encrypted backup using its separately held recovery file and independently recorded digest. Plain keyrings and unknown input fields are rejected. The independent version-2 evidence response must pin that exact backup ID/digest/key list; a copied JSON verification report cannot replace the local capability. The checker reopens and decrypts the saved bytes, rather than using a cached original keyring. Its recovered active ID must match current policy, supplied ID/material fingerprints must match immutable registration, and all four token/PKCE stores must authenticate with the actual current vault primitive and owner/provider/purpose/record context. Missing/wrong/unknown keys and substitutions fail. An interrupted rotation cannot claim readiness; retaining an old current-format key permits authentication but does not settle its journal. No plaintext or old-format reader exists.
 
 Each referenced project object must be present in the isolated private object source with exact byte length and SHA-256 digest. D1 restoration cannot supply an absent R2 body. This dependency check grants no serving, export or safety approval; those domain boundaries remain separate. Native CMS object dependencies are not handled by the project-object adapter.
 
-After key/object checks, the tool rereads the database inventory and requests fresh evidence using another challenge. Candidate changes or new/changed independent evidence hold the result. It never retries an external operation. Every result, including `status: verified`, carries `servingAllowed: false`, `providerDispatchAllowed: false` and `retirementAllowed: false`. Operational admission needs the broader restore/suppression/authority adapters and separately reviewed cutover. A successful local read is not a reusable activation token.
+After key/object checks, the tool rereads the database inventory and requests fresh evidence using another challenge. The pinned backup must remain unchanged in both independent responses. The encrypted backup and recovery file are read again before the final result; loss, replacement or new permission failures hold the candidate. Candidate changes or new/changed independent evidence hold the result. It never retries an external operation. Every result, including `status: verified`, carries `servingAllowed: false`, `providerDispatchAllowed: false` and `retirementAllowed: false`. Operational admission needs the broader restore/suppression/authority adapters and separately reviewed cutover. A successful local read is not a reusable activation token.
 
 ## Verification and remaining work
 
@@ -62,3 +63,9 @@ Child C remains open for independent permitted-restore/key-backup custody and un
 ### Exact OAuth outcome checkpoint — October 2, 2026 UTC
 
 The current schema now has 163 tables. The same SQLite/local D1 verifier consumes independently recorded exact rejection/revocation receipts. An unknown event continues to hold a candidate even when that candidate contains a terminal receipt; a later independently recorded digest is required. A different OAuth client in the independently supplied digest fails. These tests add two refusal cases to the earlier 58 SQLite / 55 D1 fixture counts. No actual independent provider, archive or key-backup acceptance is implied.
+
+### Required encrypted key-backup readback — October 2, 2026 UTC
+
+The only restore input for credential keys is now a freshly verified stored-backup capability. `tools/connection-key-backup.mjs` uses the actual current vault keyring validator, a distinct random operator recovery key and AES-256-GCM authenticated backup metadata. Every credential check uses keys recovered from those saved encrypted bytes. The separate synthetic evidence registry now pins backup identity/digest/key IDs per permitted snapshot. It exercises the version-2 interface only; the old evidence protocol and direct-keyring input are rejected, with no adapter or fallback.
+
+Fixtures use separate private temporary directories and invented material. They demonstrate the file/crypto/admission boundary, not offsite storage, independent operator custody, current provider binding equality or operation of the archive/suppression service. The metadata report always keeps `independentCustodyAccepted: false` and `retirementAllowed: false`. An actual operator-held recovery key and separately stored capsule/digest still require child D acceptance; independent permitted-source inventory remains child C work. See [operator workflow](connection-key-lifecycle.md#encrypted-operator-key-backup).

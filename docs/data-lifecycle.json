@@ -1170,7 +1170,9 @@
         "src/connection-rotation.ts",
         "src/connection-write-policy.ts",
         "src/connection-oauth-response.ts",
-        "tests/connection-oauth-outcomes.mjs"
+        "tests/connection-oauth-outcomes.mjs",
+        "tools/connection-key-backup.mjs",
+        "tests/connection-key-backup.mjs"
       ],
       "storageStatus": "current",
       "protection": {
@@ -1681,7 +1683,9 @@
         "src/connection-rotation.ts",
         "src/connection-write-policy.ts",
         "src/connection-oauth-response.ts",
-        "tests/connection-oauth-outcomes.mjs"
+        "tests/connection-oauth-outcomes.mjs",
+        "tools/connection-key-backup.mjs",
+        "tests/connection-key-backup.mjs"
       ],
       "storageStatus": "current",
       "protection": {
