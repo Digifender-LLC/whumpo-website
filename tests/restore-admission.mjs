@@ -37,7 +37,7 @@ async function current(){const manifest=await capture();permit(manifest);return 
 const options=manifest=>({db,manifest,keyring,evidenceSource,expectedStreamId:streamId,objects,now:()=>now});
 let refusals=0;
 async function held(input,code){const report=await inspectIsolatedRestore(input);assert.deepEqual(report.holds,[code]);assert.equal(report.status,'held');assert.equal(report.servingAllowed,false);assert.equal(report.providerDispatchAllowed,false);assert.ok(!JSON.stringify(report).includes(canary));assert.ok(!JSON.stringify(report).includes(objectKey));refusals++;return report;}
-async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,162);return result;}
+async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,163);return result;}
 const altered=(mutate)=>({async fetch(request){const response=await evidenceSource.fetch(request);const body=await response.json();await mutate(body);return Response.json(body);}});
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>assert.fail('Restore verification cannot dispatch to any real provider');
 try{
@@ -107,9 +107,16 @@ try{
  await held({...options(manifest),objects:{get:async key=>{await changing.prepare('SELECT * FROM "users"').all();return objects.get(key);}}},'candidate-changed');
  clear();manifest=await current();await passed(options(manifest));
  // Already dispatched custody is unresolved even if independent history is empty.
- const exchange=id();await db.prepare("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,state_hash,key_id,revision,state) VALUES(?,?,'github','unknown','fixture-current',1,'dispatched')").bind(exchange,owner.account).run();
+ const exchange=id();await db.prepare("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,client_id,state_hash,key_id,revision,state) VALUES(?,?,'github','fixture','unknown','fixture-current',1,'dispatched')").bind(exchange,owner.account).run();
  clear();manifest=await current();await held(options(manifest),'uncertain-effect');
- await db.prepare('DELETE FROM connection_oauth_exchanges WHERE token_id=?').bind(exchange).run(); // Fixture reset, not an operational reconciliation path.
+ await assert.rejects(db.prepare('DELETE FROM connection_oauth_exchanges WHERE token_id=?').bind(exchange).run(),/connection_outcome_required/);
+ await db.prepare("INSERT INTO connection_oauth_outcomes(id,user_id,provider,client_id,state_hash,key_id,revision,state,reason,http_status,dispatched_at) SELECT token_id,user_id,provider,client_id,state_hash,key_id,revision,'rejected','bad_verification_code',200,created_at FROM connection_oauth_exchanges WHERE token_id=?").bind(exchange).run();
+ await db.prepare('DELETE FROM connection_oauth_exchanges WHERE token_id=?').bind(exchange).run();
+ // Only independently recorded exact terminal evidence reconciles this operation.
+ clear();manifest=await current();event('external-effect',{effectId:exchange,store:'connection_oauth_exchanges',state:'unknown',receipt:null});await held(options(manifest),'uncertain-effect');
+ const outcome=await db.prepare('SELECT * FROM connection_oauth_outcomes WHERE id=?').bind(exchange).first();
+ event('external-effect',{effectId:exchange,store:'connection_oauth_exchanges',state:'reconciled',receipt:{sha256:rowHash({...outcome,client_id:'other-client'})}});await held(options(manifest),'uncertain-effect');
+ event('external-effect',{effectId:exchange,store:'connection_oauth_exchanges',state:'reconciled',receipt:{sha256:rowHash(outcome)}});await passed(options(manifest));
  const requestId=id();await db.prepare("INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,'2026-10-02','2026-10-02')").bind(requestId,owner.account,'a'.repeat(64)).run();
  await db.prepare("UPDATE standard_ai_requests SET state='dispatched' WHERE id=?").bind(requestId).run();await db.prepare("UPDATE standard_ai_requests SET state='uncertain' WHERE id=?").bind(requestId).run();
  clear();manifest=await current();await held(options(manifest),'uncertain-effect');await db.prepare('DELETE FROM standard_ai_requests WHERE id=?').bind(requestId).run();

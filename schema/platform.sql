@@ -3636,6 +3636,7 @@ CREATE TABLE connection_oauth_exchanges (
  token_id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
  provider TEXT NOT NULL CHECK(provider IN ('github','cloudflare')),
+ client_id TEXT NOT NULL CHECK(length(client_id) BETWEEN 1 AND 128),
  state_hash TEXT NOT NULL,
  key_id TEXT NOT NULL REFERENCES connection_key_registry(id),
  revision INTEGER NOT NULL,
@@ -3649,6 +3650,37 @@ WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE active_key=NEW.key_id 
 BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
 CREATE TRIGGER connection_oauth_exchange_identity BEFORE UPDATE ON connection_oauth_exchanges
 BEGIN SELECT RAISE(ABORT,'connection_exchange_identity'); END;
+-- Metadata from the exact dispatch response. No code, credential, response body
+-- or provider error description is retained. A restored receipt is not independent evidence.
+CREATE TABLE connection_oauth_outcomes (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL CHECK(provider IN ('github','cloudflare')),
+ client_id TEXT NOT NULL,
+ state_hash TEXT NOT NULL,
+ key_id TEXT NOT NULL REFERENCES connection_key_registry(id),
+ revision INTEGER NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('rejected','revoked')),
+ reason TEXT NOT NULL,
+ http_status INTEGER NOT NULL,
+ dispatched_at TEXT NOT NULL,
+ settled_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ CHECK((state='revoked' AND reason='provider_revoked' AND ((provider='github' AND http_status=204) OR (provider='cloudflare' AND http_status=200)))
+  OR (state='rejected' AND provider='github' AND http_status IN (200,400) AND reason IN ('incorrect_client_credentials','redirect_uri_mismatch','bad_verification_code','unverified_user_email'))
+  OR (state='rejected' AND provider='cloudflare' AND ((http_status=400 AND reason IN ('invalid_request','invalid_client','invalid_grant','unauthorized_client','unsupported_grant_type','invalid_scope')) OR (http_status=401 AND reason='invalid_client'))))
+);
+CREATE TRIGGER connection_oauth_outcome_admission BEFORE INSERT ON connection_oauth_outcomes
+WHEN NOT EXISTS(SELECT 1 FROM connection_oauth_exchanges e WHERE e.token_id=NEW.id AND e.user_id=NEW.user_id AND e.provider=NEW.provider AND e.client_id=NEW.client_id AND e.state_hash=NEW.state_hash AND e.key_id=NEW.key_id AND e.revision=NEW.revision AND e.created_at=NEW.dispatched_at)
+ OR EXISTS(SELECT 1 FROM github_token_vault WHERE id=NEW.id)
+ OR EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'connection_outcome_admission'); END;
+CREATE TRIGGER connection_oauth_outcome_immutable BEFORE UPDATE ON connection_oauth_outcomes
+BEGIN SELECT RAISE(ABORT,'connection_outcome_immutable'); END;
+CREATE TRIGGER connection_oauth_exchange_settlement BEFORE DELETE ON connection_oauth_exchanges
+WHEN NOT EXISTS(SELECT 1 FROM connection_oauth_outcomes r WHERE r.id=OLD.token_id AND r.user_id=OLD.user_id AND r.provider=OLD.provider AND r.client_id=OLD.client_id AND r.state_hash=OLD.state_hash AND r.key_id=OLD.key_id AND r.revision=OLD.revision AND r.dispatched_at=OLD.created_at)
+ AND NOT (OLD.provider='github' AND EXISTS(SELECT 1 FROM github_token_vault WHERE id=OLD.token_id AND user_id=OLD.user_id))
+ AND NOT (OLD.provider='cloudflare' AND EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE id=OLD.token_id AND user_id=OLD.user_id))
+BEGIN SELECT RAISE(ABORT,'connection_outcome_required'); END;
 CREATE TRIGGER connection_key_activation BEFORE UPDATE ON connection_key_policy
 WHEN NEW.singleton!=OLD.singleton OR NEW.revision!=OLD.revision+1 OR NEW.active_key=OLD.active_key
  OR EXISTS(SELECT 1 FROM connection_oauth_exchanges)

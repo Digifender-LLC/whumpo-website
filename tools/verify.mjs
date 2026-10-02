@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 export const profiles={
  fast:['tests/ai.mjs','tests/prompt-data-boundaries.mjs','tests/ack-timing.mjs','tests/lifecycle-catalog.mjs','tests/connection-vault.mjs'],
- protection:['tests/processing-boundaries.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs','tests/restore-admission.mjs'],
+ protection:['tests/processing-boundaries.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs','tests/connection-oauth-outcomes.mjs','tests/restore-admission.mjs'],
  site:['tests/customer-site-journey.mjs'],
  app:['tests/customer-app-journey.mjs'],
 };
