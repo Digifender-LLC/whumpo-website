@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {readFile,readdir} from 'node:fs/promises';
+import {currentSchema} from '../tools/current-schema.mjs';
 import {build} from 'esbuild';
 import {contentRiskReviewInput as parse,runContentRiskReview as run} from '../tools/content-risk-review-input.mjs';
 const code=await build({entryPoints:['src/content-risk-evidence.ts','src/content-risk.ts'],bundle:true,format:'esm',platform:'node',outdir:'unused',write:false});
 const [service,{assessContentRisk:assess}]=await Promise.all(code.outputFiles.map(f=>import('data:text/javascript;base64,'+Buffer.from(f.text).toString('base64'))));
 const sql=new DatabaseSync(':memory:');
 try{
- for(const name of (await readdir('migrations')).filter(n=>n.endsWith('.sql')).sort())sql.exec(await readFile(`migrations/${name}`,'utf8'));
+ sql.exec(await currentSchema());
  const account=crypto.randomUUID(),other=crypto.randomUUID();
- for(const id of [account,other])sql.prepare("INSERT INTO users VALUES(?,?,'fixture','fixture','2026-09-30')").run(id,id+'@example.invalid');
+ for(const id of [account,other])sql.prepare("INSERT INTO users VALUES(?,?,'2026-09-30')").run(id,id+'@example.invalid');
  const db={prepare:q=>({bind:(...p)=>({first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({success:true,results:sql.prepare(q).all(...p)}),run:async()=>sql.prepare(q).run(...p)})})};
  const input={action:'record',account,id:'finding-1',incident:'incident-1',kind:'confirmed_evasion',occurredAt:Date.now()-1000,evidenceRef:'case-1',reviewerRef:'operator-1',reviewed:true};
  for(const value of [null,[],{...input,reviewed:false},{...input,secret:'x'},{...input,evidenceRef:'raw private text'},{...input,account:"' OR 1=1 --"},{...input,kind:'model_refusal'},{...input,occurredAt:Date.now()+60000}])assert.throws(()=>parse(JSON.stringify(value)));

@@ -1,16 +1,21 @@
+// Owner-deferred acceptance; only fixture initialization is aligned here.
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
-const bundle=await build({stdin:{resolveDir:process.cwd(),contents:"export * from './src/cms-pending';export {sendChat,readChat} from './src/chat';export {getBilling} from './src/billing';export {cmsContentAction} from './src/cms-content';export {prepareSiteAction} from './src/site-agent';"},bundle:true,format:'esm',platform:'node',write:false});
-const {pendingCMSWork,describePendingCMS,cmsPendingRequest,sendChat,readChat,getBilling,cmsContentAction,prepareSiteAction}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-cms-pending-');let proxy;
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture} from './helpers/workspace-identity.mjs';
+const bundle=await build({stdin:{resolveDir:process.cwd(),contents:"export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export * from './src/cms-pending';export {sendChat,readChat} from './src/chat';export {getBilling} from './src/billing';export {cmsContentAction} from './src/cms-content';export {prepareSiteAction} from './src/site-agent';"},bundle:true,format:'esm',platform:'node',write:false});
+const identity=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const {pendingCMSWork,describePendingCMS,cmsPendingRequest,sendChat,readChat,getBilling,cmsContentAction,prepareSiteAction}=identity;
+const dir=await mkdtemp('/tmp/whumpo-cms-pending-');let store;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,id=()=>crypto.randomUUID(),owner=id(),other=id(),project=id(),foreign=id();
+ store=await databaseFixture({d1:true,r2:true});const db=store.db,id=()=>crypto.randomUUID(),owner=id(),other=id(),project=id(),foreign=id();
+ const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
+ async function accountAuthority(user){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}
  const now=Date.now(),date=new Date(now).toISOString(),future=new Date(now+86400000).toISOString(),past='2000-01-01T00:00:00.000Z';
- for(const user of [owner,other]){await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',date).run();await db.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(user).run();}
+ for(const user of [owner,other]){await accountAuthority(user);await db.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(user).run();}
  for(const [p,u,name] of [[project,owner,'My publishing space'],[foreign,other,'FOREIGN_NAME_CANARY']])await db.prepare('INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,?,?,?)').bind(p,u,name,date,date).run();
  // Read-path fixture: disable only write-admission triggers while seeding all lifecycle states.
  // Production write invariants are covered by the actual import/publication suites.
@@ -30,10 +35,10 @@ try{
  await db.prepare("INSERT INTO cms_wordpress_sources(id,user_id,project_id,filename,digest,size) VALUES(?,?,?,'PRIVATE_EXPORT.xml',?,1)").bind(sourceUpload,owner,project,'b'.repeat(64)).run();
  const readOnly={prepare(sql){assert.match(sql,/^(SELECT|WITH)\b/);return db.prepare(sql);}};
  let work=await pendingCMSWork(readOnly,owner,undefined,1,now);assert.deepEqual(work.rows.map(r=>r.kind).sort(),['discard','draft','edit','image-upload','import','publish','setup','source-upload','unpublish']);assert.equal(work.rows.filter(r=>r.id===imported).length,1);assert.ok(work.rows.every(r=>r.id!==expired));assert.equal(work.rows.at(-1).id,discard);
- assert.match(await cmsContentAction(db,owner,{kind:'cms',operation:'pendingWork',projectId:project},id(),{}),/Unfinished publishing work/);
- await assert.rejects(cmsContentAction(db,other,{kind:'cms',operation:'pendingWork',projectId:project},id(),{}),e=>e.status===404);
- await assert.rejects(cmsContentAction(db,owner,{kind:'cms',operation:'pendingWork',projectId:project,confirm:true},id(),{}),e=>e.status===400);
- const proposed=await prepareSiteAction(db,owner,id(),JSON.stringify({reply:'FICTIONAL_CONFIRMATION',action:{kind:'cms',operation:'pendingWork',projectId:project}}),{}, {cmsContent:(action,request)=>cmsContentAction(db,owner,action,request,{})});assert.match(proposed.reply,/Unfinished publishing work/);assert.ok(!proposed.reply.includes('FICTIONAL_CONFIRMATION'));assert.deepEqual(proposed.statements,[]);
+ assert.match(await cmsContentAction(scope(owner),owner,{kind:'cms',operation:'pendingWork',projectId:project},id(),{}),/Unfinished publishing work/);
+ await assert.rejects(cmsContentAction(scope(other),other,{kind:'cms',operation:'pendingWork',projectId:project},id(),{}),e=>e.status===404);
+ await assert.rejects(cmsContentAction(scope(owner),owner,{kind:'cms',operation:'pendingWork',projectId:project,confirm:true},id(),{}),e=>e.status===400);
+ const proposed=await prepareSiteAction(scope(owner),owner,id(),JSON.stringify({reply:'FICTIONAL_CONFIRMATION',action:{kind:'cms',operation:'pendingWork',projectId:project}}),{}, {cmsContent:(action,request)=>cmsContentAction(scope(owner),owner,action,request,{})});assert.match(proposed.reply,/Unfinished publishing work/);assert.ok(!proposed.reply.includes('FICTIONAL_CONFIRMATION'));assert.deepEqual(proposed.statements,[]);
  const text=describePendingCMS(work);for(const canary of ['FOREIGN_NAME_CANARY','PRIVATE_ARTICLE_CANARY','PRIVATE_EDIT_CANARY','PRIVATE_HTML','PRIVATE_TAGLINE','PRIVATE_FILENAME','PRIVATE_EXPORT','PRIVATE_ORIGIN'])assert.ok(!text.includes(canary));assert.ok(text.includes('Saved request: '+imported));assert.ok(!text.includes('/confirm-'));assert.ok(text.includes('/workspace/cms?project='+project));assert.ok(text.includes('Saved request: '+imageUpload));assert.ok(text.includes('Saved request: '+sourceUpload));assert.ok(!text.includes(foreignImage));
  await assert.rejects(pendingCMSWork(readOnly,other,project),e=>e.status===404);assert.equal((await pendingCMSWork(readOnly,other)).rows.length,2);
  await db.prepare('UPDATE cms_discard_reviews SET expires_at=? WHERE id=?').bind(past,discard).run();assert.ok(!(await pendingCMSWork(readOnly,owner)).rows.some(r=>r.id===discard));assert.ok((await pendingCMSWork(readOnly,owner)).rows.some(r=>r.id===publication));
@@ -53,6 +58,6 @@ try{
  // Dropping these CMS-only triggers never affects the workspace receipt/billing guards.
  for(const {sql} of triggers)await db.prepare(sql).run();
  const originalFetch=globalThis.fetch;globalThis.fetch=()=>{throw Error('No inference or provider calls allowed');};
- try{const before=(await getBilling(db,owner)).standardAI.creditCharge;for(const content of ['/cms-pending','show unfinished publishing work','/cms-pending '+foreign]){const state=await readChat(db,owner),request=id(),result=await sendChat(db,owner,{id:request,revision:state.state.revision,content},{baseURL:'https://invalid.example/v1',apiKey:'not-used',model:'not-used',protocol:'responses'});assert.equal(result.status,content.includes(foreign)?404:200);if(result.status===200){const turn=await db.prepare('SELECT mode,status,assistant_text FROM chat_turns WHERE id=?').bind(request).first();assert.equal(turn.mode,'guided');assert.equal(turn.status,'completed');assert.match(turn.assistant_text,/Unfinished publishing work/);const replay=await sendChat(db,owner,{id:request,revision:state.state.revision,content});assert.equal(replay.status,200);}}assert.equal((await getBilling(db,owner)).standardAI.creditCharge,before);}finally{globalThis.fetch=originalFetch;}
+ try{const before=(await getBilling(scope(owner),owner)).standardAI.creditCharge;for(const content of ['/cms-pending','show unfinished publishing work','/cms-pending '+foreign]){const state=await readChat(scope(owner),owner),request=id(),result=await sendChat(scope(owner),owner,{id:request,revision:state.state.revision,content},{baseURL:'https://invalid.example/v1',apiKey:'not-used',model:'not-used',protocol:'responses'});assert.equal(result.status,content.includes(foreign)?404:200);if(result.status===200){const turn=await db.prepare('SELECT mode,status,assistant_text FROM chat_turns WHERE id=?').bind(request).first();assert.equal(turn.mode,'guided');assert.equal(turn.status,'completed');assert.match(turn.assistant_text,/Unfinished publishing work/);const replay=await sendChat(scope(owner),owner,{id:request,revision:state.state.revision,content});assert.equal(replay.status,200);}}assert.equal((await getBilling(scope(owner),owner)).standardAI.creditCharge,before);}finally{globalThis.fetch=originalFetch;}
  console.log('Pending CMS work passed: read-only owner-scoped inventory, nine operation families including private upload recovery, mapped-import deduplication, expiry/completion filtering, deterministic pagination, no content leakage, no auto-confirmation/retry, guided Chat/replay with configured AI and unchanged usage.');
-}finally{if(proxy)await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{if(store)await store.close();await rm(dir,{recursive:true,force:true});}

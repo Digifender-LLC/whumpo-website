@@ -1,13 +1,18 @@
+// Owner-deferred CMS acceptance. Current-schema setup only; do not run without resumption.
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
-import {build} from 'esbuild';
-import wrangler from 'wrangler';
-async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+import {currentFixtureModules} from './helpers/current-modules.mjs';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture} from './helpers/workspace-identity.mjs';
+const {module,identity}=await currentFixtureModules(["src/chat.ts", "src/cms-article-images.ts", "src/cms-bridge.ts", "src/cms-capability-contract.ts", "src/cms-content-shape.ts", "src/cms-content.ts", "src/cms-deploy.ts", "src/cms-edits.ts", "src/cms-gateway.ts", "src/cms-imports.ts", "src/cms-media-uploads.ts", "src/cms-pending.ts", "src/cms-preview.ts", "src/cms-projects.ts", "src/cms-provision.ts", "src/cms-publication-media.ts", "src/cms-publication.ts", "src/cms-wordpress-chat.ts", "src/cms-wordpress-import.ts", "src/cms-wordpress-mapped-media.ts", "src/cms-wordpress-sources.ts", "src/files.ts", "src/index.ts", "src/security.ts", "src/site-host.ts"]);
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
-const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
-async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Deploy fixture','','draft',?,?)").bind(project,user,now,now).run();const review=await prepareCMS(db,user,id(),project,'My CMS','Our updates');await confirmCMS(db,user,review.id);const resources=new Map();await allocateCMSResources(db,project,{accountId:account,find:async(k,n)=>resources.get(k+n)??null,create:async(k,n)=>resources.set(k+n,k==='database'?id():k==='session'?id().replaceAll('-',''):n)});const origin='https://whumpo-cms-'+project.replaceAll('-','')+'.whumpo.site',config={projectId:project,ownerId:user,origin,secret:await deriveCMSSecret(master,project,user,origin)};return {user,project,review,config};}
+const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');
+const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
+const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
+async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}
+const fixtureStranger=id();await accountAuthority(fixtureStranger);
+async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await accountAuthority(user);await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Deploy fixture','','draft',?,?)").bind(project,user,now,now).run();const review=await prepareCMS(scope(user),user,id(),project,'My CMS','Our updates');await confirmCMS(scope(user),user,review.id);const resources=new Map();await allocateCMSResources(db,project,{accountId:account,find:async(k,n)=>resources.get(k+n)??null,create:async(k,n)=>resources.set(k+n,k==='database'?id():k==='session'?id().replaceAll('-',''):n)});const origin='https://whumpo-cms-'+project.replaceAll('-','')+'.whumpo.site',config={projectId:project,ownerId:user,origin,secret:await deriveCMSSecret(master,project,user,origin)};return {user,project,review,config};}
 function provider(a){let tag=null,version=null,initialized=false,setupId=null;const p={accountId:account,uploads:0,setups:0,owner:a.user,missingPages:false,unresolved:false,lostUpload:false,exists:async()=>version!==null,deploy:async(_name,t)=>{p.uploads++;if(p.unresolved)throw Error('unknown');tag=t;version=id();if(p.lostUpload)throw Error('lost upload acknowledgement');},activeVersion:async(_name,t)=>tag===t?version:null,replaceVersion:()=>{version=id();},service:{fetch:async request=>{const verified=await verifyCMSRequest(request,a.config);let data;
  if(verified.path==='/_emdash/api/setup/status')data={needsSetup:!initialized};
  else if(verified.path==='/_emdash/api/setup'){assert.deepEqual(JSON.parse(verified.body),{title:'My CMS',tagline:'Our updates',includeContent:false});if(setupId&&setupId!==verified.id)throw Error('unexpected setup ID');if(!initialized)p.setups++;initialized=true;setupId=verified.id;data={setupComplete:true,seedComplete:true};}
@@ -33,14 +38,14 @@ try{
  const ops=async()=>Number((await db.prepare("SELECT write_ops FROM storage_usage WHERE period=strftime('%Y-%m','now')").first())?.write_ops??0);
  capable=false;await assert.rejects(upload(),e=>e.status===409);assert.equal(await count(),0);assert.equal(writes,0);
  capable=true;const first=id();drop=true;await assert.rejects(upload(first),e=>e.status===503);assert.equal(writes,1);assert.equal(await count(),1);assert.equal(await ops(),2);
- assert.equal((await readCMSUploads(db,a.user,a.project,env)).uploads[0].status,'unresolved');
- const unfinished=await pendingCMSWork(db,a.user,a.project);assert.equal(unfinished.rows.filter(r=>r.kind==='image-upload'&&r.id===first).length,1);assert.ok(describePendingCMS(unfinished).includes('/workspace/cms?project='+a.project));assert.equal(writes,1);
+ assert.equal((await readCMSUploads(scope(a.user),a.user,a.project,env)).uploads[0].status,'unresolved');
+ const unfinished=await pendingCMSWork(scope(a.user),a.user,a.project);assert.equal(unfinished.rows.filter(r=>r.kind==='image-upload'&&r.id===first).length,1);assert.ok(describePendingCMS(unfinished).includes('/workspace/cms?project='+a.project));assert.equal(writes,1);
  const saved=await upload(first);assert.equal(saved.status,'saved');assert.equal(writes,1);assert.equal(await ops(),2);assert.ok(!JSON.stringify(saved).includes('PRIVATE_'));
- assert.ok(!(await pendingCMSWork(db,a.user,a.project)).rows.some(r=>r.id===first));
+ assert.ok(!(await pendingCMSWork(scope(a.user),a.user,a.project)).rows.some(r=>r.id===first));
  capable=false;assert.deepEqual(await upload(first),saved);capable=true;
  await assert.rejects(upload(first,'other.jpg'),e=>e.status===409);
- await assert.rejects(uploadCMSMedia(db,id(),a.project,id(),bytes,'studio.jpg',env),e=>e.status===404);
- await assert.rejects(readCMSUploads(db,id(),a.project,env),e=>e.status===404);
+ await assert.rejects(uploadCMSMedia(scope(fixtureStranger),fixtureStranger,a.project,id(),bytes,'studio.jpg',env),e=>e.status===404);
+ await assert.rejects(readCMSUploads(scope(fixtureStranger),fixtureStranger,a.project,env),e=>e.status===404);
  const concurrent=id();const results=await Promise.allSettled([upload(concurrent),upload(concurrent)]);assert.ok(results.some(r=>r.status==='fulfilled'));assert.equal((await upload(concurrent)).status,'saved');assert.equal(writes,2);assert.equal(await ops(),4);
  // A lost acknowledgement after control D1 commits must still return the saved receipt.
  const localId=id();let lose=true;const lostDB={prepare(sql){const statement=db.prepare(sql);if(!sql.startsWith('UPDATE cms_media_uploads SET result='))return statement;return {bind(...args){const bound=statement.bind(...args);return {async run(){const result=await bound.run();if(lose){lose=false;throw Error('lost local acknowledgement');}return result;}};}};}};
@@ -53,24 +58,24 @@ try{
  // Two concurrent admissions at the final project slot cannot both reserve capacity.
  for(let n=0;n<16;n++)await upload();assert.equal(await count(),19);
  const before=writes;const full=await Promise.allSettled([upload(),upload()]);assert.equal(full.filter(r=>r.status==='fulfilled').length,1);assert.equal(await count(),20);assert.equal(writes,before+1);assert.equal(await ops(),40);
- const listing=await readCMSUploads(db,a.user,a.project,env);assert.equal(listing.uploadEnabled,true);assert.equal(listing.uploads.length,20);assert.ok(!JSON.stringify(listing).includes('PRIVATE_'));assert.ok(!JSON.stringify(listing).includes(a.config.origin));
+ const listing=await readCMSUploads(scope(a.user),a.user,a.project,env);assert.equal(listing.uploadEnabled,true);assert.equal(listing.uploads.length,20);assert.ok(!JSON.stringify(listing).includes('PRIVATE_'));assert.ok(!JSON.stringify(listing).includes(a.config.origin));
  const {captureCMSArticleImages}=await module('src/cms-article-images.ts');
  const image={_type:'image',_key:'one',asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAV'},alt:'Synthetic image'};
  let imageReads=0,changed=false;
  const imageEnv={CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:{fetch:async request=>{const verified=await verifyCMSRequest(request,a.config);assert.equal(verified.path,'/_emdash/api/whumpo/media/'+image.asset._ref+'/preview');imageReads++;const body=photo.bytes.slice();if(changed)body[body.length-4]^=1;return new Response(body,{headers:{'content-type':'image/jpeg'}});}}};
- const captured=await captureCMSArticleImages(db,a.user,a.project,[image,{...image,_key:'two'}],imageEnv);assert.equal(captured.length,1);assert.equal(imageReads,1);assert.deepEqual(captured[0].bytes,photo.bytes);assert.equal(captured[0].width,32);
- await assert.rejects(captureCMSArticleImages(db,id(),a.project,[image],imageEnv),e=>e.status===404);assert.equal(imageReads,1);
- await assert.rejects(captureCMSArticleImages(db,a.user,a.project,[{...image,asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}}],imageEnv),e=>e.status===409);assert.equal(imageReads,1);
- changed=true;await assert.rejects(captureCMSArticleImages(db,a.user,a.project,[image],imageEnv),e=>e.status===409);assert.equal(imageReads,2);
+ const captured=await captureCMSArticleImages(scope(a.user),a.user,a.project,[image,{...image,_key:'two'}],imageEnv);assert.equal(captured.length,1);assert.equal(imageReads,1);assert.deepEqual(captured[0].bytes,photo.bytes);assert.equal(captured[0].width,32);
+ await assert.rejects(captureCMSArticleImages(scope(fixtureStranger),fixtureStranger,a.project,[image],imageEnv),e=>e.status===404);assert.equal(imageReads,1);
+ await assert.rejects(captureCMSArticleImages(scope(a.user),a.user,a.project,[{...image,asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}}],imageEnv),e=>e.status===409);assert.equal(imageReads,1);
+ changed=true;await assert.rejects(captureCMSArticleImages(scope(a.user),a.user,a.project,[image],imageEnv),e=>e.status===409);assert.equal(imageReads,2);
  console.log('Article image capture passed: confirmed owner/project receipt, exact native-byte hash, dimensions, deduplicated reads and changed/missing media refusal.');
  // Source-derived image mapping uses retained WXR and confirmed native bytes, without a draft write.
  const {prepareWordPressMediaCandidate}=await module('src/cms-wordpress-mapped-media.ts');
  const {uploadCMSWordPressSource,cmsWordPressSourceKey}=await module('src/cms-wordpress-sources.ts');
  const sourceHTML='<!-- wp:paragraph --><p>A <strong>local</strong> story.</p><!-- /wp:paragraph --><!-- wp:image {"id":2} --><figure class="wp-block-image"><img src="https://old.example/image.jpg" alt="Bread"/><figcaption>Fresh bread</figcaption></figure><!-- /wp:image -->';
  const wxr=html=>new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><wp:wxr_version>1.2</wp:wxr_version><item><title>Story</title><wp:post_id>1</wp:post_id><wp:post_type>post</wp:post_type><wp:status>draft</wp:status><content:encoded><![CDATA[${html}]]></content:encoded></item><item><title>Photo</title><wp:post_id>2</wp:post_id><wp:post_type>attachment</wp:post_type><wp:attachment_url>https://old.example/image.jpg</wp:attachment_url></item></channel></rss>`);
- const sourceBytes=wxr(sourceHTML),source=await uploadCMSWordPressSource(db,proxy.env.FILES,a.user,a.project,id(),'images.xml',sourceBytes,env),binding='CMS_'+a.project.replaceAll('-','');
+ const sourceBytes=wxr(sourceHTML),source=await uploadCMSWordPressSource(scope(a.user),store.env.FILES,a.user,a.project,id(),'images.xml',sourceBytes,env),binding='CMS_'+a.project.replaceAll('-','');
  const mappedEnv={...env,[binding]:{fetch:request=>{assert.equal(request.method,'GET');return new URL(request.url).pathname.endsWith('/preview')?imageEnv[binding].fetch(request):env[binding].fetch(request);}}};
- const choice=[{position:0,mediaId:image.asset._ref}],map=(input=choice,owner=a.user,project=a.project,sourceId=source.id)=>prepareWordPressMediaCandidate(db,proxy.env.FILES,owner,project,sourceId,1,input,mappedEnv);
+ const choice=[{position:0,mediaId:image.asset._ref}],map=(input=choice,owner=a.user,project=a.project,sourceId=source.id)=>prepareWordPressMediaCandidate(scope(owner),store.env.FILES,owner,project,sourceId,1,input,mappedEnv);
  changed=false;const writesBeforeMapping=writes,mapped=await map();
  assert.equal(mapped.sourceDigest,source.digest);assert.equal(mapped.imported,false);assert.equal(mapped.published,false);assert.equal(mapped.reviewRequired,true);
  assert.equal(mapped.body.data.content[1].asset._ref,image.asset._ref);assert.equal(mapped.body.data.content[1].alt,'Bread');assert.equal(mapped.body.data.content[1].caption,'Fresh bread');
@@ -83,15 +88,15 @@ try{
  await assert.rejects(map([{position:0,mediaId:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}]),e=>e.status===409);
  changed=true;await assert.rejects(map(),e=>e.status===409);changed=false;
  capable=false;await assert.rejects(map(),e=>e.status===409);capable=true;
- const unsupported=await uploadCMSWordPressSource(db,proxy.env.FILES,a.user,a.project,id(),'unsupported.xml',wxr(sourceHTML+'<script>bad()</script>'),env);
+ const unsupported=await uploadCMSWordPressSource(scope(a.user),store.env.FILES,a.user,a.project,id(),'unsupported.xml',wxr(sourceHTML+'<script>bad()</script>'),env);
  await assert.rejects(map(choice,a.user,a.project,unsupported.id),e=>e.status===409);
- const repeated=await uploadCMSWordPressSource(db,proxy.env.FILES,a.user,a.project,id(),'repeated.xml',wxr(sourceHTML+sourceHTML),env);
+ const repeated=await uploadCMSWordPressSource(scope(a.user),store.env.FILES,a.user,a.project,id(),'repeated.xml',wxr(sourceHTML+sourceHTML),env);
  const beforeRepeatedReads=imageReads,repeatedMap=await map([{position:1,mediaId:image.asset._ref},{position:0,mediaId:image.asset._ref}],a.user,a.project,repeated.id);
  assert.equal(imageReads,beforeRepeatedReads+1,'Repeated image occurrences verify the native bytes once');assert.deepEqual(repeatedMap.mediaPlan.map(row=>row.blockKey),['wp-image-0','wp-image-1']);assert.equal(new Set(repeatedMap.body.data.content.map(block=>block._key)).size,4);
- const oversized=await uploadCMSWordPressSource(db,proxy.env.FILES,a.user,a.project,id(),'oversized.xml',wxr('<!-- wp:paragraph --><p>'+'x'.repeat(4200)+'</p><!-- /wp:paragraph -->'+sourceHTML),env);
+ const oversized=await uploadCMSWordPressSource(scope(a.user),store.env.FILES,a.user,a.project,id(),'oversized.xml',wxr('<!-- wp:paragraph --><p>'+'x'.repeat(4200)+'</p><!-- /wp:paragraph -->'+sourceHTML),env);
  await assert.rejects(map(choice,a.user,a.project,oversized.id),e=>e.status===409);
- const sourceKey=cmsWordPressSourceKey({project_id:a.project,id:source.id,digest:source.digest}),corrupt=sourceBytes.slice();corrupt[corrupt.length-1]^=1;await proxy.env.FILES.put(sourceKey,corrupt);
- await assert.rejects(map(),e=>e.status===503);await proxy.env.FILES.put(sourceKey,sourceBytes);
+ const sourceKey=cmsWordPressSourceKey({project_id:a.project,id:source.id,digest:source.digest}),corrupt=sourceBytes.slice();corrupt[corrupt.length-1]^=1;await store.env.FILES.put(sourceKey,corrupt);
+ await assert.rejects(map(),e=>e.status===503);await store.env.FILES.put(sourceKey,sourceBytes);
  assert.equal(writes,writesBeforeMapping);assert.equal((await db.prepare('SELECT count(*) n FROM cms_import_reviews').first()).n,0);assert.equal((await db.prepare('SELECT count(*) n FROM cms_draft_requests').first()).n,0);
  console.log('WordPress local image preparation passed: retained source, deterministic conversion, immutable caller choices, exact owner media, corruption/capability refusal and no review, draft or native write.');
  // Immutable review and exact confirmation/recovery for an article with mapped local images.
@@ -100,29 +105,29 @@ try{
  const {createCMSDraft:recoverImageImport}=await module('src/cms-content.ts');
  const {describeWordPressImport}=await module('src/cms-wordpress-chat.ts');
  let importedWrites=0,loseImport=true;
- const importEnv={...mappedEnv,FILES:proxy.env.FILES,[binding]:{fetch:async request=>{
+ const importEnv={...mappedEnv,FILES:store.env.FILES,[binding]:{fetch:async request=>{
   if(new URL(request.url).pathname.endsWith('/preview'))return imageEnv[binding].fetch(request);
   const response=await cmsGateway(request,nativeEnv,async request=>{assert.equal(request.method,'POST');assert.ok(request.url.endsWith('/content/posts'));importedWrites++;const body=await request.json();assert.deepEqual(body.data,mapped.body.data);return Response.json({success:true,data:{_rev:'import-v1',item:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAC',slug:body.slug,status:'draft',version:1,data:body.data}}},{status:201});});
   if(request.method==='POST'&&loseImport){loseImport=false;throw Error('lost mapped draft response');}return response;
  }}};
- const mediaReview=await prepareCMSWordPressMediaImport(db,proxy.env.FILES,a.user,a.project,source.id,1,id(),choice,importEnv);
+ const mediaReview=await prepareCMSWordPressMediaImport(scope(a.user),store.env.FILES,a.user,a.project,source.id,1,id(),choice,importEnv);
  assert.equal(mediaReview.status,'pending');assert.deepEqual(JSON.parse(mediaReview.media_plan),mapped.mediaPlan);assert.equal(importedWrites,0);
  assert.equal(await db.prepare('SELECT id FROM cms_draft_requests WHERE id=?').bind(mediaReview.id).first(),null);
- assert.equal((await prepareCMSWordPressMediaImport(db,proxy.env.FILES,a.user,a.project,source.id,1,id(),choice,importEnv)).id,mediaReview.id);
+ assert.equal((await prepareCMSWordPressMediaImport(scope(a.user),store.env.FILES,a.user,a.project,source.id,1,id(),choice,importEnv)).id,mediaReview.id);
  assert.match(describeWordPressImport(mediaReview),/reviewed local images/);
  const candidate={sourceDigest:mapped.sourceDigest,sourceId:1,collection:mapped.collection,title:mapped.body.data.title,content:mapped.body.data.content,provenance:mapped.provenance,mediaPlan:mapped.mediaPlan,taxonomyPlan:mapped.taxonomyPlan};
- await assert.rejects(prepareCMSImport(db,a.user,a.project,id(),{...candidate,mediaPlan:[{...mapped.mediaPlan[0],digest:'f'.repeat(64)}]},importEnv,source.id),e=>e.status===409);
+ await assert.rejects(prepareCMSImport(scope(a.user),a.user,a.project,id(),{...candidate,mediaPlan:[{...mapped.mediaPlan[0],digest:'f'.repeat(64)}]},importEnv,source.id),e=>e.status===409);
  await assert.rejects(db.prepare("UPDATE cms_import_reviews SET media_plan='[]' WHERE id=?").bind(mediaReview.id).run());
  const insertMapping=plan=>db.prepare("INSERT INTO cms_import_reviews(id,user_id,project_id,source_digest,source_id,collection,body,provenance,source_upload_id,media_plan) VALUES(?,?,?,?,99,'posts',?,?,?,?)").bind(id(),a.user,a.project,source.digest,mediaReview.body,mediaReview.provenance,source.id,JSON.stringify(plan)).run();
  for(const invalid of [[],[{...mapped.mediaPlan[0],digest:'f'.repeat(64)}],[{...mapped.mediaPlan[0],blockKey:'other'}],[{...mapped.mediaPlan[0],position:1}],[{...mapped.mediaPlan[0],mediaId:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}]])await assert.rejects(insertMapping(invalid));
- const mappedPage=await cmsImportPage(db,a.user,mediaReview.id,importEnv),mappedHTML=await mappedPage.text();assert.ok(mappedHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!mappedHTML.includes('src="https://old.example'));assert.ok(mappedHTML.includes('Fresh bread'));assert.match(mappedPage.headers.get('content-security-policy'),/img-src data:/);
- await assert.rejects(cmsImportPage(db,id(),mediaReview.id,importEnv),e=>e.status===404);
- changed=true;await assert.rejects(confirmCMSImport(db,a.user,mediaReview.id,importEnv),e=>e.status===409);await assert.rejects(cmsImportPage(db,a.user,mediaReview.id,importEnv),e=>e.status===409);changed=false;
- assert.equal((await readCMSImport(db,a.user,mediaReview.id)).status,'pending');assert.equal(importedWrites,0);
- await assert.rejects(confirmCMSImport(db,a.user,mediaReview.id,importEnv),e=>e.status===503);assert.equal(importedWrites,1);assert.equal((await readCMSImport(db,a.user,mediaReview.id)).status,'approved');
- changed=true;await assert.rejects(recoverImageImport(db,a.user,a.project,mediaReview.id,'posts',mapped.body.data.title,mapped.body.data.content,importEnv,'structured'),e=>e.status===409);assert.equal(importedWrites,1);changed=false;
- assert.equal((await confirmCMSImport(db,a.user,mediaReview.id,importEnv)).status,'imported');assert.equal(importedWrites,1);
- changed=true;assert.equal((await confirmCMSImport(db,a.user,mediaReview.id,importEnv)).status,'imported');changed=false;assert.equal(importedWrites,1);
+ const mappedPage=await cmsImportPage(scope(a.user),a.user,mediaReview.id,importEnv),mappedHTML=await mappedPage.text();assert.ok(mappedHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!mappedHTML.includes('src="https://old.example'));assert.ok(mappedHTML.includes('Fresh bread'));assert.match(mappedPage.headers.get('content-security-policy'),/img-src data:/);
+ await assert.rejects(cmsImportPage(scope(fixtureStranger),fixtureStranger,mediaReview.id,importEnv),e=>e.status===404);
+ changed=true;await assert.rejects(confirmCMSImport(scope(a.user),a.user,mediaReview.id,importEnv),e=>e.status===409);await assert.rejects(cmsImportPage(scope(a.user),a.user,mediaReview.id,importEnv),e=>e.status===409);changed=false;
+ assert.equal((await readCMSImport(scope(a.user),a.user,mediaReview.id)).status,'pending');assert.equal(importedWrites,0);
+ await assert.rejects(confirmCMSImport(scope(a.user),a.user,mediaReview.id,importEnv),e=>e.status===503);assert.equal(importedWrites,1);assert.equal((await readCMSImport(scope(a.user),a.user,mediaReview.id)).status,'approved');
+ changed=true;await assert.rejects(recoverImageImport(scope(a.user),a.user,a.project,mediaReview.id,'posts',mapped.body.data.title,mapped.body.data.content,importEnv,'structured'),e=>e.status===409);assert.equal(importedWrites,1);changed=false;
+ assert.equal((await confirmCMSImport(scope(a.user),a.user,mediaReview.id,importEnv)).status,'imported');assert.equal(importedWrites,1);
+ changed=true;assert.equal((await confirmCMSImport(scope(a.user),a.user,mediaReview.id,importEnv)).status,'imported');changed=false;assert.equal(importedWrites,1);
  assert.equal((await db.prepare('SELECT count(*) n FROM cms_publication_reviews').first()).n,0);
  console.log('Mapped image import passed: immutable source-derived review, SQL mapping/receipt admission, private inline comparison, changed-byte refusal before approval and generic retry, and exact lost-response recovery without another native write.');
  const {freezeCMSPublicationMedia,publicCMSPublicationImage,cmsPublicationMediaKey}=await module('src/cms-publication-media.ts');
@@ -133,18 +138,18 @@ try{
  const reserve=(reviewId,items)=>db.prepare("INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,media_manifest) VALUES(?,?,?,?,'posts',?,'revision',?,'preview','public',?,?)").bind(reviewId,draft,a.user,a.project,image.asset._ref,JSON.stringify(snapshot),'c'.repeat(64),JSON.stringify(items)).run();
  await assert.rejects(reserve(id(),[]));await assert.rejects(reserve(id(),[{...manifest[0],digest:'d'.repeat(64)}]));
  await reserve(review,manifest);await assert.rejects(db.prepare("UPDATE cms_publication_reviews SET status='approved' WHERE id=?").bind(review).run());
- const files=proxy.env.FILES;let puts=0;
+ const files=store.env.FILES;let puts=0;
  const lostFiles={get:files.get.bind(files),put:async(...args)=>{puts++;await files.put(...args);throw Error('lost object acknowledgement');}};
- await assert.rejects(freezeCMSPublicationMedia(db,lostFiles,a.user,review,captured));assert.equal(puts,1);
- await freezeCMSPublicationMedia(db,lostFiles,a.user,review,[]);assert.equal(puts,1);
- await assert.rejects(freezeCMSPublicationMedia(db,files,id(),review,captured),e=>e.status===404);
+ await assert.rejects(freezeCMSPublicationMedia(scope(a.user),lostFiles,a.user,review,captured));assert.equal(puts,1);
+ await freezeCMSPublicationMedia(scope(a.user),lostFiles,a.user,review,[]);assert.equal(puts,1);
+ await assert.rejects(freezeCMSPublicationMedia(scope(fixtureStranger),files,fixtureStranger,review,captured),e=>e.status===404);
  await assert.rejects(db.prepare("UPDATE cms_publication_reviews SET media_manifest='[]' WHERE id=?").bind(review).run());
  await assert.rejects(db.prepare('DELETE FROM cms_publication_media WHERE review_id=?').bind(review).run());
  const fetchImage=(project=a.project,method='GET',bucket=files)=>publicCMSPublicationImage(new Request('https://example.test/',{method}),db,bucket,project,review,captured[0].digest);
  assert.equal((await fetchImage()).status,404);
  await db.prepare("UPDATE cms_publication_reviews SET status='approved' WHERE id=?").bind(review).run();await db.prepare("UPDATE cms_publication_reviews SET status='published' WHERE id=?").bind(review).run();
  const served=await fetchImage();assert.equal(served.status,200);assert.deepEqual(new Uint8Array(await served.arrayBuffer()),photo.bytes);assert.equal(served.headers.get('cache-control'),'no-store');assert.equal((await fetchImage(id())).status,404);assert.equal((await fetchImage(a.project,'POST')).status,405);assert.equal(await (await fetchImage(a.project,'HEAD')).text(),'');
- const key=cmsPublicationMediaKey({project_id:a.project,review_id:review,digest:captured[0].digest});const wrong=photo.bytes.slice();wrong[wrong.length-4]^=1;await files.put(key,wrong,{customMetadata:{sha256:captured[0].digest}});assert.equal((await fetchImage()).status,503);await assert.rejects(freezeCMSPublicationMedia(db,files,a.user,review,captured),e=>e.status===503);
+ const key=cmsPublicationMediaKey({project_id:a.project,review_id:review,digest:captured[0].digest});const wrong=photo.bytes.slice();wrong[wrong.length-4]^=1;await files.put(key,wrong,{customMetadata:{sha256:captured[0].digest}});assert.equal((await fetchImage()).status,503);await assert.rejects(freezeCMSPublicationMedia(scope(a.user),files,a.user,review,captured),e=>e.status===503);
  await files.put(key,photo.bytes);
  const unpublish=id();await db.prepare("INSERT INTO cms_unpublish_reviews(id,publication_id,user_id,revision) VALUES(?,?,?,'revision')").bind(unpublish,review,a.user).run();await db.prepare("UPDATE cms_unpublish_reviews SET status='approved' WHERE id=?").bind(unpublish).run();
  let reads=0;assert.equal((await fetchImage(a.project,'GET',{get(){reads++;throw Error('must not read private object');}})).status,404);assert.equal(reads,0);
@@ -160,21 +165,21 @@ try{
   return cmsGateway(request,nativeEnv,async request=>{if(request.method!=='GET'){assert.ok(request.url.endsWith('/publish'));assert.equal((await request.json())._rev,articleRev);publishes++;article={id:article.id,status:'published',data:article.data};}return Response.json({success:true,data:{item:article,_rev:articleRev}});});
  }}};
  const integrated=id();let loseImage=true;const interrupted={...articleEnv,FILES:{get:files.get.bind(files),put:async(...args)=>{const result=await files.put(...args);if(loseImage){loseImage=false;throw Error('lost image receipt');}return result;}}};
- await assert.rejects(prepareCMSPublication(db,a.user,a.project,draft,integrated,interrupted),e=>e.status===503);
- const recovered=await cmsPublicationCommand(db,a.user,id(),'/recover-cms-publish '+integrated,articleEnv)();assert.match(recovered,/Frozen images: 1/);assert.equal(publishes,0);
- const {readChat,sendChat}=await module('src/chat.ts');const recoverState=await readChat(db,a.user),recoverTurn=id();
- assert.equal((await sendChat(db,a.user,{id:recoverTurn,revision:recoverState.state.revision,content:'/recover-cms-publish '+integrated},undefined,{cmsPublication:(turn,content)=>cmsPublicationCommand(db,a.user,turn,content,articleEnv)})).status,200);
- assert.equal((await readChat(db,a.user)).turns.find(t=>t.id===recoverTurn).cms_publication_confirmation_id,integrated);
- const reviewPage=await cmsPublicationPage(db,a.user,integrated,files),reviewHTML=await reviewPage.text();assert.ok(reviewHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!reviewHTML.includes('src="/cms/media/'));assert.match(reviewPage.headers.get('content-security-policy'),/img-src data:/);
- await assert.rejects(cmsPublicationPage(db,id(),integrated,files),e=>e.status===404);
+ await assert.rejects(prepareCMSPublication(scope(a.user),a.user,a.project,draft,integrated,interrupted),e=>e.status===503);
+ const recovered=await cmsPublicationCommand(scope(a.user),a.user,id(),'/recover-cms-publish '+integrated,articleEnv)();assert.match(recovered,/Frozen images: 1/);assert.equal(publishes,0);
+ const {readChat,sendChat}=await module('src/chat.ts');const recoverState=await readChat(scope(a.user),a.user),recoverTurn=id();
+ assert.equal((await sendChat(scope(a.user),a.user,{id:recoverTurn,revision:recoverState.state.revision,content:'/recover-cms-publish '+integrated},undefined,{cmsPublication:(turn,content)=>cmsPublicationCommand(scope(a.user),a.user,turn,content,articleEnv)})).status,200);
+ assert.equal((await readChat(scope(a.user),a.user)).turns.find(t=>t.id===recoverTurn).cms_publication_confirmation_id,integrated);
+ const reviewPage=await cmsPublicationPage(scope(a.user),a.user,integrated,files),reviewHTML=await reviewPage.text();assert.ok(reviewHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!reviewHTML.includes('src="/cms/media/'));assert.match(reviewPage.headers.get('content-security-policy'),/img-src data:/);
+ await assert.rejects(cmsPublicationPage(scope(fixtureStranger),fixtureStranger,integrated,files),e=>e.status===404);
  const imageURL=reviewId=>`https://${a.project}.whumpo.site/cms/media/${reviewId}/${captured[0].digest}.jpg`;
  const hosted=reviewId=>siteHost.fetch(new Request(imageURL(reviewId)),{DB:db,FILES:files});
- assert.equal((await hosted(integrated)).status,404);await confirmCMSPublication(db,a.user,integrated,articleEnv);assert.equal(publishes,1);assert.equal((await hosted(integrated)).status,200);
+ assert.equal((await hosted(integrated)).status,404);await confirmCMSPublication(scope(a.user),a.user,integrated,articleEnv);assert.equal(publishes,1);assert.equal((await hosted(integrated)).status,200);
  const servedArticle=await siteHost.fetch(new Request(`https://${a.project}.whumpo.site/cms/posts/${article.id}`),{DB:db,FILES:files});assert.match(servedArticle.headers.get('content-security-policy'),/img-src 'self'/);assert.ok((await servedArticle.text()).includes(`/cms/media/${integrated}/`));
  article={...article,draftRevisionId:'staged',liveData:structuredClone(article.data),data:{...article.data,title:'Updated image story'}};articleRev='rev-two';
- const replacement=await prepareCMSPublication(db,a.user,a.project,draft,id(),articleEnv);assert.equal(replacement.replaces_publication_id,integrated);assert.equal((await hosted(replacement.id)).status,404);assert.equal((await hosted(integrated)).status,200);
- await confirmCMSPublication(db,a.user,replacement.id,articleEnv);assert.equal(publishes,2);assert.equal((await hosted(integrated)).status,404);assert.equal((await hosted(replacement.id)).status,200);
- await confirmCMSPublication(db,a.user,replacement.id,articleEnv);assert.equal(publishes,2);
+ const replacement=await prepareCMSPublication(scope(a.user),a.user,a.project,draft,id(),articleEnv);assert.equal(replacement.replaces_publication_id,integrated);assert.equal((await hosted(replacement.id)).status,404);assert.equal((await hosted(integrated)).status,200);
+ await confirmCMSPublication(scope(a.user),a.user,replacement.id,articleEnv);assert.equal(publishes,2);assert.equal((await hosted(integrated)).status,404);assert.equal((await hosted(replacement.id)).status,200);
+ await confirmCMSPublication(scope(a.user),a.user,replacement.id,articleEnv);assert.equal(publishes,2);
  console.log('Image publication integration passed: exact interrupted-review recovery, authenticated inline review, explicit native publish, routed public images and replacement revocation with replay.');
  const {createCMSDraft}=await module('src/cms-content.ts'),{editCMSDraft}=await module('src/cms-edits.ts'),{cmsPreview}=await module('src/cms-preview.ts'),{cmsCapabilities}=await module('src/cms-capability-contract.ts');
  let imageCapability=true,imageWrites=0,imageRevision='image-rev1',imageArticle;
@@ -185,17 +190,17 @@ try{
   return cmsGateway(request,nativeEnv,async request=>{if(request.method!=='GET'){const body=await request.json();if(request.method==='PUT'&&body._rev!==imageRevision)return Response.json({error:'stale'},{status:409});imageWrites++;imageRevision='image-rev'+(imageWrites+1);imageArticle={id:'01ARZ3NDEKTSV4RRFFQ69G5FAB',status:'draft',version:1,slug:body.slug??imageArticle?.slug,data:body.data};}return Response.json({success:true,data:{item:imageArticle,_rev:imageRevision}});});
  }}};
  const imageContent=article.data.content,imageDraft=id();imageCapability=false;
- await assert.rejects(createCMSDraft(db,a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured'),e=>e.status===409);assert.equal(await db.prepare('SELECT id FROM cms_draft_requests WHERE id=?').bind(imageDraft).first(),null);
- imageCapability=true;await assert.rejects(createCMSDraft(db,a.user,a.project,id(),'posts','Missing image',[imageContent[0],{...image,asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}}],writeEnv,'structured'),e=>e.status===409);assert.equal(imageWrites,0);
- await createCMSDraft(db,a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured');assert.equal(imageWrites,1);
- imageCapability=false;await createCMSDraft(db,a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured');assert.equal(imageWrites,1);imageCapability=true;
- const revised=structuredClone(imageContent);revised[1].caption='Owner revised caption';await editCMSDraft(db,a.user,a.project,id(),imageDraft,'Illustrated',revised,imageRevision,writeEnv,'structured');assert.equal(imageWrites,2);assert.deepEqual(imageArticle.data.content,revised);
- await assert.rejects(editCMSDraft(db,a.user,a.project,id(),imageDraft,'Flatten','Plain replacement',imageRevision,writeEnv),e=>e.status===409);assert.equal(imageWrites,2);
- const illustratedPreview=await cmsPreview(db,a.user,a.project,imageDraft,writeEnv);assert.match(illustratedPreview.headers.get('content-security-policy'),/img-src data:/);const illustratedHTML=await illustratedPreview.text();assert.ok(illustratedHTML.includes('src="data:image/jpeg;base64,'));assert.ok(illustratedHTML.includes('Owner revised caption'));
+ await assert.rejects(createCMSDraft(scope(a.user),a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured'),e=>e.status===409);assert.equal(await db.prepare('SELECT id FROM cms_draft_requests WHERE id=?').bind(imageDraft).first(),null);
+ imageCapability=true;await assert.rejects(createCMSDraft(scope(a.user),a.user,a.project,id(),'posts','Missing image',[imageContent[0],{...image,asset:{_ref:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}}],writeEnv,'structured'),e=>e.status===409);assert.equal(imageWrites,0);
+ await createCMSDraft(scope(a.user),a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured');assert.equal(imageWrites,1);
+ imageCapability=false;await createCMSDraft(scope(a.user),a.user,a.project,imageDraft,'posts','Illustrated',imageContent,writeEnv,'structured');assert.equal(imageWrites,1);imageCapability=true;
+ const revised=structuredClone(imageContent);revised[1].caption='Owner revised caption';await editCMSDraft(scope(a.user),a.user,a.project,id(),imageDraft,'Illustrated',revised,imageRevision,writeEnv,'structured');assert.equal(imageWrites,2);assert.deepEqual(imageArticle.data.content,revised);
+ await assert.rejects(editCMSDraft(scope(a.user),a.user,a.project,id(),imageDraft,'Flatten','Plain replacement',imageRevision,writeEnv),e=>e.status===409);assert.equal(imageWrites,2);
+ const illustratedPreview=await cmsPreview(scope(a.user),a.user,a.project,imageDraft,writeEnv);assert.match(illustratedPreview.headers.get('content-security-policy'),/img-src data:/);const illustratedHTML=await illustratedPreview.text();assert.ok(illustratedHTML.includes('src="data:image/jpeg;base64,'));assert.ok(illustratedHTML.includes('Owner revised caption'));
  console.log('Owner image writing passed: capability refusal before reservation, missing-media refusal, exact completed replay, image-preserving edits, plain flattening denial and private inline image previews.');
  const worker=(await module('src/index.ts')).default,{hashToken}=await module('src/security.ts');
- const session='c'.repeat(64);await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(session),a.user,new Date(Date.now()+3600000).toISOString(),new Date().toISOString()).run();
- const importHTTP=(path,method='GET',body,headers={})=>worker.fetch(new Request('https://whumpo.com/api/'+path,{method,headers:{origin:'https://whumpo.com',cookie:'whumpo_session='+session,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})}),{...importEnv,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
+ const session=accounts.get(a.user).token;
+ const importHTTP=(path,method='GET',body,headers={})=>worker.fetch(new Request('https://whumpo.com/api/'+path,{method,headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+session,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})}),{...importEnv,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
  const importPath=`cms/${a.project}/wordpress/sources/${source.id}/import-reviews`,importBody={id:id(),sourceItemId:1,mediaIds:[image.asset._ref]};
  assert.equal((await importHTTP(importPath,'POST',importBody,{cookie:''})).status,401);assert.equal((await importHTTP(importPath,'POST',importBody,{origin:'https://evil.test'})).status,403);
  assert.equal((await importHTTP(importPath,'POST',{...importBody,mediaIds:['https://old.example/image.jpg']})).status,400);
@@ -203,10 +208,10 @@ try{
  const replayImport=await importHTTP(importPath,'POST',importBody);assert.equal(replayImport.status,200);assert.equal((await replayImport.json()).id,mediaReview.id);
  const httpPreview=await importHTTP(`cms-import-reviews/${mediaReview.id}/preview`);assert.equal(httpPreview.status,200);assert.ok((await httpPreview.text()).includes('src="data:image/jpeg;base64,'));
  const {cmsWordPressCommand}=await module('src/cms-wordpress-chat.ts');const chatReview=id();
- const chatMapped=await cmsWordPressCommand(db,a.user,chatReview,`/import-wordpress ${a.project} ${repeated.id} 1 | ${image.asset._ref} ${image.asset._ref}`,importEnv)();assert.ok(chatMapped.includes('Send /confirm-cms-import '+chatReview));assert.equal((await readCMSImport(db,a.user,chatReview)).status,'pending');assert.equal(importedWrites,1);
- assert.match(await cmsWordPressCommand(db,a.user,id(),`/import-wordpress ${a.project} ${source.id} 1 | https://evil.test`,importEnv)(),/confirmed local image IDs/);
+ const chatMapped=await cmsWordPressCommand(scope(a.user),a.user,chatReview,`/import-wordpress ${a.project} ${repeated.id} 1 | ${image.asset._ref} ${image.asset._ref}`,importEnv)();assert.ok(chatMapped.includes('Send /confirm-cms-import '+chatReview));assert.equal((await readCMSImport(scope(a.user),a.user,chatReview)).status,'pending');assert.equal(importedWrites,1);
+ assert.match(await cmsWordPressCommand(scope(a.user),a.user,id(),`/import-wordpress ${a.project} ${source.id} 1 | https://evil.test`,importEnv)(),/confirmed local image IDs/);
  console.log('Mapped image API/Chat passed: strict ordered selections, session/origin checks, saved-review replay, authenticated inline preview and guided preparation without approval or inference.');
- const http=(suffix,method='GET',body,headers={})=>worker.fetch(new Request('https://whumpo.com/api/cms/'+a.project+'/media/uploads'+suffix,{method,headers:{origin:'https://whumpo.com',cookie:'whumpo_session='+session,'content-type':'image/jpeg','x-photo-name':'studio.jpg',...headers},body}),{...env,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
+ const http=(suffix,method='GET',body,headers={})=>worker.fetch(new Request('https://whumpo.com/api/cms/'+a.project+'/media/uploads'+suffix,{method,headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+session,'content-type':'image/jpeg','x-photo-name':'studio.jpg',...headers},body}),{...env,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
  assert.equal((await http('')).status,200);
  assert.equal((await http('/'+first,'PUT',bytes,{cookie:''})).status,401);
  assert.equal((await http('/'+first,'PUT',bytes,{origin:'https://evil.test'})).status,403);
@@ -216,4 +221,4 @@ try{
  const replay=await http('/'+first,'PUT',bytes);assert.equal(replay.status,200);assert.deepEqual(await replay.json(),saved);
  assert.equal((await http('/'+first,'DELETE')).status,405);assert.equal(writes,before+1);
  console.log('Owner CMS uploads passed: native and local acknowledgement recovery, exact replay, concurrent admission, private metadata projection, owner isolation, immutable reservations, storage rollback and project capacity.');
-}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await store.close();await rm(dir,{recursive:true,force:true});}

@@ -12,7 +12,7 @@ const scripts={site:'tests/customer-site-journey.mjs',edits:'tests/first-ai-jour
 async function sourceManifest(){
  const files=[];
  async function walk(path){for(const entry of await readdir(join(root,path),{withFileTypes:true})){const relative=path+'/'+entry.name;if(entry.isDirectory())await walk(relative);else if(entry.isFile())files.push(relative);else throw Error('Unexpected source entry');}}
- for(const dir of ['src','tests','tools','migrations','web','public-app'])await walk(dir);
+ for(const dir of ['src','tests','tools','schema','web','public-app'])await walk(dir);
  for(const name of ['package.json','pnpm-lock.yaml','wrangler.jsonc','wrangler.runtime.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','worker-configuration.d.ts'])if((await lstat(join(root,name)).catch(()=>null))?.isFile())files.push(name);
  const entries=[];for(const path of files.sort())entries.push({path,sha256:createHash('sha256').update(await readFile(join(root,path))).digest('hex')});
  return {sha256:createHash('sha256').update(JSON.stringify(entries)).digest('hex'),files:entries};

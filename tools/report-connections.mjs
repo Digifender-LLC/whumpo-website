@@ -39,5 +39,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const report=await connectionReadiness(api,db,config.name);
   console.log(JSON.stringify(report,null,2));
   if(Object.values(report.providers).some(p=>p.missing.length||p.recoveryRequired))process.exitCode=2;
- }catch{console.error('Connection readiness could not be verified. Check operator authorization, Worker configuration and migrations. No settings were changed.');process.exitCode=1;}
+ }catch{console.error('Connection readiness could not be verified. Check operator authorization, Worker configuration and the current schema. No settings were changed.');process.exitCode=1;}
 }

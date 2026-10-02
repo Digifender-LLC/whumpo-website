@@ -1,12 +1,14 @@
+// Owner-deferred CMS acceptance. Current-schema setup only; do not run without resumption.
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
-import {build} from 'esbuild';
-import wrangler from 'wrangler';
-async function module(path){const result=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));}
+import {currentFixtureModules} from './helpers/current-modules.mjs';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture} from './helpers/workspace-identity.mjs';
+const {module,identity}=await currentFixtureModules(["src/cms-bridge.ts", "src/cms-gateway.ts"]);
 const {signCMSRequest,verifyCMSRequest,cmsRequestAllowed}=await module('src/cms-bridge.ts'),{cmsGateway}=await module('src/cms-gateway.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-bridge-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
-const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID();
+const dir=await mkdtemp('/tmp/whumpo-cms-bridge-');
+const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID();
 const config={projectId:id(),ownerId:id(),secret:'local-fixture-key-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
 let dispatches=0;const dispatch=async()=>{dispatches++;return Response.json({ok:true},{headers:{'set-cookie':'must-not-leave-gateway=1'}});},setup={title:'Fixture',tagline:'CMS test',includeContent:false},path='/_emdash/api/setup';
 const execute=async(r,environment=env,handler=dispatch)=>cmsGateway(r,environment,handler);
@@ -33,4 +35,4 @@ try{
  const invalid=id();assert.equal((await execute(await signCMSRequest(config,path,invalid,setup),env,async()=>new Response('x'.repeat(65537),{headers:{'content-type':'application/json'}}))).status,502);
  assert.equal((await execute(await signCMSRequest(config,path,invalid,setup))).status,409);assert.equal(dispatches,3);
  console.log('CMS bridge checks passed: owner/project/origin/method/body signatures, expiry, cookie denial, operation bounds, replay/conflict, concurrent dispatch-once, lost acknowledgment and unknown-outcome handling.');
-}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await store.close();await rm(dir,{recursive:true,force:true});}

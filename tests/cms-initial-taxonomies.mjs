@@ -1,14 +1,15 @@
+// Owner-deferred acceptance; only fixture initialization is aligned here.
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {databaseFixture} from './helpers/current-database.mjs';
 execFileSync(process.execPath,['tools/generate-cms-native-schema.mjs','--check']);
 const b=await build({stdin:{contents:"export * from './src/cms-bridge';export * from './src/cms-gateway';export * from './src/cms-initial-taxonomy-shape';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {signCMSRequest,cmsGateway,initialTaxonomies,initialTaxonomyPath}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-initial-taxonomies-');let proxy;
+const dir=await mkdtemp('/tmp/whumpo-initial-taxonomies-');let store;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,id=()=>crypto.randomUUID(),config={projectId:id(),ownerId:id(),secret:'local-initial-taxonomy-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
+ store=await databaseFixture({d1:true,r2:true});const db=store.db,id=()=>crypto.randomUUID(),config={projectId:id(),ownerId:id(),secret:'local-initial-taxonomy-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
  // Minimal pinned-schema fixture. The separate built-native suite verifies real compatibility.
  for(const sql of [
   'CREATE TABLE _whumpo_requests(id TEXT PRIMARY KEY,request_hash TEXT,status INTEGER,response TEXT)',
@@ -36,4 +37,4 @@ try{
  assert.equal((await run(await fresh(),id(),{...env,WHUMPO_CMS_OWNER_ID:id()})).status,403);
  for(const malformed of [{...body,terms:[]},{...body,terms:[terms[0],terms[0]]},{...body,extra:true},{...body,terms:Array(21).fill(terms[0])}])assert.equal((await run(malformed)).status,403);
  console.log('Initial taxonomy assignment passed: owner/shape gates, pinned native state, exact term revalidation, all-or-nothing mapping/version/receipt, lost commit recovery, concurrent replay, fresh-draft enforcement and cache invalidation.');
-}finally{if(proxy)await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{if(store)await store.close();await rm(dir,{recursive:true,force:true});}

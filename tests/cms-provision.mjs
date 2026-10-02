@@ -1,14 +1,18 @@
+// Owner-deferred CMS acceptance. Current-schema setup only; do not run without resumption.
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
-import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {currentFixtureModules} from './helpers/current-modules.mjs';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {cmsCloudflareProvider} from '../tools/cms-cloudflare.mjs';
-async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+const {module,identity}=await currentFixtureModules(["src/cms-projects.ts", "src/cms-provision.ts"]);
 const {allocateCMSResources}=await module('src/cms-provision.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-provision-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
-const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID(),account='a'.repeat(32);
-async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Provision fixture','','draft',?,?)").bind(project,user,now,now).run();const r=await prepareCMS(db,user,id(),project,'CMS','');await confirmCMS(db,user,r.id);return project;}
+const dir=await mkdtemp('/tmp/whumpo-cms-provision-');
+const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32);
+const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
+async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}
+async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await accountAuthority(user);await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Provision fixture','','draft',?,?)").bind(project,user,now,now).run();const r=await prepareCMS(scope(user),user,id(),project,'CMS','');await confirmCMS(scope(user),user,r.id);return project;}
 function provider(){const resources=new Map(),calls=[];return {resources,calls,accountId:account,find:async(kind,name)=>resources.get(kind+':'+name)??null,create:async(kind,name)=>{calls.push(kind);resources.set(kind+':'+name,kind==='database'?id():kind==='session'?id().replaceAll('-',''):name);}};}
 try{
  const denied=provider();await assert.rejects(allocateCMSResources(db,id(),denied),/not approved/);assert.equal(denied.calls.length,0);
@@ -29,4 +33,4 @@ try{
  let requests=0;const paged=cmsCloudflareProvider(account,async(path)=>{requests++;const page=new URL('https://fixture'+path).searchParams.get('page');return {result:page==='1'?Array.from({length:100},(_,i)=>({title:'unrelated-'+i,id:String(i)})):[{title:'chosen',id:'c'.repeat(32)}]};});assert.equal(await paged.find('session','chosen'),'c'.repeat(32));assert.equal(requests,2);
  const ambiguous=cmsCloudflareProvider(account,async()=>({result:[{title:'chosen',id:'a'.repeat(32)},{title:'chosen',id:'b'.repeat(32)}]}));await assert.rejects(ambiguous.find('session','chosen'),/Ambiguous/);
  console.log('CMS allocator passed: approved-only isolated resources, creation receipts, lost provider replies, unresolved no-repeat, collision rejection, concurrency, immutable IDs, account pinning and paginated reconciliation.');
-}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await store.close();await rm(dir,{recursive:true,force:true});}
