@@ -21,7 +21,7 @@ export function parseLayout(value:unknown):WorkspaceLayout{
 }
 export async function readLayout(db:D1Database,user:string){
  const row=await db.prepare('SELECT revision,layout_json FROM workspace_preferences WHERE user_id=?').bind(user).first<{revision:number;layout_json:string}>();
- return {revision:row?.revision??0,layout:row?JSON.parse(row.layout_json) as WorkspaceLayout:defaultLayout};
+ return {revision:row?.revision??0,layout:row?parseLayout(JSON.parse(row.layout_json)):defaultLayout};
 }
 export async function saveLayout(db:D1Database,user:string,revision:unknown,value:unknown){
  const layout=parseLayout(value);
