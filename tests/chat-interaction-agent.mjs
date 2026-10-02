@@ -158,6 +158,28 @@ try{
   const removed=await chat(o,'Use the project I selected.',[submitted(f),body=>{assert.doesNotMatch(JSON.stringify(body),/selectedProject/);return null;}]);assert.equal(removed.calls,2);
   assert.equal((await store.readInteraction(o.scope,o.user,f.envelope.id)).submission.answers.project,o.project);
  });
+ const replaceIntake=f=>({kind:'interaction',operation:'replaceProjectIntake',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision});
+ await test('natural correction reads metadata then reopens the same intake without exposing answer values',async()=>{
+  const o=intakeOwner,before=intake,result=await chat(o,'Let me revise my saved project brief.',[read(before.envelope.id),body=>{assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE|INTAKE_PRIVATE_DRAFT/);return replaceIntake(before);}]);assert.equal(result.calls,2);
+  const next=await readForm(o,result.turn.interaction_id);assert.equal(next.previousInteractionId,before.envelope.id);assert.equal(next.envelope.scope.taskId,before.envelope.scope.taskId);assert.equal(next.envelope.scope.projectId,null);assert.deepEqual(next.envelope.definition.fields.map(f=>f.default),[{value:'INTAKE_SUBMITTED_NAME',provenance:'user'},{value:'INTAKE_SUBMITTED_PURPOSE',provenance:'user'}]);
+  const context=await agent.siteContext(o.scope,o.user);assert(!context.submittedIntakes.some(i=>i.interactionId===before.envelope.id));assert(context.interactions.some(i=>i.interactionId===next.envelope.id));
+  assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted(before))).inspection,undefined);assert.deepEqual((await readForm(o,before.envelope.id)).submission,before.submission);
+  await json(o,'/api/chat/interactions/v1/mutate',mutate(next,'submit',{name:'CORRECTED_INTAKE_NAME',purpose:'CORRECTED_INTAKE_PURPOSE'}));intake=await readForm(o,next.envelope.id);assert.equal(intake.submission.continuation,null);
+  const follow=await chat(o,'Use my corrected project brief.',[submitted(intake),body=>{assert.match(JSON.stringify(body),/CORRECTED_INTAKE_PURPOSE/);assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_PURPOSE/);return null;}]);assert.equal(follow.calls,2);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
+ });
+ await test('agent correction rejects answer injection and wrong-template substitution',async()=>{
+  const o=intakeOwner;
+  for(const bad of [{...replaceIntake(intake),answers:{name:'forged'}},{...replaceIntake(intake),questions:['Secret?']},{...replaceIntake(intake),template:'project-select@1'},{...replaceIntake(intake),projectId:b.project}]){
+   const result=await forms.interactionAgentAction(o.scope,o.user,id(),bad);assert.equal(result.statements.length,0);assert.equal(result.inspection,undefined);
+  }
+  assert.equal((await forms.interactionAgentAction(a.scope,a.user,id(),replaceIntake(form))).statements.length,0);
+  assert.equal(inspection.inspectionRequest(JSON.stringify({reply:'Revise',action:replaceIntake(intake)})),false);
+ });
+ await test('lost Chat correction acknowledgment preserves one successor without redispatch',async()=>{
+  const o=await owner(),created=await chat(o,'Help me plan another project.',[intakeRequest('requestProjectBrief')]),f=await readForm(o,created.turn.interaction_id);let lost=false;
+  const lossy=interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost correction Chat result');}}),result=await chat(o,'Reopen that project brief.',[replaceIntake(f)],lossy);assert(lost);assert(result.turn.interaction_id);assert.equal(result.turn.status,'completed');
+  const before=mainCalls;await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE previous_interaction_id=?',f.envelope.id)).n,1);
+ });
  await Promise.all(background);assert.equal(queue.length,0);
  assert.equal((await json(a,'/api/billing')).standardAI.creditCharge,0);
  console.log(`Maintained Chat agent: ${cases} cases passed; ${mainCalls} scripted main calls, ${ackCalls} scripted acknowledgments. Actual HTTP, compiler and private review; no external inference, publication or customer unit charges.`);
