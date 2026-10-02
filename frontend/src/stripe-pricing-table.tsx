@@ -114,7 +114,7 @@ export function StripePricingTable({
   const tableId = state.status === 'ready' ? state.config[tableKey] : '';
   return (
     <div
-      className="min-w-0 md:col-span-2"
+      className="min-w-0"
       role="region"
       aria-label={`${audience === 'personal' ? 'Personal' : 'Business'} ${billingInterval} plans`}
     >
