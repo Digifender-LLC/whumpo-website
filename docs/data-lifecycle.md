@@ -22,7 +22,7 @@ None of these proposals authorizes a timer to delete current data. Until decided
 
 ## Data and resource ownership map
 
-[data-lifecycle.json](data-lifecycle.json) is the explicit table-to-class register. Each class has a purpose, ownership scope, **current** retention, **proposed** retention, deletion authority, export boundary and source references. `node tools/lifecycle-catalog.mjs` rebuilds an empty local schema from all migrations and verifies every table has exactly one classification. `--json` includes columns and foreign-key paths/actions; it never reads application rows or contacts Cloudflare.
+[data-lifecycle.json](data-lifecycle.json) is the explicit table-to-class register. Each class has a purpose, ownership scope, **current** retention, **proposed** retention, deletion authority, export boundary and source references. `node tools/lifecycle-catalog.mjs` rebuilds the complete empty current schema from its three source files and verifies every table has exactly one classification. `--json` includes columns and foreign-key paths/actions; it never reads application rows or contacts Cloudflare.
 
 At this baseline, **148 control tables across 31 classes** are mapped. No prefix or wildcard silently classifies future tables. New/unmapped/duplicate tables, missing contracts and invalid source references fail validation. Foreign keys establish relationships, not a safe deletion order or permission to delete. The October 1 reconciliation adds the 15 tables introduced since migration 0107; the initial September 30 packet covered 133 tables/29 classes.
 
@@ -161,3 +161,7 @@ Remaining qualified review: US privacy/access/deletion duties and applicable vis
 Follow-on gates: WH-015 restricted cases; WH-018 closure/export implementation; WH-019 and WH-059 restore-safe erasure; WH-052 resumable job design; WH-020/021 inference privacy; WH-041 financial lifecycle when the owner resumes Stripe. Policy choices and actual cleanup acceptance must be recorded before changing “proposed” to “approved/implemented.” The schema coverage check does not satisfy those gates.
 
 October 1 reconciliation verification passed: `node tools/lifecycle-catalog.mjs`, the four tests above, `node tools/roadmap.mjs validate`, `node tools/roadmap.mjs render`, `node tools/roadmap.mjs render --check`, and `git diff --check`. The application journeys use disposable local D1/QuickJS and scripted model responses; they add no real inference or provider operations. This is a source/documentation and operator-tool update, with no Worker source or schema change to deploy.
+
+### Current identity integration — October 1, 2026
+
+The catalog now covers the complete current target: **156 tables / 37 classes**. Retired workspace-auth tables are absent. Separate entries classify identity progress, admission proofs/challenges, kit offers, receipts/recovery reviews, invitations and the always-empty transaction assertion. Verified pending progress is retained. Existing expiry rules are implemented by bounded daily maintenance; this does not approve the separate account-closure retention proposals above. Export redaction and forward-repair rules forbid resurrecting historical sessions, kit verifiers or spent invitations. Account-wide export/deletion/restore remain unavailable. The deployed database has not yet been reset to this schema.

@@ -1,3 +1,4 @@
+import {identityRequest} from './lib/identity';
 import {SubscriptionPanel} from './subscription-panel';
 import {clearChatRecovery} from './lib/chat-recovery';
 import {saveWelcomeProfile,saveWelcomeProgress,finishWelcome,type WelcomeDraft as Draft,type Welcome} from './lib/welcome-delivery';
@@ -65,7 +66,7 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  const optional=prompt==='bio'||prompt==='audience'||prompt==='style';
  const nextLabel=prompt==='review'?'Start my project':returnToReview?'Save and review':prompt==='picture'?'Use this picture':prompt==='bio'&&!bio.trim()||prompt==='audience'&&!draft.audience.trim()?'Skip for now':prompt==='style'?'Use this starting feel':'Continue';
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-xl">
-  <div className="flex items-center justify-between gap-4"><Brand/><Button variant="ghost" className="min-h-11" disabled={waiting} onClick={()=>void action(async()=>{await send('/auth/logout');clearChatRecovery();queryClient.clear();location.assign('/workspace');})}>Sign out</Button></div>
+  <div className="flex items-center justify-between gap-4"><Brand/><Button variant="ghost" className="min-h-11" disabled={waiting} onClick={()=>void action(async()=>{await identityRequest('logout');clearChatRecovery();queryClient.clear();location.assign('/workspace');})}>Sign out</Button></div>
   <ol aria-label="Welcome progress" className="mt-8 mb-6 flex gap-3">{['About you','Your first idea','Ready to begin'].map((label,i)=><li key={label} aria-current={chapter===i?'step':undefined} className="flex-1"><div className={'h-1.5 rounded-full mb-2 '+(i<=chapter?'bg-primary':'bg-muted')}/><span className={'text-xs '+(i===chapter?'font-semibold':'text-muted-foreground')}>{label}</span></li>)}</ol>
   <p className="text-xs text-muted-foreground mb-6">Guided welcome · no AI usage · answers save when you continue</p>
   {answered.length>0&&prompt!=='review'&&<details key={'answers-'+prompt} className="mb-6 rounded-2xl border bg-card px-4"><summary className="cursor-pointer py-3 text-sm font-medium min-h-11">Your answers so far <span className="text-muted-foreground">({answered.length})</span></summary><dl className="pb-3 space-y-3">{answered.map(row=><div key={row.prompt} className="flex items-start justify-between gap-3"><div className="min-w-0"><dt className="text-xs text-muted-foreground">{row.label}</dt><dd className="text-sm whitespace-pre-wrap break-words line-clamp-3">{row.value}</dd></div><Button type="button" variant="ghost" className="min-h-11 shrink-0" disabled={waiting} onClick={()=>go(row.prompt)} aria-label={'Edit '+row.label.toLowerCase()}>Edit</Button></div>)}</dl></details>}

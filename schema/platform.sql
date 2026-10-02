@@ -1,0 +1,3577 @@
+-- Current platform schema, applied to an empty database during the coordinated test reset.
+
+-- Workspace identity inputs and policy schema are composed by tools/current-schema.mjs.
+
+CREATE TABLE projects (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  purpose TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'building', 'live', 'error')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+, audience TEXT NOT NULL DEFAULT '' CHECK(length(audience)<=1000), style_notes TEXT NOT NULL DEFAULT '' CHECK(length(style_notes)<=1000), preferred_theme TEXT NOT NULL DEFAULT 'ocean' CHECK(preferred_theme IN ('ocean','clay','forest')), details_revision INTEGER NOT NULL DEFAULT 0, backend_revision INTEGER NOT NULL DEFAULT 0 CHECK(backend_revision>=0), site_draft_revision INTEGER NOT NULL DEFAULT 0 CHECK(site_draft_revision>=0));
+
+CREATE TABLE activity_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE workspace_state (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL DEFAULT 0,
+  step TEXT NOT NULL DEFAULT 'idea' CHECK(step IN ('idea','name','ready')),
+  idea TEXT NOT NULL DEFAULT ''
+, brief_project_id TEXT, brief_stage TEXT CHECK(brief_stage IN ('audience','style')));
+
+CREATE TABLE chat_turns (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL,
+  user_text TEXT NOT NULL,
+  assistant_text TEXT NOT NULL,
+  created_at TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'guided' CHECK(mode IN ('guided','ai')), status TEXT NOT NULL DEFAULT 'completed' CHECK(status IN ('pending','completed','failed','uncertain')), input_tokens INTEGER, output_tokens INTEGER, ai_context_allowed INTEGER NOT NULL DEFAULT 1 CHECK(ai_context_allowed IN (0,1)), action_json TEXT CHECK(action_json IS NULL OR (json_valid(action_json) AND json_type(action_json)='object' AND length(action_json)<=2048)),
+  UNIQUE(user_id, revision)
+);
+
+CREATE TABLE site_versions (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ component_id TEXT NOT NULL,
+ config_json TEXT NOT NULL CHECK(length(CAST(config_json AS BLOB)) <= 8192),
+ html TEXT NOT NULL CHECK(length(CAST(html AS BLOB)) <= 32768),
+ digest TEXT NOT NULL,
+ created_at TEXT NOT NULL
+, source TEXT NOT NULL DEFAULT 'guided' CHECK(source IN ('guided','ai')), base_version_id TEXT);
+
+CREATE TABLE publications (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0,
+ version_id TEXT REFERENCES site_versions(id) ON DELETE SET NULL
+);
+
+CREATE TABLE publication_actions (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('publish','restore','unpublish')),
+ version_id TEXT REFERENCES site_versions(id) ON DELETE CASCADE,
+ expected_revision INTEGER NOT NULL,
+ expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE,
+ CHECK((kind = 'unpublish' AND version_id IS NULL) OR (kind != 'unpublish' AND version_id IS NOT NULL))
+);
+
+CREATE TABLE chat_exports (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL REFERENCES site_versions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE project_files (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 100),
+ object_key TEXT NOT NULL UNIQUE,
+ digest TEXT NOT NULL,
+ size INTEGER NOT NULL CHECK(size BETWEEN 1 AND 1048576),
+ width INTEGER NOT NULL CHECK(width BETWEEN 1 AND 1600),
+ height INTEGER NOT NULL CHECK(height BETWEEN 1 AND 1600),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','ready')),
+ created_at TEXT NOT NULL
+);
+
+CREATE TABLE file_cleanup (object_key TEXT PRIMARY KEY,created_at TEXT NOT NULL);
+
+CREATE TABLE version_photos (
+ version_id TEXT NOT NULL REFERENCES site_versions(id) ON DELETE CASCADE,
+ file_id TEXT NOT NULL REFERENCES project_files(id) ON DELETE CASCADE,
+ position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 3),
+ alt TEXT NOT NULL CHECK(length(alt) BETWEEN 1 AND 200),
+ PRIMARY KEY(version_id,file_id),
+ UNIQUE(version_id,position)
+);
+
+CREATE TABLE storage_usage (
+ period TEXT PRIMARY KEY,
+ read_ops INTEGER NOT NULL DEFAULT 0 CHECK(read_ops BETWEEN 0 AND 100000),
+ write_ops INTEGER NOT NULL DEFAULT 0 CHECK(write_ops BETWEEN 0 AND 10000)
+);
+
+CREATE TABLE domain_claims (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ hostname TEXT NOT NULL CHECK(length(hostname) BETWEEN 3 AND 253),
+ token TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ verified_at TEXT,
+ created_at TEXT NOT NULL,
+ UNIQUE(project_id,hostname)
+);
+
+CREATE TABLE github_oauth_states (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ state_hash TEXT NOT NULL UNIQUE,
+ authority_id TEXT NOT NULL REFERENCES identity_sessions(id) ON DELETE CASCADE,
+ verifier_ciphertext TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1))
+);
+
+CREATE TABLE github_token_vault (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ ciphertext TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('active','revoking'))
+);
+
+CREATE TABLE github_connections (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ github_user_id TEXT NOT NULL,
+ login TEXT NOT NULL,
+ active_token_id TEXT REFERENCES github_token_vault(id) ON DELETE SET NULL,
+ connected_at TEXT NOT NULL
+);
+
+CREATE TABLE github_backups (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL REFERENCES site_versions(id) ON DELETE CASCADE,
+ request_hash TEXT NOT NULL,
+ token_id TEXT REFERENCES github_token_vault(id) ON DELETE SET NULL,
+ github_user_id TEXT NOT NULL,
+ repo_id INTEGER NOT NULL,
+ repo_owner TEXT NOT NULL,
+ repo_name TEXT NOT NULL,
+ repo_private INTEGER NOT NULL CHECK(repo_private IN (0,1)),
+ branch TEXT NOT NULL,
+ path TEXT NOT NULL,
+ sha256 TEXT NOT NULL,
+ tree_sha TEXT NOT NULL,
+ base_head TEXT NOT NULL,
+ files_json TEXT NOT NULL CHECK(length(files_json)<=4096),
+ byte_length INTEGER NOT NULL,
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','dispatching','uncertain','complete','failed')),
+ commit_sha TEXT,
+ detail TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ dispatched_at TEXT
+);
+
+CREATE TABLE domain_connections (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ claim_id TEXT NOT NULL REFERENCES domain_claims(id) ON DELETE RESTRICT,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+ hostname TEXT NOT NULL,
+ zone_id TEXT NOT NULL,
+ target TEXT NOT NULL,
+ proof_hash TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('review','creating','uncertain','provisioning','active','disconnecting','disconnected')),
+ provider_id TEXT,
+ provider_status TEXT NOT NULL DEFAULT '',
+ ssl_status TEXT NOT NULL DEFAULT '',
+ detail TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ checked_at TEXT,
+ serve_until TEXT
+, check_id TEXT, reconciliation_id TEXT, reconciliation_evidence TEXT, reconciliation_operator TEXT);
+
+CREATE TABLE domain_reconciliations (
+ id TEXT PRIMARY KEY,
+ connection_id TEXT NOT NULL REFERENCES domain_connections(id) ON DELETE RESTRICT,
+ user_id TEXT NOT NULL,
+ hostname TEXT NOT NULL,
+ zone_id TEXT NOT NULL,
+ provider_id TEXT NOT NULL,
+ old_state TEXT NOT NULL,
+ new_state TEXT NOT NULL,
+ evidence TEXT NOT NULL CHECK(length(evidence) BETWEEN 12 AND 1000),
+ operator TEXT NOT NULL CHECK(length(operator) BETWEEN 1 AND 100),
+ created_at TEXT NOT NULL
+);
+
+CREATE TABLE photo_removals (
+ id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ file_id TEXT NOT NULL,
+ name TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE REFERENCES chat_turns(id),
+ CHECK((status='pending' AND confirmed_by IS NULL) OR (status='applied' AND confirmed_by IS NOT NULL))
+);
+
+CREATE TABLE cloudflare_oauth_states (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ state_hash TEXT NOT NULL UNIQUE, authority_id TEXT NOT NULL REFERENCES identity_sessions(id) ON DELETE CASCADE,
+ verifier_ciphertext TEXT NOT NULL, expires_at TEXT NOT NULL,
+ claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1)),
+ cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1))
+);
+
+CREATE TABLE cloudflare_token_vault (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ ciphertext TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL,
+ revoke_attempt TEXT, revoke_after TEXT,
+ state TEXT NOT NULL CHECK(state IN ('staged','active','revoking'))
+);
+
+CREATE TABLE cloudflare_dns_actions (
+ id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ claim_id TEXT NOT NULL REFERENCES domain_claims(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ token_id TEXT NOT NULL,zone_id TEXT NOT NULL,zone_name TEXT NOT NULL,
+ record_name TEXT NOT NULL,content TEXT NOT NULL,inventory_hash TEXT NOT NULL,
+ created_at TEXT NOT NULL,expires_at TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'review' CHECK(state IN ('review','sending','uncertain','applied','unchanged','observed')),
+ provider_id TEXT,detail TEXT NOT NULL DEFAULT ''
+, record_type TEXT NOT NULL DEFAULT 'TXT' CHECK(record_type IN ('TXT','CNAME')), connection_id TEXT REFERENCES domain_connections(id) ON DELETE RESTRICT, proof_token TEXT);
+
+CREATE TABLE version_removals (
+ id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL,digest TEXT NOT NULL,component_id TEXT NOT NULL,
+ version_created_at TEXT NOT NULL,expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE REFERENCES chat_turns(id),
+ CHECK((status='pending' AND confirmed_by IS NULL) OR (status='applied' AND confirmed_by IS NOT NULL))
+);
+
+CREATE TABLE contact_settings (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0,
+ enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+ publication_revision INTEGER NOT NULL DEFAULT -1
+);
+
+CREATE TABLE contact_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ expected_revision INTEGER NOT NULL,
+ publication_revision INTEGER NOT NULL,
+ expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE
+);
+
+CREATE TABLE contact_receipts (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ request_hash TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL
+);
+
+CREATE TABLE contact_submissions (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ settings_revision INTEGER NOT NULL,
+ request_hash TEXT NOT NULL,
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 100),
+ email TEXT NOT NULL CHECK(length(email) BETWEEN 3 AND 254),
+ message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 2000),
+ created_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL
+);
+
+CREATE TABLE chat_comparisons (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL REFERENCES site_versions(id) ON DELETE CASCADE,
+ baseline_id TEXT REFERENCES site_versions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE site_health_checks (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL,
+ publication_revision INTEGER NOT NULL,
+ contact_revision INTEGER NOT NULL,
+ source TEXT NOT NULL CHECK(source IN ('manual','publish','scheduled')),
+ state TEXT NOT NULL DEFAULT 'checking' CHECK(state IN ('checking','healthy','unhealthy','superseded')),
+ detail TEXT NOT NULL DEFAULT 'Checking the published page and photo responses',
+ started_at TEXT NOT NULL,
+ finished_at TEXT
+, form_review_id TEXT);
+
+CREATE TABLE site_health_budget(day TEXT PRIMARY KEY,checks INTEGER NOT NULL CHECK(checks BETWEEN 1 AND 500));
+
+CREATE TABLE directories (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0,
+ draft_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(draft_json) AND json_type(draft_json)='array' AND json_array_length(draft_json)<=25 AND length(CAST(draft_json AS BLOB))<=24576),
+ live_json TEXT CHECK(live_json IS NULL OR (json_valid(live_json) AND json_type(live_json)='array' AND json_array_length(live_json)<=25 AND length(CAST(live_json AS BLOB))<=24576)),
+ publication_revision INTEGER NOT NULL DEFAULT -1,
+ published_at TEXT
+);
+
+CREATE TABLE directory_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('edit','publish','unpublish')),
+ snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json) AND json_type(snapshot_json)='array' AND json_array_length(snapshot_json)<=25 AND length(CAST(snapshot_json AS BLOB))<=24576),
+ digest TEXT NOT NULL,
+ expected_revision INTEGER NOT NULL,
+ publication_revision INTEGER NOT NULL,
+ expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE
+, source_review_id TEXT);
+
+CREATE TABLE directory_exports (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ review_id TEXT NOT NULL REFERENCES directory_reviews(id) ON DELETE CASCADE
+);
+
+CREATE TABLE backend_versions (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ source TEXT NOT NULL CHECK(length(CAST(source AS BLOB)) BETWEEN 1 AND 8192),
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ created_at TEXT NOT NULL
+);
+
+CREATE TABLE backend_runs (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL REFERENCES backend_versions(id) ON DELETE CASCADE,
+ request_hash TEXT NOT NULL,
+ day TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d','now')),
+ state TEXT NOT NULL DEFAULT 'running' CHECK(state IN ('running','complete')),
+ result_json TEXT CHECK(result_json IS NULL OR length(CAST(result_json AS BLOB))<=18000),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ CHECK((state='running' AND result_json IS NULL) OR (state='complete' AND result_json IS NOT NULL))
+);
+
+CREATE TABLE backend_state (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ state_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(state_json) AND length(CAST(state_json AS BLOB))<=4096)
+);
+
+CREATE TABLE backend_state_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL REFERENCES backend_versions(id),
+ base_revision INTEGER NOT NULL,
+ before_json TEXT NOT NULL CHECK(json_valid(before_json)),
+ input_json TEXT NOT NULL CHECK(json_valid(input_json) AND length(CAST(input_json AS BLOB))<=4096),
+ after_json TEXT CHECK(after_json IS NULL OR (json_valid(after_json) AND length(CAST(after_json AS BLOB))<=4096)),
+ result_json TEXT CHECK(result_json IS NULL OR (json_valid(result_json) AND length(CAST(result_json AS BLOB))<=4096)),
+ status TEXT NOT NULL DEFAULT 'preparing' CHECK(status IN ('preparing','ready','applied','failed')),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes')), restore_review_id TEXT REFERENCES backend_state_reviews(id), restore_side TEXT CHECK(restore_side IN ('before','after')),
+ CHECK((status IN ('preparing','failed') AND after_json IS NULL AND result_json IS NULL) OR (status IN ('ready','applied') AND after_json IS NOT NULL AND result_json IS NOT NULL))
+);
+
+CREATE TABLE backend_state_links (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ review_id TEXT NOT NULL REFERENCES backend_state_reviews(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('review','export'))
+);
+
+CREATE TABLE cms_setup_reviews (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 100),
+ tagline TEXT NOT NULL CHECK(length(tagline)<=200),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved')),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes'))
+);
+
+CREATE TABLE cms_instances (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ review_id TEXT NOT NULL UNIQUE REFERENCES cms_setup_reviews(id),
+ worker_name TEXT NOT NULL UNIQUE,
+ database_name TEXT NOT NULL UNIQUE,
+ bucket_name TEXT NOT NULL UNIQUE,
+ state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','provisioning','ready','uncertain')),
+ database_id TEXT UNIQUE,
+ session_namespace_id TEXT UNIQUE,
+ deployed_version_id TEXT,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ CHECK(state<>'ready' OR (database_id IS NOT NULL AND session_namespace_id IS NOT NULL AND deployed_version_id IS NOT NULL))
+);
+
+CREATE TABLE cms_resource_jobs (
+ project_id TEXT NOT NULL REFERENCES cms_instances(project_id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('database','media','session')),
+ account_id TEXT NOT NULL CHECK(length(account_id)=32),
+ resource_name TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','complete')),
+ provider_id TEXT,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ PRIMARY KEY(project_id,kind),
+ UNIQUE(account_id,kind,provider_id),
+ CHECK((state='pending' AND provider_id IS NULL) OR (state='complete' AND provider_id IS NOT NULL))
+);
+
+CREATE TABLE cms_deployments (
+ project_id TEXT PRIMARY KEY REFERENCES cms_instances(project_id) ON DELETE CASCADE,
+ account_id TEXT NOT NULL,
+ source_digest TEXT NOT NULL CHECK(length(source_digest)=64),
+ secret_digest TEXT NOT NULL CHECK(length(secret_digest)=64),
+ origin TEXT NOT NULL UNIQUE,
+ tag TEXT NOT NULL UNIQUE,
+ state TEXT NOT NULL DEFAULT 'reserved' CHECK(state IN ('reserved','uploaded','verified','connected')),
+ worker_version_id TEXT,
+ platform_version_id TEXT,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ CHECK((state='reserved' AND worker_version_id IS NULL AND platform_version_id IS NULL) OR (state IN ('uploaded','verified') AND worker_version_id IS NOT NULL AND platform_version_id IS NULL) OR (state='connected' AND worker_version_id IS NOT NULL AND platform_version_id IS NOT NULL))
+);
+
+CREATE TABLE cms_platform_deploy_lock (id INTEGER PRIMARY KEY CHECK(id=1),token TEXT NOT NULL,expires_at TEXT NOT NULL);
+
+CREATE TABLE cms_draft_requests (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES cms_instances(project_id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ collection TEXT NOT NULL CHECK(collection IN ('posts','pages')),
+ body TEXT NOT NULL CHECK(length(CAST(body AS BLOB))<=4096),
+ item_id TEXT,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+, content_format TEXT NOT NULL DEFAULT 'plain' CHECK(content_format IN ('plain','structured')));
+
+CREATE TABLE cms_edit_requests (
+ id TEXT PRIMARY KEY,
+ draft_request_id TEXT NOT NULL REFERENCES cms_draft_requests(id) ON DELETE CASCADE,
+ body TEXT NOT NULL CHECK(length(CAST(body AS BLOB))<=4096),
+ result TEXT CHECK(result IS NULL OR length(CAST(result AS BLOB))<=2048),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+, content_format TEXT NOT NULL DEFAULT 'plain' CHECK(content_format IN ('plain','structured')));
+
+CREATE TABLE cms_preview_links (
+ turn_id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ project_id TEXT NOT NULL REFERENCES cms_instances(project_id) ON DELETE CASCADE,
+ draft_request_id TEXT NOT NULL REFERENCES cms_draft_requests(id) ON DELETE CASCADE
+);
+
+CREATE TABLE cms_publication_reviews (
+ id TEXT PRIMARY KEY,
+ draft_request_id TEXT NOT NULL REFERENCES cms_draft_requests(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ project_id TEXT NOT NULL REFERENCES cms_instances(project_id) ON DELETE CASCADE,
+ collection TEXT NOT NULL CHECK(collection IN ('posts','pages')),
+ item_id TEXT NOT NULL,
+ revision TEXT NOT NULL,
+ snapshot TEXT NOT NULL CHECK(length(CAST(snapshot AS BLOB))<=16384),
+ preview_html TEXT NOT NULL CHECK(length(CAST(preview_html AS BLOB))<=32768),
+ public_html TEXT NOT NULL CHECK(length(CAST(public_html AS BLOB))<=32768),
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','published')),
+ expires_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes')),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+, withdrawn INTEGER NOT NULL DEFAULT 0 CHECK(withdrawn IN (0,1)), replaces_publication_id TEXT REFERENCES cms_publication_reviews(id), media_manifest TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(media_manifest) AND json_type(media_manifest)='array' AND json_array_length(media_manifest)<=4 AND length(media_manifest)<=4096));
+
+CREATE TABLE cms_unpublish_reviews (
+ id TEXT PRIMARY KEY,
+ publication_id TEXT NOT NULL REFERENCES cms_publication_reviews(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ revision TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','complete')),
+ expires_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes')),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE cms_discard_reviews (
+ id TEXT PRIMARY KEY,
+ publication_id TEXT NOT NULL REFERENCES cms_publication_reviews(id),
+ user_id TEXT NOT NULL REFERENCES users(id),
+ revision TEXT NOT NULL,
+ snapshot TEXT NOT NULL CHECK(length(CAST(snapshot AS BLOB))<=16384),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','complete')),
+ expires_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes')),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE backend_publications (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ review_id TEXT,
+ version_id TEXT REFERENCES backend_versions(id),
+ CHECK((review_id IS NULL)=(version_id IS NULL))
+);
+
+CREATE TABLE backend_publication_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ project_id TEXT NOT NULL REFERENCES projects(id),
+ operation TEXT NOT NULL CHECK(operation IN ('publish','unpublish')),
+ version_id TEXT NOT NULL REFERENCES backend_versions(id),
+ run_id TEXT REFERENCES backend_runs(id),
+ base_revision INTEGER NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes')),
+ CHECK((operation='publish' AND run_id IS NOT NULL) OR (operation='unpublish' AND run_id IS NULL))
+);
+
+CREATE TABLE backend_public_usage (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ day TEXT NOT NULL,
+ calls INTEGER NOT NULL CHECK(calls BETWEEN 1 AND 100),
+ publication_id TEXT NOT NULL REFERENCES backend_publication_reviews(id)
+);
+
+CREATE TABLE backend_form_settings (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id),
+ revision INTEGER NOT NULL DEFAULT 0,
+ review_id TEXT
+);
+
+CREATE TABLE backend_form_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ project_id TEXT NOT NULL REFERENCES projects(id),
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ config_json TEXT CHECK(config_json IS NULL OR length(CAST(config_json AS BLOB))<=4096),
+ site_revision INTEGER NOT NULL,
+ backend_publication_id TEXT REFERENCES backend_publication_reviews(id),
+ base_revision INTEGER NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes')),
+ CHECK((enabled=1 AND config_json IS NOT NULL AND backend_publication_id IS NOT NULL) OR (enabled=0 AND config_json IS NULL AND backend_publication_id IS NULL))
+);
+
+CREATE TABLE app_spaces (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id),
+ owner_user_id TEXT NOT NULL REFERENCES users(id),
+ version_id TEXT NOT NULL REFERENCES backend_versions(id),
+ enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0)
+, review_id TEXT, migration_id TEXT REFERENCES app_migration_approvals(id), rollback_id TEXT REFERENCES app_restore_reviews(id));
+
+CREATE TABLE app_visitors (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE app_sessions (
+ token_hash TEXT PRIMARY KEY,
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
+, page_review_id TEXT REFERENCES app_page_reviews(id));
+
+CREATE TABLE app_documents (
+ visitor_id TEXT PRIMARY KEY REFERENCES app_visitors(id),
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ state_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(state_json) AND length(CAST(state_json AS BLOB))<=4096)
+);
+
+CREATE TABLE app_runs (
+ id TEXT PRIMARY KEY,
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id),
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ version_id TEXT NOT NULL REFERENCES backend_versions(id),
+ session_hash TEXT NOT NULL,
+ request_hash TEXT NOT NULL,
+ base_revision INTEGER NOT NULL,
+ program_revision INTEGER NOT NULL,
+ state TEXT NOT NULL DEFAULT 'running' CHECK(state IN ('running','complete','failed','conflict')),
+ result_json TEXT CHECK(result_json IS NULL OR length(CAST(result_json AS BLOB))<=4608),
+ next_json TEXT CHECK(next_json IS NULL OR json_valid(next_json) AND length(CAST(next_json AS BLOB))<=4096),
+ day TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d','now')),
+ CHECK((state='running' AND result_json IS NULL AND next_json IS NULL) OR (state='complete' AND result_json IS NOT NULL AND next_json IS NOT NULL) OR (state IN ('failed','conflict') AND result_json IS NOT NULL AND next_json IS NULL))
+);
+
+CREATE TABLE app_activation_reviews (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES projects(id),
+ user_id TEXT NOT NULL REFERENCES users(id),
+ version_id TEXT NOT NULL REFERENCES backend_versions(id),
+ run_id TEXT REFERENCES backend_runs(id),
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ base_revision INTEGER NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes')),
+ CHECK((enabled=1 AND run_id IS NOT NULL) OR (enabled=0 AND run_id IS NULL))
+);
+
+CREATE TABLE plan_catalog (
+ id TEXT PRIMARY KEY,
+ tier INTEGER NOT NULL,
+ published_sites INTEGER NOT NULL CHECK(published_sites>0)
+);
+
+CREATE TABLE inference_budgets (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ period TEXT NOT NULL,
+ budget_micros INTEGER NOT NULL CHECK(budget_micros BETWEEN 1 AND 20000000),
+ spent_micros INTEGER NOT NULL DEFAULT 0 CHECK(spent_micros>=0),
+ reserved_micros INTEGER NOT NULL DEFAULT 0 CHECK(reserved_micros>=0),
+ PRIMARY KEY(user_id,period),
+ CHECK(spent_micros+reserved_micros<=budget_micros)
+);
+
+CREATE TABLE inference_calls (
+ id TEXT PRIMARY KEY,
+ turn_id TEXT NOT NULL REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ period TEXT NOT NULL,
+ role TEXT NOT NULL CHECK(role IN ('ack','orchestrator','normal','advanced')),
+ model TEXT NOT NULL,
+ provider_origin TEXT NOT NULL,
+ protocol TEXT NOT NULL CHECK(protocol IN ('chat','responses')),
+ policy TEXT NOT NULL,
+ cost_basis TEXT NOT NULL CHECK(cost_basis IN ('subscription-shadow','unpriced')),
+ ack_text TEXT CHECK(ack_text IS NULL OR (role='ack' AND status='observed' AND length(ack_text)<=180)),
+ rate_id TEXT NOT NULL,
+ input_rate INTEGER NOT NULL CHECK(input_rate>=0),
+ output_rate INTEGER NOT NULL CHECK(output_rate>=0),
+ reserved_micros INTEGER NOT NULL CHECK(reserved_micros>=0),
+ status TEXT NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved','dispatched','observed','released','uncertain')),
+ input_tokens INTEGER,
+ output_tokens INTEGER,
+ estimated_micros INTEGER,
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(turn_id,role),
+ FOREIGN KEY(user_id,period) REFERENCES inference_budgets(user_id,period),
+ CHECK((status='observed' AND input_tokens>=0 AND output_tokens>=0 AND estimated_micros>=0 AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL AND estimated_micros IS NOT NULL)
+ OR (status!='observed' AND input_tokens IS NULL AND output_tokens IS NULL AND estimated_micros IS NULL))
+);
+
+CREATE TABLE workspace_preferences (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+ layout_json TEXT NOT NULL CHECK(json_valid(layout_json) AND length(CAST(layout_json AS BLOB)) <= 12000),
+ updated_at TEXT NOT NULL
+);
+
+CREATE TABLE capacity_preferences (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+ preferred_plan TEXT NOT NULL DEFAULT 'starter' CHECK(preferred_plan IN ('starter','personal','business','business-pro')),
+ billing_interval TEXT NOT NULL DEFAULT 'month' CHECK(billing_interval IN ('month','year')),
+ draft_overage_cents INTEGER NOT NULL DEFAULT 0 CHECK(draft_overage_cents BETWEEN 0 AND 100000),
+ updated_at TEXT NOT NULL
+);
+
+CREATE TABLE user_profiles (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ name TEXT NOT NULL DEFAULT '' CHECK(length(name)<=80),
+ about_me TEXT NOT NULL DEFAULT '' CHECK(length(about_me)<=1200),
+ share_context INTEGER NOT NULL DEFAULT 0 CHECK(share_context IN(0,1)),
+ theme TEXT NOT NULL DEFAULT 'system' CHECK(theme IN('system','light','dark')),
+ photo TEXT CHECK(photo IS NULL OR length(photo)<=45000)
+, avatar_id TEXT NOT NULL DEFAULT 'cloud' CHECK(avatar_id IN ('cloud','sun','moon','leaf','star','planet')), photo_digest TEXT CHECK(photo_digest IS NULL OR length(photo_digest)=64));
+
+CREATE TABLE app_invitations (
+ code_hash TEXT PRIMARY KEY CHECK(length(code_hash)=64),
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ program_revision INTEGER NOT NULL CHECK(program_revision>=0),
+ used_by TEXT REFERENCES app_visitors(id),
+ revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
+);
+
+CREATE TABLE app_passkeys (
+ id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 1400),
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id),
+ public_key TEXT NOT NULL CHECK(length(public_key) BETWEEN 1 AND 3000),
+ counter INTEGER NOT NULL CHECK(counter>=0),
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0)
+);
+
+CREATE TABLE app_auth_challenges (
+ token_hash TEXT PRIMARY KEY CHECK(length(token_hash)=64),
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ program_revision INTEGER NOT NULL CHECK(program_revision>=0),
+ challenge TEXT NOT NULL CHECK(length(challenge) BETWEEN 16 AND 128),
+ kind TEXT NOT NULL CHECK(kind IN ('signup','login','add')),
+ visitor_id TEXT NOT NULL,
+ invite_hash TEXT NOT NULL,
+ session_hash TEXT NOT NULL,
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes'))
+, page_review_id TEXT REFERENCES app_page_reviews(id));
+
+CREATE TABLE app_recovery_codes (
+ visitor_id TEXT PRIMARY KEY REFERENCES app_visitors(id),
+ code_hash TEXT NOT NULL UNIQUE CHECK(length(code_hash)=64)
+);
+
+CREATE TABLE app_page_settings (
+ project_id TEXT PRIMARY KEY REFERENCES app_spaces(project_id),
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ review_id TEXT
+);
+
+CREATE TABLE app_page_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ program_revision INTEGER NOT NULL CHECK(program_revision>=0),
+ base_revision INTEGER NOT NULL CHECK(base_revision>=0),
+ config_json TEXT CHECK(config_json IS NULL OR json_valid(config_json) AND length(CAST(config_json AS BLOB))<=4096),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes'))
+);
+
+CREATE TABLE app_daily_usage (
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ day TEXT NOT NULL,
+ attempts INTEGER NOT NULL CHECK(attempts>=0),
+ PRIMARY KEY(project_id,day)
+);
+
+CREATE TABLE app_deletion_receipts (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ proof_hash TEXT NOT NULL CHECK(length(proof_hash)=64),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
+);
+
+CREATE TABLE agent_inspections (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ result_text TEXT NOT NULL CHECK(length(CAST(result_text AS BLOB))<=8000),
+ input_tokens INTEGER NOT NULL CHECK(input_tokens>=0),
+ output_tokens INTEGER NOT NULL CHECK(output_tokens>=0),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE site_traffic_daily (
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ day TEXT NOT NULL CHECK(length(day)=10),
+ requests INTEGER NOT NULL CHECK(requests>=0),
+ PRIMARY KEY(project_id,day)
+);
+
+CREATE TABLE site_traffic_metadata (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ enabled_at TEXT NOT NULL
+);
+
+CREATE TABLE cms_export_links (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ draft_request_id TEXT NOT NULL REFERENCES cms_draft_requests(id) ON DELETE CASCADE
+);
+
+CREATE TABLE gateway_spend_buckets (
+ id TEXT PRIMARY KEY,
+ scope TEXT NOT NULL CHECK(scope IN ('platform','account','task','premium','approval')),
+ user_id TEXT REFERENCES users(id) ON DELETE RESTRICT,
+ task_id TEXT,
+ limit_micros INTEGER NOT NULL CHECK(typeof(limit_micros)='integer' AND limit_micros BETWEEN 0 AND 1000000000000),
+ held_micros INTEGER NOT NULL DEFAULT 0 CHECK(typeof(held_micros)='integer' AND held_micros>=0),
+ spent_micros INTEGER NOT NULL DEFAULT 0 CHECK(typeof(spent_micros)='integer' AND spent_micros>=0),
+ terms_json TEXT NOT NULL DEFAULT '{}',
+ CHECK(json_valid(terms_json)),
+ CHECK(held_micros+spent_micros<=limit_micros),
+ CHECK((scope='platform' AND user_id IS NULL AND task_id IS NULL) OR (scope IN ('account','premium') AND user_id IS NOT NULL AND task_id IS NULL) OR (scope IN ('task','approval') AND user_id IS NOT NULL AND task_id IS NOT NULL))
+);
+
+CREATE TABLE gateway_spend_attempts (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ task_id TEXT NOT NULL,
+ snapshot TEXT NOT NULL CHECK(json_valid(snapshot)),
+ task_bucket TEXT NOT NULL REFERENCES gateway_spend_buckets(id),
+ account_bucket TEXT NOT NULL REFERENCES gateway_spend_buckets(id),
+ platform_bucket TEXT NOT NULL REFERENCES gateway_spend_buckets(id),
+ premium_bucket TEXT REFERENCES gateway_spend_buckets(id),
+ approval_bucket TEXT REFERENCES gateway_spend_buckets(id),
+ provider_reserved INTEGER NOT NULL CHECK(typeof(provider_reserved)='integer' AND provider_reserved BETWEEN 0 AND 1000000000000),
+ customer_reserved INTEGER NOT NULL CHECK(typeof(customer_reserved)='integer' AND customer_reserved BETWEEN 0 AND 1000000000000),
+ status TEXT NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved','dispatched','uncertain','settled','released')),
+ input_tokens INTEGER, output_tokens INTEGER, provider_actual INTEGER, customer_actual INTEGER,
+ CHECK((status='settled' AND typeof(input_tokens)='integer' AND typeof(output_tokens)='integer' AND typeof(provider_actual)='integer' AND typeof(customer_actual)='integer' AND input_tokens>=0 AND output_tokens>=0 AND provider_actual BETWEEN 0 AND provider_reserved AND customer_actual BETWEEN 0 AND customer_reserved)
+ OR (status!='settled' AND input_tokens IS NULL AND output_tokens IS NULL AND provider_actual IS NULL AND customer_actual IS NULL))
+);
+
+CREATE TABLE fair_use_project_lifecycle (
+ project_id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at TEXT NOT NULL,
+ observed_since TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ ai_saved_at TEXT,
+ export_prepared_at TEXT,
+ removed_at TEXT
+);
+
+CREATE TABLE fair_use_control (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ requested_mode TEXT NOT NULL DEFAULT 'monitor' CHECK(requested_mode IN ('monitor','enforce')),
+ updated_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE cms_media_uploads (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES cms_instances(project_id) ON DELETE RESTRICT,
+ origin TEXT NOT NULL,
+ filename TEXT NOT NULL CHECK(length(filename) BETWEEN 5 AND 100),
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ size INTEGER NOT NULL CHECK(size BETWEEN 20 AND 1048576),
+ width INTEGER NOT NULL CHECK(width BETWEEN 1 AND 1600),
+ height INTEGER NOT NULL CHECK(height BETWEEN 1 AND 1600),
+ result TEXT CHECK(result IS NULL OR (json_valid(result) AND length(result)<=2048)),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE cms_publication_media (
+ review_id TEXT NOT NULL REFERENCES cms_publication_reviews(id) ON DELETE CASCADE,
+ media_id TEXT NOT NULL,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES cms_instances(project_id),
+ digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*'),
+ size INTEGER NOT NULL CHECK(size BETWEEN 20 AND 1048576),
+ width INTEGER NOT NULL CHECK(width BETWEEN 1 AND 1600),
+ height INTEGER NOT NULL CHECK(height BETWEEN 1 AND 1600),
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','ready')),
+ PRIMARY KEY(review_id,media_id)
+);
+
+CREATE TABLE cms_import_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES cms_instances(project_id),
+ source_digest TEXT NOT NULL CHECK(length(source_digest)=64 AND source_digest NOT GLOB '*[^0-9a-f]*'),
+ source_id INTEGER NOT NULL CHECK(source_id BETWEEN 1 AND 9007199254740991),
+ collection TEXT NOT NULL CHECK(collection IN ('posts','pages')),
+ body TEXT NOT NULL CHECK(json_valid(body) AND length(CAST(body AS BLOB))<=4096),
+ provenance TEXT NOT NULL CHECK(json_valid(provenance) AND length(CAST(provenance AS BLOB))<=32768),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','imported','superseded')),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now','+24 hours'))
+, source_upload_id TEXT REFERENCES cms_wordpress_sources(id), taxonomy_plan TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(taxonomy_plan) AND json_type(taxonomy_plan)='array' AND json_array_length(taxonomy_plan)<=20 AND length(CAST(taxonomy_plan AS BLOB))<=4096), media_plan TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(media_plan) AND json_type(media_plan)='array' AND json_array_length(media_plan)<=4 AND length(CAST(media_plan AS BLOB))<=24576));
+
+CREATE TABLE cms_wordpress_sources (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES cms_instances(project_id),
+ filename TEXT NOT NULL CHECK(length(filename) BETWEEN 5 AND 100),
+ digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*'),
+ size INTEGER NOT NULL CHECK(size BETWEEN 1 AND 1048576),
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','ready')),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(project_id,digest)
+);
+
+CREATE TABLE backend_component_instances (
+ version_id TEXT PRIMARY KEY REFERENCES backend_versions(id) ON DELETE CASCADE,
+ component_id TEXT NOT NULL CHECK(length(component_id) BETWEEN 1 AND 80),
+ component_version INTEGER NOT NULL CHECK(component_version>0),
+ artifact_digest TEXT NOT NULL CHECK(length(artifact_digest)=64),
+ provenance TEXT NOT NULL,
+ license TEXT NOT NULL
+);
+
+CREATE TABLE welcome_onboarding (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL DEFAULT 0,
+ stage TEXT NOT NULL DEFAULT 'profile' CHECK(stage IN ('profile','project','review','complete')),
+ project_id TEXT NOT NULL UNIQUE,
+ project_name TEXT NOT NULL DEFAULT '' CHECK(length(project_name)<=100),
+ idea TEXT NOT NULL DEFAULT '' CHECK(length(idea)<=1000),
+ audience TEXT NOT NULL DEFAULT '' CHECK(length(audience)<=1000),
+ preferred_theme TEXT NOT NULL DEFAULT 'ocean' CHECK(preferred_theme IN ('ocean','clay','forest')),
+ completed_at TEXT
+, prompt TEXT
+ CHECK(prompt IS NULL OR prompt IN ('name','picture','bio','idea','project-name','audience','style','review')));
+
+CREATE TABLE domain_proof_removals (
+ id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ claim_id TEXT NOT NULL, hostname TEXT NOT NULL, proof_token TEXT NOT NULL,
+ proof_expires_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE REFERENCES chat_turns(id),
+ CHECK((status='pending' AND confirmed_by IS NULL) OR (status='applied' AND confirmed_by IS NOT NULL))
+);
+
+CREATE TABLE gateway_inference_requests (
+ attempt_id TEXT PRIMARY KEY REFERENCES gateway_spend_attempts(id) ON DELETE RESTRICT,
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
+ result_json TEXT CHECK(result_json IS NULL OR (json_valid(result_json) AND
+  json_type(result_json,'$.text') IS 'text' AND length(json_extract(result_json,'$.text')) BETWEEN 1 AND 32000 AND
+  json_type(result_json,'$.inputTokens') IS 'integer' AND json_extract(result_json,'$.inputTokens')>=0 AND
+  json_type(result_json,'$.outputTokens') IS 'integer' AND json_extract(result_json,'$.outputTokens')>=0))
+);
+
+CREATE TABLE gateway_provider_receipts (
+ attempt_id TEXT PRIMARY KEY REFERENCES gateway_inference_requests(attempt_id) ON DELETE RESTRICT,
+ account_id TEXT NOT NULL CHECK(length(account_id)=32 AND account_id NOT GLOB '*[^0-9a-f]*'),
+ gateway_id TEXT NOT NULL CHECK(length(gateway_id) BETWEEN 1 AND 64 AND gateway_id NOT GLOB '*[^a-z0-9-]*'),
+ http_status INTEGER NOT NULL CHECK(typeof(http_status)='integer' AND http_status BETWEEN 100 AND 599),
+ event_id TEXT CHECK(event_id IS NULL OR (length(event_id) BETWEEN 1 AND 128 AND event_id NOT GLOB '*[^a-zA-Z0-9_.:-]*')),
+ log_id TEXT CHECK(log_id IS NULL OR (length(log_id) BETWEEN 1 AND 128 AND log_id NOT GLOB '*[^a-zA-Z0-9_.:-]*')),
+ received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE welcome_first_drafts (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE cms_import_taxonomy_jobs (
+ review_id TEXT PRIMARY KEY REFERENCES cms_import_reviews(id) ON DELETE CASCADE,
+ body TEXT NOT NULL CHECK(json_valid(body) AND length(CAST(body AS BLOB))<=4096),
+ state TEXT NOT NULL DEFAULT 'prepared' CHECK(state IN ('prepared','applied'))
+);
+
+CREATE TABLE application_builds (
+ id TEXT PRIMARY KEY REFERENCES backend_versions(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64)
+);
+
+CREATE TABLE app_owner_erasures (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ visitor_id TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days'))
+);
+
+CREATE TABLE app_recovery_points (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ version_id TEXT NOT NULL REFERENCES backend_versions(id),
+ sealed INTEGER NOT NULL DEFAULT 0 CHECK(sealed IN (0,1)),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+, removed INTEGER NOT NULL DEFAULT 0 CHECK(removed IN (0,1)));
+
+CREATE TABLE app_recovery_documents (
+ point_id TEXT NOT NULL REFERENCES app_recovery_points(id) ON DELETE CASCADE,
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>=0),
+ state_json TEXT NOT NULL CHECK(json_valid(state_json) AND length(CAST(state_json AS BLOB))<=4096),
+ PRIMARY KEY(point_id,visitor_id)
+);
+
+CREATE TABLE app_restore_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ point_id TEXT NOT NULL REFERENCES app_recovery_points(id),
+ base_revision INTEGER NOT NULL,
+ roster_json TEXT NOT NULL CHECK(json_valid(roster_json) AND json_type(roster_json)='array' AND json_array_length(roster_json)<=100 AND length(CAST(roster_json AS BLOB))<=12000),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ expires_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now','+10 minutes'))
+, restore_program INTEGER NOT NULL DEFAULT 0 CHECK(restore_program IN (0,1)), from_version TEXT REFERENCES backend_versions(id));
+
+CREATE TABLE app_migration_checks (
+ id TEXT PRIMARY KEY REFERENCES app_recovery_points(id),
+ user_id TEXT NOT NULL REFERENCES users(id),
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ from_version TEXT NOT NULL REFERENCES backend_versions(id),
+ to_version TEXT NOT NULL REFERENCES backend_versions(id),
+ transform_version TEXT NOT NULL REFERENCES backend_versions(id),
+ test_id TEXT NOT NULL REFERENCES backend_runs(id),
+ base_revision INTEGER NOT NULL,
+ roster_json TEXT NOT NULL CHECK(json_valid(roster_json) AND json_type(roster_json)='array' AND json_array_length(roster_json)<=100 AND length(CAST(roster_json AS BLOB))<=12000),
+ expires_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 minutes'))
+);
+
+CREATE TABLE app_migration_documents (
+ migration_id TEXT NOT NULL REFERENCES app_migration_checks(id),
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
+ base_revision INTEGER NOT NULL,
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','running','ready','failed')),
+ next_json TEXT CHECK(next_json IS NULL OR (json_valid(next_json) AND length(CAST(next_json AS BLOB))<=4096)),
+ error TEXT CHECK(error IS NULL OR error IN ('invalid_output','invalid_request','invalid_code','execution_failed','work_limit','unresolved_promise','unavailable','busy')),
+ PRIMARY KEY(migration_id,visitor_id),
+ CHECK((state IN ('pending','running') AND next_json IS NULL AND error IS NULL) OR (state='ready' AND next_json IS NOT NULL AND error IS NULL) OR (state='failed' AND next_json IS NULL AND error IS NOT NULL))
+);
+
+CREATE TABLE app_migration_approvals (
+ id TEXT PRIMARY KEY REFERENCES app_migration_checks(id),
+ user_id TEXT NOT NULL REFERENCES users(id),
+ changed_documents INTEGER NOT NULL CHECK(changed_documents BETWEEN 0 AND 100),
+ status TEXT NOT NULL DEFAULT 'applying' CHECK(status IN ('applying','applied')),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE app_migration_cancellations (
+ id TEXT PRIMARY KEY REFERENCES app_migration_checks(id),
+ user_id TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE app_maintenance_chat_links (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ kind TEXT NOT NULL CHECK(kind IN ('upgrade','rollback')),
+ review_id TEXT NOT NULL,
+ reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
+);
+
+CREATE TABLE fair_use_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ policy_version TEXT NOT NULL CHECK(length(policy_version) BETWEEN 1 AND 100),
+ plan_id TEXT NOT NULL CHECK(plan_id IN ('starter','personal','business','business-pro')),
+ category TEXT NOT NULL CHECK(category IN ('unrelated_chat','project_churn','legitimate_capacity')),
+ opened_by TEXT NOT NULL CHECK(length(opened_by) BETWEEN 1 AND 100),
+ context TEXT NOT NULL CHECK(length(context) BETWEEN 1 AND 2000),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ state TEXT NOT NULL DEFAULT 'open' CHECK(state IN ('open','resolved')),
+ outcome TEXT CHECK(outcome IN ('legitimate_use','insufficient_evidence','confirmed_pattern')),
+ resolution TEXT CHECK(length(resolution) BETWEEN 1 AND 2000),
+ resolved_by TEXT CHECK(length(resolved_by) BETWEEN 1 AND 100),
+ resolved_at TEXT, observation_json TEXT
+ CHECK(observation_json IS NULL OR (length(observation_json)<=8192 AND json_valid(observation_json) AND json_type(observation_json)='object')),
+ CHECK((state='open' AND outcome IS NULL AND resolution IS NULL AND resolved_by IS NULL AND resolved_at IS NULL AND revision=0) OR
+       (state='resolved' AND outcome IS NOT NULL AND resolution IS NOT NULL AND resolved_by IS NOT NULL AND resolved_at IS NOT NULL AND revision=1))
+);
+
+CREATE TABLE backend_nominations (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL REFERENCES backend_versions(id) ON DELETE CASCADE,
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ state TEXT NOT NULL DEFAULT 'review' CHECK(state IN ('review','nominated','withdrawn')),
+ created_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ consent_at TEXT,
+ withdrawn_at TEXT,
+ CHECK((state='review' AND consent_at IS NULL AND withdrawn_at IS NULL) OR
+       (state='nominated' AND consent_at IS NOT NULL AND withdrawn_at IS NULL) OR
+       (state='withdrawn' AND withdrawn_at IS NOT NULL))
+);
+
+CREATE TABLE standard_ai_requests (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ state TEXT NOT NULL DEFAULT 'reserved' CHECK(state IN ('reserved','dispatched','uncertain','completed','released')),
+ input_tokens INTEGER,
+ output_tokens INTEGER,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL,
+ CHECK((state='completed' AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL AND input_tokens>=0 AND output_tokens>=0)
+ OR (state!='completed' AND input_tokens IS NULL AND output_tokens IS NULL))
+);
+
+CREATE TABLE usage_review_requests (
+ id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ statement TEXT NOT NULL CHECK(length(statement) BETWEEN 1 AND 950),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ state TEXT NOT NULL DEFAULT 'open' CHECK(state IN ('open','answered')),
+ public_response TEXT CHECK(length(public_response) BETWEEN 1 AND 2000),
+ answered_by TEXT CHECK(length(answered_by) BETWEEN 1 AND 100),
+ answered_at TEXT,
+ CHECK((state='open' AND public_response IS NULL AND answered_by IS NULL AND answered_at IS NULL) OR
+       (state='answered' AND public_response IS NOT NULL AND answered_by IS NOT NULL AND answered_at IS NOT NULL))
+);
+
+CREATE TABLE backend_imports (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ source TEXT NOT NULL CHECK(length(CAST(source AS BLOB)) BETWEEN 1 AND 8192),
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ policy_version TEXT NOT NULL CHECK(policy_version='2026-09-30'),
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','requires_review','blocked')),
+ reason TEXT CHECK(reason IN ('scanner_required','integrity','credential','dynamic_code','remote_dependency')),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ scanned_at TEXT,
+ CHECK((state='pending' AND reason IS NULL AND scanned_at IS NULL) OR
+       (state='requires_review' AND reason='scanner_required' AND scanned_at IS NOT NULL) OR
+       (state='blocked' AND reason IN ('integrity','credential','dynamic_code','remote_dependency') AND scanned_at IS NOT NULL))
+);
+
+CREATE TABLE profile_photo_safety (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ photo_revision INTEGER NOT NULL CHECK(photo_revision>=0),
+ policy_version TEXT NOT NULL CHECK(policy_version='2026-09-30'),
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','approved','blocked')),
+ csam_check TEXT NOT NULL DEFAULT 'unknown' CHECK(csam_check IN ('unknown','clear','matched')),
+ sexual_check TEXT NOT NULL DEFAULT 'unknown' CHECK(sexual_check IN ('unknown','clear','matched')),
+ scanner_reference TEXT,
+ expires_at TEXT,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ CHECK(state!='approved' OR (csam_check='clear' AND sexual_check='clear' AND length(scanner_reference) BETWEEN 1 AND 200 AND scanner_reference IS NOT NULL AND expires_at IS NOT NULL))
+);
+
+CREATE TABLE project_photo_safety (
+ file_id TEXT PRIMARY KEY REFERENCES project_files(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ policy_version TEXT NOT NULL CHECK(policy_version='2026-09-30'),
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','approved','blocked')),
+ csam_check TEXT NOT NULL DEFAULT 'unknown' CHECK(csam_check IN ('unknown','clear','matched')),
+ sexual_check TEXT NOT NULL DEFAULT 'unknown' CHECK(sexual_check IN ('unknown','clear','matched')),
+ scanner_reference TEXT,
+ expires_at TEXT,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ CHECK(state!='approved' OR (csam_check='clear' AND sexual_check='clear' AND scanner_reference IS NOT NULL AND length(scanner_reference) BETWEEN 1 AND 200 AND expires_at IS NOT NULL AND julianday(expires_at) IS NOT NULL))
+);
+
+CREATE TABLE "photo_scan_tickets" (
+ id TEXT PRIMARY KEY,
+ kind TEXT NOT NULL CHECK(kind IN ('profile','project')),
+ subject_id TEXT NOT NULL,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ policy_version TEXT NOT NULL CHECK(policy_version='2026-09-30'),
+ authority_hash TEXT NOT NULL CHECK(length(authority_hash)=64),
+ state TEXT NOT NULL DEFAULT 'reserved' CHECK(state IN ('reserved','completed','stale')),
+ result_hash TEXT,
+ outcome TEXT CHECK(outcome IN ('approved','blocked','held')),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL,
+ completed_at TEXT,
+ CHECK((state='reserved' AND result_hash IS NULL AND outcome IS NULL AND completed_at IS NULL) OR
+ (state IN ('completed','stale') AND length(result_hash)=64 AND result_hash IS NOT NULL AND outcome IS NOT NULL AND completed_at IS NOT NULL))
+);
+
+CREATE TABLE content_screening_decisions (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('chat_text','generated_artifact','media','imported_code')),
+ digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*'),
+ policy_version TEXT NOT NULL,
+ first_required INTEGER NOT NULL CHECK(first_required IN (0,1)),
+ required INTEGER NOT NULL CHECK(required IN (0,1)),
+ first_reason TEXT NOT NULL CHECK(first_reason IN ('mandatory_format','risk_or_missing_history','sample_selected','not_sampled','sampling_unavailable')),
+ first_percent INTEGER NOT NULL CHECK(first_percent BETWEEN 0 AND 100),
+ first_risk_score INTEGER NOT NULL CHECK(first_risk_score BETWEEN 0 AND 100),
+ escalation_reason TEXT CHECK(escalation_reason IN ('mandatory_format','risk_or_missing_history','sample_selected','sampling_unavailable')),
+ escalated_at TEXT,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ PRIMARY KEY(user_id,kind,digest,policy_version),
+ CHECK(required>=first_required),
+ CHECK((first_required=required AND escalation_reason IS NULL AND escalated_at IS NULL) OR (first_required=0 AND required=1 AND escalation_reason IS NOT NULL AND escalated_at IS NOT NULL)),
+ CHECK((first_required=0 AND first_reason='not_sampled') OR (first_required=1 AND first_reason!='not_sampled')),
+ CHECK(kind NOT IN ('media','imported_code') OR first_required=1)
+);
+
+CREATE TABLE content_risk_evidence (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ incident_id TEXT NOT NULL CHECK(length(incident_id) BETWEEN 1 AND 128),
+ kind TEXT NOT NULL CHECK(kind IN ('verified_benign','uncertain_flag','confirmed_violation','confirmed_evasion','critical_incident')),
+ occurred_at INTEGER NOT NULL CHECK(occurred_at>=0),
+ evidence_ref TEXT NOT NULL CHECK(length(evidence_ref) BETWEEN 1 AND 128),
+ reviewer_ref TEXT NOT NULL CHECK(length(reviewer_ref) BETWEEN 1 AND 128),
+ recorded_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE content_risk_reversals (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ incident_id TEXT NOT NULL,
+ evidence_ref TEXT NOT NULL CHECK(length(evidence_ref) BETWEEN 1 AND 128),
+ reviewer_ref TEXT NOT NULL CHECK(length(reviewer_ref) BETWEEN 1 AND 128),
+ recorded_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ PRIMARY KEY(user_id,incident_id)
+);
+
+CREATE TABLE maintenance_health (
+ job TEXT PRIMARY KEY CHECK(job IN ('identity','imports','hosting','health','fair_use','traffic','applications','contacts','photos','github','cloudflare')),
+ run_id TEXT NOT NULL,
+ started_at INTEGER NOT NULL CHECK(started_at>=0),
+ finished_at INTEGER,
+ last_success_at INTEGER,
+ duration_ms INTEGER CHECK(duration_ms>=0),
+ status TEXT NOT NULL CHECK(status IN ('running','completed','failed','skipped')),
+ failure_category TEXT CHECK(failure_category IS NULL OR failure_category='job_failed')
+);
+
+CREATE TABLE github_revocation_health (
+ token_id TEXT PRIMARY KEY REFERENCES github_token_vault(id) ON DELETE CASCADE,
+ requested_at TEXT
+);
+
+CREATE TABLE cloudflare_revocation_health (
+ token_id TEXT PRIMARY KEY REFERENCES cloudflare_token_vault(id) ON DELETE CASCADE,
+ requested_at TEXT
+);
+
+CREATE TABLE chat_review_receipts (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id),
+ kind TEXT NOT NULL CHECK(kind IN ('application','appPage','appRestore','backendPublication','backendForm')),
+ review_id TEXT NOT NULL,
+ reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
+);
+
+CREATE TABLE composition_plans (
+ id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ catalog_digest TEXT NOT NULL CHECK(length(catalog_digest)=64),
+ plan_json TEXT NOT NULL CHECK(json_valid(plan_json) AND length(CAST(plan_json AS BLOB))<=16000),
+ details_revision INTEGER NOT NULL CHECK(details_revision>=0),
+ backend_count INTEGER NOT NULL CHECK(backend_count>=0),
+ backend_revision INTEGER NOT NULL CHECK(backend_revision>=0),
+ extension_scope TEXT NOT NULL CHECK(extension_scope IN ('none','pure-function','visitor-transition')),
+ expires_at INTEGER NOT NULL
+);
+
+CREATE TABLE backend_extension_uses (
+ version_id TEXT PRIMARY KEY REFERENCES backend_versions(id) ON DELETE CASCADE,
+ plan_id TEXT NOT NULL UNIQUE REFERENCES composition_plans(id)
+);
+
+CREATE TABLE project_spec_proposals (
+ id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ operation TEXT NOT NULL CHECK(operation IN ('import','change','restore')),
+ expected_revision INTEGER NOT NULL CHECK(expected_revision>=0), draft_revision INTEGER NOT NULL,
+ base_version_id TEXT, target_version_id TEXT,
+ base_digest TEXT, request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ proposal_digest TEXT NOT NULL CHECK(length(proposal_digest)=64),
+ spec_digest TEXT NOT NULL CHECK(length(spec_digest)=64), manifest_digest TEXT NOT NULL CHECK(length(manifest_digest)=64),
+ policy_version TEXT NOT NULL, expires_at TEXT NOT NULL,
+ spec_json TEXT NOT NULL CHECK(json_valid(spec_json) AND length(CAST(spec_json AS BLOB))<=32768),
+ lock_json TEXT NOT NULL CHECK(json_valid(lock_json) AND length(CAST(lock_json AS BLOB))<=4096),
+ manifest_json TEXT NOT NULL CHECK(json_valid(manifest_json) AND length(CAST(manifest_json AS BLOB))<=16384),
+ config_json TEXT NOT NULL CHECK(json_valid(config_json) AND length(CAST(config_json AS BLOB))<=8192),
+ html TEXT NOT NULL CHECK(length(CAST(html AS BLOB))<=32768), html_digest TEXT NOT NULL CHECK(length(html_digest)=64),
+ diff_json TEXT NOT NULL CHECK(json_valid(diff_json) AND length(CAST(diff_json AS BLOB))<=65536),
+ envelope_json TEXT NOT NULL CHECK(json_valid(envelope_json) AND length(CAST(envelope_json AS BLOB))<=16384)
+);
+
+CREATE TABLE project_spec_versions (
+ version_id TEXT PRIMARY KEY REFERENCES site_versions(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>0), proposal_id TEXT NOT NULL,
+ spec_json TEXT NOT NULL CHECK(json_valid(spec_json) AND length(CAST(spec_json AS BLOB))<=32768),
+ spec_digest TEXT NOT NULL CHECK(length(spec_digest)=64),
+ lock_json TEXT NOT NULL CHECK(json_valid(lock_json) AND length(CAST(lock_json AS BLOB))<=4096),
+ manifest_json TEXT NOT NULL CHECK(json_valid(manifest_json) AND length(CAST(manifest_json AS BLOB))<=16384),
+ manifest_digest TEXT NOT NULL CHECK(length(manifest_digest)=64),
+ UNIQUE(project_id,revision)
+);
+
+CREATE TABLE project_spec_applies (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ proposal_id TEXT NOT NULL UNIQUE, proposal_digest TEXT NOT NULL CHECK(length(proposal_digest)=64),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ version_id TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL CHECK(revision>0),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(project_id,revision)
+);
+
+CREATE TABLE project_spec_heads (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>0), version_id TEXT NOT NULL,
+ draft_revision INTEGER NOT NULL
+);
+
+CREATE TABLE project_spec_chat_links (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ proposal_id TEXT NOT NULL REFERENCES project_spec_proposals(id) ON DELETE CASCADE,
+ reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
+);
+
+CREATE TABLE service_client_proposals (
+ id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ website_version_id TEXT NOT NULL REFERENCES site_versions(id) ON DELETE CASCADE,
+ operation TEXT NOT NULL CHECK(operation IN ('prepare','restore')),
+ expected_revision INTEGER NOT NULL CHECK(expected_revision>=0),
+ base_version_id TEXT, base_digest TEXT, restore_version_id TEXT,
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64), proposal_digest TEXT NOT NULL CHECK(length(proposal_digest)=64),
+ spec_json TEXT NOT NULL CHECK(json_valid(spec_json) AND length(CAST(spec_json AS BLOB))<=6144), spec_digest TEXT NOT NULL CHECK(length(spec_digest)=64),
+ target_json TEXT NOT NULL CHECK(json_valid(target_json) AND length(CAST(target_json AS BLOB))<=4096), target_digest TEXT NOT NULL CHECK(length(target_digest)=64),
+ lock_json TEXT NOT NULL CHECK(json_valid(lock_json) AND length(CAST(lock_json AS BLOB))<=4096),
+ manifest_json TEXT NOT NULL CHECK(json_valid(manifest_json) AND length(CAST(manifest_json AS BLOB))<=16384), manifest_digest TEXT NOT NULL CHECK(length(manifest_digest)=64),
+ preview_html TEXT NOT NULL CHECK(length(CAST(preview_html AS BLOB))<=49152), preview_digest TEXT NOT NULL CHECK(length(preview_digest)=64),
+ candidate_html TEXT NOT NULL CHECK(length(CAST(candidate_html AS BLOB))<=49152), candidate_digest TEXT NOT NULL CHECK(length(candidate_digest)=64),
+ diff_json TEXT NOT NULL CHECK(json_valid(diff_json) AND length(CAST(diff_json AS BLOB))<=16384),
+ envelope_json TEXT NOT NULL CHECK(json_valid(envelope_json) AND length(CAST(envelope_json AS BLOB))<=16384),
+ policy_version TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+
+CREATE TABLE service_client_versions (
+ id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ website_version_id TEXT NOT NULL REFERENCES site_versions(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>0), proposal_id TEXT NOT NULL,
+ spec_json TEXT NOT NULL CHECK(json_valid(spec_json) AND length(CAST(spec_json AS BLOB))<=6144), spec_digest TEXT NOT NULL CHECK(length(spec_digest)=64),
+ target_json TEXT NOT NULL CHECK(json_valid(target_json) AND length(CAST(target_json AS BLOB))<=4096), target_digest TEXT NOT NULL CHECK(length(target_digest)=64),
+ lock_json TEXT NOT NULL CHECK(json_valid(lock_json) AND length(CAST(lock_json AS BLOB))<=4096),
+ manifest_json TEXT NOT NULL CHECK(json_valid(manifest_json) AND length(CAST(manifest_json AS BLOB))<=16384), manifest_digest TEXT NOT NULL CHECK(length(manifest_digest)=64),
+ preview_html TEXT NOT NULL CHECK(length(CAST(preview_html AS BLOB))<=49152), preview_digest TEXT NOT NULL CHECK(length(preview_digest)=64),
+ candidate_html TEXT NOT NULL CHECK(length(CAST(candidate_html AS BLOB))<=49152), candidate_digest TEXT NOT NULL CHECK(length(candidate_digest)=64),
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')), UNIQUE(project_id,revision)
+);
+
+CREATE TABLE service_client_applies (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ proposal_id TEXT NOT NULL UNIQUE, proposal_digest TEXT NOT NULL CHECK(length(proposal_digest)=64),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64), version_id TEXT NOT NULL UNIQUE,
+ revision INTEGER NOT NULL CHECK(revision>0), created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(project_id,revision)
+);
+
+CREATE TABLE service_client_heads (
+ project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>0), version_id TEXT NOT NULL
+);
+
+CREATE TABLE service_client_chat_links (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ proposal_id TEXT NOT NULL REFERENCES service_client_proposals(id) ON DELETE CASCADE,
+ reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
+);
+
+CREATE TABLE service_client_activation_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ version_id TEXT NOT NULL, version_revision INTEGER NOT NULL CHECK(version_revision>0),
+ spec_digest TEXT NOT NULL CHECK(length(spec_digest)=64),
+ service TEXT NOT NULL CHECK(service IN('contact','statelessForm')),
+ enabled INTEGER NOT NULL CHECK(enabled IN(0,1)),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ target_json TEXT NOT NULL CHECK(json_valid(target_json) AND length(CAST(target_json AS BLOB))<=4096),
+ target_digest TEXT NOT NULL CHECK(length(target_digest)=64),
+ manifest_digest TEXT NOT NULL CHECK(length(manifest_digest)=64),
+ preview_digest TEXT NOT NULL CHECK(length(preview_digest)=64),
+ candidate_digest TEXT NOT NULL CHECK(length(candidate_digest)=64),
+ policy_version TEXT NOT NULL, expires_at TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE service_client_activation_links (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ review_id TEXT NOT NULL REFERENCES service_client_activation_reviews(id) ON DELETE CASCADE,
+ reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
+);
+
+CREATE TABLE stripe_customers (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ customer_id TEXT UNIQUE,
+ created_at INTEGER NOT NULL,
+ lease TEXT,
+ lease_until INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE stripe_subscription_orders (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ plan_id TEXT NOT NULL REFERENCES plan_catalog(id),
+ interval TEXT NOT NULL CHECK(interval IN ('month','year')),
+ price_id TEXT NOT NULL,
+ amount_cents INTEGER NOT NULL CHECK(amount_cents>0),
+ created_at INTEGER NOT NULL,
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','complete','expired')),
+ session_id TEXT UNIQUE,
+ subscription_id TEXT UNIQUE
+);
+
+CREATE TABLE stripe_subscriptions (
+ id TEXT PRIMARY KEY,
+ order_id TEXT NOT NULL UNIQUE REFERENCES stripe_subscription_orders(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ status TEXT NOT NULL,
+ cancel_at_period_end INTEGER NOT NULL CHECK(cancel_at_period_end IN (0,1)),
+ period_end INTEGER NOT NULL,
+ latest_invoice_id TEXT,
+ payment_status TEXT,
+ updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE stripe_paid_invoices (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ subscription_id TEXT NOT NULL REFERENCES stripe_subscriptions(id) ON DELETE CASCADE,
+ plan_id TEXT NOT NULL REFERENCES plan_catalog(id),
+ amount_cents INTEGER NOT NULL CHECK(amount_cents>0),
+ interval TEXT NOT NULL CHECK(interval IN ('month','year')),
+ starts_at INTEGER NOT NULL,
+ ends_at INTEGER NOT NULL CHECK(ends_at>starts_at),
+ hosted_url TEXT,
+ created_at INTEGER NOT NULL
+);
+
+CREATE TABLE github_token_staging (
+ token_id TEXT PRIMARY KEY REFERENCES github_token_vault(id) ON DELETE CASCADE,
+ state_hash TEXT NOT NULL,
+ expires_at TEXT NOT NULL
+);
+
+CREATE TABLE github_revocation_claims (
+ token_id TEXT PRIMARY KEY REFERENCES github_token_vault(id) ON DELETE CASCADE,
+ claim_id TEXT NOT NULL,
+ expires_at TEXT NOT NULL
+);
+
+CREATE TABLE app_deletion_reviews (
+ id TEXT PRIMARY KEY,
+ project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
+ session_hash TEXT NOT NULL UNIQUE REFERENCES app_sessions(token_hash) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>=0),
+ expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes'))
+);
+
+CREATE TABLE project_spec_creations (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ version_id TEXT NOT NULL UNIQUE,
+ created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE feature_preview_grants (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ contract_version INTEGER NOT NULL CHECK(contract_version=1),
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+ feature_id TEXT NOT NULL CHECK(length(feature_id) BETWEEN 1 AND 80),
+ operation TEXT NOT NULL CHECK(operation IN ('connect','read','prepare','confirm','dispatch')),
+ purpose TEXT NOT NULL CHECK(purpose='private-test-acceptance'),
+ review_reference TEXT NOT NULL CHECK(length(review_reference) BETWEEN 1 AND 200),
+ starts_at INTEGER NOT NULL CHECK(typeof(starts_at)='integer'),
+ ends_at INTEGER NOT NULL CHECK(typeof(ends_at)='integer' AND ends_at>starts_at AND ends_at-starts_at<=604800),
+ created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer'),
+ revoked_at INTEGER CHECK(revoked_at IS NULL OR (typeof(revoked_at)='integer' AND revoked_at>=created_at))
+);
+
+CREATE INDEX projects_owner_updated ON projects(owner_user_id, updated_at DESC);
+
+CREATE INDEX activity_user_created ON activity_events(user_id, created_at DESC);
+
+CREATE INDEX chat_turns_user_revision ON chat_turns(user_id, revision DESC);
+
+CREATE INDEX chat_turns_pending ON chat_turns(user_id, status, created_at);
+
+CREATE INDEX site_versions_project ON site_versions(project_id, created_at DESC);
+
+CREATE INDEX publication_actions_owner ON publication_actions(user_id,project_id);
+
+CREATE INDEX project_files_project ON project_files(project_id,created_at);
+
+CREATE INDEX github_tokens_cleanup ON github_token_vault(state,expires_at);
+
+CREATE INDEX github_backups_user ON github_backups(user_id,created_at DESC);
+
+CREATE UNIQUE INDEX domain_connection_hostname ON domain_connections(hostname) WHERE state NOT IN ('review','disconnected');
+
+CREATE UNIQUE INDEX domain_connection_provider ON domain_connections(zone_id,provider_id) WHERE provider_id IS NOT NULL;
+
+CREATE INDEX domain_connection_owner ON domain_connections(user_id,created_at DESC);
+
+CREATE INDEX photo_removals_file ON photo_removals(file_id,status);
+
+CREATE UNIQUE INDEX cloudflare_one_active ON cloudflare_token_vault(user_id) WHERE state='active';
+
+CREATE INDEX cloudflare_dns_owner ON cloudflare_dns_actions(user_id,created_at);
+
+CREATE UNIQUE INDEX cloudflare_dns_pending ON cloudflare_dns_actions(zone_id,record_name) WHERE state IN ('sending','uncertain');
+
+CREATE UNIQUE INDEX cloudflare_dns_attempt ON cloudflare_dns_actions(zone_id,record_name,content) WHERE state IN ('sending','uncertain','applied','observed');
+
+CREATE INDEX version_removals_version ON version_removals(version_id,status);
+
+CREATE INDEX contact_reviews_owner ON contact_reviews(user_id,project_id);
+
+CREATE INDEX contact_receipts_project ON contact_receipts(project_id,created_at);
+
+CREATE INDEX contact_receipts_expiry ON contact_receipts(expires_at);
+
+CREATE INDEX contact_submissions_project ON contact_submissions(project_id,created_at DESC,id);
+
+CREATE INDEX contact_submissions_expiry ON contact_submissions(expires_at);
+
+CREATE INDEX site_health_project ON site_health_checks(project_id,started_at DESC,id DESC);
+
+CREATE INDEX directory_reviews_project ON directory_reviews(project_id);
+
+CREATE INDEX backend_versions_project ON backend_versions(project_id,created_at);
+
+CREATE INDEX backend_runs_user_day ON backend_runs(user_id,day);
+
+CREATE INDEX backend_runs_project_day ON backend_runs(project_id,day);
+
+CREATE INDEX backend_runs_day ON backend_runs(day);
+
+CREATE INDEX backend_state_reviews_project ON backend_state_reviews(project_id,created_at);
+
+CREATE INDEX cms_setup_reviews_owner ON cms_setup_reviews(user_id,created_at);
+
+CREATE INDEX cms_instances_owner ON cms_instances(user_id);
+
+CREATE UNIQUE INDEX cms_publication_live_item ON cms_publication_reviews(project_id,collection,item_id) WHERE status='published' AND withdrawn=0;
+
+CREATE UNIQUE INDEX cms_unpublish_once ON cms_unpublish_reviews(publication_id) WHERE status IN ('approved','complete');
+
+CREATE UNIQUE INDEX cms_publication_one_pending_native ON cms_publication_reviews(project_id,collection,item_id) WHERE status='approved';
+
+CREATE UNIQUE INDEX cms_discard_pending ON cms_discard_reviews(publication_id) WHERE status='approved';
+
+CREATE INDEX backend_publication_reviews_project ON backend_publication_reviews(project_id);
+
+CREATE INDEX backend_public_usage_day ON backend_public_usage(day);
+
+CREATE INDEX backend_form_reviews_project ON backend_form_reviews(project_id);
+
+CREATE INDEX app_visitors_project ON app_visitors(project_id);
+
+CREATE INDEX app_sessions_visitor ON app_sessions(visitor_id);
+
+CREATE INDEX app_runs_visitor_day ON app_runs(visitor_id,day);
+
+CREATE INDEX app_runs_project_day ON app_runs(project_id,day);
+
+CREATE INDEX app_runs_day ON app_runs(day);
+
+CREATE UNIQUE INDEX app_runs_applied_revision ON app_runs(visitor_id,base_revision) WHERE state='complete';
+
+CREATE INDEX app_activation_project ON app_activation_reviews(project_id);
+
+CREATE INDEX inference_calls_owner_time ON inference_calls(user_id,created_at,role);
+
+CREATE INDEX app_invitation_project ON app_invitations(project_id);
+
+CREATE INDEX app_passkeys_visitor ON app_passkeys(visitor_id);
+
+CREATE INDEX app_challenge_project ON app_auth_challenges(project_id);
+
+CREATE INDEX app_page_reviews_project ON app_page_reviews(project_id);
+
+CREATE INDEX site_traffic_retention ON site_traffic_daily(day);
+
+CREATE INDEX gateway_attempts_owner_task ON gateway_spend_attempts(user_id,task_id);
+
+CREATE INDEX fair_use_lifecycle_owner_created ON fair_use_project_lifecycle(user_id,created_at);
+
+CREATE INDEX cms_media_uploads_owner ON cms_media_uploads(user_id,created_at);
+
+CREATE UNIQUE INDEX cms_import_source_current ON cms_import_reviews(project_id,source_digest,source_id) WHERE status<>'superseded';
+
+CREATE INDEX domain_proof_removal_claim ON domain_proof_removals(claim_id,status);
+
+CREATE INDEX application_builds_owner ON application_builds(user_id,project_id);
+
+CREATE INDEX app_owner_erasures_expiry ON app_owner_erasures(expires_at);
+
+CREATE INDEX app_recovery_project ON app_recovery_points(project_id,created_at);
+
+CREATE INDEX app_migration_checks_project ON app_migration_checks(project_id);
+
+CREATE INDEX fair_use_reviews_owner ON fair_use_reviews(user_id,created_at,id);
+
+CREATE INDEX backend_nominations_owner ON backend_nominations(user_id,created_at,id);
+
+CREATE INDEX standard_ai_owner_time ON standard_ai_requests(user_id,created_at,id);
+
+CREATE UNIQUE INDEX usage_review_one_open ON usage_review_requests(user_id) WHERE state='open';
+
+CREATE INDEX usage_review_owner_time ON usage_review_requests(user_id,created_at,id);
+
+CREATE INDEX backend_imports_pending ON backend_imports(state,created_at,id);
+
+CREATE INDEX backend_imports_owner ON backend_imports(user_id,project_id,created_at);
+
+CREATE UNIQUE INDEX photo_scan_one_reserved ON photo_scan_tickets(kind,subject_id,digest,policy_version) WHERE state='reserved';
+
+CREATE INDEX content_risk_evidence_owner ON content_risk_evidence(user_id,incident_id);
+
+CREATE INDEX chat_review_receipts_owner ON chat_review_receipts(user_id,turn_id);
+
+CREATE INDEX composition_plans_owner ON composition_plans(user_id,project_id);
+
+CREATE INDEX project_spec_proposals_project ON project_spec_proposals(project_id,expires_at);
+
+CREATE INDEX project_spec_proposals_expiry ON project_spec_proposals(expires_at);
+
+CREATE INDEX service_client_proposals_project ON service_client_proposals(project_id,expires_at);
+
+CREATE INDEX service_client_proposals_expiry ON service_client_proposals(expires_at);
+
+CREATE INDEX service_client_versions_website ON service_client_versions(website_version_id);
+
+CREATE INDEX service_client_activation_project ON service_client_activation_reviews(project_id,created_at);
+
+CREATE INDEX service_client_activation_version ON service_client_activation_reviews(version_id);
+
+CREATE UNIQUE INDEX stripe_pending_order ON stripe_subscription_orders(user_id) WHERE state='pending';
+
+CREATE INDEX stripe_invoice_coverage ON stripe_paid_invoices(user_id,starts_at,ends_at);
+
+CREATE INDEX github_staging_expiry ON github_token_staging(expires_at);
+
+CREATE INDEX app_deletion_review_expiry ON app_deletion_reviews(expires_at);
+
+CREATE INDEX feature_preview_scope ON feature_preview_grants(user_id,project_id,feature_id,operation,ends_at);
+
+CREATE VIEW cms_live_articles AS
+ SELECT r.id AS publication_id,r.project_id,r.user_id,r.collection,r.item_id,r.public_html,r.digest,json_extract(r.snapshot,'$.item.data.title') AS title,r.created_at
+ FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id JOIN cms_instances c ON c.project_id=r.project_id
+ WHERE r.status='published' AND r.withdrawn=0 AND p.owner_user_id=r.user_id AND c.state='ready';
+
+CREATE VIEW project_service_status AS
+ SELECT service.*,CASE WHEN site_live=1 OR cms_articles>0 OR backend_live=1 THEN 'live' WHEN status='live' THEN 'draft' ELSE status END AS service_status
+ FROM (SELECT p.*,
+ EXISTS(SELECT 1 FROM publications s WHERE s.project_id=p.id AND s.version_id IS NOT NULL) AS site_live,
+ (SELECT count(*) FROM cms_live_articles c WHERE c.project_id=p.id) AS cms_articles,
+ EXISTS(SELECT 1 FROM backend_publications b JOIN backend_publication_reviews r ON r.id=b.review_id AND r.status='applied' WHERE b.project_id=p.id AND b.version_id IS NOT NULL AND r.user_id=p.owner_user_id) AS backend_live
+ FROM projects p) service;
+
+CREATE VIEW app_live_pages AS
+ SELECT r.id,r.project_id,r.config_json,r.program_revision,s.revision
+ FROM app_page_settings s JOIN app_page_reviews r ON r.id=s.review_id JOIN app_spaces a ON a.project_id=s.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
+ WHERE r.status='applied' AND r.config_json IS NOT NULL AND a.enabled=1 AND a.owner_user_id=r.user_id AND a.revision=r.program_revision;
+
+CREATE VIEW app_recovery_rosters AS SELECT a.project_id,coalesce((SELECT json_group_array(json(row_json)) FROM (SELECT json_object('visitor',v.id,'revision',d.revision) row_json FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id WHERE v.project_id=a.project_id AND v.revoked=0 ORDER BY v.id)),'[]') roster_json FROM app_spaces a;
+
+CREATE VIEW app_migration_current AS SELECT m.id FROM app_migration_checks m
+ JOIN app_spaces a ON a.project_id=m.project_id AND a.owner_user_id=m.user_id
+ JOIN projects p ON p.id=m.project_id AND p.owner_user_id=m.user_id
+ JOIN app_recovery_points b ON b.id=m.id AND b.project_id=m.project_id AND b.user_id=m.user_id AND b.version_id=m.from_version AND b.removed=0 AND b.sealed=1
+ JOIN app_recovery_rosters roster ON roster.project_id=m.project_id
+ WHERE a.enabled=0 AND a.version_id=m.from_version AND a.revision=m.base_revision AND roster.roster_json=m.roster_json AND m.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+ AND NOT EXISTS(SELECT 1 FROM json_each(m.roster_json) entry WHERE NOT EXISTS(SELECT 1 FROM app_recovery_documents d WHERE d.point_id=m.id AND d.visitor_id=json_extract(entry.value,'$.visitor') AND d.revision=json_extract(entry.value,'$.revision'))) AND NOT EXISTS(SELECT 1 FROM app_migration_cancellations c WHERE c.id=m.id);
+
+CREATE VIEW approved_project_photos AS
+ SELECT f.id,f.project_id,f.digest FROM project_files f JOIN projects p ON p.id=f.project_id
+ JOIN project_photo_safety s ON s.file_id=f.id AND s.user_id=p.owner_user_id AND s.digest=f.digest
+ WHERE f.status='ready' AND s.policy_version='2026-09-30' AND s.state='approved'
+ AND s.csam_check='clear' AND s.sexual_check='clear' AND length(s.scanner_reference)>0
+ AND julianday(s.expires_at)>julianday('now');
+
+CREATE VIEW project_spec_held AS SELECT v.version_id FROM project_spec_versions v JOIN projects p ON p.id=v.project_id JOIN site_versions s ON s.id=v.version_id
+ WHERE EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=p.owner_user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(v.spec_digest,v.manifest_digest,s.digest));
+
+CREATE VIEW service_client_current AS SELECT p.id project_id,p.owner_user_id,
+ coalesce(s.revision,0) site_revision,s.version_id live_version_id,
+ coalesce(c.revision,0) contact_revision,CASE WHEN c.enabled=1 AND s.version_id IS NOT NULL AND c.publication_revision=s.revision THEN 1 ELSE 0 END contact_active,
+ coalesce(f.revision,0) form_revision,f.review_id form_review_id,CASE WHEN lf.id IS NULL THEN 0 ELSE 1 END form_active,
+ CASE WHEN bv.id IS NOT NULL THEN b.revision ELSE NULL END backend_revision,r.id backend_review_id,bv.id backend_version_id,bv.digest backend_digest
+ FROM projects p LEFT JOIN publications s ON s.project_id=p.id LEFT JOIN contact_settings c ON c.project_id=p.id
+ LEFT JOIN backend_form_settings f ON f.project_id=p.id LEFT JOIN backend_live_forms lf ON lf.project_id=p.id
+ LEFT JOIN backend_publications b ON b.project_id=p.id
+ LEFT JOIN backend_publication_reviews r ON r.id=b.review_id AND r.project_id=p.id AND r.user_id=p.owner_user_id AND r.status='applied' AND r.operation='publish' AND r.version_id=b.version_id
+ LEFT JOIN backend_versions bv ON bv.id=r.version_id AND bv.project_id=p.id;
+
+CREATE VIEW service_client_held AS SELECT v.id FROM service_client_versions v JOIN projects p ON p.id=v.project_id
+ WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=v.website_version_id)
+ OR EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=p.owner_user_id AND d.kind='generated_artifact' AND d.required=1
+ AND d.digest IN(v.spec_digest,v.manifest_digest,v.preview_digest,v.candidate_digest,json_extract(v.target_json,'$.website.digest'),json_extract(v.target_json,'$.backend.digest')));
+
+CREATE VIEW service_client_valid_proposals AS SELECT q.id FROM service_client_proposals q
+ JOIN service_client_current c ON c.project_id=q.project_id AND c.owner_user_id=q.user_id
+ JOIN site_versions w ON w.id=q.website_version_id AND w.project_id=q.project_id
+ LEFT JOIN service_client_heads h ON h.project_id=q.project_id LEFT JOIN service_client_versions v ON v.id=h.version_id AND v.project_id=q.project_id
+ WHERE coalesce(h.revision,0)=q.expected_revision AND h.version_id IS q.base_version_id AND v.spec_digest IS q.base_digest
+ AND q.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+ AND json_extract(q.target_json,'$.projectId')=q.project_id AND json_extract(q.target_json,'$.website.versionId')=w.id AND json_extract(q.target_json,'$.website.digest')=w.digest
+ AND json_extract(q.target_json,'$.publication.revision')=c.site_revision AND json_extract(q.target_json,'$.publication.versionId') IS c.live_version_id
+ AND json_extract(q.target_json,'$.contact.revision')=c.contact_revision AND json_extract(q.target_json,'$.contact.active')=c.contact_active
+ AND json_extract(q.target_json,'$.form.revision')=c.form_revision AND json_extract(q.target_json,'$.form.reviewId') IS c.form_review_id AND json_extract(q.target_json,'$.form.active')=c.form_active
+ AND json_extract(q.target_json,'$.backend.reviewId') IS c.backend_review_id AND json_extract(q.target_json,'$.backend.versionId') IS c.backend_version_id
+ AND json_extract(q.target_json,'$.backend.revision') IS c.backend_revision AND json_extract(q.target_json,'$.backend.digest') IS c.backend_digest
+ AND (q.operation='prepare' AND q.restore_version_id IS NULL OR q.operation='restore' AND EXISTS(SELECT 1 FROM service_client_versions r WHERE r.id=q.restore_version_id AND r.project_id=q.project_id AND r.website_version_id=q.website_version_id AND r.spec_json=q.spec_json AND r.lock_json=q.lock_json AND (json_type(q.spec_json,'$.statelessForm')='null' OR json_extract(r.target_json,'$.backend.versionId') IS json_extract(q.target_json,'$.backend.versionId') AND json_extract(r.target_json,'$.backend.digest') IS json_extract(q.target_json,'$.backend.digest'))))
+ AND NOT EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=q.website_version_id)
+ AND NOT EXISTS(SELECT 1 FROM service_client_held WHERE id IN(q.base_version_id,q.restore_version_id))
+ AND NOT EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=q.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(q.spec_digest,q.manifest_digest,q.preview_digest,q.candidate_digest,json_extract(q.target_json,'$.website.digest'),json_extract(q.target_json,'$.backend.digest')));
+
+CREATE VIEW service_client_activation_state AS
+ SELECT a.id,r.status FROM service_client_activation_reviews a JOIN contact_reviews r ON a.service='contact' AND r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id
+ UNION ALL SELECT a.id,r.status FROM service_client_activation_reviews a JOIN backend_form_reviews r ON a.service='statelessForm' AND r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id;
+
+CREATE VIEW service_client_activation_valid AS SELECT a.id FROM service_client_activation_reviews a
+ JOIN service_client_versions v ON v.id=a.version_id AND v.project_id=a.project_id AND v.revision=a.version_revision AND v.spec_digest=a.spec_digest
+ JOIN service_client_heads h ON h.project_id=v.project_id AND h.version_id=v.id AND h.revision=v.revision
+ JOIN service_client_current c ON c.project_id=a.project_id AND c.owner_user_id=a.user_id
+ JOIN site_versions w ON w.id=v.website_version_id AND w.project_id=a.project_id
+ WHERE a.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+ AND json_extract(a.target_json,'$.projectId')=a.project_id AND json_extract(a.target_json,'$.website.versionId')=w.id AND json_extract(a.target_json,'$.website.digest')=w.digest
+ AND json_extract(a.target_json,'$.publication.revision')=c.site_revision AND json_extract(a.target_json,'$.publication.versionId') IS c.live_version_id
+ AND (a.enabled=0 OR c.live_version_id=w.id)
+ AND json_extract(a.target_json,'$.contact.revision')=c.contact_revision AND json_extract(a.target_json,'$.contact.active')=c.contact_active
+ AND json_extract(a.target_json,'$.form.revision')=c.form_revision AND json_extract(a.target_json,'$.form.reviewId') IS c.form_review_id AND json_extract(a.target_json,'$.form.active')=c.form_active
+ AND json_extract(a.target_json,'$.backend.revision') IS c.backend_revision AND json_extract(a.target_json,'$.backend.reviewId') IS c.backend_review_id
+ AND json_extract(a.target_json,'$.backend.versionId') IS c.backend_version_id AND json_extract(a.target_json,'$.backend.digest') IS c.backend_digest
+ AND (json_type(v.spec_json,'$.statelessForm')='null' OR (json_extract(v.target_json,'$.backend.versionId')=c.backend_version_id AND json_extract(v.target_json,'$.backend.digest')=c.backend_digest))
+ AND NOT EXISTS(SELECT 1 FROM service_client_held WHERE id=v.id)
+ AND NOT EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=a.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')))
+ AND (
+  a.service='contact' AND a.enabled=(json_type(v.spec_json,'$.contact')<>'null') AND EXISTS(SELECT 1 FROM contact_reviews r WHERE r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id AND r.status='pending' AND r.enabled=a.enabled AND r.expected_revision=c.contact_revision AND r.publication_revision=CASE WHEN c.live_version_id IS NULL THEN -1 ELSE c.site_revision END AND r.expires_at=a.expires_at)
+  OR a.service='statelessForm' AND a.enabled=(json_type(v.spec_json,'$.statelessForm')<>'null') AND EXISTS(SELECT 1 FROM backend_form_reviews r WHERE r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id AND r.status='pending' AND r.enabled=a.enabled AND r.base_revision=c.form_revision AND r.expires_at=a.expires_at AND (a.enabled=0 AND r.config_json IS NULL AND r.site_revision=-1 AND r.backend_publication_id IS NULL OR a.enabled=1 AND r.config_json=json_extract(v.spec_json,'$.statelessForm.config') AND r.site_revision=c.site_revision AND r.backend_publication_id=c.backend_review_id))
+ );
+
+CREATE VIEW service_client_activation_held AS SELECT a.id FROM service_client_activation_reviews a
+ WHERE NOT EXISTS(SELECT 1 FROM service_client_versions WHERE id=a.version_id AND project_id=a.project_id)
+ OR EXISTS(SELECT 1 FROM service_client_held WHERE id=a.version_id)
+ OR EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=a.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')));
+
+CREATE VIEW service_client_blocked_contacts AS SELECT c.project_id FROM contact_settings c
+ JOIN contact_reviews r ON r.project_id=c.project_id AND r.expected_revision+1=c.revision AND r.status='applied' AND r.enabled=1 AND r.publication_revision=c.publication_revision
+ JOIN service_client_activation_held a ON a.id=r.id;
+
+CREATE VIEW backend_live_forms AS
+ SELECT r.id,r.project_id,r.config_json,r.backend_publication_id,r.site_revision
+ FROM backend_form_settings f JOIN backend_form_reviews r ON r.id=f.review_id JOIN projects p ON p.id=f.project_id AND p.owner_user_id=r.user_id JOIN publications s ON s.project_id=f.project_id JOIN backend_publications b ON b.project_id=f.project_id
+ WHERE r.status='applied' AND r.enabled=1 AND s.version_id IS NOT NULL AND s.revision=r.site_revision AND b.review_id=r.backend_publication_id AND b.version_id IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM service_client_activation_held WHERE id=r.id);
+
+CREATE VIEW plan_entitlements AS SELECT user_id,plan_id,starts_at,ends_at FROM stripe_paid_invoices;
+
+INSERT INTO cms_platform_deploy_lock("id","token","expires_at") VALUES(1,'','2000-01-01T00:00:00.000Z');
+
+INSERT INTO plan_catalog("id","tier","published_sites") VALUES('explore',0,1);
+
+INSERT INTO plan_catalog("id","tier","published_sites") VALUES('starter',1,1);
+
+INSERT INTO plan_catalog("id","tier","published_sites") VALUES('personal',2,5);
+
+INSERT INTO plan_catalog("id","tier","published_sites") VALUES('business',3,10);
+
+INSERT INTO plan_catalog("id","tier","published_sites") VALUES('business-pro',4,25);
+
+INSERT INTO site_traffic_metadata("id","enabled_at") VALUES(1,'2026-10-02T00:10:41.297Z');
+
+INSERT INTO fair_use_control("id","requested_mode","updated_at") VALUES(1,'monitor','2026-10-02T00:10:41.311Z');
+
+CREATE TRIGGER project_quota BEFORE INSERT ON projects
+WHEN (SELECT COUNT(*) FROM projects WHERE owner_user_id = NEW.owner_user_id) >= 20
+BEGIN SELECT RAISE(ABORT, 'project_quota'); END;
+
+CREATE TRIGGER site_versions_quota BEFORE INSERT ON site_versions
+WHEN (SELECT COUNT(*) FROM site_versions WHERE project_id = NEW.project_id) >= 25
+BEGIN SELECT RAISE(ABORT, 'site_version_quota'); END;
+
+CREATE TRIGGER site_versions_immutable BEFORE UPDATE ON site_versions
+BEGIN SELECT RAISE(ABORT, 'site_version_immutable'); END;
+
+CREATE TRIGGER publication_action_identity BEFORE UPDATE ON publication_actions
+WHEN NEW.id != OLD.id OR NEW.user_id != OLD.user_id OR NEW.project_id != OLD.project_id OR NEW.kind != OLD.kind OR NEW.version_id IS NOT OLD.version_id OR NEW.expected_revision != OLD.expected_revision OR NEW.expires_at != OLD.expires_at OR OLD.status != 'pending' OR NEW.status != 'applied' OR NEW.confirmed_by IS NULL
+BEGIN SELECT RAISE(ABORT,'publication_action_immutable'); END;
+
+CREATE TRIGGER publication_apply AFTER UPDATE ON publication_actions
+BEGIN
+ UPDATE publications SET version_id=NEW.version_id,revision=revision+1 WHERE project_id=NEW.project_id;
+ UPDATE projects SET status=CASE WHEN NEW.version_id IS NULL THEN 'draft' ELSE 'live' END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=NEW.project_id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('publication:'||NEW.id,NEW.user_id,NEW.project_id,'site.'||NEW.kind,CASE WHEN NEW.kind='unpublish' THEN 'Unpublished site' WHEN NEW.kind='restore' THEN 'Restored published site version' ELSE 'Published site version' END,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER chat_export_owner BEFORE INSERT ON chat_exports
+BEGIN
+ SELECT RAISE(ABORT, 'export_owner') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_turns t JOIN site_versions v ON v.id=NEW.version_id
+  JOIN projects p ON p.id=v.project_id AND p.owner_user_id=t.user_id WHERE t.id=NEW.turn_id
+ );
+END;
+
+CREATE TRIGGER chat_export_immutable BEFORE UPDATE ON chat_exports
+BEGIN SELECT RAISE(ABORT, 'export_immutable'); END;
+
+CREATE TRIGGER project_file_quota BEFORE INSERT ON project_files
+WHEN NOT EXISTS(SELECT 1 FROM project_files WHERE id=NEW.id)
+BEGIN
+ SELECT RAISE(ABORT,'file_project_quota') WHERE (SELECT COUNT(*) FROM project_files WHERE project_id=NEW.project_id)>=20;
+ SELECT RAISE(ABORT,'file_account_quota') WHERE (SELECT COUNT(*) FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))>=50;
+ SELECT RAISE(ABORT,'file_platform_quota') WHERE (SELECT COUNT(*) FROM project_files)>=500;
+END;
+
+CREATE TRIGGER project_file_immutable BEFORE UPDATE ON project_files
+BEGIN
+ SELECT RAISE(ABORT,'file_immutable') WHERE NEW.id!=OLD.id OR NEW.project_id!=OLD.project_id OR NEW.name!=OLD.name OR NEW.object_key!=OLD.object_key OR NEW.digest!=OLD.digest OR NEW.size!=OLD.size OR NEW.width!=OLD.width OR NEW.height!=OLD.height OR NEW.created_at!=OLD.created_at OR (OLD.status='ready' AND NEW.status!='ready');
+END;
+
+CREATE TRIGGER project_file_cleanup AFTER DELETE ON project_files
+BEGIN
+ INSERT OR IGNORE INTO file_cleanup(object_key,created_at) VALUES(OLD.object_key,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER version_photo_owner BEFORE INSERT ON version_photos
+BEGIN
+ SELECT RAISE(ABORT,'version_photo_owner') WHERE NOT EXISTS(SELECT 1 FROM site_versions v JOIN project_files f ON f.project_id=v.project_id WHERE v.id=NEW.version_id AND f.id=NEW.file_id AND f.status='ready');
+END;
+
+CREATE TRIGGER version_photo_immutable BEFORE UPDATE ON version_photos
+BEGIN SELECT RAISE(ABORT,'version_photo_immutable'); END;
+
+CREATE TRIGGER domain_claim_quota BEFORE INSERT ON domain_claims BEGIN
+ SELECT RAISE(ABORT,'domain_claim_quota') WHERE
+ (SELECT COUNT(*) FROM domain_claims WHERE project_id=NEW.project_id)>=3 OR
+ (SELECT COUNT(*) FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))>=10 OR
+ (SELECT COUNT(*) FROM domain_claims)>=80;
+END;
+
+CREATE TRIGGER domain_claim_identity BEFORE UPDATE OF id,project_id,hostname,created_at ON domain_claims BEGIN
+ SELECT RAISE(ABORT,'domain_claim_identity');
+END;
+
+CREATE TRIGGER github_connection_owner_insert BEFORE INSERT ON github_connections
+WHEN NEW.active_token_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'github_token_owner') WHERE NOT EXISTS(SELECT 1 FROM github_token_vault WHERE id=NEW.active_token_id AND user_id=NEW.user_id AND state='active'); END;
+
+CREATE TRIGGER github_connection_owner_update BEFORE UPDATE ON github_connections
+WHEN NEW.active_token_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'github_token_owner') WHERE NOT EXISTS(SELECT 1 FROM github_token_vault WHERE id=NEW.active_token_id AND user_id=NEW.user_id AND state='active'); END;
+
+CREATE TRIGGER github_token_quota BEFORE INSERT ON github_token_vault
+WHEN (SELECT COUNT(*) FROM github_token_vault WHERE user_id=NEW.user_id)>=10
+BEGIN SELECT RAISE(ABORT,'github_token_quota'); END;
+
+CREATE TRIGGER github_backup_owner BEFORE INSERT ON github_backups
+BEGIN
+ SELECT RAISE(ABORT,'github_backup_owner') WHERE NOT EXISTS(SELECT 1 FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=NEW.version_id AND p.id=NEW.project_id AND p.owner_user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'github_backup_quota') WHERE (SELECT COUNT(*) FROM github_backups WHERE user_id=NEW.user_id)>=100;
+END;
+
+CREATE TRIGGER github_backup_identity BEFORE UPDATE ON github_backups
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.version_id!=OLD.version_id OR NEW.request_hash!=OLD.request_hash OR NEW.github_user_id!=OLD.github_user_id OR NEW.repo_id!=OLD.repo_id OR NEW.repo_owner!=OLD.repo_owner OR NEW.repo_name!=OLD.repo_name OR NEW.repo_private!=OLD.repo_private OR NEW.branch!=OLD.branch OR NEW.path!=OLD.path OR NEW.sha256!=OLD.sha256 OR NEW.tree_sha!=OLD.tree_sha OR NEW.base_head!=OLD.base_head OR NEW.files_json!=OLD.files_json OR NEW.byte_length!=OLD.byte_length OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at OR (NEW.token_id IS NOT OLD.token_id AND NEW.token_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'github_backup_immutable'); END;
+
+CREATE TRIGGER domain_connection_owner BEFORE INSERT ON domain_connections BEGIN
+ SELECT RAISE(ABORT,'domain_connection_initial') WHERE NEW.state!='review' OR NEW.provider_id IS NOT NULL OR NEW.serve_until IS NOT NULL;
+ SELECT RAISE(ABORT,'domain_connection_owner') WHERE NOT EXISTS(SELECT 1 FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE d.id=NEW.claim_id AND d.project_id=NEW.project_id AND d.hostname=NEW.hostname AND p.owner_user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'domain_connection_reviews') WHERE (SELECT COUNT(*) FROM domain_connections WHERE user_id=NEW.user_id)>=100;
+END;
+
+CREATE TRIGGER domain_connection_capacity BEFORE UPDATE OF state ON domain_connections
+WHEN OLD.state='review' AND NEW.state='creating'
+BEGIN SELECT RAISE(ABORT,'domain_connection_capacity') WHERE (SELECT COUNT(*) FROM domain_connections WHERE state NOT IN ('review','disconnected'))>=80; END;
+
+CREATE TRIGGER domain_connection_identity BEFORE UPDATE ON domain_connections
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.claim_id!=OLD.claim_id OR NEW.project_id!=OLD.project_id OR NEW.hostname!=OLD.hostname OR NEW.zone_id!=OLD.zone_id OR NEW.target!=OLD.target OR NEW.proof_hash!=OLD.proof_hash OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at OR (OLD.provider_id IS NOT NULL AND NEW.provider_id IS NOT OLD.provider_id)
+BEGIN SELECT RAISE(ABORT,'domain_connection_immutable'); END;
+
+CREATE TRIGGER domain_reconciliation_audit AFTER UPDATE OF reconciliation_id ON domain_connections
+WHEN NEW.reconciliation_id IS NOT NULL AND NEW.reconciliation_id IS NOT OLD.reconciliation_id
+BEGIN
+ SELECT RAISE(ABORT,'domain_reconciliation_state') WHERE OLD.provider_id IS NOT NULL OR OLD.state NOT IN ('uncertain','disconnecting') OR NEW.provider_id IS NULL OR NEW.state NOT IN ('provisioning','disconnecting') OR NEW.serve_until IS NOT NULL OR (OLD.state='disconnecting' AND NEW.state!='disconnecting');
+ INSERT INTO domain_reconciliations(id,connection_id,user_id,hostname,zone_id,provider_id,old_state,new_state,evidence,operator,created_at) VALUES(NEW.reconciliation_id,NEW.id,NEW.user_id,NEW.hostname,NEW.zone_id,NEW.provider_id,OLD.state,NEW.state,NEW.reconciliation_evidence,NEW.reconciliation_operator,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('hosting-recovery:'||NEW.reconciliation_id,NEW.user_id,NEW.project_id,'domain.reconciled','Operator reconciled an uncertain hostname; routing remains disabled',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER domain_reconciliation_no_update BEFORE UPDATE ON domain_reconciliations BEGIN SELECT RAISE(ABORT,'domain_reconciliation_immutable'); END;
+
+CREATE TRIGGER domain_reconciliation_no_delete BEFORE DELETE ON domain_reconciliations BEGIN SELECT RAISE(ABORT,'domain_reconciliation_immutable'); END;
+
+CREATE TRIGGER photo_removal_identity BEFORE UPDATE ON photo_removals
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.file_id!=OLD.file_id OR NEW.name!=OLD.name OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied'
+BEGIN SELECT RAISE(ABORT,'photo_removal_immutable'); END;
+
+CREATE TRIGGER photo_removal_guard BEFORE UPDATE ON photo_removals
+BEGIN
+ SELECT RAISE(ABORT,'photo_removal_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+ SELECT RAISE(ABORT,'photo_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM project_files f JOIN projects p ON p.id=f.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE f.id=NEW.file_id AND f.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id);
+END;
+
+CREATE TRIGGER photo_removal_apply AFTER UPDATE ON photo_removals
+BEGIN
+ DELETE FROM project_files WHERE id=NEW.file_id AND project_id=NEW.project_id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('photo-removal:'||NEW.file_id,NEW.user_id,NEW.project_id,'file.removed','Removed an unused private project photo',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER project_file_retained BEFORE DELETE ON project_files
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM version_photos WHERE file_id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'photo_removal_referenced'); END;
+
+CREATE TRIGGER project_file_removed BEFORE INSERT ON project_files
+WHEN EXISTS(SELECT 1 FROM photo_removals WHERE file_id=NEW.id AND status='applied')
+BEGIN SELECT RAISE(ABORT,'photo_removal_replay'); END;
+
+CREATE TRIGGER project_file_cleanup_capacity BEFORE INSERT ON project_files
+WHEN NOT EXISTS(SELECT 1 FROM project_files WHERE id=NEW.id)
+ AND (SELECT COUNT(*) FROM project_files)+(SELECT COUNT(*) FROM file_cleanup)>=500
+BEGIN SELECT RAISE(ABORT,'file_cleanup_quota'); END;
+
+CREATE TRIGGER cloudflare_vault_quota BEFORE INSERT ON cloudflare_token_vault
+WHEN (SELECT COUNT(*) FROM cloudflare_token_vault WHERE user_id=NEW.user_id)>=10
+BEGIN SELECT RAISE(ABORT,'cloudflare_vault_quota'); END;
+
+CREATE TRIGGER cloudflare_vault_identity BEFORE UPDATE ON cloudflare_token_vault
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.ciphertext!=OLD.ciphertext OR NEW.expires_at!=OLD.expires_at OR NEW.created_at!=OLD.created_at
+BEGIN SELECT RAISE(ABORT,'cloudflare_vault_immutable'); END;
+
+CREATE TRIGGER cloudflare_dns_quota BEFORE INSERT ON cloudflare_dns_actions
+WHEN (SELECT COUNT(*) FROM cloudflare_dns_actions WHERE user_id=NEW.user_id)>=100
+BEGIN SELECT RAISE(ABORT,'cloudflare_dns_quota'); END;
+
+CREATE TRIGGER cloudflare_dns_identity BEFORE UPDATE ON cloudflare_dns_actions
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.claim_id!=OLD.claim_id OR NEW.project_id!=OLD.project_id OR NEW.token_id!=OLD.token_id OR NEW.zone_id!=OLD.zone_id OR NEW.zone_name!=OLD.zone_name OR NEW.record_name!=OLD.record_name OR NEW.content!=OLD.content OR NEW.inventory_hash!=OLD.inventory_hash OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at
+BEGIN SELECT RAISE(ABORT,'cloudflare_dns_immutable'); END;
+
+CREATE TRIGGER version_removal_identity BEFORE UPDATE ON version_removals
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.version_id!=OLD.version_id OR NEW.digest!=OLD.digest OR NEW.component_id!=OLD.component_id OR NEW.version_created_at!=OLD.version_created_at OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied'
+BEGIN SELECT RAISE(ABORT,'version_removal_immutable'); END;
+
+CREATE TRIGGER version_removal_guard BEFORE UPDATE ON version_removals
+BEGIN
+ SELECT RAISE(ABORT,'version_removal_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+ SELECT RAISE(ABORT,'version_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM site_versions v JOIN projects p ON p.id=v.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE v.id=NEW.version_id AND v.project_id=NEW.project_id AND v.digest=NEW.digest AND v.component_id=NEW.component_id AND v.created_at=NEW.version_created_at AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id);
+END;
+
+CREATE TRIGGER version_removal_apply AFTER UPDATE ON version_removals
+BEGIN
+ DELETE FROM site_versions WHERE id=NEW.version_id AND project_id=NEW.project_id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('version-removal:'||NEW.version_id,NEW.user_id,NEW.project_id,'site.version.removed','Removed saved version '||NEW.version_id,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER site_version_retained BEFORE DELETE ON site_versions
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)
+BEGIN
+ SELECT RAISE(ABORT,'version_removal_live') WHERE EXISTS(SELECT 1 FROM publications WHERE version_id=OLD.id);
+ SELECT RAISE(ABORT,'version_removal_publication') WHERE EXISTS(SELECT 1 FROM publication_actions WHERE version_id=OLD.id AND status='pending' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ SELECT RAISE(ABORT,'version_removal_backup') WHERE EXISTS(SELECT 1 FROM github_backups WHERE version_id=OLD.id);
+ SELECT RAISE(ABORT,'version_removal_unreviewed') WHERE NOT EXISTS(SELECT 1 FROM version_removals WHERE version_id=OLD.id AND project_id=OLD.project_id AND digest=OLD.digest AND status='applied');
+END;
+
+CREATE TRIGGER site_version_removed BEFORE INSERT ON site_versions
+WHEN EXISTS(SELECT 1 FROM version_removals WHERE version_id=NEW.id AND status='applied')
+BEGIN SELECT RAISE(ABORT,'version_removal_replay'); END;
+
+CREATE TRIGGER contact_review_identity BEFORE UPDATE ON contact_reviews
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.enabled!=OLD.enabled OR NEW.expected_revision!=OLD.expected_revision OR NEW.publication_revision!=OLD.publication_revision OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied' OR NEW.confirmed_by IS NULL
+BEGIN SELECT RAISE(ABORT,'contact_review_changed'); END;
+
+CREATE TRIGGER contact_review_confirm BEFORE UPDATE ON contact_reviews
+BEGIN
+ SELECT RAISE(ABORT,'contact_review_changed') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM contact_settings c JOIN projects p ON p.id=c.project_id WHERE c.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND c.revision=NEW.expected_revision);
+ SELECT RAISE(ABORT,'contact_review_changed') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL AND revision=NEW.publication_revision);
+ SELECT RAISE(ABORT,'contact_review_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id);
+END;
+
+CREATE TRIGGER contact_review_apply AFTER UPDATE ON contact_reviews
+BEGIN
+ UPDATE contact_settings SET revision=revision+1,enabled=NEW.enabled,publication_revision=NEW.publication_revision WHERE project_id=NEW.project_id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('contact:'||NEW.id,NEW.user_id,NEW.project_id,'contact.settings',CASE WHEN NEW.enabled=1 THEN 'Enabled contact form for reviewed publication' ELSE 'Disabled contact form' END,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER contact_receipt_immutable BEFORE UPDATE ON contact_receipts
+BEGIN SELECT RAISE(ABORT,'contact_receipt_immutable'); END;
+
+CREATE TRIGGER contact_submission_guard BEFORE INSERT ON contact_submissions
+WHEN NOT EXISTS(SELECT 1 FROM contact_submissions WHERE id=NEW.id)
+BEGIN
+ SELECT RAISE(ABORT,'contact_received') WHERE EXISTS(SELECT 1 FROM contact_receipts WHERE id=NEW.id);
+ SELECT RAISE(ABORT,'contact_unavailable') WHERE NOT EXISTS(SELECT 1 FROM contact_settings c JOIN publications s ON s.project_id=c.project_id WHERE c.project_id=NEW.project_id AND c.revision=NEW.settings_revision AND c.enabled=1 AND s.version_id IS NOT NULL AND s.revision=c.publication_revision);
+ SELECT RAISE(ABORT,'contact_capacity') WHERE (SELECT COUNT(*) FROM contact_receipts WHERE project_id=NEW.project_id)>=100 OR (SELECT COUNT(*) FROM contact_receipts)>=1000;
+ SELECT RAISE(ABORT,'contact_rate') WHERE (SELECT COUNT(*) FROM contact_receipts WHERE project_id=NEW.project_id AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour'))>=20;
+END;
+
+CREATE TRIGGER contact_submission_immutable BEFORE UPDATE ON contact_submissions
+BEGIN SELECT RAISE(ABORT,'contact_submission_immutable'); END;
+
+CREATE TRIGGER contact_submission_receipt AFTER INSERT ON contact_submissions
+BEGIN
+ INSERT INTO contact_receipts(id,project_id,request_hash,created_at,expires_at) VALUES(NEW.id,NEW.project_id,NEW.request_hash,NEW.created_at,NEW.expires_at);
+END;
+
+CREATE TRIGGER chat_comparison_owner BEFORE INSERT ON chat_comparisons
+BEGIN
+ SELECT RAISE(ABORT,'comparison_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t JOIN site_versions v ON v.id=NEW.version_id JOIN projects p ON p.id=v.project_id WHERE t.id=NEW.turn_id AND t.user_id=p.owner_user_id AND (NEW.baseline_id IS NULL OR EXISTS(SELECT 1 FROM site_versions b WHERE b.id=NEW.baseline_id AND b.project_id=v.project_id)));
+END;
+
+CREATE TRIGGER chat_comparison_immutable BEFORE UPDATE ON chat_comparisons
+BEGIN SELECT RAISE(ABORT,'comparison_immutable'); END;
+
+CREATE TRIGGER cloudflare_dns_routing_identity BEFORE UPDATE ON cloudflare_dns_actions
+WHEN NEW.record_type!=OLD.record_type OR NEW.connection_id IS NOT OLD.connection_id OR NEW.proof_token IS NOT OLD.proof_token
+BEGIN SELECT RAISE(ABORT,'cloudflare_dns_immutable'); END;
+
+CREATE TRIGGER cloudflare_dns_receipt AFTER UPDATE OF state ON cloudflare_dns_actions
+WHEN NEW.state IN ('applied','unchanged','observed') AND OLD.state NOT IN ('applied','unchanged','observed')
+BEGIN
+ INSERT OR IGNORE INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('cf-dns:'||NEW.id,NEW.user_id,NEW.project_id,'domain.dns.receipt','Recorded Cloudflare '||NEW.record_type||' result; public DNS and hosting verification remain separate',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER site_health_claim BEFORE INSERT ON site_health_checks
+BEGIN
+ SELECT RAISE(ABORT,'health_publication_changed') WHERE NOT EXISTS(SELECT 1 FROM publications s JOIN projects p ON p.id=s.project_id LEFT JOIN contact_settings c ON c.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.version_id=NEW.version_id AND s.revision=NEW.publication_revision AND COALESCE(c.revision,-1)=NEW.contact_revision);
+ SELECT RAISE(ABORT,'health_cooldown') WHERE EXISTS(SELECT 1 FROM site_health_checks h WHERE h.project_id=NEW.project_id AND h.publication_revision=NEW.publication_revision AND h.contact_revision=NEW.contact_revision AND h.started_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-5 minutes'));
+END;
+
+CREATE TRIGGER site_health_budget_claim AFTER INSERT ON site_health_checks
+BEGIN
+ INSERT INTO site_health_budget(day,checks) VALUES(substr(NEW.started_at,1,10),1) ON CONFLICT(day) DO UPDATE SET checks=checks+1;
+END;
+
+CREATE TRIGGER directory_review_identity BEFORE UPDATE ON directory_reviews
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.kind!=OLD.kind OR NEW.snapshot_json!=OLD.snapshot_json OR NEW.digest!=OLD.digest OR NEW.expected_revision!=OLD.expected_revision OR NEW.publication_revision!=OLD.publication_revision OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied' OR NEW.confirmed_by IS NULL
+BEGIN SELECT RAISE(ABORT,'directory_changed'); END;
+
+CREATE TRIGGER directory_capacity BEFORE UPDATE ON directories
+BEGIN
+ SELECT RAISE(ABORT,'directory_capacity') WHERE (SELECT COALESCE(SUM(json_array_length(draft_json)+COALESCE(json_array_length(live_json),0)),0) FROM directories WHERE project_id!=NEW.project_id)+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>2000;
+END;
+
+CREATE TRIGGER directory_review_apply AFTER UPDATE ON directory_reviews
+BEGIN
+ UPDATE directories SET revision=revision+1,draft_json=CASE WHEN NEW.kind='edit' THEN NEW.snapshot_json ELSE draft_json END,live_json=CASE NEW.kind WHEN 'publish' THEN NEW.snapshot_json WHEN 'unpublish' THEN NULL ELSE live_json END,publication_revision=CASE WHEN NEW.kind='publish' THEN NEW.publication_revision ELSE publication_revision END,published_at=CASE WHEN NEW.kind='publish' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE published_at END WHERE project_id=NEW.project_id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('directory:'||NEW.id,NEW.user_id,NEW.project_id,'directory.'||NEW.kind,CASE NEW.kind WHEN 'edit' THEN 'Updated private directory draft' WHEN 'publish' THEN 'Published reviewed directory snapshot' ELSE 'Took directory offline' END,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER directory_restore_source BEFORE INSERT ON directory_reviews
+WHEN NEW.source_review_id IS NOT NULL
+BEGIN
+ SELECT RAISE(ABORT,'directory_changed') WHERE NEW.kind!='edit' OR NOT EXISTS(SELECT 1 FROM directory_reviews r WHERE r.id=NEW.source_review_id AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.status='applied' AND r.kind IN ('edit','publish') AND r.snapshot_json=NEW.snapshot_json AND r.digest=NEW.digest);
+END;
+
+CREATE TRIGGER directory_restore_identity BEFORE UPDATE ON directory_reviews
+WHEN NEW.source_review_id IS NOT OLD.source_review_id
+BEGIN SELECT RAISE(ABORT,'directory_changed'); END;
+
+CREATE TRIGGER directory_export_owner BEFORE INSERT ON directory_exports
+BEGIN
+ SELECT RAISE(ABORT,'directory_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t JOIN directory_reviews r ON r.id=NEW.review_id AND r.user_id=t.user_id JOIN projects p ON p.id=r.project_id AND p.owner_user_id=t.user_id WHERE t.id=NEW.turn_id AND r.status='applied' AND r.kind IN ('edit','publish'));
+END;
+
+CREATE TRIGGER directory_export_immutable BEFORE UPDATE ON directory_exports
+BEGIN SELECT RAISE(ABORT,'directory_changed'); END;
+
+CREATE TRIGGER directory_review_insert BEFORE INSERT ON directory_reviews
+BEGIN
+ SELECT RAISE(ABORT,'directory_changed') WHERE NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'directory_capacity') WHERE NEW.kind!='unpublish' AND (SELECT COUNT(*) FROM directory_reviews WHERE project_id=NEW.project_id AND kind!='unpublish')>=100;
+END;
+
+CREATE TRIGGER backend_versions_immutable BEFORE UPDATE ON backend_versions BEGIN SELECT RAISE(ABORT,'backend_immutable'); END;
+
+CREATE TRIGGER backend_versions_quota BEFORE INSERT ON backend_versions WHEN
+ (SELECT count(*) FROM backend_versions WHERE project_id=NEW.project_id)>=25 OR (SELECT count(*) FROM backend_versions)>=1000
+ BEGIN SELECT RAISE(ABORT,'backend_version_quota'); END;
+
+CREATE TRIGGER backend_runs_authority BEFORE INSERT ON backend_runs WHEN NOT EXISTS (
+ SELECT 1 FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=NEW.version_id AND p.id=NEW.project_id AND p.owner_user_id=NEW.user_id
+) BEGIN SELECT RAISE(ABORT,'backend_owner'); END;
+
+CREATE TRIGGER backend_runs_quota BEFORE INSERT ON backend_runs WHEN
+ NEW.day<>strftime('%Y-%m-%d','now') OR (SELECT count(*) FROM backend_runs)>=5000 OR
+ (SELECT count(*) FROM backend_runs WHERE project_id=NEW.project_id AND day=NEW.day)>=20 OR
+ (SELECT count(*) FROM backend_runs WHERE user_id=NEW.user_id AND day=NEW.day)>=100 OR
+ (SELECT count(*) FROM backend_runs WHERE day=NEW.day)>=1000
+ BEGIN SELECT RAISE(ABORT,'backend_run_quota'); END;
+
+CREATE TRIGGER backend_runs_identity BEFORE UPDATE ON backend_runs WHEN
+ NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.version_id<>OLD.version_id OR NEW.request_hash<>OLD.request_hash OR NEW.day<>OLD.day OR NEW.created_at<>OLD.created_at OR OLD.state='complete'
+ BEGIN SELECT RAISE(ABORT,'backend_run_immutable'); END;
+
+CREATE TRIGGER backend_state_review_insert BEFORE INSERT ON backend_state_reviews WHEN
+ NEW.status<>'preparing' OR NOT EXISTS(SELECT 1 FROM backend_versions v JOIN projects p ON p.id=v.project_id JOIN backend_state s ON s.project_id=p.id WHERE v.id=NEW.version_id AND p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision AND s.state_json=NEW.before_json) OR
+ (SELECT count(*) FROM backend_state_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_state_reviews)>=1000
+ BEGIN SELECT RAISE(ABORT,'backend_state_review_unavailable'); END;
+
+CREATE TRIGGER backend_state_review_identity BEFORE UPDATE ON backend_state_reviews WHEN
+ NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.version_id<>OLD.version_id OR NEW.base_revision<>OLD.base_revision OR NEW.before_json<>OLD.before_json OR NEW.input_json<>OLD.input_json OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at OR
+ NOT ((OLD.status='preparing' AND NEW.status IN ('ready','failed')) OR (OLD.status='ready' AND NEW.status='applied' AND NEW.after_json IS OLD.after_json AND NEW.result_json IS OLD.result_json))
+ BEGIN SELECT RAISE(ABORT,'backend_state_review_immutable'); END;
+
+CREATE TRIGGER backend_state_confirm_guard BEFORE UPDATE OF status ON backend_state_reviews WHEN NEW.status='applied' AND (
+ NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM backend_state s JOIN projects p ON p.id=s.project_id WHERE s.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision AND s.state_json=NEW.before_json))
+ BEGIN SELECT RAISE(ABORT,'backend_state_review_stale'); END;
+
+CREATE TRIGGER backend_state_apply AFTER UPDATE OF status ON backend_state_reviews WHEN NEW.status='applied' BEGIN
+ UPDATE backend_state SET state_json=NEW.after_json,revision=NEW.base_revision+1 WHERE project_id=NEW.project_id;
+END;
+
+CREATE TRIGGER backend_state_initial BEFORE INSERT ON backend_state WHEN NEW.revision<>0 OR NEW.state_json<>'{}' BEGIN SELECT RAISE(ABORT,'backend_state_initial'); END;
+
+CREATE TRIGGER backend_state_guard BEFORE UPDATE ON backend_state WHEN NEW.project_id<>OLD.project_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(
+ SELECT 1 FROM backend_state_reviews WHERE project_id=OLD.project_id AND status='applied' AND base_revision=OLD.revision AND before_json=OLD.state_json AND after_json=NEW.state_json
+) BEGIN SELECT RAISE(ABORT,'backend_state_review_required'); END;
+
+CREATE TRIGGER backend_state_restore_source BEFORE INSERT ON backend_state_reviews WHEN
+ (NEW.restore_review_id IS NULL)<>(NEW.restore_side IS NULL) OR
+ (NEW.restore_review_id IS NOT NULL AND (NEW.input_json<>'null' OR NOT EXISTS(
+ SELECT 1 FROM backend_state_reviews r WHERE r.id=NEW.restore_review_id AND r.status='applied' AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.version_id=NEW.version_id
+ ))) BEGIN SELECT RAISE(ABORT,'backend_state_restore_source'); END;
+
+CREATE TRIGGER backend_state_restore_identity BEFORE UPDATE ON backend_state_reviews WHEN
+ NEW.restore_review_id IS NOT OLD.restore_review_id OR NEW.restore_side IS NOT OLD.restore_side OR
+ (NEW.restore_review_id IS NOT NULL AND NEW.status='ready' AND NOT EXISTS(
+ SELECT 1 FROM backend_state_reviews r WHERE r.id=NEW.restore_review_id AND r.status='applied' AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND
+ NEW.after_json=CASE NEW.restore_side WHEN 'before' THEN r.before_json ELSE r.after_json END
+ )) BEGIN SELECT RAISE(ABORT,'backend_state_restore_immutable'); END;
+
+CREATE TRIGGER backend_state_links_authority BEFORE INSERT ON backend_state_links WHEN NOT EXISTS(
+ SELECT 1 FROM chat_turns t JOIN backend_state_reviews r ON r.id=NEW.review_id JOIN projects p ON p.id=r.project_id WHERE t.id=NEW.turn_id AND t.user_id=r.user_id AND p.owner_user_id=t.user_id AND (NEW.kind='review' OR r.status='applied')
+) BEGIN SELECT RAISE(ABORT,'backend_state_link_owner'); END;
+
+CREATE TRIGGER backend_state_links_immutable BEFORE UPDATE ON backend_state_links BEGIN SELECT RAISE(ABORT,'backend_state_link_immutable'); END;
+
+CREATE TRIGGER cms_setup_review_guard BEFORE INSERT ON cms_setup_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id) OR
+ EXISTS(SELECT 1 FROM cms_instances WHERE project_id=NEW.project_id) OR (SELECT count(*) FROM cms_setup_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_setup_reviews)>=1000
+ BEGIN SELECT RAISE(ABORT,'cms_setup_review_unavailable'); END;
+
+CREATE TRIGGER cms_instances_insert BEFORE INSERT ON cms_instances WHEN
+ NEW.state<>'queued' OR NEW.database_id IS NOT NULL OR NEW.session_namespace_id IS NOT NULL OR NEW.deployed_version_id IS NOT NULL OR
+ NEW.worker_name<>'townhello-cms-'||replace(NEW.project_id,'-','') OR NEW.database_name<>NEW.worker_name OR NEW.bucket_name<>NEW.worker_name||'-media' OR
+ NOT EXISTS(SELECT 1 FROM cms_setup_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=NEW.review_id AND r.project_id=NEW.project_id AND r.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND r.status='approved') OR
+ (SELECT count(*) FROM cms_instances)>=5 OR (SELECT count(*) FROM cms_instances WHERE user_id=NEW.user_id)>=2
+ BEGIN SELECT RAISE(ABORT,'cms_instance_unavailable'); END;
+
+CREATE TRIGGER cms_setup_review_identity BEFORE UPDATE ON cms_setup_reviews WHEN NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.user_id<>OLD.user_id OR NEW.title<>OLD.title OR NEW.tagline<>OLD.tagline OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at OR OLD.status<>'pending' OR NEW.status<>'approved'
+ BEGIN SELECT RAISE(ABORT,'cms_setup_review_immutable'); END;
+
+CREATE TRIGGER cms_setup_confirm_guard BEFORE UPDATE OF status ON cms_setup_reviews WHEN NEW.status='approved' AND (
+ NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id) OR EXISTS(SELECT 1 FROM cms_instances WHERE project_id=NEW.project_id))
+ BEGIN SELECT RAISE(ABORT,'cms_setup_review_stale'); END;
+
+CREATE TRIGGER cms_setup_enqueue AFTER UPDATE OF status ON cms_setup_reviews WHEN NEW.status='approved' BEGIN
+ INSERT INTO cms_instances(project_id,user_id,review_id,worker_name,database_name,bucket_name) VALUES(NEW.project_id,NEW.user_id,NEW.id,'townhello-cms-'||replace(NEW.project_id,'-',''),'townhello-cms-'||replace(NEW.project_id,'-',''),'townhello-cms-'||replace(NEW.project_id,'-','')||'-media');
+END;
+
+CREATE TRIGGER cms_instance_identity BEFORE UPDATE ON cms_instances WHEN NEW.project_id<>OLD.project_id OR NEW.user_id<>OLD.user_id OR NEW.review_id<>OLD.review_id OR NEW.worker_name<>OLD.worker_name OR NEW.database_name<>OLD.database_name OR NEW.bucket_name<>OLD.bucket_name OR NEW.created_at<>OLD.created_at OR (OLD.database_id IS NOT NULL AND NEW.database_id IS NOT OLD.database_id) OR (OLD.session_namespace_id IS NOT NULL AND NEW.session_namespace_id IS NOT OLD.session_namespace_id)
+ BEGIN SELECT RAISE(ABORT,'cms_instance_immutable'); END;
+
+CREATE TRIGGER cms_resource_job_insert BEFORE INSERT ON cms_resource_jobs WHEN NEW.state<>'pending' OR NOT EXISTS(
+ SELECT 1 FROM cms_instances c JOIN cms_setup_reviews r ON r.id=c.review_id JOIN projects p ON p.id=c.project_id WHERE c.project_id=NEW.project_id AND r.status='approved' AND p.owner_user_id=c.user_id AND c.state<>'ready' AND NEW.resource_name=CASE NEW.kind WHEN 'database' THEN c.database_name WHEN 'media' THEN c.bucket_name WHEN 'session' THEN c.worker_name||'-session' END
+) BEGIN SELECT RAISE(ABORT,'cms_resource_not_approved'); END;
+
+CREATE TRIGGER cms_resource_job_immutable BEFORE UPDATE ON cms_resource_jobs WHEN NEW.project_id<>OLD.project_id OR NEW.kind<>OLD.kind OR NEW.account_id<>OLD.account_id OR NEW.resource_name<>OLD.resource_name OR NEW.created_at<>OLD.created_at OR OLD.state<>'pending' OR NEW.state<>'complete'
+ BEGIN SELECT RAISE(ABORT,'cms_resource_immutable'); END;
+
+CREATE TRIGGER cms_resource_record AFTER UPDATE OF state ON cms_resource_jobs WHEN NEW.state='complete' BEGIN
+ UPDATE cms_instances SET database_id=CASE WHEN NEW.kind='database' THEN NEW.provider_id ELSE database_id END,session_namespace_id=CASE WHEN NEW.kind='session' THEN NEW.provider_id ELSE session_namespace_id END WHERE project_id=NEW.project_id;
+END;
+
+CREATE TRIGGER cms_deployment_identity BEFORE UPDATE ON cms_deployments WHEN NEW.project_id<>OLD.project_id OR NEW.account_id<>OLD.account_id OR NEW.source_digest<>OLD.source_digest OR NEW.secret_digest<>OLD.secret_digest OR NEW.origin<>OLD.origin OR NEW.tag<>OLD.tag OR NEW.created_at<>OLD.created_at OR (OLD.worker_version_id IS NOT NULL AND NEW.worker_version_id IS NOT OLD.worker_version_id) OR NOT ((OLD.state='reserved' AND NEW.state='uploaded') OR (OLD.state='uploaded' AND NEW.state='verified') OR (OLD.state='verified' AND NEW.state='connected'))
+ BEGIN SELECT RAISE(ABORT,'cms_deployment_immutable'); END;
+
+CREATE TRIGGER cms_deployment_connected AFTER UPDATE OF state ON cms_deployments WHEN NEW.state='connected' BEGIN
+ UPDATE cms_instances SET state='ready',deployed_version_id=NEW.worker_version_id WHERE project_id=NEW.project_id;
+END;
+
+CREATE TRIGGER cms_ready_guard BEFORE UPDATE OF state ON cms_instances WHEN NEW.state='ready' AND NOT EXISTS(SELECT 1 FROM cms_deployments d WHERE d.project_id=NEW.project_id AND d.state='connected' AND d.worker_version_id=NEW.deployed_version_id)
+ BEGIN SELECT RAISE(ABORT,'cms_readiness_not_verified'); END;
+
+CREATE TRIGGER cms_draft_admission BEFORE INSERT ON cms_draft_requests WHEN NEW.item_id IS NOT NULL OR NOT EXISTS(SELECT 1 FROM cms_instances c JOIN projects p ON p.id=c.project_id WHERE c.project_id=NEW.project_id AND c.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND c.state='ready') OR (SELECT count(*) FROM cms_draft_requests WHERE project_id=NEW.project_id)>=90 OR (SELECT count(*) FROM cms_draft_requests)>=450
+ BEGIN SELECT RAISE(ABORT,'cms_draft_not_available'); END;
+
+CREATE TRIGGER cms_draft_immutable BEFORE UPDATE ON cms_draft_requests WHEN NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.user_id<>OLD.user_id OR NEW.collection<>OLD.collection OR NEW.body<>OLD.body OR NEW.created_at<>OLD.created_at OR OLD.item_id IS NOT NULL OR NEW.item_id IS NULL
+ BEGIN SELECT RAISE(ABORT,'cms_draft_immutable'); END;
+
+CREATE TRIGGER cms_edit_admission BEFORE INSERT ON cms_edit_requests WHEN NEW.result IS NOT NULL OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR NOT EXISTS(SELECT 1 FROM cms_draft_requests d JOIN cms_instances c ON c.project_id=d.project_id JOIN projects p ON p.id=d.project_id WHERE d.id=NEW.draft_request_id AND d.item_id IS NOT NULL AND c.state='ready' AND p.owner_user_id=d.user_id) OR (SELECT count(*) FROM cms_draft_requests)+(SELECT count(*) FROM cms_edit_requests)>=450 OR (SELECT count(*) FROM cms_draft_requests WHERE project_id=(SELECT project_id FROM cms_draft_requests WHERE id=NEW.draft_request_id))+(SELECT count(*) FROM cms_edit_requests e JOIN cms_draft_requests d ON d.id=e.draft_request_id WHERE d.project_id=(SELECT project_id FROM cms_draft_requests WHERE id=NEW.draft_request_id))>=90
+ BEGIN SELECT RAISE(ABORT,'cms_edit_not_available'); END;
+
+CREATE TRIGGER cms_edit_immutable BEFORE UPDATE ON cms_edit_requests WHEN NEW.id<>OLD.id OR NEW.draft_request_id<>OLD.draft_request_id OR NEW.body<>OLD.body OR NEW.created_at<>OLD.created_at OR OLD.result IS NOT NULL OR NEW.result IS NULL
+ BEGIN SELECT RAISE(ABORT,'cms_edit_immutable'); END;
+
+CREATE TRIGGER cms_draft_edit_capacity BEFORE INSERT ON cms_draft_requests WHEN EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR (SELECT count(*) FROM cms_draft_requests)+(SELECT count(*) FROM cms_edit_requests)>=450 OR (SELECT count(*) FROM cms_draft_requests WHERE project_id=NEW.project_id)+(SELECT count(*) FROM cms_edit_requests e JOIN cms_draft_requests d ON d.id=e.draft_request_id WHERE d.project_id=NEW.project_id)>=90
+ BEGIN SELECT RAISE(ABORT,'cms_content_capacity'); END;
+
+CREATE TRIGGER cms_preview_admission BEFORE INSERT ON cms_preview_links WHEN NOT EXISTS(SELECT 1 FROM cms_draft_requests d JOIN projects p ON p.id=d.project_id WHERE d.id=NEW.draft_request_id AND d.project_id=NEW.project_id AND d.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND d.item_id IS NOT NULL) OR (SELECT count(*) FROM cms_preview_links WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_preview_links)>=1000
+ BEGIN SELECT RAISE(ABORT,'cms_preview_not_available'); END;
+
+CREATE TRIGGER cms_preview_immutable BEFORE UPDATE ON cms_preview_links BEGIN SELECT RAISE(ABORT,'cms_preview_immutable'); END;
+
+CREATE TRIGGER cms_publication_admission BEFORE INSERT ON cms_publication_reviews WHEN NEW.status<>'pending' OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR NOT EXISTS(SELECT 1 FROM cms_draft_requests d JOIN projects p ON p.id=d.project_id JOIN cms_instances c ON c.project_id=d.project_id WHERE d.id=NEW.draft_request_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND d.collection=NEW.collection AND d.item_id=NEW.item_id AND c.state='ready') OR (SELECT count(*) FROM cms_publication_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_publication_reviews)>=500
+ BEGIN SELECT RAISE(ABORT,'cms_publication_not_available'); END;
+
+CREATE TRIGGER cms_unpublish_admission BEFORE INSERT ON cms_unpublish_reviews WHEN NEW.status<>'pending' OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR NOT EXISTS(SELECT 1 FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=NEW.publication_id AND r.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND r.status='published' AND r.withdrawn=0) OR (SELECT count(*) FROM cms_unpublish_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_unpublish_reviews)>=500
+ BEGIN SELECT RAISE(ABORT,'cms_unpublish_not_available'); END;
+
+CREATE TRIGGER cms_unpublish_immutable BEFORE UPDATE ON cms_unpublish_reviews WHEN NEW.id<>OLD.id OR NEW.publication_id<>OLD.publication_id OR NEW.user_id<>OLD.user_id OR NEW.revision<>OLD.revision OR NEW.expires_at<>OLD.expires_at OR NEW.created_at<>OLD.created_at OR NOT((OLD.status='pending' AND NEW.status='approved' AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=NEW.publication_id AND r.withdrawn=0 AND r.status='published' AND p.owner_user_id=NEW.user_id)) OR (OLD.status='approved' AND NEW.status='complete'))
+ BEGIN SELECT RAISE(ABORT,'cms_unpublish_immutable_or_expired'); END;
+
+CREATE TRIGGER cms_unpublish_hide AFTER UPDATE OF status ON cms_unpublish_reviews WHEN NEW.status='approved' BEGIN
+ UPDATE cms_publication_reviews SET withdrawn=1 WHERE id=NEW.publication_id;
+END;
+
+CREATE TRIGGER cms_publication_unpublish_guard BEFORE UPDATE OF status ON cms_publication_reviews WHEN NEW.status IN ('approved','published') AND EXISTS(SELECT 1 FROM cms_unpublish_reviews u JOIN cms_publication_reviews r ON r.id=u.publication_id WHERE r.project_id=NEW.project_id AND r.collection=NEW.collection AND r.item_id=NEW.item_id AND u.status='approved')
+ BEGIN SELECT RAISE(ABORT,'cms_unpublish_pending'); END;
+
+CREATE TRIGGER cms_publication_withdrawn_insert BEFORE INSERT ON cms_publication_reviews WHEN NEW.withdrawn<>0 BEGIN SELECT RAISE(ABORT,'cms_publication_invalid_state'); END;
+
+CREATE TRIGGER cms_publication_immutable BEFORE UPDATE ON cms_publication_reviews WHEN NEW.replaces_publication_id IS NOT OLD.replaces_publication_id OR NEW.id<>OLD.id OR NEW.draft_request_id<>OLD.draft_request_id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.collection<>OLD.collection OR NEW.item_id<>OLD.item_id OR NEW.revision<>OLD.revision OR NEW.snapshot<>OLD.snapshot OR NEW.preview_html<>OLD.preview_html OR NEW.public_html<>OLD.public_html OR NEW.digest<>OLD.digest OR NEW.expires_at<>OLD.expires_at OR NEW.created_at<>OLD.created_at OR NOT((OLD.withdrawn=0 AND NEW.withdrawn=0 AND ((OLD.status='pending' AND NEW.status='approved' AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR (OLD.status='approved' AND NEW.status='published'))) OR (OLD.status='published' AND NEW.status='published' AND OLD.withdrawn=0 AND NEW.withdrawn=1 AND (EXISTS(SELECT 1 FROM cms_unpublish_reviews u WHERE u.publication_id=OLD.id AND u.status='approved') OR EXISTS(SELECT 1 FROM cms_publication_reviews replacement WHERE replacement.replaces_publication_id=OLD.id AND replacement.status='approved'))))
+ BEGIN SELECT RAISE(ABORT,'cms_publication_immutable_or_expired'); END;
+
+CREATE TRIGGER cms_replacement_admission BEFORE INSERT ON cms_publication_reviews WHEN NEW.replaces_publication_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM cms_publication_reviews base WHERE base.id=NEW.replaces_publication_id AND base.project_id=NEW.project_id AND base.collection=NEW.collection AND base.item_id=NEW.item_id AND base.user_id=NEW.user_id AND base.status='published' AND base.withdrawn=0)
+ BEGIN SELECT RAISE(ABORT,'cms_replacement_base_unavailable'); END;
+
+CREATE TRIGGER cms_replacement_current BEFORE UPDATE OF status ON cms_publication_reviews WHEN OLD.status='pending' AND NEW.status='approved' AND (
+ (NEW.replaces_publication_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM cms_publication_reviews base WHERE base.id=NEW.replaces_publication_id AND base.status='published' AND base.withdrawn=0)) OR
+ (NEW.replaces_publication_id IS NULL AND EXISTS(SELECT 1 FROM cms_publication_reviews base WHERE base.project_id=NEW.project_id AND base.collection=NEW.collection AND base.item_id=NEW.item_id AND base.status='published' AND base.withdrawn=0))
+ ) BEGIN SELECT RAISE(ABORT,'cms_publication_base_changed'); END;
+
+CREATE TRIGGER cms_replacement_swap BEFORE UPDATE OF status ON cms_publication_reviews WHEN OLD.status='approved' AND NEW.status='published' AND NEW.replaces_publication_id IS NOT NULL BEGIN
+ SELECT RAISE(ABORT,'cms_publication_base_changed') WHERE NOT EXISTS(SELECT 1 FROM cms_publication_reviews base WHERE base.id=NEW.replaces_publication_id AND base.status='published' AND base.withdrawn=0);
+ UPDATE cms_publication_reviews SET withdrawn=1 WHERE id=NEW.replaces_publication_id AND withdrawn=0;
+END;
+
+CREATE TRIGGER cms_unpublish_replacement_guard BEFORE UPDATE OF status ON cms_unpublish_reviews WHEN NEW.status='approved' AND EXISTS(SELECT 1 FROM cms_publication_reviews replacement WHERE replacement.replaces_publication_id=NEW.publication_id AND replacement.status='approved')
+ BEGIN SELECT RAISE(ABORT,'cms_replacement_pending'); END;
+
+CREATE TRIGGER cms_discard_admission BEFORE INSERT ON cms_discard_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM cms_publication_reviews p JOIN projects project ON project.id=p.project_id WHERE p.id=NEW.publication_id AND p.user_id=NEW.user_id AND project.owner_user_id=NEW.user_id AND p.status='published' AND p.withdrawn=0) OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR (SELECT count(*) FROM cms_discard_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_discard_reviews)>=500
+ BEGIN SELECT RAISE(ABORT,'cms_discard_unavailable'); END;
+
+CREATE TRIGGER cms_discard_immutable BEFORE UPDATE ON cms_discard_reviews WHEN NEW.id<>OLD.id OR NEW.publication_id<>OLD.publication_id OR NEW.user_id<>OLD.user_id OR NEW.revision<>OLD.revision OR NEW.snapshot<>OLD.snapshot OR NEW.expires_at<>OLD.expires_at OR NEW.created_at<>OLD.created_at OR NOT((OLD.status='pending' AND NEW.status='approved' AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM cms_publication_reviews p JOIN projects project ON project.id=p.project_id WHERE p.id=NEW.publication_id AND project.owner_user_id=NEW.user_id AND p.status='published' AND p.withdrawn=0)) OR (OLD.status='approved' AND NEW.status='complete'))
+ BEGIN SELECT RAISE(ABORT,'cms_discard_immutable_or_expired'); END;
+
+CREATE TRIGGER cms_discard_publication_guard BEFORE UPDATE OF status ON cms_discard_reviews WHEN NEW.status='approved' AND EXISTS(SELECT 1 FROM cms_publication_reviews replacement WHERE replacement.replaces_publication_id=NEW.publication_id AND replacement.status='approved')
+ BEGIN SELECT RAISE(ABORT,'cms_replacement_pending'); END;
+
+CREATE TRIGGER cms_publication_discard_guard BEFORE UPDATE OF status ON cms_publication_reviews WHEN NEW.status='approved' AND EXISTS(SELECT 1 FROM cms_discard_reviews d WHERE d.publication_id=NEW.replaces_publication_id AND d.status='approved')
+ BEGIN SELECT RAISE(ABORT,'cms_discard_pending'); END;
+
+CREATE TRIGGER cms_unpublish_discard_guard BEFORE UPDATE OF status ON cms_unpublish_reviews WHEN NEW.status='approved' AND EXISTS(SELECT 1 FROM cms_discard_reviews d WHERE d.publication_id=NEW.publication_id AND d.status='approved')
+ BEGIN SELECT RAISE(ABORT,'cms_discard_pending'); END;
+
+CREATE TRIGGER backend_publication_review_admit BEFORE INSERT ON backend_publication_reviews BEGIN
+ SELECT RAISE(ABORT,'backend_publication_owner') WHERE NOT EXISTS(
+  SELECT 1 FROM projects p JOIN backend_versions v ON v.project_id=p.id JOIN backend_publications b ON b.project_id=p.id
+  WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND v.id=NEW.version_id AND b.revision=NEW.base_revision
+  AND (NEW.operation='publish' OR b.version_id=NEW.version_id)
+ );
+ SELECT RAISE(ABORT,'backend_publication_test') WHERE NEW.operation='publish' AND NOT EXISTS(
+  SELECT 1 FROM backend_runs r WHERE r.id=NEW.run_id AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.version_id=NEW.version_id
+  AND r.state='complete' AND json_extract(r.result_json,'$.ok')=1
+ );
+ SELECT RAISE(ABORT,'backend_publication_capacity') WHERE (SELECT count(*) FROM backend_publication_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_publication_reviews)>=1000;
+ SELECT RAISE(ABORT,'backend_publication_initial') WHERE NEW.status<>'pending';
+END;
+
+CREATE TRIGGER backend_publication_review_immutable BEFORE UPDATE ON backend_publication_reviews WHEN
+ NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.operation<>OLD.operation OR NEW.version_id<>OLD.version_id OR NEW.run_id IS NOT OLD.run_id OR NEW.base_revision<>OLD.base_revision OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at OR OLD.status<>'pending' OR NEW.status<>'applied'
+ BEGIN SELECT RAISE(ABORT,'backend_publication_immutable'); END;
+
+CREATE TRIGGER backend_publication_apply BEFORE UPDATE OF status ON backend_publication_reviews BEGIN
+ SELECT RAISE(ABORT,'backend_publication_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(
+ SELECT 1 FROM backend_publications b JOIN projects p ON p.id=b.project_id WHERE b.project_id=NEW.project_id AND b.revision=NEW.base_revision AND p.owner_user_id=NEW.user_id);
+ UPDATE backend_publications SET revision=revision+1,review_id=NEW.id,version_id=NEW.version_id WHERE project_id=NEW.project_id AND NEW.operation='publish';
+ UPDATE backend_publications SET revision=revision+1,review_id=NULL,version_id=NULL WHERE project_id=NEW.project_id AND NEW.operation='unpublish';
+END;
+
+CREATE TRIGGER backend_public_usage_insert BEFORE INSERT ON backend_public_usage BEGIN
+ SELECT RAISE(ABORT,'backend_public_unavailable') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR NOT EXISTS(SELECT 1 FROM backend_publications b JOIN backend_publication_reviews r ON r.id=b.review_id AND r.status='applied' JOIN projects p ON p.id=b.project_id AND p.owner_user_id=r.user_id WHERE b.project_id=NEW.project_id AND b.review_id=NEW.publication_id AND b.version_id IS NOT NULL);
+ SELECT RAISE(ABORT,'backend_public_quota') WHERE
+ coalesce((SELECT calls FROM backend_public_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=100 OR
+ coalesce((SELECT sum(u.calls) FROM backend_public_usage u JOIN projects p ON p.id=u.project_id WHERE u.day=NEW.day AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=500 OR
+ coalesce((SELECT sum(calls) FROM backend_public_usage WHERE day=NEW.day),0)>=1000;
+END;
+
+CREATE TRIGGER backend_public_usage_update BEFORE UPDATE ON backend_public_usage BEGIN
+ SELECT RAISE(ABORT,'backend_public_counter') WHERE NEW.project_id<>OLD.project_id OR NEW.day<>strftime('%Y-%m-%d','now') OR NEW.calls<> (OLD.calls*(NEW.day=OLD.day)+1);
+END;
+
+CREATE TRIGGER backend_form_admit BEFORE INSERT ON backend_form_reviews BEGIN
+ SELECT RAISE(ABORT,'backend_form_owner') WHERE NOT EXISTS(SELECT 1 FROM projects p JOIN backend_form_settings s ON s.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision);
+ SELECT RAISE(ABORT,'backend_form_targets') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM publications s JOIN backend_publications b ON b.project_id=s.project_id JOIN backend_publication_reviews r ON r.id=b.review_id WHERE s.project_id=NEW.project_id AND s.version_id IS NOT NULL AND s.revision=NEW.site_revision AND b.review_id=NEW.backend_publication_id AND r.user_id=NEW.user_id AND r.status='applied');
+ SELECT RAISE(ABORT,'backend_form_capacity') WHERE (SELECT count(*) FROM backend_form_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_form_reviews)>=1000;
+ SELECT RAISE(ABORT,'backend_form_initial') WHERE NEW.status<>'pending';
+END;
+
+CREATE TRIGGER backend_form_immutable BEFORE UPDATE ON backend_form_reviews WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.enabled<>OLD.enabled OR NEW.config_json IS NOT OLD.config_json OR NEW.site_revision<>OLD.site_revision OR NEW.backend_publication_id IS NOT OLD.backend_publication_id OR NEW.base_revision<>OLD.base_revision OR NEW.expires_at<>OLD.expires_at OR OLD.status<>'pending' OR NEW.status<>'applied'
+ BEGIN SELECT RAISE(ABORT,'backend_form_immutable'); END;
+
+CREATE TRIGGER health_form_snapshot BEFORE INSERT ON site_health_checks WHEN NEW.form_review_id IS NOT (SELECT id FROM backend_live_forms WHERE project_id=NEW.project_id)
+ BEGIN SELECT RAISE(ABORT,'health_publication_changed'); END;
+
+CREATE TRIGGER health_form_immutable BEFORE UPDATE ON site_health_checks WHEN NEW.form_review_id IS NOT OLD.form_review_id
+ BEGIN SELECT RAISE(ABORT,'health_form_immutable'); END;
+
+CREATE TRIGGER app_space_owner BEFORE INSERT ON app_spaces WHEN NOT EXISTS(SELECT 1 FROM projects p JOIN backend_versions v ON v.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.owner_user_id AND v.id=NEW.version_id)
+ BEGIN SELECT RAISE(ABORT,'app_space_owner'); END;
+
+CREATE TRIGGER app_space_update BEFORE UPDATE ON app_spaces WHEN NEW.project_id<>OLD.project_id OR NEW.owner_user_id<>OLD.owner_user_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.version_id AND project_id=NEW.project_id)
+ BEGIN SELECT RAISE(ABORT,'app_space_identity'); END;
+
+CREATE TRIGGER app_visitor_admit BEFORE INSERT ON app_visitors BEGIN
+ SELECT RAISE(ABORT,'app_unavailable') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_visitor_capacity') WHERE (SELECT count(*) FROM app_visitors WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_visitors)>=1000;
+END;
+
+CREATE TRIGGER app_visitor_identity BEFORE UPDATE ON app_visitors WHEN NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.created_at<>OLD.created_at OR OLD.revoked=1 AND NEW.revoked<>1
+ BEGIN SELECT RAISE(ABORT,'app_visitor_identity'); END;
+
+CREATE TRIGGER app_session_admit BEFORE INSERT ON app_sessions BEGIN
+ SELECT RAISE(ABORT,'app_session_identity') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_session_capacity') WHERE (SELECT count(*) FROM app_sessions WHERE visitor_id=NEW.visitor_id)>=5 OR (SELECT count(*) FROM app_sessions)>=5000;
+END;
+
+CREATE TRIGGER app_session_immutable BEFORE UPDATE ON app_sessions BEGIN SELECT RAISE(ABORT,'app_session_immutable'); END;
+
+CREATE TRIGGER app_document_revision BEFORE UPDATE ON app_documents WHEN NEW.visitor_id<>OLD.visitor_id OR NEW.revision<>OLD.revision+1 BEGIN SELECT RAISE(ABORT,'app_document_revision'); END;
+
+CREATE TRIGGER app_visitor_document AFTER INSERT ON app_visitors BEGIN INSERT INTO app_documents(visitor_id) VALUES(NEW.id); END;
+
+CREATE TRIGGER app_run_immutable BEFORE UPDATE ON app_runs WHEN NEW.id<>OLD.id OR NEW.visitor_id<>OLD.visitor_id OR NEW.project_id<>OLD.project_id OR NEW.version_id<>OLD.version_id OR NEW.session_hash<>OLD.session_hash OR NEW.request_hash<>OLD.request_hash OR NEW.base_revision<>OLD.base_revision OR NEW.program_revision<>OLD.program_revision OR NEW.day<>OLD.day OR OLD.state<>'running' OR NEW.state='running'
+ BEGIN SELECT RAISE(ABORT,'app_run_immutable'); END;
+
+CREATE TRIGGER app_run_apply BEFORE UPDATE OF state ON app_runs WHEN NEW.state='complete' BEGIN
+ SELECT RAISE(ABORT,'app_state_changed') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ UPDATE app_documents SET state_json=NEW.next_json,revision=revision+1 WHERE visitor_id=NEW.visitor_id;
+END;
+
+CREATE TRIGGER app_activation_admit BEFORE INSERT ON app_activation_reviews BEGIN
+ SELECT RAISE(ABORT,'app_activation_owner') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN backend_versions v ON v.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND a.revision=NEW.base_revision AND v.id=NEW.version_id);
+ SELECT RAISE(ABORT,'app_activation_test') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM backend_runs r WHERE r.id=NEW.run_id AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.version_id=NEW.version_id AND r.state='complete' AND json_extract(r.result_json,'$.ok')=1 AND json_type(r.result_json,'$.value')='object' AND (SELECT count(*) FROM json_each(r.result_json,'$.value'))=2 AND json_type(r.result_json,'$.value.state') IS NOT NULL AND json_type(r.result_json,'$.value.result') IS NOT NULL AND length(CAST(json_quote(json_extract(r.result_json,'$.value.state')) AS BLOB))<=4096 AND length(CAST(json_quote(json_extract(r.result_json,'$.value.result')) AS BLOB))<=4096);
+ SELECT RAISE(ABORT,'app_activation_capacity') WHERE (SELECT count(*) FROM app_activation_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_activation_reviews)>=1000;
+ SELECT RAISE(ABORT,'app_activation_initial') WHERE NEW.status<>'pending';
+END;
+
+CREATE TRIGGER app_activation_immutable BEFORE UPDATE ON app_activation_reviews WHEN NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.user_id<>OLD.user_id OR NEW.version_id<>OLD.version_id OR NEW.run_id IS NOT OLD.run_id OR NEW.enabled<>OLD.enabled OR NEW.base_revision<>OLD.base_revision OR NEW.expires_at<>OLD.expires_at OR OLD.status<>'pending' OR NEW.status<>'applied'
+ BEGIN SELECT RAISE(ABORT,'app_activation_immutable'); END;
+
+CREATE TRIGGER app_space_initial_review BEFORE INSERT ON app_spaces WHEN NEW.enabled<>0 OR NEW.review_id IS NOT NULL OR NEW.revision<>0
+ BEGIN SELECT RAISE(ABORT,'app_activation_required'); END;
+
+CREATE TRIGGER app_activation_apply BEFORE UPDATE OF status ON app_activation_reviews BEGIN
+ SELECT RAISE(ABORT,'app_activation_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.revision=NEW.base_revision);
+ SELECT RAISE(ABORT,'app_migration_required') WHERE NEW.enabled=1 AND EXISTS(SELECT 1 FROM app_spaces a JOIN app_visitors v ON v.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.version_id<>NEW.version_id);
+ SELECT RAISE(ABORT,'app_disable_version') WHERE NEW.enabled=0 AND NOT EXISTS(SELECT 1 FROM app_spaces WHERE project_id=NEW.project_id AND version_id=NEW.version_id);
+ UPDATE app_spaces SET enabled=NEW.enabled,version_id=NEW.version_id,revision=revision+1,review_id=NEW.id WHERE project_id=NEW.project_id;
+ DELETE FROM app_sessions WHERE NEW.enabled=0 AND visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
+END;
+
+CREATE TRIGGER app_activation_delete_guard BEFORE DELETE ON app_activation_reviews WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) BEGIN SELECT RAISE(ABORT,'app_activation_immutable'); END;
+
+CREATE TRIGGER plan_catalog_immutable BEFORE UPDATE ON plan_catalog BEGIN SELECT RAISE(ABORT,'plan_catalog_immutable'); END;
+
+CREATE TRIGGER inference_reserved AFTER INSERT ON inference_calls BEGIN
+ UPDATE inference_budgets SET reserved_micros=reserved_micros+NEW.reserved_micros WHERE user_id=NEW.user_id AND period=NEW.period;
+END;
+
+CREATE TRIGGER inference_immutable BEFORE UPDATE ON inference_calls BEGIN
+ SELECT RAISE(ABORT,'inference_immutable') WHERE NEW.id!=OLD.id OR NEW.turn_id!=OLD.turn_id OR NEW.user_id!=OLD.user_id OR NEW.period!=OLD.period OR NEW.role!=OLD.role OR NEW.model!=OLD.model OR NEW.provider_origin!=OLD.provider_origin OR NEW.protocol!=OLD.protocol OR NEW.policy!=OLD.policy OR NEW.cost_basis!=OLD.cost_basis OR NEW.rate_id!=OLD.rate_id OR NEW.input_rate!=OLD.input_rate OR NEW.output_rate!=OLD.output_rate OR NEW.reserved_micros!=OLD.reserved_micros OR NEW.created_at!=OLD.created_at;
+ SELECT RAISE(ABORT,'inference_transition') WHERE NOT (
+  (OLD.status='reserved' AND NEW.status IN ('dispatched','released')) OR
+  (OLD.status IN ('dispatched','uncertain') AND NEW.status='observed') OR
+  (OLD.status='dispatched' AND NEW.status='uncertain'));
+ SELECT RAISE(ABORT,'inference_cost_mismatch') WHERE NEW.status='observed' AND (NEW.estimated_micros>OLD.reserved_micros OR NEW.estimated_micros!=CAST((NEW.input_tokens*OLD.input_rate+NEW.output_tokens*OLD.output_rate+999999)/1000000 AS INTEGER));
+END;
+
+CREATE TRIGGER inference_finished AFTER UPDATE ON inference_calls WHEN NEW.status IN ('observed','released') BEGIN
+ UPDATE inference_budgets SET reserved_micros=reserved_micros-OLD.reserved_micros,spent_micros=spent_micros+COALESCE(NEW.estimated_micros,0) WHERE user_id=NEW.user_id AND period=NEW.period;
+END;
+
+CREATE TRIGGER inference_delete_guard BEFORE DELETE ON inference_calls WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'inference_immutable'); END;
+
+CREATE TRIGGER workspace_preferences_revision BEFORE UPDATE ON workspace_preferences
+WHEN NEW.user_id != OLD.user_id OR NEW.revision != OLD.revision+1
+BEGIN SELECT RAISE(ABORT,'workspace_revision'); END;
+
+CREATE TRIGGER capacity_preferences_revision BEFORE UPDATE ON capacity_preferences
+WHEN NEW.user_id != OLD.user_id OR NEW.revision != OLD.revision+1
+BEGIN SELECT RAISE(ABORT,'capacity_revision'); END;
+
+CREATE TRIGGER user_profiles_revision BEFORE UPDATE ON user_profiles
+WHEN NEW.user_id!=OLD.user_id OR NEW.revision!=OLD.revision+1
+BEGIN SELECT RAISE(ABORT,'profile_revision'); END;
+
+CREATE TRIGGER app_invitation_admit BEFORE INSERT ON app_invitations BEGIN
+ SELECT RAISE(ABORT,'app_invitation_authority') WHERE NEW.used_by IS NOT NULL OR NEW.revoked<>0 OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1 AND a.revision=NEW.program_revision);
+ SELECT RAISE(ABORT,'app_invitation_capacity') WHERE (SELECT count(*) FROM app_invitations WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_invitations)>=1000;
+END;
+
+CREATE TRIGGER app_invitation_identity BEFORE UPDATE ON app_invitations WHEN NEW.code_hash<>OLD.code_hash OR NEW.project_id<>OLD.project_id OR NEW.program_revision<>OLD.program_revision OR NEW.expires_at<>OLD.expires_at OR OLD.revoked=1 AND NEW.revoked<>1 OR OLD.used_by IS NOT NULL AND NEW.used_by IS NOT OLD.used_by OR NEW.used_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.used_by AND project_id=NEW.project_id)
+ BEGIN SELECT RAISE(ABORT,'app_invitation_identity'); END;
+
+CREATE TRIGGER app_passkey_admit BEFORE INSERT ON app_passkeys BEGIN
+ SELECT RAISE(ABORT,'app_passkey_authority') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_passkey_capacity') WHERE (SELECT count(*) FROM app_passkeys WHERE visitor_id=NEW.visitor_id)>=5;
+END;
+
+CREATE TRIGGER app_passkey_identity BEFORE UPDATE ON app_passkeys WHEN NEW.id<>OLD.id OR NEW.visitor_id<>OLD.visitor_id OR NEW.public_key<>OLD.public_key OR NEW.counter<OLD.counter OR NEW.revision<>OLD.revision+1
+ BEGIN SELECT RAISE(ABORT,'app_passkey_identity'); END;
+
+CREATE TRIGGER app_challenge_admit BEFORE INSERT ON app_auth_challenges BEGIN
+ SELECT RAISE(ABORT,'app_challenge_authority') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1 AND a.revision=NEW.program_revision);
+ SELECT RAISE(ABORT,'app_challenge_capacity') WHERE (SELECT count(*) FROM app_auth_challenges WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM app_auth_challenges)>=1000;
+END;
+
+CREATE TRIGGER app_challenge_immutable BEFORE UPDATE ON app_auth_challenges BEGIN SELECT RAISE(ABORT,'app_challenge_immutable'); END;
+
+CREATE TRIGGER app_recovery_identity BEFORE UPDATE ON app_recovery_codes WHEN NEW.visitor_id<>OLD.visitor_id
+ BEGIN SELECT RAISE(ABORT,'app_recovery_identity'); END;
+
+CREATE TRIGGER app_visitor_revoke AFTER UPDATE OF revoked ON app_visitors WHEN NEW.revoked=1 BEGIN
+ DELETE FROM app_sessions WHERE visitor_id=NEW.id;
+ DELETE FROM app_passkeys WHERE visitor_id=NEW.id;
+ DELETE FROM app_recovery_codes WHERE visitor_id=NEW.id;
+ DELETE FROM app_auth_challenges WHERE visitor_id=NEW.id;
+END;
+
+CREATE TRIGGER app_page_admit BEFORE INSERT ON app_page_reviews BEGIN
+ SELECT RAISE(ABORT,'app_page_owner') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_page_settings s ON s.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.revision=NEW.program_revision AND s.revision=NEW.base_revision AND (NEW.config_json IS NULL OR a.enabled=1));
+ SELECT RAISE(ABORT,'app_page_capacity') WHERE (SELECT count(*) FROM app_page_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_page_reviews)>=1000;
+ SELECT RAISE(ABORT,'app_page_initial') WHERE NEW.status<>'pending';
+END;
+
+CREATE TRIGGER app_page_immutable BEFORE UPDATE ON app_page_reviews WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.program_revision<>OLD.program_revision OR NEW.base_revision<>OLD.base_revision OR NEW.config_json IS NOT OLD.config_json OR NEW.expires_at<>OLD.expires_at OR OLD.status<>'pending' OR NEW.status<>'applied'
+ BEGIN SELECT RAISE(ABORT,'app_page_immutable'); END;
+
+CREATE TRIGGER app_page_apply AFTER UPDATE OF status ON app_page_reviews BEGIN
+ SELECT RAISE(ABORT,'app_page_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_page_settings s ON s.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.revision=NEW.program_revision AND s.revision=NEW.base_revision AND (NEW.config_json IS NULL OR a.enabled=1));
+ UPDATE app_page_settings SET revision=revision+1,review_id=NEW.id WHERE project_id=NEW.project_id;
+ DELETE FROM app_sessions WHERE visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
+ DELETE FROM app_auth_challenges WHERE project_id=NEW.project_id;
+END;
+
+CREATE TRIGGER app_page_settings_initial BEFORE INSERT ON app_page_settings WHEN NEW.revision<>0 OR NEW.review_id IS NOT NULL
+ BEGIN SELECT RAISE(ABORT,'app_page_initial'); END;
+
+CREATE TRIGGER app_page_settings_guard BEFORE UPDATE ON app_page_settings WHEN NEW.project_id<>OLD.project_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM app_page_reviews r WHERE r.id=NEW.review_id AND r.project_id=NEW.project_id AND r.base_revision=OLD.revision AND r.status='applied')
+ BEGIN SELECT RAISE(ABORT,'app_page_settings'); END;
+
+CREATE TRIGGER app_challenge_page BEFORE INSERT ON app_auth_challenges WHEN NEW.page_review_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_live_pages WHERE id=NEW.page_review_id AND project_id=NEW.project_id)
+ BEGIN SELECT RAISE(ABORT,'app_page_changed'); END;
+
+CREATE TRIGGER app_session_page BEFORE INSERT ON app_sessions WHEN NEW.page_review_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_live_pages p JOIN app_visitors v ON v.project_id=p.project_id WHERE p.id=NEW.page_review_id AND v.id=NEW.visitor_id)
+ BEGIN SELECT RAISE(ABORT,'app_page_changed'); END;
+
+CREATE TRIGGER app_run_admit BEFORE INSERT ON app_runs BEGIN
+ SELECT RAISE(ABORT,'app_run_identity') WHERE NEW.state<>'running' OR NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ SELECT RAISE(ABORT,'app_run_quota') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR (SELECT count(*) FROM app_runs)>=10000 OR (SELECT count(*) FROM app_runs WHERE visitor_id=NEW.visitor_id AND day=NEW.day)>=20 OR coalesce((SELECT attempts FROM app_daily_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=100 OR coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=1000;
+END;
+
+CREATE TRIGGER app_run_meter AFTER INSERT ON app_runs BEGIN
+ INSERT INTO app_daily_usage(project_id,day,attempts) VALUES(NEW.project_id,NEW.day,1) ON CONFLICT(project_id,day) DO UPDATE SET attempts=attempts+1;
+END;
+
+CREATE TRIGGER app_deletion_receipt_immutable BEFORE UPDATE ON app_deletion_receipts BEGIN SELECT RAISE(ABORT,'app_deletion_receipt_immutable'); END;
+
+CREATE TRIGGER app_deletion_receipt_capacity BEFORE INSERT ON app_deletion_receipts WHEN (SELECT count(*) FROM app_deletion_receipts)>=1000
+ BEGIN SELECT RAISE(ABORT,'app_deletion_receipt_capacity'); END;
+
+CREATE TRIGGER app_visitor_erase BEFORE DELETE ON app_visitors BEGIN
+ DELETE FROM app_auth_challenges WHERE visitor_id=OLD.id;
+ DELETE FROM app_invitations WHERE used_by=OLD.id;
+ DELETE FROM app_passkeys WHERE visitor_id=OLD.id;
+ DELETE FROM app_recovery_codes WHERE visitor_id=OLD.id;
+ DELETE FROM app_sessions WHERE visitor_id=OLD.id;
+ DELETE FROM app_runs WHERE visitor_id=OLD.id;
+ DELETE FROM app_documents WHERE visitor_id=OLD.id;
+END;
+
+CREATE TRIGGER agent_inspection_immutable BEFORE UPDATE ON agent_inspections BEGIN SELECT RAISE(ABORT,'agent_inspection_immutable'); END;
+
+CREATE TRIGGER cms_deployment_insert BEFORE INSERT ON cms_deployments WHEN NEW.state<>'reserved' OR NOT EXISTS(
+ SELECT 1 FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_setup_reviews r ON r.id=c.review_id WHERE c.project_id=NEW.project_id AND p.owner_user_id=c.user_id AND r.status='approved' AND c.state<>'ready' AND NEW.origin='https://'||c.worker_name||'.whumpo.site' AND (SELECT count(*) FROM cms_resource_jobs j WHERE j.project_id=c.project_id AND j.account_id=NEW.account_id AND j.state='complete')=3
+) BEGIN SELECT RAISE(ABORT,'cms_deployment_not_approved'); END;
+
+CREATE TRIGGER cloudflare_dns_routing_insert BEFORE INSERT ON cloudflare_dns_actions
+WHEN (NEW.record_type='TXT' AND (NEW.connection_id IS NOT NULL OR NEW.proof_token IS NOT NULL)) OR
+(NEW.record_type='CNAME' AND (NEW.content!='hosting.whumpo.site' OR NEW.record_name=NEW.zone_name OR NEW.connection_id IS NULL OR NEW.proof_token IS NULL OR NOT EXISTS(
+ SELECT 1 FROM domain_connections c JOIN domain_claims d ON d.id=c.claim_id JOIN projects p ON p.id=c.project_id
+ WHERE c.id=NEW.connection_id AND c.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND c.claim_id=NEW.claim_id AND c.project_id=NEW.project_id AND d.project_id=c.project_id AND d.hostname=c.hostname AND c.hostname=NEW.record_name AND c.target=NEW.content AND c.zone_id='8d46ee4e394514402479acf16579f7b5' AND c.state IN ('provisioning','active') AND c.provider_id IS NOT NULL AND d.token=NEW.proof_token AND d.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))))
+BEGIN SELECT RAISE(ABORT,'cloudflare_dns_stale'); END;
+
+CREATE TRIGGER cloudflare_dns_dispatch BEFORE UPDATE OF state ON cloudflare_dns_actions
+WHEN OLD.state='review' AND NEW.state IN ('sending','unchanged')
+BEGIN
+ SELECT RAISE(ABORT,'cloudflare_dns_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(
+ SELECT 1 FROM domain_claims d JOIN projects p ON p.id=d.project_id JOIN cloudflare_token_vault t ON t.user_id=p.owner_user_id
+ WHERE d.id=NEW.claim_id AND d.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND d.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND t.id=NEW.token_id AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND (
+ (NEW.record_type='TXT' AND '_tellumo.'||d.hostname=NEW.record_name AND 'tellumo-verification='||d.token=NEW.content)
+ OR (NEW.record_type='CNAME' AND d.hostname=NEW.record_name AND d.token=NEW.proof_token AND NEW.content='hosting.whumpo.site' AND NEW.record_name!=NEW.zone_name AND EXISTS(
+ SELECT 1 FROM domain_connections c WHERE c.id=NEW.connection_id AND c.user_id=NEW.user_id AND c.claim_id=d.id AND c.project_id=d.project_id AND c.hostname=d.hostname AND c.target=NEW.content AND c.zone_id='8d46ee4e394514402479acf16579f7b5' AND c.state IN ('provisioning','active') AND c.provider_id IS NOT NULL))));
+END;
+
+CREATE TRIGGER project_details_revision AFTER UPDATE OF name,purpose,audience,style_notes,preferred_theme ON projects
+WHEN NEW.name<>OLD.name OR NEW.purpose<>OLD.purpose OR NEW.audience<>OLD.audience OR NEW.style_notes<>OLD.style_notes OR NEW.preferred_theme<>OLD.preferred_theme
+BEGIN
+ UPDATE projects SET details_revision=OLD.details_revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=NEW.id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at)
+ VALUES(lower(hex(randomblob(16))),NEW.owner_user_id,NEW.id,'project.details.updated','Updated project details',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER cms_export_link_owner BEFORE INSERT ON cms_export_links
+WHEN (SELECT COUNT(*) FROM cms_export_links)>=5000 OR (SELECT COUNT(*) FROM cms_export_links WHERE user_id=NEW.user_id)>=1000 OR NOT EXISTS(SELECT 1 FROM cms_draft_requests d JOIN projects p ON p.id=d.project_id JOIN chat_turns t ON t.id=NEW.turn_id WHERE d.id=NEW.draft_request_id AND d.project_id=NEW.project_id AND d.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id AND t.status IN ('pending','completed'))
+BEGIN SELECT RAISE(ABORT,'cms_export_owner'); END;
+
+CREATE TRIGGER cms_export_link_immutable BEFORE UPDATE ON cms_export_links
+BEGIN SELECT RAISE(ABORT,'cms_export_immutable'); END;
+
+CREATE TRIGGER cms_draft_format_immutable BEFORE UPDATE OF content_format ON cms_draft_requests WHEN NEW.content_format<>OLD.content_format
+ BEGIN SELECT RAISE(ABORT,'cms_draft_format_immutable'); END;
+
+CREATE TRIGGER cms_edit_format_immutable BEFORE UPDATE OF content_format ON cms_edit_requests WHEN NEW.content_format<>OLD.content_format
+ BEGIN SELECT RAISE(ABORT,'cms_edit_format_immutable'); END;
+
+CREATE TRIGGER gateway_bucket_identity BEFORE UPDATE ON gateway_spend_buckets BEGIN
+ SELECT RAISE(ABORT,'gateway_bucket_identity') WHERE NEW.id!=OLD.id OR NEW.scope!=OLD.scope OR NEW.user_id IS NOT OLD.user_id OR NEW.task_id IS NOT OLD.task_id OR NEW.terms_json!=OLD.terms_json;
+ -- Approval caps cannot be raised by changing a balance. A new approval is required.
+ SELECT RAISE(ABORT,'gateway_approval_immutable') WHERE OLD.scope='approval' AND NEW.limit_micros!=OLD.limit_micros;
+END;
+
+CREATE TRIGGER gateway_attempt_admit BEFORE INSERT ON gateway_spend_attempts BEGIN
+ SELECT RAISE(ABORT,'gateway_initial_state') WHERE NEW.status!='reserved';
+ SELECT RAISE(ABORT,'gateway_snapshot') WHERE json_extract(NEW.snapshot,'$.ownerId') IS NOT NEW.user_id OR json_extract(NEW.snapshot,'$.taskId') IS NOT NEW.task_id OR json_extract(NEW.snapshot,'$.providerReservationMicros') IS NOT NEW.provider_reserved OR json_extract(NEW.snapshot,'$.customerReservationMicros') IS NOT NEW.customer_reserved OR json_extract(NEW.snapshot,'$.role') NOT IN ('ack','orchestrator') OR json_extract(NEW.snapshot,'$.role') IS NULL;
+ SELECT RAISE(ABORT,'gateway_rate_bounds') WHERE
+ typeof(json_extract(NEW.snapshot,'$.inputBound'))!='integer' OR json_extract(NEW.snapshot,'$.inputBound') NOT BETWEEN 1 AND 10000000 OR
+ typeof(json_extract(NEW.snapshot,'$.outputBound'))!='integer' OR json_extract(NEW.snapshot,'$.outputBound') NOT BETWEEN 1 AND 10000000 OR
+ typeof(json_extract(NEW.snapshot,'$.rate.inputMicrosPerMillion'))!='integer' OR json_extract(NEW.snapshot,'$.rate.inputMicrosPerMillion') NOT BETWEEN 0 AND 1000000000 OR
+ typeof(json_extract(NEW.snapshot,'$.rate.outputMicrosPerMillion'))!='integer' OR json_extract(NEW.snapshot,'$.rate.outputMicrosPerMillion') NOT BETWEEN 0 AND 1000000000 OR
+ typeof(json_extract(NEW.snapshot,'$.extraMicrosPerCall'))!='integer' OR json_extract(NEW.snapshot,'$.extraMicrosPerCall') NOT BETWEEN 0 AND 1000000000 OR
+ typeof(json_extract(NEW.snapshot,'$.rateValidUntil'))!='integer';
+ SELECT RAISE(ABORT,'gateway_quote') WHERE NEW.provider_reserved!=CAST((json_extract(NEW.snapshot,'$.inputBound')*json_extract(NEW.snapshot,'$.rate.inputMicrosPerMillion')+json_extract(NEW.snapshot,'$.outputBound')*json_extract(NEW.snapshot,'$.rate.outputMicrosPerMillion')+999999)/1000000 AS INTEGER)+json_extract(NEW.snapshot,'$.extraMicrosPerCall');
+ SELECT RAISE(ABORT,'gateway_retail_quote') WHERE json_extract(NEW.snapshot,'$.tier')='premium' AND (
+ typeof(json_extract(NEW.snapshot,'$.retailMultiplierBps'))!='integer' OR json_extract(NEW.snapshot,'$.retailMultiplierBps') NOT BETWEEN 10000 AND 100000 OR
+ NEW.customer_reserved!=CAST((NEW.provider_reserved*json_extract(NEW.snapshot,'$.retailMultiplierBps')+9999)/10000 AS INTEGER));
+ SELECT RAISE(ABORT,'gateway_rate_expired') WHERE json_extract(NEW.snapshot,'$.rateValidUntil') IS NULL OR json_extract(NEW.snapshot,'$.rateValidUntil')<=(CAST(strftime('%s','now') AS INTEGER)*1000+CAST(substr(strftime('%f','now'),4,3) AS INTEGER));
+ SELECT RAISE(ABORT,'gateway_task_budget') WHERE NOT EXISTS(SELECT 1 FROM gateway_spend_buckets WHERE id=NEW.task_bucket AND scope='task' AND user_id=NEW.user_id AND task_id=NEW.task_id AND limit_micros-held_micros-spent_micros>=NEW.provider_reserved);
+ SELECT RAISE(ABORT,'gateway_account_budget') WHERE NOT EXISTS(SELECT 1 FROM gateway_spend_buckets WHERE id=NEW.account_bucket AND scope='account' AND user_id=NEW.user_id AND limit_micros-held_micros-spent_micros>=NEW.provider_reserved);
+ SELECT RAISE(ABORT,'gateway_platform_budget') WHERE NOT EXISTS(SELECT 1 FROM gateway_spend_buckets WHERE id=NEW.platform_bucket AND scope='platform' AND limit_micros-held_micros-spent_micros>=NEW.provider_reserved);
+ SELECT RAISE(ABORT,'gateway_tier') WHERE NOT (
+  (json_extract(NEW.snapshot,'$.tier')='standard' AND NEW.customer_reserved=0 AND NEW.premium_bucket IS NULL AND NEW.approval_bucket IS NULL) OR
+  (json_extract(NEW.snapshot,'$.tier')='premium' AND NEW.premium_bucket IS NOT NULL AND NEW.approval_bucket IS NOT NULL)
+ ) OR json_extract(NEW.snapshot,'$.tier') IS NULL;
+ SELECT RAISE(ABORT,'gateway_premium_balance') WHERE NEW.premium_bucket IS NOT NULL AND NOT EXISTS(SELECT 1 FROM gateway_spend_buckets WHERE id=NEW.premium_bucket AND scope='premium' AND user_id=NEW.user_id AND limit_micros-held_micros-spent_micros>=NEW.customer_reserved);
+ SELECT RAISE(ABORT,'gateway_premium_approval') WHERE NEW.approval_bucket IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM gateway_spend_buckets b WHERE b.id=NEW.approval_bucket AND b.scope='approval' AND b.user_id=NEW.user_id AND b.task_id=NEW.task_id
+  AND b.id=json_extract(NEW.snapshot,'$.approvalId') AND json_extract(b.terms_json,'$.catalogVersion')=json_extract(NEW.snapshot,'$.catalogVersion')
+  AND json_extract(b.terms_json,'$.policy')='gateway-cost-routing-v1' AND json_extract(b.terms_json,'$.tariffId')=json_extract(NEW.snapshot,'$.tariffId')
+  AND json_extract(b.terms_json,'$.retailMultiplierBps')=json_extract(NEW.snapshot,'$.retailMultiplierBps')
+  AND json_extract(b.terms_json,'$.expiresAt')>(CAST(strftime('%s','now') AS INTEGER)*1000+CAST(substr(strftime('%f','now'),4,3) AS INTEGER))
+  AND EXISTS(SELECT 1 FROM json_each(b.terms_json,'$.candidateIds') WHERE value=json_extract(NEW.snapshot,'$.candidateId'))
+  AND b.limit_micros-b.held_micros-b.spent_micros>=NEW.customer_reserved
+ );
+END;
+
+CREATE TRIGGER gateway_attempt_hold AFTER INSERT ON gateway_spend_attempts BEGIN
+ UPDATE gateway_spend_buckets SET held_micros=held_micros+NEW.provider_reserved WHERE id IN (NEW.task_bucket,NEW.account_bucket,NEW.platform_bucket);
+ UPDATE gateway_spend_buckets SET held_micros=held_micros+NEW.customer_reserved WHERE id IN (NEW.premium_bucket,NEW.approval_bucket);
+END;
+
+CREATE TRIGGER gateway_attempt_immutable BEFORE UPDATE ON gateway_spend_attempts BEGIN
+ SELECT RAISE(ABORT,'gateway_attempt_immutable') WHERE NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.task_id!=OLD.task_id OR NEW.snapshot!=OLD.snapshot OR NEW.task_bucket!=OLD.task_bucket OR NEW.account_bucket!=OLD.account_bucket OR NEW.platform_bucket!=OLD.platform_bucket OR NEW.premium_bucket IS NOT OLD.premium_bucket OR NEW.approval_bucket IS NOT OLD.approval_bucket OR NEW.provider_reserved!=OLD.provider_reserved OR NEW.customer_reserved!=OLD.customer_reserved;
+ SELECT RAISE(ABORT,'gateway_dispatch_expired') WHERE NEW.status='dispatched' AND (json_extract(OLD.snapshot,'$.rateValidUntil')<=(CAST(strftime('%s','now') AS INTEGER)*1000+CAST(substr(strftime('%f','now'),4,3) AS INTEGER)) OR (OLD.approval_bucket IS NOT NULL AND NOT EXISTS(SELECT 1 FROM gateway_spend_buckets WHERE id=OLD.approval_bucket AND json_extract(terms_json,'$.expiresAt')>(CAST(strftime('%s','now') AS INTEGER)*1000+CAST(substr(strftime('%f','now'),4,3) AS INTEGER)))));
+ SELECT RAISE(ABORT,'gateway_settlement_cost') WHERE NEW.status='settled' AND (
+ NEW.input_tokens>json_extract(OLD.snapshot,'$.inputBound') OR NEW.output_tokens>json_extract(OLD.snapshot,'$.outputBound') OR
+ NEW.provider_actual!=CAST((NEW.input_tokens*json_extract(OLD.snapshot,'$.rate.inputMicrosPerMillion')+NEW.output_tokens*json_extract(OLD.snapshot,'$.rate.outputMicrosPerMillion')+999999)/1000000 AS INTEGER)+json_extract(OLD.snapshot,'$.extraMicrosPerCall') OR
+ NEW.customer_actual!=CASE WHEN json_extract(OLD.snapshot,'$.tier')='standard' THEN 0 ELSE CAST((NEW.provider_actual*json_extract(OLD.snapshot,'$.retailMultiplierBps')+9999)/10000 AS INTEGER) END);
+ SELECT RAISE(ABORT,'gateway_transition') WHERE NOT ((OLD.status='reserved' AND NEW.status IN ('dispatched','released')) OR (OLD.status='dispatched' AND NEW.status IN ('uncertain','settled')) OR (OLD.status='uncertain' AND NEW.status='settled'));
+END;
+
+CREATE TRIGGER gateway_attempt_finish AFTER UPDATE ON gateway_spend_attempts WHEN NEW.status IN ('settled','released') BEGIN
+ UPDATE gateway_spend_buckets SET held_micros=held_micros-OLD.provider_reserved,spent_micros=spent_micros+COALESCE(NEW.provider_actual,0) WHERE id IN (NEW.task_bucket,NEW.account_bucket,NEW.platform_bucket);
+ UPDATE gateway_spend_buckets SET held_micros=held_micros-OLD.customer_reserved,spent_micros=spent_micros+COALESCE(NEW.customer_actual,0) WHERE id IN (NEW.premium_bucket,NEW.approval_bucket);
+END;
+
+CREATE TRIGGER gateway_attempt_no_delete BEFORE DELETE ON gateway_spend_attempts BEGIN SELECT RAISE(ABORT,'gateway_attempt_immutable'); END;
+
+CREATE TRIGGER fair_use_project_created AFTER INSERT ON projects BEGIN
+ INSERT INTO fair_use_project_lifecycle(project_id,user_id,created_at) VALUES(NEW.id,NEW.owner_user_id,NEW.created_at);
+END;
+
+CREATE TRIGGER fair_use_ai_version AFTER INSERT ON site_versions WHEN EXISTS(SELECT 1 FROM chat_turns t JOIN projects p ON p.id=NEW.project_id AND p.owner_user_id=t.user_id WHERE t.id=NEW.id AND t.mode='ai' AND t.status='completed') BEGIN
+ UPDATE fair_use_project_lifecycle SET ai_saved_at=COALESCE(ai_saved_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE project_id=NEW.project_id;
+END;
+
+CREATE TRIGGER fair_use_ai_completed AFTER UPDATE OF status ON chat_turns WHEN NEW.mode='ai' AND NEW.status='completed' AND OLD.status!='completed' BEGIN
+ UPDATE fair_use_project_lifecycle SET ai_saved_at=COALESCE(ai_saved_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE user_id=NEW.user_id AND project_id IN (SELECT project_id FROM site_versions WHERE id=NEW.id);
+END;
+
+CREATE TRIGGER fair_use_project_removed AFTER DELETE ON projects BEGIN
+ UPDATE fair_use_project_lifecycle SET removed_at=COALESCE(removed_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE project_id=OLD.id AND user_id=OLD.owner_user_id;
+END;
+
+CREATE TRIGGER fair_use_lifecycle_immutable BEFORE UPDATE ON fair_use_project_lifecycle BEGIN
+ SELECT RAISE(ABORT,'fair_use_identity') WHERE NEW.project_id!=OLD.project_id OR NEW.user_id!=OLD.user_id OR NEW.created_at!=OLD.created_at OR NEW.observed_since!=OLD.observed_since;
+ SELECT RAISE(ABORT,'fair_use_history') WHERE (OLD.ai_saved_at IS NOT NULL AND NEW.ai_saved_at IS NOT OLD.ai_saved_at) OR (OLD.export_prepared_at IS NOT NULL AND NEW.export_prepared_at IS NOT OLD.export_prepared_at) OR (OLD.removed_at IS NOT NULL AND NEW.removed_at IS NOT OLD.removed_at);
+END;
+
+CREATE TRIGGER cms_media_upload_admit BEFORE INSERT ON cms_media_uploads BEGIN
+ SELECT RAISE(ABORT,'cms_upload_owner') WHERE NOT EXISTS(SELECT 1 FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_deployments d ON d.project_id=c.project_id WHERE c.project_id=NEW.project_id AND c.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND c.state='ready' AND d.state='connected' AND d.origin=NEW.origin);
+ SELECT RAISE(ABORT,'cms_upload_initial') WHERE NEW.result IS NOT NULL;
+ SELECT RAISE(ABORT,'cms_upload_quota') WHERE (SELECT count(*) FROM cms_media_uploads WHERE project_id=NEW.project_id)>=20 OR (SELECT count(*) FROM cms_media_uploads WHERE user_id=NEW.user_id)>=50 OR (SELECT count(*) FROM cms_media_uploads)>=500;
+END;
+
+CREATE TRIGGER cms_media_upload_storage AFTER INSERT ON cms_media_uploads BEGIN
+ INSERT INTO storage_usage(period,write_ops) VALUES(strftime('%Y-%m','now'),2) ON CONFLICT(period) DO UPDATE SET write_ops=write_ops+2 WHERE write_ops+2<=10000;
+ SELECT RAISE(ABORT,'cms_upload_storage') WHERE changes()=0;
+END;
+
+CREATE TRIGGER cms_media_upload_immutable BEFORE UPDATE ON cms_media_uploads BEGIN
+ SELECT RAISE(ABORT,'cms_upload_identity') WHERE NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.origin!=OLD.origin OR NEW.filename!=OLD.filename OR NEW.digest!=OLD.digest OR NEW.size!=OLD.size OR NEW.width!=OLD.width OR NEW.height!=OLD.height OR NEW.created_at!=OLD.created_at OR OLD.result IS NOT NULL OR NEW.result IS NULL;
+END;
+
+CREATE TRIGGER cms_media_upload_retained BEFORE DELETE ON cms_media_uploads WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'cms_upload_retained'); END;
+
+CREATE TRIGGER cms_publication_manifest_immutable BEFORE UPDATE OF media_manifest ON cms_publication_reviews WHEN NEW.media_manifest<>OLD.media_manifest BEGIN SELECT RAISE(ABORT,'cms_media_manifest_immutable'); END;
+
+CREATE TRIGGER cms_publication_media_create AFTER INSERT ON cms_publication_reviews BEGIN
+ SELECT RAISE(ABORT,'cms_media_manifest_content') WHERE (SELECT count(DISTINCT json_extract(value,'$.asset._ref')) FROM json_each(NEW.snapshot,'$.item.data.content') WHERE json_extract(value,'$._type')='image')<>json_array_length(NEW.media_manifest) OR EXISTS(SELECT 1 FROM json_each(NEW.media_manifest) m WHERE NOT EXISTS(SELECT 1 FROM json_each(NEW.snapshot,'$.item.data.content') b WHERE json_extract(b.value,'$._type')='image' AND json_extract(b.value,'$.asset._ref')=json_extract(m.value,'$.mediaId')));
+ SELECT RAISE(ABORT,'cms_media_capacity') WHERE (SELECT count(*) FROM cms_publication_media)+json_array_length(NEW.media_manifest)>500;
+ INSERT INTO cms_publication_media(review_id,media_id,user_id,project_id,digest,size,width,height)
+ SELECT NEW.id,json_extract(value,'$.mediaId'),NEW.user_id,NEW.project_id,json_extract(value,'$.digest'),json_extract(value,'$.size'),json_extract(value,'$.width'),json_extract(value,'$.height') FROM json_each(NEW.media_manifest);
+END;
+
+CREATE TRIGGER cms_publication_media_admit BEFORE INSERT ON cms_publication_media BEGIN
+ SELECT RAISE(ABORT,'cms_media_receipt_required') WHERE NEW.state<>'pending' OR NOT EXISTS(
+  SELECT 1 FROM cms_media_uploads u JOIN cms_deployments d ON d.project_id=u.project_id JOIN cms_publication_reviews r ON r.id=NEW.review_id
+  WHERE u.user_id=NEW.user_id AND u.project_id=NEW.project_id AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.status='pending'
+  AND u.origin=d.origin AND d.state='connected' AND json_extract(u.result,'$.mediaId')=NEW.media_id AND u.digest=NEW.digest AND u.size=NEW.size AND u.width=NEW.width AND u.height=NEW.height
+  AND EXISTS(SELECT 1 FROM json_each(r.media_manifest) m WHERE json_extract(m.value,'$.mediaId')=NEW.media_id AND json_extract(m.value,'$.digest')=NEW.digest AND json_extract(m.value,'$.size')=NEW.size AND json_extract(m.value,'$.width')=NEW.width AND json_extract(m.value,'$.height')=NEW.height)
+ );
+END;
+
+CREATE TRIGGER cms_publication_media_immutable BEFORE UPDATE ON cms_publication_media WHEN NEW.review_id<>OLD.review_id OR NEW.media_id<>OLD.media_id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.digest<>OLD.digest OR NEW.size<>OLD.size OR NEW.width<>OLD.width OR NEW.height<>OLD.height OR OLD.state<>'pending' OR NEW.state<>'ready' BEGIN SELECT RAISE(ABORT,'cms_media_immutable'); END;
+
+CREATE TRIGGER cms_publication_media_retained BEFORE DELETE ON cms_publication_media WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'cms_media_retained'); END;
+
+CREATE TRIGGER cms_publication_media_approval BEFORE UPDATE OF status ON cms_publication_reviews WHEN NEW.status IN ('approved','published') AND (
+ (SELECT count(*) FROM cms_publication_media WHERE review_id=NEW.id AND state='ready')<>json_array_length(NEW.media_manifest)
+) BEGIN SELECT RAISE(ABORT,'cms_media_not_frozen'); END;
+
+CREATE TRIGGER cms_import_admission BEFORE INSERT ON cms_import_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_deployments d ON d.project_id=c.project_id WHERE c.project_id=NEW.project_id AND c.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND c.state='ready' AND d.state='connected') OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_discard_reviews WHERE id=NEW.id) OR (SELECT count(*) FROM cms_import_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_import_reviews)>=500
+ BEGIN SELECT RAISE(ABORT,'cms_import_unavailable'); END;
+
+CREATE TRIGGER cms_import_immutable BEFORE UPDATE ON cms_import_reviews WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.source_digest<>OLD.source_digest OR NEW.source_id<>OLD.source_id OR NEW.collection<>OLD.collection OR NEW.body<>OLD.body OR NEW.provenance<>OLD.provenance OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at OR NOT ((OLD.status='pending' AND NEW.status='superseded' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR (OLD.status='pending' AND NEW.status='approved' AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR (OLD.status='approved' AND NEW.status='imported' AND EXISTS(SELECT 1 FROM cms_draft_requests d WHERE d.id=OLD.id AND d.user_id=OLD.user_id AND d.project_id=OLD.project_id AND d.collection=OLD.collection AND d.body=OLD.body AND d.content_format='structured' AND d.item_id IS NOT NULL)))
+ BEGIN SELECT RAISE(ABORT,'cms_import_immutable'); END;
+
+CREATE TRIGGER cms_import_approve AFTER UPDATE OF status ON cms_import_reviews WHEN OLD.status='pending' AND NEW.status='approved' BEGIN
+ INSERT INTO cms_draft_requests(id,project_id,user_id,collection,body,content_format) VALUES(NEW.id,NEW.project_id,NEW.user_id,NEW.collection,NEW.body,'structured');
+END;
+
+CREATE TRIGGER cms_import_draft_guard BEFORE INSERT ON cms_draft_requests WHEN EXISTS(SELECT 1 FROM cms_import_reviews r WHERE r.id=NEW.id AND (r.status<>'approved' OR r.project_id<>NEW.project_id OR r.user_id<>NEW.user_id OR r.collection<>NEW.collection OR r.body<>NEW.body OR NEW.content_format<>'structured')) BEGIN SELECT RAISE(ABORT,'cms_import_review_required'); END;
+
+CREATE TRIGGER cms_import_retained BEFORE DELETE ON cms_import_reviews WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'cms_import_retained'); END;
+
+CREATE TRIGGER cms_import_publication_id BEFORE INSERT ON cms_publication_reviews WHEN EXISTS(SELECT 1 FROM cms_import_reviews WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'cms_import_id_reserved'); END;
+
+CREATE TRIGGER cms_import_edit_id BEFORE INSERT ON cms_edit_requests WHEN EXISTS(SELECT 1 FROM cms_import_reviews WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'cms_import_id_reserved'); END;
+
+CREATE TRIGGER cms_import_unpublish_id BEFORE INSERT ON cms_unpublish_reviews WHEN EXISTS(SELECT 1 FROM cms_import_reviews WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'cms_import_id_reserved'); END;
+
+CREATE TRIGGER cms_import_discard_id BEFORE INSERT ON cms_discard_reviews WHEN EXISTS(SELECT 1 FROM cms_import_reviews WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'cms_import_id_reserved'); END;
+
+CREATE TRIGGER cms_import_renew BEFORE INSERT ON cms_import_reviews BEGIN
+ UPDATE cms_import_reviews SET status='superseded' WHERE project_id=NEW.project_id AND user_id=NEW.user_id AND source_digest=NEW.source_digest AND source_id=NEW.source_id AND status='pending' AND expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+END;
+
+CREATE TRIGGER cms_wordpress_source_admit BEFORE INSERT ON cms_wordpress_sources WHEN NEW.state<>'pending' OR NOT EXISTS(SELECT 1 FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_deployments d ON d.project_id=c.project_id WHERE c.project_id=NEW.project_id AND c.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND c.state='ready' AND d.state='connected') OR (SELECT count(*) FROM cms_wordpress_sources WHERE project_id=NEW.project_id)>=5 OR (SELECT count(*) FROM cms_wordpress_sources WHERE user_id=NEW.user_id)>=10 OR (SELECT count(*) FROM cms_wordpress_sources)>=50
+ BEGIN SELECT RAISE(ABORT,'cms_wordpress_source_unavailable'); END;
+
+CREATE TRIGGER cms_wordpress_source_immutable BEFORE UPDATE ON cms_wordpress_sources WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.filename<>OLD.filename OR NEW.digest<>OLD.digest OR NEW.size<>OLD.size OR NEW.created_at<>OLD.created_at OR OLD.state<>'pending' OR NEW.state<>'ready'
+ BEGIN SELECT RAISE(ABORT,'cms_wordpress_source_immutable'); END;
+
+CREATE TRIGGER cms_wordpress_source_retained BEFORE DELETE ON cms_wordpress_sources WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'cms_wordpress_source_retained'); END;
+
+CREATE TRIGGER cms_import_source_admit BEFORE INSERT ON cms_import_reviews WHEN NEW.source_upload_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM cms_wordpress_sources s WHERE s.id=NEW.source_upload_id AND s.user_id=NEW.user_id AND s.project_id=NEW.project_id AND s.digest=NEW.source_digest AND s.state='ready') BEGIN SELECT RAISE(ABORT,'cms_import_source_required'); END;
+
+CREATE TRIGGER cms_import_source_immutable BEFORE UPDATE OF source_upload_id ON cms_import_reviews WHEN NEW.source_upload_id IS NOT OLD.source_upload_id BEGIN SELECT RAISE(ABORT,'cms_import_source_immutable'); END;
+
+CREATE TRIGGER backend_component_integrity BEFORE INSERT ON backend_component_instances
+ WHEN NOT EXISTS(SELECT 1 FROM backend_versions v WHERE v.id=NEW.version_id AND v.digest=NEW.artifact_digest)
+ BEGIN SELECT RAISE(ABORT,'backend_component_digest_mismatch'); END;
+
+CREATE TRIGGER backend_component_immutable BEFORE UPDATE ON backend_component_instances
+ BEGIN SELECT RAISE(ABORT,'backend_component_immutable'); END;
+
+CREATE TRIGGER backend_component_retained BEFORE DELETE ON backend_component_instances
+ WHEN EXISTS(SELECT 1 FROM backend_versions WHERE id=OLD.version_id)
+ BEGIN SELECT RAISE(ABORT,'backend_component_retained'); END;
+
+CREATE TRIGGER welcome_revision BEFORE UPDATE ON welcome_onboarding
+ WHEN NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.revision<>OLD.revision+1 OR OLD.completed_at IS NOT NULL
+ BEGIN SELECT RAISE(ABORT,'welcome_revision'); END;
+
+CREATE TRIGGER welcome_complete_guard BEFORE UPDATE ON welcome_onboarding
+ WHEN (NEW.stage='complete')<>(NEW.completed_at IS NOT NULL) OR
+ (NEW.completed_at IS NOT NULL AND (OLD.stage<>'review' OR length(trim(NEW.project_name))=0 OR length(trim(NEW.idea))=0 OR NOT EXISTS(SELECT 1 FROM user_profiles WHERE user_id=NEW.user_id AND length(trim(name))>0)))
+ BEGIN SELECT RAISE(ABORT,'welcome_incomplete'); END;
+
+CREATE TRIGGER domain_proof_removal_identity BEFORE UPDATE ON domain_proof_removals
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.claim_id!=OLD.claim_id OR NEW.hostname!=OLD.hostname OR NEW.proof_token!=OLD.proof_token OR NEW.proof_expires_at!=OLD.proof_expires_at OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied'
+BEGIN SELECT RAISE(ABORT,'domain_proof_removal_immutable'); END;
+
+CREATE TRIGGER domain_proof_removal_apply AFTER UPDATE ON domain_proof_removals
+BEGIN
+ DELETE FROM domain_claims WHERE id=NEW.claim_id AND project_id=NEW.project_id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('domain-proof-removal:'||NEW.claim_id,NEW.user_id,NEW.project_id,'domain.proof.removed','Removed unused domain ownership proof',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER domain_proof_retained BEFORE DELETE ON domain_claims
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)
+BEGIN
+ SELECT RAISE(ABORT,'domain_proof_removal_retained') WHERE EXISTS(SELECT 1 FROM domain_connections WHERE claim_id=OLD.id) OR EXISTS(SELECT 1 FROM cloudflare_dns_actions WHERE claim_id=OLD.id);
+ SELECT RAISE(ABORT,'domain_proof_removal_unreviewed') WHERE NOT EXISTS(SELECT 1 FROM domain_proof_removals WHERE claim_id=OLD.id AND project_id=OLD.project_id AND proof_token=OLD.token AND status='applied');
+END;
+
+CREATE TRIGGER domain_proof_removed BEFORE INSERT ON domain_claims
+WHEN EXISTS(SELECT 1 FROM domain_proof_removals WHERE claim_id=NEW.id AND status='applied')
+BEGIN SELECT RAISE(ABORT,'domain_proof_removal_replay'); END;
+
+CREATE TRIGGER gateway_request_admit BEFORE INSERT ON gateway_inference_requests BEGIN
+ SELECT RAISE(ABORT,'gateway_request_state') WHERE NEW.result_json IS NOT NULL OR NOT EXISTS(SELECT 1 FROM gateway_spend_attempts WHERE id=NEW.attempt_id AND status='reserved');
+END;
+
+CREATE TRIGGER gateway_request_immutable BEFORE UPDATE ON gateway_inference_requests BEGIN
+ SELECT RAISE(ABORT,'gateway_request_immutable') WHERE NEW.attempt_id!=OLD.attempt_id OR NEW.request_hash!=OLD.request_hash OR OLD.result_json IS NOT NULL OR NEW.result_json IS NULL;
+ SELECT RAISE(ABORT,'gateway_request_state') WHERE NOT EXISTS(SELECT 1 FROM gateway_spend_attempts WHERE id=OLD.attempt_id AND status='dispatched');
+END;
+
+CREATE TRIGGER gateway_request_no_delete BEFORE DELETE ON gateway_inference_requests BEGIN SELECT RAISE(ABORT,'gateway_request_immutable'); END;
+
+CREATE TRIGGER gateway_provider_receipt_admit BEFORE INSERT ON gateway_provider_receipts BEGIN
+ SELECT RAISE(ABORT,'gateway_provider_receipt_state') WHERE NOT EXISTS(SELECT 1 FROM gateway_spend_attempts WHERE id=NEW.attempt_id AND status='dispatched');
+END;
+
+CREATE TRIGGER gateway_provider_receipt_no_update BEFORE UPDATE ON gateway_provider_receipts BEGIN SELECT RAISE(ABORT,'gateway_provider_receipt_immutable'); END;
+
+CREATE TRIGGER gateway_provider_receipt_no_delete BEFORE DELETE ON gateway_provider_receipts BEGIN SELECT RAISE(ABORT,'gateway_provider_receipt_immutable'); END;
+
+CREATE TRIGGER welcome_first_draft_immutable BEFORE UPDATE ON welcome_first_drafts
+ BEGIN SELECT RAISE(ABORT,'welcome_first_draft_immutable'); END;
+
+CREATE TRIGGER welcome_first_draft_guard BEFORE INSERT ON site_versions
+ WHEN EXISTS (
+  SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND substr(t.user_text,1,13)='/first-draft '
+  AND (t.user_text<>'/first-draft '||NEW.project_id OR t.mode<>'ai'
+   OR NOT EXISTS(SELECT 1 FROM welcome_first_drafts f WHERE f.turn_id=t.id AND f.project_id=NEW.project_id AND f.user_id=t.user_id)
+   OR NOT EXISTS(SELECT 1 FROM welcome_onboarding w JOIN projects p ON p.id=w.project_id AND p.owner_user_id=w.user_id
+    WHERE w.user_id=t.user_id AND w.project_id=NEW.project_id AND w.completed_at IS NOT NULL)
+   OR EXISTS(SELECT 1 FROM site_versions v WHERE v.project_id=NEW.project_id))
+ )
+ BEGIN SELECT RAISE(ABORT,'welcome_first_draft_changed'); END;
+
+CREATE TRIGGER cms_import_taxonomy_admit BEFORE INSERT ON cms_import_reviews WHEN NEW.taxonomy_plan<>'[]' AND (
+ NEW.collection<>'posts' OR NEW.source_upload_id IS NULL OR json_array_length(NEW.taxonomy_plan)=0 OR
+ EXISTS(SELECT 1 FROM json_each(NEW.taxonomy_plan) t WHERE json_type(t.value)<>'object' OR (SELECT count(*) FROM json_each(t.value))<>3 OR json_extract(t.value,'$.taxonomy') NOT IN ('categories','tags') OR json_type(t.value,'$.taxonomy') IS NOT 'text' OR json_type(t.value,'$.slug') IS NOT 'text' OR json_type(t.value,'$.label') IS NOT 'text') OR
+ (SELECT count(DISTINCT json_extract(value,'$.taxonomy')||':'||json_extract(value,'$.slug')) FROM json_each(NEW.taxonomy_plan))<>json_array_length(NEW.taxonomy_plan)
+) BEGIN SELECT RAISE(ABORT,'cms_import_taxonomy_plan_invalid'); END;
+
+CREATE TRIGGER cms_import_taxonomy_immutable BEFORE UPDATE OF taxonomy_plan ON cms_import_reviews WHEN NEW.taxonomy_plan<>OLD.taxonomy_plan BEGIN SELECT RAISE(ABORT,'cms_import_taxonomy_immutable'); END;
+
+CREATE TRIGGER cms_import_taxonomy_job_admit BEFORE INSERT ON cms_import_taxonomy_jobs WHEN NEW.state<>'prepared' OR NOT EXISTS(
+ SELECT 1 FROM cms_import_reviews r JOIN projects p ON p.id=r.project_id JOIN cms_draft_requests d ON d.id=r.id
+ WHERE r.id=NEW.review_id AND r.status='approved' AND r.taxonomy_plan<>'[]' AND r.user_id=p.owner_user_id AND d.item_id IS NULL AND d.user_id=r.user_id AND d.project_id=r.project_id AND d.body=r.body
+ AND json_type(NEW.body)='object' AND (SELECT count(*) FROM json_each(NEW.body))=3
+ AND json_extract(NEW.body,'$.draftRequestId')=r.id AND json_type(NEW.body,'$.itemId')='text' AND length(json_extract(NEW.body,'$.itemId'))=26
+ AND json_extract(NEW.body,'$.itemId') NOT GLOB '*[^0-9A-HJKMNP-TV-Z]*'
+ AND json_type(NEW.body,'$.terms')='array' AND json_array_length(NEW.body,'$.terms')=json_array_length(r.taxonomy_plan)
+ AND (SELECT count(DISTINCT json_extract(value,'$.id')) FROM json_each(NEW.body,'$.terms'))=json_array_length(r.taxonomy_plan)
+ AND NOT EXISTS(SELECT 1 FROM json_each(NEW.body,'$.terms') n WHERE json_type(n.value)<>'object' OR (SELECT count(*) FROM json_each(n.value))<>4 OR json_extract(n.value,'$.id') GLOB '*[^0-9A-HJKMNP-TV-Z]*')
+ AND NOT EXISTS(SELECT 1 FROM json_each(r.taxonomy_plan) t WHERE NOT EXISTS(SELECT 1 FROM json_each(NEW.body,'$.terms') n WHERE json_extract(n.value,'$.taxonomy')=json_extract(t.value,'$.taxonomy') AND json_extract(n.value,'$.slug')=json_extract(t.value,'$.slug') AND json_extract(n.value,'$.label')=json_extract(t.value,'$.label') AND json_type(n.value,'$.id')='text' AND length(json_extract(n.value,'$.id'))=26))
+) BEGIN SELECT RAISE(ABORT,'cms_import_taxonomy_job_invalid'); END;
+
+CREATE TRIGGER cms_import_taxonomy_job_immutable BEFORE UPDATE ON cms_import_taxonomy_jobs WHEN NEW.review_id<>OLD.review_id OR NEW.body<>OLD.body OR OLD.state<>'prepared' OR NEW.state<>'applied' BEGIN SELECT RAISE(ABORT,'cms_import_taxonomy_job_immutable'); END;
+
+CREATE TRIGGER cms_import_taxonomy_job_retained BEFORE DELETE ON cms_import_taxonomy_jobs WHEN EXISTS(SELECT 1 FROM cms_import_reviews r JOIN users u ON u.id=r.user_id WHERE r.id=OLD.review_id) BEGIN SELECT RAISE(ABORT,'cms_import_taxonomy_job_retained'); END;
+
+CREATE TRIGGER cms_import_taxonomy_draft_receipt BEFORE UPDATE OF item_id ON cms_draft_requests WHEN EXISTS(SELECT 1 FROM cms_import_reviews r WHERE r.id=NEW.id AND r.taxonomy_plan<>'[]') AND NOT EXISTS(SELECT 1 FROM cms_import_taxonomy_jobs j WHERE j.review_id=NEW.id AND j.state='applied' AND json_extract(j.body,'$.itemId')=NEW.item_id) BEGIN SELECT RAISE(ABORT,'cms_import_taxonomies_incomplete'); END;
+
+CREATE TRIGGER application_build_admit BEFORE INSERT ON application_builds BEGIN
+ SELECT RAISE(ABORT,'application_build_owner') WHERE NOT EXISTS(
+  SELECT 1 FROM backend_versions v JOIN projects p ON p.id=v.project_id
+  JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.status='pending'
+  WHERE v.id=NEW.id AND p.id=NEW.project_id AND p.owner_user_id=NEW.user_id
+ );
+ SELECT RAISE(ABORT,'application_build_migration') WHERE EXISTS(SELECT 1 FROM app_visitors WHERE project_id=NEW.project_id);
+END;
+
+CREATE TRIGGER application_build_immutable BEFORE UPDATE ON application_builds
+ BEGIN SELECT RAISE(ABORT,'application_build_immutable'); END;
+
+CREATE TRIGGER welcome_first_draft_claim BEFORE INSERT ON welcome_first_drafts
+ WHEN NOT EXISTS(SELECT 1 FROM chat_turns t JOIN welcome_onboarding w ON w.user_id=t.user_id
+  JOIN projects p ON p.id=w.project_id AND p.owner_user_id=w.user_id
+  WHERE t.id=NEW.turn_id AND t.user_id=NEW.user_id AND t.mode='ai' AND t.status='pending'
+   AND t.user_text IN('/first-draft '||NEW.project_id,'/first-app '||NEW.project_id)
+   AND p.id=NEW.project_id AND w.completed_at IS NOT NULL)
+ OR EXISTS(SELECT 1 FROM site_versions WHERE project_id=NEW.project_id)
+ OR EXISTS(SELECT 1 FROM backend_versions WHERE project_id=NEW.project_id)
+ OR EXISTS(SELECT 1 FROM cms_instances WHERE project_id=NEW.project_id)
+ OR EXISTS(SELECT 1 FROM welcome_first_drafts WHERE project_id=NEW.project_id)
+ BEGIN SELECT RAISE(ABORT,'welcome_first_draft_changed'); END;
+
+CREATE TRIGGER welcome_first_app_guard BEFORE INSERT ON backend_versions
+ WHEN EXISTS (
+  SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND substr(t.user_text,1,11)='/first-app '
+  AND (t.user_text<>'/first-app '||NEW.project_id OR t.mode<>'ai'
+   OR NOT EXISTS(SELECT 1 FROM welcome_first_drafts f WHERE f.turn_id=t.id AND f.project_id=NEW.project_id AND f.user_id=t.user_id)
+   OR NOT EXISTS(SELECT 1 FROM welcome_onboarding w JOIN projects p ON p.id=w.project_id AND p.owner_user_id=w.user_id
+    WHERE w.user_id=t.user_id AND w.project_id=NEW.project_id AND w.completed_at IS NOT NULL)
+   OR EXISTS(SELECT 1 FROM backend_versions v WHERE v.project_id=NEW.project_id)
+   OR EXISTS(SELECT 1 FROM site_versions v WHERE v.project_id=NEW.project_id)
+   OR EXISTS(SELECT 1 FROM cms_instances c WHERE c.project_id=NEW.project_id))
+ ) BEGIN SELECT RAISE(ABORT,'welcome_first_draft_changed'); END;
+
+CREATE TRIGGER app_owner_erasure_admit BEFORE INSERT ON app_owner_erasures BEGIN
+ SELECT RAISE(ABORT,'visitor_erasure_authority') WHERE NOT EXISTS(
+  SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id
+  JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
+  WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=1 AND a.owner_user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'visitor_erasure_capacity') WHERE (SELECT count(*) FROM app_owner_erasures)>=1000;
+END;
+
+CREATE TRIGGER app_owner_erasure_apply AFTER INSERT ON app_owner_erasures BEGIN
+ DELETE FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=1;
+END;
+
+CREATE TRIGGER app_owner_erasure_immutable BEFORE UPDATE ON app_owner_erasures
+ BEGIN SELECT RAISE(ABORT,'visitor_erasure_immutable'); END;
+
+CREATE TRIGGER app_owner_erasure_retention BEFORE DELETE ON app_owner_erasures
+ WHEN OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+ BEGIN SELECT RAISE(ABORT,'visitor_erasure_retention'); END;
+
+CREATE TRIGGER app_recovery_capture AFTER INSERT ON app_recovery_points BEGIN
+ INSERT INTO app_recovery_documents(point_id,visitor_id,revision,state_json) SELECT NEW.id,v.id,d.revision,d.state_json FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id WHERE v.project_id=NEW.project_id AND v.revoked=0;
+ UPDATE app_recovery_points SET sealed=1 WHERE id=NEW.id;
+END;
+
+CREATE TRIGGER app_recovery_document_admit BEFORE INSERT ON app_recovery_documents BEGIN
+ SELECT RAISE(ABORT,'recovery_document') WHERE NOT EXISTS(SELECT 1 FROM app_recovery_points r JOIN app_visitors v ON v.project_id=r.project_id JOIN app_documents d ON d.visitor_id=v.id WHERE r.id=NEW.point_id AND r.sealed=0 AND v.id=NEW.visitor_id AND v.revoked=0 AND d.revision=NEW.revision AND d.state_json=NEW.state_json);
+END;
+
+CREATE TRIGGER app_recovery_document_immutable BEFORE UPDATE ON app_recovery_documents BEGIN SELECT RAISE(ABORT,'recovery_immutable'); END;
+
+CREATE TRIGGER app_recovery_revoke AFTER UPDATE OF revoked ON app_visitors WHEN NEW.revoked=1 BEGIN DELETE FROM app_recovery_documents WHERE visitor_id=NEW.id; END;
+
+CREATE TRIGGER app_restore_delete_guard BEFORE DELETE ON app_restore_reviews BEGIN SELECT RAISE(ABORT,'restore_immutable'); END;
+
+CREATE TRIGGER app_recovery_admit BEFORE INSERT ON app_recovery_points BEGIN
+ SELECT RAISE(ABORT,'recovery_initial') WHERE NEW.sealed!=0 OR NEW.removed!=0;
+ SELECT RAISE(ABORT,'recovery_owner') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.version_id=NEW.version_id);
+ SELECT RAISE(ABORT,'recovery_capacity') WHERE (SELECT count(*) FROM app_recovery_points WHERE project_id=NEW.project_id AND removed=0)>=10 OR (SELECT count(*) FROM app_recovery_points WHERE removed=0)>=100 OR (SELECT count(*) FROM app_recovery_points)>=1000;
+END;
+
+CREATE TRIGGER app_recovery_point_immutable BEFORE UPDATE ON app_recovery_points BEGIN
+ SELECT RAISE(ABORT,'recovery_immutable') WHERE NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.version_id!=OLD.version_id OR NEW.created_at!=OLD.created_at OR NOT((OLD.sealed=0 AND NEW.sealed=1 AND OLD.removed=0 AND NEW.removed=0) OR (OLD.sealed=1 AND NEW.sealed=1 AND OLD.removed=0 AND NEW.removed=1));
+END;
+
+CREATE TRIGGER app_recovery_document_delete BEFORE DELETE ON app_recovery_documents WHEN EXISTS(SELECT 1 FROM app_recovery_points WHERE id=OLD.point_id AND removed=0) AND EXISTS(SELECT 1 FROM app_visitors WHERE id=OLD.visitor_id AND revoked=0) BEGIN SELECT RAISE(ABORT,'recovery_immutable'); END;
+
+CREATE TRIGGER app_recovery_remove AFTER UPDATE OF removed ON app_recovery_points WHEN NEW.removed=1 BEGIN DELETE FROM app_recovery_documents WHERE point_id=NEW.id; END;
+
+CREATE TRIGGER app_recovery_delete_guard BEFORE DELETE ON app_recovery_points BEGIN SELECT RAISE(ABORT,'recovery_immutable'); END;
+
+CREATE TRIGGER app_restore_removed_admit BEFORE INSERT ON app_restore_reviews WHEN EXISTS(SELECT 1 FROM app_recovery_points WHERE id=NEW.point_id AND removed=1) BEGIN SELECT RAISE(ABORT,'recovery_removed'); END;
+
+CREATE TRIGGER app_restore_removed_confirm BEFORE UPDATE ON app_restore_reviews WHEN EXISTS(SELECT 1 FROM app_recovery_points WHERE id=NEW.point_id AND removed=1) BEGIN SELECT RAISE(ABORT,'recovery_removed'); END;
+
+CREATE TRIGGER app_migration_check_capture AFTER INSERT ON app_migration_checks BEGIN
+ INSERT INTO app_migration_documents(migration_id,visitor_id,base_revision) SELECT NEW.id,visitor_id,revision FROM app_recovery_documents WHERE point_id=NEW.id;
+END;
+
+CREATE TRIGGER app_migration_check_immutable BEFORE UPDATE ON app_migration_checks BEGIN SELECT RAISE(ABORT,'migration_immutable'); END;
+
+CREATE TRIGGER app_migration_check_delete BEFORE DELETE ON app_migration_checks BEGIN SELECT RAISE(ABORT,'migration_immutable'); END;
+
+CREATE TRIGGER app_migration_document_admit BEFORE INSERT ON app_migration_documents BEGIN
+ SELECT RAISE(ABORT,'migration_document') WHERE NEW.state!='pending' OR NOT EXISTS(SELECT 1 FROM app_migration_current m JOIN app_recovery_documents d ON d.point_id=m.id WHERE m.id=NEW.migration_id AND d.visitor_id=NEW.visitor_id AND d.revision=NEW.base_revision);
+END;
+
+CREATE TRIGGER app_migration_document_update BEFORE UPDATE ON app_migration_documents BEGIN
+ SELECT RAISE(ABORT,'migration_immutable') WHERE NEW.migration_id!=OLD.migration_id OR NEW.visitor_id!=OLD.visitor_id OR NEW.base_revision!=OLD.base_revision OR NOT((OLD.state='pending' AND NEW.state='running') OR (OLD.state='running' AND NEW.state IN ('ready','failed')));
+ SELECT RAISE(ABORT,'migration_stale') WHERE NOT EXISTS(SELECT 1 FROM app_migration_current WHERE id=NEW.migration_id);
+END;
+
+CREATE TRIGGER app_migration_revoke AFTER UPDATE OF revoked ON app_visitors WHEN NEW.revoked=1 BEGIN DELETE FROM app_migration_documents WHERE visitor_id=NEW.id; END;
+
+CREATE TRIGGER app_migration_point_remove AFTER UPDATE OF removed ON app_recovery_points WHEN NEW.removed=1 BEGIN DELETE FROM app_migration_documents WHERE migration_id=NEW.id; END;
+
+CREATE TRIGGER app_migration_initial_space BEFORE INSERT ON app_spaces WHEN NEW.migration_id IS NOT NULL BEGIN SELECT RAISE(ABORT,'migration_initial'); END;
+
+CREATE TRIGGER app_migration_approval_admit BEFORE INSERT ON app_migration_approvals BEGIN
+ SELECT RAISE(ABORT,'migration_changed_count') WHERE NEW.changed_documents!=(SELECT count(*) FROM app_migration_documents d JOIN app_recovery_documents b ON b.point_id=d.migration_id AND b.visitor_id=d.visitor_id WHERE d.migration_id=NEW.id AND d.state='ready' AND d.next_json!=b.state_json);
+ SELECT RAISE(ABORT,'migration_approval') WHERE NEW.status!='applying' OR NOT EXISTS(SELECT 1 FROM app_migration_checks m JOIN app_migration_current current ON current.id=m.id WHERE m.id=NEW.id AND m.user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'migration_incomplete') WHERE (SELECT count(*) FROM app_migration_documents WHERE migration_id=NEW.id)!=(SELECT json_array_length(roster_json) FROM app_migration_checks WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM app_migration_documents WHERE migration_id=NEW.id AND state!='ready');
+ SELECT RAISE(ABORT,'migration_roster') WHERE EXISTS(SELECT 1 FROM app_migration_checks m,json_each(m.roster_json) entry WHERE m.id=NEW.id AND NOT EXISTS(SELECT 1 FROM app_migration_documents d WHERE d.migration_id=m.id AND d.visitor_id=json_extract(entry.value,'$.visitor') AND d.base_revision=json_extract(entry.value,'$.revision')));
+END;
+
+CREATE TRIGGER app_migration_approval_update BEFORE UPDATE ON app_migration_approvals WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.created_at!=OLD.created_at OR NEW.changed_documents!=OLD.changed_documents OR OLD.status!='applying' OR NEW.status!='applied'
+ BEGIN SELECT RAISE(ABORT,'migration_approval_immutable'); END;
+
+CREATE TRIGGER app_migration_approval_delete BEFORE DELETE ON app_migration_approvals BEGIN SELECT RAISE(ABORT,'migration_approval_immutable'); END;
+
+CREATE TRIGGER app_migration_approval_apply AFTER INSERT ON app_migration_approvals BEGIN
+ UPDATE app_documents SET revision=revision+1,state_json=(SELECT next_json FROM app_migration_documents WHERE migration_id=NEW.id AND visitor_id=app_documents.visitor_id) WHERE visitor_id IN(SELECT visitor_id FROM app_migration_documents WHERE migration_id=NEW.id);
+ UPDATE app_spaces SET version_id=(SELECT to_version FROM app_migration_checks WHERE id=NEW.id),revision=revision+1,migration_id=NEW.id WHERE project_id=(SELECT project_id FROM app_migration_checks WHERE id=NEW.id);
+ DELETE FROM app_sessions WHERE visitor_id IN(SELECT id FROM app_visitors WHERE project_id=(SELECT project_id FROM app_migration_checks WHERE id=NEW.id));
+ UPDATE app_migration_approvals SET status='applied' WHERE id=NEW.id;
+END;
+
+CREATE TRIGGER app_rollback_initial_space BEFORE INSERT ON app_spaces WHEN NEW.rollback_id IS NOT NULL BEGIN SELECT RAISE(ABORT,'rollback_initial'); END;
+
+CREATE TRIGGER app_restore_admit BEFORE INSERT ON app_restore_reviews BEGIN
+ SELECT RAISE(ABORT,'restore_initial') WHERE NEW.status!='pending';
+ SELECT RAISE(ABORT,'restore_authority') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_recovery_points r ON r.project_id=a.project_id AND r.user_id=a.owner_user_id JOIN app_recovery_rosters roster ON roster.project_id=a.project_id WHERE r.id=NEW.point_id AND r.sealed=1 AND a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.enabled=0 AND a.revision=NEW.base_revision AND ((NEW.restore_program=0 AND NEW.from_version IS NULL AND a.version_id=r.version_id) OR (NEW.restore_program=1 AND NEW.from_version=a.version_id AND a.version_id!=r.version_id)) AND roster.roster_json=NEW.roster_json);
+ SELECT RAISE(ABORT,'restore_missing_document') WHERE EXISTS(SELECT 1 FROM json_each(NEW.roster_json) entry WHERE NOT EXISTS(SELECT 1 FROM app_recovery_documents d WHERE d.point_id=NEW.point_id AND d.visitor_id=json_extract(entry.value,'$.visitor')));
+ SELECT RAISE(ABORT,'restore_capacity') WHERE (SELECT count(*) FROM app_restore_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_restore_reviews)>=1000;
+END;
+
+CREATE TRIGGER app_restore_immutable BEFORE UPDATE ON app_restore_reviews BEGIN
+ SELECT RAISE(ABORT,'restore_immutable') WHERE NEW.restore_program!=OLD.restore_program OR NEW.from_version IS NOT OLD.from_version OR NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.point_id!=OLD.point_id OR NEW.base_revision!=OLD.base_revision OR NEW.roster_json!=OLD.roster_json OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied';
+ SELECT RAISE(ABORT,'restore_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_recovery_points r ON r.project_id=a.project_id AND r.user_id=a.owner_user_id JOIN app_recovery_rosters roster ON roster.project_id=a.project_id WHERE r.id=NEW.point_id AND r.sealed=1 AND a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.enabled=0 AND a.revision=NEW.base_revision AND ((NEW.restore_program=0 AND a.version_id=r.version_id) OR (NEW.restore_program=1 AND NEW.from_version=a.version_id AND a.version_id!=r.version_id)) AND roster.roster_json=NEW.roster_json);
+ SELECT RAISE(ABORT,'restore_missing_document') WHERE EXISTS(SELECT 1 FROM json_each(NEW.roster_json) entry WHERE NOT EXISTS(SELECT 1 FROM app_recovery_documents d WHERE d.point_id=NEW.point_id AND d.visitor_id=json_extract(entry.value,'$.visitor')));
+END;
+
+CREATE TRIGGER app_restore_apply AFTER UPDATE OF status ON app_restore_reviews BEGIN
+ UPDATE app_documents SET revision=revision+1,state_json=(SELECT state_json FROM app_recovery_documents WHERE point_id=NEW.point_id AND visitor_id=app_documents.visitor_id) WHERE visitor_id IN(SELECT json_extract(value,'$.visitor') FROM json_each(NEW.roster_json));
+ UPDATE app_spaces SET version_id=(SELECT version_id FROM app_recovery_points WHERE id=NEW.point_id),revision=revision+1,rollback_id=NEW.id WHERE project_id=NEW.project_id AND NEW.restore_program=1;
+ DELETE FROM app_sessions WHERE NEW.restore_program=1 AND visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
+END;
+
+CREATE TRIGGER app_space_apply_review BEFORE UPDATE ON app_spaces WHEN NOT (
+ (NEW.rollback_id IS OLD.rollback_id AND NEW.migration_id IS OLD.migration_id AND EXISTS(SELECT 1 FROM app_activation_reviews r WHERE r.id=NEW.review_id AND r.project_id=NEW.project_id AND r.user_id=NEW.owner_user_id AND r.version_id=NEW.version_id AND r.enabled=NEW.enabled AND r.base_revision=OLD.revision AND r.status='pending' AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')))
+ OR (NEW.rollback_id IS OLD.rollback_id AND NEW.enabled=0 AND OLD.enabled=0 AND NEW.review_id IS OLD.review_id AND NEW.migration_id IS NOT OLD.migration_id AND EXISTS(SELECT 1 FROM app_migration_approvals receipt JOIN app_migration_checks m ON m.id=receipt.id WHERE receipt.id=NEW.migration_id AND receipt.user_id=NEW.owner_user_id AND receipt.status='applying' AND m.project_id=NEW.project_id AND m.user_id=NEW.owner_user_id AND m.from_version=OLD.version_id AND m.to_version=NEW.version_id AND m.base_revision=OLD.revision))
+ OR (NEW.enabled=0 AND OLD.enabled=0 AND NEW.review_id IS OLD.review_id AND NEW.migration_id IS OLD.migration_id AND NEW.rollback_id IS NOT OLD.rollback_id AND EXISTS(SELECT 1 FROM app_restore_reviews r JOIN app_recovery_points p ON p.id=r.point_id WHERE r.id=NEW.rollback_id AND r.user_id=NEW.owner_user_id AND r.project_id=NEW.project_id AND r.restore_program=1 AND r.status='applied' AND r.from_version=OLD.version_id AND p.version_id=NEW.version_id AND r.base_revision=OLD.revision))
+) BEGIN SELECT RAISE(ABORT,'app_activation_required'); END;
+
+CREATE TRIGGER app_rollback_backup_admit BEFORE INSERT ON app_restore_reviews WHEN NEW.restore_program=1 BEGIN
+ SELECT RAISE(ABORT,'rollback_backup') WHERE NOT EXISTS(SELECT 1 FROM app_recovery_points b WHERE b.id=NEW.id AND b.project_id=NEW.project_id AND b.user_id=NEW.user_id AND b.version_id=NEW.from_version AND b.sealed=1 AND b.removed=0) OR EXISTS(SELECT 1 FROM json_each(NEW.roster_json) entry WHERE NOT EXISTS(SELECT 1 FROM app_recovery_documents d WHERE d.point_id=NEW.id AND d.visitor_id=json_extract(entry.value,'$.visitor') AND d.revision=json_extract(entry.value,'$.revision')));
+END;
+
+CREATE TRIGGER app_rollback_backup_confirm BEFORE UPDATE ON app_restore_reviews WHEN NEW.restore_program=1 BEGIN
+ SELECT RAISE(ABORT,'rollback_backup') WHERE NOT EXISTS(SELECT 1 FROM app_recovery_points b WHERE b.id=NEW.id AND b.project_id=NEW.project_id AND b.user_id=NEW.user_id AND b.version_id=NEW.from_version AND b.sealed=1 AND b.removed=0);
+END;
+
+CREATE TRIGGER app_migration_cancel_admit BEFORE INSERT ON app_migration_cancellations BEGIN
+ SELECT RAISE(ABORT,'migration_cancel_owner') WHERE NOT EXISTS(SELECT 1 FROM app_migration_checks m JOIN projects p ON p.id=m.project_id AND p.owner_user_id=m.user_id JOIN app_spaces a ON a.project_id=m.project_id AND a.owner_user_id=m.user_id WHERE m.id=NEW.id AND m.user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'migration_already_applied') WHERE EXISTS(SELECT 1 FROM app_migration_approvals WHERE id=NEW.id);
+END;
+
+CREATE TRIGGER app_migration_cancel_update BEFORE UPDATE ON app_migration_cancellations BEGIN SELECT RAISE(ABORT,'migration_cancel_immutable'); END;
+
+CREATE TRIGGER app_migration_cancel_delete BEFORE DELETE ON app_migration_cancellations BEGIN SELECT RAISE(ABORT,'migration_cancel_immutable'); END;
+
+CREATE TRIGGER app_migration_cancel_cleanup AFTER INSERT ON app_migration_cancellations BEGIN DELETE FROM app_migration_documents WHERE migration_id=NEW.id; END;
+
+CREATE TRIGGER app_migration_applied_cleanup AFTER UPDATE OF status ON app_migration_approvals WHEN NEW.status='applied' BEGIN DELETE FROM app_migration_documents WHERE migration_id=NEW.id; END;
+
+CREATE TRIGGER app_migration_check_admit BEFORE INSERT ON app_migration_checks BEGIN
+ SELECT RAISE(ABORT,'migration_authority') WHERE NEW.to_version=NEW.from_version OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_recovery_points b ON b.id=NEW.id AND b.user_id=a.owner_user_id AND b.project_id=a.project_id AND b.version_id=a.version_id AND b.removed=0 AND b.sealed=1 JOIN app_recovery_rosters roster ON roster.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.enabled=0 AND a.version_id=NEW.from_version AND a.revision=NEW.base_revision AND roster.roster_json=NEW.roster_json);
+ SELECT RAISE(ABORT,'migration_version') WHERE NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.to_version AND project_id=NEW.project_id) OR NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.transform_version AND project_id=NEW.project_id);
+ SELECT RAISE(ABORT,'migration_test') WHERE NOT EXISTS(SELECT 1 FROM backend_runs r WHERE r.id=NEW.test_id AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.version_id=NEW.to_version AND r.state='complete' AND json_extract(r.result_json,'$.ok')=1 AND json_extract(r.result_json,'$.check.status')='passed' AND json_type(r.result_json,'$.value')='object' AND (SELECT count(*) FROM json_each(r.result_json,'$.value'))=2 AND json_type(r.result_json,'$.value.state') IS NOT NULL AND json_type(r.result_json,'$.value.result') IS NOT NULL AND length(CAST(json_quote(json_extract(r.result_json,'$.value.state')) AS BLOB))<=4096 AND length(CAST(json_quote(json_extract(r.result_json,'$.value.result')) AS BLOB))<=4096);
+ SELECT RAISE(ABORT,'migration_capacity') WHERE (SELECT count(*) FROM app_migration_checks m JOIN app_migration_current c ON c.id=m.id WHERE m.project_id=NEW.project_id)>=5 OR (SELECT count(*) FROM app_migration_current)>=50 OR (SELECT count(*) FROM app_migration_checks)>=1000;
+END;
+
+CREATE TRIGGER app_maintenance_chat_link_admit BEFORE INSERT ON app_maintenance_chat_links BEGIN
+ SELECT RAISE(ABORT,'maintenance_chat_owner') WHERE NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.turn_id AND user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'maintenance_chat_review') WHERE NOT (
+ (NEW.kind='upgrade' AND EXISTS(SELECT 1 FROM app_migration_checks WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+ (NEW.kind='rollback' AND EXISTS(SELECT 1 FROM app_restore_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id AND restore_program=1)));
+END;
+
+CREATE TRIGGER app_maintenance_chat_link_update BEFORE UPDATE ON app_maintenance_chat_links BEGIN SELECT RAISE(ABORT,'maintenance_chat_immutable'); END;
+
+CREATE TRIGGER cms_import_media_admit BEFORE INSERT ON cms_import_reviews WHEN
+ json_array_length(NEW.media_plan)<>(SELECT count(*) FROM json_each(NEW.body,'$.data.content') WHERE json_extract(value,'$._type')='image') OR
+ (NEW.media_plan<>'[]' AND (NEW.source_upload_id IS NULL OR
+ EXISTS(SELECT 1 FROM json_each(NEW.media_plan) m WHERE
+  json_type(m.value)<>'object' OR (SELECT count(*) FROM json_each(m.value))<>10 OR
+  json_type(m.value,'$.position') IS NOT 'integer' OR json_extract(m.value,'$.position')<>m.key OR
+  json_type(m.value,'$.sourceAttachmentId') IS NOT 'integer' OR json_extract(m.value,'$.sourceAttachmentId')<1 OR
+  json_type(m.value,'$.blockKey') IS NOT 'text' OR json_type(m.value,'$.mediaId') IS NOT 'text' OR
+  json_type(m.value,'$.digest') IS NOT 'text' OR json_type(m.value,'$.size') IS NOT 'integer' OR json_type(m.value,'$.width') IS NOT 'integer' OR json_type(m.value,'$.height') IS NOT 'integer' OR
+  json_type(m.value,'$.sourceURL') IS NULL OR json_type(m.value,'$.sourceURL') NOT IN ('text','null') OR length(json_extract(m.value,'$.sourceURL'))>2048 OR
+  json_type(m.value,'$.attachmentURL') IS NULL OR json_type(m.value,'$.attachmentURL') NOT IN ('text','null') OR length(json_extract(m.value,'$.attachmentURL'))>2048 OR
+  NOT EXISTS(SELECT 1 FROM json_each(NEW.body,'$.data.content') b WHERE json_extract(b.value,'$._type')='image' AND json_extract(b.value,'$._key')=json_extract(m.value,'$.blockKey') AND json_extract(b.value,'$.asset._ref')=json_extract(m.value,'$.mediaId')) OR
+  NOT EXISTS(SELECT 1 FROM cms_media_uploads u JOIN cms_deployments d ON d.project_id=u.project_id WHERE u.user_id=NEW.user_id AND u.project_id=NEW.project_id AND u.origin=d.origin AND d.state='connected' AND u.result IS NOT NULL AND json_extract(u.result,'$.mediaId')=json_extract(m.value,'$.mediaId') AND u.digest=json_extract(m.value,'$.digest') AND u.size=json_extract(m.value,'$.size') AND u.width=json_extract(m.value,'$.width') AND u.height=json_extract(m.value,'$.height'))
+ ) OR (SELECT count(DISTINCT json_extract(value,'$.blockKey')) FROM json_each(NEW.media_plan))<>json_array_length(NEW.media_plan)))
+BEGIN SELECT RAISE(ABORT,'cms_import_media_invalid'); END;
+
+CREATE TRIGGER cms_import_media_immutable BEFORE UPDATE OF media_plan ON cms_import_reviews WHEN NEW.media_plan<>OLD.media_plan BEGIN SELECT RAISE(ABORT,'cms_import_media_immutable'); END;
+
+CREATE TRIGGER fair_use_review_insert BEFORE INSERT ON fair_use_reviews BEGIN
+ SELECT RAISE(ABORT,'review_must_start_open') WHERE NEW.state!='open' OR NEW.revision!=0;
+END;
+
+CREATE TRIGGER fair_use_review_update BEFORE UPDATE ON fair_use_reviews BEGIN
+ SELECT RAISE(ABORT,'immutable_review') WHERE NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.policy_version IS NOT OLD.policy_version OR NEW.plan_id IS NOT OLD.plan_id OR NEW.category IS NOT OLD.category OR NEW.opened_by IS NOT OLD.opened_by OR NEW.context IS NOT OLD.context OR NEW.created_at IS NOT OLD.created_at;
+ SELECT RAISE(ABORT,'review_already_resolved') WHERE OLD.state!='open' OR NEW.state!='resolved' OR NEW.revision!=OLD.revision+1;
+END;
+
+CREATE TRIGGER fair_use_review_observation_insert BEFORE INSERT ON fair_use_reviews BEGIN
+ SELECT RAISE(ABORT,'review_observation_required') WHERE NEW.observation_json IS NULL
+  OR json_extract(NEW.observation_json,'$.version') IS NOT 1
+  OR json_extract(NEW.observation_json,'$.entitlement.planId') IS NOT NEW.plan_id
+  OR json_type(NEW.observation_json,'$.metrics') IS NOT 'object'
+  OR json_type(NEW.observation_json,'$.asOf') IS NOT 'text';
+END;
+
+CREATE TRIGGER fair_use_review_observation_update BEFORE UPDATE ON fair_use_reviews BEGIN
+ SELECT RAISE(ABORT,'immutable_review_observation') WHERE NEW.observation_json IS NOT OLD.observation_json;
+END;
+
+CREATE TRIGGER backend_nomination_insert BEFORE INSERT ON backend_nominations BEGIN
+ SELECT RAISE(ABORT,'nomination_requires_review') WHERE NEW.state!='review';
+ SELECT RAISE(ABORT,'nomination_owner_or_digest') WHERE NOT EXISTS(SELECT 1 FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=NEW.version_id AND p.owner_user_id=NEW.user_id AND v.digest=NEW.digest);
+ SELECT RAISE(ABORT,'nomination_capacity') WHERE (SELECT COUNT(*) FROM backend_nominations WHERE user_id=NEW.user_id)>=20 OR (SELECT COUNT(*) FROM backend_nominations WHERE user_id=NEW.user_id AND (state='nominated' OR (state='review' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))))>=5;
+ SELECT RAISE(ABORT,'nomination_already_open') WHERE EXISTS(SELECT 1 FROM backend_nominations WHERE user_id=NEW.user_id AND version_id=NEW.version_id AND (state='nominated' OR (state='review' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))));
+END;
+
+CREATE TRIGGER backend_nomination_update BEFORE UPDATE ON backend_nominations BEGIN
+ SELECT RAISE(ABORT,'nomination_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.version_id IS NOT OLD.version_id OR NEW.digest IS NOT OLD.digest OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at;
+ SELECT RAISE(ABORT,'nomination_transition') WHERE NOT ((OLD.state='review' AND NEW.state='nominated' AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR (OLD.state IN ('review','nominated') AND NEW.state='withdrawn' AND NEW.consent_at IS OLD.consent_at));
+ SELECT RAISE(ABORT,'nomination_owner_or_digest') WHERE NOT EXISTS(SELECT 1 FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=NEW.version_id AND p.owner_user_id=NEW.user_id AND v.digest=NEW.digest);
+END;
+
+CREATE TRIGGER standard_ai_insert BEFORE INSERT ON standard_ai_requests
+WHEN NEW.state!='reserved' OR NEW.input_tokens IS NOT NULL OR NEW.output_tokens IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'standard_ai_initial'); END;
+
+CREATE TRIGGER standard_ai_update BEFORE UPDATE ON standard_ai_requests
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.request_hash!=OLD.request_hash OR NEW.created_at!=OLD.created_at
+ OR NOT ((OLD.state='reserved' AND NEW.state IN ('dispatched','released'))
+ OR (OLD.state='dispatched' AND NEW.state IN ('completed','uncertain'))
+ OR (OLD.state='uncertain' AND NEW.state='completed'))
+BEGIN SELECT RAISE(ABORT,'standard_ai_transition'); END;
+
+CREATE TRIGGER chat_private_context BEFORE UPDATE OF ai_context_allowed ON chat_turns
+WHEN OLD.ai_context_allowed=0 AND NEW.ai_context_allowed!=0
+BEGIN SELECT RAISE(ABORT,'private_chat_context'); END;
+
+CREATE TRIGGER usage_review_insert BEFORE INSERT ON usage_review_requests BEGIN
+ SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.state!='open' OR NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0);
+END;
+
+CREATE TRIGGER usage_review_update BEFORE UPDATE ON usage_review_requests BEGIN
+ SELECT RAISE(ABORT,'usage_review_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.statement IS NOT OLD.statement OR NEW.created_at IS NOT OLD.created_at OR OLD.state!='open' OR NEW.state!='answered';
+END;
+
+CREATE TRIGGER usage_review_delete BEFORE DELETE ON usage_review_requests
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN SELECT RAISE(ABORT,'usage_review_immutable'); END;
+
+CREATE TRIGGER backend_import_owner BEFORE INSERT ON backend_imports WHEN NOT EXISTS(
+ SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id
+) OR EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.id) OR NEW.state!='pending'
+ BEGIN SELECT RAISE(ABORT,'backend_import_owner'); END;
+
+CREATE TRIGGER backend_import_quota BEFORE INSERT ON backend_imports WHEN
+ (SELECT count(*) FROM backend_imports WHERE project_id=NEW.project_id)>=25 OR
+ (SELECT count(*) FROM backend_imports WHERE user_id=NEW.user_id)>=100 OR
+ (SELECT count(*) FROM backend_imports)>=1000
+ BEGIN SELECT RAISE(ABORT,'backend_import_quota'); END;
+
+CREATE TRIGGER backend_import_immutable BEFORE UPDATE ON backend_imports WHEN
+ NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR
+ NEW.source!=OLD.source OR NEW.digest!=OLD.digest OR NEW.policy_version!=OLD.policy_version OR
+ NEW.created_at!=OLD.created_at OR OLD.state!='pending' OR NEW.state='pending'
+ BEGIN SELECT RAISE(ABORT,'backend_import_immutable'); END;
+
+CREATE TRIGGER backend_import_not_executable BEFORE INSERT ON backend_versions WHEN
+ EXISTS(SELECT 1 FROM backend_imports WHERE id=NEW.id)
+ BEGIN SELECT RAISE(ABORT,'backend_import_quarantined'); END;
+
+CREATE TRIGGER profile_photo_safety_owner BEFORE INSERT ON profile_photo_safety WHEN
+ NEW.state!='pending' OR NEW.csam_check!='unknown' OR NEW.sexual_check!='unknown' OR
+ NEW.scanner_reference IS NOT NULL OR NEW.expires_at IS NOT NULL OR NOT EXISTS(
+ SELECT 1 FROM user_profiles WHERE user_id=NEW.user_id AND photo IS NOT NULL AND photo_digest=NEW.digest AND revision=NEW.photo_revision
+) BEGIN SELECT RAISE(ABORT,'profile_photo_safety_owner'); END;
+
+CREATE TRIGGER profile_photo_safety_invalidate AFTER UPDATE ON user_profiles WHEN
+ NEW.photo IS NOT OLD.photo OR NEW.photo_digest IS NOT OLD.photo_digest
+ BEGIN DELETE FROM profile_photo_safety WHERE user_id=NEW.user_id; END;
+
+CREATE TRIGGER project_photo_safety_owner BEFORE INSERT ON project_photo_safety WHEN
+ NEW.state!='pending' OR NEW.csam_check!='unknown' OR NEW.sexual_check!='unknown' OR NEW.scanner_reference IS NOT NULL OR NEW.expires_at IS NOT NULL OR NOT EXISTS(
+ SELECT 1 FROM project_files f JOIN projects p ON p.id=f.project_id WHERE f.id=NEW.file_id AND f.digest=NEW.digest AND p.owner_user_id=NEW.user_id AND f.status='ready'
+) BEGIN SELECT RAISE(ABORT,'project_photo_safety_owner'); END;
+
+CREATE TRIGGER project_photo_safety_ready AFTER UPDATE OF status ON project_files WHEN NEW.status='ready' AND OLD.status!='ready'
+ BEGIN INSERT INTO project_photo_safety(file_id,user_id,digest,policy_version) SELECT NEW.id,owner_user_id,NEW.digest,'2026-09-30' FROM projects WHERE id=NEW.project_id; END;
+
+CREATE TRIGGER project_photo_safety_insert AFTER INSERT ON project_files WHEN NEW.status='ready'
+ BEGIN INSERT INTO project_photo_safety(file_id,user_id,digest,policy_version) SELECT NEW.id,owner_user_id,NEW.digest,'2026-09-30' FROM projects WHERE id=NEW.project_id; END;
+
+CREATE TRIGGER version_photo_safety BEFORE INSERT ON version_photos WHEN NOT EXISTS(
+ SELECT 1 FROM approved_project_photos WHERE id=NEW.file_id
+) BEGIN SELECT RAISE(ABORT,'photo_safety_required'); END;
+
+CREATE TRIGGER publication_photo_safety_insert BEFORE INSERT ON publications WHEN NEW.version_id IS NOT NULL AND EXISTS(
+ SELECT 1 FROM version_photos vp WHERE vp.version_id=NEW.version_id AND NOT EXISTS(SELECT 1 FROM approved_project_photos WHERE id=vp.file_id)
+) BEGIN SELECT RAISE(ABORT,'photo_safety_required'); END;
+
+CREATE TRIGGER publication_photo_safety_update BEFORE UPDATE OF version_id ON publications WHEN NEW.version_id IS NOT NULL AND EXISTS(
+ SELECT 1 FROM version_photos vp WHERE vp.version_id=NEW.version_id AND NOT EXISTS(SELECT 1 FROM approved_project_photos WHERE id=vp.file_id)
+) BEGIN SELECT RAISE(ABORT,'photo_safety_required'); END;
+
+CREATE TRIGGER photo_scan_ticket_owner BEFORE INSERT ON photo_scan_tickets WHEN
+ NEW.state!='reserved' OR julianday(NEW.expires_at)<=julianday('now') OR julianday(NEW.expires_at)>julianday('now','+1 hour') OR julianday(NEW.expires_at) IS NULL OR NOT (
+ (NEW.kind='profile' AND NEW.subject_id=NEW.user_id AND EXISTS(SELECT 1 FROM profile_photo_safety s JOIN user_profiles p ON p.user_id=s.user_id AND p.photo_digest=s.digest WHERE s.user_id=NEW.user_id AND s.digest=NEW.digest AND s.policy_version=NEW.policy_version AND s.state='pending')) OR
+ (NEW.kind='project' AND EXISTS(SELECT 1 FROM project_photo_safety s JOIN project_files f ON f.id=s.file_id AND f.digest=s.digest JOIN projects p ON p.id=f.project_id AND p.owner_user_id=s.user_id WHERE s.file_id=NEW.subject_id AND s.user_id=NEW.user_id AND s.digest=NEW.digest AND s.policy_version=NEW.policy_version AND s.state='pending'))
+) BEGIN SELECT RAISE(ABORT,'photo_scan_ticket_owner'); END;
+
+CREATE TRIGGER photo_scan_ticket_quota BEFORE INSERT ON photo_scan_tickets WHEN
+ (SELECT count(*) FROM photo_scan_tickets)>=5000 OR
+ (SELECT count(*) FROM photo_scan_tickets WHERE user_id=NEW.user_id)>=100
+ BEGIN SELECT RAISE(ABORT,'photo_scan_ticket_quota'); END;
+
+CREATE TRIGGER photo_scan_ticket_immutable BEFORE UPDATE ON photo_scan_tickets WHEN
+ NEW.id!=OLD.id OR NEW.kind!=OLD.kind OR NEW.subject_id!=OLD.subject_id OR NEW.user_id!=OLD.user_id OR NEW.digest!=OLD.digest OR NEW.policy_version!=OLD.policy_version OR NEW.authority_hash!=OLD.authority_hash OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at OR OLD.state!='reserved' OR NEW.state NOT IN ('completed','stale')
+ BEGIN SELECT RAISE(ABORT,'photo_scan_ticket_immutable'); END;
+
+CREATE TRIGGER profile_photo_safety_immutable BEFORE UPDATE ON profile_photo_safety WHEN
+ NEW.user_id!=OLD.user_id OR NEW.digest!=OLD.digest OR NEW.photo_revision!=OLD.photo_revision OR NEW.policy_version!=OLD.policy_version OR NEW.created_at!=OLD.created_at OR
+ NOT ((OLD.state='pending' AND NEW.state IN ('approved','blocked')) OR (OLD.state='approved' AND NEW.state='blocked') OR (OLD.state='approved' AND NEW.state='pending' AND julianday(OLD.expires_at)<=julianday('now') AND NEW.csam_check='unknown' AND NEW.sexual_check='unknown' AND NEW.scanner_reference IS NULL AND NEW.expires_at IS NULL))
+ BEGIN SELECT RAISE(ABORT,'profile_photo_safety_immutable'); END;
+
+CREATE TRIGGER project_photo_safety_immutable BEFORE UPDATE ON project_photo_safety WHEN
+ NEW.file_id!=OLD.file_id OR NEW.user_id!=OLD.user_id OR NEW.digest!=OLD.digest OR NEW.policy_version!=OLD.policy_version OR NEW.created_at!=OLD.created_at OR
+ NOT ((OLD.state='pending' AND NEW.state IN ('approved','blocked')) OR (OLD.state='approved' AND NEW.state='blocked') OR (OLD.state='approved' AND NEW.state='pending' AND julianday(OLD.expires_at)<=julianday('now') AND NEW.csam_check='unknown' AND NEW.sexual_check='unknown' AND NEW.scanner_reference IS NULL AND NEW.expires_at IS NULL))
+ BEGIN SELECT RAISE(ABORT,'project_photo_safety_immutable'); END;
+
+CREATE TRIGGER content_screening_insert BEFORE INSERT ON content_screening_decisions WHEN
+ NEW.first_required!=NEW.required OR NEW.escalation_reason IS NOT NULL OR NEW.escalated_at IS NOT NULL
+ BEGIN SELECT RAISE(ABORT,'content_screening_initial'); END;
+
+CREATE TRIGGER content_screening_immutable BEFORE UPDATE ON content_screening_decisions WHEN
+ NEW.user_id!=OLD.user_id OR NEW.kind!=OLD.kind OR NEW.digest!=OLD.digest OR NEW.policy_version!=OLD.policy_version OR NEW.first_required!=OLD.first_required OR NEW.first_reason!=OLD.first_reason OR NEW.first_percent!=OLD.first_percent OR NEW.first_risk_score!=OLD.first_risk_score OR NEW.created_at!=OLD.created_at OR OLD.required!=0 OR NEW.required!=1
+ BEGIN SELECT RAISE(ABORT,'content_screening_immutable'); END;
+
+CREATE TRIGGER content_screening_capacity BEFORE INSERT ON content_screening_decisions WHEN
+ (SELECT count(*) FROM content_screening_decisions WHERE user_id=NEW.user_id)>=10000 OR
+ (SELECT count(*) FROM content_screening_decisions)>=100000
+ BEGIN SELECT RAISE(ABORT,'content_screening_capacity'); END;
+
+CREATE TRIGGER content_risk_evidence_admit BEFORE INSERT ON content_risk_evidence BEGIN
+ SELECT RAISE(ABORT,'risk_event_future') WHERE NEW.occurred_at>unixepoch('now')*1000+999;
+ SELECT RAISE(ABORT,'risk_event_capacity') WHERE (SELECT count(*) FROM content_risk_evidence WHERE user_id=NEW.user_id)>=10000 OR (SELECT count(*) FROM content_risk_evidence)>=100000;
+END;
+
+CREATE TRIGGER content_risk_evidence_immutable BEFORE UPDATE ON content_risk_evidence BEGIN SELECT RAISE(ABORT,'risk_event_immutable'); END;
+
+CREATE TRIGGER content_risk_evidence_retained BEFORE DELETE ON content_risk_evidence WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'risk_event_retained'); END;
+
+CREATE TRIGGER content_risk_reversal_admit BEFORE INSERT ON content_risk_reversals WHEN NOT EXISTS(SELECT 1 FROM content_risk_evidence WHERE user_id=NEW.user_id AND incident_id=NEW.incident_id) BEGIN SELECT RAISE(ABORT,'risk_incident_missing'); END;
+
+CREATE TRIGGER content_risk_reversal_immutable BEFORE UPDATE ON content_risk_reversals BEGIN SELECT RAISE(ABORT,'risk_reversal_immutable'); END;
+
+CREATE TRIGGER content_risk_reversal_retained BEFORE DELETE ON content_risk_reversals WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'risk_reversal_retained'); END;
+
+CREATE TRIGGER github_revocation_health_insert AFTER INSERT ON github_token_vault WHEN NEW.state='revoking'
+BEGIN INSERT OR IGNORE INTO github_revocation_health VALUES(NEW.id,strftime('%Y-%m-%dT%H:%M:%fZ','now')); END;
+
+CREATE TRIGGER github_revocation_health_update AFTER UPDATE OF state ON github_token_vault WHEN NEW.state='revoking' AND OLD.state!='revoking'
+BEGIN INSERT OR IGNORE INTO github_revocation_health VALUES(NEW.id,strftime('%Y-%m-%dT%H:%M:%fZ','now')); END;
+
+CREATE TRIGGER cloudflare_revocation_health_insert AFTER INSERT ON cloudflare_token_vault WHEN NEW.state='revoking'
+BEGIN INSERT OR IGNORE INTO cloudflare_revocation_health VALUES(NEW.id,strftime('%Y-%m-%dT%H:%M:%fZ','now')); END;
+
+CREATE TRIGGER cloudflare_revocation_health_update AFTER UPDATE OF state ON cloudflare_token_vault WHEN NEW.state='revoking' AND OLD.state!='revoking'
+BEGIN INSERT OR IGNORE INTO cloudflare_revocation_health VALUES(NEW.id,strftime('%Y-%m-%dT%H:%M:%fZ','now')); END;
+
+CREATE TRIGGER chat_review_receipt_admit BEFORE INSERT ON chat_review_receipts BEGIN
+ SELECT RAISE(ABORT,'chat_review_owner') WHERE NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.turn_id AND user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'chat_review_missing') WHERE NOT (
+  (NEW.kind='application' AND EXISTS(SELECT 1 FROM app_activation_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='appPage' AND EXISTS(SELECT 1 FROM app_page_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='appRestore' AND EXISTS(SELECT 1 FROM app_restore_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id AND restore_program=0)) OR
+  (NEW.kind='backendPublication' AND EXISTS(SELECT 1 FROM backend_publication_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='backendForm' AND EXISTS(SELECT 1 FROM backend_form_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id))
+ );
+END;
+
+CREATE TRIGGER chat_review_receipt_immutable BEFORE UPDATE ON chat_review_receipts BEGIN SELECT RAISE(ABORT,'chat_review_immutable'); END;
+
+CREATE TRIGGER composition_backend_added AFTER INSERT ON backend_versions BEGIN UPDATE projects SET backend_revision=backend_revision+1 WHERE id=NEW.project_id; END;
+
+CREATE TRIGGER composition_backend_removed AFTER DELETE ON backend_versions BEGIN UPDATE projects SET backend_revision=backend_revision+1 WHERE id=OLD.project_id; END;
+
+CREATE TRIGGER composition_plan_admit BEFORE INSERT ON composition_plans BEGIN
+ SELECT RAISE(ABORT,'composition_plan_owner') WHERE NOT EXISTS(
+  SELECT 1 FROM projects p JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.status='pending' AND t.mode='ai'
+  WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.details_revision=NEW.details_revision
+  AND p.backend_revision=NEW.backend_revision AND (SELECT count(*) FROM backend_versions WHERE project_id=p.id)=NEW.backend_count
+ );
+ SELECT RAISE(ABORT,'composition_plan_quota') WHERE
+  (SELECT count(*) FROM composition_plans WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM composition_plans)>=5000;
+END;
+
+CREATE TRIGGER composition_plan_immutable BEFORE UPDATE ON composition_plans BEGIN SELECT RAISE(ABORT,'composition_plan_immutable'); END;
+
+CREATE TRIGGER backend_extension_admit BEFORE INSERT ON backend_extension_uses BEGIN
+ SELECT RAISE(ABORT,'composition_plan_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM composition_plans c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id
+  JOIN backend_versions v ON v.id=NEW.version_id AND v.project_id=p.id
+  JOIN chat_turns t ON t.id=v.id AND t.user_id=c.user_id AND t.status='pending' AND t.mode='ai'
+  WHERE c.id=NEW.plan_id AND c.extension_scope!='none' AND c.expires_at>unixepoch()
+  AND p.details_revision=c.details_revision AND p.backend_revision=c.backend_revision+1
+  AND (SELECT count(*) FROM backend_versions WHERE project_id=p.id AND id!=v.id)=c.backend_count
+ );
+END;
+
+CREATE TRIGGER backend_extension_immutable BEFORE UPDATE ON backend_extension_uses BEGIN SELECT RAISE(ABORT,'composition_plan_immutable'); END;
+
+CREATE TRIGGER backend_extension_retain BEFORE DELETE ON backend_extension_uses WHEN EXISTS(SELECT 1 FROM backend_versions WHERE id=OLD.version_id)
+ BEGIN SELECT RAISE(ABORT,'composition_plan_retained'); END;
+
+CREATE TRIGGER specification_site_added AFTER INSERT ON site_versions BEGIN UPDATE projects SET site_draft_revision=site_draft_revision+1 WHERE id=NEW.project_id; END;
+
+CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposals BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM projects p JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='ai' AND t.status='pending'
+  LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id
+  WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=NEW.draft_revision
+  AND coalesce(h.revision,0)=NEW.expected_revision AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+  AND (NEW.operation!='change' OR h.draft_revision=p.site_draft_revision)
+ );
+ SELECT RAISE(ABORT,'specification_changed') WHERE NEW.target_version_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM site_versions WHERE id=NEW.target_version_id AND project_id=NEW.project_id);
+ SELECT RAISE(ABORT,'specification_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM content_screening_decisions WHERE user_id=NEW.user_id AND kind='generated_artifact' AND required=1 AND digest IN (NEW.spec_digest,NEW.manifest_digest,NEW.html_digest));
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id IN(NEW.base_version_id,NEW.target_version_id));
+ SELECT RAISE(ABORT,'specification_quota') WHERE (SELECT count(*) FROM project_spec_proposals WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM project_spec_proposals)>=4000;
+END;
+
+CREATE TRIGGER project_spec_proposal_immutable BEFORE UPDATE ON project_spec_proposals BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
+
+CREATE TRIGGER project_spec_version_immutable BEFORE UPDATE ON project_spec_versions BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
+
+CREATE TRIGGER project_spec_apply_immutable BEFORE UPDATE ON project_spec_applies BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
+
+CREATE TRIGGER project_spec_head_update BEFORE UPDATE ON project_spec_heads BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NEW.project_id!=OLD.project_id OR NEW.revision!=OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM project_spec_applies a JOIN projects p ON p.id=a.project_id WHERE a.project_id=NEW.project_id AND a.version_id=NEW.version_id AND a.revision=NEW.revision AND p.site_draft_revision=NEW.draft_revision);
+END;
+
+CREATE TRIGGER project_spec_apply AFTER INSERT ON project_spec_applies BEGIN
+ INSERT INTO project_spec_heads(project_id,revision,version_id,draft_revision) SELECT NEW.project_id,NEW.revision,NEW.version_id,site_draft_revision FROM projects WHERE id=NEW.project_id
+ ON CONFLICT(project_id) DO UPDATE SET revision=excluded.revision,version_id=excluded.version_id,draft_revision=excluded.draft_revision;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('specification:'||NEW.id,NEW.user_id,NEW.project_id,'site.specification.applied','Saved a reviewed private website version',NEW.created_at);
+END;
+
+CREATE TRIGGER project_spec_link_admit BEFORE INSERT ON project_spec_chat_links BEGIN
+ SELECT RAISE(ABORT,'specification_owner') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t JOIN project_spec_proposals q ON q.user_id=t.user_id JOIN projects p ON p.id=q.project_id AND p.owner_user_id=t.user_id WHERE t.id=NEW.turn_id AND q.id=NEW.proposal_id);
+END;
+
+CREATE TRIGGER project_spec_link_immutable BEFORE UPDATE ON project_spec_chat_links BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
+
+CREATE TRIGGER project_spec_version_retained BEFORE DELETE ON site_versions WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) BEGIN
+ SELECT RAISE(ABORT,'version_removal_specification') WHERE EXISTS(SELECT 1 FROM project_spec_heads WHERE version_id=OLD.id);
+ SELECT RAISE(ABORT,'version_removal_specification') WHERE EXISTS(SELECT 1 FROM project_spec_proposals q WHERE (q.base_version_id=OLD.id OR q.target_version_id=OLD.id) AND q.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM project_spec_applies WHERE proposal_id=q.id));
+END;
+
+CREATE TRIGGER project_spec_forget_deleted AFTER DELETE ON site_versions BEGIN
+ DELETE FROM project_spec_proposals WHERE base_version_id=OLD.id OR target_version_id=OLD.id OR id IN(SELECT proposal_id FROM project_spec_applies WHERE version_id=OLD.id);
+END;
+
+CREATE TRIGGER specification_publication_insert BEFORE INSERT ON publications WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=NEW.version_id) BEGIN SELECT RAISE(ABORT,'specification_held'); END;
+
+CREATE TRIGGER specification_publication_update BEFORE UPDATE OF version_id ON publications WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=NEW.version_id) BEGIN SELECT RAISE(ABORT,'specification_held'); END;
+
+CREATE TRIGGER project_spec_apply_retained BEFORE DELETE ON project_spec_applies
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)
+ AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN SELECT RAISE(ABORT,'specification_receipt_retained'); END;
+
+CREATE TRIGGER service_client_proposal_admit BEFORE INSERT ON service_client_proposals BEGIN
+ SELECT RAISE(ABORT,'service_client_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t JOIN projects p ON p.id=NEW.project_id WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='ai' AND t.status='pending' AND p.owner_user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'service_client_quota') WHERE (SELECT count(*) FROM service_client_proposals WHERE project_id=NEW.project_id)>=20 OR (SELECT count(*) FROM service_client_proposals)>=400;
+END;
+
+CREATE TRIGGER service_client_proposal_validate AFTER INSERT ON service_client_proposals BEGIN SELECT RAISE(ABORT,'service_client_changed') WHERE NOT EXISTS(SELECT 1 FROM service_client_valid_proposals WHERE id=NEW.id); END;
+
+CREATE TRIGGER service_client_proposal_immutable BEFORE UPDATE ON service_client_proposals BEGIN SELECT RAISE(ABORT,'service_client_immutable'); END;
+
+CREATE TRIGGER service_client_version_immutable BEFORE UPDATE ON service_client_versions BEGIN SELECT RAISE(ABORT,'service_client_immutable'); END;
+
+CREATE TRIGGER service_client_apply_immutable BEFORE UPDATE ON service_client_applies BEGIN SELECT RAISE(ABORT,'service_client_immutable'); END;
+
+CREATE TRIGGER service_client_apply_retained BEFORE DELETE ON service_client_applies WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'service_client_receipt_retained'); END;
+
+CREATE TRIGGER service_client_head_insert BEFORE INSERT ON service_client_heads BEGIN
+ SELECT RAISE(ABORT,'service_client_changed') WHERE NOT EXISTS(SELECT 1 FROM service_client_applies WHERE project_id=NEW.project_id AND version_id=NEW.version_id AND revision=NEW.revision);
+END;
+
+CREATE TRIGGER service_client_head_update BEFORE UPDATE ON service_client_heads BEGIN
+ SELECT RAISE(ABORT,'service_client_changed') WHERE NEW.project_id!=OLD.project_id OR NEW.revision!=OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM service_client_applies WHERE project_id=NEW.project_id AND version_id=NEW.version_id AND revision=NEW.revision);
+END;
+
+CREATE TRIGGER service_client_apply AFTER INSERT ON service_client_applies BEGIN
+ INSERT INTO service_client_heads(project_id,revision,version_id) VALUES(NEW.project_id,NEW.revision,NEW.version_id) ON CONFLICT(project_id) DO UPDATE SET revision=excluded.revision,version_id=excluded.version_id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('service-client:'||NEW.id,NEW.user_id,NEW.project_id,'site.services.saved','Saved reviewed private website service settings',NEW.created_at);
+END;
+
+CREATE TRIGGER service_client_link_admit BEFORE INSERT ON service_client_chat_links BEGIN
+ SELECT RAISE(ABORT,'service_client_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t JOIN service_client_proposals q ON q.user_id=t.user_id JOIN projects p ON p.id=q.project_id AND p.owner_user_id=t.user_id WHERE t.id=NEW.turn_id AND q.id=NEW.proposal_id);
+END;
+
+CREATE TRIGGER service_client_link_immutable BEFORE UPDATE ON service_client_chat_links BEGIN SELECT RAISE(ABORT,'service_client_immutable'); END;
+
+CREATE TRIGGER service_client_version_retained BEFORE DELETE ON service_client_versions
+ WHEN EXISTS(SELECT 1 FROM projects p JOIN users u ON u.id=p.owner_user_id WHERE p.id=OLD.project_id) BEGIN
+ SELECT RAISE(ABORT,'service_client_version_retained') WHERE EXISTS(SELECT 1 FROM service_client_heads WHERE version_id=OLD.id) OR EXISTS(SELECT 1 FROM service_client_proposals q WHERE (q.base_version_id=OLD.id OR q.restore_version_id=OLD.id) AND q.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM service_client_applies WHERE proposal_id=q.id));
+END;
+
+CREATE TRIGGER service_client_site_retained BEFORE DELETE ON site_versions BEGIN
+ SELECT RAISE(ABORT,'version_removal_service_client') WHERE EXISTS(SELECT 1 FROM projects p JOIN users u ON u.id=p.owner_user_id WHERE p.id=OLD.project_id) AND (EXISTS(SELECT 1 FROM service_client_heads h JOIN service_client_versions v ON v.id=h.version_id WHERE v.website_version_id=OLD.id)
+ OR EXISTS(SELECT 1 FROM service_client_proposals q WHERE (q.website_version_id=OLD.id OR q.base_version_id IN(SELECT id FROM service_client_versions WHERE website_version_id=OLD.id) OR q.restore_version_id IN(SELECT id FROM service_client_versions WHERE website_version_id=OLD.id)) AND q.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM service_client_applies WHERE proposal_id=q.id)));
+ -- Validate before purging; separate BEFORE triggers have no safe ordering contract.
+ DELETE FROM service_client_proposals WHERE website_version_id=OLD.id OR base_version_id IN(SELECT id FROM service_client_versions WHERE website_version_id=OLD.id) OR restore_version_id IN(SELECT id FROM service_client_versions WHERE website_version_id=OLD.id);
+END;
+
+CREATE TRIGGER service_client_forget_version AFTER DELETE ON service_client_versions BEGIN
+ DELETE FROM service_client_proposals WHERE base_version_id=OLD.id OR restore_version_id=OLD.id OR id=OLD.proposal_id;
+END;
+
+CREATE TRIGGER service_client_head_retained BEFORE DELETE ON service_client_heads WHEN EXISTS(SELECT 1 FROM projects p JOIN users u ON u.id=p.owner_user_id WHERE p.id=OLD.project_id) BEGIN SELECT RAISE(ABORT,'service_client_head_retained'); END;
+
+CREATE TRIGGER service_client_activation_admit BEFORE INSERT ON service_client_activation_reviews BEGIN
+ SELECT RAISE(ABORT,'service_client_activation_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.id AND user_id=NEW.user_id AND mode='ai' AND status='pending');
+ SELECT RAISE(ABORT,'service_client_quota') WHERE (SELECT count(*) FROM service_client_activation_reviews WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM service_client_activation_reviews)>=20000;
+END;
+
+CREATE TRIGGER service_client_activation_validate AFTER INSERT ON service_client_activation_reviews BEGIN
+ SELECT RAISE(ABORT,'service_client_activation_changed') WHERE NOT EXISTS(SELECT 1 FROM service_client_activation_valid WHERE id=NEW.id);
+END;
+
+CREATE TRIGGER service_client_activation_immutable BEFORE UPDATE ON service_client_activation_reviews BEGIN SELECT RAISE(ABORT,'service_client_immutable'); END;
+
+CREATE TRIGGER service_client_activation_retained BEFORE DELETE ON service_client_activation_reviews WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'service_client_receipt_retained'); END;
+
+CREATE TRIGGER service_client_activation_link_admit BEFORE INSERT ON service_client_activation_links BEGIN
+ SELECT RAISE(ABORT,'service_client_activation_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t JOIN service_client_activation_reviews a ON a.user_id=t.user_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=t.user_id WHERE t.id=NEW.turn_id AND a.id=NEW.review_id);
+END;
+
+CREATE TRIGGER service_client_activation_link_immutable BEFORE UPDATE ON service_client_activation_links BEGIN SELECT RAISE(ABORT,'service_client_immutable'); END;
+
+CREATE TRIGGER service_client_contact_confirm BEFORE UPDATE OF status ON contact_reviews WHEN NEW.status='applied' AND EXISTS(SELECT 1 FROM service_client_activation_reviews WHERE id=NEW.id) BEGIN
+ SELECT RAISE(ABORT,'service_client_activation_changed') WHERE NOT EXISTS(SELECT 1 FROM service_client_activation_valid WHERE id=NEW.id);
+END;
+
+CREATE TRIGGER backend_form_apply BEFORE UPDATE OF status ON backend_form_reviews BEGIN
+ SELECT RAISE(ABORT,'service_client_activation_changed') WHERE EXISTS(SELECT 1 FROM service_client_activation_reviews WHERE id=NEW.id) AND NOT EXISTS(SELECT 1 FROM service_client_activation_valid WHERE id=NEW.id);
+ SELECT RAISE(ABORT,'backend_form_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM backend_form_settings s JOIN projects p ON p.id=s.project_id WHERE s.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision);
+ SELECT RAISE(ABORT,'backend_form_targets') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM publications s JOIN backend_publications b ON b.project_id=s.project_id JOIN backend_publication_reviews r ON r.id=b.review_id WHERE s.project_id=NEW.project_id AND s.version_id IS NOT NULL AND s.revision=NEW.site_revision AND b.review_id=NEW.backend_publication_id AND r.user_id=NEW.user_id AND r.status='applied');
+ UPDATE backend_form_settings SET review_id=NEW.id,revision=revision+1 WHERE project_id=NEW.project_id;
+END;
+
+CREATE TRIGGER service_client_activation_version_retained BEFORE DELETE ON service_client_versions WHEN EXISTS(SELECT 1 FROM projects p JOIN users u ON u.id=p.owner_user_id WHERE p.id=OLD.project_id) BEGIN
+ SELECT RAISE(ABORT,'service_client_version_retained') WHERE EXISTS(SELECT 1 FROM service_client_activation_reviews a JOIN service_client_activation_state s ON s.id=a.id WHERE a.version_id=OLD.id AND s.status='pending' AND a.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER service_client_activation_site_retained BEFORE DELETE ON site_versions WHEN EXISTS(SELECT 1 FROM projects p JOIN users u ON u.id=p.owner_user_id WHERE p.id=OLD.project_id) BEGIN
+ SELECT RAISE(ABORT,'version_removal_service_client') WHERE EXISTS(SELECT 1 FROM service_client_activation_reviews a JOIN service_client_activation_state s ON s.id=a.id JOIN service_client_versions v ON v.id=a.version_id WHERE v.website_version_id=OLD.id AND s.status='pending' AND a.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER service_client_contact_submission BEFORE INSERT ON contact_submissions BEGIN
+ SELECT RAISE(ABORT,'contact_unavailable') WHERE EXISTS(SELECT 1 FROM service_client_blocked_contacts WHERE project_id=NEW.project_id);
+END;
+
+CREATE TRIGGER stripe_customer_identity BEFORE UPDATE ON stripe_customers
+WHEN NEW.user_id!=OLD.user_id OR NEW.created_at!=OLD.created_at OR (OLD.customer_id IS NOT NULL AND NEW.customer_id IS NOT OLD.customer_id)
+BEGIN SELECT RAISE(ABORT,'stripe_customer_identity'); END;
+
+CREATE TRIGGER stripe_order_identity BEFORE UPDATE ON stripe_subscription_orders
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.plan_id!=OLD.plan_id OR NEW.interval!=OLD.interval OR NEW.price_id!=OLD.price_id OR NEW.amount_cents!=OLD.amount_cents OR NEW.created_at!=OLD.created_at
+ OR (OLD.session_id IS NOT NULL AND NEW.session_id IS NOT OLD.session_id)
+ OR (OLD.subscription_id IS NOT NULL AND NEW.subscription_id IS NOT OLD.subscription_id)
+ OR (OLD.state!='pending' AND NEW.state!=OLD.state)
+BEGIN SELECT RAISE(ABORT,'stripe_order_identity'); END;
+
+CREATE TRIGGER stripe_invoice_immutable BEFORE UPDATE ON stripe_paid_invoices BEGIN SELECT RAISE(ABORT,'stripe_invoice_immutable'); END;
+
+CREATE TRIGGER publication_confirm_guard BEFORE UPDATE ON publication_actions
+BEGIN
+ SELECT RAISE(ABORT,'publication_expired') WHERE NEW.expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now');
+ SELECT RAISE(ABORT,'publication_changed') WHERE NOT EXISTS(SELECT 1 FROM publications s JOIN projects p ON p.id=s.project_id WHERE s.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.expected_revision);
+ SELECT RAISE(ABORT,'publication_version') WHERE NEW.kind!='unpublish' AND NOT EXISTS(SELECT 1 FROM site_versions WHERE id=NEW.version_id AND project_id=NEW.project_id);
+ SELECT RAISE(ABORT,'published_site_quota') WHERE NEW.kind!='unpublish'
+ AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL)
+ AND (SELECT COUNT(*) FROM publications s JOIN projects p ON p.id=s.project_id WHERE p.owner_user_id=NEW.user_id AND s.version_id IS NOT NULL AND s.project_id!=NEW.project_id)>=COALESCE((SELECT MAX(c.published_sites) FROM plan_entitlements g JOIN plan_catalog c ON c.id=g.plan_id WHERE user_id=NEW.user_id AND starts_at<=unixepoch() AND ends_at>unixepoch()),1);
+END;
+
+CREATE TRIGGER app_deletion_review_immutable BEFORE UPDATE ON app_deletion_reviews
+ BEGIN SELECT RAISE(ABORT,'app_deletion_review_immutable'); END;
+
+CREATE TRIGGER app_deletion_review_capacity BEFORE INSERT ON app_deletion_reviews
+ WHEN (SELECT count(*) FROM app_deletion_reviews)>=5000
+ BEGIN SELECT RAISE(ABORT,'app_deletion_review_capacity'); END;
+
+CREATE TRIGGER inference_admit BEFORE INSERT ON inference_calls BEGIN
+ SELECT RAISE(ABORT,'inference_owner') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.turn_id AND t.user_id=NEW.user_id AND t.status='pending'
+ AND EXISTS(SELECT 1 FROM standard_ai_requests s WHERE s.id=t.id AND s.user_id=NEW.user_id AND substr(s.created_at,1,7)=NEW.period AND s.state IN ('reserved','dispatched')));
+ SELECT RAISE(ABORT,'inference_initial') WHERE NEW.status!='reserved';
+ SELECT RAISE(ABORT,'inference_budget') WHERE NOT EXISTS(SELECT 1 FROM inference_budgets WHERE user_id=NEW.user_id AND period=NEW.period AND budget_micros-spent_micros-reserved_micros>=NEW.reserved_micros);
+ -- Subagent dispatch is not exposed yet. All actual calls use the orchestrator route.
+ SELECT RAISE(ABORT,'inference_role_unavailable') WHERE NEW.role NOT IN ('orchestrator','ack');
+END;
+
+CREATE TRIGGER agent_inspection_admit BEFORE INSERT ON agent_inspections BEGIN
+ SELECT RAISE(ABORT,'agent_inspection_closed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_turns t JOIN inference_calls i ON i.id=t.id
+  WHERE t.id=NEW.turn_id AND t.user_id=NEW.user_id AND t.status='pending'
+   AND i.user_id=NEW.user_id AND i.status='dispatched'
+   AND EXISTS(SELECT 1 FROM standard_ai_requests s WHERE s.id=t.id AND s.user_id=NEW.user_id AND s.state='dispatched'));
+END;
+
+CREATE TRIGGER chat_result_open BEFORE UPDATE OF input_tokens,output_tokens ON chat_turns
+WHEN OLD.mode='ai' AND (OLD.status!='pending' OR NOT EXISTS(
+ SELECT 1 FROM standard_ai_requests s WHERE s.id=OLD.id AND s.user_id=OLD.user_id AND s.state IN ('dispatched','uncertain')))
+BEGIN SELECT RAISE(ABORT,'chat_result_closed'); END;
+
+CREATE TRIGGER stripe_invoice_delete_guard BEFORE DELETE ON stripe_paid_invoices
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'stripe_invoice_immutable'); END;
+
+CREATE TRIGGER plan_catalog_delete_guard BEFORE DELETE ON plan_catalog BEGIN SELECT RAISE(ABORT,'plan_catalog_immutable'); END;
+
+CREATE TRIGGER plan_catalog_insert_guard BEFORE INSERT ON plan_catalog BEGIN SELECT RAISE(ABORT,'plan_catalog_immutable'); END;
+
+CREATE TRIGGER stripe_current_order BEFORE INSERT ON stripe_subscription_orders
+WHEN NEW.plan_id NOT IN ('starter','personal','business','business-pro')
+BEGIN SELECT RAISE(ABORT,'current_plan_required'); END;
+
+CREATE TRIGGER stripe_current_invoice BEFORE INSERT ON stripe_paid_invoices
+WHEN NEW.plan_id NOT IN ('starter','personal','business','business-pro')
+BEGIN SELECT RAISE(ABORT,'current_plan_required'); END;
+
+CREATE TRIGGER chat_action_guided BEFORE INSERT ON chat_turns WHEN NEW.action_json IS NOT NULL AND NEW.mode!='guided'
+BEGIN SELECT RAISE(ABORT,'chat_action_mode'); END;
+
+CREATE TRIGGER chat_action_immutable BEFORE UPDATE OF action_json,user_text ON chat_turns
+WHEN NEW.action_json IS NOT OLD.action_json OR (OLD.action_json IS NOT NULL AND NEW.user_text IS NOT OLD.user_text)
+BEGIN SELECT RAISE(ABORT,'chat_action_immutable'); END;
+
+CREATE TRIGGER directory_review_confirm BEFORE UPDATE ON directory_reviews
+BEGIN
+ SELECT RAISE(ABORT,'directory_changed') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM directories d JOIN projects p ON p.id=d.project_id WHERE d.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND d.revision=NEW.expected_revision);
+ SELECT RAISE(ABORT,'directory_changed') WHERE NEW.kind='publish' AND (NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL AND revision=NEW.publication_revision) OR NEW.snapshot_json!=(SELECT draft_json FROM directories WHERE project_id=NEW.project_id));
+ SELECT RAISE(ABORT,'directory_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id AND mode='guided' AND json_extract(action_json,'$.type')='confirm' AND json_extract(action_json,'$.kind')='directory' AND json_extract(action_json,'$.reviewId')=NEW.id);
+END;
+
+CREATE TRIGGER domain_proof_removal_guard BEFORE UPDATE ON domain_proof_removals
+BEGIN
+ SELECT RAISE(ABORT,'domain_proof_removal_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+ SELECT RAISE(ABORT,'domain_proof_removal_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM domain_claims d JOIN projects p ON p.id=d.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by
+  WHERE d.id=NEW.claim_id AND d.project_id=NEW.project_id AND d.hostname=NEW.hostname AND d.token=NEW.proof_token AND d.expires_at=NEW.proof_expires_at AND p.owner_user_id=NEW.user_id
+  AND t.user_id=NEW.user_id AND t.mode='guided' AND json_extract(t.action_json,'$.type')='confirm' AND json_extract(t.action_json,'$.kind')='domainProof' AND json_extract(t.action_json,'$.reviewId')=NEW.id);
+END;
+
+CREATE TRIGGER project_spec_apply_admit BEFORE INSERT ON project_spec_applies BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM project_spec_proposals q JOIN projects p ON p.id=q.project_id AND p.owner_user_id=q.user_id
+  JOIN project_spec_versions v ON v.version_id=NEW.version_id AND v.project_id=p.id AND v.proposal_id=q.id
+  JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND json_extract(t.action_json,'$.type')='specificationApply' AND json_extract(t.action_json,'$.reviewId')=q.id AND json_extract(t.action_json,'$.proposalDigest')=q.proposal_digest AND json_type(t.action_json,'$.expectedRevision')='integer' AND json_extract(t.action_json,'$.expectedRevision')=q.expected_revision
+  LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions b ON b.version_id=h.version_id
+  WHERE q.id=NEW.proposal_id AND q.user_id=NEW.user_id AND q.project_id=NEW.project_id AND q.proposal_digest=NEW.proposal_digest
+  AND NEW.id=NEW.version_id AND NEW.revision=q.expected_revision+1 AND v.revision=NEW.revision
+  AND coalesce(h.revision,0)=q.expected_revision AND h.version_id IS q.base_version_id AND b.spec_digest IS q.base_digest
+  AND p.site_draft_revision=q.draft_revision+1
+  AND (q.target_version_id IS NULL OR EXISTS(SELECT 1 FROM site_versions WHERE id=q.target_version_id AND project_id=q.project_id))
+ );
+ SELECT RAISE(ABORT,'specification_expired') WHERE (SELECT expires_at FROM project_spec_proposals WHERE id=NEW.proposal_id)<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM content_screening_decisions s JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND s.user_id=q.user_id AND s.kind='generated_artifact' AND s.required=1 AND s.digest IN(q.spec_digest,q.manifest_digest,q.html_digest));
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held h JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND h.version_id IN(q.base_version_id,q.target_version_id));
+ SELECT RAISE(ABORT,'specification_quota') WHERE (SELECT count(*) FROM project_spec_applies WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM project_spec_applies)>=20000;
+END;
+
+CREATE TRIGGER service_client_version_admit BEFORE INSERT ON service_client_versions BEGIN
+ SELECT RAISE(ABORT,'service_client_changed') WHERE NOT EXISTS(SELECT 1 FROM service_client_proposals q JOIN service_client_valid_proposals a ON a.id=q.id
+ JOIN chat_turns t ON t.id=NEW.id AND t.user_id=q.user_id AND t.mode='guided' AND json_extract(t.action_json,'$.type')='serviceClientApply' AND json_extract(t.action_json,'$.reviewId')=q.id AND json_extract(t.action_json,'$.proposalDigest')=q.proposal_digest AND json_type(t.action_json,'$.expectedRevision')='integer' AND json_extract(t.action_json,'$.expectedRevision')=q.expected_revision
+ WHERE q.id=NEW.proposal_id AND q.project_id=NEW.project_id AND q.website_version_id=NEW.website_version_id AND NEW.revision=q.expected_revision+1
+ AND NEW.spec_json=q.spec_json AND NEW.spec_digest=q.spec_digest AND NEW.target_json=q.target_json AND NEW.target_digest=q.target_digest AND NEW.lock_json=q.lock_json AND NEW.manifest_json=q.manifest_json AND NEW.manifest_digest=q.manifest_digest AND NEW.preview_html=q.preview_html AND NEW.preview_digest=q.preview_digest AND NEW.candidate_html=q.candidate_html AND NEW.candidate_digest=q.candidate_digest);
+ SELECT RAISE(ABORT,'service_client_quota') WHERE (SELECT count(*) FROM service_client_versions WHERE project_id=NEW.project_id)>=25 OR (SELECT count(*) FROM service_client_versions)>=1000;
+END;
+
+CREATE TRIGGER service_client_apply_admit BEFORE INSERT ON service_client_applies BEGIN
+ SELECT RAISE(ABORT,'service_client_changed') WHERE NOT EXISTS(SELECT 1 FROM service_client_proposals q JOIN service_client_valid_proposals a ON a.id=q.id JOIN service_client_versions v ON v.id=NEW.version_id AND v.project_id=q.project_id AND v.proposal_id=q.id
+ JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND json_extract(t.action_json,'$.type')='serviceClientApply' AND json_extract(t.action_json,'$.reviewId')=q.id AND json_extract(t.action_json,'$.proposalDigest')=q.proposal_digest AND json_type(t.action_json,'$.expectedRevision')='integer' AND json_extract(t.action_json,'$.expectedRevision')=q.expected_revision
+ WHERE q.id=NEW.proposal_id AND q.user_id=NEW.user_id AND q.project_id=NEW.project_id AND q.proposal_digest=NEW.proposal_digest AND NEW.id=NEW.version_id AND NEW.revision=q.expected_revision+1 AND v.revision=NEW.revision);
+ SELECT RAISE(ABORT,'service_client_quota') WHERE (SELECT count(*) FROM service_client_applies WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM service_client_applies)>=20000;
+END;
+
+CREATE TRIGGER project_spec_creation_immutable BEFORE UPDATE ON project_spec_creations BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
+
+CREATE TRIGGER project_spec_creation_retained BEFORE DELETE ON project_spec_creations
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN SELECT RAISE(ABORT,'specification_receipt_retained'); END;
+
+CREATE TRIGGER project_spec_current_proposal BEFORE INSERT ON project_spec_proposals BEGIN
+ SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 2 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 2;
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=NEW.project_id AND json_extract(v.spec_json,'$.schemaVersion')=2 AND h.draft_revision=NEW.draft_revision);
+END;
+
+CREATE TRIGGER project_spec_version_admit BEFORE INSERT ON project_spec_versions BEGIN
+ SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 2 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 2;
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM project_spec_proposals q JOIN site_versions v ON v.id=NEW.version_id AND v.project_id=q.project_id
+  JOIN projects p ON p.id=q.project_id AND p.owner_user_id=q.user_id
+  WHERE q.id=NEW.proposal_id AND q.project_id=NEW.project_id AND NEW.revision=q.expected_revision+1
+  AND NEW.spec_json=q.spec_json AND NEW.spec_digest=q.spec_digest AND NEW.lock_json=q.lock_json
+  AND NEW.manifest_json=q.manifest_json AND NEW.manifest_digest=q.manifest_digest
+  AND v.component_id=json_extract(q.manifest_json,'$.artifacts[0].component') AND v.html=q.html AND v.digest=q.html_digest AND v.config_json=q.config_json
+ ) AND NOT EXISTS(
+  SELECT 1 FROM site_versions v JOIN projects p ON p.id=v.project_id
+  JOIN chat_turns t ON t.id=v.id AND t.user_id=p.owner_user_id AND t.mode='ai' AND t.status='pending' AND t.action_json IS NULL
+  WHERE v.id=NEW.version_id AND v.project_id=NEW.project_id AND NEW.proposal_id=NEW.version_id AND NEW.revision=1
+  AND p.site_draft_revision=1 AND NOT EXISTS(SELECT 1 FROM project_spec_heads WHERE project_id=p.id)
+  AND v.component_id=json_extract(NEW.manifest_json,'$.artifacts[0].component')
+  AND v.digest=json_extract(NEW.manifest_json,'$.artifacts[0].digest')
+  AND NEW.spec_digest=json_extract(NEW.manifest_json,'$.specificationDigest')
+  AND NOT EXISTS(SELECT 1 FROM project_spec_creations WHERE project_id=p.id)
+ );
+END;
+
+CREATE TRIGGER project_spec_creation_admit BEFORE INSERT ON project_spec_creations BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM projects p JOIN site_versions s ON s.project_id=p.id
+  JOIN project_spec_versions v ON v.version_id=s.id AND v.project_id=p.id AND v.revision=1 AND v.proposal_id=v.version_id
+  JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='ai' AND t.status='pending' AND t.action_json IS NULL
+  WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=1
+  AND NEW.id=NEW.version_id AND v.version_id=NEW.version_id AND s.source='ai'
+  AND NOT EXISTS(SELECT 1 FROM project_spec_heads WHERE project_id=p.id)
+  AND json_extract(v.spec_json,'$.schemaVersion')=2 AND json_extract(v.lock_json,'$.compiler.version')=2
+ );
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=NEW.version_id);
+END;
+
+CREATE TRIGGER project_spec_head_insert BEFORE INSERT ON project_spec_heads BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(SELECT 1 FROM project_spec_applies a JOIN projects p ON p.id=a.project_id WHERE a.project_id=NEW.project_id AND a.version_id=NEW.version_id AND a.revision=NEW.revision AND p.site_draft_revision=NEW.draft_revision)
+ AND NOT EXISTS(SELECT 1 FROM project_spec_creations c JOIN projects p ON p.id=c.project_id WHERE c.project_id=NEW.project_id AND c.version_id=NEW.version_id AND NEW.revision=1 AND p.site_draft_revision=1 AND NEW.draft_revision=1);
+END;
+
+CREATE TRIGGER project_spec_created AFTER INSERT ON project_spec_creations BEGIN
+ INSERT INTO project_spec_heads(project_id,revision,version_id,draft_revision) VALUES(NEW.project_id,1,NEW.version_id,1);
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('specification:'||NEW.id,NEW.user_id,NEW.project_id,'site.specification.created','Saved the first current website specification',NEW.created_at);
+END;
+
+CREATE TRIGGER current_website_component BEFORE INSERT ON site_versions
+WHEN NEW.component_id NOT IN('site-page@1','photo-page@1')
+BEGIN SELECT RAISE(ABORT,'specification_current_required'); END;
+
+CREATE TRIGGER welcome_create_project AFTER UPDATE ON welcome_onboarding WHEN NEW.completed_at IS NOT NULL
+ BEGIN
+ INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at,audience,preferred_theme)
+ VALUES(NEW.project_id,NEW.user_id,NEW.project_name,NEW.idea,'draft',NEW.completed_at,NEW.completed_at,NEW.audience,NEW.preferred_theme);
+ INSERT INTO workspace_state(user_id,revision,step,idea) VALUES(NEW.user_id,1,'ready','')
+ ON CONFLICT(user_id) DO UPDATE SET revision=revision+1,step='ready',idea='',brief_project_id=NULL,brief_stage=NULL;
+ INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status)
+ SELECT NEW.project_id,NEW.user_id,revision,'Start my first project.',
+ 'Your project “'||NEW.project_name||'” is ready to work on. I saved your idea and preferences privately. Tell me what you would like to build first. Nothing is published, and no services have been purchased.',NEW.completed_at,'guided','completed'
+ FROM workspace_state WHERE user_id=NEW.user_id;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at)
+ VALUES('welcome:'||NEW.project_id,NEW.user_id,NEW.project_id,'project.created','Started first project during welcome',NEW.completed_at);
+ END;
+
+CREATE TRIGGER feature_preview_admit BEFORE INSERT ON feature_preview_grants BEGIN
+ SELECT RAISE(ABORT,'feature_preview_owner') WHERE NEW.project_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'feature_preview_initial') WHERE NEW.revoked_at IS NOT NULL;
+ SELECT RAISE(ABORT,'feature_preview_capacity') WHERE (SELECT count(*) FROM feature_preview_grants WHERE user_id=NEW.user_id)>=1000 OR (SELECT count(*) FROM feature_preview_grants)>=20000;
+END;
+
+CREATE TRIGGER feature_preview_immutable BEFORE UPDATE ON feature_preview_grants
+WHEN NEW.id IS NOT OLD.id OR NEW.contract_version IS NOT OLD.contract_version OR NEW.user_id IS NOT OLD.user_id
+ OR NEW.project_id IS NOT OLD.project_id OR NEW.feature_id IS NOT OLD.feature_id OR NEW.operation IS NOT OLD.operation
+ OR NEW.purpose IS NOT OLD.purpose OR NEW.review_reference IS NOT OLD.review_reference
+ OR NEW.starts_at IS NOT OLD.starts_at OR NEW.ends_at IS NOT OLD.ends_at OR NEW.created_at IS NOT OLD.created_at
+ OR OLD.revoked_at IS NOT NULL OR NEW.revoked_at IS NULL
+BEGIN SELECT RAISE(ABORT,'feature_preview_immutable'); END;
+
+CREATE TRIGGER feature_preview_retained BEFORE DELETE ON feature_preview_grants
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+ AND (OLD.project_id IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id))
+BEGIN SELECT RAISE(ABORT,'feature_preview_retained'); END;

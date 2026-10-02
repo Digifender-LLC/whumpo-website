@@ -1,5 +1,11 @@
 -- Isolated WH-114/115 schema. Not an automatic migration or a second live policy.
 -- Admit into the platform schema only with the coordinated current-policy cutover.
+-- Atomic admission assertion. Successful checks insert nothing; denial aborts the
+-- entire D1 batch before any workspace effect. This table must always be empty.
+CREATE TABLE identity_admission_checks (denied INTEGER NOT NULL CHECK(denied=1)) STRICT;
+CREATE TRIGGER identity_admission_denied BEFORE INSERT ON identity_admission_checks
+BEGIN SELECT RAISE(ABORT,'identity_admission_denied'); END;
+
 CREATE TABLE identity_accounts (
  account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  policy_version INTEGER NOT NULL CHECK(policy_version=1),

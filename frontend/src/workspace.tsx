@@ -1,3 +1,4 @@
+import {identityCeremony} from './lib/identity';
 import {useChatRecovery} from './use-chat-recovery';
 import {chatControl,type ChatControl} from '../../src/chat-controls';
 import {AppMaintenanceCard} from './app-maintenance-card';
@@ -23,7 +24,7 @@ import {api,send,message,APIError,queryClient,type Profile,type Chat,type Dashbo
 import {Button} from './components/ui/button';
 import {Textarea} from './components/ui/textarea';
 import {Brand} from './components/brand';
-import {Auth} from './auth';
+import {IdentityGate} from './identity/flow';
 import {providerReturn} from './lib/workspace-navigation';
 import {DeferredArea} from './deferred-area';
 import {QueryRecovery} from './query-recovery';
@@ -37,6 +38,9 @@ export const useWorkspace=()=>useContext(Context);
 export function Workspace(){
  useMobileViewport();
  const location=useRouterState({select:s=>s.location});
+ return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><WorkspaceProfile/></IdentityGate>;
+}
+function WorkspaceProfile(){
  const profile=useQuery({queryKey:['session'],queryFn:async()=>{
   const next=await api<Profile>('/profile'),previous=queryClient.getQueryData<Profile>(['session']);
   if(previous&&previous.accountId!==next.accountId)queryClient.removeQueries({predicate:q=>q.queryKey[0]!=='session'});
@@ -45,7 +49,7 @@ export function Workspace(){
  useEffect(()=>{const theme=profile.data?.theme??'system',media=matchMedia('(prefers-color-scheme: dark)'),apply=()=>document.documentElement.classList.toggle('dark',theme==='dark'||theme==='system'&&media.matches);apply();media.addEventListener('change',apply);return()=>media.removeEventListener('change',apply);},[profile.data?.theme]);
  useEffect(()=>{if(profile.data&&!profile.data.onboardingComplete)document.title="Welcome — Whumpo";},[profile.data?.onboardingComplete]);
  if(profile.isPending)return <div className="min-h-dvh grid place-items-center"><LoaderCircle className="animate-spin size-6" aria-label="Opening your workspace"/></div>;
- if(profile.error)return profile.error instanceof APIError&&profile.error.status===401?<Auth signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}/>:<main className="page-pad"><h1>Couldn’t open your workspace</h1><p role="alert">{message(profile.error)}</p><Button onClick={()=>profile.refetch()}>Try again</Button></main>;
+ if(profile.error)return <main className="page-pad"><h1>Couldn’t open your workspace</h1><p role="alert">{message(profile.error)}</p><Button onClick={()=>profile.refetch()}>Try again</Button></main>;
  if(!profile.data)return null;
  if(!profile.data.onboardingComplete)return <Onboarding profile={profile.data}/>;
  return <WorkspaceSession key={profile.data.accountId} account={profile.data}/>;
@@ -79,7 +83,7 @@ function WorkspaceSession({account}:{account:Profile}){
  const mutation=useMutation({mutationFn:async(request:ChatRequest)=>presentWithAcknowledgment(submitChat(request,r=>r.action?send<Chat>('/chat/actions',{id:r.id,revision:r.revision,action:r.action}):send<Chat>('/chat',r),()=>api<Chat>('/chat')),{showAck:setAck,hideAck:()=>setAck(''),readAck:async()=>(await api<{ack:string|null}>('/chat/'+request.id+'/ack')).ack}),onSuccess:(result,request)=>{setDeliveryError('');queryClient.setQueryData(['chat',scope],result);setPending(null);restoredPending.current=false;setPendingText('');setDraft(current=>current.trim()===request.content?'':current);void queryClient.invalidateQueries({queryKey:['dashboard']});void queryClient.invalidateQueries({queryKey:['billing']});void queryClient.invalidateQueries({queryKey:['domain-controls'],refetchType:'none'});},onError:error=>{if(canRecoverChat(error)){setDeliveryError('The connection dropped before we could confirm your message. Retry checks the same request, without starting it again.');}else{setNotice(message(error));setPending(null);restoredPending.current=false;setPendingText('');void queryClient.invalidateQueries({queryKey:['chat']});}}});
  const open=(target:string,project?:string)=>navigate({to:'/workspace/$view',params:{view:target},search:{project}});
  async function sendMessage(content:string){content=content.trim();if(!content||mutation.isPending)return;await submitMessage(content,false);}
- async function runAction(action:ChatControl){const control=chatControl(action);if(!control)throw Error('This action is not available.');await submitMessage(control.label,false,control.action);}
+ async function runAction(action:ChatControl){const control=chatControl(action);if(!control)throw Error('This action is not available.');if(control.recentAuth)await identityCeremony('reauth');await submitMessage(control.label,false,control.action);}
  async function submitMessage(content:string,stayOnPage:boolean,action?:ChatControl){
   if(waitingForReply){setNotice('Whumpo is still working on your previous request.');if(action)throw Error('Wait for the current reply to finish.');return;}
   if(!chat.data||mutation.isPending){if(action)throw Error('Wait for the current message to finish.');return;}

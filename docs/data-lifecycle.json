@@ -20,17 +20,62 @@
       "currentRetention": "Retained while the account exists; eligibility cascades. Other tables can prevent account deletion.",
       "proposedRetention": "Active account; ordinary personal fields enter closure purge. Only justified minimal proof survives in a separate restricted receipt.",
       "deletionAuthority": "Recently authenticated owner confirms exact account closure; restricted preservation review precedes purge.",
-      "exportPolicy": "Allowlist account identifier, email, creation time and customer declaration. Exclude password hashes/salts and recovery secrets.",
-      "references": ["src/index.ts", "src/passkeys.ts", "docs/content-safety.md"]
+      "exportPolicy": "Allowlist account identifier, email, creation time and US customer declaration. Account rows have no password fields.",
+      "references": ["src/workspace-identity/canonical-inputs.sql", "src/workspace-identity/http.ts", "docs/content-safety.md"]
     },
     {
-      "id": "owner-auth", "tables": ["sessions", "passkeys", "recovery_codes", "auth_challenges", "invitations"], "scope": "mixed",
-      "purpose": "Owner authentication, invitation redemption and replay prevention; unused invitations/challenges may have no account.",
-      "currentRetention": "Expiry checks deny stale sessions/challenges. Challenges are consumed/pruned during auth. Invitations.used_by has NO ACTION; auth_challenges has no ownership FK. No general identity-retention sweeper.",
-      "proposedRetention": "Revoke sessions and open challenges on closure; retain only closure-cancel authentication during any approved grace period. Remove credential material at purge. Expired unclaimed auth material is independently swept.",
-      "deletionAuthority": "Owner security controls or reviewed account closure; operator manages unclaimed invitations. Never infer erasure solely from a missing FK.",
-      "exportPolicy": "Credential names and creation/last-use metadata only; omit public-key material, credential IDs, hashes, codes, challenges and bearer tokens.",
-      "references": ["src/index.ts", "src/passkeys.ts", "docs/owner-recovery.md"]
+      "id": "owner-identity-progress", "tables": ["identity_accounts", "identity_attempts", "identity_credentials"], "scope": "owner",
+      "purpose": "Current policy epoch, verified enrollment/recovery progress and public passkey verification material. Private passkey keys are never received.",
+      "currentRetention": "Account-owned cascades. Pending verified progress is retained until authenticated cancellation or reviewed account deletion. Attempts referenced by credentials are retained; emergency removal fences all authority.",
+      "proposedRetention": "Preserve monotonic revocation and generation truth during any forward repair. Never restore historical sessions or an earlier kit verifier. Whole-account restore is not implemented.",
+      "deletionAuthority": "Shared identity engine handles reviewed cancellation/removal; complete account closure remains a separate lifecycle gate.",
+      "exportPolicy": "Allowlist stage, user-facing credential names and creation/last-use metadata. Exclude public keys, credential IDs, counters, kit verifiers and internal proof identifiers.",
+      "references": ["src/workspace-identity/schema.sql", "src/workspace-identity/ceremonies.ts", "docs/identity-web.md"]
+    },
+    {
+      "id": "owner-identity-admission", "tables": ["identity_sessions", "identity_grants", "identity_challenges"], "scope": "mixed",
+      "purpose": "Hashed ordinary sessions, restricted grants and one-use browser ceremonies.",
+      "currentRetention": "Expiry denies authority immediately. Daily maintenance removes at most 500 expired rows per table. Sessions last at most seven days from proof, grants thirty minutes, challenges five minutes. User deletion explicitly clears bound challenges; credential/account deletion cascades sessions/grants.",
+      "proposedRetention": "Retain only current authority; any restore must discard these records and require fresh verification. Never rehydrate browser sessions from backups.",
+      "deletionAuthority": "Verified logout, shared revocation engine and bounded expiry maintenance.",
+      "exportPolicy": "No bearer hashes, tokens, challenges, challenge payloads, proof bodies or authority IDs in customer exports, Chat or telemetry.",
+      "references": ["src/workspace-identity/schema.sql", "src/workspace-identity/ceremonies.ts", "docs/identity-web.md"]
+    },
+    {
+      "id": "owner-identity-kits", "tables": ["identity_kit_offers"], "scope": "owner",
+      "purpose": "One-time kit preparation and explicit saved acknowledgment; stores a verifier, never the plaintext kit.",
+      "currentRetention": "Offers expire after thirty minutes; daily maintenance deletes at most 500 expired offers. Active kit verifier stays on identity_accounts until rotation/removal.",
+      "proposedRetention": "No recovery-key plaintext or verifier is exported/restored as transferable authority. Preserve current kit generation and revocation truth in forward repair.",
+      "deletionAuthority": "Shared kit preparation supersedes the prior offer; exact saved acknowledgment and reviewed rotation/completion activate it.",
+      "exportPolicy": "Allowlist saved/expiry metadata only. Exclude verifiers and nonce/request bindings. Plaintext delivery exists only in its original no-store preparation response.",
+      "references": ["src/workspace-identity/schema.sql", "src/workspace-identity/ceremonies.ts", "docs/identity-web.md"]
+    },
+    {
+      "id": "owner-identity-receipts", "tables": ["identity_ceremony_receipts", "identity_effect_receipts", "identity_recovery_reviews"], "scope": "owner",
+      "purpose": "Bound operation receipts prevent duplicate identity effects; recovery reviews preserve exact lost-credential choices and progress.",
+      "currentRetention": "Ceremony/effect receipts last seven days with bounded 500-row expiry cleanup. Reviews follow their attempts/account and are not silently purged during pending recovery. Receipts cannot issue fresh bearer authority on replay.",
+      "proposedRetention": "Retain only the evidence necessary for current progress and unresolved effects. Restored receipts cannot re-create expired or revoked authority.",
+      "deletionAuthority": "Shared engine creates immutable receipts and revises exact reviews. Account cleanup cascades; bounded cleanup applies only to expired operation receipts.",
+      "exportPolicy": "Allowlist user-facing completion/progress status. Exclude request hashes, execution nonces, review credential IDs and internal proof bindings.",
+      "references": ["src/workspace-identity/schema.sql", "src/workspace-identity/ceremonies.ts", "docs/identity-web.md"]
+    },
+    {
+      "id": "identity-invitations", "tables": ["invitations"], "scope": "mixed",
+      "purpose": "Single-use signup invitations, including spent invitations whose account was removed.",
+      "currentRetention": "used_at is immutable after redemption. User deletion clears used_by but leaves spending intact. There is no invitation age purge that could resurrect a spent code.",
+      "proposedRetention": "Operator retention may remove expired code hashes only without allowing old codes to be reissued. Do not restore historical invitation availability.",
+      "deletionAuthority": "Operator creates invitations; signup atomically spends one; the database preserves spent status through cancellation/deletion.",
+      "exportPolicy": "No invitation code or code hash in customer exports or logs.",
+      "references": ["src/workspace-identity/schema.sql", "src/workspace-identity/ceremonies.ts", "docs/identity-web.md"]
+    },
+    {
+      "id": "identity-admission-assertion", "tables": ["identity_admission_checks"], "scope": "platform",
+      "purpose": "Always-empty SQL assertion table used to atomically reject workspace batches after identity revocation.",
+      "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
+      "proposedRetention": "Remain empty in every deployment and restore.",
+      "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
+      "exportPolicy": "No data exists to export.",
+      "references": ["src/workspace-identity/schema.sql", "src/workspace-identity/ceremonies.ts", "docs/identity-web.md"]
     },
     {
       "id": "profile-workspace", "tables": ["user_profiles", "welcome_onboarding", "welcome_first_drafts", "workspace_preferences", "workspace_state"], "scope": "owner",

@@ -6,12 +6,14 @@ import type {ApplicationReviewPresentation} from '../../../src/application-revie
 import {QueryClient} from '@tanstack/react-query';
 export class APIError extends Error{constructor(message:string,public status:number){super(message)}}
 export const queryClient=new QueryClient({defaultOptions:{queries:{retry:false,staleTime:15000,refetchOnWindowFocus:false},mutations:{retry:false}}});
-export async function api<T>(path:string,options:RequestInit={}):Promise<T>{const response=await fetch('/api'+path,{credentials:'same-origin',...options,headers:{'content-type':'application/json',...options.headers}});const data=await response.json();if(!response.ok)throw new APIError(data.error??'This request could not finish.',response.status);if(path==='/profile')requireCurrentAccountIdentity(data);return data;}
+let workspaceGeneration=0;
+export function resetWorkspaceClient(){workspaceGeneration++;window.dispatchEvent(new Event('whumpo:workspace-reset'));queryClient.clear();}
+export async function api<T>(path:string,options:RequestInit={}):Promise<T>{const generation=workspaceGeneration;const response=await fetch('/api'+path,{credentials:'same-origin',...options,headers:{'content-type':'application/json',...options.headers}});const data=await response.json();if(generation!==workspaceGeneration)throw new APIError('Account access changed. Check your current workspace.',401);if(!response.ok){if(['proof_required','identity_changed','identity_incomplete'].includes(data.code))window.dispatchEvent(new Event('whumpo:identity-changed'));throw new APIError(data.error??'This request could not finish.',response.status);}if(path==='/profile')requireCurrentAccountIdentity(data);return data;}
 export function requireCurrentAccountIdentity(value:unknown):asserts value is {accountId:string}{
  if(!value||typeof value!=='object'||Array.isArray(value)||!('accountId'in value)||typeof value.accountId!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(value.accountId))throw new APIError('Whumpo needs its current account response. Refresh the app and try again.',409);
 }
 export const send=<T>(path:string,body:unknown={},method='POST')=>api<T>(path,{method,body:JSON.stringify(body)});
-export type Profile={accountId:string;revision:number;avatar_id:string;onboardingComplete:boolean;name:string;about_me:string;email:string;share_context:number;theme:string;hasPhoto:number;photoSafety?:'none'|'pending'|'approved'|'blocked';passwordEnabled:boolean};
+export type Profile={accountId:string;revision:number;avatar_id:string;onboardingComplete:boolean;name:string;about_me:string;email:string;share_context:number;theme:string;hasPhoto:number;photoSafety?:'none'|'pending'|'approved'|'blocked'};
 export type Project={id:string;name:string;status:string;purpose:string;cms_articles:number};
 export type Layout={widgets:string[];tabs:{id:string;label:string;projectId:string|null;widgets:string[];shortcuts?:WorkspaceShortcut[]}[]};
 export type Traffic={enabledAt:string|null;days:number;rows:{project_id:string;day:string;requests:number}[];metric:string};

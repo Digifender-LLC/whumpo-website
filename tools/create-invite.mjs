@@ -16,7 +16,7 @@ try {
   if (result.status !== 0) { console.error(result.stderr); process.exitCode = 1; }
   else {
     const output = resolve(`.secrets/invitation-${digest.slice(0,12)}.txt`);
-    writeFileSync(output, `Whumpo test invitation\nOpen https://whumpo.com/workspace/?signup=1 to create your account.\nInvitation code: ${code}\nExpires: ${expires}\nOne use. Do not commit or post this code publicly.\n`, { mode: 0o600 });
+    writeFileSync(output, `Whumpo test invitation\nOpen https://whumpo.com/workspace/?signup=true to create your account.\nInvitation code: ${code}\nExpires: ${expires}\nOne use. Do not commit or post this code publicly.\n`, { mode: 0o600 });
     console.log(`Invitation saved to ${output}`);
   }
 } finally { unlinkSync(sqlFile); }

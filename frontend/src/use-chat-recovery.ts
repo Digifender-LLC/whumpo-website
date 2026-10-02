@@ -10,7 +10,7 @@ export function useChatRecovery(owner:string){
  const [draft,setDraftState]=useState(current.current.draft);
  const [storageFailed,setStorageFailed]=useState(initial.failed);
  const mounted=useRef(true);
- useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+ useEffect(()=>{mounted.current=true;const reset=()=>{mounted.current=false;};window.addEventListener('whumpo:workspace-reset',reset);return()=>{mounted.current=false;window.removeEventListener('whumpo:workspace-reset',reset);};},[]);
  const persist=useCallback(()=>{if(!mounted.current)return;try{writeRecovery(sessionStorage,owner,current.current);setStorageFailed(false);}catch{setStorageFailed(true);}},[owner]);
  const setDraft=useCallback((update:SetStateAction<string>)=>{
   const next=typeof update==='function'?update(current.current.draft):update;

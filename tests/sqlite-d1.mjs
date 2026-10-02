@@ -1,9 +1,9 @@
 import {DatabaseSync} from 'node:sqlite';
-import {readFile,readdir} from 'node:fs/promises';
+import {currentSchema} from '../tools/current-schema.mjs';
 /** Disposable SQLite adapter for fast checks of the actual D1 queries and transactions. */
 export async function sqliteD1(){
  const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON');
- for(const file of (await readdir('migrations')).filter(n=>n.endsWith('.sql')).sort())sql.exec(await readFile('migrations/'+file,'utf8'));
+ sql.exec(await currentSchema());
  const prepare=query=>{
   const bound=params=>({query,params,
    run:async()=>{const r=sql.prepare(query).run(...params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}};},
