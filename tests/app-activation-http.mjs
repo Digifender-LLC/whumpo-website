@@ -4,8 +4,7 @@ import {backendHttpFixture} from './backend-http-fixture.mjs';
 const fixture=await backendHttpFixture(),base=fixture.base;
 try {
 
-async function register(){const response=await fetch(base+'/api/auth/register',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({email:crypto.randomUUID()+'@example.test',password:crypto.randomUUID()+'local-test'})});assert.equal(response.status,200);return response.headers.get('set-cookie').split(';')[0];}
-const cookie=await register(),other=await register();
+const cookie=await fixture.account(),other=await fixture.account();
 const post=(path,data,origin=base,session=cookie)=>fetch(base+path,{method:'POST',headers:{origin,cookie:session,'content-type':'application/json'},body:JSON.stringify(data)});
 const get=path=>fetch(base+path,{headers:{cookie}});
 

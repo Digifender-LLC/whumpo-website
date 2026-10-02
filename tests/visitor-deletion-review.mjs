@@ -15,7 +15,7 @@ try{
  assert.equal((await confirm(a,B,r)).status,409);assert.ok(await exists(A)&&await exists(B));pass('A review cannot delete B after an ambient account switch; immutable authority');
  assert.equal((await confirm(b,C,r)).status,409);assert.ok(await exists(C));pass('Cross-project confirmation cannot acquire another visitor');
  const replacement={...A,session:await m.issueAppSession(db,A.who)};assert.equal((await confirm(a,replacement,r)).status,409);assert.ok(await exists(A));pass('Same visitor with a replacement session must review again');
- assert.equal((await confirm(a,B,{id:id(),revision:1})).status,409);assert.ok(await exists(B));pass('Unreviewed legacy/random request IDs cannot first-dispatch deletion');
+ assert.equal((await confirm(a,B,{id:id(),revision:1})).status,409);assert.ok(await exists(B));pass('Unreviewed random request IDs cannot first-dispatch deletion');
  const noWrites=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{assert.match(sql,/^SELECT /);return target.prepare(sql);};throw Error('Unexpected database operation '+String(key));}});
  for(const request of [r,{id:id(),revision:1}])assert.deepEqual(await (await status(a,B,request,{db:noWrites})).json(),{deleted:false,id:request.id});
  assert.ok(await exists(A)&&await exists(B));pass('Unknown or mismatched status is read-only and unconfirmed');
@@ -51,11 +51,11 @@ try{
  assert.equal((await db.prepare('SELECT count(*) n FROM app_deletion_receipts WHERE id=?').bind(r2.id).first()).n,1);pass('Concurrent confirmations create one receipt and one erasure');
  const expired=await visitor(a),expiredReview=await review(a,expired);await m.cleanupAppLifecycle(future('+6 minutes'));
  assert.equal(await db.prepare('SELECT id FROM app_deletion_reviews WHERE id=?').bind(expiredReview.id).first(),null);assert.ok(await exists(expired));pass('Maintenance expires review metadata without deleting the visitor');
- // Historical receipts retain the same proof format and can be recovered without a review row.
- const legacy={id:id(),revision:1},proof=await m.hashToken(JSON.stringify(['townhello-app-deletion',A.session,a.project,legacy.id,legacy.revision]));
- await db.prepare('INSERT INTO app_deletion_receipts(id,project_id,proof_hash) VALUES(?,?,?)').bind(legacy.id,a.project,proof).run();
- assert.deepEqual(await (await status(a,A,legacy)).json(),{deleted:true,id:legacy.id});assert.equal((await confirm(a,A,legacy)).status,200);assert.ok(await exists(A));pass('Pre-upgrade committed receipt remains recoverable without new deletion');
- const off=id();await m.prepareAppPage(db,a.user,a.project,off,null);await m.confirmAppPage(db,a.user,off);
+ // A committed current receipt remains recoverable after its review row expires.
+ const committed={id:id(),revision:1},proof=await m.hashToken(JSON.stringify(['townhello-app-deletion',A.session,a.project,committed.id,committed.revision]));
+ await db.prepare('INSERT INTO app_deletion_receipts(id,project_id,proof_hash) VALUES(?,?,?)').bind(committed.id,a.project,proof).run();
+ assert.deepEqual(await (await status(a,A,committed)).json(),{deleted:true,id:committed.id});assert.equal((await confirm(a,A,committed)).status,200);assert.ok(await exists(A));pass('Committed receipt remains recoverable without its review and cannot cause another deletion');
+ const off=id();await m.prepareAppPage(a.ownerDB,a.user,a.project,off,null);await m.confirmAppPage(a.ownerDB,a.user,off);
  assert.equal((await call(a,B,'account/deletion-review',{})).status,404);
  assert.deepEqual(await (await status(a,rollback,rollbackReview)).json(),{deleted:true,id:rollbackReview.id});
  assert.equal((await confirm(a,rollback,rollbackReview)).status,200);pass('Read-only completion recovery survives page withdrawal; new review does not');

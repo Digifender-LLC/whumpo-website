@@ -2,6 +2,12 @@
 
 **Current Chat contract, October 1, 2026:** [Natural-language Chat](natural-language-chat.md) replaces the historical command and guided-navigation examples below. Current app-maintenance inventories return saved review IDs and plain-language guidance. Exact approval controls and their owned immutable receipt checks remain authoritative. The reply cleanup is source-verified separately from test deployment in the [current-version policy](current-version-policy.md).
 
+## Current owner and visitor authority — October 2, 2026
+
+Current local verification uses the complete schema and admitted workspace scopes for owner program tests, activation, invitations, access management and page reviews. Visitor sign-in, sessions, document transitions, recovery and deletion keep their separate project-scoped authority. A valid workspace cookie cannot authenticate a visitor. The visitor passkey suite verifies actual signatures, challenge/replay checks, host separation and page withdrawal during sign-in/transition; owner stale-proof cases use a distinct aged current session.
+
+The 17 visitor-deletion authority/recovery cases pass again, including ambient account changes, replacement sessions, stale document review, rollback, lost replies and read-only receipt recovery after page withdrawal. That final withdrawal uses current owner admission. The browser deletion harness shares the converted fixture but has not been rerun at this checkpoint. Actual local QuickJS/HTTP activation also passes. [Exact scope and commands](verification.md#backend-execution-and-visitor-authority) distinguish synthetic owner setup, signed visitor ceremonies and actual runtime execution. Remaining application recovery/build fixtures, the coordinated remote cutover and physical-device acceptance stay open.
+
 ## Find unfinished application work — September 30, 2026
 
 `/app-maintenance [PROJECT_ID or all] [PAGE]`, “show unfinished app work”, “show app maintenance” and “show pending app work” read unfinished app-access, visitor-page, upgrade, document-restore and program-rollback reviews. The list is owner-scoped, with an optional exact owned project and 20 results per page. Failed, uncertain and changed upgrade checks appear first, followed by deterministic expiry/family/ID order. Applied, cancelled and expired reviews are omitted; retained recovery points remain separately accessible through `/app-recovery`.

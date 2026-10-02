@@ -4,7 +4,7 @@ import {backendHttpFixture} from './backend-http-fixture.mjs';
 const fixture=await backendHttpFixture(),base=fixture.base;
 try {
 
-const register=await fetch(base+'/api/auth/register',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({email:crypto.randomUUID()+'@example.test',password:crypto.randomUUID()+'local-test'})});assert.equal(register.status,200);const cookie=register.headers.get('set-cookie').split(';')[0];
+const cookie=await fixture.account();
 const post=(path,data,origin=base,session=cookie)=>fetch(base+path,{method:'POST',headers:{origin,cookie:session,'content-type':'application/json'},body:JSON.stringify(data)});
 const get=path=>fetch(base+path,{headers:{cookie}});
 const chat=content=>fixture.seedChat(cookie,content); // Private fixture setup only; public Chat has no commands.
