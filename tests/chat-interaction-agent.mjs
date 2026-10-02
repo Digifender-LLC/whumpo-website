@@ -36,7 +36,7 @@ async function chat(o,content,steps,database){queue=steps;const input={id:id(),r
 const request=o=>({kind:'interaction',operation:'requestContent',projectId:o.project,contentIds:['headline','section-1-text']});
 const read=interactionId=>({kind:'interaction',operation:'read',interactionId});
 const replace=f=>({kind:'interaction',operation:'replaceContent',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,contentIds:['headline','section-1-text','about-text']});
-const client={versions:[1],fieldTypes:['text','long-text','resource'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1']};
+const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1']};
 const readForm=(o,interactionId)=>json(o,'/api/chat/interactions/v1/read',{version:1,interactionId,client});
 const mutate=(f,operation,answers)=>({version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,operation,...(answers?{answers}:{})});
 try{
@@ -177,6 +177,29 @@ try{
   assert.equal((await store.readInteraction(o.scope,o.user,f.envelope.id)).submission.answers.project,o.project);
  });
  const replaceIntake=f=>({kind:'interaction',operation:'replaceProjectIntake',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision});
+ await test('writing style uses the existing bounded lookup, immutable corrections and zero automatic followup',async()=>{
+  const o=await owner(),created=await chat(o,'Show me a few choices for how my website should sound.',[intakeRequest('requestWritingStyle')]);assert.equal(created.calls,1);
+  let f=await readForm(o,created.turn.interaction_id);assert.equal(f.envelope.definition.template,'choice@1');assert.equal(f.envelope.definition.fields[0].default,undefined);
+  await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'save-draft',{tone:'friendly'}));f=await readForm(o,f.envelope.id);
+  const draftMetadata=await forms.interactionAgentAction(o.scope,o.user,id(),read(f.envelope.id));assert.equal(JSON.parse(draftMetadata.inspection).data.template,'choice@1');assert.doesNotMatch(draftMetadata.inspection,/friendly|default|answers/);
+  assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted({...f,submission:{id:id()}}))).inspection,undefined);
+  const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{tone:'friendly'}));f=await readForm(o,f.envelope.id);assert.equal(mainCalls,before);assert.equal(f.submission.continuation,null);
+  const references=JSON.parse(agent.agentWorkspaceData(await agent.siteContext(o.scope,o.user))).data.submittedIntakes;
+  assert.deepEqual(references,[{interactionId:f.envelope.id,taskId:f.envelope.scope.taskId,submissionId:f.submission.id,template:'choice@1'}]);
+  const readback=await chat(o,'Use the style I saved.',[submitted(f),body=>{const data=JSON.parse(JSON.parse(body.input.at(-1).content).result).data;assert.deepEqual(data.answers,{tone:'friendly'});assert.equal(data.selectedProject,undefined);return null;}]);assert.equal(readback.calls,2);
+  const corrected=await chat(o,'Let me choose another writing style.',[read(f.envelope.id),()=>replaceIntake(f)]);assert.equal(corrected.calls,2);
+  const next=await readForm(o,corrected.turn.interaction_id);assert.equal(next.envelope.scope.taskId,f.envelope.scope.taskId);assert.deepEqual(next.envelope.definition.fields[0].default,{value:'friendly',provenance:'user'});
+  assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted(f))).inspection,undefined);
+  await json(o,'/api/chat/interactions/v1/mutate',mutate(next,'submit',{tone:'straightforward'}));const saved=await readForm(o,next.envelope.id);
+  const follow=await chat(o,'Use my corrected writing style.',[submitted(saved),body=>{assert.deepEqual(JSON.parse(JSON.parse(body.input.at(-1).content).result).data.answers,{tone:'straightforward'});return null;}]);assert.equal(follow.calls,2);
+  assert.deepEqual((await readForm(o,f.envelope.id)).submission,f.submission);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);
+  const calls=mainCalls;await json(o,'/api/chat',created.input);await json(o,'/api/chat',follow.input);assert.equal(mainCalls,calls);
+ });
+ await test('writing-style actions cannot carry model-authored questions, defaults or targets',async()=>{
+  const o=await owner();for(const extra of [{options:['secret']},{questions:['Recovery key?']},{answers:{tone:'friendly'}},{template:'custom@1'},{projectId:o.project}]){
+   const result=await forms.interactionAgentAction(o.scope,o.user,id(),{...intakeRequest('requestWritingStyle'),...extra});assert.equal(result.statements.length,0);assert.equal(result.inspection,undefined);
+  }
+ });
  await test('natural correction reads metadata then reopens the same intake without exposing answer values',async()=>{
   const o=intakeOwner,before=intake,result=await chat(o,'Let me revise my saved project brief.',[read(before.envelope.id),body=>{assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE|INTAKE_PRIVATE_DRAFT/);return replaceIntake(before);}]);assert.equal(result.calls,2);
   const next=await readForm(o,result.turn.interaction_id);assert.equal(next.previousInteractionId,before.envelope.id);assert.equal(next.envelope.scope.taskId,before.envelope.scope.taskId);assert.equal(next.envelope.scope.projectId,null);assert.deepEqual(next.envelope.definition.fields.map(f=>f.default),[{value:'INTAKE_SUBMITTED_NAME',provenance:'user'},{value:'INTAKE_SUBMITTED_PURPOSE',provenance:'user'}]);

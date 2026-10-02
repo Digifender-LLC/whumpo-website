@@ -6,7 +6,7 @@ import type {ProjectSpecification} from '../project-specification/v2/types';
 import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
-import {projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
+import {isProjectIntakeTemplate,projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
 
 export class InteractionStoreError extends Error {
  constructor(readonly status:number,readonly code:string){super(code==='not_found'?'Chat form not found.':code==='draft_removed'?'This unsubmitted form was discarded or reached its draft retention limit. Ask for a new form.':code==='request_conflict'?'This request ID already describes another answer.':'This Chat form changed. Read its current state before continuing.');}
@@ -86,7 +86,7 @@ export async function issueProjectIntake(db:D1Database,user:string,input:Project
 /** Trusted owner-Chat adapter handoff; never accepts arbitrary definitions. */
 export async function prepareProjectIntake(db:D1Database,user:string,input:ProjectIntakeRequest):Promise<InteractionPlan>{
  await assertWorkspace(db,user);const request=copyJSON(input,4096);
- if(!request||Object.keys(request).sort().join(',')!=='originTurnId,template'||!identifier(request.originTurnId)||!['project-brief@1','project-select@1'].includes(request.template))throw new InteractionError('SHAPE');
+ if(!request||Object.keys(request).sort().join(',')!=='originTurnId,template'||!identifier(request.originTurnId)||!isProjectIntakeTemplate(request.template))throw new InteractionError('SHAPE');
  const issueHash=await jsonDigest(request),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  await assertFeature(db,feature(user,null));
@@ -105,10 +105,10 @@ export async function prepareReplacementProjectIntake(db:D1Database,user:string,
  const issueHash=await jsonDigest({adapter:'project-intake',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  const previous=await readInteraction(db,user,request.previousInteractionId),template=previous.envelope.definition.template;
- if(previous.envelope.scope.projectId!==null||!['project-brief@1','project-select@1'].includes(template)||previous.envelope.definition.continuationBinding!==null)throw new InteractionStoreError(409,'adapter_unavailable');
+ if(previous.envelope.scope.projectId!==null||!isProjectIntakeTemplate(template)||previous.envelope.definition.continuationBinding!==null)throw new InteractionStoreError(409,'adapter_unavailable');
  if(previous.envelope.definitionDigest!==request.definitionDigest||previous.answerRevision!==request.expectedAnswerRevision||previous.replacementInteractionId||!['open','submitted','expired'].includes(previous.state))throw changed();
  await assertFeature(db,feature(user,null));
- const definition=projectIntakeDefinition(template as ProjectIntakeTemplate),answers=carriedAnswers(previous),guards:D1PreparedStatement[]=[];
+ const definition=projectIntakeDefinition(template),answers=carriedAnswers(previous),guards:D1PreparedStatement[]=[];
  for(const field of definition.fields){
   if(!Object.hasOwn(answers,field.id))continue;
   if(field.type==='resource'){
@@ -257,7 +257,7 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  if(existing){if(existing.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,raw.requestId);}
  const envelope=await retainedEnvelope(saved),{request}=await validateMutation(raw,envelope);
  // Only maintained adapters with complete current policy checks are admitted.
- if(!['content-change@1','project-brief@1','project-select@1'].includes(envelope.definition.template))throw new InteractionStoreError(409,'adapter_unavailable');
+ if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template))throw new InteractionStoreError(409,'adapter_unavailable');
  const resourceGuards:D1PreparedStatement[]=[];
  if(request.operation!=='cancel'&&envelope.definition.template==='project-select@1'&&Object.hasOwn(request.answers,'project')){
   const selected=request.answers.project as string;

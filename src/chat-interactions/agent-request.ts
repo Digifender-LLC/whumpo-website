@@ -2,7 +2,7 @@ import {contentFieldLimit} from './protocol';
 
 type Request={kind:'interaction';operation:'requestContent';projectId:string;contentIds:string[]};
 type Read={kind:'interaction';operation:'read';interactionId:string};
-type Intake={kind:'interaction';operation:'requestProjectBrief'}|{kind:'interaction';operation:'requestProjectSelection'};
+type Intake={kind:'interaction';operation:'requestProjectBrief'}|{kind:'interaction';operation:'requestProjectSelection'}|{kind:'interaction';operation:'requestWritingStyle'};
 type SubmittedIntake={kind:'interaction';operation:'readSubmittedIntake';interactionId:string;taskId:string;submissionId:string};
 type Replace={kind:'interaction';operation:'replaceContent';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;contentIds:string[]};
 type ReplaceIntake={kind:'interaction';operation:'replaceProjectIntake';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number};
@@ -12,7 +12,7 @@ const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-
 export function interactionActionRequest(value:unknown):value is InteractionAction{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const a=value as Record<string,unknown>;if(a.kind!=='interaction')return false;
- if(a.operation==='requestProjectBrief'||a.operation==='requestProjectSelection')return Object.keys(a).sort().join(',')==='kind,operation';
+ if(a.operation==='requestProjectBrief'||a.operation==='requestProjectSelection'||a.operation==='requestWritingStyle')return Object.keys(a).sort().join(',')==='kind,operation';
  if(a.operation==='readSubmittedIntake')return Object.keys(a).sort().join(',')==='interactionId,kind,operation,submissionId,taskId'&&uuid(a.interactionId)&&uuid(a.taskId)&&uuid(a.submissionId);
  if(a.operation==='read')return Object.keys(a).sort().join(',')==='interactionId,kind,operation'&&uuid(a.interactionId);
  if(a.operation==='replaceProjectIntake')return Object.keys(a).sort().join(',')==='definitionDigest,expectedAnswerRevision,kind,operation,previousInteractionId'&&uuid(a.previousInteractionId)&&typeof a.definitionDigest==='string'&&/^[a-f0-9]{64}$/.test(a.definitionDigest)&&Number.isSafeInteger(a.expectedAnswerRevision)&&(a.expectedAnswerRevision as number)>=0;
