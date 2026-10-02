@@ -15,7 +15,7 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'site.content@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'readSpecification',scope:'project'},
   'site.content-prepare@1': {mode:'prepare',feature:'core.editing',source:'src/project-specification/store.ts',handler:'prepareSpecification',scope:'project'},
   'workspace.projects@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'dashboardData',scope:'account',displays:['summary','table']},
-  'project.status@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'dashboardData',scope:'project',displays:['status','key-values']},
+  'project.status@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'readProjectStatuses',scope:'project',displays:['status','key-values']},
   'project.traffic@1': {mode:'read',feature:'core.insights',source:'src/site-traffic.ts',handler:'readTraffic',scope:'project',displays:['summary','table']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},

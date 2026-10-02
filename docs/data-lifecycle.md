@@ -202,3 +202,10 @@ Normal agent context contains at most five submitted-intake locators and no answ
 ### Maintained correction copies — October 2, 2026 UTC
 
 Explicitly requested project-intake corrections reuse the existing interaction class, just as content corrections do. Each successor can carry explicit earlier user answers as `user` defaults while retaining immutable prior submissions. Untouched correction chains preserve those answers; ordinary history and metadata-only model reads omit the unsubmitted copy, while the owner form and eligible transcript export include it. Each new requested form has its own draft deadline; the predecessor's deadline is unchanged. Removed/transferred project selections are not copied into a new default. No additional table, provider dispatch or general account-erasure policy is introduced.
+
+
+### Chat display card copies — October 2, 2026 UTC
+
+The maintained website-brief `project.status@1` binding is part of its immutable definition and existing retention class. Its current query returns only the selected owned project's name, saved service state, website publication boolean, source and observation time. It uses the dashboard's shared project-status projection with filtering in SQL, plus current feature/identity/interaction checks before and after the read. No answer/default, file, billing or other-project data enters the card.
+
+Read results are ephemeral, private/no-store and never part of sessionStorage, retained history/export or model context. The collapsed panel does not query; collapse/navigation releases its abortable query with zero inactive retention. Refresh hides the old result, failures/denials contain no previous metrics, and shared sign-out/account-switch reset clears the query. The writing-style submitted-answer projection is also now explicit in the existing class processor inventory. There is no new table, retention policy, export format or whole-account-erasure claim.

@@ -16,7 +16,7 @@
     "report:gateway": "node tools/report-gateway.mjs",
     "deploy": "node tools/deploy.mjs",
     "invite": "node tools/create-invite.mjs",
-    "test:chat-interactions": "node tests/chat-interaction-contract.mjs && node tests/chat-interaction-input.mjs && node tests/chat-interaction-storage.mjs && node tests/chat-interaction-intake.mjs && node tests/chat-interaction-agent.mjs && node tests/chat-interaction-history.mjs",
+    "test:chat-interactions": "node tests/chat-interaction-contract.mjs && node tests/chat-interaction-input.mjs && node tests/chat-interaction-storage.mjs && node tests/chat-interaction-intake.mjs && node tests/chat-interaction-agent.mjs && node tests/chat-interaction-history.mjs && node tests/chat-interaction-cards.mjs && node tests/chat-interaction-cards-client.mjs",
     "test:chat": "node tests/chat.mjs",
     "build": "node tools/build.mjs",
     "test:billing-ui": "node tests/billing-ui.mjs",
