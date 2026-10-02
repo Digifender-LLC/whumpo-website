@@ -3,10 +3,12 @@ import {resolve,join,basename} from 'node:path';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 import {activeWorker,runWrangler} from './cms-release.mjs';
 import {withPlatformLock,deployPlatform} from './deploy-platform.mjs';
+import {inspectSchema} from './current-schema.mjs';
 import {configFiles,workerOrder,readJSON,verifyRelease,same} from './release-manifest.mjs';
 
 export function bindingSummary(bindings){
  return {
+  databases:bindings.filter(b=>b.type==='d1').map(b=>({binding:b.name,id:b.id})).sort((a,b)=>a.binding.localeCompare(b.binding)),
   services:bindings.filter(b=>b.type==='service').map(b=>({binding:b.name,service:b.service,...(b.environment?{environment:b.environment}:{}),...(b.entrypoint?{entrypoint:b.entrypoint}:{})})).sort((a,b)=>a.binding.localeCompare(b.binding)),
   secrets:bindings.filter(b=>b.type==='secret_text').map(b=>b.name).sort()
  };
@@ -24,7 +26,7 @@ export function cmsServices(cms){
  });
 }
 export function resolveConfig(config,directory){
- return {...config,main:resolve(directory,config.main),...(config.base_dir?{base_dir:resolve(directory,config.base_dir)}:{}),...(config.assets?{assets:{...config.assets,directory:resolve(directory,config.assets.directory)}}:{}),...(config.d1_databases?{d1_databases:config.d1_databases.map(d=>({...d,...(d.migrations_dir?{migrations_dir:resolve(directory,d.migrations_dir)}:{})}))}: {})};
+ return {...config,main:resolve(directory,config.main),...(config.base_dir?{base_dir:resolve(directory,config.base_dir)}:{}),...(config.assets?{assets:{...config.assets,directory:resolve(directory,config.assets.directory)}}:{})};
 }
 export async function compileWorker(root,role,config,output,directory,options){
  const file=join(directory,role+'-build.json');
@@ -39,10 +41,10 @@ export async function releaseProvider(root=process.cwd()){
  const base=configs.platform,api=cloudflareClient(base.account_id),db=remoteD1(api,base.d1_databases.find(b=>b.binding==='DB').database_id);
  return {
   configs,
-  withLock:work=>withPlatformLock(db,work),
+  withLock:(manifest,work)=>withPlatformLock(remoteD1(api,manifest.before.workers.platform.databases.find(d=>d.binding==='DB').id),work),
   async verifyToolchain(manifest,directory){
    if(Number(process.versions.node.split('.')[0])!==24||JSON.parse(await readFile(join(root,'node_modules/wrangler/package.json'),'utf8')).version!==manifest.toolchain.wrangler)throw Error('Restore the pinned Node/Wrangler toolchain before applying this release');
-   for(const name of ['deploy.mjs','release-manifest.mjs','prepare-release.mjs','release-provider.mjs','deploy-platform.mjs','cms-release.mjs','cms-cloudflare.mjs'])if(!(await readFile(join(root,'tools',name))).equals(await readFile(join(directory,'payload/source/tools',name))))throw Error('Release tooling changed; restore the archived tools before applying');
+   for(const name of ['deploy.mjs','release-manifest.mjs','prepare-release.mjs','release-provider.mjs','deploy-platform.mjs','cms-release.mjs','cms-cloudflare.mjs','current-schema.mjs'])if(!(await readFile(join(root,'tools',name))).equals(await readFile(join(directory,'payload/source/tools',name))))throw Error('Release tooling changed; restore the archived tools before applying');
    if(manifest.cms.length&&!(await readFile(join(root,'src/cms-bridge.ts'))).equals(await readFile(join(directory,'payload/source/src/cms-bridge.ts'))))throw Error('CMS key derivation source changed');
   },
   async observe(manifest){
@@ -55,16 +57,22 @@ export async function releaseProvider(root=process.cwd()){
     const version=(await api('/workers/scripts/'+name+'/versions/'+active.id)).result;
     workers[role]={id:active.id,tag:version.annotations?.['workers/tag']??null,...bindingSummary(active.bindings)};
    }
-   return {workers,cms:await cmsInventory(db),migrations:(await db.prepare('SELECT name FROM d1_migrations ORDER BY name').all()).results.map(r=>r.name)};
+   const schema=await inspectSchema(db);
+   const baselineId=manifest?.before.workers.platform.databases.find(d=>d.binding==='DB').id??workers.platform.databases.find(d=>d.binding==='DB')?.id;
+   if(!baselineId)throw Error('Active platform database binding is missing');
+   const cms=await cmsInventory(remoteD1(api,baselineId));
+   if(schema.objects&&baselineId!==base.d1_databases.find(b=>b.binding==='DB').database_id&& !same(cms,await cmsInventory(db)))throw Error('Replacement database CMS registry differs');
+   return {workers,cms,schema};
   },
   compile:(role,config,output,directory)=>compileWorker(root,role,config,output,directory),
-  async migrate(manifest,directory){
-   await runWrangler(['d1','migrations','apply','whumpo-control','--remote','--config',join(directory,'payload/config/platform.json')],join(directory,'migrations.log'));
+  async initialize(manifest,directory){
+   if((await inspectSchema(db)).objects!==0)throw Error('Schema initialization requires an empty database');
+   await runWrangler(['d1','execute','DB','--remote','--yes','--config',join(directory,'payload/config/platform.json'),'--file',join(directory,'payload/schema/current.sql')],join(directory,'schema.log'));
   },
   async deploy(role,manifest,directory,guard,onDeployed){
    const path=join(directory,'payload/config',role+'.json'),config=resolveConfig(await readJSON(path),join(directory,'payload/config'));
    if(role==='platform'){
-    await deployPlatform({config,api,db,guard,tag:manifest.workers[role].tag,logFile:join(directory,role+'-deploy.log'),onDeployed,verify:async()=>{
+    await deployPlatform({config,api,db,guard,schema:manifest.schema.expected,tag:manifest.workers[role].tag,logFile:join(directory,role+'-deploy.log'),onDeployed,verify:async()=>{
      await verifyRelease(directory);
      if(!same(manifest.cms,await cmsInventory(db)))throw Error('CMS registrations changed');
     }});
