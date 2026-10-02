@@ -1,10 +1,10 @@
 # Connecting photos to saved websites
 
-Implemented contract for `photo-page@1`, migration 0013. Deployment and verification evidence is recorded in deployment.md. Private upload details are in photos.md.
+Implemented contract for current `photo-page@1` specifications and the complete platform schema. Historical deployment evidence is in [deployment.md](deployment.md); current identity checks are in [verification.md](verification.md#photo-versions-and-removal-under-current-identity). Private upload details are in [photos.md](photos.md).
 
 ## Versioned component
 
-Use the immutable component ID `photo-page@1` for pages with photos, preserving existing renderers. Its validated configuration references project-owned ready photo IDs and plain-text alt descriptions. Never accept image URLs, R2 keys, inline SVG, arbitrary markup or credentials from the model. The planner may see owned photo IDs, names and dimensions; photo bytes do not go to the model in this phase. It must not invent visual descriptions it has not been given.
+Use the immutable component ID `photo-page@1` for pages with photos, using the current registered renderer. Its validated configuration references project-owned ready photo IDs and plain-text alt descriptions. Never accept image URLs, R2 keys, inline SVG, arbitrary markup or credentials from the model. The planner may see owned photo IDs, names and dimensions; photo bytes do not go to the model in this phase. It must not invent visual descriptions it has not been given.
 
 Save a normalized version-to-photo relation in the same D1 transaction as the immutable HTML, chat response and token receipt. Every referenced file must belong to that version's project and be ready. Preserve original text-only component behavior, focused-edit ancestry and restore semantics. Reject cross-project references even when the same account owns both projects.
 
