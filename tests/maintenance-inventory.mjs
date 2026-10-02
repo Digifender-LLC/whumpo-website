@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {readFile,readdir} from 'node:fs/promises';
+import {currentSchema} from '../tools/current-schema.mjs';
 import {maintenanceReport} from '../tools/report-maintenance.mjs';
 const sql=new DatabaseSync(':memory:'),id=()=>crypto.randomUUID();
 const db={prepare:q=>{const bound=p=>({first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({results:sql.prepare(q).all(...p)})});return {...bound([]),bind:(...p)=>bound(p)};}};
 try{
- for(const name of (await readdir('migrations')).filter(n=>n.endsWith('.sql')&&!n.startsWith('0107_')).sort())sql.exec(await readFile('migrations/'+name,'utf8'));
+ sql.exec(await currentSchema());
  const owner=id(),project=id(),now=Date.now(),at=offset=>new Date(now+offset).toISOString(),day=86400000;
- sql.prepare("INSERT INTO users VALUES(?,?,'fixture','fixture',?)").run(owner,'PRIVATE_EMAIL_CANARY@example.invalid',at(0));
+ sql.prepare("INSERT INTO users VALUES(?,?,?)").run(owner,'PRIVATE_EMAIL_CANARY@example.invalid',at(0));
  sql.prepare('INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,?,?,?)').run(project,owner,'PRIVATE_NAME_CANARY',at(0),at(0));
  const oldGH=id(),oldCF=id(),newGH=id(),newCF=id();
  const github=(token,state)=>sql.prepare('INSERT INTO github_token_vault VALUES(?,?,?,?,?)').run(token,owner,'PRIVATE_CREDENTIAL_CANARY',at(day),state);
  const cloudflare=(token,state)=>sql.prepare('INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,?,?)').run(token,owner,'PRIVATE_CREDENTIAL_CANARY',at(day),at(-10*day),state);
  github(oldGH,'revoking');cloudflare(oldCF,'revoking');
- sql.exec(await readFile('migrations/0107_revocation_health.sql','utf8'));
- assert.equal(sql.prepare('SELECT requested_at FROM github_revocation_health WHERE token_id=?').get(oldGH).requested_at,null);
+ // Direct revocation admission timestamps new work without historical backfills.
+ for(const [provider,token] of [['github',oldGH],['cloudflare',oldCF]])assert.ok(Date.parse(sql.prepare(`SELECT requested_at FROM ${provider}_revocation_health WHERE token_id=?`).get(token).requested_at)>=now);
+ // Missing/unknown telemetry is a diagnostic failure, never invented success.
+ sql.prepare('DELETE FROM github_revocation_health WHERE token_id=?').run(oldGH);
+ sql.prepare('UPDATE cloudflare_revocation_health SET requested_at=NULL WHERE token_id=?').run(oldCF);
+ assert.equal(sql.prepare('SELECT requested_at FROM github_revocation_health WHERE token_id=?').get(oldGH),undefined);
  assert.equal(sql.prepare('SELECT requested_at FROM cloudflare_revocation_health WHERE token_id=?').get(oldCF).requested_at,null);
  github(newGH,'active');cloudflare(newCF,'active');
  for(const [provider,token] of [['github',newGH],['cloudflare',newCF]]){
@@ -46,5 +50,5 @@ try{
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
  assert.equal(report.operations.length,4);assert.ok(report.operations.every(o=>o.state==='available'));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: migration preserves unknown history, precise new revocation clocks, retry stability/cascade, 28 read-only queues, four receipt families, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 28 read-only queues, four receipt families, retention eligibility and private data exclusion.');
 }finally{sql.close();}

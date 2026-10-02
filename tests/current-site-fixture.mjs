@@ -18,6 +18,9 @@ export async function currentSiteFixtureHandlers(){
   export {ownedExport} from './src/exports';
   export {seal} from './src/connection-vault';
   export {sendAIChat} from './src/ai-chat';
+  export {cleanPhoto,uploadPhoto,readPhoto,listPhotos,cleanupPhotos} from './src/files';
+  export {compareVersions,compareReview,diffPage} from './src/version-diff';
+  export {renderSite} from './src/components';
   export {default as host} from './src/site-host';
   export {hostname,verifyDNS,listDomains} from './src/domains';
   export {reviewHosting,confirmHosting,disconnectHosting,refreshHosting,hostingConnections} from './src/domain-hosting';
