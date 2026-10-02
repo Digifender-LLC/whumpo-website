@@ -121,3 +121,10 @@ No additional product decision is needed for these sequencing fixes. Existing un
 ## Owner current-version amendment — October 1, 2026
 
 [WH-120](../current-version-policy.md), issue [#53](https://github.com/zemdregon/whumpo/issues/53), is the active cross-cutting removal inventory. The owner rejects legacy support, superseding earlier old-client coexistence and fallback requirements. WH-105/081/084/107/109/111 now require current-version clients/layouts and explicit rejection, with obsolete-test resets instead of data-preservation migrations or compatibility adapters. Finish retiring current runtime legacy paths alongside shared roadmap work, and record each implemented versus deployed slice. Do not rebuild those paths in entitlements, interaction storage, native clients or release recovery. CSAM and Daybreak remain deferred and CMS functional testing remains paused.
+
+
+## WH-052 job handoff — October 2, 2026
+
+[Shared job/outbox contract](../job-envelope.md) and the [reconciled ADR](../background-jobs.md) freeze current tenant/actor/resource pins, exact domain intent, distinct attempt/delivery identities and uncertain-effect recovery. D1 state with bounded scheduled passes remains the initial design; the reference is offline and adds no runtime dispatcher or service. WH-018/036/068/069/074/086 implement adapters over this contract and prove actual current authority, D1 transactions, fairness, privacy and provider outcomes in their own packets. Jobs and restored receipts cannot create workspace or provider authority. CSAM and Daybreak remain deferred.
+
+Active WH-083 and WH-106 scope also now uses the complete current schema and disposable test fixtures/reviewed empty databases. Two stale numbered-migration requirements were removed; task dependencies, feature acceptance and prior historical evidence remain intact.

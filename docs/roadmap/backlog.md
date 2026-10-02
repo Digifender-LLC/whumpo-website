@@ -425,6 +425,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/job-journal-prototype.mjs](../../tests/job-journal-prototype.mjs)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+- [tools/prototypes/job-envelope.mjs](../../tools/prototypes/job-envelope.mjs)
+- [tests/fixtures/job-envelope.mjs](../../tests/fixtures/job-envelope.mjs)
+- [tests/job-envelope-contract.mjs](../../tests/job-envelope-contract.mjs)
 
 ### Execution coordination
 
@@ -433,6 +437,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/11. Planning owner: Unassigned
 ### Evidence
 
 - 2026-09-30 source/local evidence: docs/background-jobs.md selects D1-owned receipts and bounded scheduled passes initially, with dated provider cost/retry/retention comparison. File-backed SQLite prototype tests pass for uncertain scans and resumable cleanup; production D1 integration, connected load evidence and provider/operator activation remain separate gates. No new service or schedule enabled.
+- 2026-10-02 UTC: WH-052 reconciled against current workspace identity and WH-071 resource pins. docs/job-envelope.md freezes bounded current envelopes, domain/attempt/delivery identity, current-authority requirements and synthetic email/rule/push examples. Passed 40 envelope cases, 60 placement cases and file-backed SQLite outbox/restart/fencing/uncertain-effect/cancellation/expiry/cleanup checks. Public Cloudflare cost/retry/retention facts refreshed; current maintenance readback at 04:44:30 UTC returned no recorded passes, so no load/capacity claim. D1 scheduled passes remain the initial design; no runtime dispatcher, new service, provider/scanner call or schedule change. Implementing adapters retain D1/current-authority/load/activation gates.
 
 # F1 — Safe customer beta
 
@@ -3129,7 +3134,7 @@ Forms and their submitted answers survive reloads and interrupted requests witho
 
 ### Scope
 
-- Add numbered additive migrations for issued definitions, answer revisions, immutable submissions and separate downstream operation receipts
+- Extend the complete current schema with issued definitions, answer revisions, immutable submissions and separate downstream operation receipts; initialize disposable current fixtures or a reviewed empty test database, without numbered migration replay or old readers
 - Implement owner-scoped read, draft/save, submit, cancel and resume adapters with strict schemas, current actor/project authority and expected revisions
 - Bind stable submission IDs to exact payloads and recover committed state after lost acknowledgements without automatic effect redispatch
 - Extend history/export and lifecycle inventory for definitions, answers and attachment references; minimize model and local-device copies
@@ -3176,6 +3181,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
+- 2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature.
 
 ## WH-107 — Render accessible Chat forms and maintained interaction templates
 
@@ -6709,7 +6715,7 @@ An Android owner can authenticate and reach supported platform services through 
 - Add /api/mobile/v1 adapters and shared authenticated owner/session context over the existing domain handlers, with typed Kotlin/TypeScript contracts
 - Implement native passkey challenge/verification and current-credential session issuance with approved RP/signing origins and verified App Links
 - Implement one-time PKCE S256 browser-return exchange for completed passkey signup, welcome and completed restricted recovery with bound state/account/redirect/expiry; no password fallback
-- Reuse authoritative revocation, seven-day expiry and ten-minute recent-authentication rules; introduce additive migrations with coordinated numbering
+- Reuse authoritative revocation, seven-day expiry and ten-minute recent-authentication rules; extend the complete current schema and initialize disposable current fixtures or a reviewed empty test database, without numbered migration replay or old readers
 - Separate native bearer and browser cookie admission without weakening existing Origin, rate-limit, onboarding or tenant guards
 
 ### Acceptance criteria
@@ -6753,7 +6759,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature.
 
 ## WH-084 — Deliver the native Chat, project and explicit-review journey
 
