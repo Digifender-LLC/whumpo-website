@@ -3,7 +3,7 @@ import type {Answer,Continuation,FieldType} from './types';
 
 type Identity={version:1;id:string;previousInteractionId:string|null;replacementInteractionId:string|null;answerRevision:number};
 export type HistoryInteraction=Identity&({state:'removed';removal:{reason:'discarded'|'inactive';completedAt:string|null}}|{
- state:'open'|'submitted'|'canceled'|'superseded'|'expired';title:string;summary:string;
+ kind:'form'|'view';state:'open'|'submitted'|'canceled'|'superseded'|'expired';title:string;summary:string;
  fields:{id:string;label:string;help:string;type:FieldType;required:boolean;defaultProvenance?:'saved'|'user'|'suggested'}[];
  submission:null|{answers:Record<string,Answer>;submittedAt:string;continuation:null|{state:Continuation['state'];reason:string|null}};
 });
@@ -26,7 +26,8 @@ export function readHistoryInteraction(input:unknown):HistoryInteraction|null{
   const d=copyJSON(input,32768) as HistoryInteraction,base=['version','id','previousInteractionId','replacementInteractionId','answerRevision','state'];
   if(!object(d)||d.version!==1||!uuid(d.id)||![d.previousInteractionId,d.replacementInteractionId].every(v=>v===null||uuid(v))||!integer(d.answerRevision))return null;
   if(d.state==='removed')return shape(d,[...base,'removal'])&&shape(d.removal,['reason','completedAt'])&&['inactive','discarded'].includes(d.removal.reason)&&(d.removal.completedAt===null||iso(d.removal.completedAt))?d:null;
-  if(!shape(d,[...base,'title','summary','fields','submission'])||!['open','submitted','canceled','superseded','expired'].includes(d.state)||!text(d.title,100)||!text(d.summary,400)||!Array.isArray(d.fields)||d.fields.length>12)return null;
+  if(!shape(d,[...base,'kind','title','summary','fields','submission'])||!['open','submitted','canceled','superseded','expired'].includes(d.state)||!text(d.title,100)||!text(d.summary,400)||!Array.isArray(d.fields)||d.fields.length>12)return null;
+  if(!['form','view'].includes(d.kind)||d.kind==='view'&&(d.fields.length!==0||d.submission!==null||d.state==='submitted'))return null;
   if(!d.fields.every(f=>shape(f,['id','label','help','type','required'],['defaultProvenance'])&&/^[a-z][a-z0-9-]{0,39}$/.test(f.id)&&!['__proto__','constructor','prototype'].includes(f.id)&&text(f.label,80)&&text(f.help,240)&&fieldTypes.includes(f.type)&&typeof f.required==='boolean'&&(!Object.hasOwn(f,'defaultProvenance')||['saved','user','suggested'].includes(f.defaultProvenance!)))||new Set(d.fields.map(f=>f.id)).size!==d.fields.length)return null;
   const s=d.submission;
   if((d.state==='submitted')!==(s!==null))return null;

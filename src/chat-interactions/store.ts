@@ -6,7 +6,7 @@ import type {ProjectSpecification} from '../project-specification/v2/types';
 import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
-import {isProjectIntakeTemplate,projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
+import {isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
 import {readOwnedResourceOptions} from './resource-options';
 import {readResourcePage,resourceCursor,type ResourceCursor} from './resource-shape';
 
@@ -93,6 +93,16 @@ export async function prepareProjectIntake(db:D1Database,user:string,input:Proje
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  await assertFeature(db,feature(user,null));
  return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},projectIntakeDefinition(request.template),issueHash,null,[]);
+}
+
+/** Fixed project-scoped upload view; no generated question or upload dispatch. */
+export async function preparePhotoIntake(db:D1Database,user:string,input:{originTurnId:string;projectId:string}):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,4096);
+ if(!request||Object.keys(request).sort().join(',')!=='originTurnId,projectId'||!identifier(request.originTurnId)||!identifier(request.projectId))throw new InteractionError('SHAPE');
+ const issueHash=await jsonDigest({operation:'photo-intake',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ await assertFeature(db,feature(user,request.projectId));
+ return prepareIssuedInteraction(db,user,request,photoIntakeDefinition(),issueHash,null,[interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)',[request.projectId,user])]);
 }
 
 export async function replaceProjectIntake(db:D1Database,user:string,input:ReplacementIdentity){
@@ -261,7 +271,7 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  if(existing){if(existing.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,raw.requestId);}
  const envelope=await retainedEnvelope(saved),{request}=await validateMutation(raw,envelope);
  // Only maintained adapters with complete current policy checks are admitted.
- if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template))throw new InteractionStoreError(409,'adapter_unavailable');
+ if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!(isPhotoIntakeDefinition(envelope.definition)&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
  const resourceGuards:D1PreparedStatement[]=[];
  if(request.operation!=='cancel'&&envelope.definition.template==='project-select@1'&&Object.hasOwn(request.answers,'project')){
   const selected=request.answers.project as string;

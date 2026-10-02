@@ -63,7 +63,8 @@ import {githubGrantReviews,reviewGitHubGrant,confirmGitHubGrant,cancelGitHubGran
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
 import { StorageLimitError } from './storage-budget';
-import { FileError, uploadPhoto, listPhotos, readPhoto, cleanupPhotos } from './files';
+import {uploadPhoto,listPhotos,readPhotoUpload,readPhoto,cleanupPhotos} from './files';
+import {FileError} from './photo-format';
 import { ownedExport } from './exports';
 import { componentCatalog, previewHeaders } from './components';
 import { publicPlans, domainBenefit } from "./plans";
@@ -332,6 +333,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if (method === "GET" && pathname === "/api/components") return json({components:componentCatalog});
   const filesMatch = pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/files(?:\/([0-9a-f-]{36}))?$/);
   if (filesMatch && method === 'GET' && !filesMatch[2]) return json(await listPhotos(env.DB,user.id,filesMatch[1]));
+  if (filesMatch && method === 'GET' && filesMatch[2]) return json(await readPhotoUpload(env.DB,user.id,filesMatch[1],filesMatch[2]));
   if (filesMatch && method === 'PUT' && filesMatch[2]) return json(await uploadPhoto(request,env,user.id,filesMatch[1],filesMatch[2]));
   const photoMatch=pathname.match(/^\/api\/files\/([0-9a-f-]{36})$/);
   if (photoMatch && method === 'GET') return readPhoto(env,user.id,photoMatch[1]);

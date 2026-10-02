@@ -15,6 +15,7 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'site.content@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'readSpecification',scope:'project'},
   'site.content-prepare@1': {mode:'prepare',feature:'core.editing',source:'src/project-specification/store.ts',handler:'prepareSpecification',scope:'project'},
   'workspace.projects@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'dashboardData',scope:'account',displays:['summary','table']},
+  'project.photos@1': {mode:'read',feature:'core.editing',source:'src/files.ts',handler:'readPhotoUpload',scope:'project',displays:['photos']},
   'project.status@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'readProjectStatuses',scope:'project',displays:['status','key-values']},
   'project.traffic@1': {mode:'read',feature:'core.insights',source:'src/site-traffic.ts',handler:'readTraffic',scope:'project',displays:['summary','table']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
@@ -182,7 +183,7 @@ export function mutationHeader(input:unknown):Mutation{
 }
 export async function validateMutation(input:unknown,envelope:unknown,options:{owned?:OwnedResources}={}){
   const e=await verifyEnvelope(envelope),r=mutationHeader(input);
-  check(r.interactionId===e.id,'REFERENCE');check(r.definitionDigest===e.definitionDigest,'DIGEST');check(e.definition.kind==='form','KIND');
+  check(r.interactionId===e.id,'REFERENCE');check(r.definitionDigest===e.definitionDigest,'DIGEST');check(e.definition.kind==='form'||r.operation==='cancel','KIND');
   if(r.operation!=='cancel')r.answers=validateAnswers(e.definition,r.answers,{owned:options.owned,partial:r.operation==='save-draft'});
   return {request:r,requestHash:await hash(r)};
 }

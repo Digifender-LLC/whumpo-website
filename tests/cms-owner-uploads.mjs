@@ -21,7 +21,7 @@ function provider(a){let tag=null,version=null,initialized=false,setupId=null;co
  else throw Error('unexpected path');return Response.json({success:true,data});}}};return p;}
 const {cmsGateway}=await module('src/cms-gateway.ts');
 const {pendingCMSWork,describePendingCMS}=await module('src/cms-pending.ts');
-const {uploadCMSMedia,readCMSUploads}=await module('src/cms-media-uploads.ts'),{cleanPhoto}=await module('src/files.ts');
+const {uploadCMSMedia,readCMSUploads}=await module('src/cms-media-uploads.ts'),{cleanPhoto}=await module('src/photo-format.ts');
 try{
  const a=await fixture(),p=provider(a);await deployCMS(db,a.project,digest,a.config,p);await connectCMS(db,a.project,id());
  execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1])",dir+'/photo.jpg']);

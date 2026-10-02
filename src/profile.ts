@@ -1,7 +1,7 @@
 import {contentPolicyVersion} from './content-policy';
 import {onboardingComplete} from './onboarding';
 import {BillingError} from './billing';
-import {cleanPhoto} from './files';
+import {cleanPhoto} from './photo-format';
 async function photoDigest(photo:string){const bytes=Uint8Array.from(atob(photo),c=>c.charCodeAt(0));return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(v=>v.toString(16).padStart(2,'0')).join('');}
 async function photoSafety(db:D1Database,user:string,digest:string|null){
  if(!digest)return 'pending' as const;

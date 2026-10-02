@@ -36,11 +36,27 @@ async function chat(o,content,steps,database){queue=steps;const input={id:id(),r
 const request=o=>({kind:'interaction',operation:'requestContent',projectId:o.project,contentIds:['headline','section-1-text']});
 const read=interactionId=>({kind:'interaction',operation:'read',interactionId});
 const replace=f=>({kind:'interaction',operation:'replaceContent',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,contentIds:['headline','section-1-text','about-text']});
-const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1','project.status@1']};
+const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1','project.status@1','project.photos@1']};
 const readForm=(o,interactionId)=>json(o,'/api/chat/interactions/v1/read',{version:1,interactionId,client});
 const mutate=(f,operation,answers)=>({version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,operation,...(answers?{answers}:{})});
 try{
  const a=await owner(),b=await owner();let first,form;
+ await test('natural Chat offers an owned upload handoff without dispatching uploads or answers',async()=>{
+  const o=await owner(),result=await chat(o,'I want to upload a photo for my landscaping project.',[{kind:'interaction',operation:'requestPhotoUpload',projectId:o.project}]);
+  const saved=await readForm(o,result.turn.interaction_id);
+  assert.equal(saved.envelope.definition.kind,'view');assert.equal(saved.envelope.scope.projectId,o.project);assert.equal(saved.submission,null);assert.equal(saved.draft,null);
+  assert.equal((await row('SELECT count(*) n FROM project_files WHERE project_id=?',o.project)).n,0);
+  await assert.rejects(()=>store.mutateInteraction(o.scope,o.user,mutate(saved,'submit',{})),e=>e.code==='KIND');
+  await assert.rejects(()=>store.mutateInteraction(o.scope,o.user,mutate(saved,'save-draft',{})),e=>e.code==='KIND');
+  const before=mainCalls;await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE origin_turn_id=?',result.input.id)).n,1);
+  const canceled={...mutate(saved,'cancel')};delete canceled.answers;await store.mutateInteraction(o.scope,o.user,canceled);assert.equal((await store.readInteractionReceipt(o.scope,o.user,canceled.requestId)).operation,'cancel');
+ });
+ await test('upload handoff refuses foreign projects and model-authored upload payloads',async()=>{
+  const o=await owner(),foreign=await owner();
+  for(const action of [{kind:'interaction',operation:'requestPhotoUpload',projectId:foreign.project},{kind:'interaction',operation:'requestPhotoUpload',projectId:o.project,url:'https://untrusted.test/photo.jpg'},{kind:'interaction',operation:'requestPhotoUpload',projectId:o.project,answers:{file:'bytes'}}]){
+   const result=await chat(o,'Add my project photo.',[action]);assert(!result.turn.interaction_id);assert.equal((await row('SELECT count(*) n FROM project_files WHERE project_id=?',o.project)).n,0);
+  }
+ });
  await test('natural Chat uses one specification lookup then atomically offers the maintained form',async()=>{
   first=await chat(a,'Help me fill in the headline and services for my landscaping website.',[{kind:'specification',operation:'read',projectId:a.project},body=>{assert.match(JSON.stringify(body),/workspace_lookup_result/);assert.match(JSON.stringify(body),/section-1-text/);return request(a);}]);
   assert.equal(first.calls,2);assert(first.turn.interaction_id);assert.doesNotMatch(first.turn.assistant_text,/UNTRUSTED_MODEL_PROSE/);
@@ -169,7 +185,8 @@ try{
   const o=await owner(),created=await chat(o,'Which of my projects should we work on?', [intakeRequest('requestProjectSelection')]);let f=await readForm(o,created.turn.interaction_id);
   assert.equal(f.envelope.definition.template,'project-select@1');assert.equal(f.draft,null);
   await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{project:o.project}));f=await readForm(o,f.envelope.id);
-  const resources=await json(o,'/api/chat/interactions/v1/resources',{version:1,interactionId:f.envelope.id,fieldId:'project',limit:20,before:null});assert.deepEqual(resources.items,[{id:o.project,name:'Garden'}]);
+  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','read','private-test-acceptance','synthetic owned resource fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user);
+  const resources=await json(o,'/api/chat/interactions/v1/resources',{version:1,interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,fieldId:'project',limit:20,before:null});assert.deepEqual(resources.items,[{id:o.project,name:'Garden',photo:null}]);
   const result=await chat(o,'What project did I choose?', [submitted(f),body=>{const lookup=JSON.parse(JSON.parse(body.input.at(-1).content).result);assert.deepEqual(lookup.data.selectedProject,{id:o.project,name:'Garden'});assert.equal(lookup.data.answers,undefined);return null;}]);assert.equal(result.calls,2);
   await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Another project','Keep workspace admission','draft',datetime('now'),datetime('now'))",id(),o.user);
   await run('UPDATE projects SET owner_user_id=? WHERE id=?',b.user,o.project);

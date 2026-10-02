@@ -19,3 +19,9 @@ export function projectIntakeDefinition(template:ProjectIntakeTemplate):Definiti
   {id:'project',type:'resource',label:'Project',help:'Choose one of your current projects.',required:true,binding:'answer.value@1',constraints:{collection:'projects',multiple:false,maxItems:1}}
  ]};
 }
+
+/** A maintained upload handoff. It has no answers, photo references or continuation. */
+export function photoIntakeDefinition():Definition{return {version:1,kind:'view',template:'status@1',title:'Add a project photo',summary:'Choose a photo for this project. Uploads stay private and held until safety checks clear them. Website changes require their own review.',presentation:'inline',fields:[],cards:[{id:'photo-upload',binding:'project.photos@1',display:'photos',limit:1,reviewId:null}],submitBinding:null,continuationBinding:null};}
+export function isPhotoIntakeDefinition(d:Definition){
+ const expected=photoIntakeDefinition();return d.version===1&&d.kind==='view'&&d.template==='status@1'&&d.title===expected.title&&d.summary===expected.summary&&d.presentation==='inline'&&d.fields.length===0&&d.cards.length===1&&d.cards[0].id==='photo-upload'&&d.cards[0].binding==='project.photos@1'&&d.cards[0].display==='photos'&&d.cards[0].limit===1&&d.cards[0].reviewId===null&&d.submitBinding===null&&d.continuationBinding===null;
+}

@@ -461,3 +461,17 @@ WH-107/#90 now uses the shared resource picker for the existing maintained proje
 - Both TypeScript/compiler checks, the 69-case protocol suite, client recovery, Chat reply/delivery and connected customer-site journey pass. The latter uses scripted Responses, seven main calls/seven acknowledgments and zero customer units. The frontend build, lifecycle catalogue (172 tables, 39 current/seven planned classes, 42 refusal cases), roadmap validation/alignment/render and diff checks pass.
 
 The old single-purpose component is removed. The current client and changed resource request/projection must ship together; no compatibility adapter is retained. No schema change, remote deployment, customer publication, provider activation, CSAM, Daybreak or CMS functional test occurred. WH-107 remains open for connected photo intake and complete presentation/accessibility acceptance; WH-108 retains custom composition and semantic admission.
+
+
+## Maintained Chat photo intake and upload recovery — October 2, 2026 UTC
+
+Source/local WH-107 checkpoint, not a deployment or scanner acceptance:
+
+- `node tests/photo-upload-recovery.mjs`: current closed metadata/response shape, no bytes/URL admission, conflicting request refusal, account clearing, storage failure preservation and exact resolution.
+- `node tests/files.mjs`: actual local D1/private R2, unchanged JPEG envelope cleaning and independent pixel decoding, exact metadata/pending/ready readback, tenant isolation, late ownership/session loss, lost R2/D1 acknowledgments, concurrency, quotas, no AI-unit charge and queued/orphan cleanup. Existing benign synthetic safety receipts test access boundaries; no detector/provider is called.
+- `node tests/chat-interaction-agent.mjs` and `--d1`: 25 cases each, including actual Chat offer/replay, current client read, fixed project scope, no automatic upload, submit/draft refusal, exact cancel, foreign target and model URL/answer rejection. Each run uses 47 scripted main responses and 32 scripted acknowledgments; zero real model/provider calls. An older project-list test was updated to require the already-current digest/read grant and closed metadata shape; no old request adapter was added.
+- `node tests/chat-interaction-browser.mjs --d1`: built workspace with actual HTTP/local D1/R2, explicit upload, browser-storage failure before dispatch, lost accepted response, collapse/reload readback without resend, absent reservation with exact-ID retry, original-file reselection and mismatched-file refusal. Dismissing the view preserves files and pending metadata; account changes clear device recovery. Held bytes are never requested. Existing brief/preview/exact review/history/correction/account-reset journeys also pass.
+- Inspected 360/390px photo-intake screenshots and native file/name/save targets. Repeated explanatory copy was removed; uploader controls have their own labels. Chromium touch/keyboard/accessibility evidence is distinct from physical phones and spoken screen-reader acceptance.
+- Current protocol (69 cases), history/client, intake (23 SQLite cases), storage (39 SQLite cases), prompt-focus, Chat reply/delivery, connected customer-site journey, lifecycle catalogue, type/compiler checks and frontend build pass. No schema change, migration, public exposure, CMS functional testing, CSAM implementation or Daybreak work.
+
+Remaining WH-107 acceptance, custom-photo answer/copy admission and the combined current test cutover stay open.

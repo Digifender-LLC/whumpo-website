@@ -221,3 +221,10 @@ The existing `chat-interactions` class now covers finite bounded number values, 
 ### Owned resource option copies — October 2, 2026 UTC
 
 The shared Chat resource picker keeps account/form/digest/field/collection-scoped option metadata only in the mounted private query, with zero inactive retention. Failed/denied/refreshing reads hide old names; collapse/navigation and the existing account-reset fence remove query copies. Form recovery continues to store selected IDs only, without names, image bytes, object keys or URLs. The reusable photo option adapter reads eligible metadata using the existing photo inventory predicate, with no new upload, clearance or stored selection. Runtime photo/custom issuance remains refused until the implementing adapter registers submission and attachment-copy lifecycle; no new storage class or retention rule is enabled by this component work.
+
+
+### Maintained Chat photo intake — October 2, 2026 UTC
+
+The current `project-media` class includes unresolved private-upload metadata in account-bound browser sessionStorage. Metadata is written before dispatch, has no draft expiration, and is cleared after matching ready readback or account change/sign-out. Image bytes remain in memory only; after reload the owner must reselect matching prepared bytes for an explicit same-ID retry. Failed storage prevents dispatch. See [the photo recovery contract](photos.md#chat-upload-handoff-and-exact-recovery--october-2-2026-utc).
+
+The maintained Chat view contains only a fixed binding and existing project/task scope. It adds no photo-bearing answer/default, provider destination, image processing service or scanner. Its own payload follows the interaction lifecycle; dismissing/expiring it does not remove uploaded photos or unresolved upload recovery. Submitted-photo selection and custom attachment copy handling remain unadmitted. These additions are source/local and require the coordinated current client/API deployment.
