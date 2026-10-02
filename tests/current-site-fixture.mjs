@@ -12,9 +12,10 @@ export async function currentSiteFixtureHandlers(){
   export {hashToken,newSessionToken} from './src/security';
   export {admitWorkspace} from './src/workspace-identity/admission';
   export {resolveIdentity} from './src/workspace-identity/authority';
-  export {createWebsite,prepareSpecification,readSpecificationProposal} from './src/project-specification/store';
-  export {readChat,sendChat,sendChatControl,chatState} from './src/chat';
+  export {createWebsite,prepareSpecification,readSpecificationProposal,readSpecification,specificationPreview,applySpecificationCommand} from './src/project-specification/store';
+  export {readChat,sendChat,sendChatControl,sendConversation,chatState} from './src/chat';
   export {reviewBackup,confirmBackup,listBackups,githubRepositories} from './src/github-backups';
+  export * from './src/project-specification/compiler';
   export {ownedPreview} from './src/photo-versions';
   export {reserveStorage} from './src/storage-budget';
   export {ownedExport} from './src/exports';

@@ -41,7 +41,7 @@ An occupied database with a different schema is refused. The current reset selec
 
 A database replacement isolates new account rows from requests still holding the old D1 binding. No old account or credential is copied. During the sequential deployment, some components may still use the retired test database; review this interval and the service contracts. It is not a zero-downtime claim. The deployment lease stays in the baseline database through completion. Deleting that database before the journal completes is invalid.
 
-**Still required for the identity cutover:** finish source-only alignment of deferred-lane fixtures (without running CMS/scanner acceptance), review old provider credentials and external resources, create/select the new database, deploy and independently verify all current components, settle external cleanup, then retire the old database and obsolete secrets. The release tool does not create/delete databases, cancel third-party obligations or claim that old provider calls have stopped. The owner's testing-only data deletion authorization applies; no preservation migration or backward runtime is planned.
+**Still required for the identity cutover:** refresh the recorded provider/resource inventory, create/select the new database, deploy and independently verify all current components, settle external cleanup, then retire the old database and obsolete secrets. The release tool does not create/delete databases, cancel third-party obligations or claim that old provider calls have stopped. The owner's testing-only data deletion authorization applies; no preservation migration or backward runtime is planned.
 
 ## Private archive and journal
 

@@ -9,7 +9,7 @@ export async function cmsBrowserAcceptance({platform,env,session,project,source,
  const server=createServer(async(req,res)=>{try{
   if(req.headers.host!=='localhost:8167'){res.writeHead(403).end();return;}
   const url=new URL(req.url,origin);
-  if(url.pathname==='/_acceptance/start'&&req.method==='GET'){res.writeHead(302,{'set-cookie':`tellumo_session=${session}; HttpOnly; SameSite=Strict; Path=/`,'location':'/workspace/cms?project='+project,'cache-control':'no-store'}).end();return;}
+  if(url.pathname==='/_acceptance/start'&&req.method==='GET'){res.writeHead(302,{'set-cookie':`__Host-whumpo_session=${session}; Secure; HttpOnly; SameSite=Lax; Path=/`,'location':'/workspace/cms?project='+project,'cache-control':'no-store'}).end();return;}
   if(url.pathname.startsWith('/api/')){
    const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>1048576){res.writeHead(413).end();return;}chunks.push(chunk);}
    const response=await platform.fetch(new Request(url,{method:req.method,headers:req.headers,...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})}),env,{waitUntil(){throw Error('No background inference expected');}});

@@ -232,3 +232,19 @@ The solid-color JPEGs, ready-account authority, clearance records and active cus
 The six updated scripts are `agent-inspection-live`, `project-brief-live`, `workspace-shortcuts-live`, `welcome-ai-live`, `specification-live` and `service-client-live`. The first four use complete-schema disposable D1 and module-private owner scopes. The two remote probes require the exact current catalog before creating any rows, seed two synthetic credentials on a current completed account, obtain a real signed session through the current routes, and use the current onboarding prompt and logout protocol. Their existing cleanup journals and private-only behavior remain in place. Synthetic ready accounts do not establish signup, recovery-kit, human Turnstile or device acceptance.
 
 Nine changed/new fixture files pass syntax checks; roadmap validation/alignment/render and whitespace checks pass. No live probe, model request, schema mutation, Worker deployment or deferred CMS/scanner test ran. These scripts intentionally refuse the still-obsolete remote database until the coordinated cutover. Historical live model evidence is not evidence for this new identity deployment.
+
+
+### Complete-schema cleanup and final fixture alignment
+
+October 2, 2026, local evidence before the coordinated identity cutover:
+
+- `node tests/current-schema.mjs`: complete catalog and current passkey/invitation invariants, empty initialization, no-write repeat and drift refusal on SQLite and actual local D1 after removing all 120 numbered platform SQL files.
+- `node tests/content-risk-evidence.mjs` and `node tests/content-risk-review.mjs`: current SQLite evidence ledger immutability, isolation, replay/lost acknowledgment, incident correction and exact private operator-review authority. No ingestion or scanner activation.
+- `node tests/content-policy.mjs`: actual current signup route rejects missing/nonboolean/false US declarations before database access or cookies; declaration alone cannot pass invitation admission. The initial assertion used the retired rejection wording; it was corrected to the current response and the suite passed.
+- `node tests/feature-inclusion.mjs` and `node tests/feature-inclusion.mjs --d1`: 728 feature/tier/operation/scope decisions, exact preview-grant expiry/revocation, immutable receipts, annual coverage, lost replies and parent cleanup. These are eligibility decisions, not provider operations.
+- `node tests/current-website-specifications.mjs`: actual handlers with scripted inference and current SQLite owner scopes; first creation/head/receipts, retired-contract refusal, reviewed edits/forward restores, competing reviews/replay, exports/previews/publication, synthetic photo digest/clearance and late-hold rollback, quota and foreign isolation.
+- `node tests/live-workspace-fixture.mjs`: shared single-bundle module loader and local D1 setup pass actual signed current-login/state/logout, exact-schema prewrite checks, completed onboarding, workspace gates, cleanup and six opt-in refusals. No live model or remote probe ran.
+
+Deferred CMS and photo-result fixture initialization was aligned by source review and syntax checking only. No CMS functional acceptance or scanner behavior was executed; additional behavioral repair may be needed when those lanes resume. The obsolete migration-preservation fixture is removed. The current native EmDash bootstrap stays separate from the retired platform migration chain.
+
+The shipped sandbox pricing overlay `18e9e88` is included exactly as `0c8fa8c`; its six files and live public pricing JSON match. `pnpm --config.verify-deps-before-run=false run check` and `run build` passed. The generated visitor bundle changes only dependency-path comments following the primary checkout rename. No provider, entitlement, identity or database activation is claimed by the pricing overlay.

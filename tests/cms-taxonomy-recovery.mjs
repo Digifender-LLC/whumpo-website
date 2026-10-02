@@ -1,13 +1,14 @@
+// Owner-deferred acceptance; only fixture initialization is aligned here.
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {databaseFixture} from './helpers/current-database.mjs';
 const b=await build({stdin:{contents:"export * from './src/cms-bridge';export * from './src/cms-taxonomy-shape';export * from './src/cms-taxonomy-recovery';export * from './src/cms-gateway';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {signCMSRequest,verifyCMSRequest,cmsGateway,cmsTaxonomyDefinition,cmsTaxonomyTerm,taxonomyIntent,matchesTaxonomyIntent}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-taxonomy-recovery-');let proxy;
+const dir=await mkdtemp('/tmp/whumpo-taxonomy-recovery-');let store;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,id=()=>crypto.randomUUID(),config={projectId:id(),ownerId:id(),secret:'local-taxonomy-recovery-'.repeat(4),origin:'https://cms.test'},env={DB:db,TOWNHELLO_CMS_PROJECT_ID:config.projectId,TOWNHELLO_CMS_OWNER_ID:config.ownerId,TOWNHELLO_CMS_BRIDGE_KEY:config.secret,TOWNHELLO_CMS_ORIGIN:config.origin};
+ store=await databaseFixture({d1:true,r2:true});const db=store.db,id=()=>crypto.randomUUID(),config={projectId:id(),ownerId:id(),secret:'local-taxonomy-recovery-'.repeat(4),origin:'https://cms.test'},env={DB:db,TOWNHELLO_CMS_PROJECT_ID:config.projectId,TOWNHELLO_CMS_OWNER_ID:config.ownerId,TOWNHELLO_CMS_BRIDGE_KEY:config.secret,TOWNHELLO_CMS_ORIGIN:config.origin};
  const objects=new Map();let posts=0,gets=0,drop=false,missing=false;
  const dispatch=async request=>{const verified=await verifyCMSRequest(request,config);if(request.method==='GET'){gets++;return objects.has(verified.path)?Response.json(objects.get(verified.path)):Response.json({error:'missing'},{status:404});}
   posts++;const intent=taxonomyIntent(verified.path,verified.body);assert.ok(intent);if(objects.has(intent.readPath))return Response.json({success:false,error:'exists'},{status:409});
@@ -32,4 +33,4 @@ try{
  const race=id(),raceBody=cmsTaxonomyTerm('race','Race'),raceBefore=posts;const raced=await Promise.all(Array.from({length:5},()=>run(termPath,raceBody,race)));assert.ok(raced.every(r=>[200,201,409].includes(r.status)));assert.ok([200,201].includes((await run(termPath,raceBody,race)).status));assert.equal(posts,raceBefore+1);
  assert.equal((await run(termPath,body,conflict,{...env,TOWNHELLO_CMS_OWNER_ID:id()})).status,403);
  console.log('Taxonomy recovery passed: atomic intent/receipt reservation, exact definition and term readback, existing-state reconciliation, no duplicate create under retries/races, changed/missing/legacy refusal, lost acknowledgement and owner isolation.');
-}finally{if(proxy)await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{if(store)await store.close();await rm(dir,{recursive:true,force:true});}

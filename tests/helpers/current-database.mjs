@@ -2,8 +2,9 @@ import {sqliteD1} from '../sqlite-d1.mjs';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {currentSchema} from '../../tools/current-schema.mjs';
 import {execFileSync} from 'node:child_process';
-export async function databaseFixture({d1=false,r2=false}={}){
- if(!(process.argv.length===2||(process.argv.length===3&&process.argv[2]==='--d1')))throw Error('Choose SQLite or --d1');
+export async function databaseFixture({d1=false,r2=false,allowedArguments=[]}={}){
+ if(process.argv.slice(2).some(arg=>arg!=='--d1'&&!allowedArguments.includes(arg)))throw Error('Unsupported fixture argument');
+ if(new Set(process.argv.slice(2)).size!==process.argv.length-2)throw Error('Repeated fixture argument');
  if(!d1&&!r2&&process.argv.length===2)return sqliteD1();
  const directory=await mkdtemp('/tmp/whumpo-feature-inclusion-'),config=directory+'/wrangler.json';
  try{

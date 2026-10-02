@@ -147,7 +147,7 @@ The ledger stores a canonical result fingerprint and the photo safety row refere
 
 Local verification: `pnpm check` and `node tests/photo-scan-results.mjs`. The disposable D1/R2 test uses generated solid-color JPEGs and synthetic evidence to verify authority hashing, ownership/digest/policy binding, strict check coverage, pending/blocked/approved delivery, replay/conflict/concurrency, lost batch acknowledgement, changed targets, expired reservations and immutable terminal records. These tests establish result-handling behavior, not detector accuracy or live provider acceptance.
 
-Retry verification: `node tests/photo-scan-results.mjs` also covers profile/project expired-clearance rescans, inconclusive retries, expired-ticket supersession, blocked/live-clearance refusal, competing reservations and lost reservation acknowledgements. `python3 tests/photo-scan-migration.py` verifies migration 0102 preserves reserved/completed/stale rows, foreign keys and terminal immutability while replacing the lifetime uniqueness constraint with one reserved attempt. Synthetic evidence only.
+Retry verification: `node tests/photo-scan-results.mjs` also covers profile/project expired-clearance rescans, inconclusive retries, expired-ticket supersession, blocked/live-clearance refusal, competing reservations and lost reservation acknowledgements. The former migration-preservation fixture is retired: disposable test databases now initialize the complete current schema, verified by `node tests/current-schema.mjs`. Historical migration evidence does not establish current scanner acceptance. Scanner implementation/testing remains owner-deferred; this source alignment does not resume it.
 
 ## Supplemental screening selection — source implementation, inactive
 

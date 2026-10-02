@@ -178,7 +178,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/4",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001\u20130113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
+        "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001–0113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
       ]
     },
     {
@@ -216,7 +216,7 @@
         "src/domain-hosting.ts",
         "src/github-backups.ts",
         "src/billing.ts",
-        "migrations"
+        "schema"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/5",
       "owner": null,
@@ -454,7 +454,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.",
-        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001\u20130113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7.",
+        "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001–0113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7.",
         "2026-10-01 alignment: foundation completion remains historical. WH-116 and each new Chat/module/connector/member feature must register new data classes, retention/export/deletion and key custody; they do not inherit complete coverage from issue #7."
       ]
     },
@@ -508,7 +508,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/8",
       "owner": null,
       "evidence": [
-        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001\u20130113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011\u2013017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
+        "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001–0113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011–017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
         "2026-10-01 UTC test release 20d37ba0-fca6-4003-a9c8-280f2b23edff from source 3417ea2 deploys the corrected agent knowledge. Readback verified four candidate versions, unchanged service/secret-binding names and CMS registry, 113 applied migrations / none pending, 16 matching platform assets, home/health 200 and anonymous Chat/profile 401. See docs/safety-coverage.md and docs/releases.md. No real-model moderation evaluation, detector connection, CMS functional test or customer publication."
       ]
     },
@@ -587,7 +587,7 @@
       ],
       "verification": [
         "node tests/photo-scan-results.mjs",
-        "python3 tests/photo-scan-migration.py",
+        "node tests/current-schema.mjs",
         "Injected timeouts, response loss, stale approvals and concurrent jobs",
         "Provider canary only after the concrete activation review"
       ],
@@ -2221,7 +2221,7 @@
         "Choose supported website/app paths and a small cohort size based on measured capacity",
         "Review gate matrix, open risks, support ownership and rollback",
         "Keep unavailable provider/CMS/payment paths explicitly disabled",
-        "Require WH-117 transparent data-protection acceptance and the WH-113\u2013115 owner identity/recovery policy through WH-005; WH-118 feasibility is outside beta prerequisites"
+        "Require WH-117 transparent data-protection acceptance and the WH-113–115 owner identity/recovery policy through WH-005; WH-118 feasibility is outside beta prerequisites"
       ],
       "acceptance": [
         "All required gate evidence refers to the candidate release and admitted paths",
@@ -2612,7 +2612,7 @@
       "blockers": [],
       "outcome": "All selected connections reuse server-controlled explicit bounded reads, reviewed actions, scoped consent, current eligibility and reliable reconciliation.",
       "scope": [
-        "Define common capabilities for GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot; new adapter delivery belongs to WH-096\u2013100",
+        "Define common capabilities for GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot; new adapter delivery belongs to WH-096–100",
         "Reuse encrypted scoped credentials, account binding, refresh/revocation, current eligibility and durable dispatch/readback receipts",
         "Define request-bound lookup/data-use consent and allowlisted operations; exclude arbitrary outbound fetch, continuous sync and visitor-triggered maintainer",
         "Keep WH-036 platform delivery independent of customer mailbox OAuth; split contract/implementation/conformance children without depending on provider children or WH-049",
@@ -3035,7 +3035,7 @@
       "issue": "https://github.com/zemdregon/whumpo/issues/13",
       "owner": null,
       "evidence": [
-        "2026-10-01 alignment: live GitHub completion evidence re-read. Catalog/planner implementation completed in b457f6b and issue #13 with local and deployed readback evidence. General service modules remain WH-067\u2013069."
+        "2026-10-01 alignment: live GitHub completion evidence re-read. Catalog/planner implementation completed in b457f6b and issue #13 with local and deployed readback evidence. General service modules remain WH-067–069."
       ]
     },
     {
@@ -3085,7 +3085,7 @@
       "owner": null,
       "evidence": [
         "2026-09-30 issue readback for the tier extension: parent #14 remains open; #15 compiler/schema and #16 durable private proposal/apply/restore are closed with recorded source and synthetic acceptance. Forms/API child #17 remains open; content-only compilation is not complete WH-066/067 delivery. Source at review: 628c16f. This roadmap update does not verify a deployment.",
-        "2026-10-01 alignment: live GitHub completion evidence re-read. Initial supported compiler scope completed through #15/#16/#17 and merged PR #18 (0002632). Content, fixed contact intake and reviewed stateless clients have deterministic/private apply/restore and scoped connected evidence. General records/access/files and notification/rule services remain WH-067\u2013069."
+        "2026-10-01 alignment: live GitHub completion evidence re-read. Initial supported compiler scope completed through #15/#16/#17 and merged PR #18 (0002632). Content, fixed contact intake and reviewed stateless clients have deterministic/private apply/restore and scoped connected evidence. General records/access/files and notification/rule services remain WH-067–069."
       ]
     },
     {
@@ -3908,7 +3908,7 @@
         "src/index.ts",
         "src/workspace-identity/ceremonies.ts",
         "src/security.ts",
-        "migrations",
+        "schema",
         "docs/roadmap/identity-and-data-protection.md",
         "docs/workspace-identity.md"
       ],
@@ -4441,7 +4441,7 @@
         "Expose scheduled/completed/failed/cancelled/uncertain receipts; recheck rule/connection/feature authority before each unsent step",
         "Wire provider-backed recipes only through their accepted adapters; split workflow core, selected adapters and connected acceptance children",
         "Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.",
-        "Initial automatic notifications use the approved WH-036/068 platform sender. Customer mailbox/calendar/CRM recipes require a separately supported adapter operation and reviewed rule authority; WH-096\u2013100 owner-request consent alone never enables unattended sends or polling."
+        "Initial automatic notifications use the approved WH-036/068 platform sender. Customer mailbox/calendar/CRM recipes require a separately supported adapter operation and reviewed rule authority; WH-096–100 owner-request consent alone never enables unattended sends or polling."
       ],
       "acceptance": [
         "Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary",
@@ -4949,7 +4949,7 @@
         "WH-080"
       ],
       "blockers": [
-        "Real provider approvals, consenting accounts and accepted production privacy remain required; see WH-031/032 and WH-096\u2013100.",
+        "Real provider approvals, consenting accounts and accepted production privacy remain required; see WH-031/032 and WH-096–100.",
         "Stripe sandbox is deployed and owner-authorized; real-money activation and CMS testing remain gated. Local/connected evidence never authorizes commercial activation."
       ],
       "outcome": "One candidate release proves every selected tier benefit and all seven provider journeys before commercial presentation or paid activation.",
@@ -5045,7 +5045,7 @@
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
-        "2026-10-01: WH-105 source-grounded interaction v1 decision and offline reference/fixtures prepared against 26b9fa4 under issue #51. WH-113/#42 and WH-089/#44 completion evidence refreshed before claim. Owner amendment removes legacy/unsupported-client fallback; current-version-only rejection replaces downgrade rendering. 63 offline contract/compiler/control cases pass. Production storage/admission/rendering remain WH-106\u2013112; no runtime or deployment change."
+        "2026-10-01: WH-105 source-grounded interaction v1 decision and offline reference/fixtures prepared against 26b9fa4 under issue #51. WH-113/#42 and WH-089/#44 completion evidence refreshed before claim. Owner amendment removes legacy/unsupported-client fallback; current-version-only rejection replaces downgrade rendering. 63 offline contract/compiler/control cases pass. Production storage/admission/rendering remain WH-106–112; no runtime or deployment change."
       ]
     },
     {
@@ -5529,7 +5529,8 @@
         "2026-10-01: #72 adds five passing complete-schema suites for current-cookie profile identity/revocation (SQLite), connection metadata, atomic workspace projects/exports, a four-turn website journey and service authority (local D1). Owner statements share admitted scope; visitor execution uses real isolated QuickJS with maintainer/provider fetch disabled. Model transports and vault/hold metadata are synthetic. Required current photos configuration and transaction-matched lost creation recovery are verified; standard AI remains zero customer debit. No remote cutover, provider/scanner activation or CMS functional testing; remaining observation/operator/live/deferred fixtures and owner/device acceptance stay open.",
         "2026-10-01: #72 adds eight passing complete-schema D1 suites for fair-use observation/reviews, private usage support, dormant Gateway spend/dispatch, stored screening requirements, scripted conversation and current signup eligibility. Customer admission and independent operator/ledger authority remain distinct. Actual ES256 registration verifies mandatory declaration/invitation/Turnstile in local/test, enrollment-only grants and atomic receipt-failure rollback/fresh retry. Financial, model, gateway, Turnstile and risk-history inputs are synthetic. No scanner, routing/provider activation or remote cutover. Remaining media/live/deferred fixtures and physical/live acceptance stay open.",
         "2026-10-02: #72 adds passing complete-schema local D1/R2 photo-version and removal suites. Current owner admission, private dependency/digest checks, publication withdrawal, portable ZIP/JPEG exports, retained-version races, exact lost-response recovery and delayed orphan cleanup are verified. Ready accounts, images, clearance and domain records are synthetic; no scanner implementation, DNS/provider activation, CMS functional testing or remote cutover. Live/deferred fixtures and physical/live acceptance remain open.",
-        "2026-10-02: #72 aligns six opt-in model/deployment probes with current schemas/scopes. Shared probe support passes local D1 exact-schema refusal before writes, two signed credentials, current cookie/login/state/logout, onboarding checkpoint, workspace admission, cleanup and all opt-in refusals. Remote probes retain cleanup journals and refuse obsolete deployments. No live model/deployment, scanner or CMS functional acceptance; only deferred-lane obsolete fixture setup, resource reconciliation and coordinated cutover remain."
+        "2026-10-02: #72 aligns six opt-in model/deployment probes with current schemas/scopes. Shared probe support passes local D1 exact-schema refusal before writes, two signed credentials, current cookie/login/state/logout, onboarding checkpoint, workspace admission, cleanup and all opt-in refusals. Remote probes retain cleanup journals and refuse obsolete deployments. No live model/deployment, scanner or CMS functional acceptance; only deferred-lane obsolete fixture setup, resource reconciliation and coordinated cutover remain.",
+        "2026-10-02: Removed 120 retired platform migrations and preservation-only fixture; complete-schema initialization passes SQLite/local D1. Current content-risk/operator, eligibility, 728 feature-inclusion decisions (SQLite/D1), website specification and signed probe-loader checks pass. Deferred CMS/scanner setup is source-aligned and syntax-checked only, not functionally accepted. Imported exact already-shipped Stripe pricing overlay 18e9e88 as 0c8fa8c and reconciled live JSON. See docs/verification.md and docs/identity-web.md. New empty database selection, coordinated test cutover and physical-device acceptance remain open under #72."
       ]
     },
     {
@@ -5687,7 +5688,7 @@
         "docs/releases.md",
         "docs/integrations/cloudflare-connection.md",
         "src/connection-vault.ts",
-        "migrations"
+        "schema"
       ],
       "issue": null,
       "owner": null,
@@ -5846,7 +5847,8 @@
         "2026-10-01: current website source replaces legacy import, launch/full-page writers and guided creation with atomic schema-2 first saves plus exact reviewed changes/restores, including photos. Current compiler identities replace old implementations; stale snapshots reject. Schema 0119 and the client/platform/site cutover await deployment/reset. Parent stays open for remaining CMS shape inventory and deployment acceptance; see docs/project-specification-storage.md.",
         "2026-10-01: website source merged as PR #60, merge 430065bae840868869497c32f4ae289c33f48b54. CMS source cleanup removes status-bearing edit bodies/recovery and incomplete provenance/report shapes. Only source/type/build and fixture syntax verification is performed for CMS; functional testing stays deferred. Coordinated current test cutover remains pending.",
         "2026-10-01 20:34 UTC: current-only removal inventory completed in test release 925bb8a8-12b2-44f5-807a-251ab85a5905, source 56cf575. All four Worker identities/bindings, 119 schema files, 17 new/replaced schema objects, 18 asset hashes, foreign-key and anonymous access checks pass. Real Muse/HTTP current first draft, reviewed edit, forward restore, exact retry and ephemeral account cleanup pass. No old content required conversion/deletion; retired guided state cleared and owner uncertain AI receipt retained. CMS cleanup has source/type/build/syntax verification only; CMS functional testing stays deferred. See docs/current-version-policy.md#current-contract-test-release.",
-        "2026-10-01 current identity release foundation: review v3/archive v2 pins the complete 156-table schema and exact database bindings, removes numbered SQL replay from deployment/local initialization, refuses occupied or active-database reset targets, and initializes only a distinct empty database. Actual local D1/SQLite catalog and current identity invariants, no-write reinitialization, drift refusal, release interruption/no-replay and build/lifecycle checks pass. No remote mutation; fixture/operator conversion, external cleanup, new database selection, coordinated live cutover and owner/device acceptance remain open in #72. See docs/releases.md and draft PR #79."
+        "2026-10-01 current identity release foundation: review v3/archive v2 pins the complete 156-table schema and exact database bindings, removes numbered SQL replay from deployment/local initialization, refuses occupied or active-database reset targets, and initializes only a distinct empty database. Actual local D1/SQLite catalog and current identity invariants, no-write reinitialization, drift refusal, release interruption/no-replay and build/lifecycle checks pass. No remote mutation; fixture/operator conversion, external cleanup, new database selection, coordinated live cutover and owner/device acceptance remain open in #72. See docs/releases.md and draft PR #79.",
+        "2026-10-02: Removed 120 retired platform migrations and preservation-only fixture; complete-schema initialization passes SQLite/local D1. Current content-risk/operator, eligibility, 728 feature-inclusion decisions (SQLite/D1), website specification and signed probe-loader checks pass. Deferred CMS/scanner setup is source-aligned and syntax-checked only, not functionally accepted. Imported exact already-shipped Stripe pricing overlay 18e9e88 as 0c8fa8c and reconciled live JSON. See docs/verification.md and docs/identity-web.md. New empty database selection, coordinated test cutover and physical-device acceptance remain open under #72."
       ]
     }
   ]

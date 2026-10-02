@@ -236,7 +236,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/domain-hosting.ts](../../src/domain-hosting.ts)
 - [src/github-backups.ts](../../src/github-backups.ts)
 - [src/billing.ts](../../src/billing.ts)
-- [migrations](../../migrations)
+- [schema](../../schema)
 
 ### Execution coordination
 
@@ -371,6 +371,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/53. Planning owner: Unassigned
 - 2026-10-01: website source merged as PR #60, merge 430065bae840868869497c32f4ae289c33f48b54. CMS source cleanup removes status-bearing edit bodies/recovery and incomplete provenance/report shapes. Only source/type/build and fixture syntax verification is performed for CMS; functional testing stays deferred. Coordinated current test cutover remains pending.
 - 2026-10-01 20:34 UTC: current-only removal inventory completed in test release 925bb8a8-12b2-44f5-807a-251ab85a5905, source 56cf575. All four Worker identities/bindings, 119 schema files, 17 new/replaced schema objects, 18 asset hashes, foreign-key and anonymous access checks pass. Real Muse/HTTP current first draft, reviewed edit, forward restore, exact retry and ephemeral account cleanup pass. No old content required conversion/deletion; retired guided state cleared and owner uncertain AI receipt retained. CMS cleanup has source/type/build/syntax verification only; CMS functional testing stays deferred. See docs/current-version-policy.md#current-contract-test-release.
 - 2026-10-01 current identity release foundation: review v3/archive v2 pins the complete 156-table schema and exact database bindings, removes numbered SQL replay from deployment/local initialization, refuses occupied or active-database reset targets, and initializes only a distinct empty database. Actual local D1/SQLite catalog and current identity invariants, no-write reinitialization, drift refusal, release interruption/no-replay and build/lifecycle checks pass. No remote mutation; fixture/operator conversion, external cleanup, new database selection, coordinated live cutover and owner/device acceptance remain open in #72. See docs/releases.md and draft PR #79.
+- 2026-10-02: Removed 120 retired platform migrations and preservation-only fixture; complete-schema initialization passes SQLite/local D1. Current content-risk/operator, eligibility, 728 feature-inclusion decisions (SQLite/D1), website specification and signed probe-loader checks pass. Deferred CMS/scanner setup is source-aligned and syntax-checked only, not functionally accepted. Imported exact already-shipped Stripe pricing overlay 18e9e88 as 0c8fa8c and reconciled live JSON. See docs/verification.md and docs/identity-web.md. New empty database selection, coordinated test cutover and physical-device acceptance remain open under #72.
 
 ## WH-052 — Choose durable job orchestration from current requirements
 
@@ -824,7 +825,7 @@ Photo approval results come from authenticated providers over exact private byte
 ### Verification
 
 - node tests/photo-scan-results.mjs
-- python3 tests/photo-scan-migration.py
+- node tests/current-schema.mjs
 - Injected timeouts, response loss, stale approvals and concurrent jobs
 - Provider canary only after the concrete activation review
 
@@ -1599,6 +1600,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned
 - 2026-10-01: #72 adds eight passing complete-schema D1 suites for fair-use observation/reviews, private usage support, dormant Gateway spend/dispatch, stored screening requirements, scripted conversation and current signup eligibility. Customer admission and independent operator/ledger authority remain distinct. Actual ES256 registration verifies mandatory declaration/invitation/Turnstile in local/test, enrollment-only grants and atomic receipt-failure rollback/fresh retry. Financial, model, gateway, Turnstile and risk-history inputs are synthetic. No scanner, routing/provider activation or remote cutover. Remaining media/live/deferred fixtures and physical/live acceptance stay open.
 - 2026-10-02: #72 adds passing complete-schema local D1/R2 photo-version and removal suites. Current owner admission, private dependency/digest checks, publication withdrawal, portable ZIP/JPEG exports, retained-version races, exact lost-response recovery and delayed orphan cleanup are verified. Ready accounts, images, clearance and domain records are synthetic; no scanner implementation, DNS/provider activation, CMS functional testing or remote cutover. Live/deferred fixtures and physical/live acceptance remain open.
 - 2026-10-02: #72 aligns six opt-in model/deployment probes with current schemas/scopes. Shared probe support passes local D1 exact-schema refusal before writes, two signed credentials, current cookie/login/state/logout, onboarding checkpoint, workspace admission, cleanup and all opt-in refusals. Remote probes retain cleanup journals and refuse obsolete deployments. No live model/deployment, scanner or CMS functional acceptance; only deferred-lane obsolete fixture setup, resource reconciliation and coordinated cutover remain.
+- 2026-10-02: Removed 120 retired platform migrations and preservation-only fixture; complete-schema initialization passes SQLite/local D1. Current content-risk/operator, eligibility, 728 feature-inclusion decisions (SQLite/D1), website specification and signed probe-loader checks pass. Deferred CMS/scanner setup is source-aligned and syntax-checked only, not functionally accepted. Imported exact already-shipped Stripe pricing overlay 18e9e88 as 0c8fa8c and reconciled live JSON. See docs/verification.md and docs/identity-web.md. New empty database selection, coordinated test cutover and physical-device acceptance remain open under #72.
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 
@@ -1864,7 +1866,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/releases.md](../../docs/releases.md)
 - [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
 - [src/connection-vault.ts](../../src/connection-vault.ts)
-- [migrations](../../migrations)
+- [schema](../../schema)
 
 ### Execution coordination
 
@@ -6736,7 +6738,7 @@ Planning dependencies: WH-081, WH-115. Verify completion in current issue eviden
 - [src/index.ts](../../src/index.ts)
 - [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
 - [src/security.ts](../../src/security.ts)
-- [migrations](../../migrations)
+- [schema](../../schema)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 
