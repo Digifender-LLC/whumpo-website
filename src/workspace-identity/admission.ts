@@ -1,7 +1,10 @@
+import {connectionWriteKey} from '../connection-write-policy';
 import {IdentityError,assertCurrentIdentity,identityPredicate,type IdentityPrincipal,type IdentityPolicy} from './authority';
 
 type Scope={db:D1Database;principal:IdentityPrincipal;policy:IdentityPolicy};
 const scopes=new WeakMap<object,Scope>();
+/** Internal maintenance entry points must never accept customer workspace authority. */
+export function assertMaintenanceDatabase(db:D1Database){if(scopes.has(db))throw new Error('Platform maintenance authority is required.');}
 const unavailable=()=>new IdentityError(401,'proof_required','Sign in with your current passkey to continue.');
 const changed=()=>new IdentityError(409,'identity_changed','Your account access changed. Sign in again and review the current state before continuing.');
 function scope(db:object,userId?:string){
@@ -94,26 +97,34 @@ export function workspaceBindings(env:Env,db:D1Database,userId:string):Env{
 /** Custody of one OAuth response already requested by this session. Revocation
  * must not strand a new provider credential. This capability cannot activate it,
  * read other credentials, send provider requests or authorize another operation. */
-export async function prepareOAuthCustody(db:D1Database,userId:string,provider:'github'|'cloudflare',stateHash:string){
+export async function prepareOAuthCustody(db:D1Database,userId:string,provider:'github'|'cloudflare',stateHash:string,keyring:string){
  const c=scope(db,userId);
  if(!/^[a-f0-9]{64}$/.test(stateHash))throw unavailable();
- const table=provider==='github'?'github_oauth_states':'cloudflare_oauth_states';
- if(!await db.prepare(`SELECT 1 FROM ${table} WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=1 AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')`).bind(userId,stateHash,c.principal.authorityId).first())throw changed();
- const tokenId=crypto.randomUUID();let remembered=false;
+ const table=provider==='github'?'github_oauth_states':'cloudflare_oauth_states',flowAdmission=provider==='cloudflare'?' AND cancelled=0':'';
+ if(!await db.prepare(`SELECT 1 FROM ${table} WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=1${flowAdmission} AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')`).bind(userId,stateHash,c.principal.authorityId).first())throw changed();
+ const tokenId=crypto.randomUUID(),writeKey=await connectionWriteKey(db,keyring);let remembered=false;
+ const held=await db.prepare(`INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,state_hash,key_id,revision,state)
+ SELECT ?,?,?,?,?,?,'dispatched' WHERE EXISTS(SELECT 1 FROM ${table} WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=1${flowAdmission} AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).bind(tokenId,userId,provider,stateHash,writeKey.active_key,writeKey.revision,userId,stateHash,c.principal.authorityId).run();
+ if(held.meta.changes!==1)throw changed();
+ const settle=()=>c.db.prepare('DELETE FROM connection_oauth_exchanges WHERE token_id=? AND user_id=? AND provider=?').bind(tokenId,userId,provider).run();
  const confirmed=async()=>!!await c.db.prepare(provider==='github'
   ? "SELECT 1 FROM github_connections WHERE user_id=? AND active_token_id=?"
   : "SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND id=? AND state='active'").bind(userId,tokenId).first();
- return Object.freeze({tokenId,confirmed,
+ return Object.freeze({tokenId,confirmed,settle,
   async remember(ciphertext:string,expiresAt:string){
    if(remembered||!ciphertext||ciphertext.length>16384||!Number.isFinite(Date.parse(expiresAt)))throw new Error('Invalid OAuth custody operation.');
    remembered=true;
-   // Neither staging representation grants provider access. Activation still
-   // requires the original live session, exact flow and current feature scope.
-   if(provider==='github')await c.db.batch([
+   const vault=provider==='github'?'github_token_vault':'cloudflare_token_vault';
+   const saved=()=>c.db.prepare(`SELECT 1 FROM ${vault} WHERE id=? AND user_id=? AND expires_at=?`).bind(tokenId,userId,expiresAt).first();
+   if(await saved()){await settle();return;}
+   // An issued token survives sign-out, disconnect and lost commit acknowledgment.
+   // Its exact admission holds the current write key until ciphertext is durable.
+   const statements=provider==='github'?[
     c.db.prepare("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,'active')").bind(tokenId,userId,ciphertext,expiresAt),
     c.db.prepare("INSERT INTO github_token_staging(token_id,state_hash,expires_at) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 minute'))").bind(tokenId,stateHash),
-   ]);
-   else await c.db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),'staged')").bind(tokenId,userId,ciphertext,expiresAt).run();
+   ]:[c.db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),'staged')").bind(tokenId,userId,ciphertext,expiresAt)];
+   statements.push(c.db.prepare('DELETE FROM connection_oauth_exchanges WHERE token_id=? AND user_id=? AND provider=?').bind(tokenId,userId,provider));
+   try{await c.db.batch(statements);}catch(error){if(!await saved())throw error;}
   },
   async retire(){
    // Exact settlement survives sign-out. Never retire an activated credential.

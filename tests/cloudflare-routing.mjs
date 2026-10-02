@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -30,6 +30,7 @@ const review=(a,p,id=crypto.randomUUID(),database=scope(a.user),ready=true)=>rev
 const confirm=(a,p,id,database=scope(a.user),ready=true)=>confirmDNS(database,a.user,id,config,p.send,ready);
 const beforeDispatch=(a,fn)=>identities.get(a.user).scope(interceptDatabase(db,/UPDATE cloudflare_dns_actions SET state=\?/,fn));
 try{
+ await initializeFixtureKeys(db,config.key);
  const a=await account(),other=await account(),p=provider(a),r=await review(a,p);
  assert.equal(r.state,'review');assert.equal(r.record.type,'CNAME');assert.equal(r.record.proxied,false);assert.equal(p.posts,0);assert.equal('proof_token' in r,false);
  await assert.rejects(reviewCNAME(scope(other.user),other.user,crypto.randomUUID(),a.connection,zone,config,p.send,true),{status:404});

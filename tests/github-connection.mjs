@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -20,6 +20,7 @@ function provider(start,{token='ghu_synthetic',expires=28800,revokeStatus=204,us
 async function start(user){return startGitHub(scope(user),user,config);}
 async function finish(user,s,transport,admitted=scope(user)){return finishGitHub(admitted,user,new URL(s.url).searchParams.get('state'),'test-code',config,transport);}
 try{
+ await initializeFixtureKeys(db,config.key);
  const user=await account(),other=await account();
  assert.equal((await connectionStatus(scope(user),user,undefined)).github.enabled,false);await assert.rejects(()=>startGitHub(scope(user),user,undefined));
  const ciphertext=await seal(config.key,'whumpo:github:token:user-one:record-one','secret');assert.ok(!ciphertext.includes('secret'));assert.equal(await unseal(config.key,'whumpo:github:token:user-one:record-one',ciphertext),'secret');await assert.rejects(()=>unseal(config.key,'whumpo:github:token:user-two:record-one',ciphertext));await assert.rejects(()=>unseal(fixtureKeyring('cd'.repeat(32)),'whumpo:github:token:user-one:record-one',ciphertext));
@@ -38,8 +39,9 @@ try{
  const cancelled=await start(user);await cancelGitHub(scope(user),user,new URL(cancelled.url).searchParams.get('state'));await assert.rejects(()=>finish(user,cancelled,denied));
  const expired=await start(user);await db.prepare("UPDATE github_oauth_states SET expires_at='2000-01-01' WHERE user_id=?").bind(user).run();await assert.rejects(()=>finish(user,expired,denied));
  for(const options of [{token:'gho_wrong_app'},{token:'ghu_nonexpiring',expires:undefined},{token:'ghu_failed_user',userStatus:401}]){const flow=await start(user);const actual={...options};if(options.token==='ghu_nonexpiring')actual.expires=0;await assert.rejects(()=>finish(user,flow,provider(flow,actual)));assert.equal((await connectionStatus(scope(user),user,config)).github.connected,false);assert.ok(revocations.includes(options.token));}
- const redirect=await start(user);await assert.rejects(()=>finish(user,redirect,async()=>new Response(null,{status:302,headers:{location:'https://evil.test'}})));await assert.rejects(()=>finish(user,redirect,denied));
- const oversized=await start(user);await assert.rejects(()=>finish(user,oversized,async()=>new Response('x'.repeat(524289))));
+ const redirectUser=await account(),redirect=await start(redirectUser);await assert.rejects(()=>finish(redirectUser,redirect,async()=>new Response(null,{status:302,headers:{location:'https://evil.test'}})));await assert.rejects(()=>finish(redirectUser,redirect,denied));
+ await assert.rejects(start(redirectUser),{status:409});
+ const oversizedUser=await account(),oversized=await start(oversizedUser);await assert.rejects(()=>finish(oversizedUser,oversized,async()=>new Response('x'.repeat(524289))));
  const acknowledged=await start(user);let lost=false;
  const lossy=await identities.get(user).scope(interceptDatabase(db,/INSERT INTO github_connections/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost commit acknowledgement');}}));
  const beforeLost=exchanges;await finishGitHub(lossy,user,new URL(acknowledged.url).searchParams.get('state'),'test-code',config,provider(acknowledged,{token:'ghu_acknowledged'}));assert.equal(lost,true);assert.equal(exchanges,beforeLost+1);assert.equal((await connectionStatus(scope(user),user,config)).github.connected,true);
@@ -57,6 +59,6 @@ try{
  const staleAccess=await githubAccess(scope(user),user,config,denied,{projectId:null,operation:'read'});await disconnectGitHub(scope(user),user,undefined);await assert.rejects(staleAccess.assertCurrent(),e=>e.status===401);await assert.rejects(staleAccess.send('/user/installations?per_page=100'),e=>e.status===401);
  const writeFlow=await start(user);await finish(user,writeFlow,provider(writeFlow,{token:'ghu_write_race'}));let writes=0;
  const writing=await githubAccess(scope(user),user,config,async()=>{writes++;await disconnectGitHub(scope(user),user,undefined);return Response.json({data:{alreadyAccepted:true}});},{projectId:null,operation:'dispatch'});await assert.rejects(writing.send('/graphql',{method:'POST',body:'{}'}),e=>e.status===401);assert.equal(writes,1,'No automatic retry after a possibly accepted write');
- const final=await start(user);await finish(user,final,provider(final,{token:'ghu_expiring'}));await db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE user_id=?").bind(user).run();assert.equal((await connectionStatus(scope(user),user,config)).github.connected,false);await assert.rejects(()=>githubInstallations(scope(user),user,config,denied));await cleanupGitHub(db,config,denied);assert.equal((await db.prepare('SELECT COUNT(*) n FROM github_token_vault WHERE user_id=?').bind(user).first()).n,0);
+ const final=await start(user);await finish(user,final,provider(final,{token:'ghu_expiring'}));await assert.rejects(db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE user_id=?").bind(user).run(),/github_vault_immutable/);await db.prepare('DELETE FROM github_token_vault WHERE user_id=?').bind(user).run();const expiredId=crypto.randomUUID();await db.prepare("INSERT INTO github_token_vault VALUES(?,?,?,'2000-01-01','active')").bind(expiredId,user,await seal(config.key,`whumpo:github:token:${user}:${expiredId}`,'ghu_expired_fixture')).run();await db.prepare('UPDATE github_connections SET active_token_id=? WHERE user_id=?').bind(expiredId,user).run();assert.equal((await connectionStatus(scope(user),user,config)).github.connected,false);await assert.rejects(()=>githubInstallations(scope(user),user,config,denied));await cleanupGitHub(db,config,denied);assert.equal((await db.prepare('SELECT COUNT(*) n FROM github_token_vault WHERE user_id=?').bind(user).first()).n,0);
  console.log('GitHub connection checks passed: PKCE, one-time session state, encrypted user-bound tokens, owner isolation, installation filtering, replacement, cancellation race, immediate disconnect, queued revocation, expiry and bounded provider failures. No real GitHub credentials were used.');
 }finally{await fixture.close();}

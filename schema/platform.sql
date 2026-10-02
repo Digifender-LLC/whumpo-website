@@ -1911,7 +1911,7 @@ WHEN (SELECT COUNT(*) FROM cloudflare_token_vault WHERE user_id=NEW.user_id)>=10
 BEGIN SELECT RAISE(ABORT,'cloudflare_vault_quota'); END;
 
 CREATE TRIGGER cloudflare_vault_identity BEFORE UPDATE ON cloudflare_token_vault
-WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.ciphertext!=OLD.ciphertext OR NEW.expires_at!=OLD.expires_at OR NEW.created_at!=OLD.created_at
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.expires_at!=OLD.expires_at OR NEW.created_at!=OLD.created_at
 BEGIN SELECT RAISE(ABORT,'cloudflare_vault_immutable'); END;
 
 CREATE TRIGGER cloudflare_dns_quota BEFORE INSERT ON cloudflare_dns_actions
@@ -3578,3 +3578,162 @@ CREATE TRIGGER feature_preview_retained BEFORE DELETE ON feature_preview_grants
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
  AND (OLD.project_id IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id))
 BEGIN SELECT RAISE(ABORT,'feature_preview_retained'); END;
+
+-- Current connection-key policy. No bootstrap key material or obsolete encoding is admitted.
+CREATE TABLE connection_key_registry (
+ id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 32 AND id GLOB '[a-z]*' AND id NOT GLOB '*[^a-z0-9-]*'),
+ fingerprint TEXT NOT NULL UNIQUE CHECK(length(fingerprint)=64 AND fingerprint NOT GLOB '*[^a-f0-9]*'),
+ review_id TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE TRIGGER connection_key_registry_immutable BEFORE UPDATE ON connection_key_registry
+BEGIN SELECT RAISE(ABORT,'connection_key_identity'); END;
+CREATE TRIGGER connection_key_registry_retained BEFORE DELETE ON connection_key_registry
+BEGIN SELECT RAISE(ABORT,'connection_key_custody_required'); END;
+CREATE TABLE connection_key_policy (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+ active_key TEXT NOT NULL REFERENCES connection_key_registry(id),
+ revision INTEGER NOT NULL CHECK(revision>0),
+ review_id TEXT NOT NULL
+);
+CREATE TRIGGER connection_key_policy_retained BEFORE DELETE ON connection_key_policy
+BEGIN SELECT RAISE(ABORT,'connection_key_policy_required'); END;
+CREATE TABLE connection_key_rotations (
+ id TEXT PRIMARY KEY,
+ source_key TEXT NOT NULL REFERENCES connection_key_registry(id),
+ target_key TEXT NOT NULL REFERENCES connection_key_registry(id),
+ revision INTEGER NOT NULL UNIQUE,
+ review_id TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('running','complete')),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ completed_at TEXT,
+ CHECK(source_key!=target_key)
+);
+CREATE UNIQUE INDEX connection_key_rotation_running ON connection_key_rotations(state) WHERE state='running';
+CREATE TABLE connection_rotation_batches (
+ id TEXT PRIMARY KEY,
+ rotation_id TEXT NOT NULL REFERENCES connection_key_rotations(id),
+ selected_count INTEGER NOT NULL CHECK(selected_count BETWEEN 0 AND 20),
+ changed_count INTEGER NOT NULL DEFAULT 0 CHECK(changed_count BETWEEN 0 AND selected_count),
+ bytes_before INTEGER NOT NULL CHECK(bytes_before>=0),
+ bytes_after INTEGER NOT NULL CHECK(bytes_after>=0),
+ crypto_ms INTEGER NOT NULL CHECK(crypto_ms>=0),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+-- Transient ciphertext-only capabilities. Insert/update/delete are one D1 batch;
+-- a failed or interrupted transaction cannot leave a capability behind.
+CREATE TABLE connection_rotation_guards (
+ batch_id TEXT NOT NULL REFERENCES connection_rotation_batches(id),
+ store TEXT NOT NULL CHECK(store IN ('github_token_vault','cloudflare_token_vault','github_oauth_states','cloudflare_oauth_states')),
+ owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ record_id TEXT NOT NULL,
+ old_ciphertext TEXT NOT NULL,
+ new_ciphertext TEXT NOT NULL,
+ PRIMARY KEY(batch_id,store,owner_id,record_id)
+);
+-- Does not expire automatically: an unknown exchange outcome may have issued a token.
+CREATE TABLE connection_oauth_exchanges (
+ token_id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ provider TEXT NOT NULL CHECK(provider IN ('github','cloudflare')),
+ state_hash TEXT NOT NULL,
+ key_id TEXT NOT NULL REFERENCES connection_key_registry(id),
+ revision INTEGER NOT NULL,
+ state TEXT NOT NULL CHECK(state='dispatched'),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(provider,state_hash),
+ UNIQUE(user_id,provider)
+);
+CREATE TRIGGER connection_oauth_exchange_key BEFORE INSERT ON connection_oauth_exchanges
+WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE active_key=NEW.key_id AND revision=NEW.revision)
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER connection_oauth_exchange_identity BEFORE UPDATE ON connection_oauth_exchanges
+BEGIN SELECT RAISE(ABORT,'connection_exchange_identity'); END;
+CREATE TRIGGER connection_key_activation BEFORE UPDATE ON connection_key_policy
+WHEN NEW.singleton!=OLD.singleton OR NEW.revision!=OLD.revision+1 OR NEW.active_key=OLD.active_key
+ OR EXISTS(SELECT 1 FROM connection_oauth_exchanges)
+ OR NOT EXISTS(SELECT 1 FROM connection_key_rotations WHERE source_key=OLD.active_key AND target_key=NEW.active_key AND revision=NEW.revision AND review_id=NEW.review_id AND state='running')
+BEGIN SELECT RAISE(ABORT,'connection_key_activation_denied'); END;
+CREATE TRIGGER github_token_vault_write_key_insert BEFORE INSERT ON github_token_vault
+WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER github_token_vault_write_key_update BEFORE UPDATE OF ciphertext ON github_token_vault
+WHEN NEW.ciphertext!=OLD.ciphertext AND NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER github_token_vault_rotation_only BEFORE UPDATE OF ciphertext ON github_token_vault
+WHEN NEW.ciphertext!=OLD.ciphertext AND NOT EXISTS(
+ SELECT 1 FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='github_token_vault' AND g.owner_id=OLD.user_id AND g.record_id=OLD.id AND g.old_ciphertext=OLD.ciphertext AND g.new_ciphertext=NEW.ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key)
+BEGIN SELECT RAISE(ABORT,'connection_rotation_required'); END;
+CREATE TRIGGER github_token_vault_rotation_count AFTER UPDATE OF ciphertext ON github_token_vault
+WHEN NEW.ciphertext!=OLD.ciphertext
+BEGIN UPDATE connection_rotation_batches SET changed_count=changed_count+1 WHERE id IN (
+ SELECT g.batch_id FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='github_token_vault' AND g.owner_id=OLD.user_id AND g.record_id=OLD.id AND g.old_ciphertext=OLD.ciphertext AND g.new_ciphertext=NEW.ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key); END;
+CREATE TRIGGER cloudflare_token_vault_write_key_insert BEFORE INSERT ON cloudflare_token_vault
+WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER cloudflare_token_vault_write_key_update BEFORE UPDATE OF ciphertext ON cloudflare_token_vault
+WHEN NEW.ciphertext!=OLD.ciphertext AND NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER cloudflare_token_vault_rotation_only BEFORE UPDATE OF ciphertext ON cloudflare_token_vault
+WHEN NEW.ciphertext!=OLD.ciphertext AND NOT EXISTS(
+ SELECT 1 FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='cloudflare_token_vault' AND g.owner_id=OLD.user_id AND g.record_id=OLD.id AND g.old_ciphertext=OLD.ciphertext AND g.new_ciphertext=NEW.ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key)
+BEGIN SELECT RAISE(ABORT,'connection_rotation_required'); END;
+CREATE TRIGGER cloudflare_token_vault_rotation_count AFTER UPDATE OF ciphertext ON cloudflare_token_vault
+WHEN NEW.ciphertext!=OLD.ciphertext
+BEGIN UPDATE connection_rotation_batches SET changed_count=changed_count+1 WHERE id IN (
+ SELECT g.batch_id FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='cloudflare_token_vault' AND g.owner_id=OLD.user_id AND g.record_id=OLD.id AND g.old_ciphertext=OLD.ciphertext AND g.new_ciphertext=NEW.ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key); END;
+CREATE TRIGGER github_oauth_states_write_key_insert BEFORE INSERT ON github_oauth_states
+WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.verifier_ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER github_oauth_states_write_key_update BEFORE UPDATE OF verifier_ciphertext ON github_oauth_states
+WHEN (NEW.verifier_ciphertext!=OLD.verifier_ciphertext OR NEW.state_hash!=OLD.state_hash) AND NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.verifier_ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER github_oauth_states_rotation_only BEFORE UPDATE OF verifier_ciphertext ON github_oauth_states
+WHEN NEW.state_hash=OLD.state_hash AND NEW.verifier_ciphertext!=OLD.verifier_ciphertext AND NOT EXISTS(
+ SELECT 1 FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='github_oauth_states' AND g.owner_id=OLD.user_id AND g.record_id=OLD.state_hash AND g.old_ciphertext=OLD.verifier_ciphertext AND g.new_ciphertext=NEW.verifier_ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key)
+BEGIN SELECT RAISE(ABORT,'connection_rotation_required'); END;
+CREATE TRIGGER github_oauth_states_rotation_count AFTER UPDATE OF verifier_ciphertext ON github_oauth_states
+WHEN NEW.state_hash=OLD.state_hash AND NEW.verifier_ciphertext!=OLD.verifier_ciphertext
+BEGIN UPDATE connection_rotation_batches SET changed_count=changed_count+1 WHERE id IN (
+ SELECT g.batch_id FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='github_oauth_states' AND g.owner_id=OLD.user_id AND g.record_id=OLD.state_hash AND g.old_ciphertext=OLD.verifier_ciphertext AND g.new_ciphertext=NEW.verifier_ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key); END;
+CREATE TRIGGER cloudflare_oauth_states_write_key_insert BEFORE INSERT ON cloudflare_oauth_states
+WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.verifier_ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER cloudflare_oauth_states_write_key_update BEFORE UPDATE OF verifier_ciphertext ON cloudflare_oauth_states
+WHEN (NEW.verifier_ciphertext!=OLD.verifier_ciphertext OR NEW.state_hash!=OLD.state_hash) AND NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.verifier_ciphertext,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER cloudflare_oauth_states_rotation_only BEFORE UPDATE OF verifier_ciphertext ON cloudflare_oauth_states
+WHEN NEW.state_hash=OLD.state_hash AND NEW.verifier_ciphertext!=OLD.verifier_ciphertext AND NOT EXISTS(
+ SELECT 1 FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='cloudflare_oauth_states' AND g.owner_id=OLD.user_id AND g.record_id=OLD.state_hash AND g.old_ciphertext=OLD.verifier_ciphertext AND g.new_ciphertext=NEW.verifier_ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key)
+BEGIN SELECT RAISE(ABORT,'connection_rotation_required'); END;
+CREATE TRIGGER cloudflare_oauth_states_rotation_count AFTER UPDATE OF verifier_ciphertext ON cloudflare_oauth_states
+WHEN NEW.state_hash=OLD.state_hash AND NEW.verifier_ciphertext!=OLD.verifier_ciphertext
+BEGIN UPDATE connection_rotation_batches SET changed_count=changed_count+1 WHERE id IN (
+ SELECT g.batch_id FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='cloudflare_oauth_states' AND g.owner_id=OLD.user_id AND g.record_id=OLD.state_hash AND g.old_ciphertext=OLD.verifier_ciphertext AND g.new_ciphertext=NEW.verifier_ciphertext AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key); END;
+CREATE TRIGGER github_vault_identity BEFORE UPDATE ON github_token_vault
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.expires_at!=OLD.expires_at
+BEGIN SELECT RAISE(ABORT,'github_vault_immutable'); END;
+-- A key identity is activated once. Reusing an earlier active key would admit
+-- stale configurations that still possess it; every rotation advances identity.
+CREATE TRIGGER connection_key_rotation_forward BEFORE INSERT ON connection_key_rotations
+WHEN EXISTS(SELECT 1 FROM connection_key_rotations WHERE source_key=NEW.target_key OR target_key=NEW.target_key)
+ OR NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE active_key=NEW.source_key AND revision+1=NEW.revision)
+BEGIN SELECT RAISE(ABORT,'connection_key_rotation_forward_only'); END;
+CREATE TRIGGER connection_key_rotation_identity BEFORE UPDATE ON connection_key_rotations
+WHEN NEW.id!=OLD.id OR NEW.source_key!=OLD.source_key OR NEW.target_key!=OLD.target_key OR NEW.revision!=OLD.revision OR NEW.review_id!=OLD.review_id OR NEW.created_at!=OLD.created_at OR OLD.state!='running' OR NEW.state!='complete' OR NEW.completed_at IS NULL
+BEGIN SELECT RAISE(ABORT,'connection_rotation_identity'); END;
+CREATE TRIGGER connection_key_rotation_retained BEFORE DELETE ON connection_key_rotations
+BEGIN SELECT RAISE(ABORT,'connection_rotation_receipt_required'); END;
+CREATE TRIGGER connection_rotation_batch_identity BEFORE UPDATE ON connection_rotation_batches
+WHEN NEW.id!=OLD.id OR NEW.rotation_id!=OLD.rotation_id OR NEW.selected_count!=OLD.selected_count OR NEW.bytes_before!=OLD.bytes_before OR NEW.bytes_after!=OLD.bytes_after OR NEW.crypto_ms!=OLD.crypto_ms OR NEW.created_at!=OLD.created_at OR NEW.changed_count!=OLD.changed_count+1
+BEGIN SELECT RAISE(ABORT,'connection_rotation_batch_identity'); END;
+CREATE TRIGGER connection_rotation_batch_retained BEFORE DELETE ON connection_rotation_batches
+BEGIN SELECT RAISE(ABORT,'connection_rotation_receipt_required'); END;

@@ -1,14 +1,15 @@
+import {sqliteD1} from './sqlite-d1.mjs';
+import {initializeFixtureKeys,fixtureKeyring,fixtureCiphertext} from './helpers/connection-keyring.mjs';
 import assert from 'node:assert/strict';
-import {DatabaseSync} from 'node:sqlite';
-import {currentSchema} from '../tools/current-schema.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
-const sql=new DatabaseSync(':memory:');
+const keyFixture=await sqliteD1(),sql=keyFixture.sql;
 try{
- sql.exec(await currentSchema());
+ await initializeFixtureKeys(keyFixture.db);
  sql.exec(`INSERT INTO users(id,email,created_at) VALUES
  ('owner-a','a@example.invalid','2026-09-30'),('owner-b','b@example.invalid','2026-09-30');
  INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES ('project-b','owner-b','PRIVATE','2026-09-30','2026-09-30');
- INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES ('token-b','owner-b','PRIVATE','2027-01-01','revoking');`);
+ `);
+ sql.prepare("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES ('token-b','owner-b',?,'2027-01-01','revoking')").run(await fixtureCiphertext(fixtureKeyring(),'whumpo:github:token:owner-b:token-b','PRIVATE'));
  sql.exec(`INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,mode,status,created_at) VALUES('plan-b','owner-b',1,'PRIVATE','PRIVATE','ai','pending','2026-09-30');
  INSERT INTO composition_plans(id,user_id,project_id,request_hash,catalog_digest,plan_json,details_revision,backend_count,backend_revision,extension_scope,expires_at)
  VALUES('plan-b','owner-b','project-b',printf('%064d',0),printf('%064d',0),'{"purpose":"PRIVATE"}',0,0,0,'none',1);`);

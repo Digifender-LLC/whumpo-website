@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import assert from 'node:assert/strict';
 import {setTimeout} from 'node:timers/promises';
 import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
@@ -17,6 +17,7 @@ globalThis.fetch=async()=>{transports++;throw Error('No provider or inference tr
 const call=(actor,path,method='GET')=>m.worker.fetch(new Request(base+'/api'+path,{method,headers:{origin:base,cookie:'__Host-whumpo_session='+actor.token}}),env);
 async function ok(response){assert.equal(response.status,200,await response.clone().text());return response;}
 try{
+ await initializeFixtureKeys(db,env.CONNECTION_ENCRYPTION_KEYRING);
  for(const funding of ['invoice','preview']){
   const actor=await workspaceFixture(db,m),other=await workspaceFixture(db,m),scope=await actor.scope();
   const site=await createFixtureProject(scope,actor.account,'Landscaping fixture','A harmless landscaping website');

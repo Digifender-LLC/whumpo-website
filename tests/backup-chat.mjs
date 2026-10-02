@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {createFixtureProject,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 import {createElement} from 'react';
@@ -22,6 +22,7 @@ const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug
 async function account(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
 const denied=async()=>{throw Error('Unexpected network');};
 try{
+ await initializeFixtureKeys(db,config.key);
  const user=await account(),other=await account(),token=crypto.randomUUID();
  await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(token,user,await seal(config.key,`whumpo:github:token:${user}:${token}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
  await db.prepare('INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) VALUES(?,?,?,?,?)').bind(user,'44','test',token,now).run();

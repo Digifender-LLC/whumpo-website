@@ -1,3 +1,4 @@
+import {sealConnectionWrite} from './connection-write-policy';
 import {assertWorkspace,workspacePrincipal,prepareOAuthCustody} from './workspace-identity/admission';
 import {hashToken,newSessionToken} from './security';
 import {seal,unseal,connectionKeyringMetadata} from './connection-vault';
@@ -54,6 +55,7 @@ export async function cloudflareStatus(db:D1Database,userId:string,config:Cloudf
  return {enabled:!!config,inclusion,connected,expired:!!config&&expired,expiresAt:row?.expires_at??null,connectedAt:row?.created_at??null,revocationPending:!!pending?.n,dnsChangesEnabled:connected&&inclusion.read};
 }
 export async function startCloudflare(db:D1Database,userId:string,configuration:CloudflareConfig|undefined){
+ if(await db.prepare("SELECT 1 FROM connection_oauth_exchanges WHERE user_id=? AND provider='cloudflare'").bind(userId).first())throw new ConnectionError(409,'A previous connection is awaiting provider recovery.');
  const config=required(configuration),scope=connectionFeature(userId,'cloudflare',null,'connect'),gate=featurePredicate(db,scope);await requireFeature(db,scope);
  const state=newSessionToken(),stateHash=await hashToken(state),verifier=newSessionToken();
  const challenge=btoa(Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))),b=>String.fromCharCode(b)).join('')).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
@@ -62,7 +64,7 @@ export async function startCloudflare(db:D1Database,userId:string,configuration:
  const result=await db.prepare(`INSERT INTO cloudflare_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at)
  SELECT ?,?,?,?,? WHERE ${gate.sql} AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)
  ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,authority_id=excluded.authority_id,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,claimed=0,cancelled=0
- WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await seal(config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),...gate.params,userId,stamp,stamp,userId,stamp).run();
+ WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await sealConnectionWrite(db,config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),...gate.params,userId,stamp,stamp,userId,stamp).run();
  if(result.meta.changes!==1){await assertFeature(db,scope);throw new ConnectionError(409,'Disconnect existing Cloudflare access and finish pending authorization or revocation before connecting again. An interrupted authorization may take ten minutes to expire.');}
  const url=new URL('https://dash.cloudflare.com/oauth2/auth');for(const [k,v] of Object.entries({client_id:config.clientId,response_type:'code',redirect_uri:callback,scope:scopes.join(' '),state,code_challenge:challenge,code_challenge_method:'S256'}))url.searchParams.set(k,v);
  return {url:url.href};
@@ -76,9 +78,9 @@ export async function finishCloudflare(db:D1Database,userId:string,state:string,
  const scope=connectionFeature(userId,'cloudflare',null,'connect'),gate=featurePredicate(db,scope);await requireFeature(db,scope);
  const stateHash=await hashToken(state),flow=await db.prepare(`UPDATE cloudflare_oauth_states SET claimed=1 WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=0 AND cancelled=0 AND expires_at>? AND ${gate.sql} RETURNING verifier_ciphertext`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,now(),...gate.params).first<{verifier_ciphertext:string}>();
  if(!flow)throw new ConnectionError(400,'This Cloudflare authorization expired, was cancelled or was already used.');
- const custody=await prepareOAuthCustody(db,userId,'cloudflare',stateHash);
  const verifier=await unseal(config.key,aad(userId,stateHash,'pkce'),flow.verifier_ciphertext);
  await assertFeature(db,scope);
+ const custody=await prepareOAuthCustody(db,userId,'cloudflare',stateHash,config.key);
  const data=await json(await request('https://dash.cloudflare.com/oauth2/token',{method:'POST',headers:oauthHeaders(config),body:new URLSearchParams({grant_type:'authorization_code',code,redirect_uri:callback,code_verifier:verifier})},transport));
  const validToken=(value:unknown):value is string=>typeof value==='string'&&/^[\x21-\x7e]{1,3500}$/.test(value);
  if(!validToken(data.access_token)||data.refresh_token!==undefined&&!validToken(data.refresh_token))throw new ConnectionError(503,'Cloudflare returned an invalid credential. Revoke the application in Cloudflare settings before trying again.');
@@ -86,7 +88,7 @@ export async function finishCloudflare(db:D1Database,userId:string,state:string,
  const validLifetime=Number.isSafeInteger(data.expires_in)&&Number(data.expires_in)>0&&Number(data.expires_in)<=28800;
  const expiry=validLifetime&&!tokens.refresh?new Date(Date.now()+Number(data.expires_in)*1000).toISOString():'9999-12-31T23:59:59.999Z',tokenId=custody.tokenId;
  try{await custody.remember(await seal(config.key,aad(userId,tokenId,'token'),JSON.stringify(tokens)),expiry);}
- catch{try{await revoke(config,tokens,transport);}catch{}throw new ConnectionError(503,'Cloudflare access could not be saved. Revoke the application in Cloudflare settings before reconnecting.');}
+ catch{try{if(await revoke(config,tokens,transport))await custody.settle();}catch{}throw new ConnectionError(503,'Cloudflare access could not be saved. Revoke the application in Cloudflare settings before reconnecting.');}
  try{
   // RFC 6749: omitted scope means exactly the originally requested scope.
   const granted=data.scope===undefined?scopes:typeof data.scope==='string'?data.scope.split(/\s+/).filter(Boolean):[];

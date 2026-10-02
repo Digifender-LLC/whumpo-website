@@ -1,4 +1,4 @@
-import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -21,6 +21,7 @@ async function dns(u){const project=id(),claim=id(),token=id(),proof=id().replac
 let posts=0,reads=0;
 const dnsProvider=async(url,init)=>{if(init.method==='POST'){posts++;throw Error('Uncertain test write');}reads++;return Response.json(url.includes('dns_records')?{success:true,result:[],result_info:{total_count:0}}:{success:true,result:{id:zone,name:'example.com',status:'active'}});};
 try{
+ await initializeFixtureKeys(db,gh.key);
  for(const plan of [undefined,'starter','personal']){
   const u=await owner(plan);await credentials(u);
   await rejected(m.startGitHub(await scoped(u),u,gh));await rejected(m.startCloudflare(await scoped(u),u,cf));
