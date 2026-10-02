@@ -3306,6 +3306,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/chat-history-dialog.tsx](../../frontend/src/chat-history-dialog.tsx)
 - [tests/chat-interaction-history.mjs](../../tests/chat-interaction-history.mjs)
 - [tests/chat-interaction-browser.mjs](../../tests/chat-interaction-browser.mjs)
+- [src/chat-interactions/maintained.ts](../../src/chat-interactions/maintained.ts)
+- [tests/chat-interaction-intake.mjs](../../tests/chat-interaction-intake.mjs)
 
 ### Execution coordination
 
@@ -3322,6 +3324,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/87. Planning owner: Codex /roo
 - 2026-10-02 UTC: current content-brief client connected under #87: owned Chat pointers, typed current readback, exact request-hash recovery, seven-day local drafts with independent unresolved retention, account-switch/sign-out clearing and late-response fencing. Inline validation/collapse/draft/discard and explicit private-preview continuation provide the first WH-107 handoff. Original generalized/resource/history/resume/agent, lifecycle/restore and reviewed deployment acceptance remains open; no new public issuer or provider activation.
 - 2026-10-02 UTC: maintained content-brief agent handoff under #87 connects requestContent/read/replaceContent to the existing bounded owner Chat loop. Prepared form writes commit with the final Chat result; model reads receive metadata only. Content forms now match the compiler limit of eight operations. Scripted actual HTTP/SQLite/local-D1 journeys cover lookup, correction, exact private preview/save, replay and late authority/base/answer changes. Broader custom/resource/lifecycle/restore and deployment acceptance remains open; no live inference or publication.
 - 2026-10-02 UTC: current content-form history and paged resume connected under #87. Read-only submitted/removal facts exclude copied unsubmitted defaults; the unfinished index locates forms beyond 100 Chat turns and opens only current scoped readback. Existing-card navigation avoids duplicate editors; dialog dismissal preserves eligible local edits and evicts private queries. Full original lifecycle/resource/restore and coordinated deployment acceptance remains open.
+- 2026-10-02 UTC: maintained project-brief/project-select storage and scoped project-resource HTTP reads extend the same issuance/mutation handlers. Information-only submission has no continuation, project creation or automatic task retargeting. Fresh selected-resource ownership is rechecked inside the write transaction, with exact loss/replay and truthful history/export. Initial trusted storage handoff only; renderer/agent activation, broader resource/custom/lifecycle/restore and deployment acceptance remain open.
 
 ## WH-107 — Render accessible Chat forms and maintained interaction templates
 

@@ -1,0 +1,92 @@
+import assert from 'node:assert/strict';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
+import {currentFixtureModules} from './helpers/current-modules.mjs';
+Error.stackTraceLimit=0;
+const modules=await currentFixtureModules(['src/chat-interactions/store.ts','src/chat-interactions/protocol.ts','src/chat-interactions/history-shape.ts','src/index.ts']);
+const store=await modules.module('src/chat-interactions/store.ts'),protocol=await modules.module('src/chat-interactions/protocol.ts'),presentation=await modules.module('src/chat-interactions/history-shape.ts'),worker=(await modules.module('src/index.ts')).default;
+const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();let cases=0,network=0;
+const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{network++;throw Error('Unexpected inference/provider request');};
+const run=(sql,...v)=>db.prepare(sql).bind(...v).run(),row=(sql,...v)=>db.prepare(sql).bind(...v).first();
+const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){}};
+const client={versions:[1],fieldTypes:['text','long-text','resource'],bindings:['answer.value@1','interaction.answers@1','owned.projects@1']};
+async function owner(){const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);const grant=id();await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','prepare','private-test-acceptance','synthetic intake fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",grant,user);return {authority,user,scope,grant};}
+async function project(o,name='Garden'){const p=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,?,'Private purpose canary','draft',datetime('now'),datetime('now'))",p,o.user,name);return p;}
+async function origin(o){const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Plan a project','Review these details',datetime('now') FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);return turn;}
+async function issue(o,template='project-brief@1',database=o.scope){const input={originTurnId:await origin(o),template};return {input,form:await store.issueProjectIntake(database,o.user,input)};}
+const request=(f,operation='submit',answers={name:'Garden',purpose:'A website about gardening.'},revision=f.answerRevision)=>({version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:revision,operation,...(operation==='cancel'?{}:{answers})});
+const resources=(f,before=null)=>({version:1,interactionId:f.envelope.id,fieldId:'project',limit:2,before});
+async function http(o,path,data){return worker.fetch(new Request('https://whumpo.com/api/chat/'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),env,ctx);}
+async function json(o,path,data,status=200){const r=await http(o,path,data),body=await r.json();assert.equal(r.status,status,JSON.stringify(body));if(path.startsWith('interactions/'))assert.match(r.headers.get('cache-control'),/no-store/);return body;}
+const denies=(fn,status=409)=>assert.rejects(fn,e=>e.status===status);
+async function test(name,fn){try{await fn();cases++;}catch(e){console.error(name,e);throw e;}}
+try{
+ await test('fixed maintained issuance and exact origin replay',async()=>{
+  const o=await owner(),{form,input}=await issue(o);assert.equal(form.projectName,null);assert.equal(form.envelope.scope.projectId,null);assert.equal(form.envelope.definition.continuationBinding,null);assert.deepEqual(form.envelope.definition.fields.map(f=>f.id),['name','purpose']);
+  assert.equal((await store.issueProjectIntake(o.scope,o.user,input)).envelope.id,form.envelope.id);
+  await denies(()=>store.issueProjectIntake(o.scope,o.user,{...input,template:'project-select@1'}));
+  for(const extra of [{questions:['Password?']},{defaults:{name:'secret'}},{projectId:id()},{template:'custom@1'}])await assert.rejects(()=>store.issueProjectIntake(o.scope,o.user,{...input,...extra}),e=>e.code==='SHAPE');
+  const other=await owner();await denies(()=>store.issueProjectIntake(other.scope,other.user,input));await denies(()=>store.readInteraction(other.scope,other.user,form.envelope.id),404);
+ });
+ await test('saved information has no downstream work and actual HTTP preserves exact receipt',async()=>{
+  const o=await owner();await project(o);const {form}=await issue(o),draft=request(form,'save-draft',{name:'Local garden'});
+  await json(o,'interactions/v1/mutate',draft);const current=await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client});assert.deepEqual(current.draft,draft.answers);
+  const submit=request(current),before=await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user);const saved=await json(o,'interactions/v1/mutate',submit);assert.equal(saved.requestId,submit.requestId);
+  assert.deepEqual(await json(o,'interactions/v1/mutate',submit),saved);await json(o,'interactions/v1/mutate',{...submit,answers:{...submit.answers,name:'Changed'}},409);
+  const submitted=await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client});assert.deepEqual(submitted.submission.answers,submit.answers);assert.equal(submitted.submission.continuation,null);assert.deepEqual(submitted.draft,{});
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations WHERE id=?',submit.requestId)).n,0);
+  await assert.rejects(()=>run('INSERT INTO chat_interaction_continuations(id) VALUES(?)',submit.requestId),/chat_interaction_changed/);
+  for(const action of ['continue','stop','reconcile'])await json(o,'interactions/v1/'+action,{version:1,submissionId:submit.requestId,...(action==='continue'?{expectedChatRevision:before.revision}:{})},409);
+  assert.deepEqual(await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user),before);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
+  const history=await json(o,'history?before=10000'),fact=history.turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction;assert(presentation.readHistoryInteraction(fact));assert.equal(fact.submission.continuation,null);
+  assert.equal((await json(o,'export')).turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction.submission.continuation,null);
+  assert.deepEqual((await store.listInteractions(o.scope,o.user,{version:1,projectId:null,limit:20,before:null})).items,[]);
+ });
+ await test('lost issuance and submission acknowledgments recover without duplicate work',async()=>{
+  const o=await owner();let issueLost=false,submitLost=false;
+  const lossy=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{},async()=>{if(!issueLost){issueLost=true;throw Error('Issue reply lost');}}));
+  const {form,input}=await issue(o,'project-brief@1',lossy);assert(issueLost);assert.equal((await store.issueProjectIntake(o.scope,o.user,input)).envelope.id,form.envelope.id);
+  const dropping=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interaction_submissions/,async()=>{},async()=>{if(!submitLost){submitLost=true;throw Error('Submit reply lost');}}));
+  const submit=request(form),receipt=await store.mutateInteraction(dropping,o.user,submit);assert(submitLost);assert.deepEqual(await store.mutateInteraction(o.scope,o.user,submit),receipt);assert.equal((await row('SELECT count(*) n FROM chat_interaction_submissions WHERE interaction_id=?',form.envelope.id)).n,1);
+ });
+ await test('owned resource paging exposes only current names and identifiers',async()=>{
+  const o=await owner(),other=await owner();for(const n of ['Alpha','Alpha','Garden','Zebra','Zebra'])await project(o,n);await project(other,'FOREIGN_NAME_CANARY');const {form}=await issue(o,'project-select@1');
+  const items=[];let before=null;do{const page=await json(o,'interactions/v1/resources',resources(form,before));assert.equal(page.definitionDigest,form.envelope.definitionDigest);assert(page.items.length<=2);items.push(...page.items);before=page.nextBefore;}while(before);
+  assert.equal(items.length,5);assert.equal(new Set(items.map(p=>p.id)).size,5);assert.deepEqual(items.map(p=>p.name),['Alpha','Alpha','Garden','Zebra','Zebra']);assert(!JSON.stringify(items).includes('Private purpose canary'));assert(!JSON.stringify(items).includes('FOREIGN_NAME_CANARY'));assert.deepEqual(Object.keys(items[0]).sort(),['id','name']);
+  await json(other,'interactions/v1/resources',resources(form),404);
+  for(const extra of [{limit:21},{fieldId:'purpose'},{before:{name:'Garden',id:'foreign'}},{projectId:id()}])await json(o,'interactions/v1/resources',{...resources(form),...extra},400);
+  await json(o,'interactions/v1/resources',{...resources(form),version:0},409);
+  await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client:{...client,fieldTypes:['text','long-text']}},409);
+  const empty=await owner();const f=await issue(empty,'project-select@1');assert.deepEqual((await store.listInteractionResources(empty.scope,empty.user,resources(f.form))).items,[]);
+ });
+ await test('foreign or removed resource cannot become an answer; accepted selection does not retarget a task',async()=>{
+  const o=await owner(),other=await owner(),own=await project(o),foreign=await project(other),{form}=await issue(o,'project-select@1');
+  for(const operation of ['save-draft','submit'])for(const selected of [foreign,id()]){const failure=await json(o,'interactions/v1/mutate',request(form,operation,{project:selected}),422);assert.equal(failure.fieldId,'project');assert.equal(failure.code,'resource_unavailable');}
+  const submit=request(form,'submit',{project:own});await json(o,'interactions/v1/mutate',submit);const current=await store.readInteraction(o.scope,o.user,form.envelope.id);assert.equal(current.submission.continuation,null);assert.equal(current.envelope.scope.projectId,null);assert.equal((await row('SELECT project_id FROM chat_interaction_tasks WHERE id=?',current.envelope.scope.taskId)).project_id,null);
+  await run('DELETE FROM projects WHERE id=?',own);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,{project:own});assert.equal((await store.mutateInteraction(o.scope,o.user,submit)).requestId,submit.requestId);
+ });
+ await test('selected project ownership is checked again inside the save transaction',async()=>{
+  for(const mode of ['transfer','delete']){const o=await owner(),other=await owner(),p=await project(o),{form}=await issue(o,'project-select@1');let changed=false;
+   const scoped=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interaction_submissions/,async()=>{changed=true;await(mode==='transfer'?run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,p):run('DELETE FROM projects WHERE id=?',p));}));
+   await denies(()=>store.mutateInteraction(scoped,o.user,request(form,'submit',{project:p})));assert(changed);const current=await store.readInteraction(o.scope,o.user,form.envelope.id);assert.equal(current.answerRevision,0);assert.equal(current.submission,null);assert.deepEqual(current.draft,{});
+  }
+ });
+ await test('late form cancellation refuses resource results',async()=>{
+  const o=await owner();await project(o);const {form}=await issue(o,'project-select@1');let changed=false;
+  const scoped=await o.authority.scope(interceptDatabase(db,/^SELECT id,name FROM projects/,async()=>{},async()=>{changed=true;await store.mutateInteraction(o.scope,o.user,request(form,'cancel'));}));
+  await denies(()=>store.listInteractionResources(scoped,o.user,resources(form)),410);assert(changed);await denies(()=>store.readInteraction(o.scope,o.user,form.envelope.id),410);
+ });
+ await test('late feature revocation rolls back issuance and submission',async()=>{
+  for(const phase of ['issue','submit']){const o=await owner(),f=phase==='submit'?(await issue(o)).form:null,turn=await origin(o);let revoked=false;
+   const scoped=await o.authority.scope(interceptDatabase(db,phase==='issue'?/^INSERT INTO chat_interactions\(/:/^INSERT INTO chat_interaction_submissions/,async()=>{revoked=true;await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',o.grant);}));
+   await denies(()=>phase==='issue'?store.issueProjectIntake(scoped,o.user,{originTurnId:turn,template:'project-brief@1'}):store.mutateInteraction(scoped,o.user,request(f)));assert(revoked);
+   if(f){const current=await store.readInteraction(o.scope,o.user,f.envelope.id);assert.equal(current.state,'open');assert.equal(current.submission,null);await store.mutateInteraction(o.scope,o.user,request(f,'cancel'));}else assert.equal(await row('SELECT id FROM chat_interaction_tasks WHERE origin_turn_id=?',turn),null);
+  }
+ });
+ await test('late session revocation refuses submission without changing stored answers',async()=>{
+  const o=await owner(),{form}=await issue(o);let revoked=false;const scoped=await o.authority.scope(interceptDatabase(db,/^INSERT INTO chat_interaction_submissions/,async()=>{revoked=true;await o.authority.revoke();}));
+  await assert.rejects(()=>store.mutateInteraction(scoped,o.user,request(form)));assert(revoked);assert.equal((await row('SELECT state FROM chat_interactions WHERE id=?',form.envelope.id)).state,'open');assert.equal(await row('SELECT id FROM chat_interaction_submissions WHERE interaction_id=?',form.envelope.id),null);
+ });
+ assert.equal(network,0);assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);assert.equal((await row('SELECT count(*) n FROM chat_interaction_checks')).n,0);
+ console.log(`Maintained project intake passed: ${cases} actual-handler cases (${process.argv.includes('--d1')?'local D1':'SQLite'}), owned paged selection, atomic scope/feature/session checks, exact loss/replay, null downstream work and real HTTP/history/export. No model/provider, project creation, activation, browser or deployment acceptance.`);
+}catch(error){console.error(error);process.exitCode=1;}finally{globalThis.fetch=originalFetch;await fixture.close();}
