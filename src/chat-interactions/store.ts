@@ -6,6 +6,7 @@ import type {ProjectSpecification} from '../project-specification/v2/types';
 import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
+import {projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
 
 export class InteractionStoreError extends Error {
  constructor(readonly status:number,readonly code:string){super(code==='not_found'?'Chat form not found.':code==='draft_removed'?'This unsubmitted form was discarded or reached its draft retention limit. Ask for a new form.':code==='request_conflict'?'This request ID already describes another answer.':'This Chat form changed. Read its current state before continuing.');}
@@ -33,8 +34,9 @@ async function receipt(db:D1Database,user:string,id:string){
 }
 export async function readInteraction(db:D1Database,user:string,id:string):Promise<InteractionRead>{
  const r=await row(db,user,id),envelope=await retainedEnvelope(r);
- const submission=await db.prepare('SELECT s.id,s.answers_json,s.answers_digest,s.answer_revision,s.created_at,c.state continuation_state,c.result_turn_id,c.reason FROM chat_interaction_submissions s JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=? AND s.user_id=?').bind(id,user).first<{id:string;answers_json:string;answers_digest:string;answer_revision:number;created_at:string;continuation_state:Continuation['state'];result_turn_id:string|null;reason:string|null}>();
+ const submission=await db.prepare('SELECT s.id,s.answers_json,s.answers_digest,s.answer_revision,s.created_at,c.state continuation_state,c.result_turn_id,c.reason FROM chat_interaction_submissions s LEFT JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=? AND s.user_id=?').bind(id,user).first<{id:string;answers_json:string;answers_digest:string;answer_revision:number;created_at:string;continuation_state:Continuation['state']|null;result_turn_id:string|null;reason:string|null}>();
  if(r.state==='submitted'&&!submission)throw new InteractionStoreError(503,'receipt_unavailable');
+ if(submission&&!!envelope.definition.continuationBinding!==(submission.continuation_state!==null))throw new InteractionStoreError(503,'receipt_unavailable');
  if(submission&&await jsonDigest(JSON.parse(submission.answers_json),16384)!==submission.answers_digest)throw new InteractionStoreError(503,'receipt_unavailable');
  const clock=await db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now') now").first<{now:string}>();
  // Recheck authority/ownership and the revision after the bounded multi-query read.
@@ -43,7 +45,7 @@ export async function readInteraction(db:D1Database,user:string,id:string):Promi
  return {version:1 as const,envelope,projectName:current.project_name,previousInteractionId:r.previous_interaction_id,replacementInteractionId:replacement?.id??null,state:r.state==='open'&&r.expires_at<=clock!.now?'expired' as const:r.state,answerRevision:r.answer_revision,draft:JSON.parse(r.draft_json) as Answers,
   observedAt:clock!.now,draftRetainUntil:r.state==='submitted'?null:new Date(Date.parse(r.draft_saved_at??r.created_at)+7*24*60*60*1000).toISOString(),
   submission:submission?{id:submission.id,answers:JSON.parse(submission.answers_json) as Answers,answersDigest:submission.answers_digest,answerRevision:submission.answer_revision,createdAt:submission.created_at,
-   continuation:{id:submission.id,state:submission.continuation_state,resultTurnId:submission.result_turn_id,reason:submission.reason}}:null};
+   continuation:submission.continuation_state?{id:submission.id,state:submission.continuation_state,resultTurnId:submission.result_turn_id,reason:submission.reason}:null}:null};
 }
 export async function readInteractionReceipt(db:D1Database,user:string,requestId:string):Promise<InteractionReceipt>{
  const r=await receipt(db,user,requestId);if(!r)throw unavailable();
@@ -74,21 +76,55 @@ export async function listInteractions(db:D1Database,user:string,input:unknown){
  const page=results.slice(0,request.limit),last=page.at(-1);
  await assertWorkspace(db,user);
  return {version:1 as const,items:page.map(r=>({interactionId:r.id,projectId:r.project_id,projectName:r.project_name,task:{id:r.task_id,revision:r.task_revision},originTurnId:r.origin_turn_id,createdAt:r.created_at,expiresAt:r.expires_at,state:r.state,answerRevision:r.answer_revision,hasDraft:r.draft_saved_at!==null,
-  continuation:r.submission_id?{id:r.submission_id,state:r.continuation_state,reason:r.reason}:null})),nextBefore:results.length>request.limit&&last?{createdAt:last.created_at,interactionId:last.id}:null};
+  continuation:r.submission_id&&r.continuation_state?{id:r.submission_id,state:r.continuation_state,reason:r.reason}:null})),nextBefore:results.length>request.limit&&last?{createdAt:last.created_at,interactionId:last.id}:null};
+}
+
+type ProjectIntakeRequest={originTurnId:string;template:ProjectIntakeTemplate};
+export async function issueProjectIntake(db:D1Database,user:string,input:ProjectIntakeRequest){
+ return persistInteraction(db,user,await prepareProjectIntake(db,user,input));
+}
+/** Trusted owner-Chat adapter handoff; never accepts arbitrary definitions. */
+export async function prepareProjectIntake(db:D1Database,user:string,input:ProjectIntakeRequest):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,4096);
+ if(!request||Object.keys(request).sort().join(',')!=='originTurnId,template'||!identifier(request.originTurnId)||!['project-brief@1','project-select@1'].includes(request.template))throw new InteractionError('SHAPE');
+ const issueHash=await jsonDigest(request),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ await assertFeature(db,feature(user,null));
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},projectIntakeDefinition(request.template),issueHash,null,[]);
+}
+
+/** Resource names are transient scoped reads, never embedded in the definition.
+ * Selection only records an answer; submit rechecks ownership at commit. */
+export async function listInteractionResources(db:D1Database,user:string,input:unknown){
+ await assertWorkspace(db,user);
+ const request=copyJSON(input,4096) as {version:number;interactionId:string;fieldId:string;limit:number;before:null|{name:string;id:string}};
+ if(!request||typeof request!=='object'||Array.isArray(request)||Object.keys(request).sort().join(',')!=='before,fieldId,interactionId,limit,version')throw new InteractionError('SHAPE');
+ if(request.version!==1)throw new InteractionError('VERSION');
+ if(!identifier(request.interactionId)||request.fieldId!=='project'||!Number.isSafeInteger(request.limit)||request.limit<1||request.limit>20)throw new InteractionError('SHAPE');
+ const before=request.before;
+ if(before!==null&&(!before||typeof before!=='object'||Array.isArray(before)||Object.keys(before).sort().join(',')!=='id,name'||!identifier(before.id)||typeof before.name!=='string'||!before.name.trim()||before.name.length>100))throw new InteractionError('SHAPE');
+ const current=await readInteraction(db,user,request.interactionId);
+ if(current.envelope.definition.template!=='project-select@1')throw new InteractionStoreError(409,'adapter_unavailable');
+ if(current.state!=='open')throw changed();
+ const {results}=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR name>? OR (name=? AND id>?)) ORDER BY name,id LIMIT ?').bind(user,before?.name??null,before?.name??null,before?.name??null,before?.id??null,request.limit+1).all<{id:string;name:string}>();
+ const final=await readInteraction(db,user,request.interactionId);
+ if(final.state!=='open'||final.answerRevision!==current.answerRevision)throw changed();
+ const items=results.slice(0,request.limit),last=items.at(-1);
+ return {version:1 as const,interactionId:current.envelope.id,definitionDigest:current.envelope.definitionDigest,fieldId:request.fieldId,items,nextBefore:results.length>request.limit&&last?{name:last.name,id:last.id}:null};
 }
 
 type ContentBriefRequest={originTurnId:string;projectId:string;contentIds:string[]};
 type ReplacementRequest={originTurnId:string;previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;contentIds:string[]};
-type BriefPlan={interactionId:string;originTurnId:string;issueHash:string;statements:D1PreparedStatement[]};
+type InteractionPlan={interactionId:string;originTurnId:string;issueHash:string;statements:D1PreparedStatement[]};
 function contentIds(value:unknown):asserts value is string[]{
  if(!Array.isArray(value)||value.length<1||value.length>contentFieldLimit||new Set(value).size!==value.length||value.some(x=>typeof x!=='string'||!/^[a-z][a-z0-9-]{0,39}$/.test(x)))throw new InteractionError('SHAPE');
 }
 /** Server-maintained fields only. Model-authored questions/defaults are not an issuance API. */
 export async function issueContentBrief(db:D1Database,user:string,input:ContentBriefRequest){
- return persistBrief(db,user,await prepareContentBrief(db,user,input));
+ return persistInteraction(db,user,await prepareContentBrief(db,user,input));
 }
 /** Compose these guarded writes with the pending Chat result, never before it. */
-export async function prepareContentBrief(db:D1Database,user:string,input:ContentBriefRequest):Promise<BriefPlan>{
+export async function prepareContentBrief(db:D1Database,user:string,input:ContentBriefRequest):Promise<InteractionPlan>{
  await assertWorkspace(db,user);const request=copyJSON(input,4096);
  if(!request||Object.keys(request).sort().join(',')!=='contentIds,originTurnId,projectId'||!identifier(request.originTurnId)||!identifier(request.projectId))throw new InteractionError('SHAPE');
  contentIds(request.contentIds);return prepareBrief(db,user,request,null);
@@ -96,9 +132,9 @@ export async function prepareContentBrief(db:D1Database,user:string,input:Conten
 /** The trusted Chat adapter supplies its current origin turn, never an arbitrary
  * form definition. A correction stays on the original owned project and task. */
 export async function replaceContentBrief(db:D1Database,user:string,input:ReplacementRequest){
- return persistBrief(db,user,await prepareReplacementContentBrief(db,user,input));
+ return persistInteraction(db,user,await prepareReplacementContentBrief(db,user,input));
 }
-export async function prepareReplacementContentBrief(db:D1Database,user:string,input:ReplacementRequest):Promise<BriefPlan>{
+export async function prepareReplacementContentBrief(db:D1Database,user:string,input:ReplacementRequest):Promise<InteractionPlan>{
  await assertWorkspace(db,user);const request=copyJSON(input,4096);
  if(!request||Object.keys(request).sort().join(',')!=='contentIds,definitionDigest,expectedAnswerRevision,originTurnId,previousInteractionId'||!identifier(request.originTurnId)||!identifier(request.previousInteractionId)||typeof request.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(request.definitionDigest)||!Number.isSafeInteger(request.expectedAnswerRevision)||request.expectedAnswerRevision<0)throw new InteractionError('SHAPE');
  contentIds(request.contentIds);
@@ -114,11 +150,11 @@ export async function prepareReplacementContentBrief(db:D1Database,user:string,i
  if(!previous.envelope.scope.projectId||previous.envelope.definition.template!=='content-change@1')throw new InteractionStoreError(409,'adapter_unavailable');
  return prepareBrief(db,user,{originTurnId:request.originTurnId,projectId:previous.envelope.scope.projectId,contentIds:request.contentIds},{request,previous});
 }
-async function prepareBrief(db:D1Database,user:string,request:ContentBriefRequest,replacement:{request:ReplacementRequest;previous:InteractionRead}|null):Promise<BriefPlan>{
+async function prepareBrief(db:D1Database,user:string,request:ContentBriefRequest,replacement:{request:ReplacementRequest;previous:InteractionRead}|null):Promise<InteractionPlan>{
  const previous=replacement?.previous??null,issueHash=await jsonDigest(replacement?{...request,replacement:replacement.request}:request);
  const prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
- if(replacement&&(previous!.envelope.definitionDigest!==replacement.request.definitionDigest||previous!.answerRevision!==replacement.request.expectedAnswerRevision||previous!.replacementInteractionId||['pending','unknown'].includes(previous!.submission?.continuation.state??'')))throw changed();
+ if(replacement&&(previous!.envelope.definitionDigest!==replacement.request.definitionDigest||previous!.answerRevision!==replacement.request.expectedAnswerRevision||previous!.replacementInteractionId||['pending','unknown'].includes(previous!.submission?.continuation?.state??'')))throw changed();
  await assertFeature(db,feature(user,request.projectId));
  const current=await readSpecification(db,user,request.projectId);
  if(!current.specification||!current.versionId||current.otherDraftChanges)throw changed();
@@ -136,6 +172,10 @@ async function prepareBrief(db:D1Database,user:string,request:ContentBriefReques
   return {id:`field-${n+1}`,type:t.max<=200?'text':'long-text',label:t.label,help:'',required:true,binding:'answer.value@1',constraints:{maxLength:t.max},source:{binding:'site.content@1',contentId,revision:current.revision},...(typeof value==='string'&&value.trim()?{default:{value,provenance:retained?'user' as const:'saved' as const}}:{})};
  });
  const definition:Definition={version:1,kind:'form',template:'content-change@1',title:'Update your website text',summary:'Review the text, then prepare a private preview. Saving and publishing each require a separate review.',presentation:'inline',fields,cards:[],submitBinding:'interaction.answers@1',continuationBinding:'site.content-prepare@1'};
+ return prepareIssuedInteraction(db,user,request,definition,issueHash,replacement,[interactionGuard(db,'EXISTS(SELECT 1 FROM project_spec_heads h JOIN projects p ON p.id=h.project_id WHERE h.project_id=? AND h.version_id=? AND h.revision=? AND h.draft_revision=p.site_draft_revision)',[request.projectId,current.versionId,current.revision])]);
+}
+async function prepareIssuedInteraction(db:D1Database,user:string,request:{originTurnId:string;projectId:string|null},definition:Definition,issueHash:string,replacement:{request:ReplacementRequest;previous:InteractionRead}|null,guards:D1PreparedStatement[]):Promise<InteractionPlan>{
+ const previous=replacement?.previous??null;
  const conversation=await db.prepare('SELECT id FROM chat_conversations WHERE user_id=?').bind(user).first<{id:string}>();
  const conversationId=previous?.envelope.scope.conversationId??conversation?.id??crypto.randomUUID(),taskId=previous?.envelope.scope.taskId??crypto.randomUUID(),id=crypto.randomUUID();
  const task=previous?await db.prepare('SELECT revision FROM chat_interaction_tasks WHERE id=? AND user_id=?').bind(taskId,user).first<{revision:number}>():null;
@@ -146,7 +186,7 @@ async function prepareBrief(db:D1Database,user:string,request:ContentBriefReques
  const statements=[
   interactionGuard(db,gate.sql,gate.params),
   interactionGuard(db,"EXISTS(SELECT 1 FROM workspace_state WHERE user_id=? AND step='ready') AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND status IN ('pending','completed'))",[user,request.originTurnId,user]),
-  interactionGuard(db,'EXISTS(SELECT 1 FROM project_spec_heads h JOIN projects p ON p.id=h.project_id WHERE h.project_id=? AND h.version_id=? AND h.revision=? AND h.draft_revision=p.site_draft_revision)',[request.projectId,current.versionId,current.revision]),
+  ...guards,
   interactionGuard(db,"(SELECT count(*) FROM chat_interactions WHERE user_id=? AND state='open' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND id IS NOT ?)<20 AND (SELECT count(*) FROM chat_interactions WHERE conversation_id=? AND state='open' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND id IS NOT ?)<5",[user,previous?.envelope.id??null,conversationId,previous?.envelope.id??null])
  ];
  if(previous){
@@ -163,7 +203,7 @@ async function prepareBrief(db:D1Database,user:string,request:ContentBriefReques
  statements.push(db.prepare('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,previous_interaction_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,user,conversationId,taskId,request.projectId,request.originTurnId,previous?.envelope.id??null,canonicalJSON(envelope),envelope.definitionDigest,issueHash,clock!.now,clock!.expiry));
  return {interactionId:id,originTurnId:request.originTurnId,issueHash,statements};
 }
-async function persistBrief(db:D1Database,user:string,plan:BriefPlan){
+async function persistInteraction(db:D1Database,user:string,plan:InteractionPlan){
  try{if(plan.statements.length)await db.batch(plan.statements);}catch(error){
   const saved=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(plan.originTurnId,user).first<{id:string;issue_hash:string}>();
   if(saved){if(saved.issue_hash!==plan.issueHash)throw new InteractionStoreError(409,'request_conflict');return readInteraction(db,user,saved.id);}
@@ -179,19 +219,25 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  const saved=await row(db,user,raw.interactionId),requestHash=await jsonDigest(raw,32768),existing=await db.prepare('SELECT request_hash FROM chat_interaction_requests WHERE user_id=? AND request_id=?').bind(user,raw.requestId).first<{request_hash:string}>();
  if(existing){if(existing.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,raw.requestId);}
  const envelope=await retainedEnvelope(saved),{request}=await validateMutation(raw,envelope);
- // Only server-issued content briefs are currently activated. Future maintained
- // adapters register their fresh resource/policy checks before exposing issuance.
- if(envelope.definition.template!=='content-change@1')throw new InteractionStoreError(409,'adapter_unavailable');
+ // Only maintained adapters with complete current policy checks are admitted.
+ if(!['content-change@1','project-brief@1','project-select@1'].includes(envelope.definition.template))throw new InteractionStoreError(409,'adapter_unavailable');
+ const resourceGuards:D1PreparedStatement[]=[];
+ if(request.operation!=='cancel'&&envelope.definition.template==='project-select@1'&&Object.hasOwn(request.answers,'project')){
+  const selected=request.answers.project as string;
+  const owned=await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(selected,user).first<{id:string}>();
+  validateAnswers(envelope.definition,request.answers,{partial:request.operation==='save-draft',owned:{projects:owned?[owned.id]:[]}});
+  resourceGuards.push(interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)',[selected,user]));
+ }
  if(request.operation!=='cancel')await assertFeature(db,feature(user,saved.project_id));
  const gate=featurePredicate(db,feature(user,saved.project_id)),revision=request.expectedAnswerRevision+1;
- const statements=[...(request.operation==='cancel'?[]:[interactionGuard(db,gate.sql,gate.params)]),
+ const statements=[...resourceGuards,...(request.operation==='cancel'?[]:[interactionGuard(db,gate.sql,gate.params)]),
   interactionGuard(db,"EXISTS(SELECT 1 FROM chat_interactions WHERE id=? AND user_id=? AND state='open' AND removed_at IS NULL AND definition_digest=? AND answer_revision=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND EXISTS(SELECT 1 FROM workspace_state WHERE user_id=? AND step='ready')",[saved.id,user,request.definitionDigest,request.expectedAnswerRevision,user])];
  if(request.operation==='save-draft')statements.push(interactionGuard(db,"EXISTS(SELECT 1 FROM chat_interactions WHERE id=? AND (draft_saved_at IS NULL OR julianday(draft_saved_at)<=julianday('now','-1 second')))",[saved.id]));
  statements.push(db.prepare("UPDATE chat_interactions SET answer_revision=answer_revision+1,state=?,draft_json=?,draft_saved_at=CASE WHEN ?='save-draft' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NULL END,envelope_json=CASE WHEN ?='cancel' THEN NULL ELSE envelope_json END,removed_at=CASE WHEN ?='cancel' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NULL END,removal_reason=CASE WHEN ?='cancel' THEN 'discarded' ELSE NULL END WHERE id=? AND user_id=?").bind(request.operation==='submit'?'submitted':request.operation==='cancel'?'canceled':'open',request.operation==='save-draft'?canonicalJSON(request.answers,16384):'{}',request.operation,request.operation,request.operation,request.operation,saved.id,user),
   db.prepare("INSERT INTO chat_interaction_requests(user_id,request_id,interaction_id,request_hash,operation,answer_revision,created_at) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(user,request.requestId,saved.id,requestHash,request.operation,revision));
  if(request.operation==='submit')statements.push(
-  db.prepare("INSERT INTO chat_interaction_submissions(id,user_id,interaction_id,answers_json,answers_digest,answer_revision,created_at) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(request.requestId,user,saved.id,canonicalJSON(request.answers,16384),await jsonDigest(request.answers,16384),revision),
-  db.prepare('INSERT INTO chat_interaction_continuations(id) VALUES(?)').bind(request.requestId));
+  db.prepare("INSERT INTO chat_interaction_submissions(id,user_id,interaction_id,answers_json,answers_digest,answer_revision,created_at) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(request.requestId,user,saved.id,canonicalJSON(request.answers,16384),await jsonDigest(request.answers,16384),revision));
+ if(request.operation==='submit'&&envelope.definition.continuationBinding)statements.push(db.prepare('INSERT INTO chat_interaction_continuations(id) VALUES(?)').bind(request.requestId));
  try{await db.batch(statements);}catch(error){
   const committed=await receipt(db,user,request.requestId);
   if(committed){if(committed.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,request.requestId);}

@@ -1,7 +1,7 @@
 import {SpecificationError} from '../project-specification/v2/json';
 import {readInteractionInput} from './input';
 import {InteractionError,requireCurrentClient} from './protocol';
-import {listInteractions,readInteraction,readInteractionReceipt,mutateInteraction,InteractionStoreError} from './store';
+import {listInteractions,listInteractionResources,readInteraction,readInteractionReceipt,mutateInteraction,InteractionStoreError} from './store';
 import {continueContentBrief,stopInteractionContinuation,reconcileContentBrief} from './continuation';
 const prefix='/api/chat/interactions/';
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'private, no-store','pragma':'no-cache','x-content-type-options':'nosniff','referrer-policy':'no-referrer'};
@@ -19,6 +19,7 @@ export async function handleInteractionRequest(request:Request,db:D1Database,use
   if(request.method!=='POST'||url.search)throw new InteractionError('BODY');
   const data=await readInteractionInput(request),action=url.pathname.slice((prefix+'v1/').length);
   if(action==='list')return respond(await listInteractions(db,user,data));
+  if(action==='resources')return respond(await listInteractionResources(db,user,data));
   if(action==='read'){
    exact(data,['version','interactionId','client']);id(data.interactionId);
    const interaction=await readInteraction(db,user,data.interactionId);await requireCurrentClient(interaction.envelope,data.client);return respond(interaction);

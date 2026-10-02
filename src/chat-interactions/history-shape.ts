@@ -5,7 +5,7 @@ type Identity={version:1;id:string;previousInteractionId:string|null;replacement
 export type HistoryInteraction=Identity&({state:'removed';removal:{reason:'discarded'|'inactive';completedAt:string|null}}|{
  state:'open'|'submitted'|'canceled'|'superseded'|'expired';title:string;summary:string;
  fields:{id:string;label:string;help:string;type:FieldType;required:boolean;defaultProvenance?:'saved'|'user'|'suggested'}[];
- submission:null|{answers:Record<string,Answer>;submittedAt:string;continuation:{state:Continuation['state'];reason:string|null}};
+ submission:null|{answers:Record<string,Answer>;submittedAt:string;continuation:null|{state:Continuation['state'];reason:string|null}};
 });
 export type InteractionCursor={createdAt:string;interactionId:string};
 export type InteractionIndex={version:1;items:{interactionId:string;projectId:string|null;projectName:string|null;task:{id:string;revision:number};originTurnId:string;createdAt:string;expiresAt:string;state:'open'|'submitted';answerRevision:number;hasDraft:boolean;continuation:null|{id:string;state:Continuation['state'];reason:string|null}}[];nextBefore:InteractionCursor|null};
@@ -30,7 +30,7 @@ export function readHistoryInteraction(input:unknown):HistoryInteraction|null{
   if(!d.fields.every(f=>shape(f,['id','label','help','type','required'],['defaultProvenance'])&&/^[a-z][a-z0-9-]{0,39}$/.test(f.id)&&!['__proto__','constructor','prototype'].includes(f.id)&&text(f.label,80)&&text(f.help,240)&&fieldTypes.includes(f.type)&&typeof f.required==='boolean'&&(!Object.hasOwn(f,'defaultProvenance')||['saved','user','suggested'].includes(f.defaultProvenance!)))||new Set(d.fields.map(f=>f.id)).size!==d.fields.length)return null;
   const s=d.submission;
   if((d.state==='submitted')!==(s!==null))return null;
-  if(s!==null&&(!shape(s,['answers','submittedAt','continuation'])||!object(s.answers)||!Object.entries(s.answers).every(([key,value])=>d.fields.some(f=>f.id===key)&&answer(value))||!iso(s.submittedAt)||!shape(s.continuation,['state','reason'])||!states.includes(s.continuation.state)||!reason(s.continuation.reason)))return null;
+  if(s!==null&&(!shape(s,['answers','submittedAt','continuation'])||!object(s.answers)||!Object.entries(s.answers).every(([key,value])=>d.fields.some(f=>f.id===key)&&answer(value))||!iso(s.submittedAt)||s.continuation!==null&&(!shape(s.continuation,['state','reason'])||!states.includes(s.continuation.state)||!reason(s.continuation.reason))))return null;
   return d;
  }catch{return null;}
 }

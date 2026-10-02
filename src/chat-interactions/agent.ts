@@ -21,7 +21,7 @@ export async function interactionAgentAction(db:D1Database,userId:string,turnId:
     definitionDigest:e.definitionDigest,answerRevision:saved.answerRevision,state:saved.state,
     previousInteractionId:saved.previousInteractionId,replacementInteractionId:saved.replacementInteractionId,
     fields:e.definition.fields.map(f=>({id:f.id,label:f.label,contentId:f.source!.contentId,revision:f.source!.revision})),
-    continuation:saved.submission?{state:saved.submission.continuation.state,resultTurnId:saved.submission.continuation.resultTurnId}:null};
+    continuation:saved.submission?.continuation?{state:saved.submission.continuation.state,resultTurnId:saved.submission.continuation.resultTurnId}:null};
    return {reply:`The website text form is ${saved.state}. It has ${metadata.fields.length} fields. Open its Chat card to review your answers.`,inspection:JSON.stringify({type:'chat_interaction_metadata',data:metadata}),statements};
   }
   const prepared=input.operation==='requestContent'

@@ -4035,7 +4035,8 @@ WHEN EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN users u ON u.id=s.
 BEGIN SELECT RAISE(ABORT,'chat_interaction_receipt_retained'); END;
 
 CREATE TRIGGER chat_interaction_continuation_new BEFORE INSERT ON chat_interaction_continuations
-WHEN NEW.state!='not-started'
+WHEN NEW.state!='not-started' OR NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id
+ WHERE s.id=NEW.id AND json_extract(i.envelope_json,'$.definition.continuationBinding')='site.content-prepare@1')
 BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
 CREATE TRIGGER chat_interaction_continuation_result BEFORE UPDATE ON chat_interaction_continuations
 WHEN NEW.state='succeeded' AND NEW.result_turn_id IS NOT NULL AND NOT EXISTS(

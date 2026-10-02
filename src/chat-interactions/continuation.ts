@@ -12,7 +12,8 @@ async function submitted(db:D1Database,user:string,id:string){
  if(!s)throw new InteractionStoreError(404,'not_found');
  const interaction=await readInteraction(db,user,s.interaction_id);
  if(!interaction.submission||interaction.submission.id!==id)throw new InteractionStoreError(503,'receipt_unavailable');
- return {...interaction,submission:interaction.submission};
+ if(interaction.envelope.definition.template!=='content-change@1'||interaction.envelope.definition.continuationBinding!=='site.content-prepare@1'||!interaction.submission.continuation)throw new InteractionStoreError(409,'adapter_unavailable');
+ return {...interaction,submission:{...interaction.submission,continuation:interaction.submission.continuation}};
 }
 /** Explicit invocation only. Reads/replays never re-enter the compiler or dispatch effects. */
 export async function continueContentBrief(db:D1Database,user:string,submissionId:string,expectedChatRevision:number){

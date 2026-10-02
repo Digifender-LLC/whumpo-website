@@ -29,7 +29,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100||value.envelope.definition.template!=='content-change@1'||value.envelope.definition.presentation!=='inline'||value.envelope.definition.cards.length)throw new APIError('This form needs a supported current template.',409,'client_update_required');
   validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
   return value;
- },staleTime:0,gcTime:0,refetchInterval:q=>['pending','unknown'].includes(q.state.data?.submission?.continuation.state??'')?5000:false});
+ },staleTime:0,gcTime:0,refetchInterval:q=>['pending','unknown'].includes(q.state.data?.submission?.continuation?.state??'')?5000:false});
  const form=query.data,local=recovery.value,pending=local?.pending??null;
  const answers=local?.answers??(form?startingAnswers(form):{}),collapsed=local?.dismissed??false;
  const conflict=!!(form&&local?.answers&&(local.definitionDigest!==form.envelope.definitionDigest||local.answerRevision!==form.answerRevision));
