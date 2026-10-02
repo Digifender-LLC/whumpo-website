@@ -6,6 +6,7 @@ import {transcriptRequests,transcriptReply,isTranscriptRequest} from './chat-tra
 import {usageReviewCommand,prepareUsageReviewChat} from './usage-review-requests';
 import {readStandardAIHistory,readStandardAIRequest,describeStandardAIHistory,describeStandardAIRequest} from './standard-ai-history';
 import {describeConnections} from './connection-chat';
+import {githubGrantChatControl,githubGrantChatActions} from './github-grant-chat';
 import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
 import {appRecoveryChatActions} from './app-recovery-chat-actions';
@@ -79,6 +80,7 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsRemovals.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_unpublish_confirmation_id=r.id;turn.cms_unpublish_recovery=r.status==='approved';}}
   for(const turn of result[1].results as Record<string,unknown>[]){if(turn.status==='completed'&&typeof turn.user_text==='string'&&isTranscriptRequest(turn.user_text)&&turn.assistant_text===transcriptReply)turn.chat_transcript_download=true;}
   const reviewReceipts=await readChatReviewReceipts(db,userId,result[1].results as Record<string,unknown>[]);
+  await githubGrantChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await backendReviewChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await applicationChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
   await appRecoveryChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
@@ -160,7 +162,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const health=healthChatCommand(db,userId,command,dnsOptions);
   const backend=backendChatCommand(db,userId,input.id,content,dnsOptions?.backendRuntime);
   const cms=dnsOptions?.cmsPublication?.(input.id,content)??cmsContentCommand(content,input.id,dnsOptions?.cmsContent)??cmsChatCommand(db,userId,input.id,content,dnsOptions?.cms);
-  const external=cms??backend??hosting??dns??backup??health;
+  const githubGrant=control?.action.type==='githubGrant'?githubGrantChatControl(db,userId,command,dnsOptions):undefined;
+  const external=githubGrant??cms??backend??hosting??dns??backup??health;
   const comparison=await diffCommand(db,userId,input.id,command);
   const directory=await directoryCommand(db,userId,input.id,content);
   const contact=await contactCommand(db,userId,input.id,command);
@@ -174,6 +177,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if(usageReviewReply)reply=usageReviewReply.reply;
   else if(maintenance){try{reply=describeAppMaintenance(await listAppMaintenance(db,userId,maintenance.projectId,maintenance.page),maintenance.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Application maintenance could not be read. Try again; nothing was executed.'};}}
   else if(pendingCMS){try{reply=describePendingCMS(await pendingCMSWork(db,userId,pendingCMS.projectId,pendingCMS.page),pendingCMS.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Publishing work could not be read. Try again; no operation was retried.'};}}
+  else if(githubGrant)reply='GitHub access removal request recorded. Open the saved review in Settings → External connections to check its state. Replaying this message will not send it again.';
   else if(cms)reply="CMS request recorded. Ask to inspect the saved setup or content request "+input.id+' to recover its saved state.';
   else if(backend)reply="Backend request recorded. Its result is not saved yet. Ask to read test receipt "+input.id+'. Replaying this message will not execute again.';
   else if(health)reply="Website check recorded; the result is not saved yet. Ask to read its current saved status.";
@@ -315,7 +319,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   if(external){
     const result=await external();
-    if(backend)await linkChatReviewReply(db,userId,input.id,result);
+    if(backend||githubGrant)await linkChatReviewReply(db,userId,input.id,result);
     await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=? AND user_id=?').bind(result,input.id,userId).run();
   }
   if(dnsOptions?.healthChecks&&publication&&command.startsWith('/confirm ')){

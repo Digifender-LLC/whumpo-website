@@ -9,6 +9,9 @@ import {createRequire} from 'node:module';
 import {build} from 'esbuild';
 import {build as viteBuild} from 'vite';
 import {databaseFixture} from './helpers/current-database.mjs';
+import {paidPlan} from './helpers/paid-plan.mjs';
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+const grantJourney=process.argv.includes('--github-grant');let providerCalls=0,modelCalls=0;
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp('/tmp/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
 let browser,server,fixture,page,phase='build';const originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
@@ -16,12 +19,12 @@ const requests=[],errors=[];let loseSecureReply=false;
 try{
  await writeFile(html,'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whumpo identity acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script></body></html>');
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
- const bundled=await build({stdin:{contents:"export {default as worker} from './src/index';export {hashToken} from './src/security';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
- const {worker,hashToken}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
- fixture=await databaseFixture();const db=fixture.db;
+ const bundled=await build({stdin:{contents:"export {default as worker} from './src/index';export {hashToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {sendConversation,readChat} from './src/chat';export {startGitHub,finishGitHub} from './src/github-connection';export {initializeConnectionKeys} from './src/connection-rotation';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
+ const {worker,hashToken,admitWorkspace,resolveIdentity,sendConversation,readChat,startGitHub,finishGitHub,initializeConnectionKeys}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+ fixture=await databaseFixture({allowedArguments:['--github-grant']});const db=fixture.db;
  const code=crypto.randomUUID();await db.prepare("INSERT INTO invitations VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'),NULL,NULL)").bind(await hashToken(code)).run();
  crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
- globalThis.fetch=async(url,...args)=>{if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
+ globalThis.fetch=async(url,...args)=>{if(grantJourney&&String(url)==='https://opencode.ai/zen/go/v1/responses'){modelCalls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Prepared.',action:{kind:'githubAccess',operation:'review'}})}]}],usage:{input_tokens:200,output_tokens:80}});}if(grantJourney&&String(url)==='https://api.github.com/applications/browser-grant/grant'){providerCalls++;return new Response(null,{status:204});}if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
  const env={DB:db,ENVIRONMENT:'local',TURNSTILE_SITE_KEY:'synthetic-public',TURNSTILE_SECRET:'synthetic-secret',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
  const root=resolve(dir+'/web');
  server=createServer(async(req,res)=>{try{
@@ -87,6 +90,32 @@ try{
  await page.waitForFunction(()=>!document.querySelector('button[aria-label="Send message"]')?.disabled);await page.waitForLoadState('networkidle');
  await page.waitForFunction(()=>[...document.images].every(image=>image.complete&&image.naturalWidth>0));
  await page.screenshot({path:'/tmp/whumpo-current-workspace-mobile.png',fullPage:true});
+ if(grantJourney){
+  phase='GitHub review in current mobile workspace';
+  const key=fixtureKeyring(),config={clientId:'browser-grant',clientSecret:'SYNTHETIC_APP_SECRET',appId:1,slug:'fixture',key};
+  Object.assign(env,{GITHUB_CLIENT_ID:config.clientId,GITHUB_CLIENT_SECRET:config.clientSecret,GITHUB_APP_ID:'1',GITHUB_APP_SLUG:'fixture',CONNECTION_ENCRYPTION_KEYRING:key});
+  await initializeConnectionKeys(db,key,'browser-synthetic');
+  const token=(await context.cookies()).find(c=>c.name==='__Host-whumpo_session').value,principal=await resolveIdentity(db,{version:1,client:'web',kind:'session',token}),scope=admitWorkspace(db,principal),user=principal.accountId;
+  await paidPlan(db,user,'business');const start=await startGitHub(scope,user,config);
+  await finishGitHub(scope,user,new URL(start.url).searchParams.get('state'),'synthetic-code',config,async url=>url.endsWith('/access_token')?Response.json({access_token:'ghu_BROWSER_ONLY',expires_in:3600,refresh_token:'ghr_BROWSER_ONLY',refresh_token_expires_in:15897600}):Response.json({id:123,login:'gardener'}));
+  const prepare=async()=>{const request={id:crypto.randomUUID(),revision:(await readChat(scope,user)).state.revision,content:'Please review removing all GitHub app access.'};await sendConversation(scope,user,request,{baseURL:'https://opencode.ai/zen/go/v1',apiKey:'synthetic',model:'muse-spark-1.3-contributor',protocol:'responses'},{github:config});await page.reload();await page.getByRole('button',{name:'Revoke all GitHub app access',exact:true}).waitFor();return request.id;};
+  const first=await prepare();assert.equal(providerCalls,0);
+  const card=page.getByRole('region',{name:'GitHub access review'}).last();await card.scrollIntoViewIfNeeded();
+  assert.match(await card.innerText(),/authorizations outside this workspace/);assert.doesNotMatch(await page.locator('body').innerText(),/ghu_BROWSER_ONLY|ghr_BROWSER_ONLY|SYNTHETIC_APP_SECRET/);
+  const button=card.getByRole('button',{name:'Revoke all GitHub app access'});assert.ok((await button.boundingBox()).height>=44);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:'/tmp/whumpo-github-grant-mobile.png',fullPage:true});
+  await page.evaluate(()=>{const get=navigator.credentials.get.bind(navigator.credentials);navigator.credentials.get=async(...args)=>{navigator.credentials.get=get;throw new DOMException('Cancelled','NotAllowedError');};});
+  await button.click();await card.getByRole('alert').filter({hasText:'passkey step was not completed'}).waitFor();assert.equal(providerCalls,0);assert.equal((await db.prepare('SELECT state FROM github_grant_revocations WHERE id=?').bind(first).first()).state,'review');
+  await card.getByRole('button',{name:'Cancel review',exact:true}).click();await card.getByText('This review made no request to GitHub.').waitFor();assert.equal(providerCalls,0);
+  const second=await prepare();
+  await page.goto(origin+'/workspace/connections');await page.getByRole('heading',{name:'Access removal reviews'}).waitFor();await page.getByRole('button',{name:'Revoke all GitHub app access',exact:true}).waitFor();assert.equal(modelCalls,2,'Opening saved reviews must not invoke the model');
+  const beforeProof=requests.filter(r=>r.path.endsWith('/reauth/verify')).length;
+  await page.getByRole('button',{name:'Revoke all GitHub app access',exact:true}).click();await page.getByRole('region',{name:'GitHub access review'}).filter({hasText:'Access removal confirmed'}).first().waitFor();
+  assert.equal(providerCalls,1);assert.equal(modelCalls,2);assert.equal((await db.prepare('SELECT state FROM github_grant_revocations WHERE id=?').bind(second).first()).state,'revoked');assert.equal(requests.filter(r=>r.path.endsWith('/reauth/verify')).length,beforeProof+1);
+  await page.reload();await page.getByRole('region',{name:'GitHub access review'}).filter({hasText:'Access removal confirmed'}).first().waitFor();assert.equal(await page.getByRole('button',{name:'Revoke all GitHub app access',exact:true}).count(),0);assert.equal(providerCalls,1);
+  await page.setViewportSize({width:1280,height:900});await page.getByRole('region',{name:'GitHub access review'}).last().scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/whumpo-github-grant-desktop.png',fullPage:true});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ }
  const savedTurns=(await db.prepare('SELECT count(*) n FROM chat_turns').first()).n;
  phase='live workspace revocation';
  await db.prepare('DELETE FROM identity_sessions').run();
@@ -96,6 +125,7 @@ try{
  assert.equal(await page.evaluate(()=>document.cookie),'');
  assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);
  assert.equal(errors.length,0,errors.join('\n'));
- console.log('Current workspace browser passed: real mobile entry, two Chromium passkeys, recovery kit, identity-before-profile gate, first-project welcome, draft reload and immediate workspace closure on session revocation. No provider requests.');
+ if(grantJourney)console.log(JSON.stringify({suite:'github-grant-browser',modelCalls,providerCalls,realPasskeyConfirmation:true,liveProviderAccess:false}));
+ console.log('Current workspace browser passed: real mobile entry, two Chromium passkeys, recovery kit, identity-before-profile gate, first-project welcome, draft reload and immediate workspace closure on session revocation. No live provider requests.');
 }catch(error){console.error(`Current workspace browser failed during ${phase}: ${error.message}`);console.error('Browser errors:',errors);if(page)console.error('Page:',page.url(),(await page.locator('body').innerText().catch(()=>'' )).replace(/[a-f0-9]{64}/g,'[redacted]').slice(0,1500));console.error('API paths:',requests.filter(r=>r.path.startsWith('/api/')));process.exitCode=1;}
 finally{globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}
