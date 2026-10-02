@@ -5,16 +5,17 @@ import {readSpecification} from '../project-specification/store';
 import type {ProjectSpecification} from '../project-specification/v2/types';
 import {InteractionError,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers} from './protocol';
 import type {Definition,Field} from './types';
+import {draftRetentionDue} from './retention';
 
 export class InteractionStoreError extends Error {
- constructor(readonly status:number,readonly code:string){super(code==='not_found'?'Chat form not found.':code==='request_conflict'?'This request ID already describes another answer.':'This Chat form changed. Read its current state before continuing.');}
+ constructor(readonly status:number,readonly code:string){super(code==='not_found'?'Chat form not found.':code==='draft_removed'?'This unsubmitted form was discarded or reached its draft retention limit. Ask for a new form.':code==='request_conflict'?'This request ID already describes another answer.':'This Chat form changed. Read its current state before continuing.');}
 }
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const identifier=(v:unknown):v is string=>typeof v==='string'&&uuid.test(v);
 const changed=()=>new InteractionStoreError(409,'interaction_changed');
 const unavailable=()=>new InteractionStoreError(404,'not_found');
 const feature=(userId:string,projectId:string|null)=>({userId,projectId,featureId:'core.editing' as const,operation:'prepare' as const});
-type Row={id:string;user_id:string;project_id:string|null;previous_interaction_id:string|null;envelope_json:string;definition_digest:string;issue_hash:string;created_at:string;expires_at:string;state:'open'|'submitted'|'canceled'|'superseded';answer_revision:number;draft_json:string;draft_saved_at:string|null};
+type Row={id:string;user_id:string;project_id:string|null;previous_interaction_id:string|null;envelope_json:string|null;definition_digest:string;issue_hash:string;created_at:string;expires_at:string;state:'open'|'submitted'|'canceled'|'superseded';answer_revision:number;draft_json:string;draft_saved_at:string|null;removed_at:string|null;removal_reason:string|null;draft_due:number};
 type Receipt={request_id:string;interaction_id:string;request_hash:string;operation:'save-draft'|'submit'|'cancel';answer_revision:number;created_at:string};
 const ownership="(i.project_id IS NULL OR EXISTS(SELECT 1 FROM projects p WHERE p.id=i.project_id AND p.owner_user_id=i.user_id))";
 export function interactionGuard(db:D1Database,sql:string,params:unknown[]=[]){
@@ -22,22 +23,23 @@ export function interactionGuard(db:D1Database,sql:string,params:unknown[]=[]){
 }
 async function row(db:D1Database,user:string,id:string){
  await assertWorkspace(db,user);if(!identifier(id))throw new InteractionError('ID');
- const r=await db.prepare(`SELECT i.* FROM chat_interactions i WHERE i.id=? AND i.user_id=? AND ${ownership}`).bind(id,user).first<Row>();
+ const r=await db.prepare(`SELECT i.*,(${draftRetentionDue}) draft_due FROM chat_interactions i WHERE i.id=? AND i.user_id=? AND ${ownership}`).bind(id,user).first<Row>();
  if(!r)throw unavailable();return r;
 }
+function retainedEnvelope(r:Row){if(r.removed_at||r.draft_due||!r.envelope_json)throw new InteractionStoreError(410,'draft_removed');return verifyEnvelope(JSON.parse(r.envelope_json));}
 async function receipt(db:D1Database,user:string,id:string){
  await assertWorkspace(db,user);if(!identifier(id))throw new InteractionError('ID');
  return db.prepare(`SELECT r.request_id,r.interaction_id,r.request_hash,r.operation,r.answer_revision,r.created_at FROM chat_interaction_requests r JOIN chat_interactions i ON i.id=r.interaction_id AND i.user_id=r.user_id WHERE r.user_id=? AND r.request_id=? AND ${ownership}`).bind(user,id).first<Receipt>();
 }
 export async function readInteraction(db:D1Database,user:string,id:string){
- const r=await row(db,user,id),envelope=await verifyEnvelope(JSON.parse(r.envelope_json));
+ const r=await row(db,user,id),envelope=await retainedEnvelope(r);
  const submission=await db.prepare('SELECT s.id,s.answers_json,s.answers_digest,s.answer_revision,s.created_at,c.state continuation_state,c.result_turn_id,c.reason FROM chat_interaction_submissions s JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=? AND s.user_id=?').bind(id,user).first<{id:string;answers_json:string;answers_digest:string;answer_revision:number;created_at:string;continuation_state:string;result_turn_id:string|null;reason:string|null}>();
  if(r.state==='submitted'&&!submission)throw new InteractionStoreError(503,'receipt_unavailable');
  if(submission&&await jsonDigest(JSON.parse(submission.answers_json),16384)!==submission.answers_digest)throw new InteractionStoreError(503,'receipt_unavailable');
  const clock=await db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now') now").first<{now:string}>();
  // Recheck authority/ownership and the revision after the bounded multi-query read.
  const replacement=await db.prepare('SELECT id FROM chat_interactions WHERE previous_interaction_id=? AND user_id=?').bind(id,user).first<{id:string}>();
- const current=await row(db,user,id);if(current.answer_revision!==r.answer_revision)throw changed();
+ const current=await row(db,user,id);await retainedEnvelope(current);if(current.answer_revision!==r.answer_revision)throw changed();
  return {version:1 as const,envelope,previousInteractionId:r.previous_interaction_id,replacementInteractionId:replacement?.id??null,state:r.state==='open'&&r.expires_at<=clock!.now?'expired' as const:r.state,answerRevision:r.answer_revision,draft:JSON.parse(r.draft_json) as Record<string,unknown>,
   submission:submission?{id:submission.id,answers:JSON.parse(submission.answers_json) as Record<string,unknown>,answersDigest:submission.answers_digest,answerRevision:submission.answer_revision,createdAt:submission.created_at,
    continuation:{id:submission.id,state:submission.continuation_state,resultTurnId:submission.result_turn_id,reason:submission.reason}}:null};
@@ -62,7 +64,7 @@ export async function listInteractions(db:D1Database,user:string,input:unknown){
   FROM chat_interactions i JOIN chat_interaction_tasks t ON t.id=i.task_id AND t.user_id=i.user_id
   LEFT JOIN chat_interaction_submissions s ON s.interaction_id=i.id AND s.user_id=i.user_id
   LEFT JOIN chat_interaction_continuations c ON c.id=s.id
-  WHERE i.user_id=? AND ${ownership} AND (? IS NULL OR i.project_id=?)
+  WHERE i.user_id=? AND ${ownership} AND i.removed_at IS NULL AND NOT (${draftRetentionDue}) AND (? IS NULL OR i.project_id=?)
    AND NOT EXISTS(SELECT 1 FROM chat_interactions child WHERE child.previous_interaction_id=i.id)
    AND ((i.state='open' AND i.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     OR c.state IN ('pending','unknown') OR (i.state='submitted' AND c.state='not-started' AND i.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')))
@@ -91,6 +93,13 @@ export async function replaceContentBrief(db:D1Database,user:string,input:Replac
  await assertWorkspace(db,user);const request=copyJSON(input,4096);
  if(!request||Object.keys(request).sort().join(',')!=='contentIds,definitionDigest,expectedAnswerRevision,originTurnId,previousInteractionId'||!identifier(request.originTurnId)||!identifier(request.previousInteractionId)||typeof request.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(request.definitionDigest)||!Number.isSafeInteger(request.expectedAnswerRevision)||request.expectedAnswerRevision<0)throw new InteractionError('SHAPE');
  contentIds(request.contentIds);
+ // The predecessor's payload may have expired after this correction committed.
+ // Its retained ownership and exact issue hash still support successor readback.
+ const metadata=await row(db,user,request.previousInteractionId),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){
+  const hash=await jsonDigest({originTurnId:request.originTurnId,projectId:metadata.project_id,contentIds:request.contentIds,replacement:request});
+  if(prior.issue_hash!==hash)throw new InteractionStoreError(409,'request_conflict');return readInteraction(db,user,prior.id);
+ }
  const previous=await readInteraction(db,user,request.previousInteractionId);
  if(!previous.envelope.scope.projectId||previous.envelope.definition.template!=='content-change@1')throw new InteractionStoreError(409,'adapter_unavailable');
  return issueBrief(db,user,{originTurnId:request.originTurnId,projectId:previous.envelope.scope.projectId,contentIds:request.contentIds},{request,previous});
@@ -154,18 +163,18 @@ async function issueBrief(db:D1Database,user:string,request:ContentBriefRequest,
 export async function mutateInteraction(db:D1Database,user:string,input:unknown){
  await assertWorkspace(db,user);
  const raw=mutationHeader(input);
- const saved=await row(db,user,raw.interactionId),envelope=await verifyEnvelope(JSON.parse(saved.envelope_json));
- const {request,requestHash}=await validateMutation(raw,envelope),existing=await db.prepare('SELECT request_hash FROM chat_interaction_requests WHERE user_id=? AND request_id=?').bind(user,request.requestId).first<{request_hash:string}>();
- if(existing){if(existing.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,request.requestId);}
+ const saved=await row(db,user,raw.interactionId),requestHash=await jsonDigest(raw,32768),existing=await db.prepare('SELECT request_hash FROM chat_interaction_requests WHERE user_id=? AND request_id=?').bind(user,raw.requestId).first<{request_hash:string}>();
+ if(existing){if(existing.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,raw.requestId);}
+ const envelope=await retainedEnvelope(saved),{request}=await validateMutation(raw,envelope);
  // Only server-issued content briefs are currently activated. Future maintained
  // adapters register their fresh resource/policy checks before exposing issuance.
  if(envelope.definition.template!=='content-change@1')throw new InteractionStoreError(409,'adapter_unavailable');
  if(request.operation!=='cancel')await assertFeature(db,feature(user,saved.project_id));
  const gate=featurePredicate(db,feature(user,saved.project_id)),revision=request.expectedAnswerRevision+1;
  const statements=[...(request.operation==='cancel'?[]:[interactionGuard(db,gate.sql,gate.params)]),
-  interactionGuard(db,"EXISTS(SELECT 1 FROM chat_interactions WHERE id=? AND user_id=? AND state='open' AND definition_digest=? AND answer_revision=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND EXISTS(SELECT 1 FROM workspace_state WHERE user_id=? AND step='ready')",[saved.id,user,request.definitionDigest,request.expectedAnswerRevision,user])];
+  interactionGuard(db,"EXISTS(SELECT 1 FROM chat_interactions WHERE id=? AND user_id=? AND state='open' AND removed_at IS NULL AND definition_digest=? AND answer_revision=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND EXISTS(SELECT 1 FROM workspace_state WHERE user_id=? AND step='ready')",[saved.id,user,request.definitionDigest,request.expectedAnswerRevision,user])];
  if(request.operation==='save-draft')statements.push(interactionGuard(db,"EXISTS(SELECT 1 FROM chat_interactions WHERE id=? AND (draft_saved_at IS NULL OR julianday(draft_saved_at)<=julianday('now','-1 second')))",[saved.id]));
- statements.push(db.prepare("UPDATE chat_interactions SET answer_revision=answer_revision+1,state=?,draft_json=?,draft_saved_at=CASE WHEN ?='save-draft' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NULL END WHERE id=? AND user_id=?").bind(request.operation==='submit'?'submitted':request.operation==='cancel'?'canceled':'open',request.operation==='save-draft'?canonicalJSON(request.answers,16384):'{}',request.operation,saved.id,user),
+ statements.push(db.prepare("UPDATE chat_interactions SET answer_revision=answer_revision+1,state=?,draft_json=?,draft_saved_at=CASE WHEN ?='save-draft' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NULL END,envelope_json=CASE WHEN ?='cancel' THEN NULL ELSE envelope_json END,removed_at=CASE WHEN ?='cancel' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NULL END,removal_reason=CASE WHEN ?='cancel' THEN 'discarded' ELSE NULL END WHERE id=? AND user_id=?").bind(request.operation==='submit'?'submitted':request.operation==='cancel'?'canceled':'open',request.operation==='save-draft'?canonicalJSON(request.answers,16384):'{}',request.operation,request.operation,request.operation,request.operation,saved.id,user),
   db.prepare("INSERT INTO chat_interaction_requests(user_id,request_id,interaction_id,request_hash,operation,answer_revision,created_at) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(user,request.requestId,saved.id,requestHash,request.operation,revision));
  if(request.operation==='submit')statements.push(
   db.prepare("INSERT INTO chat_interaction_submissions(id,user_id,interaction_id,answers_json,answers_digest,answer_revision,created_at) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(request.requestId,user,saved.id,canonicalJSON(request.answers,16384),await jsonDigest(request.answers,16384),revision),
