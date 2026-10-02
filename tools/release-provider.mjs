@@ -5,8 +5,10 @@ import {activeWorker,runWrangler} from './cms-release.mjs';
 import {withPlatformLock,deployPlatform} from './deploy-platform.mjs';
 import {inspectSchema} from './current-schema.mjs';
 import {configFiles,workerOrder,readJSON,verifyRelease,same} from './release-manifest.mjs';
+import {secretBindingReadback} from './secret-custody.mjs';
 
 export function bindingSummary(bindings){
+ secretBindingReadback(bindings);
  return {
   databases:bindings.filter(b=>b.type==='d1').map(b=>({binding:b.name,id:b.id})).sort((a,b)=>a.binding.localeCompare(b.binding)),
   services:bindings.filter(b=>b.type==='service').map(b=>({binding:b.name,service:b.service,...(b.environment?{environment:b.environment}:{}),...(b.entrypoint?{entrypoint:b.entrypoint}:{})})).sort((a,b)=>a.binding.localeCompare(b.binding)),

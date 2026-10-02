@@ -1,6 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {lstat,readdir,readFile,writeFile,mkdir,rename,copyFile,open} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
+import {assertArtifactPath} from './artifact-protection.mjs';
 
 export const workerOrder=['runtime','apps','sites','platform'];
 export const configFiles={runtime:'wrangler.runtime.jsonc',apps:'wrangler.apps.jsonc',sites:'wrangler.sites.jsonc',platform:'wrangler.jsonc'};
@@ -15,6 +16,7 @@ export async function fileInventory(directory,prefix=''){
  const result=[];
  for(const name of (await readdir(directory)).sort()){
   const path=join(directory,name),entry=await lstat(path),relative=prefix+name;
+  assertArtifactPath(relative);
   if(entry.isSymbolicLink())throw Error('Release artifacts cannot contain symlinks');
   if(entry.isDirectory())result.push(...await fileInventory(path,relative+'/'));
   else if(entry.isFile())result.push({path:relative,bytes:entry.size,sha256:digest(await readFile(path))});

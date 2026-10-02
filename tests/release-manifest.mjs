@@ -39,6 +39,7 @@ try{
  for(const dir of ['src','frontend','web','public-app','tools','dist','src/workspace-identity','node_modules/wrangler','compiler-locks','schema'])await mkdir(join(root,dir),{recursive:true});
  for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v2.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v3.json'])await writeFile(join(root,name),'fixture');
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
+ for(const name of ['tools/artifact-protection.mjs','tools/secret-custody.mjs'])await writeFile(join(root,name),'fixture');
  for(const role of workerOrder){
   configs[role]={name:'whumpo-'+role,account_id:'a'.repeat(32),main:'src/index.ts',vars:{ENVIRONMENT:'test'},workers_dev:false,preview_urls:false,...(role==='runtime'?{}:{d1_databases:[{binding:'DB',database_name:'whumpo-control',database_id:databaseId}]}),...(['apps','platform'].includes(role)?{assets:{directory:role==='apps'?'./public-app':'./dist'}}:{})};
   if(role==='apps')configs[role].services=[{binding:'BACKEND_RUNTIME',service:'whumpo-runtime'}];
@@ -128,7 +129,8 @@ try{
  assert.throws(()=>validateCompatibility({...review,environment:'production'},plan),/current test-release/);
  review=normalReview;reset();
  // Binding inventory preserves identities while stripping credential values.
- assert.deepEqual(bindingSummary([{type:'secret_text',name:'KEY',text:'PRIVATE_VALUE'},{type:'service',name:'CMS_x',service:'cms-x',token:'PRIVATE_VALUE'}]),{databases:[],services:[{binding:'CMS_x',service:'cms-x'}],secrets:['KEY']});
+ assert.deepEqual(bindingSummary([{type:'secret_text',name:'AI_API_KEY',text:'PRIVATE_VALUE'},{type:'service',name:'CMS_x',service:'cms-x',token:'PRIVATE_VALUE'}]),{databases:[],services:[{binding:'CMS_x',service:'cms-x'}],secrets:['AI_API_KEY']});
+ assert.throws(()=>bindingSummary([{type:'plain_text',name:'AI_API_KEY',text:'PRIVATE_VALUE'}]),/custody/);
  const cms=[{project_id:'abc-def',worker_name:'whumpo-cms-abcdef',deployment_state:'connected'}];
  assert.deepEqual(archivedConfig('platform',configs.platform,'index.js',cms).services,[{binding:'CMS_abcdef',service:'whumpo-cms-abcdef'}]);
  assert.throws(()=>archivedConfig('platform',{...configs.platform,build:{command:'unexpected'}},'index.js',[]),/archive support/);

@@ -6,6 +6,7 @@ import {verifyBuildSnapshot} from './build-snapshot.mjs';
 import {workerOrder,copyTree,digest,same,fileInventory,validateCompatibility,sealRelease,configFiles} from './release-manifest.mjs';
 import {cmsServices} from './release-provider.mjs';
 import {currentSchemaArtifact,currentSchemaPlan} from './current-schema.mjs';
+import {assertArtifactConfiguration} from './artifact-protection.mjs';
 
 const sourceTrees=['src','frontend','web','tools','compiler-locks','schema'];
 const sourceFiles=['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json',...Object.values(configFiles)];
@@ -21,6 +22,7 @@ export function expectedServiceBindings(services){
 }
 
 export function archivedConfig(role,base,entry,cms){
+ assertArtifactConfiguration(base);
  for(const key of Object.keys(base))if(!supportedKeys.includes(key))throw Error('New Worker configuration requires release archive support: '+key);
  if(base.name!=='whumpo-'+role||base.workers_dev!==false||base.preview_urls!==false)throw Error('Unexpected release destination');
  const config={...base};delete config.$schema;
@@ -42,6 +44,7 @@ export function archivedConfig(role,base,entry,cms){
 }
 
 export async function prepareRelease(root,driver,review,{git=()=>({commit:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),dirty:!!execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim()})}={}){
+ for(const role of workerOrder)assertArtifactConfiguration(driver.configs[role]);
  if(driver.configs.platform.vars?.ENVIRONMENT!=='test')throw Error('Only the test platform may be released');
  const build=await verifyBuildSnapshot(root),before=await driver.observe();
  if(review?.buildInputs!==build.inputs.sha256)throw Error('Compatibility review does not match the current build inputs');
