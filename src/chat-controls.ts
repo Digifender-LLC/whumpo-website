@@ -20,6 +20,8 @@ export const confirmationControls = {
  photo:{verb:'confirm-photo-delete',label:'Delete the reviewed photo'},
 } as const;
 export type ChatControl =
+ | {type:'githubGrant';operation:'confirm';reviewId:string;confirmation:'REVOKE_APP_ACCESS'}
+ | {type:'githubGrant';operation:'cancel';reviewId:string}
  | {type:'confirm';kind:keyof typeof confirmationControls;reviewId:string}
  | {type:'serviceClientApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
@@ -35,6 +37,10 @@ const exact=(a:Record<string,unknown>,keys:string[])=>Object.keys(a).every(k=>ke
 export function chatControl(value:unknown):{action:ChatControl;command:string;label:string;recentAuth:boolean}|undefined{
  if(!value||typeof value!=='object'||Array.isArray(value))return;
  const a=value as Record<string,unknown>;
+ if(a.type==='githubGrant'&&id(a.reviewId)){
+  if(a.operation==='confirm'&&a.confirmation==='REVOKE_APP_ACCESS'&&exact(a,['type','operation','reviewId','confirmation']))return {action:{type:'githubGrant',operation:'confirm',reviewId:a.reviewId,confirmation:'REVOKE_APP_ACCESS'},command:'/github-grant-confirm '+a.reviewId,label:'Revoke all access for the GitHub app and account in this review.',recentAuth:true};
+  if(a.operation==='cancel'&&exact(a,['type','operation','reviewId']))return {action:{type:'githubGrant',operation:'cancel',reviewId:a.reviewId},command:'/github-grant-cancel '+a.reviewId,label:'Cancel this GitHub access removal review.',recentAuth:false};
+ }
  if(a.type==='serviceClientApply'&&exact(a,['type','reviewId','proposalDigest','expectedRevision'])&&id(a.reviewId)&&typeof a.proposalDigest==='string'&&/^[0-9a-f]{64}$/.test(a.proposalDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
   const action={type:'serviceClientApply' as const,reviewId:a.reviewId,proposalDigest:a.proposalDigest,expectedRevision:Number(a.expectedRevision)};
   return {action,command:`/confirm-service-clients ${action.reviewId} ${action.proposalDigest} ${action.expectedRevision}`,label:'Save the exact reviewed private service settings.',recentAuth:true};

@@ -1,11 +1,13 @@
 import {ConnectionError,type GitHubConfig} from './github-connection';
+import type {GitHubGrantReview} from './github-grant-shape';
+export type {GitHubGrantReview} from './github-grant-shape';
 import {unseal} from './connection-vault';
 import {requireFreshWorkspace,githubGrantCustody,workspaceTransport} from './workspace-identity/admission';
 
 type Review={id:string;user_id:string;client_id:string;github_user_id:string;login:string;token_id:string;token_ids:string;state:'review'|'dispatching'|'uncertain'|'revoked'|'cancelled';created_at:string;expires_at:string;dispatched_at:string|null;settled_at:string|null};
 const validID=(id:string)=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(id);
 const changed=()=>new ConnectionError(409,'GitHub authorization changed or has unresolved work. Refresh the connection and prepare a new review.');
-const view=(r:Review)=>({id:r.id,state:r.state==='review'&&r.expires_at<=new Date().toISOString()?'expired':r.state,githubUserId:r.github_user_id,login:r.login,credentialCount:(JSON.parse(r.token_ids) as string[]).length,expiresAt:r.expires_at,settledAt:r.settled_at,scope:'all-app-access' as const,disclosure:'Revoke all access granted to this Whumpo GitHub App for this GitHub account, including other authorizations outside this workspace. Repository files and the app installation are not deleted. You must authorize the app again before connecting. An uncertain result will require operator recovery.'});
+const view=(r:Review):GitHubGrantReview=>({id:r.id,state:r.state==='review'&&r.expires_at<=new Date().toISOString()?'expired':r.state,githubUserId:r.github_user_id,login:r.login,credentialCount:(JSON.parse(r.token_ids) as string[]).length,expiresAt:r.expires_at,settledAt:r.settled_at,scope:'all-app-access' as const,disclosure:'Revoke all access granted to this Whumpo GitHub App for this GitHub account, including other authorizations outside this workspace. Repository files and the app installation are not deleted. You must authorize the app again before connecting. An uncertain result will require operator recovery.'});
 async function owned(db:D1Database,user:string,id:string){
  if(!validID(id))throw new ConnectionError(400,'Choose a saved GitHub access review.');
  const row=await db.prepare('SELECT * FROM github_grant_revocations WHERE id=? AND user_id=?').bind(id,user).first<Review>();
@@ -14,6 +16,7 @@ async function owned(db:D1Database,user:string,id:string){
 export async function githubGrantReviews(db:D1Database,user:string){
  const {results}=await db.prepare('SELECT * FROM github_grant_revocations WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 100').bind(user).all<Review>();return {reviews:results.map(view)};
 }
+export async function readGitHubGrant(db:D1Database,user:string,id:string){return view(await owned(db,user,id));}
 export async function reviewGitHubGrant(db:D1Database,user:string,id:string,config:GitHubConfig|undefined){
  if(!validID(id))throw new ConnectionError(400,'Choose a unique GitHub access review ID.');
  const old=await db.prepare('SELECT * FROM github_grant_revocations WHERE id=? AND user_id=?').bind(id,user).first<Review>();if(old)return view(old);

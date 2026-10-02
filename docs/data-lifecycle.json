@@ -456,6 +456,8 @@
       "references": [
         "src/chat-transcript.ts",
         "src/chat.ts",
+        "src/github-grant-chat.ts",
+        "frontend/src/github-grant-review.tsx",
         "src/agent-inspection.ts",
         "docs/data-protection.md"
       ],
@@ -1158,7 +1160,7 @@
       ],
       "scope": "owner",
       "purpose": "Customer-authorized provider access and durable credential revocation.",
-      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction. Exact dispatch rejection/revocation receipts contain only bounded metadata and remain until account closure/independent retention reconciliation; a restored receipt alone grants no authority. GitHub refresh credentials use a separate encrypted purpose and RESTRICT references; access expiry or single-token revocation cannot delete their pending grant custody. Numeric GitHub identity is bound once from the exact issued token's authenticated lookup and retained independently of later connections; missing lookup evidence remains unknown. This metadata is not revocation proof. Reviewed app-grant revocation can remove the exact matched ciphertext only after a directly acknowledged, atomically saved 204. Immutable review/outcome metadata remains; unknown effects and unidentified grants stay held. Customer rendering and real provider acceptance are pending.",
+      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction. Exact dispatch rejection/revocation receipts contain only bounded metadata and remain until account closure/independent retention reconciliation; a restored receipt alone grants no authority. GitHub refresh credentials use a separate encrypted purpose and RESTRICT references; access expiry or single-token revocation cannot delete their pending grant custody. Numeric GitHub identity is bound once from the exact issued token's authenticated lookup and retained independently of later connections; missing lookup evidence remains unknown. This metadata is not revocation proof. Reviewed app-grant revocation can remove the exact matched ciphertext only after a directly acknowledged, atomically saved 204. Immutable review/outcome metadata remains; unknown effects and unidentified grants stay held. The shared customer renderer and Chat controls are locally verified; real provider acceptance and the coordinated deployment remain pending.",
       "proposedRetention": "Cancel callbacks/new consent on closure; revoke credentials before deleting ciphertext/key access. Keep unresolved revocation work in isolated minimal closure records, without preserving unrelated customer content.",
       "deletionAuthority": "Customer disconnect/closure authorizes access revocation, not deleting repositories/zones. Operator reconciles failed revocation.",
       "exportPolicy": "Provider names, customer connection status and selected resource metadata only. Never tokens, ciphertext, PKCE verifier, auth state or encryption material.",
@@ -1181,7 +1183,8 @@
         "docs/restore-admission.md",
         "tests/github-refresh-custody.mjs",
         "src/github-grant-revocation.ts",
-        "tests/github-grant-revocation.mjs"
+        "tests/github-grant-revocation.mjs",
+        "tests/github-grant-chat.mjs"
       ],
       "storageStatus": "current",
       "protection": {
