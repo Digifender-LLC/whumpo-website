@@ -1,12 +1,12 @@
 # Whumpo product and delivery roadmap
 
-**Aligned October 1, 2026; follow-up dependency audit against `db8b740` covers all 118 tasks.** The [alignment review](alignment.md) records corrected dependencies, shared contract ownership, current issue evidence and remaining launch gates. Stable task IDs and phase labels are preserved; phase and task numbers are not build order. This is a delivery plan, not a release or provider authorization.
+**Aligned October 2, 2026; 122 current tasks include explicit privacy and feature-admission handoffs.** The [alignment review](alignment.md) records corrected dependencies, shared contract ownership, current issue evidence and remaining launch gates. Stable task IDs and phase labels are preserved; phase and task numbers are not build order. This is a delivery plan, not a release or provider authorization.
 
 Whumpo should first become a dependable way for an invited customer to create, improve, publish and recover a useful website or bounded application. The next investment should turn its substantial foundations into operated customer journeys. Broader Cloudflare capabilities follow demonstrated demand and measured economics.
 
 ## Start here
 
-- [GitHub execution hub](https://github.com/zemdregon/whumpo/issues/2): nine initial task issues, claims, progress and handoffs. The complete longer-term plan remains in the backlog below.
+- [GitHub execution hub](https://github.com/zemdregon/whumpo/issues/2): task issues, claims, progress and handoffs. The complete longer-term plan remains in the backlog below.
 - [Logical resources and workload placement](../workload-placement.md): WH-071 interface, lifecycle/export and conditional hosting decision.
 - [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths, current build order and persistent graph checks.
 - [Full backlog](backlog.md): every task, dependency, acceptance criterion and verification boundary.
