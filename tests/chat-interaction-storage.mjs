@@ -60,6 +60,26 @@ async function aged(o,definition,{createdDays=9,editedDays=8,submitted=false,unk
 function mutation(form,operation='submit',revision=0){return {version:1,requestId:id(),interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:revision,operation,...(operation==='cancel'?{}:{answers:{'field-1':'Gardens, cared for.','field-2':'Seasonal care and planting.'}})};}
 const denies=(fn,status=409)=>assert.rejects(fn,e=>e.status===status);
 try{
+ await test('account deletion retains pending or unknown continuation custody until explicit reconciliation',async()=>{
+  for(const mode of ['pending','unknown']){
+   const c=await owner(),{form}=await issue(c),request=mutation(form);await store.mutateInteraction(c.scope,c.user,request);
+   let interrupted=false;
+   const scope=await c.authority.scope(interceptDatabase(db,mode==='pending'?/^UPDATE chat_interaction_continuations SET state='pending'/:/^INSERT INTO project_spec_proposals/,
+    async()=>{if(mode==='unknown'){interrupted=true;throw Error('Unconfirmed local write');}},
+    async()=>{if(mode==='pending'&&!interrupted){interrupted=true;throw Error('Lost claim response');}}));
+   const held=await continuation.continueContentBrief(scope,c.user,request.requestId,await revision(c));assert(interrupted);assert.equal(held.submission.continuation.state,mode);
+   await assert.rejects(()=>run('DELETE FROM users WHERE id=?',c.user),/chat_interaction_receipt_retained/);
+   assert(await row('SELECT account_id FROM identity_accounts WHERE account_id=?',c.user));
+   const retained=await store.readInteraction(c.scope,c.user,form.envelope.id);assert.deepEqual(retained.submission,held.submission);
+   assert.equal((await store.readInteractionReceipt(c.scope,c.user,request.requestId)).requestId,request.requestId);
+   const unrelated=await owner();await run('DELETE FROM users WHERE id=?',unrelated.user);assert.equal(await row('SELECT id FROM users WHERE id=?',unrelated.user),null);
+   const resolved=await continuation.reconcileContentBrief(c.scope,c.user,request.requestId);assert.equal(resolved.submission.continuation.state,'failed');
+   await run('DELETE FROM users WHERE id=?',c.user);assert.equal(await row('SELECT id FROM chat_interactions WHERE id=?',form.envelope.id),null);
+   assert.equal(await row('SELECT request_id FROM chat_interaction_requests WHERE user_id=?',c.user),null);
+   assert.equal(await row('SELECT id FROM chat_interaction_continuations WHERE id=?',request.requestId),null);
+   await assert.rejects(()=>store.readInteraction(c.scope,c.user,form.envelope.id));
+  }
+ });
  const a=await owner(),b=await owner(),first=await issue(a);let saved;
  await test('server-owned defaults, target limits and idempotent issuance',async()=>{
   assert.equal(first.form.projectName,'Garden');
