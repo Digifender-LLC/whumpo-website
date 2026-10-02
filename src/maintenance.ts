@@ -1,4 +1,4 @@
-export const maintenanceJobs={identity:86400000,imports:3600000,hosting:3600000,health:3600000,fair_use:86400000,traffic:86400000,applications:86400000,contacts:86400000,photos:86400000,github:86400000,cloudflare:86400000} as const;
+export const maintenanceJobs={identity:3600000,imports:3600000,hosting:3600000,health:3600000,fair_use:86400000,traffic:86400000,applications:86400000,contacts:86400000,photos:86400000,github:86400000,cloudflare:86400000} as const;
 type Job={name:keyof typeof maintenanceJobs;enabled?:boolean;run:()=>Promise<unknown>};
 
 /** Telemetry failure must never suppress cleanup or disclose its thrown value. */

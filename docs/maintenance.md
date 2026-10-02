@@ -8,6 +8,7 @@ The [WH-052 background-job decision](background-jobs.md) retains this scheduler 
 
 | Job | Schedule (UTC) | Existing operation |
 | --- | --- | --- |
+| identity | Hourly at :47 and daily 03:17 | Expire bounded session/grant/challenge/receipt/kit-offer records; preserve verified unfinished enrollment/recovery |
 | imports | Hourly at :47 and daily 03:17 | Triage up to ten quarantined source imports; never approve execution |
 | hosting | Hourly at :47 | Refresh bounded custom-hostname provider records when configured |
 | health | Hourly at :47 | Check due published sites and expire old health evidence |
@@ -19,7 +20,7 @@ The [WH-052 background-job decision](background-jobs.md) retains this scheduler 
 | github | Daily 03:17, when configured | Expire OAuth state/tokens and retry pending revocations |
 | cloudflare | Daily 03:17, when configured | Retire abandoned staged authorization and retry pending revocations |
 
-This wraps the existing [scheduled handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/); it does not introduce more frequent jobs, new provider calls or new services. Migration 0106 adds at most ten rows, one per allowlisted job. Each invocation writes a start record and a terminal record, plus the last-success timestamp for completed passes: at most about 240 extra D1 write statements per day at the current schedule. Account allowance/actual row charges still require observation; no new recurring minimum is enabled.
+This wraps the existing [scheduled handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/); it does not introduce more frequent jobs, new provider calls or new services. The complete current schema stores at most eleven telemetry rows, one per allowlisted job. Each invocation writes a start record and a terminal record, plus the last-success timestamp for completed passes: at most 315 D1 write statements per day for 24 hourly and one daily invocation of the current schedule. Account allowance/actual row charges still require observation; no new recurring minimum is enabled.
 
 ## Meaning and failure behavior
 
@@ -31,7 +32,7 @@ The operator report labels an observed run `stalled` after 15 minutes and a sche
 
 ## Backlogs and recovery
 
-The report covers **29 queues**, including expired GitHub staging leases (0115) and visitor deletion reviews (0116). Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
+The report covers **28 queues**, including expired GitHub staging leases and visitor deletion reviews. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
 
 | Group | Covered work | Attention rule |
 | --- | --- | --- |
@@ -41,19 +42,25 @@ The report covers **29 queues**, including expired GitHub staging leases (0115) 
 | Hosting/health | Active/provisioning/disconnecting host refresh, unknown creation, due current-publication health checks, checks stuck in progress | Two hours since last hosting check or health-check eligibility; 10 minutes for unknown creation; 15 minutes for in-progress checks |
 | Provider operations | Historical/standard AI receipts, dispatched/uncertain GitHub backups and DNS actions | Ten minutes from available receipt timestamp |
 
-Migration **0107** records the first revocation transition in a separate metadata row linked to each credential. New rows use the database timestamp; retry/lease changes preserve it, and credential deletion cascades to its telemetry. Existing revoking credentials are backfilled with **unknown** timestamps. This adds one small metadata write per new revocation, no extra provider calls and no new minimum service charge. The report never selects credential IDs or ciphertext. The earlier Cloudflare credential-creation proxy is no longer used.
+The current schema records the first revocation transition in a separate metadata row linked to each credential. New rows use the database timestamp; retry/lease changes preserve it, and credential deletion cascades to its telemetry. Missing or null telemetry timestamps remain explicitly unknown and require investigation. This adds one small metadata write per new revocation, no extra provider calls and no new minimum service charge. The report never selects credential IDs or ciphertext. The earlier Cloudflare credential-creation proxy is no longer used.
 
 Hosting records without a previous check, and a current publication without a matching health-check history, report unknown age and require inspection. Hostname creation and DNS receipts have only review-creation times, which can conservatively overstate their operation age; backups use `dispatched_at`. Photo age covers the cleanup queue only, not unlisted R2 orphans. Imports requiring human/scanner review are not part of the pending-triage count. This is operational maintenance coverage, not comprehensive safety backlog or provider billing reconciliation.
 
-The report lists up to 100 oldest unresolved IDs in each of five families: historical usage, standard AI, hosting, GitHub backups and DNS. It includes only the exact operation ID, allowlisted state, available timestamp and a link to the existing recovery contract. Matching backlog counts expose truncation (hosting refresh and unknown-creation counts are separate). Owner IDs, domains, repository names, provider IDs, evidence strings, credentials and conversation/source data remain excluded. Missing timestamps remain null. Follow the linked feature contract; an unresolved operation does not authorize another provider call or a waiver. Receipt reconciliation is currently request/operator driven, not a new cron job.
+The report lists up to 100 oldest unresolved IDs in each of four families: standard AI, hosting, GitHub backups and DNS. It includes only the exact operation ID, allowlisted state, available timestamp and a link to the existing recovery contract. Matching backlog counts expose truncation (hosting refresh and unknown-creation counts are separate). Owner IDs, domains, repository names, provider IDs, evidence strings, credentials and conversation/source data remain excluded. Missing timestamps remain null. Follow the linked feature contract; an unresolved operation does not authorize another provider call or a waiver. Receipt reconciliation is currently request/operator driven, not a new cron job.
 
 Exit codes: `0` means the covered observations do not currently require attention; `2` means unobserved, overdue, failed, stalled or unavailable work/backlogs; `1` means invalid invocation or report setup failure. The tool performs SELECTs only. It does not repair anything or install alerts.
 
 ## Acceptance and WH-006 completion
 
-`node tests/maintenance.mjs` uses all migrations in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 29 queries against the current schema, five receipt families, exact new revocation clocks, preserved unknown history, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use, health budgets and expired GitHub staging; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
+`node tests/maintenance.mjs` initializes the complete current schema in disposable in-memory SQLite and checks independent success/failure/skips, overlapping runs, last-success preservation, telemetry failure, missing evidence, overdue queues and read-only receipt IDs. Synthetic private error/object/email markers are absent from the output. `pnpm check` verifies Worker types. `node tests/maintenance-inventory.mjs` additionally checks all 28 queries against the current schema, four receipt families, exact new revocation clocks, missing/unknown telemetry, retry stability, credential-delete cascades, retention eligibility/age, and read-only/private-data boundaries. Positive retention fixtures cover contacts, traffic, fair-use, health budgets and expired GitHub staging; provider-state queries are schema-checked without live provider actions. These tests do not prove live cron execution.
 
 The previously outstanding natural daily execution evidence is now recorded below alongside the first hourly run. WH-006 acceptance is complete; wider incident alerting and unresolved-operation remediation remain separate work. The backlog and recovery-pointer coverage listed above is implemented; historical timestamps absent from source records remain explicitly unknown. No CMS functional testing or new activation is authorized by this inventory. Monitoring/alert delivery is not installed.
+
+## Current identity verification — October 2, 2026 UTC
+
+All three local maintenance suites pass with the complete current schema and no numbered migration replay. The scheduled-handler suite uses transactional SQLite batches, expires an old session and enrollment grant, retains a current session and verified unfinished enrollment, and verifies independent traffic-failure/recovery and hourly dispatch. Identity cleanup now uses its actual hourly interval for overdue reporting; daily jobs keep their separate deadlines. The read-only inventory still excludes private content and credentials. No provider fetch or live scheduled invocation is performed by these tests.
+
+This source checkpoint is part of the pending coordinated identity/schema cutover (#72). The dated remote records below prove the earlier schedule only; they do not prove the new identity job has run remotely.
 
 ## Private-test deployment evidence
 

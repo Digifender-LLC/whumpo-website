@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {readFile,readdir} from 'node:fs/promises';
+import {currentSchema} from '../tools/current-schema.mjs';
 import {runMaintenance,maintenanceJobs} from '../src/maintenance.ts';
 import {maintenanceReport} from '../tools/report-maintenance.mjs';
 const sql=new DatabaseSync(':memory:');
@@ -10,7 +10,7 @@ const prepare=q=>{
 };
 const db={prepare};
 try{
- for(const name of (await readdir('migrations')).filter(n=>n.endsWith('.sql')).sort())sql.exec(await readFile('migrations/'+name,'utf8'));
+ sql.exec(await currentSchema());
  const now=Date.now(),clock=()=>now;let calls=0;
  await assert.rejects(runMaintenance(db,[{name:'imports',run:async()=>{throw Error('PRIVATE_SECRET_CANARY');}},{name:'traffic',run:async()=>{calls++;}},{name:'github',enabled:false,run:async()=>assert.fail('disabled job ran')}],clock),/Scheduled maintenance or telemetry failed/);
  assert.equal(calls,1);
@@ -36,7 +36,7 @@ try{
  const unavailable=await maintenanceReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);
  assert.ok(unavailable.jobs.every(j=>j.state==='unavailable'));assert.equal(unavailable.attention,true);assert.ok(!JSON.stringify(unavailable).includes('PRIVATE_SECRET_CANARY'));
  const user=crypto.randomUUID(),op=crypto.randomUUID(),date=new Date(now-1800000).toISOString();
- sql.prepare("INSERT INTO users VALUES(?,?,'fixture','fixture',?)").run(user,'private@example.invalid',date);
+ sql.prepare("INSERT INTO users VALUES(?,?,?)").run(user,'private@example.invalid',date);
  sql.prepare("INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,?,?)").run(op,user,'a'.repeat(64),date,date);
  sql.prepare("INSERT INTO file_cleanup VALUES('PRIVATE_OBJECT_KEY_CANARY',?)").run(new Date(now-91000000).toISOString());
  sql.prepare("UPDATE maintenance_health SET status='running',started_at=?,finished_at=NULL WHERE job='traffic'").run(now-1000000);
