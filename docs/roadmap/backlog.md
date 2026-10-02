@@ -1523,7 +1523,7 @@ Follow the [agent execution contract](../../docs/roadmap/execution.md) and [cano
 
 ### Outcome
 
-Workspace signup requires two distinct verified passkeys, preserves incomplete progress and closes password and incomplete-enrollment access paths under a staged transition.
+Workspace signup requires two distinct verified passkeys, preserves incomplete progress and closes password and incomplete-enrollment access paths in one coordinated current-policy test cutover.
 
 ### Scope
 
@@ -1563,7 +1563,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/index.ts](../../src/index.ts)
 - [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
 - [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
-- [migrations](../../migrations)
+- [schema/platform.sql](../../schema/platform.sql)
+- [src/workspace-identity/schema.sql](../../src/workspace-identity/schema.sql)
+- [tools/current-schema.mjs](../../tools/current-schema.mjs)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 - [docs/identity-authority.md](../../docs/identity-authority.md)
 - [docs/identity-ceremonies.md](../../docs/identity-ceremonies.md)
@@ -1586,6 +1588,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned
 - 2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation.
 - 2026-10-01 current identity release foundation: review v3/archive v2 pins the complete 156-table schema and exact database bindings, removes numbered SQL replay from deployment/local initialization, refuses occupied or active-database reset targets, and initializes only a distinct empty database. Actual local D1/SQLite catalog and current identity invariants, no-write reinitialization, drift refusal, release interruption/no-replay and build/lifecycle checks pass. No remote mutation; fixture/operator conversion, external cleanup, new database selection, coordinated live cutover and owner/device acceptance remain open in #72. See docs/releases.md and draft PR #79.
 - 2026-10-01 current onboarding follow-through: API, React and canonical SQL require exact non-null question/stage checkpoints; chapter-only client fallbacks are removed. Welcome fixtures now use current admitted identity and full schema. SQLite/local D1 pass private profile/project steps, lost-response/concurrent completion, HTTP gates and identity revocation immediately before commit with no project created. The actual mobile React/WebAuthn journey passes again. Source/local only; full test cutover and physical-device acceptance remain open in #72.
+- 2026-10-02 current identity follow-through: billing/plan, subscription, GitHub/Cloudflare connection, token custody, GitHub backup/Chat, TXT/CNAME routing, standard AI cost/history/recovery and signed HTTP/workspace smoke fixtures now use current schemas and admitted owner scopes. Focused SQLite/local D1 suites pass with synthetic providers; no real charges, DNS writes, GitHub backups or inference. The smoke command exercises actual signed identity before workspace isolation/quota/logout. Specific coverage is in docs/verification.md. Remaining older domain/operator fixtures, remote resource reconciliation and coordinated test cutover are still open under #72; no remote mutation or device-acceptance claim.
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 

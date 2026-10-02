@@ -9,7 +9,7 @@
     "check": "node tools/generate-cms-native-schema.mjs --check && node tools/check-specification-compiler.mjs --check && node tools/check-service-client-compiler.mjs --check && tsc --noEmit && tsc -p tsconfig.frontend.json --noEmit",
     "test:specification-compiler": "node tests/specification-compiler.mjs",
     "test:specification-journey": "node tests/specification-journey.mjs",
-    "test:smoke": "node tests/smoke.mjs",
+    "test:smoke": "node tests/identity-http.mjs --d1 && node tests/smoke.mjs",
     "test:ai": "node tests/ai.mjs",
     "test:ai-gateway": "node tests/ai-gateway.mjs",
     "test:gateway-inference": "node tests/gateway-inference.mjs",
