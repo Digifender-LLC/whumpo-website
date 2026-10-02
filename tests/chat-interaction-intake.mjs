@@ -10,13 +10,13 @@ const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{network++;throw 
 const run=(sql,...v)=>db.prepare(sql).bind(...v).run(),row=(sql,...v)=>db.prepare(sql).bind(...v).first();
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){}};
 const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','interaction.answers@1','owned.projects@1']};
-async function owner(){const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);const grant=id();await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','prepare','private-test-acceptance','synthetic intake fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",grant,user);return {authority,user,scope,grant};}
+async function owner(){const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);const grant=id();await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','prepare','private-test-acceptance','synthetic intake fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",grant,user);const readGrant=id();await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','read','private-test-acceptance','synthetic resource fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",readGrant,user);return {authority,user,scope,grant,readGrant};}
 async function project(o,name='Garden'){const p=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,?,'Private purpose canary','draft',datetime('now'),datetime('now'))",p,o.user,name);return p;}
 async function origin(o){const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Plan a project','Review these details',datetime('now') FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);return turn;}
 async function issue(o,template='project-brief@1',database=o.scope){const input={originTurnId:await origin(o),template};return {input,form:await store.issueProjectIntake(database,o.user,input)};}
 const request=(f,operation='submit',answers={name:'Garden',purpose:'A website about gardening.'},revision=f.answerRevision)=>({version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:revision,operation,...(operation==='cancel'?{}:{answers})});
 const replacement=async(o,f)=>({originTurnId:await origin(o),previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision});
-const resources=(f,before=null)=>({version:1,interactionId:f.envelope.id,fieldId:'project',limit:2,before});
+const resources=(f,before=null)=>({version:1,interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,fieldId:'project',limit:2,before});
 async function http(o,path,data){return worker.fetch(new Request('https://whumpo.com/api/chat/'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),env,ctx);}
 async function json(o,path,data,status=200){const r=await http(o,path,data),body=await r.json();assert.equal(r.status,status,JSON.stringify(body));if(path.startsWith('interactions/'))assert.match(r.headers.get('cache-control'),/no-store/);return body;}
 const denies=(fn,status=409)=>assert.rejects(fn,e=>e.status===status);
@@ -101,12 +101,19 @@ try{
  await test('owned resource paging exposes only current names and identifiers',async()=>{
   const o=await owner(),other=await owner();for(const n of ['Alpha','Alpha','Garden','Zebra','Zebra'])await project(o,n);await project(other,'FOREIGN_NAME_CANARY');const {form}=await issue(o,'project-select@1');
   const items=[];let before=null;do{const page=await json(o,'interactions/v1/resources',resources(form,before));assert.equal(page.definitionDigest,form.envelope.definitionDigest);assert(page.items.length<=2);items.push(...page.items);before=page.nextBefore;}while(before);
-  assert.equal(items.length,5);assert.equal(new Set(items.map(p=>p.id)).size,5);assert.deepEqual(items.map(p=>p.name),['Alpha','Alpha','Garden','Zebra','Zebra']);assert(!JSON.stringify(items).includes('Private purpose canary'));assert(!JSON.stringify(items).includes('FOREIGN_NAME_CANARY'));assert.deepEqual(Object.keys(items[0]).sort(),['id','name']);
+  assert.equal(items.length,5);assert.equal(new Set(items.map(p=>p.id)).size,5);assert.deepEqual(items.map(p=>p.name),['Alpha','Alpha','Garden','Zebra','Zebra']);assert(!JSON.stringify(items).includes('Private purpose canary'));assert(!JSON.stringify(items).includes('FOREIGN_NAME_CANARY'));assert.deepEqual(Object.keys(items[0]).sort(),['id','name','photo']);
   await json(other,'interactions/v1/resources',resources(form),404);
   for(const extra of [{limit:21},{fieldId:'purpose'},{before:{name:'Garden',id:'foreign'}},{projectId:id()}])await json(o,'interactions/v1/resources',{...resources(form),...extra},400);
   await json(o,'interactions/v1/resources',{...resources(form),version:0},409);
   await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client:{...client,fieldTypes:['text','long-text']}},409);
   const empty=await owner();const f=await issue(empty,'project-select@1');assert.deepEqual((await store.listInteractionResources(empty.scope,empty.user,resources(f.form))).items,[]);
+ });
+ await test('resource reads require current digest, read eligibility and unreplaced form',async()=>{
+  const o=await owner();await project(o);const {form}=await issue(o,'project-select@1');
+  await json(o,'interactions/v1/resources',{...resources(form),definitionDigest:'0'.repeat(64)},409);
+  const missing={...resources(form)};delete missing.definitionDigest;await json(o,'interactions/v1/resources',missing,400);
+  await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',o.readGrant);await json(o,'interactions/v1/resources',resources(form),403);
+  await store.replaceProjectIntake(o.scope,o.user,await replacement(o,form));await json(o,'interactions/v1/resources',resources(form),409);
  });
  await test('foreign or removed resource cannot become an answer; accepted selection does not retarget a task',async()=>{
   const o=await owner(),other=await owner(),own=await project(o),foreign=await project(other),{form}=await issue(o,'project-select@1');

@@ -7,6 +7,8 @@ import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validat
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
 import {isProjectIntakeTemplate,projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
+import {readOwnedResourceOptions} from './resource-options';
+import {readResourcePage,resourceCursor,type ResourceCursor} from './resource-shape';
 
 export class InteractionStoreError extends Error {
  constructor(readonly status:number,readonly code:string){super(code==='not_found'?'Chat form not found.':code==='draft_removed'?'This unsubmitted form was discarded or reached its draft retention limit. Ask for a new form.':code==='request_conflict'?'This request ID already describes another answer.':'This Chat form changed. Read its current state before continuing.');}
@@ -125,20 +127,22 @@ export async function prepareReplacementProjectIntake(db:D1Database,user:string,
  * Selection only records an answer; submit rechecks ownership at commit. */
 export async function listInteractionResources(db:D1Database,user:string,input:unknown){
  await assertWorkspace(db,user);
- const request=copyJSON(input,4096) as {version:number;interactionId:string;fieldId:string;limit:number;before:null|{name:string;id:string}};
- if(!request||typeof request!=='object'||Array.isArray(request)||Object.keys(request).sort().join(',')!=='before,fieldId,interactionId,limit,version')throw new InteractionError('SHAPE');
+ const request=copyJSON(input,4096) as {version:number;interactionId:string;definitionDigest:string;fieldId:string;limit:number;before:ResourceCursor|null};
+ if(!request||typeof request!=='object'||Array.isArray(request)||Object.keys(request).sort().join(',')!=='before,definitionDigest,fieldId,interactionId,limit,version')throw new InteractionError('SHAPE');
  if(request.version!==1)throw new InteractionError('VERSION');
  if(!identifier(request.interactionId)||request.fieldId!=='project'||!Number.isSafeInteger(request.limit)||request.limit<1||request.limit>20)throw new InteractionError('SHAPE');
  const before=request.before;
- if(before!==null&&(!before||typeof before!=='object'||Array.isArray(before)||Object.keys(before).sort().join(',')!=='id,name'||!identifier(before.id)||typeof before.name!=='string'||!before.name.trim()||before.name.length>100))throw new InteractionError('SHAPE');
+ if(before!==null&&!resourceCursor(before))throw new InteractionError('SHAPE');
  const current=await readInteraction(db,user,request.interactionId);
+ if(request.definitionDigest!==current.envelope.definitionDigest)throw new InteractionError('DIGEST');
  if(current.envelope.definition.template!=='project-select@1')throw new InteractionStoreError(409,'adapter_unavailable');
- if(!['open','submitted'].includes(current.state))throw changed();
- const {results}=await db.prepare('SELECT id,name FROM projects WHERE owner_user_id=? AND (? IS NULL OR name>? OR (name=? AND id>?)) ORDER BY name,id LIMIT ?').bind(user,before?.name??null,before?.name??null,before?.name??null,before?.id??null,request.limit+1).all<{id:string;name:string}>();
+ if(!['open','submitted'].includes(current.state)||current.replacementInteractionId)throw changed();
+ const page=await readOwnedResourceOptions(db,user,'projects',null,before,request.limit);
  const final=await readInteraction(db,user,request.interactionId);
- if(final.state!==current.state||final.answerRevision!==current.answerRevision)throw changed();
- const items=results.slice(0,request.limit),last=items.at(-1);
- return {version:1 as const,interactionId:current.envelope.id,definitionDigest:current.envelope.definitionDigest,fieldId:request.fieldId,items,nextBefore:results.length>request.limit&&last?{name:last.name,id:last.id}:null};
+ if(final.state!==current.state||final.answerRevision!==current.answerRevision||final.replacementInteractionId!==current.replacementInteractionId)throw changed();
+ const result=readResourcePage({version:1,interactionId:current.envelope.id,definitionDigest:current.envelope.definitionDigest,fieldId:request.fieldId,collection:'projects',...page});
+ if(!result)throw new InteractionStoreError(503,'resource_unavailable');
+ return result;
 }
 
 type ContentBriefRequest={originTurnId:string;projectId:string;contentIds:string[]};

@@ -10,8 +10,8 @@ export const contentFieldLimit=8;
 export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'|'core.insights';source:string|null;handler:string|null;scope?:string;displays?:readonly string[]}>> = Object.freeze({
   'answer.value@1': {mode:'collect',feature:'core.editing',source:null,handler:null},
   'interaction.answers@1': {mode:'submit',feature:'core.editing',source:null,handler:null},
-  'owned.projects@1': {mode:'select',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'dashboardData',scope:'account'},
-  'owned.photos@1': {mode:'select',feature:'core.editing',source:'src/files.ts',handler:'listPhotos',scope:'project'},
+  'owned.projects@1': {mode:'select',feature:'core.editing',source:'src/chat-interactions/resource-options.ts',handler:'readOwnedResourceOptions',scope:'account'},
+  'owned.photos@1': {mode:'select',feature:'core.editing',source:'src/chat-interactions/resource-options.ts',handler:'readOwnedResourceOptions',scope:'project'},
   'site.content@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'readSpecification',scope:'project'},
   'site.content-prepare@1': {mode:'prepare',feature:'core.editing',source:'src/project-specification/store.ts',handler:'prepareSpecification',scope:'project'},
   'workspace.projects@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'dashboardData',scope:'account',displays:['summary','table']},
