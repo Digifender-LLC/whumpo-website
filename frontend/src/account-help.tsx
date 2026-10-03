@@ -25,7 +25,7 @@ export function AccountHelpProvider({children}:{children:ReactNode}){
    <DialogHeader className="pr-10 text-left shrink-0"><DialogTitle ref={heading} tabIndex={-1}>Account help</DialogTitle><DialogDescription className="[.phone-keyboard_&]:sr-only">Manage your passkeys, recovery kit or sign-in. Closing this panel keeps your unsaved answer in place.</DialogDescription></DialogHeader>
    <div className="min-h-0 overflow-y-auto overscroll-contain space-y-6 pr-1">
     <p className="text-sm text-muted-foreground">Human support is not connected in this test platform yet. Never share your recovery key in Chat or with support.</p>
-    <Button asChild variant="outline" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'safety'}} search={{}} onClick={()=>setOpen(false)}>Website safety</Link></Button>
+    <Button asChild variant="outline" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'safety'}} search={{}} onClick={()=>setOpen(false)}>Site & app safety</Link></Button>
     {open&&<IdentitySecurity/>}
    </div>
   </DialogContent>

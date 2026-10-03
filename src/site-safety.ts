@@ -2,6 +2,7 @@ import type {ProjectRow,ReviewRow,SiteSafetyReview,SiteSafetyInventory,SiteSafet
 import {DiffError} from './version-diff';
 import {publicationConfirmationStatement,siteURL} from './publications';
 import {assertWorkspace} from './workspace-identity/admission';
+import {safetyResources} from './service-safety';
 
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const exact=(value:unknown,keys:string[]):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
@@ -17,8 +18,9 @@ export async function siteSafetyInventory(db:D1Database,user:string,after:string
  if(after!==null)identifier(after);
  const {results}=await db.prepare(`SELECT p.id,p.name,COALESCE(s.revision,0) AS revision,s.version_id AS versionId FROM projects p
  LEFT JOIN publications s ON s.project_id=p.id WHERE p.owner_user_id=? AND (? IS NULL OR p.id>?) ORDER BY p.id LIMIT 51`).bind(user,after,after).all<ProjectRow>();
+ const projects=results.slice(0,50),services=await safetyResources(db,user,projects.map(p=>p.id));
  await assertWorkspace(db,user);
- return {version:1,projects:results.slice(0,50).map(p=>({...p,url:siteURL(p.id)})),next:results.length>50?results[49].id:null};
+ return {version:1,projects:projects.map(p=>({...p,url:siteURL(p.id),services:services.filter(s=>s.projectId===p.id)})),next:results.length>50?results[49].id:null};
 }
 /** ID pagination keeps every saved withdrawal discoverable, including lost replies. */
 export async function siteSafetyReviews(db:D1Database,user:string,project:string,after:string|null):Promise<SiteSafetyReviews>{
