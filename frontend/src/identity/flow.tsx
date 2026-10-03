@@ -1,39 +1,92 @@
 import {identityActionFocus} from './focus';
 import {resetWorkspaceClient} from '../lib/api';
-import {clearChatRecovery} from '../lib/chat-recovery';
-import {createContext,useContext,useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
+import {clearChatRecovery,scopeChatRecovery} from '../lib/chat-recovery';
+import {fenceIdentityRequests,observeIdentityChanges} from '../lib/identity-invalidation';
+import {createContext,useContext,useCallback,useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {ArrowRight,KeyRound,ShieldCheck} from 'lucide-react';
 import {Button} from '../components/ui/button';
 import {Input} from '../components/ui/input';
 import {Label} from '../components/ui/label';
 import {Brand} from '../components/brand';
 import {IdentityKit} from './kit';
-import {IdentityClientError,identityRequest,identityState,identityIntent,identityCeremony,sameIdentityReview,type IdentityState,type PreparedIdentityKit} from '../lib/identity';
+import {IdentityClientError,identityChanged,identityRequest,identityState,identityIntent,identityCeremony,sameIdentityReview,type IdentityState,type PreparedIdentityKit} from '../lib/identity';
 
 function useIdentity(){
- const [state,setState]=useState<IdentityState|null>(null),[loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const lastWorkspace=useRef<string|null|undefined>(undefined);
- const locked=useRef(false),active=useRef(true),sequence=useRef(0),uncertain=useRef(false);
- const reload=useCallback(async()=>{const seq=++sequence.current;const result=await identityState();if(active.current&&seq===sequence.current){const next=result.identity?.purpose==='workspace'?result.identity.accountId+':'+result.identity.expectedEpoch:null;if(next!==lastWorkspace.current){resetWorkspaceClient();if(lastWorkspace.current!==undefined)clearChatRecovery();lastWorkspace.current=next;}setState(result.identity);setLoaded(true);uncertain.current=false;}return result.identity;},[]);
- useEffect(()=>{active.current=true;void reload().catch(e=>{if(active.current){setError(e.message);setLoaded(true);}});return()=>{active.current=false;sequence.current++;};},[reload]);
- async function run(fn:()=>Promise<unknown>,exit=false){if(locked.current)return;if(uncertain.current&&fn!==reload&&!exit){setError('Check saved progress before continuing. The last change may already be saved.');return;}const finishFocus=identityActionFocus();locked.current=true;setBusy(true);setError('');try{await fn();}catch(e){if(e instanceof IdentityClientError&&e.code==='uncertain')uncertain.current=true;if(active.current)setError(e instanceof Error?e.message:'This step could not finish. Check saved progress.');}finally{locked.current=false;if(active.current)setBusy(false);finishFocus(()=>active.current);}}
- useEffect(()=>{const changed=()=>{resetWorkspaceClient();clearChatRecovery();setState(null);setLoaded(false);void reload().catch(e=>{if(active.current){setError(e.message);setLoaded(true);}});};window.addEventListener('whumpo:identity-changed',changed);return()=>window.removeEventListener('whumpo:identity-changed',changed);},[reload]);
- return {state,loaded,busy,error,reload,run};
+ const [state,setState]=useState<IdentityState|null>(null),[loaded,setLoaded]=useState(false),[verified,setVerified]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const lastIdentity=useRef<string|null|undefined>(undefined);
+ const locked=useRef(false),active=useRef(true),sequence=useRef(0),actionSequence=useRef(0),uncertain=useRef(false),checking=useRef(false);
+ const [finishedAction,setFinishedAction]=useState(0),pendingFocus=useRef<{finish:ReturnType<typeof identityActionFocus>;sequence:number}|null>(null);
+ useLayoutEffect(()=>{const pending=pendingFocus.current;pendingFocus.current=null;pending?.finish(()=>active.current&&pending.sequence===actionSequence.current);},[finishedAction]);
+ const reload=useCallback(async()=>{
+  const seq=++sequence.current;checking.current=true;
+  try{
+   const result=await identityState();
+   if(!active.current||seq!==sequence.current)throw identityChanged();
+   const identity=result.identity,next=identity?[identity.accountId,identity.purpose,identity.expectedEpoch,identity.attemptId].join(':'):null;
+   if(next!==lastIdentity.current){
+    fenceIdentityRequests();resetWorkspaceClient();
+    if(lastIdentity.current!==undefined||identity?.purpose!=='workspace')clearChatRecovery();
+    else scopeChatRecovery(identity.accountId);
+    lastIdentity.current=next;
+   }
+   setState(identity);setLoaded(true);setVerified(true);setError('');uncertain.current=false;
+   return identity;
+  }catch(error){
+   if(active.current&&seq===sequence.current){
+    // A failed check cannot keep private panels or current actions on screen.
+    // Preserve tab-local drafts until a confirmed identity change or sign-out.
+    fenceIdentityRequests();resetWorkspaceClient();setState(null);setLoaded(true);setVerified(false);
+    setError(error instanceof Error?error.message:'Account access could not be checked.');
+   }
+   throw error;
+  }finally{if(seq===sequence.current)checking.current=false;}
+ },[]);
+ async function run(fn:()=>Promise<unknown>,exit=false){
+  if(locked.current)return;
+  if(uncertain.current&&fn!==reload&&!exit){setError('Check saved progress before continuing. The last change may already be saved.');return;}
+  const seq=++actionSequence.current,finishFocus=identityActionFocus();locked.current=true;setBusy(true);setError('');
+  try{await fn();}catch(error){if(active.current&&seq===actionSequence.current){if(error instanceof IdentityClientError&&error.code==='uncertain')uncertain.current=true;setError(error instanceof Error?error.message:'This step could not finish. Check saved progress.');}}
+  finally{
+   if(active.current&&seq===actionSequence.current){
+    locked.current=false;pendingFocus.current?.finish(()=>false);pendingFocus.current={finish:finishFocus,sequence:seq};
+    setBusy(false);setFinishedAction(value=>value+1);
+   }else finishFocus(()=>false);
+  }
+ }
+ useEffect(()=>{
+  active.current=true;
+  const changed=()=>{
+   sequence.current++;actionSequence.current++;locked.current=false;uncertain.current=false;
+   resetWorkspaceClient();clearChatRecovery();setState(null);setLoaded(false);setVerified(false);setBusy(false);setError('');
+   void reload().catch(()=>{});
+  };
+  // Focus and visibility can fire together. Rechecking is read-only and does not
+  // replace an in-flight ceremony or erase drafts when access is unchanged.
+  const recheck=()=>{if(document.visibilityState==='visible'&&!locked.current&&!checking.current)void reload().catch(()=>{});};
+  const restored=(event:PageTransitionEvent)=>{if(event.persisted)recheck();};
+  window.addEventListener('whumpo:identity-changed',changed);
+  window.addEventListener('focus',recheck);document.addEventListener('visibilitychange',recheck);window.addEventListener('pageshow',restored);
+  const stop=observeIdentityChanges();void reload().catch(()=>{});
+  return()=>{active.current=false;sequence.current++;actionSequence.current++;fenceIdentityRequests();pendingFocus.current?.finish(()=>false);pendingFocus.current=null;stop();window.removeEventListener('whumpo:identity-changed',changed);window.removeEventListener('focus',recheck);document.removeEventListener('visibilitychange',recheck);window.removeEventListener('pageshow',restored);};
+ },[reload]);
+ return {state,loaded,verified,busy,error,reload,run};
 }
 type Control=ReturnType<typeof useIdentity>;
+const identityViewKey=(state:IdentityState)=>[state.accountId,state.purpose,state.expectedEpoch,state.attemptId].join(':');
 const IdentityContext=createContext<Control|null>(null);
 function Help(){return <details className="border-t pt-5 text-sm text-muted-foreground"><summary className="cursor-pointer font-medium text-foreground">Passkeys and recovery help</summary><div className="mt-4 space-y-3"><p>Use two distinct passkeys. A synced copy of the same passkey counts once. For the second, choose a different passkey provider or an optional security key. No hardware purchase is required.</p><p>If a step is interrupted, sign in with a saved passkey to resume. During secured recovery, your saved new kit can also resume progress.</p><p>If the only passkey from unfinished signup is lost, there is no active kit to recover that pending account. Email, invitations, and support cannot unlock it.</p></div></details>}
-function Status({control:c}:{control:Control}){return <>{c.busy&&<p role="status" className="text-sm text-muted-foreground">One moment…</p>}{c.error&&<div role="alert" data-identity-error tabIndex={-1} className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-3"><p>{c.error}</p><Button variant="outline" disabled={c.busy} onClick={()=>void c.run(c.reload)}>Check saved progress</Button></div>}</>}
+function Status({control:c}:{control:Control}){return <>{c.busy&&<p role="status" className="text-sm text-muted-foreground">One moment…</p>}{c.error&&<div role="alert" data-identity-error tabIndex={-1} className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-3"><p>{c.error}</p><Button variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal py-2" disabled={c.busy} onClick={()=>void c.run(c.reload)}>Check saved progress</Button></div>}</>}
 function Frame({children}:{children:ReactNode}){return <div className="auth-screen min-h-dvh grid lg:grid-cols-2"><section className="p-5 sm:p-10 flex flex-col"><Brand/><main className="max-w-md w-full mx-auto py-10 sm:py-16 space-y-6">{children}</main></section><aside className="hero-sky hidden lg:flex items-center justify-center flex-col px-12"><img src="/brand/whumpo-mascot.png" className="max-w-[460px] w-full" alt=""/><h2 className="text-3xl font-extrabold text-[#0f2d5b] mt-8">Your ideas belong here.</h2><p className="text-[#526780] mt-3">Big ideas. Less work.</p></aside></div>}
 /** Identity resolves before profile, welcome or workspace components mount. */
 export function IdentityGate({children,signup=false}:{children:ReactNode;signup?:boolean}){
  const c=useIdentity(),[initialSignup,setInitialSignup]=useState(signup);
  useEffect(()=>{if(c.state)setInitialSignup(false);},[c.state]);
  if(!c.loaded)return <Frame><p role="status">Checking account access…</p></Frame>;
- return <IdentityContext.Provider value={c}>{c.state?.purpose==='workspace'?<IdentityWorkspace key={c.state.accountId+':'+c.state.expectedEpoch}>{children}</IdentityWorkspace>:<Frame>{c.state?<IdentityProgress key={c.state.accountId} control={c}/>:<IdentityEntry control={c} signup={initialSignup}/>}<Status control={c}/><Help/></Frame>}</IdentityContext.Provider>;
+ if(!c.verified)return <Frame><h1 data-identity-step tabIndex={-1} className="text-3xl font-extrabold">Let’s check your account access.</h1><p className="text-muted-foreground">Whumpo could not confirm your current sign-in. Your saved work has not been changed. Check again to continue.</p><Status control={c}/><Button variant="outline" disabled={c.busy} onClick={()=>void c.run(async()=>{clearChatRecovery();await identityRequest('logout');await c.reload();},true)}>Sign out</Button><Help/></Frame>;
+ return <IdentityContext.Provider value={c}>{c.state?.purpose==='workspace'?<IdentityWorkspace key={identityViewKey(c.state)}>{children}</IdentityWorkspace>:<Frame>{c.state?<IdentityProgress key={identityViewKey(c.state)} control={c}/>:<IdentityEntry control={c} signup={initialSignup}/>}<Status control={c}/><Help/></Frame>}</IdentityContext.Provider>;
 }
 function IdentityWorkspace({children}:{children:ReactNode}){return children;}
-function SecurityContent({control:c}:{control:Control}){return <div className="max-w-xl space-y-6">{!c.loaded?<p role="status">Loading account security…</p>:c.state?<IdentityProgress key={c.state.accountId} control={c}/>:<IdentityEntry control={c}/>}<Status control={c}/><Help/></div>}
+function SecurityContent({control:c}:{control:Control}){return <div className="max-w-xl space-y-6">{!c.loaded?<p role="status">Loading account security…</p>:c.state?<IdentityProgress key={identityViewKey(c.state)} control={c}/>:c.verified?<IdentityEntry control={c}/>:<p>Account access could not be checked.</p>}<Status control={c}/><Help/></div>}
 function IndependentSecurity(){const c=useIdentity();return <SecurityContent control={c}/>;}
 export function IdentitySecurity(){const c=useContext(IdentityContext);return c?<SecurityContent control={c}/>:<IndependentSecurity/>;}
 type VerificationWidget={render:(element:HTMLElement,options:Record<string,unknown>)=>string;remove:(id:string)=>void;getResponse:(id:string)=>string;reset:(id:string)=>void};

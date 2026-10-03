@@ -1,3 +1,4 @@
+import {crossTabIdentityJourney} from './helpers/cross-tab-identity-journey.mjs';
 import {accountHelpJourney} from './helpers/account-help-journey.mjs';
 import {accessibilityAudit} from './helpers/accessibility-audit.mjs';
 import {ownerUsabilityJourney} from './helpers/owner-usability-journey.mjs';
@@ -17,8 +18,8 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 const accessibility=process.argv.includes('--accessibility'),accountHelp=process.argv.includes('--account-help'),a11y=accessibilityAudit();
-const grantJourney=process.argv.includes('--github-grant');
-if(accessibility&&grantJourney)throw Error('Run the owner accessibility and GitHub grant journeys separately.');
+const grantJourney=process.argv.includes('--github-grant'),crossTab=process.argv.includes('--cross-tab');
+if([accessibility,grantJourney,crossTab,accountHelp].filter(Boolean).length>1)throw Error('Run the owner accessibility and GitHub grant journeys separately.');
 let providerCalls=0,modelCalls=0;
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp('/tmp/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
@@ -26,11 +27,11 @@ let browser,server,fixture,page,phase='build';const originalFetch=globalThis.fet
 const audit={steps:[],calls:0,posts:[],failChat:false,failDashboard:false,loseChat:false,stopChat:false,holdDashboard:false,releaseDashboard:null},background=[];
 const requests=[],errors=[];let loseSecureReply=false,holdAddReply=false,releaseAddReply=null,holdWelcomeReply=false,releaseWelcomeReply=null;
 try{
- await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whumpo identity acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script></body></html>');
+ await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whumpo identity acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script>'+(crossTab?'<script type="module">import {queryClient} from "/@fs/'+resolve('frontend/src/lib/api.ts')+'";import {identityCeremony} from "/@fs/'+resolve('frontend/src/lib/identity.ts')+'";window.identityFixtureQueryKeys=()=>queryClient.getQueryCache().getAll().map(q=>q.queryKey);window.identityFixtureLogin=()=>identityCeremony("login");</script>':'')+'</body></html>');
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
  const bundled=await build({stdin:{contents:"export {default as worker} from './src/index';export {hashToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {sendConversation,readChat} from './src/chat';export {startGitHub,finishGitHub} from './src/github-connection';export {initializeConnectionKeys} from './src/connection-rotation';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
  const {worker,hashToken,admitWorkspace,resolveIdentity,sendConversation,readChat,startGitHub,finishGitHub,initializeConnectionKeys}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
- fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility','--account-help']});const db=fixture.db;
+ fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility','--account-help','--cross-tab']});const db=fixture.db;
  const code=crypto.randomUUID();await db.prepare("INSERT INTO invitations VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'),NULL,NULL)").bind(await hashToken(code)).run();
  crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
  globalThis.fetch=async(url,...args)=>{if(accessibility&&String(url)==='https://opencode.ai/zen/go/v1/responses'){const body=JSON.parse(args[0].body),ack=body.max_output_tokens===256;if(!ack){audit.calls++;assert(audit.steps.length,'Unexpected inference request');}return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(ack?{intent:'editing'}:{reply:'Scripted owner request prepared.',action:audit.steps.shift()})}]}],usage:{input_tokens:100,output_tokens:100}});}if(grantJourney&&String(url)==='https://opencode.ai/zen/go/v1/responses'){modelCalls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Prepared.',action:{kind:'githubAccess',operation:'review'}})}]}],usage:{input_tokens:200,output_tokens:80}});}if(grantJourney&&String(url)==='https://api.github.com/applications/browser-grant/grant'){providerCalls++;return new Response(null,{status:204});}if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
@@ -52,6 +53,7 @@ try{
    if(audit.holdDashboard&&url.pathname==='/api/workspace/dashboard'&&response.status===200){audit.holdDashboard=false;await new Promise(done=>{audit.releaseDashboard=done;});}
    if(!response){res.writeHead(404).end();return;}
    if(audit.holdProfile&&url.pathname==='/api/profile'&&req.method==='GET'&&response.status===200){audit.holdProfile=false;await new Promise(done=>{audit.releaseProfile=done;});}
+   if(audit.holdReauth&&url.pathname.endsWith('/reauth/verify')&&response.status===200){audit.holdReauth=false;await new Promise(done=>{audit.releaseReauth=done;});}
    if(holdWelcomeReply&&url.pathname==='/api/onboarding'&&req.method==='PUT'&&response.status===200){holdWelcomeReply=false;await new Promise(done=>{releaseWelcomeReply=done;});}
    if(holdAddReply&&url.pathname.endsWith('/add/verify')&&response.status===200){holdAddReply=false;await new Promise(done=>{releaseAddReply=done;});}
    if(loseSecureReply&&url.pathname.endsWith('/recovery/secure')&&response.status===200){loseSecureReply=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
@@ -70,8 +72,8 @@ try{
   const append=Element.prototype.append;Element.prototype.append=function(...nodes){const result=append.apply(this,nodes);for(const node of nodes)if(node instanceof HTMLIFrameElement&&node.title==='Recovery kit print view')node.contentWindow.print=()=>{window.__printedKit=node.contentDocument.body.textContent;node.contentWindow.dispatchEvent(new Event('afterprint'));};return result;};
  });
  page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
- const {reach,activate,enter}=keyboardJourney(page,accessibility||accountHelp);
- async function focusHeading(text){if(accessibility){await page.getByRole('heading',{name:text,exact:true}).waitFor();await page.waitForFunction(t=>document.activeElement?.textContent===t,text);}}
+ const {reach,activate,enter}=keyboardJourney(page,accessibility||accountHelp||crossTab);
+ async function focusHeading(text){if(accessibility||crossTab){await page.getByRole('heading',{name:text,exact:true}).waitFor();await page.waitForFunction(t=>document.activeElement?.textContent===t,text);}}
  const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');
  async function authenticator(){return (await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})).authenticatorId}
  let auth=await authenticator();
@@ -170,13 +172,17 @@ try{
   await page.setViewportSize({width:1280,height:900});await page.getByRole('region',{name:'GitHub access review'}).last().scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/whumpo-github-grant-desktop.png',fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  }
+ if(crossTab)await crossTabIdentityJourney({page,context,db,origin,requests,cdp,auth,state:audit,phase:value=>{phase=value;}});
  if(accessibility)await ownerUsabilityJourney({page,context,db,env,state:audit,origin,activate,enter,reach,phase:value=>{phase=value;},audit:a11y.check});
  if(accountHelp){await page.goto(origin+'/workspace/settings');await activate(page.getByRole('button',{name:'Account help',exact:true}));await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('heading',{name:'Account security',exact:true}).waitFor();await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();}
- await page.waitForLoadState('networkidle');
+ await page.bringToFront();await page.waitForLoadState('networkidle');
  const savedTurns=(await db.prepare('SELECT count(*) n FROM chat_turns').first()).n;
  phase='live workspace revocation';
+ await enter(page.getByRole('textbox',{name:'Message Whumpo'}),'Please make a gardening website.');await reach(page.getByRole('button',{name:'Send message',exact:true}));
  await db.prepare('DELETE FROM identity_sessions').run();
- await enter(page.getByRole('textbox',{name:'Message Whumpo'}),'Please make a gardening website.');await activate(page.getByRole('button',{name:'Send message',exact:true}));
+ // Access can close from a foreground/read check before the keystroke arrives.
+ // Both that early closure and server refusal of the send must create no turn.
+ await page.keyboard.press('Enter');
  await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).count(),0);
  assert.equal((await db.prepare('SELECT count(*) n FROM chat_turns').first()).n,savedTurns,'Revoked request must not create a Chat turn');
  assert.equal(await page.evaluate(()=>document.cookie),'');
@@ -187,4 +193,4 @@ try{
  if(accessibility)console.log('Owner usability journey passed: keyboard draft/retry, private comparison/preview/save, Dashboard outage and newer focus, unavailable billing/connections, 360/390/1280px and night mode.');
  console.log('Current workspace browser passed: real mobile entry, two Chromium passkeys, recovery kit, identity-before-profile gate, first-project welcome, draft reload and immediate workspace closure on session revocation. No live provider requests.');
 }catch(error){console.error(`Current workspace browser failed during ${phase}: ${error.message}`);console.error('Browser errors:',errors);if(page)console.error('Page:',page.url(),(await page.locator('body').innerText().catch(()=>'' )).replace(/[a-f0-9]{64}/g,'[redacted]').slice(0,1500));console.error('API paths:',requests.filter(r=>r.path.startsWith('/api/')));process.exitCode=1;}
-finally{audit.releaseDashboard?.();audit.releaseProfile?.();releaseWelcomeReply?.();releaseAddReply?.();globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await Promise.allSettled(background);await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}
+finally{audit.releaseDashboard?.();audit.releaseProfile?.();audit.releaseReauth?.();releaseWelcomeReply?.();releaseAddReply?.();globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await Promise.allSettled(background);await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}
