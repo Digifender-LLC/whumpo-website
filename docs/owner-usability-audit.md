@@ -21,7 +21,7 @@ WH-024 / [issue #10](https://github.com/zemdregon/whumpo/issues/10) remains **op
 - `node tests/chat-screen-reader.mjs --recovery`: actual identity HTTP handlers and current identity schema on local D1, built identity UI and virtual Chromium passkeys. Keyboard flow covers partial loss, exact review, saved replacement kit, secure confirmation, lost successful response with no duplicate secure request, new-kit resumption, replacement proof, key removal and ordinary sign-in. Four generated-speech checkpoints cover restricted entry, exact review, confirmation and uncertain outcome. The isolated fixture does not pretend to be the complete platform UI.
 - The existing ordinary `node tests/identity-browser.mjs --d1` regression passed before adding Orca/keyboard instrumentation. Successful registrations/assertions use Chromium's actual virtual authenticator. Only cancellation, Turnstile and browser print dispatch are synthetic. Download/copy/print contents agree; hidden/cleared kit contents and HttpOnly cookies retain their existing checks.
 - Landing captures and overflow checks at 360, 390 and 1280 CSS pixels; recovery/enrollment captures at 390 and security at 1280. The landing fixture deliberately supplies unavailable pricing configuration and verifies the free invite-only state; it does not inspect Stripe's embedded UI or activate checkout.
-- Focused welcome-delivery, Chat announcements, Chat recovery and Chat delivery checks pass. Both TypeScript/compiler checks pass. The source build and deployed evidence are recorded separately below.
+- Focused welcome-delivery, Chat announcements, Chat recovery and Chat delivery checks pass. Both TypeScript/compiler checks pass. The frontend build, deferred-loading graph, shared workspace binding checks and roadmap validation/alignment/render checks pass. Deployment is recorded separately below.
 
 The initial first-passkey/body-focus, welcome announcement, lost-passkey review and landing entry failures were reproduced before fixes. Failed Orca attempts are retained privately. Two fixture mistakes were corrected: radio groups need arrow-key navigation, and the picture question says “Pick a face for your space.” Keyboard helpers issue Tab/Shift+Tab/arrow/Enter/Space events; they do not programmatically focus target controls. Orca checkpoints consume actual generated speech, not DOM text or ARIA snapshots.
 
@@ -43,4 +43,11 @@ WH-111 still follows WH-024; this increment does not close the parent or change 
 
 ## Deployment
 
-Source/local evidence above is not deployment evidence. The scoped platform release will be recorded after actual asset, schema/binding and rendered readback. Other Worker services and the current database do not require a cutover for these frontend-only changes.
+Source `4b853fb` is deployed to the testing platform as **`a0467ecf-f106-46f8-8e6d-0bd827f1d3be`**. Independent readback at **2026-10-03T16:43:42.678Z** verifies:
+
+- All **40 public asset files** match the committed source build byte for byte. The deployment-only `_headers` file is excluded from public asset enumeration; the first verification attempt incorrectly requested it and is retained privately as a verifier failure.
+- Runtime `112fd92c-2a0c-47d4-8fb4-1199a295e511`, apps `900d9770-c4bd-4187-9416-89643f418dcd` and sites `579befb0-3481-4cba-ae12-2d86c36a6618` are unchanged. Platform database/service/secret-binding names, current 177-table/806-object schema and CMS registration metadata exactly match the pre-deployment observation. No database reset or migration.
+- Anonymous deployed Chromium at 360/390/1280px verifies the main landmark, keyboard bypass, no horizontal document overflow and honest CMS copy. Landing → signup → sign-in → recovery headings receive focus in the deployed UI. Health returns 200; anonymous profile and Chat reads return 401.
+- No account enrollment, inference, provider consent, publication or billing action was performed remotely. Authenticated passkey/kit/welcome/recovery behavior has the local virtual-WebAuthn/Orca evidence above plus matching deployed asset bytes; it is not a new live human enrollment claim.
+
+Private readback: `.secrets/usability-release-verified.json`. PR #79 remains a draft. WH-024 and whole-owner acceptance remain open.
