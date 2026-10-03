@@ -2,7 +2,7 @@ import {ProjectPhotoUpload} from './project-photo-upload';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {ChevronDown,ChevronUp,FileText,ImagePlus,LoaderCircle} from 'lucide-react';
-import {InteractionError,requireCurrentClient,validateAnswers,verifyEnvelope} from '../../src/chat-interactions/protocol';
+import {InteractionError,requireCurrentClient,validateAnswers,verifyEnvelope,isFieldVisible} from '../../src/chat-interactions/protocol';
 import type {Answers,ClientCapabilities,InteractionRead,InteractionReceipt,Mutation} from '../../src/chat-interactions/types';
 import {APIError,api,message,queryClient,send} from './lib/api';
 import {canRecoverChat} from './lib/chat-delivery';
@@ -16,15 +16,15 @@ import {ChatInteractionFields} from './chat-interaction-fields';
 import {fieldAnswerSnapshot} from './lib/interaction-fields';
 import type {Answer} from '../../src/chat-interactions/types';
 
-const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource','choice','multi-choice','boolean','number','date','datetime'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','agent.task-continue@1','owned.projects@1','project.status@1','project.photos@1']};
+const client:ClientCapabilities={versions:[1],fieldTypes:['text','long-text','resource','choice','multi-choice','boolean','number','date','datetime'],bindings:['answer.value@1','interaction.answers@1','site.content@1','site.content-prepare@1','agent.task-continue@1','owned.projects@1','owned.photos@1','project.status@1','project.photos@1']};
 const route='/chat/interactions/v1/';
 const receipt=(requestId:string)=>send<InteractionReceipt>(route+'receipt',{version:1,requestId});
 function startingAnswers(form:InteractionRead):Answers{return form.submission?.answers??form.draft??Object.fromEntries(form.envelope.definition.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value]));}
 
 /** Maintained templates and exact admitted information compositions only. */
 export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInChat}:{id:string;owner:string;chatRevision:number;busy:boolean;onAnswerInChat:()=>void}){
- const recovery=useInteractionRecovery(owner,id),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false),[resourceReady,setResourceReady]=useState(false);
- const onResourceReady=useCallback((ready:boolean)=>setResourceReady(ready),[]);
+ const recovery=useInteractionRecovery(owner,id),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false),[resourceState,setResourceState]=useState<Record<string,boolean>>({});
+ const onResourceReady=useCallback((fieldId:string,ready:boolean)=>setResourceState(previous=>previous[fieldId]===ready?previous:{...previous,[fieldId]:ready}),[]);
  const section=useRef<HTMLElement>(null),restored=useRef(false);
  const result=useRef<HTMLParagraphElement>(null),followResult=useRef<HTMLParagraphElement>(null),discardButton=useRef<HTMLButtonElement>(null),keepButton=useRef<HTMLButtonElement>(null);
  const query=useQuery({queryKey:['chat-interaction',owner,id],queryFn:async({signal})=>{
@@ -41,7 +41,9 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
  const form=query.data,local=recovery.value,pending=local?.pending??null;
  const answers=local?.answers??(form?startingAnswers(form):{}),collapsed=local?.dismissed??false;
  const conflict=!!(form&&local?.answers&&(local.definitionDigest!==form.envelope.definitionDigest||local.answerRevision!==form.answerRevision));
- const unavailable=query.data===null,content=form?.envelope.definition.template==='content-change@1',selection=form?.envelope.definition.template==='project-select@1';
+ const unavailable=query.data===null,content=form?.envelope.definition.template==='content-change@1';
+ const resourceFields=form?.envelope.definition.fields.filter(f=>(f.type==='resource'||f.type==='attachment')&&isFieldVisible(f,answers))??[];
+ const selection=resourceFields.length>0,resourceReady=resourceFields.every(f=>resourceState[f.id]===true);
  const locked=busy||chatBusy||query.isFetching||!!pending||!!query.error||conflict||!form||form.state!=='open';
  const draftRecord=()=>({definitionDigest:form!.envelope.definitionDigest,answerRevision:form!.answerRevision,answers:local?.answers??null,updatedAt:local?.updatedAt??Date.now(),dismissed:collapsed,pending:null});
  function refreshChat(){void queryClient.invalidateQueries({queryKey:['chat',owner]});}
