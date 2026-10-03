@@ -59,9 +59,9 @@ export async function verifyLiveWorkspaceViews({db,id,browser,workspaceToken,rel
   });
   const saved=()=>page.locator('[data-view-component="projects"]');
   await openPage('Garden desk');await saved().getByText('Meadow Garden',{exact:true}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).count(),0);
-  const reads=await calls();await saved().getByRole('button',{name:'Refresh projects',exact:true}).click();await saved().getByText('Meadow Garden',{exact:true}).waitFor();assert.deepEqual(await calls(),reads);
+  const reads=await calls();const refreshed=page.waitForResponse(r=>r.url()==='https://whumpo.com/api/workspace/views/v1/component'&&r.request().postDataJSON()?.kind==='projects');await saved().getByRole('button',{name:'Refresh projects',exact:true}).click();assert.equal((await refreshed).status(),200);await saved().getByText('Meadow Garden',{exact:true}).waitFor();assert.deepEqual(await calls(),reads);
   await page.getByText('This information is not available with your current access.',{exact:true}).waitFor();
-  for(const width of [360,390]){await page.setViewportSize({width,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:evidenceDirectory+'/saved-'+width+'.png'});}
+  for(const width of [360,390]){await page.setViewportSize({width,height:844});await saved().getByText('Meadow Garden',{exact:true}).waitFor();await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent==='Your pages');const r=b?.getBoundingClientRect();return r&&r.top>=0&&r.bottom<=innerHeight});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:evidenceDirectory+'/saved-'+width+'.png'});}
   await chat('update-view','Add recent activity to Garden desk, keeping its existing project status and page requests. Leave all my other pages and my dashboard as they are.',async()=>{
    savedPage=(await current()).layout.tabs.find(t=>t.id===savedPage.id);assertView(savedPage.view,['projects','traffic','activity']);assert.deepEqual((await current()).layout.dashboard,originalLayout.dashboard);
   });

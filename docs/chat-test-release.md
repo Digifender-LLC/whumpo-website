@@ -1,5 +1,7 @@
 # Chat test releases — October 2–3, 2026 UTC
 
+**Latest coordinated test release:** [workspace views, October 3](workspace-view-release.md) deploys source `81a7b9f` with 175 tables/796 objects and verifies the real-Muse saved-view lifecycle. The dated releases below retain their own earlier source/schema and verification scope.
+
 **Current:** [bounded task-memory release](#bounded-task-memory-release--october-3-2026-utc), verified October 3 at 02:18 UTC. Earlier sections retain their exact historical verification scope.
 
 This release carries the current WH-106 storage/recovery and WH-107 maintained Chat forms, choices, status/comparison cards, photo-upload handoff and mobile/accessibility work. The user authorizes disposable test resets and current-only deployment. It does not close those packets' remaining device or product acceptance.
