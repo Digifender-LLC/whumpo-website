@@ -1,7 +1,9 @@
 # Whumpo test deployment
 
+**Current release, October 3, 2026:** [routine Chat status and traffic](chat-routine-release.md) `26d0acd8-ff05-45a4-810d-d593b8f29256`, source `74c95a3`, verifies four Workers, the unchanged 176-table/801-object schema, bindings and 39 assets. Deployed real Muse/Chromium passes selected-task overview, current count refresh without inference, natural status, revoked-access clearing in both cards and model replies, reload, signed two-key identity and cleanup. Final readback at 10:59 UTC confirms zero synthetic accounts/projects/traffic and one existing owner invitation. Local SQLite 130 cases, focused D1 18 cases, the seven-call built-browser journey and two real-Muse/local-D1 five-call conversations pass. Two uncertain acknowledgments remain WH-020 work. #98 remains open for admitted media/consent and broader recovery; #99/#95, physical-device and customer acceptance remain open. This update keeps the current database and schema; no reset, migration or old reader. Use the [release protocol](releases.md).
 
-## Current deployment status and release caveat
+
+## Earlier deployment records
 
 **Current service-settings release, September 30, 2026:** `03b74965-16b8-4a41-8848-33cb1e21867f` deploys source `6740b4c` with all **113 migrations** applied. Platform `175e4f9e-5d2a-4f2d-bc37-11365740ba3f`; sites `46f134ee-a986-436a-84b5-d043635313da`; apps `c72ba375-aad6-4eed-ba49-34079111d485`; runtime `15d53d91-0b00-4859-b749-2d4f63e15a0b`. Independent readback at October 1 01:41 UTC verifies versions/bindings, 48 migration objects, workspace HTML, all 16 frontend assets, health and anonymous authentication boundaries. [Service-client contract and acceptance](project-service-clients.md) covers private save/restore and separate exact activation. No new paid resource, customer publication, provider activation or CMS test. Private archive/readback details are in that feature document. Authenticated configured-Muse acceptance passed at 01:44 UTC: private settings prepare/change/restore, exact retries, reviewed disabling of inactive contact intake, zero standard-AI customer debits, no public content and verified synthetic cleanup.
 

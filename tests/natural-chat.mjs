@@ -1,21 +1,21 @@
-import {createFixtureWebsite} from './current-site-fixture.mjs';
+import {createFixtureWebsite,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,readFile} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
-import {build} from 'esbuild';
-import wrangler from 'wrangler';
-const bundle=await build({stdin:{contents:"export {saveBackend,testBackend} from './src/backend-versions';export {default as platform} from './src/index';export {hashToken} from './src/security';export {sendConversation,sendChatControl,sendChat,readChat} from './src/chat';export {chatControl,confirmationControls} from './src/chat-controls';export {prepareSiteAction,siteContext,agentPrompt} from './src/site-agent';export {inspectWorkspace} from './src/workspace-read';export {readAgentKnowledge,knowledgeTopics} from './src/agent-knowledge';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const {saveBackend,testBackend,platform,hashToken,sendConversation,sendChatControl,sendChat,readChat,chatControl,confirmationControls,prepareSiteAction,siteContext,agentPrompt,inspectWorkspace,readAgentKnowledge,knowledgeTopics}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-natural-chat-');let proxy;const originalFetch=globalThis.fetch;
+import {readFile} from 'node:fs/promises';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
+// Share one compiled authority module with the current website fixture helpers.
+const m=await currentSiteFixtureHandlers();
+const {worker:platform,sendConversation,sendChatControl,sendChat,readChat,chatControl,confirmationControls,prepareSiteAction,siteContext,agentPrompt,inspectWorkspace,readAgentKnowledge,knowledgeTopics}=m;
+const {saveBackend,testBackend}=m.backend;
+const fixture=await databaseFixture({d1:true,r2:true}),rawDB=fixture.db;const originalFetch=globalThis.fetch;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
- proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
  const user=crypto.randomUUID(),project=crypto.randomUUID(),other=crypto.randomUUID();
- for(const owner of [user,other]){await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(owner,owner+'@example.test',new Date().toISOString()).run();await readChat(db,owner);}
+ const owner=await workspaceFixture(rawDB,m,user),foreignOwner=await workspaceFixture(rawDB,m,other),db=await owner.scope(),otherDB=await foreignOwner.scope();
+ await readChat(db,user);await readChat(otherDB,other);
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Garden','A landscaping website','draft',?,?)").bind(project,user,new Date().toISOString(),new Date().toISOString()).run();
  await db.prepare("UPDATE workspace_state SET step='ready' WHERE user_id=?").bind(user).run();
- const input=async(content,owner=user)=>({id:crypto.randomUUID(),revision:(await readChat(db,owner)).state.revision,content});
+ const input=async(content,owner=user)=>({id:crypto.randomUUID(),revision:(await readChat(owner===user?db:otherDB,owner)).state.revision,content});
  const built={id:await createFixtureWebsite(db,user,project,{name:'Garden',headline:'A greener neighborhood',description:'Landscaping',theme:'ocean',aboutTitle:'Our work',aboutText:'Garden care.',sections:[],photos:[]})};
  const review=await input('/publish '+built.id);assert.equal((await sendChat(db,user,review)).status,200);
  const websiteReview=(await readChat(db,user)).turns.find(t=>t.id===review.id);
@@ -50,7 +50,7 @@ try{
  await assert.rejects(()=>db.prepare('UPDATE chat_turns SET action_json=NULL WHERE id=?').bind(approval.id).run(),/chat_action_immutable/);
  await assert.rejects(()=>db.prepare("UPDATE chat_turns SET user_text='Changed label' WHERE id=?").bind(approval.id).run(),/chat_action_immutable/);
 
- const foreign={...approval,id:crypto.randomUUID(),revision:(await readChat(db,other)).state.revision};await sendChatControl(db,other,foreign);assert.equal((await db.prepare('SELECT confirmed_by FROM publication_actions WHERE id=?').bind(review.id).first()).confirmed_by,approval.id);
+ const foreign={...approval,id:crypto.randomUUID(),revision:(await readChat(otherDB,other)).state.revision};await sendChatControl(otherDB,other,foreign);assert.equal((await db.prepare('SELECT confirmed_by FROM publication_actions WHERE id=?').bind(review.id).first()).confirmed_by,approval.id);
  for(const action of [{type:'command',command:'/confirm '+review.id},{type:'confirm',kind:'site',reviewId:review.id,command:'/new'},{type:'confirm',kind:'site',reviewId:other+' /new'},{type:'appMaintenance',kind:'upgrade',reviewId:review.id,confirmation:'WRONG'}]){assert.equal(chatControl(action),undefined);assert.equal((await sendChatControl(db,user,{...approval,id:crypto.randomUUID(),action})).status,400);}
  assert.equal((await sendConversation(db,user,{...await input('hello'),action:approval.action},config)).status,400);
  for(const kind of Object.keys(confirmationControls))assert.ok(chatControl({type:'confirm',kind,reviewId:review.id}));
@@ -60,7 +60,7 @@ try{
  for(const topic of knowledgeTopics){const knowledge=JSON.parse(readAgentKnowledge(topic));assert.ok(Buffer.byteLength(JSON.stringify(knowledge))<8000);for(const source of knowledge.sources)await readFile(source);}
  await assert.rejects(()=>prepareSiteAction(db,user,crypto.randomUUID(),JSON.stringify({reply:'Read',action:{kind:'knowledge',topic:'usage',userId:other}}),context));
  queue=[{kind:'knowledge',topic:'usage'},null];const q=await input('How does my plan handle standard AI?');const start=calls;assert.equal((await sendConversation(db,user,q,config)).status,200);assert.equal(calls-start,2);assert.ok(JSON.stringify(requests.at(-1)).includes('platform_knowledge'));assert.ok(JSON.stringify(requests.at(-1)).includes('spends no customer credits'));
- const foreignProject=await inspectWorkspace(db,other,'project',project);assert.equal(foreignProject,'Project not found.');
+ const foreignProject=await inspectWorkspace(otherDB,other,'project',project);assert.equal(foreignProject,'Project not found.');
  assert.equal(JSON.parse(await inspectWorkspace(db,user,'photos')).files.length,0);
  const connections=await inspectWorkspace(db,user,'connections');assert.ok(connections.length>0);assert.ok(!connections.includes('synthetic'));
  assert.ok(agentPrompt(context).includes('Chat is natural language only'));assert.doesNotMatch(agentPrompt(context),/(?:^|\s)\/[a-z][a-z-]*(?:\s|$)/);assert.ok(!agentPrompt(context).includes('Guided commands'));
@@ -83,15 +83,14 @@ try{
  const appRead=await askAction('Show that application review again',{kind:'backend',operation:'applicationReview',reviewId:application.id});assert.equal(appRead.application_confirmation_id,application.id);assert.equal(appRead.application_review.state,'ready');
  for(const turn of [websiteReview,endpoint,opened,form,formRead,application,appRead]){assert.doesNotMatch(turn.assistant_text,/(?:^|\s)\/(?:confirm|backend|application|app-page)(?:[-\s]|$)/);assert.match(turn.assistant_text,/confirmation button/);}
  // Actual HTTP routing retains session, origin, onboarding and fresh-auth boundaries.
- const token=(crypto.randomUUID()+crypto.randomUUID()).replaceAll('-',''),hash=await hashToken(token);
- await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(hash,user,new Date(Date.now()+3600000).toISOString(),new Date(Date.now()-3600000).toISOString()).run();
- const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
- const http=(path,body,origin='http://localhost',cookie=token)=>platform.fetch(new Request('http://localhost'+path,{method:'POST',headers:{origin,cookie:'whumpo_session='+cookie,'content-type':'application/json'},body:JSON.stringify(body)}),env,{waitUntil(){throw Error('Unexpected background work');}});
+ const staleSession=await workspaceSession(rawDB,m,owner,-3600),token=staleSession.token;
+ const env={DB:rawDB,FILES:fixture.env.FILES,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
+ const http=(path,body,origin='http://localhost:8787',cookie=token)=>platform.fetch(new Request('http://localhost:8787'+path,{method:'POST',headers:{origin,cookie:'__Host-whumpo_session='+cookie,'content-type':'application/json'},body:JSON.stringify(body)}),env,{waitUntil(){throw Error('Unexpected background work');}});
  const fresh={id:crypto.randomUUID(),revision:(await readChat(db,user)).state.revision,action:{type:'appRestore',projectId:project,reviewId:review.id,confirmation:'RESTORE'}};
  assert.equal((await http('/api/chat/actions',fresh)).status,401);
  assert.equal((await http('/api/chat/actions',fresh,'http://foreign.test')).status,403);
- assert.equal((await http('/api/chat/actions',fresh,'http://localhost','')).status,401);
+ assert.equal((await http('/api/chat/actions',fresh,'http://localhost:8787','')).status,401);
  assert.equal((await http('/api/chat',{id:fresh.id,revision:fresh.revision,content:'/confirm-app-restore '+project+' '+review.id+' RESTORE'})).status,503);
  assert.equal((await http('/api/chat/actions',{...fresh,action:{command:'/confirm '+review.id}})).status,400);
  console.log('Natural Chat passed: literal slash/URL/path input, no command execution, typed approval/replay/foreign isolation, malformed action refusal, model cannot approve, unavailable-agent refusal, bounded sourced knowledge continuation, owner-scoped reads, natural saved-review recovery, immutable reply links, publication/form approval controls, presentation and preserved code/URLs.');
-}finally{globalThis.fetch=originalFetch;await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{globalThis.fetch=originalFetch;await fixture.close();}

@@ -6,6 +6,8 @@ const date=(column,modifier)=>`strftime('%Y-%m-%dT%H:%M:%fZ',${column},'${modifi
 const aged=(table,column,modifier)=>queue(table,`${date(column,modifier)}<=?1`,date(column,modifier));
 const healthMatch=`h.project_id=p.id AND h.publication_revision=s.revision AND h.contact_revision=COALESCE(c.revision,-1) AND h.form_review_id IS (SELECT id FROM backend_live_forms WHERE project_id=p.id)`;
 export const backlogInventory={
+ chat_drafts:queue('chat_interactions',`removed_at IS NULL AND state!='submitted' AND ${date('COALESCE(draft_saved_at,created_at)','+7 days')}<=?1`,date('COALESCE(draft_saved_at,created_at)','+7 days'),2*3600000),
+ connection_exchanges:queue('connection_oauth_exchanges',"state='dispatched'",'created_at',600000),
  imports:queue('backend_imports',"state='pending'",'created_at',3600000),
  photos:queue('file_cleanup','1=1','created_at'),
  github:queue('github_token_vault t LEFT JOIN github_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'h.requested_at'),
@@ -22,7 +24,9 @@ export const backlogInventory={
  contact_receipts:expiry('contact_receipts'),
  github_oauth:expiry('github_oauth_states'),
  github_staged:expiry('github_token_staging'),
- github_expired_tokens:expiry('github_token_vault'),
+ github_refresh_grants:queue('github_refresh_custody r JOIN github_token_vault t ON t.id=r.token_id LEFT JOIN github_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'COALESCE(r.access_revoked_at,h.requested_at)'),
+ github_grant_unknown:queue('github_grant_revocations',"state IN ('dispatching','uncertain')",'dispatched_at',600000),
+ github_expired_tokens:queue('github_token_vault',"expires_at<=?1 AND NOT EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=github_token_vault.id)",'expires_at'),
  cloudflare_oauth:expiry('cloudflare_oauth_states'),
  cloudflare_expired_tokens:expiry('cloudflare_token_vault'),
  cloudflare_staged:queue('cloudflare_token_vault',`state='staged' AND ${date('created_at','+2 minutes')}<=?1`,date('created_at','+2 minutes')),

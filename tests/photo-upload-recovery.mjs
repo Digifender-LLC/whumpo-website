@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const {outputFiles}=await build({stdin:{contents:"export * from './frontend/src/lib/photo-upload-recovery';export * from './src/photo-upload-shape';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
+const m=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const values=new Map(),storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},owner=crypto.randomUUID(),project=crypto.randomUUID();
+const upload={id:crypto.randomUUID(),projectId:project,name:'Garden',digest:'a'.repeat(64),width:32,height:24,size:400,handoff:null};
+m.writePhotoRecovery(storage,owner,upload);assert.deepEqual(m.readPhotoRecovery(storage,owner,project),upload);m.writePhotoRecovery(storage,owner,upload);
+assert.throws(()=>m.writePhotoRecovery(storage,owner,{...upload,id:crypto.randomUUID()}));assert.deepEqual(m.readPhotoRecovery(storage,owner,project),upload);
+assert.throws(()=>m.writePhotoRecovery(storage,owner,{...upload,blob:'bytes'}));assert.throws(()=>m.writePhotoRecovery(storage,owner,{...upload,name:'../photo'}));
+const photo={...upload,status:'pending',safetyStatus:'pending'};assert(m.readPhotoUploadStatus({version:1,closedHandoff:null,photo}));assert.equal(m.readPhotoUploadStatus({version:1,closedHandoff:null,photo:{...photo,object_key:'private'}}),null);assert.equal(m.readPhotoUploadStatus({version:0,closedHandoff:null,photo}),null);assert.equal(m.readPhotoUploadStatus({version:1,closedHandoff:null,photo:{...photo,digest:'wrong'}}),null);assert.equal(m.readPhotoUploadStatus({version:1,closedHandoff:null,photo:{...photo,status:['ready']}}),null);assert.equal(m.readPhotoUploadStatus({version:1,closedHandoff:null,photo:{...photo,safetyStatus:['approved']}}),null);assert.throws(()=>m.resolvePhotoRecovery(storage,owner,{...upload,digest:'b'.repeat(64)}));assert(m.samePhotoUpload(upload,photo));assert(!m.samePhotoUpload(upload,{...photo,name:'Different'}));
+const unreadable={...storage,setItem(){throw Error('Storage blocked');}};assert.throws(()=>m.writePhotoRecovery(unreadable,owner,upload),/Storage blocked/);assert.deepEqual(m.readPhotoRecovery(storage,owner,project),upload);
+m.resolvePhotoRecovery(storage,owner,{...upload,id:crypto.randomUUID()});assert.deepEqual(m.readPhotoRecovery(storage,owner,project),upload);m.resolvePhotoRecovery(storage,owner,upload);assert.equal(storage.getItem(m.photoRecoveryKey),null);
+m.writePhotoRecovery(storage,owner,upload);m.preparePhotoRecovery(storage,crypto.randomUUID());assert.equal(storage.getItem(m.photoRecoveryKey),null);
+storage.setItem(m.photoRecoveryKey,'broken');assert.throws(()=>m.readPhotoRecovery(storage,owner,project));assert.equal(storage.getItem(m.photoRecoveryKey),'broken');
+console.log('Photo recovery passed: exact request metadata, no byte/URL admission, conflict refusal, account clearing, storage failures and current response shape.');

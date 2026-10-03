@@ -3,7 +3,7 @@ import {describeConnections} from './connection-chat';
 import type {DNSChatOptions} from './dns-chat';
 import {readStandardAIHistory,describeStandardAIHistory} from './standard-ai-history';
 import {readProjectDetails} from './project-details';
-import {readTraffic,trafficDescription} from './site-traffic';
+import {inspectTraffic} from './workspace-observations';
 import {savedPage} from './photo-versions';
 import {getBilling} from './billing';
 import {domainCommand} from './domains';
@@ -18,7 +18,7 @@ export async function inspectWorkspace(db:D1Database,userId:string,scope:Inspect
   const {results}=await db.prepare(`SELECT f.id,f.project_id,f.name,f.status,${photoSafetySQL} safetyStatus,f.width,f.height FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? ORDER BY f.created_at DESC,f.id DESC LIMIT 21`).bind(userId).all();
   return JSON.stringify({type:'photo_metadata',files:results.slice(0,20),hasMore:results.length>20,notice:'Metadata only, not image pixels. Only approved files can be used. Open Photos for the full inventory.'});
  }
- if(scope==='traffic')return trafficDescription(await readTraffic(db,userId));
+ if(scope==='traffic')return (await inspectTraffic(db,userId,targetId??null)).reply;
  if(scope==='usage'){
   const b=await getBilling(db,userId);
   return `${b.plan.name} · ${b.period}\nStandard AI assistance is included under fair use with no credit charges. Advanced-model spending is not enabled. Never suggest buying credits to continue standard work. Testing capacity and provider availability can interrupt service. Subscriptions are sandbox-only; real payments and upgrades are disabled.\n\n${describeStandardAIHistory(await readStandardAIHistory(db,userId))}`;
@@ -34,7 +34,7 @@ export async function inspectWorkspace(db:D1Database,userId:string,scope:Inspect
   return results.map(p=>`${p.name} — ${p.status}\nProject: ${p.id}${p.site_live?'\n'+siteURL(p.id):''}${p.backend_live?'\nPublic JSON backend · https://'+p.id+'.whumpo.site/backend':''}${p.cms_articles?'\nCMS articles: '+p.cms_articles+' · https://'+p.id+'.whumpo.site/cms':''}`).join('\n\n')||'No projects yet. Tell me what you would like to build.';
  }
  if(scope==='project'){
-  const p=await db.prepare('SELECT p.*,s.version_id AS live_version FROM project_service_status p LEFT JOIN publications s ON s.project_id=p.id WHERE p.id=? AND p.owner_user_id=?').bind(targetId??null,userId).first<{id:string;name:string;purpose:string;status:string;audience:string;style_notes:string;preferred_theme:string;live_version:string|null;service_status:string;backend_live:number;cms_articles:number}>();
+  const p=await db.prepare('SELECT p.id,p.service_status,p.backend_live,p.cms_articles,s.version_id AS live_version FROM project_service_status p LEFT JOIN publications s ON s.project_id=p.id WHERE p.id=? AND p.owner_user_id=?').bind(targetId??null,userId).first<{id:string;name:string;purpose:string;status:string;audience:string;style_notes:string;preferred_theme:string;live_version:string|null;service_status:string;backend_live:number;cms_articles:number}>();
   if(!p)return 'Project not found.';
   const details=await readProjectDetails(db,userId,p.id);
   const count=await db.prepare('SELECT COUNT(*) AS total FROM site_versions WHERE project_id=?').bind(p.id).first<{total:number}>();

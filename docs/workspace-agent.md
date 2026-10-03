@@ -17,7 +17,7 @@ The result contains server-generated project and version receipts. The model can
 
 The allowlisted export action contains only an exact version ID. The server rechecks version ownership and records the version in `chat_exports`, whose database trigger also enforces owner agreement. The existing chat UI displays an authenticated download link from that record. It never uses a model-generated URL. Downloading rechecks ownership and returns the exact bounded saved HTML, configuration, styles and referenced photo dependencies.
 
-No current publication is changed. The source download excludes account credentials and chat history. Model interpretation is metered as an ordinary AI reply; deterministic `/export` and the existing download link use no model units.
+No current publication is changed. The source download excludes account credentials and chat history. Standard owner interpretation has zero customer-unit debits; provider usage remains internally accounted. Opening the authenticated download link invokes no model.
 
 ## Retry and failure behavior
 
@@ -25,9 +25,9 @@ Both actions share the current internal inference reservation and persisted AI-r
 
 ## Evidence and limitations
 
-`test:workspace-agent` covers atomic project/first-version creation, no publication, source receipts, foreign/missing exports, invalid properties, replay, lost commit acknowledgement and project-limit refunds. `test:site-agent` retains edit, photo, publication-review and validation coverage.
+`test:workspace-agent` covers atomic project/first-version creation, no publication, source receipts, foreign/missing exports, invalid properties, replay, lost commit acknowledgement and project-limit refusal with zero customer debit. `test:site-agent` covers current first saves, exact reviewed specification edits, publication reviews, scoped validation, escaped text and immutable ancestry.
 
-The action vocabulary is intentionally explicit and validated, but model intent classification remains probabilistic. The prompt asks for clarification when the project target or required details are missing. Domain provisioning, provider authorization and arbitrary backend execution remain unfinished. Read-only inspection is described below. Source export still depends on an exact version known in the bounded context; `/versions` exposes older choices.
+The action vocabulary is intentionally explicit and validated, but model intent classification remains probabilistic. The prompt asks for clarification when the project target or required details are missing. [Domain hosting](integrations/domain-hosting.md), provider authorization and [bounded backend execution](backend-execution.md) have their own implementation and acceptance contracts. Read-only inspection is described below. Source export requires an exact owned version; ask Chat to inspect saved versions when the desired one is outside its current context.
 
 
 ## Read-only workspace inspection
@@ -185,3 +185,8 @@ Authenticated `GET /api/chat/export` downloads `whumpo-chat.json` with attachmen
 The handler captures the maximum owned revision once and reads at most 50 turns per page, streaming the response to bound memory. New turns above that revision are excluded. Existing pending replies may finish or retained records may be removed during the download; this is not a transactionally frozen historical snapshot. A read failure aborts the stream instead of returning a syntactically complete partial export. Cancellation stops further page reads. A fresh click downloads the then-current saved history; no reusable bearer URL or public object is created.
 
 Verification: `node tests/chat-history.mjs` covers existing history/search plus complete multi-page export, tenant/auth/welcome boundaries, concurrent new messages, private-review inclusion, strict field projection, no-store attachment headers, no inference/customer charge, authoritative link metadata and interrupted reads. `node tests/chat-reply.mjs` verifies the contextual link requires the boolean metadata and cannot come from prose. `pnpm check` and isolated-release type/build/loading checks passed. This does not establish native browser/device download acceptance.
+
+
+## Current identity verification
+
+`node --stack-trace-limit=0 tests/workspace-agent.mjs`, `tests/first-ai-journey.mjs` and `tests/connection-chat.mjs` pass using the complete current local D1 schema and admitted owner scopes. New-project fixtures supply the required photos array. Lost project creation replies are injected after the actual admitted creation transaction, with one recovered project and no repeated inference. The four-turn website journey preserves exact content/ancestry and explicit specification approvals. Connection status reads reveal no credentials, call no providers, retain labeled historical replies and distinguish expired/revoking access. Internal command-shaped dispatch is fixture coverage, not a customer Chat interface. Standard assistance has zero customer debit. See [verification](verification.md#workspace-actions-profile-identity-and-service-authority); real-model and deployed acceptance remain separate.

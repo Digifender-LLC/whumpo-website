@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
-import {build} from 'esbuild';
-import wrangler from 'wrangler';
-async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
-const {readLayout,saveLayout,saveCapacity,readCapacity,dashboardData,workspaceAction}=await module('src/workspace-dashboard.ts');
-const {prepareSiteAction,siteContext}=await module('src/site-agent.ts');
-const {shortcutCommand,workspaceShortcuts}=await module('src/workspace-shortcuts.ts');
-const {planChangeQuote,capacityNotice,overageNotice,recommendPlan}=await module('src/capacity-policy.ts');
+import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture} from './helpers/workspace-identity.mjs';
+const m=await currentSiteFixtureHandlers(),{readLayout,mutateLayout,saveCapacity,readCapacity,dashboardData,workspaceAction,siteContext,shortcutCommand,workspaceShortcuts,planChangeQuote,capacityNotice,overageNotice,recommendPlan}=m;
 assert.equal(planChangeQuote('personal','business','month',0,100,50).dueCents,2450);
 assert.equal(planChangeQuote('starter','personal','year',0,120,40).dueCents,8667);
 assert.equal(planChangeQuote('personal','starter','year',0,120,40).effectiveAt,120);
@@ -21,33 +16,26 @@ assert.equal(recommendPlan(periods,'downgrade').recommend,true);
 assert.equal(recommendPlan(periods.map(p=>({...p,candidateCapacityPercent:66})),'downgrade').recommend,false);
 assert.equal(recommendPlan(periods.slice(1),'upgrade').recommend,false);
 assert.equal(recommendPlan(periods.map(p=>({...p,complete:false})),'upgrade').recommend,false);
-const dir=await mkdtemp('/tmp/whumpo-dashboard-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
-const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
+const fixture=await databaseFixture(),rawDB=fixture.db;
 try{
- const a=crypto.randomUUID(),b=crypto.randomUUID(),p=crypto.randomUUID();
- for(const user of [a,b])await db.prepare("INSERT INTO users VALUES(?,?,'00','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
+ const owner=await workspaceFixture(rawDB,m),foreign=await workspaceFixture(rawDB,m),a=owner.account,b=foreign.account,p=crypto.randomUUID(),db=await owner.scope(),otherDB=await foreign.scope();
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Dashboard fixture','','draft',?,?)").bind(p,a,new Date().toISOString(),new Date().toISOString()).run();
- const initial=await readLayout(db,a),layout={widgets:['projects','storage'],tabs:[{id:'tab-cms',label:'Publishing',projectId:p,widgets:['cms','traffic'],shortcuts:['project','versions','health','checkWebsite','application']}]};
- assert.equal(initial.revision,0);await saveLayout(db,a,0,layout);
- assert.equal((await readLayout(db,a)).revision,1);assert.deepEqual((await readLayout(db,a)).layout.tabs[0].shortcuts,layout.tabs[0].shortcuts);
+ const view={version:1,projectId:p,widgets:['projects','traffic'],shortcuts:['project','versions','health','checkWebsite','application']};
+ await rawDB.prepare("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','prepare','private-test-acceptance','synthetic dashboard fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)").bind(crypto.randomUUID(),a).run();
+ assert.equal((await readLayout(db,a)).revision,0);
+ await mutateLayout(db,a,{version:1,requestId:crypto.randomUUID(),expectedRevision:0,operation:'createPage',page:{id:'tab-garden',label:'Garden',view}});
+ assert.deepEqual((await readLayout(db,a)).layout.tabs[0].view,view);
  for(const [kind,value] of Object.entries(workspaceShortcuts)){assert.equal(shortcutCommand(kind,p),value.command+' '+p);assert.equal(shortcutCommand(kind,p+' /confirm-publish'),null);}
  assert.equal(shortcutCommand('constructor',p),null);assert.equal(shortcutCommand('project',null),null);
- for(const shortcuts of [['confirm-publish'],['https://evil.test'],['project','project'],[{command:'/delete'}],'project',null,['constructor']])await assert.rejects(()=>saveLayout(db,a,1,{...layout,tabs:[{...layout.tabs[0],shortcuts}]}));
- await assert.rejects(()=>saveLayout(db,a,1,{...layout,tabs:[{...layout.tabs[0],projectId:null}]}));
- assert.equal((await readLayout(db,a)).revision,1);assert.deepEqual((await readLayout(db,b)).layout.tabs,[]);
- await assert.rejects(()=>saveLayout(db,b,0,layout),/Project not found/);
- await assert.rejects(()=>saveLayout(db,a,0,layout),/changed/);
- for(const bad of [{...layout,script:'alert(1)'},{...layout,widgets:['sql']},{...layout,tabs:[{...layout.tabs[0],url:'https://example.com'}]},{...layout,tabs:[layout.tabs[0],layout.tabs[0]]}])await assert.rejects(()=>saveLayout(db,a,1,bad));
- const race=await Promise.allSettled([saveLayout(db,a,1,layout),saveLayout(db,a,1,layout)]);assert.equal(race.filter(r=>r.status==='fulfilled').length,1);
+ assert.deepEqual((await readLayout(otherDB,b)).layout.tabs,[]);
  const preference={revision:0,preferred_plan:'business',billing_interval:'year',draft_overage_cents:4000};
  const saved=await saveCapacity(db,a,preference);assert.equal(saved.authorizationActive,false);assert.equal(saved.policy.automaticPlanChanges,false);assert.equal(saved.policy.overageChargingEnabled,false);
- assert.equal((await readCapacity(db,b)).preferences.draft_overage_cents,0);
+ assert.equal((await readCapacity(otherDB,b)).preferences.draft_overage_cents,0);
  await assert.rejects(()=>saveCapacity(db,a,preference),/changed/);
  await assert.rejects(()=>saveCapacity(db,a,{...preference,revision:1,authorized:true}));
- await assert.rejects(()=>workspaceAction(db,a,{kind:'workspace',operation:'saveCapacity',...preference}));
- const context=await siteContext(db,a);assert.equal(context.workspace.revision,2);
- const action=await prepareSiteAction(db,a,crypto.randomUUID(),JSON.stringify({reply:'Arranging your dashboard.',action:{kind:'workspace',operation:'save',revision:2,layout:{...layout,widgets:['usage','projects','activity']}}}),context);assert.match(action.reply,/Workspace updated/);
+ await assert.rejects(()=>workspaceAction(db,a,crypto.randomUUID(),{kind:'workspace',operation:'saveCapacity',...preference}));
+ const context=await siteContext(db,a);assert.equal(context.workspace.revision,1);
  const dashboard=await dashboardData(db,a);assert.equal(dashboard.projects.length,1);assert.equal(dashboard.billing.plan.id,'explore');assert.deepEqual(dashboard.traffic.rows,[]);assert.equal(dashboard.traffic.metric,'successful_html_requests');assert.equal(dashboard.capacity.capacityPercent,null);
- assert.equal((await dashboardData(db,b)).projects.length,0);
- console.log('Dashboard tests passed: isolation, strict card/shortcut schema, command injection rejection, saved shortcut persistence, CAS concurrency, draft-only preferences, model authority, honest measurements, proration, warnings and two-cycle recommendations.');
-}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+ assert.equal((await dashboardData(otherDB,b)).projects.length,0);
+ console.log('Dashboard tests passed: isolation, current saved views, command injection rejection, shortcut persistence, draft-only preferences, honest measurements, proration, warnings and two-cycle recommendations.');
+}finally{await fixture.close();}

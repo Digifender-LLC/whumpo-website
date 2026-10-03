@@ -1,5 +1,5 @@
 import {CMSBridgeError,type CMSBridgeConfig} from './cms-bridge';
-import {cleanPhoto,maxPhotoBytes} from './files';
+import {cleanPhoto,maxPhotoBytes} from './photo-format';
 export const cmsMediaUploadPath='/_emdash/api/media';
 export const cmsMediaUploadLimit=maxPhotoBytes;
 const envelopeLimit=maxPhotoBytes+8192,uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/,encoder=new TextEncoder();

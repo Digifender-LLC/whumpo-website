@@ -2,11 +2,14 @@ import {knowledgeRequest} from './agent-knowledge';
 import {capabilityRequest} from './capability-catalog';
 import {type ChatMessage} from './ai';
 import {inspectionScopes} from './workspace-read';
+import {interactionActionRequest} from './chat-interactions/agent-request';
 export const inspectionAllowance=10000;
 export function inspectionRequest(raw:string){
  let data;try{data=JSON.parse(raw);}catch{return false;}
  if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).some(k=>!['reply','action'].includes(k))||typeof data.reply!=='string'||!data.reply.trim()||data.reply.length>2000)return false;
  const a=data.action;
+ if(a&&typeof a==='object'&&!Array.isArray(a)&&a.kind==='workspace')return a.operation==='read'&&Object.keys(a).sort().join(',')==='kind,operation';
+ if(interactionActionRequest(a))return a.operation==='read'||a.operation==='readSubmittedAnswers';
  if(a&&typeof a==='object'&&!Array.isArray(a)&&(a.kind==='specification'&&a.operation==='read'||a.kind==='serviceClients'&&['read','history','activations'].includes(a.operation)))return Object.keys(a).every(k=>['kind','operation','projectId'].includes(k))&&typeof a.projectId==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(a.projectId);
  if(capabilityRequest(a))return true;
  if(a&&typeof a==='object'&&!Array.isArray(a)&&knowledgeRequest(a))return true;
@@ -22,7 +25,7 @@ export function inspectionRequest(raw:string){
  }
  if(!a||typeof a!=='object'||Array.isArray(a)||a.kind!=='inspect'||Object.keys(a).some(k=>!['kind','scope','targetId'].includes(k))||!inspectionScopes.includes(a.scope))return false;
  const target=Object.hasOwn(a,'targetId');if(target&&(typeof a.targetId!=='string'||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(a.targetId)))return false;
- return !(['project','version'].includes(a.scope)&&!target||!['project','version','versions'].includes(a.scope)&&target);
+ return !(['project','version'].includes(a.scope)&&!target||!['project','version','versions','traffic'].includes(a.scope)&&target);
 }
 export function inspectionMessages(messages:ChatMessage[],result:string):ChatMessage[]|undefined{
  if(new TextEncoder().encode(result).length>8000||messages.length>48)return;

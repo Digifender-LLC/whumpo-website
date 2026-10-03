@@ -25,3 +25,11 @@ Internal provider capacity and availability can interrupt testing, with a servic
 Focused suites cover competing admission, ownership, immutable identity, dispatch/cancel races, exact completion replay, uncertain costs, interrupted response recovery, late-result atomic rollback, malformed/foreign history queries and zero customer credit charges. `tests/billing.mjs` also proves obsolete tables and routes are absent after a populated disposable reset. Source verification and deployment acceptance are recorded in [the current-only inventory](current-version-policy.md).
 
 Historical September 30 activation evidence remains in [the chronological deployment log](deployment.md). It describes the then-existing dual accounting schema; it is not the current runtime contract.
+
+## Current Muse response allowance — October 3, 2026 UTC
+
+The first real-model workspace-view lifecycle run completed temporary creation and correction, then the provider returned an output-limit failure while saving the corrected view as a page. The failed request committed no page. The private report retains that failed attempt; it is not accepted lifecycle evidence. Successful preceding responses included reasoning tokens in their output usage.
+
+Main Chat now allows **4,096 output tokens per call**, within the transport adapter's existing maximum, for the current Muse-only test route. It still permits at most one bounded lookup/follow-up and reserves both calls before dispatch using the same output ceiling. Observed usage settles the existing internal shadow estimate; standard assistance still charges zero customer credits. There is no automatic retry, alternate model, paid route or provider activation. The acknowledgment allowance, reply/action shape, permissions and approval rules are unchanged. Higher internal reservation headroom is not a verified provider price or increased advertised customer allowance.
+
+The actual-Chat/local-D1 regression accepts two 3,000-output-token lookup/final responses, records all 6,000 tokens within the reservation, and replays without inference or customer charges. Provider contract, current Chat interaction and inspection tests remain separately recorded. Real-model verification of the adjusted ceiling must be recorded before claiming the failed lifecycle is resolved.

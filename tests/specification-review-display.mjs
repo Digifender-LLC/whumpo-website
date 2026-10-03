@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+Error.stackTraceLimit=0;
+const {outputFiles}=await build({stdin:{contents:"export {SpecificationComparison} from './frontend/src/specification-review-details';export {createElement} from 'react';export {renderToStaticMarkup} from 'react-dom/server';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',jsx:'automatic',tsconfig:'tsconfig.frontend.json',banner:{js:"import {createRequire as moduleRequire} from 'node:module';const require=moduleRequire(process.cwd()+'/package.json');"},write:false});
+const m=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const render=value=>m.renderToStaticMarkup(m.createElement(m.SpecificationComparison,{value}));
+const c={version:1,source:'project_spec_proposals',observedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+600000).toISOString(),review:{id:crypto.randomUUID(),proposalDigest:'a'.repeat(64),expectedRevision:1},project:{id:crypto.randomUUID(),name:'Garden <script>bad()</script>'},operation:'change',changes:[{label:'Headline',before:'Before <script>x()</script>',after:'New & better'},{label:'Introduction',before:'',after:null}]};
+const html=render(c);assert(html.includes('&lt;script&gt;'));assert(!html.includes('<script>'));assert(html.includes('New &amp; better'));assert(html.includes('Before'));assert(html.includes('After'));assert(html.includes('Empty'));assert(html.includes('Not included'));assert(html.includes('Publishing requires a separate review'));assert(!html.includes('<button'));assert(!html.includes('<a '));assert(!html.includes('project_spec_proposals'));
+assert(render({...c,operation:'restore'}).includes('Restore a saved website'));assert(render({...c,changes:[]}).includes('unchanged'));
+for(const patch of [{version:0},{approve:true},{source:'model'},{project:{...c.project,url:'https://foreign.test'}}]){const out=render({...c,...patch});assert(out.includes('Update Whumpo'));assert(!out.includes('Garden'));assert(!out.includes('<button'));}
+console.log('Specification comparison display passed: escaped before/after facts, empty versus removed values, change/restore summaries, expiry, current-shape refusal and no approval/link authority.');

@@ -6,34 +6,36 @@ import {createRequire} from 'node:module';
 import {mkdtemp,rm,readdir,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {authenticator} from './app-authenticator.mjs';
 import {taskListAppJourney} from './task-list-app-journey.mjs';
-const id=()=>crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-app-journey-');let proxy,runtime;
+const id=()=>crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-app-journey-');let fixture,runtime;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
+ fixture=await databaseFixture({d1:true,r2:true});
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','deploy','--config','wrangler.runtime.jsonc','--dry-run','--outdir',dir+'/runtime'],{stdio:'pipe',maxBuffer:16*1024*1024});
  const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
  runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
- proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
- const b=await build({stdin:{contents:"export {sendChat as sendFixtureChat} from './src/chat';export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken} from './src/security';export {applicationChatActions} from './src/app-chat-actions';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
- const {sendFixtureChat,readAppStatus,describeAppStatus,backendAction,platform,host,hashToken,applicationChatActions}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+ const db=fixture.db;
+ const b=await build({stdin:{contents:"export {sendChat as sendFixtureChat} from './src/chat';export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {applicationChatActions} from './src/app-chat-actions';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+ const {sendFixtureChat,readAppStatus,describeAppStatus,backendAction,platform,host,hashToken,applicationChatActions}=m;
  let executions=0;
- const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:async(request,init)=>{executions++;return runtime.dispatchFetch(request,init);}},ASSETS:{fetch:async()=>new Response(await readFile('public-app/index.html'),{headers:{'content-type':'text/html'}})}},ctx={waitUntil(){throw Error('Unexpected external work');}};
- async function account(){const user=id(),token=(id()+id()).replaceAll('-',''),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(token),user,new Date(Date.now()+3600000).toISOString(),now).run();return {user,token};}
+ const env={DB:db,FILES:fixture.env.FILES,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:async(request,init)=>{executions++;return runtime.dispatchFetch(request,init);}},ASSETS:{fetch:async()=>new Response(await readFile('public-app/index.html'),{headers:{'content-type':'text/html'}})}},ctx={waitUntil(){throw Error('Unexpected external work');}};
+ async function account(){const authority=await workspaceFixture(db,m);return {...authority,user:authority.account};}
  const owner=await account(),foreign=await account();
- const call=(a,path,body,method=body===undefined?'GET':'POST',origin='https://whumpo.com')=>platform.fetch(new Request('https://whumpo.com/api'+path,{method,headers:{origin,'content-type':'application/json',cookie:'whumpo_session='+(a?.token??'')},body:body===undefined?undefined:JSON.stringify(body)}),env,ctx);
+ const call=(a,path,body,method=body===undefined?'GET':'POST',origin='https://whumpo.com')=>platform.fetch(new Request('https://whumpo.com/api'+path,{method,headers:{origin,'content-type':'application/json',cookie:'__Host-whumpo_session='+(a?.token??'')},body:body===undefined?undefined:JSON.stringify(body)}),env,ctx);
  async function json(path,body,status=200,method){const r=await call(owner,path,body,method);assert.equal(r.status,status,await r.clone().text());return r.json();}
  // Internal setup adapters are not public message syntax. Critical approvals use the real typed endpoint.
  async function setupChat(account,content){
   const stateResponse=await call(account,'/chat');assert.equal(stateResponse.status,200);const state=await stateResponse.json(),request={id:id(),revision:state.state.revision};
   const confirmation=content.match(/^\/confirm-(application|app-page) ([0-9a-f-]+)$/);
   if(confirmation){const response=await call(account,'/chat/actions',{...request,action:{type:'confirm',kind:confirmation[1]==='application'?'application':'appPage',reviewId:confirmation[2]}});assert.equal(response.status,200,await response.clone().text());return response.json();}
-  const result=await sendFixtureChat(db,account.user,{...request,content},undefined,{backendRuntime:env.BACKEND_RUNTIME});assert.equal(result.status,200,JSON.stringify(result));
+  const result=await sendFixtureChat(await account.scope(),account.user,{...request,content},undefined,{backendRuntime:env.BACKEND_RUNTIME});assert.equal(result.status,200,JSON.stringify(result));
   const response=await call(account,'/chat');assert.equal(response.status,200);return response.json();
  }
  async function chat(content){return setupChat(owner,content);}
- await json('/profile',{revision:0,name:'App owner',avatar_id:'planet'},200,'PATCH');await json('/onboarding');await json('/onboarding',{revision:0,stage:'review',project_name:'Private notebook',idea:'A private note for each invited member',audience:'Our team',preferred_theme:'ocean'},200,'PUT');await json('/onboarding/complete',{revision:1});
+ await json('/profile',{revision:0,name:'App owner',avatar_id:'planet'},200,'PATCH');await json('/onboarding');await json('/onboarding',{revision:0,stage:'review',prompt:'review',project_name:'Private notebook',idea:'A private note for each invited member',audience:'Our team',preferred_theme:'ocean'},200,'PUT');await json('/onboarding/complete',{revision:1});
  const {id:project}=await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(owner.user).first(),path='/projects/'+project,version=id(),run=id();
  assert.equal((await readAppStatus(db,owner.user,project)).configured,0);await assert.rejects(readAppStatus(db,foreign.user,project),e=>e.status===404);
  // Trusted synthetic fixture for runtime acceptance; external uploads now quarantine.
@@ -101,11 +103,13 @@ try{
  assert.equal((await call(null,erasePath,eraseBody)).status,401);assert.equal((await call(foreign,erasePath,eraseBody)).status,404);assert.equal((await call(owner,erasePath,eraseBody,'POST','https://foreign.test')).status,403);
  await json(erasePath,{...eraseBody,confirmation:'erase'},400);await json(erasePath,{...eraseBody,extra:true},400);await json(erasePath,eraseBody,409);
  await json(path+'/application-access/visitors/'+remaining.id+'/revoke',{});
- const sessionHash=await hashToken(owner.token),fresh=(await db.prepare('SELECT created_at FROM sessions WHERE token_hash=?').bind(sessionHash).first()).created_at;
- await db.prepare('UPDATE sessions SET created_at=? WHERE token_hash=?').bind(new Date(Date.now()-11*60000).toISOString(),sessionHash).run();await json(erasePath,eraseBody,401);await db.prepare('UPDATE sessions SET created_at=? WHERE token_hash=?').bind(fresh,sessionHash).run();
+ const agedSession=await workspaceSession(db,m,owner,-660);
+ assert.equal((await call({...owner,token:agedSession.token},erasePath,eraseBody)).status,401);
+ await agedSession.revoke();
  // Simulate a lost storage acknowledgement; concurrent retries recover one committed deletion.
- env.DB=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const stmt=target.prepare(sql);if(!sql.startsWith('INSERT INTO app_owner_erasures'))return stmt;return {bind(...args){const bound=stmt.bind(...args);return {async run(){await bound.run();throw Error('Lost erasure acknowledgement');}};}};};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
- try{const results=await Promise.all([json(erasePath,eraseBody),json(erasePath,eraseBody)]);assert.ok(results.every(r=>r.erased&&r.receiptId===eraseId));}finally{env.DB=db;}
+ let lostReplies=0;
+ env.DB=interceptDatabase(db,/^INSERT INTO app_owner_erasures/,()=>{},()=>{if(lostReplies===0){lostReplies++;throw Error('Lost erasure acknowledgement');}});
+ try{const results=await Promise.all([json(erasePath,eraseBody),json(erasePath,eraseBody)]);assert.ok(results.every(r=>r.erased&&r.receiptId===eraseId));assert.equal(lostReplies,1);}finally{env.DB=db;}
  assert.equal((await json(erasePath,eraseBody)).erased,true);await json(path+'/application-access/visitors/'+id()+'/erase',eraseBody,409);
  assert.equal((await db.prepare('SELECT count(*) n FROM app_owner_erasures WHERE id=?').bind(eraseId).first()).n,1);
  for(const table of ['app_visitors','app_documents','app_runs','app_passkeys','app_recovery_codes','app_sessions','app_auth_challenges']){const column=table==='app_visitors'?'id':'visitor_id';assert.equal((await db.prepare('SELECT count(*) n FROM '+table+' WHERE '+column+'=?').bind(remaining.id).first()).n,0);}
@@ -116,4 +120,4 @@ try{
  await recordFixtureBenchmark(db,'application',{transportCalls:0,runtimeCalls:executions});
  console.log('Customer app journey passed: welcome, actual QuickJS test, separate program/page reviews, public host, signed passkeys, isolated visitors, exact transition replay, recovery/export/deletion, withdrawal and historical approval safety. No live deployment or AI call.');
  await taskListAppJourney({db,account,call,host,env,setupChat,executions:()=>executions});
-}finally{await runtime?.dispose();await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await runtime?.dispose();await fixture?.close();await rm(dir,{recursive:true,force:true});}

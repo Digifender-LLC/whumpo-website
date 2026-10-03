@@ -43,7 +43,33 @@ export function cmsCloudflareProvider(accountId,api){
   throw Error('Resource inventory exceeds the reconciliation bound');
  },async create(kind,name){if(!paths[kind])throw Error('Unsupported CMS resource');await api(paths[kind],kind==='session'?{title:name}:{name});}};
 }
+/** Current D1 REST statements and atomic batch request. Bound statements are
+ * immutable capabilities belonging to this exact adapter; no SQL/parameter
+ * interpolation, sequential batch emulation or mutation retry. */
 export function remoteD1(api,databaseId){
  if(!/^[0-9a-f-]{36}$/.test(databaseId))throw Error('Invalid control database');
- return {prepare(sql){let params=[];const statement={bind(...values){params=values;return statement;},async run(){const response=await api('/d1/database/'+databaseId+'/query',{sql,params}),result=response.result?.[0];if(result?.success!==true)throw Error('Control database query failed');return result;},async first(){return (await statement.run()).results?.[0]??null;},async all(){return statement.run();}};return statement;}};
+ const statements=new WeakMap(),denied=()=>Error('Control database query failed');
+ const query=async(body,count)=>{
+  const response=await api('/d1/database/'+databaseId+'/query',body),results=response.result;
+  if(!Array.isArray(results)||results.length!==count||results.some(r=>r?.success!==true||!Array.isArray(r.results)))throw denied();
+  return results;
+ };
+ const prepared=(sql,params)=>{
+  const input={sql,params:structuredClone(params)};
+  const statement=Object.freeze({
+   bind:(...values)=>prepared(sql,values),
+   run:async()=>(await query(structuredClone(input),1))[0],
+   all:async()=>(await query(structuredClone(input),1))[0],
+   first:async column=>{const row=(await query(structuredClone(input),1))[0].results[0]??null;return row&&column!==undefined?row[column]:row;},
+  });
+  statements.set(statement,input);return statement;
+ };
+ return Object.freeze({
+  prepare:sql=>{if(typeof sql!=='string'||!sql.trim())throw denied();return prepared(sql,[]);},
+  batch:async items=>{
+   if(!Array.isArray(items)||!items.length||items.some(item=>!statements.has(item)))throw denied();
+   const batch=items.map(item=>structuredClone(statements.get(item)));
+   return query({batch},batch.length);
+  },
+ });
 }

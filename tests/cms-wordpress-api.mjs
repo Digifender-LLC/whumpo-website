@@ -1,13 +1,17 @@
+// Owner-deferred CMS acceptance. Current-schema setup only; do not run without resumption.
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
-import {build} from 'esbuild';
-import wrangler from 'wrangler';
-async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
+import {currentFixtureModules} from './helpers/current-modules.mjs';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture} from './helpers/workspace-identity.mjs';
+const {module,identity}=await currentFixtureModules(["src/chat.ts", "src/cms-bridge.ts", "src/cms-deploy.ts", "src/cms-gateway.ts", "src/cms-projects.ts", "src/cms-provision.ts", "src/cms-wordpress-chat.ts", "src/index.ts", "src/security.ts"]);
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
-const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
-async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now).run();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Deploy fixture','','draft',?,?)").bind(project,user,now,now).run();const review=await prepareCMS(db,user,id(),project,'My CMS','Our updates');await confirmCMS(db,user,review.id);const resources=new Map();await allocateCMSResources(db,project,{accountId:account,find:async(k,n)=>resources.get(k+n)??null,create:async(k,n)=>resources.set(k+n,k==='database'?id():k==='session'?id().replaceAll('-',''):n)});const origin='https://whumpo-cms-'+project.replaceAll('-','')+'.whumpo.site',config={projectId:project,ownerId:user,origin,secret:await deriveCMSSecret(master,project,user,origin)};return {user,project,review,config};}
+const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');
+const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
+const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
+async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}
+async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await accountAuthority(user);await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Deploy fixture','','draft',?,?)").bind(project,user,now,now).run();const review=await prepareCMS(scope(user),user,id(),project,'My CMS','Our updates');await confirmCMS(scope(user),user,review.id);const resources=new Map();await allocateCMSResources(db,project,{accountId:account,find:async(k,n)=>resources.get(k+n)??null,create:async(k,n)=>resources.set(k+n,k==='database'?id():k==='session'?id().replaceAll('-',''):n)});const origin='https://whumpo-cms-'+project.replaceAll('-','')+'.whumpo.site',config={projectId:project,ownerId:user,origin,secret:await deriveCMSSecret(master,project,user,origin)};return {user,project,review,config};}
 function provider(a){let tag=null,version=null,initialized=false,setupId=null;const p={accountId:account,uploads:0,setups:0,owner:a.user,missingPages:false,unresolved:false,lostUpload:false,exists:async()=>version!==null,deploy:async(_name,t)=>{p.uploads++;if(p.unresolved)throw Error('unknown');tag=t;version=id();if(p.lostUpload)throw Error('lost upload acknowledgement');},activeVersion:async(_name,t)=>tag===t?version:null,replaceVersion:()=>{version=id();},service:{fetch:async request=>{const verified=await verifyCMSRequest(request,a.config);let data;
  if(verified.path==='/_emdash/api/setup/status')data={needsSetup:!initialized};
  else if(verified.path==='/_emdash/api/setup'){assert.deepEqual(JSON.parse(verified.body),{title:'My CMS',tagline:'Our updates',includeContent:false});if(setupId&&setupId!==verified.id)throw Error('unexpected setup ID');if(!initialized)p.setups++;initialized=true;setupId=verified.id;data={setupComplete:true,seedComplete:true};}
@@ -17,15 +21,14 @@ function provider(a){let tag=null,version=null,initialized=false,setupId=null;co
 const {default:platform}=await module('src/index.ts'),{cmsGateway}=await module('src/cms-gateway.ts'),{hashToken}=await module('src/security.ts');
 try{
  const a=await fixture(),p=provider(a);await deployCMS(db,a.project,digest,a.config,p);await connectCMS(db,a.project,id());
- const token='a'.repeat(64),otherToken='b'.repeat(64),other=id(),now=new Date().toISOString();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(other,other+'@example.test',now).run();
+ const other=id(),now=new Date().toISOString(),token=accounts.get(a.user).token,otherToken=(await accountAuthority(other)).token;
  // The foreign customer has their own project so Chat reaches ownership checks past the welcome gate.
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Other customer project','','draft',?,?)").bind(id(),other,now,now).run();
- for(const [session,user] of [[token,a.user],[otherToken,other]])await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(session),user,new Date(Date.now()+3600000).toISOString(),now).run();
  let nativeWrites=0,bucketReads=0;
  const nativeEnv={DB:db,WHUMPO_CMS_PROJECT_ID:a.project,WHUMPO_CMS_OWNER_ID:a.user,WHUMPO_CMS_ORIGIN:a.config.origin,WHUMPO_CMS_BRIDGE_KEY:a.config.secret};
- const env={ENVIRONMENT:'local',DB:db,FILES:{get:async(...args)=>{bucketReads++;return proxy.env.FILES.get(...args);},put:proxy.env.FILES.put.bind(proxy.env.FILES)},API_LIMITER:{limit:async()=>({success:true})},CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:{fetch:request=>cmsGateway(request,nativeEnv,async request=>{assert.equal(request.method,'POST');assert.ok(request.url.endsWith('/content/posts'));nativeWrites++;const body=await request.json();return Response.json({success:true,data:{_rev:'rev1',item:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAV',slug:body.slug,status:'draft',version:1,data:body.data}}},{status:201});})}};
+ const env={ENVIRONMENT:'local',DB:db,FILES:{get:async(...args)=>{bucketReads++;return store.env.FILES.get(...args);},put:store.env.FILES.put.bind(store.env.FILES)},API_LIMITER:{limit:async()=>({success:true})},CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:{fetch:request=>cmsGateway(request,nativeEnv,async request=>{assert.equal(request.method,'POST');assert.ok(request.url.endsWith('/content/posts'));nativeWrites++;const body=await request.json();return Response.json({success:true,data:{_rev:'rev1',item:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAV',slug:body.slug,status:'draft',version:1,data:body.data}}},{status:201});})}};
  const base='/api/cms/'+a.project+'/wordpress/sources',source=id(),review=id(),xml='<rss xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/" xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><wp:wxr_version>1.2</wp:wxr_version><item><title>Private import</title><wp:post_id>9</wp:post_id><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><excerpt:encoded><![CDATA[Source excerpt marker]]></excerpt:encoded><content:encoded><![CDATA[<p>Original <strong>story</strong>.</p>]]></content:encoded></item></channel></rss>';
- const call=(path,{method='GET',body,cookie=token,origin='http://localhost',type='application/json'}={})=>platform.fetch(new Request('http://localhost'+path,{method,headers:{origin,'content-type':type,'x-source-name':'wordpress.xml',...(cookie?{cookie:'whumpo_session='+cookie}:{})},...(body===undefined?{}:{body:typeof body==='string'?body:JSON.stringify(body)})}),env,{waitUntil(){throw Error('No background work expected');}});
+ const call=(path,{method='GET',body,cookie=token,origin='http://localhost',type='application/json'}={})=>platform.fetch(new Request('http://localhost'+path,{method,headers:{origin,'content-type':type,'x-source-name':'wordpress.xml',...(cookie?{cookie:'__Host-whumpo_session='+cookie}:{})},...(body===undefined?{}:{body:typeof body==='string'?body:JSON.stringify(body)})}),env,{waitUntil(){throw Error('No background work expected');}});
  assert.equal((await call(base,{cookie:''})).status,401);assert.equal((await call(base+'/'+source,{method:'PUT',body:xml,type:'application/xml',origin:'https://foreign.test'})).status,403);
  assert.equal((await call(base+'/'+source,{method:'PUT',body:'<rss>',type:'application/xml'})).status,400);assert.equal((await db.prepare('SELECT count(*) n FROM cms_wordpress_sources').first()).n,0);
  const uploaded=await call(base+'/'+source,{method:'PUT',body:xml,type:'application/xml'});assert.equal(uploaded.status,200,await uploaded.clone().text());assert.equal((await uploaded.json()).state,'ready');assert.equal(nativeWrites,0);
@@ -39,11 +42,11 @@ try{
  // Internal fixture adapters prepare/read records; only typed approval goes through public Chat.
  const {sendChat,readChat}=await module('src/chat.ts'),{cmsWordPressCommand}=await module('src/cms-wordpress-chat.ts');
  const chat=async(content,cookie=token,requestId=id())=>{
-  const owner=cookie===token?a.user:other,state=await readChat(db,owner);
+  const owner=cookie===token?a.user:other,state=await readChat(scope(owner),owner);
   if(content.startsWith('/confirm-cms-import ')){
    const response=await call('/api/chat/actions',{method:'POST',cookie,body:{id:requestId,revision:state.state.revision,action:{type:'confirm',kind:'cmsImport',reviewId:content.split(' ')[1]}}});assert.equal(response.status,200,await response.clone().text());
-  }else assert.equal((await sendChat(db,owner,{content,revision:state.state.revision,id:requestId},undefined,{cmsPublication:(turn,text)=>cmsWordPressCommand(db,owner,turn,text,env)})).status,200);
-  return (await readChat(db,owner)).turns.find(t=>t.id===requestId);
+  }else assert.equal((await sendChat(scope(owner),owner,{content,revision:state.state.revision,id:requestId},undefined,{cmsPublication:(turn,text)=>cmsWordPressCommand(scope(owner),owner,turn,text,env)})).status,200);
+  return (await readChat(scope(owner),owner)).turns.find(t=>t.id===requestId);
  };
  const inventory=await chat('/wordpress-sources '+a.project);assert.match(inventory.assistant_text,/wordpress.xml/);
  const reportTurn=await chat('/wordpress-inspect '+a.project+' '+source);assert.match(reportTurn.assistant_text,/Item 9/);assert.ok(!reportTurn.assistant_text.includes('<strong>'));assert.ok(!reportTurn.assistant_text.includes('Original story'));assert.ok(!reportTurn.assistant_text.includes('Source excerpt marker'));
@@ -53,8 +56,8 @@ try{
  const interrupted=(await (await call('/api/chat')).json()).turns.find(t=>t.id===reviewTurn.id);assert.equal(interrupted.cms_import_confirmation_id,undefined);
  await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(reviewTurn.assistant_text,reviewTurn.id).run();
  const {cmsWordPressAction}=await module('src/cms-wordpress-chat.ts');
- assert.equal(cmsWordPressAction(db,a.user,{kind:'cms',operation:'confirmWordPressImport',reviewId:review},id(),env),undefined);
- await assert.rejects(cmsWordPressAction(db,a.user,{kind:'cms',operation:'reviewWordPressImport',projectId:a.project,sourceId:source,sourceItemId:9,title:'Replacement'},id(),env),/Unsupported/);
+ assert.equal(cmsWordPressAction(scope(a.user),a.user,{kind:'cms',operation:'confirmWordPressImport',reviewId:review},id(),env),undefined);
+ await assert.rejects(cmsWordPressAction(scope(a.user),a.user,{kind:'cms',operation:'reviewWordPressImport',projectId:a.project,sourceId:source,sourceItemId:9,title:'Replacement'},id(),env),/Unsupported/);
  const dedup=await chat('/import-wordpress '+a.project+' '+source+' 9');assert.match(dedup.assistant_text,new RegExp(review));assert.equal(nativeWrites,0);
  const imported=await chat('/confirm-cms-import '+review);assert.match(imported.assistant_text,/imported as a private draft/);assert.equal(imported.cms_import_confirmation_id,undefined);assert.equal(imported.cms_preview_request_id,review);assert.equal(nativeWrites,1);
  const recovered=await chat('/confirm-cms-import '+review);assert.equal(recovered.cms_preview_request_id,review);assert.equal(nativeWrites,1);
@@ -66,4 +69,4 @@ try{
  const incompleteReport=await(await call(base+'/'+incompleteSource)).json();assert.equal(incompleteReport.report.summary.reviewable,0);assert.ok(incompleteReport.report.articles[0].reasons.includes('missing_term_definition'));
  assert.equal((await call(base+'/'+incompleteSource+'/import-reviews',{method:'POST',body:{id:id(),sourceItemId:9}})).status,409);assert.equal(nativeWrites,1);
  console.log('Mounted WordPress API and Chat passed: guided inspection/review/confirmation/recovery, model approval exclusion, forged-action rejection, help discovery,  session/origin checks, invalid-file rejection before storage, retained-source inspection/download, owner isolation, source-derived review, forged-field denial, private preview, explicit confirmation/replay and no publication.');
-}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await store.close();await rm(dir,{recursive:true,force:true});}

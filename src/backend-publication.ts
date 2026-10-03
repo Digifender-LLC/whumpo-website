@@ -11,20 +11,22 @@ export async function readBackendPublication(db:D1Database,user:string,project:s
 export async function readBackendPublicationReview(db:D1Database,user:string,id:string){
  const row=await db.prepare('SELECT r.*,v.source,v.digest FROM backend_publication_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id JOIN backend_versions v ON v.id=r.version_id AND v.project_id=r.project_id WHERE r.id=? AND r.user_id=?').bind(id,user).first<Review>();
  if(!row)throw new BackendError(404,'Backend publication review not found');
- if(await hashToken(row.source)!==row.digest)throw new BackendError(409,'Backend integrity check failed');
+ // Withdrawal grants no execution or serving authority. Damaged source must
+ // not prevent an owner from taking its endpoint offline.
+ if(row.operation==='publish'&&await hashToken(row.source)!==row.digest)throw new BackendError(409,'Backend integrity check failed');
  return row;
 }
-export async function prepareBackendPublication(db:D1Database,user:string,project:string,id:string,operation:'publish'|'unpublish',version:string,run:string|null){
+export async function prepareBackendPublication(db:D1Database,user:string,project:string,id:string,operation:'publish'|'unpublish',version:string,run:string|null,expectedRevision?:number){
  if(!uuid.test(id)||!uuid.test(version)||!['publish','unpublish'].includes(operation)||operation==='publish'&&(!run||!uuid.test(run))||operation==='unpublish'&&run!==null)throw new BackendError(400,'Provide a review UUID, version UUID and successful test receipt for publication');
  await listBackends(db,user,project);
  const previous=await db.prepare('SELECT id FROM backend_publication_reviews WHERE id=?').bind(id).first();
  if(!previous){
   await db.prepare('INSERT OR IGNORE INTO backend_publications(project_id) VALUES(?)').bind(project).run();
   const current=await readBackendPublication(db,user,project);
-  try{await db.prepare('INSERT INTO backend_publication_reviews(id,user_id,project_id,operation,version_id,run_id,base_revision) VALUES(?,?,?,?,?,?,?)').bind(id,user,project,operation,version,run,current.revision).run();}catch{/* Read an exact committed review after an uncertain acknowledgment. */}
+  try{await db.prepare('INSERT INTO backend_publication_reviews(id,user_id,project_id,operation,version_id,run_id,base_revision) VALUES(?,?,?,?,?,?,?)').bind(id,user,project,operation,version,run,expectedRevision??current.revision).run();}catch{/* Read an exact committed review after an uncertain acknowledgment. */}
  }
  let row:Review;try{row=await readBackendPublicationReview(db,user,id);}catch{throw new BackendError(409,'Review unavailable: check the successful test receipt, current publication and review allowance');}
- if(row.project_id!==project||row.operation!==operation||row.version_id!==version||row.run_id!==run)throw new BackendError(409,'Review ID already used');
+ if(row.project_id!==project||row.operation!==operation||row.version_id!==version||row.run_id!==run||expectedRevision!==undefined&&row.base_revision!==expectedRevision)throw new BackendError(409,'Review ID already used');
  return row;
 }
 // Only the authenticated human confirmation route/command may call this.

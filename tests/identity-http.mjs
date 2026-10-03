@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
 import {timingSafeEqual} from 'node:crypto';
 import {build} from 'esbuild';
-import {identityDatabase} from './helpers/identity-database.mjs';
+import {databaseFixture} from './helpers/current-database.mjs';
 import {authenticator} from './helpers/webauthn-authenticator.mjs';
-const built=await build({stdin:{contents:"export * from './src/workspace-identity/http';export {hashToken} from './src/security';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
-const {handleIdentityRequest,workspaceIdentity,identityCookies,hashToken}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
-const fixture=await identityDatabase(),db=fixture.db,originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
+const built=await build({stdin:{contents:"export * from './src/workspace-identity/http';export {default as worker} from './src/index';export * from './src/workspace-identity/admission';export {hashToken} from './src/security';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
+const {worker,workspaceIdentity,identityCookies,hashToken}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+const fixture=await databaseFixture(),db=fixture.db,originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
 crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
 globalThis.fetch=async()=>Response.json({success:true,hostname:'whumpo.com',action:'register'});
 let limited=false,apiLimited=false,rateCalls=0,cases=0,phase='transport refusals';
 const env={DB:db,ENVIRONMENT:'test',TURNSTILE_SECRET:'synthetic-only',TURNSTILE_SITE_KEY:'synthetic-public',AUTH_LIMITER:{limit:async()=>{rateCalls++;return {success:!limited}}},API_LIMITER:{limit:async()=>({success:!apiLimited})}};
+const handleIdentityRequest=(request,environment)=>worker.fetch(request,environment,{waitUntil:()=>{}});
+const workspaceCall=(browser,path,body)=>handleIdentityRequest(new Request('https://whumpo.com/api'+path,{method:body===undefined?'GET':'POST',headers:{cookie:browser.header(),origin:'https://whumpo.com','content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}),env);
 const base='https://whumpo.com/api/auth/identity/v1/',id=()=>crypto.randomUUID(),run=(sql,...values)=>db.prepare(sql).bind(...values).run(),row=(sql,...values)=>db.prepare(sql).bind(...values).first();
 class Browser{
  cookies=new Map();counters=new Map();
@@ -46,13 +48,15 @@ try{
  await b.no('state',{},400,{headers:{origin:'https://whumpo.com','content-type':'text/plain'}});
  await b.no('state',{version:1,padding:'x'.repeat(74000)},400);await b.no('state?key=bad',{version:1},400);
  const future=await handleIdentityRequest(new Request('https://whumpo.com/api/auth/identity/v0/state',{method:'POST',headers:{origin:'https://whumpo.com'}}),env);assert.equal(future.status,409);cases++;
- assert.equal(await handleIdentityRequest(new Request('https://whumpo.com/api/auth/login'),env),null);
+ assert.equal((await handleIdentityRequest(new Request('https://whumpo.com/api/auth/login'),env)).status,404);
  await b.no('state',{},400,{method:'GET',body:undefined});
  const stale=new Browser();stale.cookies.set(identityCookies.session,'f'.repeat(64));await stale.no('state',{version:1},401);await stale.ok('logout');assert.equal(stale.cookies.size,0);
  const legacy=new Browser();legacy.cookies.set('whumpo_session','f'.repeat(64));assert.equal(await legacy.state(),null);await assert.rejects(()=>workspaceIdentity(new Request('https://whumpo.com/api/profile',{headers:{cookie:legacy.header()}}),env),e=>e.code==='proof_required');cases++;
  limited=true;await b.no('login/options',{version:1},429);assert.equal(await b.state(),null);limited=false;apiLimited=true;await b.no('state',{version:1},429);apiLimited=false;
  phase='enrollment and strict authority';
+ for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(b,path)).status,401);cases++;}
  const f=await signup(b),firstState=await b.state();assert.equal(firstState.purpose,'enrollment');assert(!b.cookies.has(identityCookies.session));assert(!b.cookies.has(identityCookies.challenge));
+ for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(b,path)).status,401);cases++;}
  await assert.rejects(()=>workspaceIdentity(new Request('https://whumpo.com/api/profile',{headers:{cookie:b.header()}}),env),e=>e.code==='proof_required');cases++;
  const duplicate=await b.call('state',{version:1},{headers:{origin:'https://whumpo.com','content-type':'application/json',cookie:`${b.header()}; ${b.header()}`}});assert.equal(duplicate.status,400);cases++;
  const ambiguous=new Browser();ambiguous.cookies=new Map(b.cookies);ambiguous.cookies.set(identityCookies.session,'f'.repeat(64));await ambiguous.no('state',{version:1},400);
@@ -61,13 +65,26 @@ try{
  await b.no('enrollment/complete',{...b.intent(saved),offerId:kit.offer.id,generation:kit.offer.generation},401);
  await b.assertion('reauth',second);const final=await b.state();assert.equal(final.freshPasskey,true);
  await b.ok('enrollment/complete',{...b.intent(final),offerId:kit.offer.id,generation:kit.offer.generation});assert.equal((await b.state()).purpose,'workspace');assert(!b.cookies.has(identityCookies.grant));assert(b.cookies.has(identityCookies.session));
+ const profile=await workspaceCall(b,'/profile');assert.equal(profile.status,200);const publicProfile=await profile.json();assert.equal(publicProfile.onboardingComplete,false);assert(!Object.hasOwn(publicProfile,'passwordEnabled'));
+ assert.equal((await workspaceCall(b,'/chat')).status,409);assert.equal((await workspaceCall(b,'/workspace/dashboard')).status,409);
+ for(const path of ['/auth/login','/auth/register','/auth/recover','/auth/passkeys/login/options','/auth/logout']){assert.equal((await workspaceCall(b,path,{})).status,404);cases++;}
+ const accessReviews=await workspaceCall(b,'/connections/github/grant-reviews');assert.equal(accessReviews.status,200);assert.deepEqual(await accessReviews.json(),{reviews:[]});cases++;
+ for(const [path,payload,status] of [
+  ['/connections/github/grant-reviews',{id:id(),extra:true},400],
+  ['/connections/github/grant-reviews',{id:id()},503],
+  ['/connections/github/grant-reviews/'+id()+'/confirm',{confirmation:'yes'},400],
+  ['/connections/github/grant-reviews/'+id()+'/confirm',{confirmation:'REVOKE_APP_ACCESS'},404],
+  ['/connections/github/grant-reviews/'+id()+'/cancel',{},404],
+ ]){assert.equal((await workspaceCall(b,path,payload)).status,status);cases++;}
+ const crossOriginGrant=await handleIdentityRequest(new Request('https://whumpo.com/api/connections/github/grant-reviews',{method:'POST',headers:{cookie:b.header(),origin:'https://elsewhere.invalid','content-type':'application/json'},body:JSON.stringify({id:id()})}),env);assert.equal(crossOriginGrant.status,403);cases++;
  const ordinary=b.cookies.get(identityCookies.session);await workspaceIdentity(new Request('https://whumpo.com/api/profile',{headers:{cookie:b.header()}}),env);
  const expiredGrant=new Browser();expiredGrant.cookies.set(identityCookies.grant,held);await expiredGrant.no('state',{version:1},401);
  phase='recovery and lost replies';
  await b.ok('recovery/start',{version:1,email:f.email,key:kit.key});assert(!b.cookies.has(identityCookies.session));assert.equal((await b.state()).purpose,'recovery');
  const stillOrdinary=new Browser();stillOrdinary.cookies.set(identityCookies.session,ordinary);assert.equal((await stillOrdinary.state()).purpose,'workspace');
  let s=await b.state();await b.ok('recovery/review',{...b.intent(s),mode:'all',lostIds:s.keys.map(k=>k.id)});const replacement=await b.kit();s=await b.state();const intent={...b.intent(s),offerId:replacement.offer.id,generation:replacement.offer.generation,reviewId:s.recovery.review.id,confirmation:'secure-account'};
- const lostReply=await b.ok('recovery/secure',intent);assert(lostReply.receipt);await stillOrdinary.no('state',{version:1},401);
+ const lostReply=await b.ok('recovery/secure',intent);assert(lostReply.receipt);
+ for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(stillOrdinary,path)).status,401);cases++;}await stillOrdinary.no('state',{version:1},401);
  b.cookies.clear();await b.ok('recovery/start',{version:1,email:f.email,key:replacement.key});s=await b.state();assert.equal(s.recovery.status,'secured');assert.equal(s.keys.length,0);assert.equal((await b.ok('recovery/secure',intent)).receipt.operationId,intent.requestId);
  await b.no('recovery/start',{version:1,email:f.email,key:kit.key},401);
  await b.add('Replacement one');const replacementKey=await b.add('Replacement two');s=await b.state();assert.equal(s.recovery.canComplete,true);
@@ -82,6 +99,6 @@ try{
  await pending.ok('login/options');await pending.no('login/verify',{version:1,credential:{}},401);assert(!pending.cookies.has(identityCookies.challenge));
  await pending.no('login/verify',{version:1,credential:{}},401);
  const separate=new Browser();await ready(separate);s=await separate.state();await separate.ok('passkey/remove',{...separate.intent(s),credentialId:s.keys[0].id,confirmation:'remove-passkey'});assert.equal(await separate.state(),null);
- console.log(`Identity HTTP: ${cases} refusal checks plus real signed enrollment, lost-reply recovery, rotation, removal and logout (${process.argv.includes('--d1')?'local D1':'SQLite'}).`);
+ console.log(`Current Worker identity HTTP: ${cases} refusal checks plus real signed enrollment, lost-reply recovery, rotation, removal and logout (${process.argv.includes('--d1')?'local D1':'SQLite'}).`);
 }catch(error){console.error(`Identity HTTP failed during ${phase}: ${error.message}`);process.exitCode=1;}
 finally{globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await fixture.close();}

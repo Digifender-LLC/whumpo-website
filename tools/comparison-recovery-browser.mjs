@@ -12,15 +12,20 @@ try{
  server=createServer(async(req,res)=>{try{
   if(req.headers.host!=='localhost:8176'){res.writeHead(403).end();return;}
   const url=new URL(req.url,origin);
+  if(url.pathname==='/_acceptance/finish'&&req.method==='GET'){res.writeHead(200,{'content-type':'text/plain','cache-control':'no-store'}).end('Checking the comparison reads.');done();return;}
   if(url.pathname==='/_fixture'&&req.method==='GET'){
    res.writeHead(200,{'content-type':'text/html','cache-control':'no-store'}).end('<h1>Private comparison checks</h1><p>Actual local handlers, synthetic account. No inference or publication.</p><form method="post" action="/_fixture/start"><button>Use the synthetic account</button></form><form method="post" action="/_fixture/logout"><button>End synthetic session</button></form><ul>'+Object.entries({fresh:'Open current review',expired:'Open expired review',missing:'Open unavailable comparison'}).map(([key,label])=>'<li><a href="'+f.paths[key]+'">'+label+'</a></li>').join('')+'</ul>');return;
   }
   if(req.method==='POST'&&['/_fixture/start','/_fixture/logout'].includes(url.pathname)){
-   res.writeHead(303,{'set-cookie':'whumpo_session='+(url.pathname.endsWith('/start')?f.token:'')+'; HttpOnly; SameSite=Lax; Path=/'+(url.pathname.endsWith('/logout')?'; Max-Age=0':''),location:'/_fixture'}).end();return;
+   res.writeHead(303,{'set-cookie':'__Host-whumpo_session='+(url.pathname.endsWith('/start')?f.token:'')+'; Secure; HttpOnly; SameSite=Lax; Path=/'+(url.pathname.endsWith('/logout')?'; Max-Age=0':''),location:'/_fixture'}).end();return;
   }
-  if(req.method!=='GET'){res.writeHead(405).end();return;}
+  const identityRead=req.method==='POST'&&['/api/auth/identity/v1/state','/api/auth/identity/v1/config'].includes(url.pathname);
+  if(req.method!=='GET'&&!identityRead){res.writeHead(405).end();return;}
   if(url.pathname.startsWith('/api/')){
-   const response=await f.worker.fetch(new Request('https://whumpo.com'+url.pathname+url.search,{headers:req.headers}),f.env,f.ctx);
+   if(identityRead&&req.headers.origin!==origin){res.writeHead(403).end();return;}
+   const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>16384){res.writeHead(413).end();return;}chunks.push(chunk);}
+   const headers=new Headers(req.headers);if(identityRead)headers.set('origin','https://whumpo.com');
+   const response=await f.worker.fetch(new Request('https://whumpo.com'+url.pathname+url.search,{method:req.method,headers,...(identityRead?{body:Buffer.concat(chunks)}:{})}),f.env,f.ctx);
    requests.push({path:url.pathname,status:response.status,contentType:response.headers.get('content-type')});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return;
   }
   const name=url.pathname==='/'||url.pathname.startsWith('/workspace')?'index.html':decodeURIComponent(url.pathname).slice(1),path=resolve(root,name);
@@ -29,7 +34,7 @@ try{
  }catch(error){res.writeHead(error.code==='ENOENT'?404:500).end('Local fixture unavailable');console.error('Fixture request failed:',error.message);}});
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(8176,'127.0.0.1',resolve);});
  input=createInterface({input:process.stdin});input.on('line',line=>{if(line.trim()==='finish')done();});
- console.log('Comparison recovery ready at '+origin+'/_fixture. Type finish after browser checks.');
+ console.log('Comparison recovery ready at '+origin+'/_fixture. Visit /_acceptance/finish or type finish after browser checks.');
  await finished;
  for(const [key,status] of [['fresh',200],['expired',409],['missing',404],['fresh',401]])assert.ok(requests.some(r=>r.path===f.paths[key]&&r.status===status&&r.contentType.startsWith('text/html')),'Missing '+key+' '+status+' browser read');
  assert.ok(requests.some(r=>r.path==='/api/chat'&&r.status===200));assert.equal(f.state(),before);

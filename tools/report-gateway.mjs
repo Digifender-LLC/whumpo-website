@@ -18,5 +18,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const credentials=process.env.CLOUDFLARE_API_TOKEN?{type:'api_token',token:process.env.CLOUDFLARE_API_TOKEN}:undefined;
   const api=cloudflareClient(config.account_id,fetch,credentials),db=remoteD1(api,config.d1_databases.find(b=>b.binding==='DB').database_id);
   console.log(JSON.stringify(await gatewayEvidenceReport(db),null,2));
- }catch{console.error('Gateway evidence report unavailable. Check operator authorization and accounting migrations. No settings were changed.');process.exitCode=1;}
+ }catch{console.error('Gateway evidence report unavailable. Check operator authorization and the current accounting schema. No settings were changed.');process.exitCode=1;}
 }

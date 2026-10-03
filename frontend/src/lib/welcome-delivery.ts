@@ -1,6 +1,6 @@
 import type {Profile} from './api';
 import type {WelcomePrompt,WelcomeStage} from '../../../src/welcome-prompts';
-export type WelcomeDraft={revision:number;stage:WelcomeStage;prompt?:WelcomePrompt;project_name:string;idea:string;audience:string;preferred_theme:string};
+export type WelcomeDraft={revision:number;stage:WelcomeStage;prompt:WelcomePrompt;project_name:string;idea:string;audience:string;preferred_theme:string};
 export type Welcome={complete:boolean;state?:WelcomeDraft};
 
 /** A lost response is checked with a read; this function never repeats a write. */

@@ -1,19 +1,16 @@
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {databaseFixture} from './helpers/current-database.mjs';
+
 import {fairUseOperatorInput,fairUseOperatorDigest,runFairUseOperator} from '../tools/fair-use-review-input.mjs';
 const bundle=await build({stdin:{contents:"export * from './src/fair-use-reviews';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const service=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const {openFairUseReview:open,readFairUseReview:read,resolveFairUseReview:resolve,listFairUseReviews:list}=service;
-const dir=await mkdtemp('/tmp/whumpo-fair-review-');let proxy;
+const store=await databaseFixture({d1:true}),db=store.db;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
- proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
  const owner=crypto.randomUUID(),other=crypto.randomUUID(),id=crypto.randomUUID();
- for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'test','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
+ for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").bind(user,user+'@example.test',new Date().toISOString()).run();
  const period=new Date().toISOString().slice(0,7);
  const grant=(user,plan)=>paidPlan(db,user,plan);
  for(const user of [owner,other])await grant(user,'starter');
@@ -71,4 +68,4 @@ try{
  const latest=await open(db,owner,raceId,{...context,plan:'business-pro'});assert.equal(JSON.parse(latest.review.observation_json).entitlement.planId,'business-pro');
  await db.prepare('DELETE FROM users WHERE id=?').bind(owner).run();assert.equal((await db.prepare('SELECT count(*) n FROM fair_use_reviews WHERE user_id=?').bind(owner).first()).n,0);assert.equal((await list(db,other)).reviews.length,1);
  console.log('Fair-use review records passed: owner isolation, immutable scope, concurrent creation/resolution, exact lost-response replay, input limits, account deletion and unchanged Monitor/chat/billing state, read-only previews, exact digest application and bounded account history, private observation snapshots and atomic entitlement rechecks.');
-}finally{await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await store.close();}

@@ -1,18 +1,19 @@
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
-const built=await build({entryPoints:['src/github-connection.ts'],bundle:true,platform:'node',format:'esm',write:false});
-const {startGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubAccess}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
-const config={clientId:'Iv1.test',clientSecret:'synthetic',appId:123,slug:'fixture',key:'ab'.repeat(32)};
-const directory=await mkdtemp('/tmp/whumpo-github-lifecycle-');let proxy,passed=0,failed=0;
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
+const built=await build({stdin:{contents:"export * from './src/github-connection';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
+const m=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+const {startGitHub,finishGitHub,disconnectGitHub,connectionStatus,cleanupGitHub,githubAccess}=m;
+const config={clientId:'Iv1.test',clientSecret:'synthetic',appId:123,slug:'fixture',key:fixtureKeyring('ab'.repeat(32))};
+let fixture,passed=0,failed=0;
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}};
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',directory],{stdio:'pipe',maxBuffer:16*1024*1024});
- proxy=await wrangler.getPlatformProxy({persist:{path:directory+'/v3'},remoteBindings:false});const db=proxy.env.DB;
- async function owner(){const id=crypto.randomUUID();await db.prepare("INSERT INTO users VALUES(?,?,'00','synthetic',?)").bind(id,id+'@example.test',new Date().toISOString()).run();await paidPlan(db,id,'business');return id;}
+ fixture=await databaseFixture({d1:true});const db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
+ await initializeFixtureKeys(db,config.key);
+ async function owner(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
  const active=user=>db.prepare('SELECT c.active_token_id,t.state FROM github_connections c LEFT JOIN github_token_vault t ON t.id=c.active_token_id WHERE c.user_id=?').bind(user).first();
  function provider(token,{onUser,onRevoke,revokeStatus=204}={}){return async(url,init)=>{
   if(url==='https://github.com/login/oauth/access_token')return Response.json({access_token:token,expires_in:3600});
@@ -20,18 +21,18 @@ try{
   if(url==='https://api.github.com/applications/Iv1.test/token'){await onRevoke?.(JSON.parse(init.body).access_token);return new Response(null,{status:revokeStatus});}
   throw Error('Unexpected provider URL');
  };}
- async function connect(user,token,options){const start=await startGitHub(db,user,'session',config);return finishGitHub(db,user,'session',new URL(start.url).searchParams.get('state'),'synthetic-code',config,provider(token,options));}
+ async function connect(user,token,options){const start=await startGitHub(scope(user),user,config);return finishGitHub(scope(user),user,new URL(start.url).searchParams.get('state'),'synthetic-code',config,provider(token,options));}
  async function check(name,run){try{await run();passed++;console.log('PASS '+name);}catch(e){failed++;console.error('FAIL '+name+': '+e.message.split('\n')[0]);}}
  await check('disconnect A cannot revoke B while its identity lookup is pending',async()=>{
   const a=await owner(),b=await owner(),revoked=[];
   await connect(a,'ghu_owner_a');
-  await connect(b,'ghu_owner_b',{onUser:()=>disconnectGitHub(db,a,config,provider('unused',{onRevoke:t=>revoked.push(t)}))});
-  assert.deepEqual(revoked,['ghu_owner_a']);assert.equal((await connectionStatus(db,b,config)).github.connected,true);
+  await connect(b,'ghu_owner_b',{onUser:()=>disconnectGitHub(scope(a),a,config,provider('unused',{onRevoke:t=>revoked.push(t)}))});
+  assert.deepEqual(revoked,['ghu_owner_a']);assert.equal((await connectionStatus(scope(b),b,config)).github.connected,true);
  });
  await check('scheduled cleanup cannot revoke a token being validated',async()=>{
   const user=await owner(),revoked=[];
   await connect(user,'ghu_pending',{onUser:()=>cleanupGitHub(db,config,provider('unused',{onRevoke:t=>revoked.push(t)}))});
-  assert.deepEqual(revoked,[]);assert.equal((await connectionStatus(db,user,config)).github.connected,true);
+  assert.deepEqual(revoked,[]);assert.equal((await connectionStatus(scope(user),user,config)).github.connected,true);
  });
  await check('failed replacement preserves the old active token',async()=>{
   const user=await owner();await connect(user,'ghu_old');const old=await active(user),revoked=[];
@@ -39,7 +40,7 @@ try{
   assert.deepEqual(await active(user),old);assert.deepEqual(revoked,[]);
  });
  await check('concurrent cleanup claims dispatch one revocation',async()=>{
-  const user=await owner();await connect(user,'ghu_cleanup');await disconnectGitHub(db,user,undefined);
+  const user=await owner();await connect(user,'ghu_cleanup');await disconnectGitHub(scope(user),user,undefined);
   const entered=deferred(),release=deferred();let dispatches=0;
   const transport=provider('unused',{onRevoke:async()=>{dispatches++;entered.resolve();if(dispatches>1)release.resolve();await release.promise;}});
   const first=cleanupGitHub(db,config,transport);let timer;
@@ -49,11 +50,11 @@ try{
  });
  await check('pending token grants no capability before validation',async()=>{
   const user=await owner();await connect(user,'ghu_no_capability',{onUser:async()=>{
-   await assert.rejects(githubAccess(db,user,config,fetch,{projectId:null,operation:'read'}),e=>e.status===401);
-   assert.equal((await connectionStatus(db,user,config)).github.connected,false);
+   await assert.rejects(githubAccess(scope(user),user,config,fetch,{projectId:null,operation:'read'}),e=>e.status===401);
+   assert.equal((await connectionStatus(scope(user),user,config)).github.connected,false);
    assert.equal((await db.prepare('SELECT COUNT(*) n FROM github_token_staging s JOIN github_token_vault t ON t.id=s.token_id WHERE t.user_id=?').bind(user).first()).n,1);
   }});
-  assert.equal((await connectionStatus(db,user,config)).github.connected,true);
+  assert.equal((await connectionStatus(scope(user),user,config)).github.connected,true);
  });
  for(const cleanup of [false,true])await check('expired staging lease rejects activation'+(cleanup?' after cleanup':''),async()=>{
   const user=await owner();await connect(user,'ghu_preserved');const old=await active(user),revoked=[];
@@ -65,11 +66,11 @@ try{
   assert.deepEqual(await active(user),old);assert.deepEqual(revoked,['ghu_expired_stage']);
  });
  await check('new flow cancels old staging without changing the active connection',async()=>{
-  const user=await owner();await connect(user,'ghu_kept');const old=await active(user),revoked=[];let next;
-  await assert.rejects(connect(user,'ghu_superseded',{onUser:async()=>{next=await startGitHub(db,user,'new-session',config);},onRevoke:t=>revoked.push(t)}),e=>e.status===409);
+  const user=await owner();await connect(user,'ghu_kept');const old=await active(user),revoked=[];const replacement=await workspaceSession(db,m,identities.get(user)),replacementScope=await replacement.scope();let next;
+  await assert.rejects(connect(user,'ghu_superseded',{onUser:async()=>{next=await startGitHub(replacementScope,user,config);},onRevoke:t=>revoked.push(t)}),e=>e.status===409);
   assert.deepEqual(await active(user),old);assert.deepEqual(revoked,['ghu_superseded']);
-  await finishGitHub(db,user,'new-session',new URL(next.url).searchParams.get('state'),'code',config,provider('ghu_new_flow'));
-  assert.equal((await connectionStatus(db,user,config)).github.connected,true);
+  await finishGitHub(replacementScope,user,new URL(next.url).searchParams.get('state'),'code',config,provider('ghu_new_flow'));
+  assert.equal((await connectionStatus(scope(user),user,config)).github.connected,true);
  });
  await check('retirement failure rolls back replacement before cleanup',async()=>{
   const user=await owner();await connect(user,'ghu_rollback_old');const old=await active(user),revoked=[];
@@ -90,13 +91,13 @@ try{
   }finally{await db.prepare('DROP TRIGGER synthetic_staging_failure').run();}
  });
  await check('interactive disconnect does not process another owners queued revocation',async()=>{
-  const a=await owner(),b=await owner(),revoked=[];await connect(b,'ghu_other_queue');await disconnectGitHub(db,b,undefined);
-  await disconnectGitHub(db,a,config,provider('unused',{onRevoke:t=>revoked.push(t)}));assert.deepEqual(revoked,[]);
-  assert.equal((await connectionStatus(db,b,config)).github.revocationPending,true);
+  const a=await owner(),b=await owner(),revoked=[];await connect(b,'ghu_other_queue');await disconnectGitHub(scope(b),b,undefined);
+  await disconnectGitHub(scope(a),a,config,provider('unused',{onRevoke:t=>revoked.push(t)}));assert.deepEqual(revoked,[]);
+  assert.equal((await connectionStatus(scope(b),b,config)).github.revocationPending,true);
   await cleanupGitHub(db,config,provider('unused',{onRevoke:t=>revoked.push(t)}),b);assert.deepEqual(revoked,['ghu_other_queue']);
  });
  await check('late cleaner acknowledgement cannot settle a replacement claim',async()=>{
-  const user=await owner();await connect(user,'ghu_claim_fence');await disconnectGitHub(db,user,undefined);
+  const user=await owner();await connect(user,'ghu_claim_fence');await disconnectGitHub(scope(user),user,undefined);
   const ready=deferred(),release=deferred();let timer;
   const first=cleanupGitHub(db,config,provider('unused',{onRevoke:async()=>{ready.resolve();await release.promise;}}),user);
   try{
@@ -105,9 +106,9 @@ try{
    // A new cleaner takes over, but the provider is unavailable. The old 204
    // cannot delete its retained work after losing the claim.
    await cleanupGitHub(db,config,provider('unused',{revokeStatus:503}),user);
-   release.resolve();await first;assert.equal((await connectionStatus(db,user,config)).github.revocationPending,true);
-   await cleanupGitHub(db,config,provider('unused'),user);assert.equal((await connectionStatus(db,user,config)).github.revocationPending,false);
+   release.resolve();await first;assert.equal((await connectionStatus(scope(user),user,config)).github.revocationPending,true);
+   await cleanupGitHub(db,config,provider('unused'),user);assert.equal((await connectionStatus(scope(user),user,config)).github.revocationPending,false);
   }finally{clearTimeout(timer);release.resolve();await first;}
  });
  console.log(JSON.stringify({suite:'github-token-lifecycle',passed,failed}));if(failed)process.exitCode=1;
-}finally{await proxy?.dispose();await rm(directory,{recursive:true,force:true});}
+}finally{await fixture?.close();}

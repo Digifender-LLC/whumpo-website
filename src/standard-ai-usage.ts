@@ -13,8 +13,11 @@ export async function reserveStandardAI(db:D1Database,user:string,id:string,requ
  if(!receipt||receipt.request_hash!==requestHash)throw new BillingError(409,'Standard AI request identity changed');
  return {receipt,created:result.meta.changes===1};
 }
+export function standardAIDispatchStatement(db:D1Database,user:string,id:string){
+ return db.prepare("UPDATE standard_ai_requests SET state='dispatched',updated_at=? WHERE id=? AND user_id=? AND state='reserved'").bind(new Date().toISOString(),id,user);
+}
 export async function dispatchStandardAI(db:D1Database,user:string,id:string){
- const result=await db.prepare("UPDATE standard_ai_requests SET state='dispatched',updated_at=? WHERE id=? AND user_id=? AND state='reserved'").bind(new Date().toISOString(),id,user).run();
+ const result=await standardAIDispatchStatement(db,user,id).run();
  return result.meta.changes===1;
 }
 export async function markStandardAIUncertain(db:D1Database,user:string,id:string){

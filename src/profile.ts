@@ -1,7 +1,7 @@
 import {contentPolicyVersion} from './content-policy';
 import {onboardingComplete} from './onboarding';
 import {BillingError} from './billing';
-import {cleanPhoto} from './files';
+import {cleanPhoto} from './photo-format';
 async function photoDigest(photo:string){const bytes=Uint8Array.from(atob(photo),c=>c.charCodeAt(0));return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(v=>v.toString(16).padStart(2,'0')).join('');}
 async function photoSafety(db:D1Database,user:string,digest:string|null){
  if(!digest)return 'pending' as const;
@@ -10,12 +10,12 @@ async function photoSafety(db:D1Database,user:string,digest:string|null){
  return row?.state==='approved'&&row.csam_check==='clear'&&row.sexual_check==='clear'&&row.scanner_reference&&row.expires_at&&Number.isFinite(Date.parse(row.expires_at))&&Date.parse(row.expires_at)>Date.now()?'approved' as const:'pending' as const;
 }
 export async function readProfile(db:D1Database,user:string){
- const account=await db.prepare("SELECT email,password_hash!='passkey-only' AS passwordEnabled FROM users WHERE id=?").bind(user).first<{email:string;passwordEnabled:number}>();
+ const account=await db.prepare("SELECT email FROM users WHERE id=?").bind(user).first<{email:string}>();
  if(!account)throw new BillingError(404,'Account not found');
  const row=await db.prepare('SELECT revision,name,about_me,share_context,theme,avatar_id,photo IS NOT NULL AS hasPhoto,photo_digest FROM user_profiles WHERE user_id=?').bind(user).first<{revision:number;name:string;about_me:string;share_context:number;theme:string;avatar_id:string;hasPhoto:number;photo_digest:string|null}>();
  const safety=row?.hasPhoto?await photoSafety(db,user,row.photo_digest):'none';
  const {photo_digest:_digest,...profile}=row??{revision:0,name:'',about_me:'',share_context:0,theme:'system',avatar_id:'cloud',hasPhoto:0,photo_digest:null};
- return {...profile,accountId:user,hasPhoto:safety==='approved'?1:0,photoSafety:safety,onboardingComplete:await onboardingComplete(db,user),email:account.email,passwordEnabled:!!account.passwordEnabled};
+ return {...profile,accountId:user,hasPhoto:safety==='approved'?1:0,photoSafety:safety,onboardingComplete:await onboardingComplete(db,user),email:account.email};
 }
 async function ensure(db:D1Database,user:string){await db.prepare('INSERT OR IGNORE INTO user_profiles(user_id) VALUES(?)').bind(user).run();}
 export async function updateProfile(db:D1Database,user:string,input:unknown){

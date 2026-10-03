@@ -1,11 +1,11 @@
-import {renderServiceClients} from './v2/core';
+import {renderServiceClients} from './v3/core';
 import {serviceClientArtifacts} from './artifacts.generated';
 import {serviceClientCatalog} from './catalog';
 import {canonicalJSON,copyJSON,jsonDigest,requireSpec} from '../v2/json';
 import type {CompilerAvailability} from '../catalog';
-export {validateServiceClientSpecification,validateServiceClientTarget} from './v2/core';
-export type {ServiceClientSpecification,ServiceClientTarget} from './v2/core';
-const lock={formatVersion:1,schemaVersion:1,compiler:{id:'project-service-clients',version:2,digest:serviceClientArtifacts.compiler},
+export {validateServiceClientSpecification,validateServiceClientTarget} from './v3/core';
+export type {ServiceClientSpecification,ServiceClientTarget} from './v3/core';
+const lock={formatVersion:1,schemaVersion:1,compiler:{id:'project-service-clients',version:3,digest:serviceClientArtifacts.compiler},
  modules:[{id:'contact-link',version:1,digest:serviceClientArtifacts.renderer},{id:'stateless-form',version:1,digest:serviceClientArtifacts.renderer}]};
 export function currentServiceClientLock(){return copyJSON(lock);}
 /** Only trusted server catalog entries may be supplied. No request-supplied availability. */

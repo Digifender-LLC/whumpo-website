@@ -7,6 +7,9 @@ import {compileProjectSpecification,compileSpecificationChange,currentCompilerLo
 import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from './v2/json';
 import {projectPage} from './v2/schema';
 import {requireSpecificationPhotos,inlineSpecificationPhotos} from '../specification-photos';
+import {assertFeature} from '../feature-admission';
+import {readSpecificationReviewDisplay} from './review-display';
+import {chatTurnGroups} from '../chat-turn-groups';
 
 const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -167,12 +170,31 @@ export async function specificationAction(db:D1Database,user:string,turn:string,
 }
 
 export async function specificationChatLinks(db:D1Database,user:string,turns:Record<string,unknown>[]){
- const {results}=await db.prepare('SELECT l.turn_id,l.proposal_id,l.reply_digest FROM project_spec_chat_links l JOIN chat_turns t ON t.id=l.turn_id WHERE t.user_id=? ORDER BY t.revision DESC LIMIT 100').bind(user).all<{turn_id:string;proposal_id:string;reply_digest:string}>();
+ for(const ids of chatTurnGroups(turns)){
+ const {results}=await db.prepare(`SELECT l.turn_id,l.proposal_id,l.reply_digest FROM project_spec_chat_links l JOIN chat_turns t ON t.id=l.turn_id WHERE t.user_id=? AND l.turn_id IN (${ids.map(()=>'?').join(',')})`).bind(user,...ids).all<{turn_id:string;proposal_id:string;reply_digest:string}>();
  for(const link of results){const turn=turns.find(t=>t.id===link.turn_id);if(!turn||turn.status!=='completed'||typeof turn.assistant_text!=='string'||await sha256(turn.assistant_text)!==link.reply_digest)continue;
   try{const q=await readSpecificationProposal(db,user,link.proposal_id);turn.specification_review={id:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision};}catch(error){if(!(error instanceof BackendError))throw error;}
  }
+ }
 }
 const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+/** Shared comparison facts. Existing review validation remains authoritative. */
+export async function specificationReviewDetails(db:D1Database,user:string,review:string){
+ const q=await readSpecificationProposal(db,user,review);
+ const gate={userId:user,projectId:q.project_id,featureId:'core.editing' as const,operation:'read' as const};
+ await assertFeature(db,gate);
+ const project=await head(db,user,q.project_id);
+ const result={version:1,source:'project_spec_proposals',observedAt:new Date().toISOString(),expiresAt:q.expires_at,
+  review:{id:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision},project:{id:q.project_id,name:project.name},operation:q.operation,changes:JSON.parse(q.diff_json)};
+ // Reuse the domain validator after assembling facts; late removal, ownership,
+ // base, expiry and safety changes must not return an earlier private snapshot.
+ const latest=await readSpecificationProposal(db,user,review);
+ if(latest.proposal_digest!==q.proposal_digest)throw changed();
+ await assertFeature(db,gate);
+ const display=readSpecificationReviewDisplay({...result,observedAt:new Date().toISOString()});
+ if(!display)throw changed();
+ return display;
+}
 export async function specificationPreview(db:D1Database,user:string,review:string,comparison=false,files?:R2Bucket){
  const q=await readSpecificationProposal(db,user,review);
  if(!comparison)return new Response(await inlineSpecificationPhotos(db,files,user,q.project_id,q.html,projectPage(JSON.parse(q.spec_json),'home').photos),{headers:{...previewHeaders,'content-security-policy':previewHeaders['content-security-policy']+'; img-src data:'}});

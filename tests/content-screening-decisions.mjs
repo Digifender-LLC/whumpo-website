@@ -1,16 +1,14 @@
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {databaseFixture} from './helpers/current-database.mjs';
+
 const b=await build({entryPoints:['src/content-screening-decisions.ts'],bundle:true,format:'esm',platform:'node',write:false});
 const {reserveContentScreening}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-screening-');let proxy;
+const store=await databaseFixture({d1:true}),db=store.db;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','whumpo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
- proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,now=Date.now(),userId=crypto.randomUUID(),other=crypto.randomUUID(),key='12'.repeat(32);
- for(const u of [userId,other])await db.prepare("INSERT INTO users VALUES(?,?,'fixture','fixture',?)").bind(u,u+'@example.test',new Date().toISOString()).run();
+ const now=Date.now(),userId=crypto.randomUUID(),other=crypto.randomUUID(),key='12'.repeat(32);
+ for(const u of [userId,other])await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").bind(u,u+'@example.test',new Date().toISOString()).run();
  const history={userId,complete:true,events:Array.from({length:28},(_,i)=>({userId,incidentId:'b-'+i,kind:'verified_benign',disposition:'active',occurredAt:now-(i%7)*86400000}))};
  const target={userId,kind:'chat_text',digest:'a'.repeat(64)};
  const first=await reserveContentScreening(db,history,target,undefined,now);assert.equal(first.required,true);
@@ -35,4 +33,4 @@ try{
  assert.equal((await db.prepare('SELECT count(*) n FROM content_screening_decisions WHERE user_id=?').bind(other).first()).n,1);
  await assert.rejects(()=>db.prepare("UPDATE content_screening_decisions SET digest=? WHERE user_id=?").bind('f'.repeat(64),userId).run());
  console.log('Persistent screening passed: sticky selection, escalation, tenant isolation, concurrent retries, immutable scope, lost response recovery, database failure holds, and no execution permission.');
-}finally{await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await store.close();}

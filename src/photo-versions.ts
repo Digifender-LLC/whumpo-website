@@ -1,7 +1,7 @@
 import {approvedPhotoSQL} from './photo-safety';
 import {requireSpecificationAvailable} from './specification-safety';
 import {siteConfig,photoConfig,previewHeaders,type SiteConfig,type PhotoConfig} from './components';
-import {FileError} from './files';
+import {FileError} from './photo-format';
 import {reserveStorage} from './storage-budget';
 export type PageConfig=SiteConfig|PhotoConfig;
 export function savedPage(component:string,json:string):PageConfig{

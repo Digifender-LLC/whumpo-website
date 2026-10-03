@@ -1,7 +1,7 @@
 import {cmsImageReferences} from './cms-image-block';
 import {readCMSMediaPreview} from './cms-media-preview';
 import {cmsConnection} from './cms-status';
-import {cleanPhoto} from './files';
+import {cleanPhoto} from './photo-format';
 import {CMSProjectError} from './cms-error';
 export type CMSArticleImage={mediaId:string;digest:string;size:number;width:number;height:number;bytes:Uint8Array};
 /** Capture verified native bytes before freezing a publication review. No storage or publication side effects. */

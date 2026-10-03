@@ -5,7 +5,7 @@ const fixture=await backendHttpFixture(),base=fixture.base;
 try {
 
 const headers={origin:base,'content-type':'application/json'};
-async function account(){const r=await fetch(base+'/api/auth/register',{method:'POST',headers,body:JSON.stringify({email:crypto.randomUUID()+'@example.com',password:crypto.randomUUID()+'local-test'})});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0];}
+const account=()=>fixture.account();
 const cookie=await account(),other=await account();
 const post=(path,data,session=cookie,origin=base)=>fetch(base+path,{method:'POST',headers:{...headers,origin,cookie:session},body:JSON.stringify(data)});
 const project=await (await post('/api/projects',{name:'Backend HTTP fixture'})).json(),pid=project.project.id;
@@ -74,7 +74,7 @@ assert.equal((await post(publicationPath,{id:crypto.randomUUID(),operation:'publ
 assert.equal((await post(checkPath,{id:crypto.randomUUID(),input:null,expected:null},other)).status,404);
 const chatBefore=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();const chatRun=crypto.randomUUID();
 assert.equal((await post('/api/chat',{id:chatRun,revision:chatBefore.state.revision,content:'/check-backend '+version+' {"input":{"values":[4,5]},"expected":{"total":9}}'})).status,503);
-const chatAfter=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();assert.equal(chatAfter.state.revision,chatBefore.state.revision);assert.equal(chatAfter.usage.available,chatBefore.usage.available);
+const chatAfter=await (await fetch(base+'/api/chat',{headers:{cookie}})).json();assert.equal(chatAfter.state.revision,chatBefore.state.revision);await fixture.assertNoInference();
 console.log('Expected-output HTTP/runtime checks passed: correct/wrong answers, immutable replay, ownership, failed publication gate and literal-chat rejection while inference is unavailable.');
 
 } finally {await fixture.dispose();}

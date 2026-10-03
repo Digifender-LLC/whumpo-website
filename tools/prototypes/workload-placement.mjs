@@ -37,6 +37,10 @@ function pin(v,path){
 const key=r=>`${r.projectId}/${r.resourceId}`;
 const kinds=['content','records','files','access','notifications','automation','custom-function'];
 
+// Shared decision shapes for downstream envelopes; still not runtime authority.
+export function validateResourceReference(input){const value=copy(input);ref(value,'ref');return value;}
+export function validateArtifactPin(input){const value=copy(input);pin(value,'pin');return value;}
+
 /** Closed descriptor; validates the current shape only. Pins and hook IDs need a trusted catalog. */
 export function validateDescriptor(input){
  const d=copy(input);
