@@ -36,7 +36,7 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
   phase=name;const record={name,success:false},before=await calls();steps.push(record);assert(before.main+before.lookups<24,'Bounded real-model call ceiling');
   await page.getByRole('textbox',{name:'Message Whumpo',exact:true}).fill(text);
   const pending=page.waitForResponse(r=>r.url()==='https://whumpo.com/api/chat'&&r.request().method()==='POST',{timeout:150000});await page.getByRole('button',{name:'Send message',exact:true}).click();
-  const response=await pending;assert.equal(response.status(),200);const input=response.request().postDataJSON();acceptedTurn=input.id;record.turn=await settled(input.id);assert.equal(record.turn.status,'completed','Expected completed Chat result');await verify(record.turn);
+  const response=await pending;assert.equal(response.status(),200);const input=response.request().postDataJSON();acceptedTurn=input.id;record.turn=await settled(input.id);record.inspection=await row('SELECT result_text FROM agent_inspections WHERE turn_id=? AND user_id=?',input.id,id);assert.equal(record.turn.status,'completed','Expected completed Chat result');await verify(record.turn);
   const after=await calls();await api('/api/chat','POST',input);assert.deepEqual(await calls(),after,'Chat replay dispatched inference');record.calls={before,after};record.success=true;console.log(JSON.stringify({step:name,passed:true,deployed:true}));return record.turn;
  }
  async function issued(turn,template){const f=await row('SELECT id FROM chat_interactions WHERE origin_turn_id=? AND user_id=?',turn.id,id);assert(f,'Expected maintained form');const form=await store.readInteraction(scope,id,f.id);assert.equal(form.envelope.definition.template,template);return form;}

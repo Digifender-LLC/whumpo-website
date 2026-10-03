@@ -21,8 +21,8 @@ const cases=process.argv.includes('--unsupported-only')?unsupportedCases:correct
 await mkdir('.secrets',{recursive:true,mode:0o700});
 const evidenceDirectory=await mkdtemp('.secrets/intake-model-cohort-');
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',protocol:'responses',apiKey:(await readFile(process.env.WHUMPO_MUSE_KEY_FILE??'opencode.key','utf8')).trim()};
-const m=await currentFixtureModules(['src/chat-interactions/store.ts','src/chat-interactions/model-continuation.ts','src/project-specification/store.ts']);
-const forms=await m.module('src/chat-interactions/store.ts'),follow=await m.module('src/chat-interactions/model-continuation.ts'),site=await m.module('src/project-specification/store.ts');
+const m=await currentFixtureModules(['src/ai-chat.ts','src/chat-interactions/store.ts','src/chat-interactions/model-continuation.ts','src/project-specification/store.ts']);
+const ai=await m.module('src/ai-chat.ts'),forms=await m.module('src/chat-interactions/store.ts'),follow=await m.module('src/chat-interactions/model-continuation.ts'),site=await m.module('src/project-specification/store.ts');
 const fixture=await databaseFixture({d1:true,allowedArguments:['--unsupported-only','--correction-only']}),db=fixture.db,id=()=>crypto.randomUUID(),results=[];
 const startedAt=new Date().toISOString();let complete=false;
 try{
@@ -38,7 +38,7 @@ try{
    await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,?,'Complete the project brief.',datetime('now'),'ai','completed')").bind(origin,user,sample.request??'I want to start another website project. Please show me a short form for its working name and what I want it to do; I have not supplied those details yet. Keep my existing Test Garden project unchanged.').run();
    const form=await forms.issueProjectIntake(scope,user,{originTurnId:origin,template:'project-brief@1'}),submission=id();
    await forms.mutateInteraction(scope,user,{version:1,requestId:submission,interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers});
-   const transport=async(...args)=>{result.calls++;assert(result.calls<=(correctionOnly?3:1),'Unexpected additional model dispatch');const r=await fetch(...args),body=await r.clone().json();result.responses.push(body.output?.flatMap(x=>x.content??[]).find(x=>x.type==='output_text')?.text??null);return r;};
+   const transport=async(...args)=>{result.calls++;assert(result.calls<=(correctionOnly?5:1),'Unexpected additional model dispatch');const r=await fetch(...args),body=await r.clone().json();result.responses.push(body.output?.flatMap(x=>x.content??[]).find(x=>x.type==='output_text')?.text??null);return r;};
    const start=performance.now(),saved=await follow.continueInformationTask(scope,user,submission,1,config,transport);
    result.elapsedMs=Math.round(performance.now()-start);result.state=saved.submission.continuation.state;
    result.turn=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(submission).first();
@@ -53,9 +53,15 @@ try{
     if(correctionOnly){
      const target=form.envelope.scope.taskId,correctionTurn=id(),correctedName='Meadow Garden Studio';
      for(const operation of ['read','prepare'])await db.prepare("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing',?,'private-test-acceptance','synthetic correction cohort',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)").bind(id(),user,target,operation).run();
-     await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,3,'Propose changing the working name to Meadow Garden Studio. Keep the same task and other answer; show the corrected form for review. Do not create another project or change the website.','Review the corrected brief.',datetime('now'),'ai','completed')").bind(correctionTurn,user).run();
-     await db.prepare('UPDATE workspace_state SET revision=3 WHERE user_id=?').bind(user).run();
-     const current=await forms.readInteraction(scope,user,form.envelope.id),replacement=await forms.replaceProjectIntake(scope,user,{originTurnId:correctionTurn,previousInteractionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:current.answerRevision}),nextSubmission=id();
+     const request='On the Meadow Garden project brief I just submitted, propose changing the working name to Meadow Garden Studio. Keep the same task and other answer; show me the corrected form so I can review it. Do not create another project or change the website.';
+     const rev=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(user).first()).revision;
+     await ai.sendAIChat(scope,user,correctionTurn,rev,request,config,transport);
+     result.formCorrection=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(correctionTurn).first();
+     const issued=await db.prepare('SELECT id FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(correctionTurn,user).first();assert(issued,'Expected an actual corrected form from natural-language routing');
+     const replacement=await forms.readInteraction(scope,user,issued.id),nextSubmission=id();
+     assert.equal(replacement.previousInteractionId,form.envelope.id);assert.equal(replacement.envelope.scope.taskId,target);assert.equal(replacement.submission,null);
+     assert.deepEqual(replacement.envelope.definition.fields.map(f=>f.default),[{value:correctedName,provenance:'suggested'},{value:answers.purpose,provenance:'user'}]);
+     assert.equal(result.calls,3);await ai.sendAIChat(scope,user,correctionTurn,rev,request,config,transport);assert.equal(result.calls,3);
      await forms.mutateInteraction(scope,user,{version:1,requestId:nextSubmission,interactionId:replacement.envelope.id,definitionDigest:replacement.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers:{...answers,name:correctedName}});
      const corrected=await follow.continueInformationTask(scope,user,nextSubmission,3,config,transport);
      result.correction={state:corrected.submission.continuation.state,turn:await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(nextSubmission).first()};
@@ -64,7 +70,7 @@ try{
      assert.equal(review.project_id,target);assert(JSON.parse(review.diff_json).some(d=>d.before===answers.name&&d.after===correctedName));
      assert.equal((await site.readSpecification(scope,user,target)).revision,1);assert.equal((await db.prepare('SELECT name FROM projects WHERE id=?').bind(target).first()).name,answers.name);
      assert.equal((await db.prepare('SELECT count(*) n FROM projects WHERE owner_user_id=?').bind(user).first()).n,1);assert.equal((await db.prepare('SELECT count(*) n FROM publications').first()).n,0);
-     const calls=result.calls;await follow.continueInformationTask(scope,user,nextSubmission,3,config,transport);assert.equal(result.calls,calls);assert.equal(calls,3);
+     const calls=result.calls;await follow.continueInformationTask(scope,user,nextSubmission,3,config,transport);assert.equal(result.calls,calls);assert.equal(calls,5);
     }
     result.success=true;
    }else assert.equal(result.project,null,'Rejected creation must not save a project');
