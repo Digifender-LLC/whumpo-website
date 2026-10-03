@@ -976,7 +976,7 @@
           "control-d1"
         ],
         "readers": [
-          "Owner exact backend/configuration/test/state handlers; runtime only admitted program/input/state"
+          "Owner exact backend/configuration/test/state handlers; direct safety reads publication/review metadata only; runtime only admitted program/input/state"
         ],
         "processors": [
           "Bounded QuickJS, explicit test/review, selected maintenance context and deterministic public actions"
@@ -1115,7 +1115,7 @@
           "control-d1"
         ],
         "readers": [
-          "Exact current visitor document/receipt handlers; owner receives only admitted admin views and reviewed data operations"
+          "Exact current visitor document/receipt handlers; owner receives only admitted admin views and reviewed data operations; direct safety reads page/program revision and negative review metadata without visitor content"
         ],
         "processors": [
           "Isolated runtime uses bounded per-visitor state/input; deterministic serving; no automatic owner-model processing"

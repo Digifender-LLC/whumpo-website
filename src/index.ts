@@ -1,3 +1,4 @@
+import {safetyService,serviceSafetyReviews,readServiceSafetyReview,prepareServiceSafetyReview,confirmServiceSafetyReview} from './service-safety';
 import {siteSafetyInventory,siteSafetyReviews,readSiteSafetyReview,prepareSiteSafetyReview,confirmSiteSafetyReview} from './site-safety';
 import {connectionStartInput,connectionReturnPath,readConnectionHandoff} from './chat-interactions/connection-handoff';
 import {isConnectionProvider} from './connection-handoff-shape';
@@ -157,6 +158,19 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='PUT'||method==='DELETE')return json(await updateProfilePhoto(env.DB,user.id,request));
   }
   if(method==='GET'&&pathname==='/api/workspace/dashboard')return json(await dashboardData(env.DB,user.id));
+  if(pathname.startsWith('/api/workspace/service-safety/')){
+    const params=new URL(request.url).searchParams;
+    if(method==='GET'&&pathname==='/api/workspace/service-safety/reviews'){
+      if([...params.keys()].some(key=>!['kind','project','after'].includes(key)||params.getAll(key).length!==1))return error(400,'Use the current service withdrawal link.');
+      return json(await serviceSafetyReviews(env.DB,user.id,safetyService(params.get('kind')),params.get('project')??'',params.get('after')));
+    }
+    if(params.size)return error(400,'Use the exact service withdrawal action.');
+    if(method==='POST'&&pathname==='/api/workspace/service-safety/reviews')return json(await prepareServiceSafetyReview(env.DB,user.id,await body(request)));
+    const review=pathname.match(/^\/api\/workspace\/service-safety\/reviews\/(backend|application)\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})(\/confirm)?$/);
+    if(review&&method==='GET'&&!review[3])return json({version:1,review:await readServiceSafetyReview(env.DB,user.id,safetyService(review[1]),review[2])});
+    if(review&&method==='POST'&&review[3])return json(await confirmServiceSafetyReview(env.DB,user.id,safetyService(review[1]),review[2],await body(request)));
+    return error(404,'Service withdrawal action not found.');
+  }
   if(pathname.startsWith('/api/workspace/site-safety')){
     const params=new URL(request.url).searchParams;
     if(method==='GET'&&(pathname==='/api/workspace/site-safety'||pathname==='/api/workspace/site-safety/reviews')){

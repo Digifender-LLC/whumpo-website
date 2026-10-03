@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {serviceSafetyJourney} from './service-safety-journey.mjs';
 import {hearOrca} from './orca-output.mjs';
 
 /** Actual built UI/Worker/current D1. Model, Chat, profile and generated
@@ -10,7 +11,7 @@ export async function siteSafetyJourney({page,context,db,state,requests,origin,a
  state.failChat=true;state.failDashboard=true;await page.reload();await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();
  await activate(page.getByRole('link',{name:'Dashboard',exact:true}).filter({visible:true}));
  await page.getByRole('alert').filter({hasText:'Couldn’t load your dashboard'}).waitFor();
- await hearOrca('dashboard outage opens website safety',()=>activate(page.getByRole('link',{name:'Website safety',exact:true})),[/Website safety/i,/heading/i]);
+ await hearOrca('dashboard outage opens website safety',()=>activate(page.getByRole('link',{name:'Site & app safety',exact:true})),[/Site & app safety/i,/heading/i]);
  await page.getByRole('article',{name:'Garden care',exact:true}).waitFor();
  const directStart=requests.length;state.failProfile=true;await page.reload();await page.getByRole('article',{name:'Garden care',exact:true}).waitFor();await page.waitForLoadState('networkidle');
  assert(requests.slice(directStart).filter(r=>r.path.startsWith('/api/')).every(r=>r.path.startsWith('/api/auth/identity/v1/')||r.path.startsWith('/api/workspace/site-safety')),'Direct safety never reads profile, Chat, billing or dashboard');
@@ -46,15 +47,16 @@ export async function siteSafetyJourney({page,context,db,state,requests,origin,a
  await activate(page.getByRole('region',{name:'Saved website withdrawals',exact:true}).getByRole('button',{name:/Garden care.*Withdrawal applied/}));await page.getByText('The website is currently offline.',{exact:true}).waitFor();assert.equal(confirms(),1);
  assert.equal((await db.prepare('SELECT count(*) n FROM chat_turns').first()).n,beforeTurns);assert.equal((await db.prepare('SELECT count(*) n FROM inference_calls').first()).n,0);
  assert.equal((await db.prepare('SELECT count(*) n FROM site_versions WHERE id=?').bind(version).first()).n,1,'Withdrawal preserves the saved version');
+ const service=await serviceSafetyJourney({page,db,state,requests,origin,activate,phase,project});
  phase('late safety read after logout cannot restore a private review');
- let release;await page.route('**/api/workspace/site-safety/reviews/'+review,async route=>{const reply=await route.fetch();await new Promise(done=>{release=()=>route.fulfill({response:reply}).then(done).catch(done);});});
+ let release;await page.route('**'+service.path,async route=>{const reply=await route.fetch();await new Promise(done=>{release=()=>route.fulfill({response:reply}).then(done).catch(done);});});
  await activate(page.getByRole('button',{name:'Check saved result',exact:true}));
  for(let i=0;!release&&i<300;i++)await new Promise(done=>setTimeout(done,20));assert(release);
  await activate(page.getByRole('button',{name:'Account help',exact:true}));await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('button',{name:'Sign out',exact:true}).waitFor();
  await activate(page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('button',{name:'Sign out',exact:true}));await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).waitFor();
- await release();await page.unroute('**/api/workspace/site-safety/reviews/'+review);await page.waitForLoadState('networkidle');assert.equal(await page.getByRole('region',{name:'Website withdrawal review',exact:true}).count(),0);
+ await release();await page.unroute('**'+service.path);await page.waitForLoadState('networkidle');assert.equal(await page.getByRole('region',{name:'Visitor app withdrawals',exact:true}).count(),0);
  state.failChat=false;state.failDashboard=false;state.failProfile=false;
- await activate(page.getByRole('button',{name:'Sign in with a passkey',exact:true}));await page.getByRole('heading',{name:'Website safety',exact:true}).waitFor();
+ await activate(page.getByRole('button',{name:'Sign in with a passkey',exact:true}));await page.getByRole('heading',{name:'Site & app safety',exact:true}).waitFor();
  await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();
- console.log('Website safety browser passed: signed owner, Chat/dashboard/profile outages, exact review, lost preparation/confirmation replies without automatic redispatch, read-error approval hiding, reload/list recovery, mobile/large-text/keyboard/reduced-motion checks and late private-read refusal after logout. Zero inference/provider calls.');
+ console.log('Site and app safety browser passed: signed owner, Chat/dashboard/profile outages, exact review, lost preparation/confirmation replies without automatic redispatch, read-error approval hiding, reload/list recovery, mobile/large-text/keyboard/reduced-motion checks and late private-read refusal after logout. Service receipts also cover both surfaces, invalid links and independent effects. Zero inference/provider calls.');
 }

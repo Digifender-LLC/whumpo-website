@@ -130,6 +130,10 @@ The agent can list, export or prepare either restore side, but cannot confirm. G
 
 HTTP additions: `GET /api/projects/:project/backend-state/history`, `GET /api/backend-state-snapshots/:id/export` (JSON attachment), and `POST /api/backend-state-snapshots/:id/restore` with `{id,side:"before"|"after"}`. The same user-only confirmation endpoint applies prepared restores. Arbitrary uploaded JSON import remains unavailable. Storage retention is still bounded by the original review ceilings.
 
+## Current direct withdrawal recovery — October 3, 2026 UTC
+
+The fixed **Site & app safety** page offers exact backend withdrawal independently of Chat/profile/generated Dashboard reads. Its metadata reader includes endpoint, version/revision and saved negative reviews without source or test data. The existing domain handler accepts the displayed expected publication revision; schema guards refuse stale preparation/confirmation. Publishing retains source-integrity checks; negative withdrawal does not require a healthy source digest and grants no new serving/execution authority. Existing immutable reviews, count bounds, current identity and ten-minute expiry remain. Lost replies recover by readback. New endpoint requests stop, attached website forms lose their endpoint, and already admitted stateless requests may finish. See the [current shared contract and verification](chat-workspace-continuity.md#direct-backend-and-visitor-app-safety--october-3-2026-utc) for source/local/deployment status. Historical command examples below are internal handler syntax, not user-facing slash commands.
+
 ## Reviewed public stateless endpoints
 
 Migration 0047 adds publication reviews and one current endpoint per project. After saving a function and completing a successful test of that exact version:
