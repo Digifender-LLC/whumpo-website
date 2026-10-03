@@ -20,8 +20,11 @@ export function inferenceReservation(db: D1Database, user: string, id: string, p
     SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND status='pending') ON CONFLICT(id) DO NOTHING`)
     .bind(role==='ack'?id+':ack':id,id,user,period,role,config.model,new URL(config.baseURL).origin,config.protocol??'chat',route?.policy??'offline-unpriced',route?.costBasis??'unpriced',rate.id,rate.inputMicrosPerMillion,rate.outputMicrosPerMillion,quote,id,user);
 }
+export function inferenceDispatchStatement(db: D1Database, user: string, id: string) {
+  return db.prepare("UPDATE inference_calls SET status='dispatched' WHERE id=? AND user_id=? AND status='reserved'").bind(id,user);
+}
 export async function dispatchInference(db: D1Database, user: string, id: string) {
-  const result=await db.prepare("UPDATE inference_calls SET status='dispatched' WHERE id=? AND user_id=? AND status='reserved'").bind(id,user).run();
+  const result=await inferenceDispatchStatement(db,user,id).run();
   return result.meta.changes===1;
 }
 export async function observeInference(db: D1Database, user: string, id: string, result: Completion, ackText?: string) {

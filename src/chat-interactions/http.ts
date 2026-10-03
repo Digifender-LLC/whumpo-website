@@ -1,3 +1,6 @@
+import type {AIConfig} from '../ai';
+import {BillingError} from '../billing';
+import {continueInformationTask,stopInformationTask,reconcileInformationTask} from './model-continuation';
 import {readInteractionCard} from './cards';
 import {SpecificationError} from '../project-specification/v2/json';
 import {readInteractionInput} from './input';
@@ -13,7 +16,7 @@ function exact(data:unknown,keys:string[]):asserts data is Record<string,unknown
 }
 function id(value:unknown):asserts value is string{if(typeof value!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(value))throw new InteractionError('ID');}
 /** Index supplies same-origin, limited, welcome-complete current workspace authority. */
-export async function handleInteractionRequest(request:Request,db:D1Database,user:string):Promise<Response|null>{
+export async function handleInteractionRequest(request:Request,db:D1Database,user:string,config?:AIConfig,transport:typeof fetch=globalThis.fetch.bind(globalThis)):Promise<Response|null>{
  const url=new URL(request.url);if(!url.pathname.startsWith(prefix))return null;
  try{
   if(!url.pathname.startsWith(prefix+'v1/'))throw new InteractionError('VERSION');
@@ -32,11 +35,16 @@ export async function handleInteractionRequest(request:Request,db:D1Database,use
   if(action==='mutate')return respond(await mutateInteraction(db,user,data));
   if(action==='continue'||action==='stop'||action==='reconcile'){
    exact(data,action==='continue'?['version','submissionId','expectedChatRevision']:['version','submissionId']);id(data.submissionId);
-   const result=action==='continue'?await continueContentBrief(db,user,data.submissionId,data.expectedChatRevision as number):action==='stop'?await stopInteractionContinuation(db,user,data.submissionId):await reconcileContentBrief(db,user,data.submissionId);
+   const source=await db.prepare('SELECT interaction_id FROM chat_interaction_submissions WHERE id=? AND user_id=?').bind(data.submissionId,user).first<{interaction_id:string}>();
+   if(!source)throw new InteractionStoreError(404,'not_found');
+   const form=await readInteraction(db,user,source.interaction_id);
+   const model=form.envelope.definition.continuationBinding==='agent.task-continue@1';
+   const result=model?(action==='continue'?await continueInformationTask(db,user,data.submissionId,data.expectedChatRevision as number,config,transport):action==='stop'?await stopInformationTask(db,user,data.submissionId):await reconcileInformationTask(db,user,data.submissionId,true)):action==='continue'?await continueContentBrief(db,user,data.submissionId,data.expectedChatRevision as number):action==='stop'?await stopInteractionContinuation(db,user,data.submissionId):await reconcileContentBrief(db,user,data.submissionId);
    return respond({version:1,submissionId:result.submission.id,continuation:result.submission.continuation});
   }
   return respond({error:'Chat interaction route not found.',code:'not_found'},404);
  }catch(error){
+  if(error instanceof BillingError)return respond({error:error.message,code:'continuation_unavailable'},error.status);
   if(error instanceof InteractionStoreError)return respond({error:error.message,code:error.code},error.status);
   if(error instanceof InteractionError){
    const update=['VERSION','CLIENT_UPDATE_REQUIRED'].includes(error.code),stale=['DIGEST','REFERENCE'].includes(error.code),status=update||stale?409:error.fieldId?422:400;

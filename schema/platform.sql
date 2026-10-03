@@ -3301,7 +3301,7 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
     SELECT 1 FROM chat_interaction_continuations c JOIN chat_interaction_submissions s ON s.id=c.id
     JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
     WHERE c.id=t.id AND c.state='pending' AND s.user_id=t.user_id AND i.project_id=NEW.project_id AND i.state='submitted'
-    AND json_extract(i.envelope_json,'$.definition.continuationBinding')='site.content-prepare@1')))
+    AND json_extract(i.envelope_json,'$.definition.continuationBinding') IN ('site.content-prepare@1','agent.task-continue@1'))))
   LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=NEW.draft_revision
   AND coalesce(h.revision,0)=NEW.expected_revision AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
@@ -4044,11 +4044,25 @@ BEGIN SELECT RAISE(ABORT,'chat_interaction_receipt_retained'); END;
 
 CREATE TRIGGER chat_interaction_continuation_new BEFORE INSERT ON chat_interaction_continuations
 WHEN NEW.state!='not-started' OR NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id
- WHERE s.id=NEW.id AND json_extract(i.envelope_json,'$.definition.continuationBinding')='site.content-prepare@1')
+ WHERE s.id=NEW.id AND json_extract(i.envelope_json,'$.definition.continuationBinding') IN ('site.content-prepare@1','agent.task-continue@1'))
 BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
 CREATE TRIGGER chat_interaction_continuation_result BEFORE UPDATE ON chat_interaction_continuations
 WHEN NEW.state='succeeded' AND NEW.result_turn_id IS NOT NULL AND NOT EXISTS(
- SELECT 1 FROM chat_interaction_submissions s JOIN chat_turns t ON t.id=NEW.result_turn_id AND t.user_id=s.user_id
- JOIN project_spec_chat_links l ON l.turn_id=t.id AND l.proposal_id=t.id
- WHERE s.id=NEW.id AND t.id=s.id AND t.status='completed')
+ SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
+ JOIN chat_turns t ON t.id=NEW.result_turn_id AND t.user_id=s.user_id
+ WHERE s.id=NEW.id AND t.id=s.id AND t.status='completed' AND (
+  (json_extract(i.envelope_json,'$.definition.continuationBinding')='site.content-prepare@1'
+   AND EXISTS(SELECT 1 FROM project_spec_chat_links l WHERE l.turn_id=t.id AND l.proposal_id=t.id))
+  OR (json_extract(i.envelope_json,'$.definition.continuationBinding')='agent.task-continue@1' AND t.mode='ai'
+   AND EXISTS(SELECT 1 FROM standard_ai_requests r WHERE r.id=t.id AND r.user_id=t.user_id AND r.state='completed'))))
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+
+-- A form submission identity cannot be borrowed by an ordinary Chat request.
+CREATE TRIGGER chat_interaction_model_turn BEFORE INSERT ON chat_turns
+WHEN EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id
+ WHERE s.id=NEW.id AND json_extract(i.envelope_json,'$.definition.continuationBinding')='agent.task-continue@1')
+ AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id
+ JOIN chat_interaction_continuations c ON c.id=s.id JOIN standard_ai_requests r ON r.id=s.id AND r.user_id=s.user_id
+ WHERE s.id=NEW.id AND s.user_id=NEW.user_id AND c.state='pending' AND r.state='reserved'
+  AND NEW.mode='ai' AND NEW.status='pending' AND NEW.action_json IS NULL AND NEW.ai_context_allowed=0)
 BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;

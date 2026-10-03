@@ -440,7 +440,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if (method === "GET" && pathname === "/api/me") return json({ user });
   const ackMatch=pathname.match(/^\/api\/chat\/([0-9a-f-]{36})\/ack$/);
   if(method==='GET' && ackMatch)return json(await readAcknowledgment(env.DB,user.id,ackMatch[1]));
-  const interaction=await handleInteractionRequest(request,env.DB,user.id);if(interaction)return interaction;
+  const interaction=await handleInteractionRequest(request,env.DB,user.id,configuredAI(env),transport);if(interaction)return interaction;
   if (method === "GET" && pathname === "/api/chat/export") return exportChatTranscript(request,env.DB,user.id);
   if (method === "GET" && pathname === "/api/chat/history") return chatHistory(request,env.DB,user.id);
   if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id, !!configuredAI(env)));

@@ -13,6 +13,7 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'owned.projects@1': {mode:'select',feature:'core.editing',source:'src/chat-interactions/resource-options.ts',handler:'readOwnedResourceOptions',scope:'account'},
   'owned.photos@1': {mode:'select',feature:'core.editing',source:'src/chat-interactions/resource-options.ts',handler:'readOwnedResourceOptions',scope:'project'},
   'site.content@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'readSpecification',scope:'project'},
+  'agent.task-continue@1': {mode:'prepare',feature:'core.editing',source:'src/chat-interactions/task-context.ts',handler:'prepareInformationTask',scope:'project'},
   'site.content-prepare@1': {mode:'prepare',feature:'core.editing',source:'src/project-specification/store.ts',handler:'prepareSpecification',scope:'project'},
   'workspace.projects@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'dashboardData',scope:'account',displays:['summary','table']},
   'project.photos@1': {mode:'read',feature:'core.editing',source:'src/files.ts',handler:'readPhotoUpload',scope:'project',displays:['photos']},
@@ -124,14 +125,14 @@ export function validateDefinition(input:unknown):Definition {
   if(d.kind==='view')check(d.template==='status@1'&&d.fields.length===0&&d.cards.length>0&&d.submitBinding===null&&d.continuationBinding===null,'TEMPLATE');
   else {
     check(['content-change@1','project-brief@1','project-select@1','choice@1','custom@1'].includes(d.template)&&d.fields.length>0&&d.submitBinding==='interaction.answers@1','TEMPLATE');
-    check(d.continuationBinding===null||d.continuationBinding==='site.content-prepare@1','BINDING');
+    check(d.continuationBinding===null||d.continuationBinding==='site.content-prepare@1'||d.template==='custom@1'&&d.continuationBinding==='agent.task-continue@1','BINDING');
     if(d.template==='content-change@1')check(d.continuationBinding==='site.content-prepare@1','TEMPLATE');
     if(d.template==='project-brief@1'){
       check(d.continuationBinding===null&&d.fields.length===2&&d.fields[0].id==='name'&&d.fields[0].type==='text'&&d.fields[0].constraints.maxLength<=100&&d.fields[0].required&&d.fields[1].id==='purpose'&&d.fields[1].type==='long-text'&&d.fields[1].constraints.maxLength<=1000&&d.fields[1].required&&!d.fields.some(f=>f.source||f.when),'TEMPLATE');
     }
     if(d.template==='project-select@1')check(d.continuationBinding===null&&d.fields.length===1&&d.fields[0].id==='project'&&d.fields[0].type==='resource'&&d.fields[0].constraints.collection==='projects'&&!d.fields[0].constraints.multiple&&d.fields[0].required&&!d.fields[0].when,'TEMPLATE');
     if(d.template==='choice@1')check(d.continuationBinding===null&&d.fields.length===1&&['choice','multi-choice'].includes(d.fields[0].type)&&!d.fields[0].when,'TEMPLATE');
-    if(d.continuationBinding){
+    if(d.continuationBinding==='site.content-prepare@1'){
       check(d.fields.length<=contentFieldLimit,'CONTENT_MAPPING');
       check(d.fields.every(f=>f.source&&f.required&&!f.when&&'maxLength' in f.constraints&&f.constraints.maxLength<=1000),'CONTENT_MAPPING');
       unique(d.fields.map(f=>({id:f.source!.contentId})),'id');
