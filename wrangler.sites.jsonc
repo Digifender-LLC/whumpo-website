@@ -15,8 +15,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "whumpo-control-memory-test",
-      "database_id": "4e4c7449-d80a-49d1-bc67-b86034708f13"
+      "database_name": "whumpo-control-views-test",
+      "database_id": "adc2a117-0e31-42fc-a07c-6dcc1c96621f"
     }
   ],
   "r2_buckets": [
