@@ -1,3 +1,5 @@
+> October 3 update: the historical `tools/workspace-recovery-browser.mjs` fixture described below is retired. Current identity, Worker/D1 and keyboard/Orca replacement evidence is in [the owner usability audit](owner-usability-audit.md). Historical results remain dated records, not runnable current acceptance commands.
+
 > October 3, 2026: the [current whole-owner audit](owner-usability-audit.md) records verified landing, identity, kit, welcome and recovery focus/contrast fixes with actual Orca output. WH-024 remains open for the rest of the original scope. Earlier synthetic fixtures and deployment records below retain their dated boundaries.
 
 # Workspace refinement acceptance — 29 September 2026
