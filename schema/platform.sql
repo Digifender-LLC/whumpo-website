@@ -87,7 +87,11 @@ CREATE TABLE project_files (
  width INTEGER NOT NULL CHECK(width BETWEEN 1 AND 1600),
  height INTEGER NOT NULL CHECK(height BETWEEN 1 AND 1600),
  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','ready')),
- created_at TEXT NOT NULL
+ created_at TEXT NOT NULL,
+ handoff_json TEXT NOT NULL DEFAULT 'null' CHECK(json_valid(handoff_json) AND (handoff_json='null' OR
+  (json_type(handoff_json)='object' AND json_extract(handoff_json,'$.interactionId') IS NOT NULL
+   AND json_type(handoff_json,'$.interactionId')='text' AND length(json_extract(handoff_json,'$.interactionId'))=36
+   AND json_extract(handoff_json,'$.definitionDigest') IS NOT NULL AND json_type(handoff_json,'$.definitionDigest')='text' AND length(json_extract(handoff_json,'$.definitionDigest'))=64)))
 );
 
 CREATE TABLE file_cleanup (object_key TEXT PRIMARY KEY,created_at TEXT NOT NULL);
@@ -1912,7 +1916,21 @@ END;
 
 CREATE TRIGGER project_file_immutable BEFORE UPDATE ON project_files
 BEGIN
- SELECT RAISE(ABORT,'file_immutable') WHERE NEW.id!=OLD.id OR NEW.project_id!=OLD.project_id OR NEW.name!=OLD.name OR NEW.object_key!=OLD.object_key OR NEW.digest!=OLD.digest OR NEW.size!=OLD.size OR NEW.width!=OLD.width OR NEW.height!=OLD.height OR NEW.created_at!=OLD.created_at OR (OLD.status='ready' AND NEW.status!='ready');
+ SELECT RAISE(ABORT,'file_immutable') WHERE NEW.id!=OLD.id OR NEW.project_id!=OLD.project_id OR NEW.name!=OLD.name OR NEW.object_key!=OLD.object_key OR NEW.handoff_json!=OLD.handoff_json OR NEW.digest!=OLD.digest OR NEW.size!=OLD.size OR NEW.width!=OLD.width OR NEW.height!=OLD.height OR NEW.created_at!=OLD.created_at OR (OLD.status='ready' AND NEW.status!='ready');
+END;
+
+CREATE TRIGGER project_file_handoff BEFORE INSERT ON project_files
+WHEN NEW.handoff_json!='null' AND NOT EXISTS(SELECT 1 FROM project_files WHERE id=NEW.id)
+BEGIN
+ SELECT RAISE(ABORT,'photo_handoff_changed') WHERE (SELECT count(*) FROM json_each(NEW.handoff_json))!=2;
+ SELECT RAISE(ABORT,'photo_handoff_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_interactions i JOIN projects p ON p.id=i.project_id AND p.owner_user_id=i.user_id
+  WHERE i.id=json_extract(NEW.handoff_json,'$.interactionId') AND i.project_id=NEW.project_id
+   AND i.definition_digest=json_extract(NEW.handoff_json,'$.definitionDigest')
+   AND i.state='open' AND i.removed_at IS NULL AND i.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+   AND json_extract(i.envelope_json,'$.definition.cards[0].id')='photo-upload'
+   AND json_extract(i.envelope_json,'$.definition.cards[0].binding')='project.photos@1'
+   AND NOT EXISTS(SELECT 1 FROM chat_interactions child WHERE child.previous_interaction_id=i.id));
 END;
 
 CREATE TRIGGER project_file_cleanup AFTER DELETE ON project_files

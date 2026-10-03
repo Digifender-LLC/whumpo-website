@@ -21,7 +21,7 @@ try{
  await db.prepare('INSERT INTO user_profiles(user_id,name,about_me,share_context,photo) VALUES(?,?,?,0,?)').bind(owner.account,'Private profile name',markers.profile,markers.photo).run();
  const tokenId=id(),photoId=id();
  await db.prepare("INSERT INTO github_token_vault VALUES(?,?,?,'2099-01-01','revoking')").bind(tokenId,owner.account,await fixtureCiphertext(key,`whumpo:github:token:${owner.account}:${tokenId}`,markers.token)).run();
- await db.prepare("INSERT INTO project_files VALUES(?,?,?,?,?,10,1,1,'ready',?)").bind(photoId,project,'Garden photo metadata',markers.object,'a'.repeat(64),now()).run();
+ await db.prepare("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) VALUES(?,?,?,?,?,10,1,1,'ready',?)").bind(photoId,project,'Garden photo metadata',markers.object,'a'.repeat(64),now()).run();
  // Private visitor state exists in the actual tables. No model or public runtime
  // executes it; explicit activation below uses only a synthetic deterministic check.
  const backend=id(),check=id(),review=id();

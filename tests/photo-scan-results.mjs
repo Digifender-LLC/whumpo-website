@@ -46,7 +46,7 @@ try{
  const recovered=await recordPhotoScan(lostDB,lost.id,lost.authority,payload(lost));assert.equal(recovered.replayed,true);assert.equal(recovered.applied,true);
  const project=crypto.randomUUID(),file=crypto.randomUUID(),stamp=new Date().toISOString();
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Synthetic','Safety fixture','draft',?,?)").bind(project,owner,stamp,stamp).run();
- await uploadPhoto(new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':'Synthetic'},body:jpeg}),{...store.env,DB:scope(owner)},owner,project,file);
+ await uploadPhoto(new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':'Synthetic'},body:jpeg}),{...store.env,DB:scope(owner)},owner,project,file);
  await assert.rejects(()=>readPhoto({...store.env,DB:scope(owner)},owner,file),err=>err.status===423);
  await assert.rejects(()=>reservePhotoScan(db,'project',lostUser,file),err=>err.status===404);
  const projectTicket=await reservePhotoScan(db,'project',owner,file);
@@ -56,7 +56,7 @@ try{
  // Expired clearance can be rescanned; live clearance and blocked states cannot be reset.
  for(const kind of ['profile','project']){
   const u=await fixture(),subject=kind==='profile'?u:crypto.randomUUID();
-  if(kind==='project')await uploadPhoto(new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':'Rescan'},body:jpeg}),{...store.env,DB:scope(owner)},owner,project,subject);
+  if(kind==='project')await uploadPhoto(new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':'Rescan'},body:jpeg}),{...store.env,DB:scope(owner)},owner,project,subject);
   const uid=kind==='profile'?u:owner,table=kind==='profile'?'profile_photo_safety':'project_photo_safety',key=kind==='profile'?'user_id':'file_id';
   await db.prepare(`UPDATE ${table} SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic-expired',expires_at='2000-01-01T00:00:00Z' WHERE ${key}=?`).bind(subject).run();
   const reservations=await Promise.allSettled([reservePhotoScan(db,kind,uid,subject),reservePhotoScan(db,kind,uid,subject)]);

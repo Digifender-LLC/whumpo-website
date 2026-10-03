@@ -6,7 +6,7 @@ Error.stackTraceLimit=0;
 const modules=await currentFixtureModules(['src/index.ts','src/site-agent.ts','src/ai-chat.ts','src/agent-inspection.ts','src/chat-interactions/store.ts','src/chat-interactions/agent.ts','src/chat-interactions/protocol.ts','src/project-specification/store.ts','src/chat-interactions/task-context.ts','src/chat-interactions/model-continuation.ts','src/publications.ts']);
 const worker=(await modules.module('src/index.ts')).default,agent=await modules.module('src/site-agent.ts'),ai=await modules.module('src/ai-chat.ts'),inspection=await modules.module('src/agent-inspection.ts');
 const store=await modules.module('src/chat-interactions/store.ts'),forms=await modules.module('src/chat-interactions/agent.ts'),protocol=await modules.module('src/chat-interactions/protocol.ts'),site=await modules.module('src/project-specification/store.ts');
-const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only','--publications-only','--observations-only']}),{db}=fixture,id=()=>crypto.randomUUID();
+const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only','--publications-only','--observations-only','--media-only']}),{db}=fixture,id=()=>crypto.randomUUID();
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-only',protocol:'responses'};
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:config.baseURL,AI_MODEL:config.model,AI_PROTOCOL:config.protocol,AI_API_KEY:config.apiKey};
@@ -21,7 +21,7 @@ globalThis.fetch=async(url,init)=>{
 };
 const http=(o,path,data,database=db)=>worker.fetch(new Request('https://whumpo.com'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),{...env,DB:database},{waitUntil(p){background.push(p);}});
 async function json(o,path,data,database){const r=await http(o,path,data,database);assert.equal(r.status,200,await r.clone().text());return r.json();}
-async function test(name,fn){if(process.argv.includes('--observations-only')&&!name.startsWith('task-observation '))return;if(process.argv.includes('--publications-only')&&!name.startsWith('task-publication '))return;if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
+async function test(name,fn){if(process.argv.includes('--media-only')&&!name.startsWith('task-media '))return;if(process.argv.includes('--observations-only')&&!name.startsWith('task-observation '))return;if(process.argv.includes('--publications-only')&&!name.startsWith('task-publication '))return;if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{const existing=name.startsWith('task-media ')?new Set((await db.prepare('SELECT id FROM users').all()).results.map(u=>u.id)):null;await fn();assert.equal(queue.length,0);cases++;if(existing)for(const u of (await db.prepare('SELECT id FROM users').all()).results)if(!existing.has(u.id))await run('DELETE FROM users WHERE id=?',u.id);}catch(e){console.error(name,String(e));throw e;}}
 async function owner(withWebsite=true){
  const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=id();
  await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -524,6 +524,61 @@ try{
   assert.equal((await row('SELECT review_id FROM publication_chat_links WHERE turn_id=?',form.submission.id)).review_id,form.submission.id);
  });
 
+
+ const photoAction=o=>({kind:'interaction',operation:'requestPhotoUpload',projectId:o.project});
+ async function mediaTask(o){
+  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing','read','private-test-acceptance','synthetic task media',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,o.project);
+  const {form}=await savedSelection(o,'Add a photo to this website task.');const shown=await follow(o,form,[photoAction(o)]);assert.equal(shown.data.continuation.state,'succeeded');
+  const handoff=await store.readInteraction(o.scope,o.user,(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',form.submission.id)).id);
+  return {f:{...form,projectId:o.project},handoff};
+ }
+ async function uploadedFor(o,h,status='pending',name='TASK_PHOTO_CANARY'){
+  const file=id();await run("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at,handoff_json) VALUES(?,?,?,?,?,1024,640,480,?,datetime('now'),?)",file,o.project,name,'PRIVATE_TASK_PHOTO_KEY/'+file,'c'.repeat(64),status,JSON.stringify({interactionId:h.envelope.id,definitionDigest:h.envelope.definitionDigest}));return file;
+ }
+ const media=(o,f)=>taskContext.prepareInformationTask(o.scope,o.user,f.submission.id,true).then(t=>t.data.photoResults);
+ await test('task-media exact task uploader, metadata results and replay preserve website and original task',async()=>{
+  const o=await owner(),{f,handoff}=await mediaTask(o),file=await uploadedFor(o,handoff);
+  assert.equal((await row('SELECT task_id FROM chat_task_progress WHERE turn_id=?',f.submission.id)).task_id,f.envelope.scope.taskId);
+  assert.deepEqual((await media(o,f)).items.map(p=>({id:p.id,status:p.status,safety:p.safetyStatus})),[{id:file,status:'pending',safety:'pending'}]);
+  await run("UPDATE project_files SET status='ready' WHERE id=?",file);
+  const result=await chat(o,'Did that task’s photo finish uploading?', [resume(f),body=>{const text=JSON.stringify(body);assert.match(text,/TASK_PHOTO_CANARY/);assert.doesNotMatch(text,/PRIVATE_TASK_PHOTO_KEY/);assert(!text.includes('c'.repeat(64)));return taskReply('Your photo is saved privately and held. It has not changed the website.');}]);
+  assert.equal(result.turn.status,'completed');assert.equal((await row('SELECT task_id FROM chat_task_progress WHERE turn_id=?',result.input.id)).task_id,f.envelope.scope.taskId);const calls=mainCalls;await json(o,'/api/chat',result.input);assert.equal(mainCalls,calls);await noEffect(o,f);
+ });
+ await test('task-media excludes direct uploads, other tasks and other projects',async()=>{
+  const o=await owner(),{f,handoff}=await mediaTask(o),other=await mediaTask(o),foreign=await owner(),foreignTask=await mediaTask(foreign);
+  const own=await uploadedFor(o,handoff,'ready'),hidden=await uploadedFor(o,other.handoff,'ready','OTHER_TASK_PHOTO');await uploadedFor(foreign,foreignTask.handoff,'ready','FOREIGN_PHOTO');await selectedPhoto(o,'DIRECT_UPLOAD_PHOTO');
+  const data=await media(o,f);assert.deepEqual(data.items.map(p=>p.id),[own]);assert(!JSON.stringify(data).includes(hidden));
+  const result=await chat(o,'What about that first photo?', [resume(f),body=>{assert.doesNotMatch(JSON.stringify(body),/OTHER_TASK_PHOTO|FOREIGN_PHOTO|DIRECT_UPLOAD_PHOTO/);return taskReply('The task photo is saved privately and held.');}]);assert.equal(result.turn.status,'completed');await noEffect(o,f);
+ });
+ await test('task-media dismissed handoff retains file outcomes and does not recreate uploads',async()=>{
+  const o=await owner(),{f,handoff}=await mediaTask(o),file=await uploadedFor(o,handoff,'ready');await store.mutateInteraction(o.scope,o.user,{version:1,requestId:id(),interactionId:handoff.envelope.id,definitionDigest:handoff.envelope.definitionDigest,expectedAnswerRevision:0,operation:'cancel'});
+  assert.equal((await media(o,f)).items[0].id,file);const r=await chat(o,'Is the photo from that task still saved?', [resume(f),taskReply('The photo remains saved privately and held after the uploader was dismissed.')]);assert.equal(r.turn.status,'completed');assert.equal((await row('SELECT count(*) n FROM project_files WHERE project_id=?',o.project)).n,1);await noEffect(o,f);
+ });
+ await test('task-media denied reads carry no photo facts',async()=>{
+  const o=await owner(),{f,handoff}=await mediaTask(o);await uploadedFor(o,handoff,'ready');await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.editing' AND operation='read'",o.user);
+  assert.equal((await media(o,f)).state,'denied');const r=await chat(o,'What is the status of that task photo?', [resume(f),body=>{assert.doesNotMatch(JSON.stringify(body),/TASK_PHOTO_CANARY/);return taskReply('I cannot read the photo’s current status with your access.');}]);assert.equal(r.turn.status,'completed');
+ });
+ for(const invalid of ['foreign','other-owned','extra-field','upload-bytes'])await test('task-media rejects '+invalid+' upload action',async()=>{
+  const o=await owner(),{f}=await mediaTask(o),a=photoAction(o);
+  if(invalid==='foreign')a.projectId=(await owner()).project;
+  if(invalid==='other-owned'){a.projectId=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Other','Other','draft',datetime('now'),datetime('now'))",a.projectId,o.user);}
+  if(invalid==='extra-field')a.url='https://example.invalid/photo.jpg';if(invalid==='upload-bytes')a.operation='uploadPhoto';
+  const r=await chat(o,'Show an uploader for that task.',[resume(f),taskReply('UNTRUSTED_UPLOAD',a)]);assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_UPLOAD/);assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',r.input.id),null);await noEffect(o,f);
+ });
+ for(const change of ['remove','clearance','read-revoked','owner-transfer'])await test('task-media late '+change+' fences model reply',async()=>{
+  const o=await owner(),{f,handoff}=await mediaTask(o),file=await uploadedFor(o,handoff,'ready'),other=await owner();
+  const result=await chat(o,'Tell me whether that photo can be used.',[resume(f),async()=>{
+   if(change==='remove')await run('DELETE FROM project_files WHERE id=?',file);
+   if(change==='clearance')await run("UPDATE project_photo_safety SET state='blocked' WHERE file_id=?",file);
+   if(change==='read-revoked')await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.editing' AND operation='read'",o.user);
+   if(change==='owner-transfer')await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,o.project);
+   return taskReply('UNTRUSTED_STALE_PHOTO');}]);assert.equal(result.turn.status,'failed');assert.doesNotMatch(result.turn.assistant_text,/UNTRUSTED_STALE_PHOTO/);assert.equal(await row('SELECT turn_id FROM chat_task_progress WHERE turn_id=?',result.input.id),null);
+ });
+ await test('task-media upload metadata is not selection or clearance authority for website changes',async()=>{
+  const o=await owner(),{f,handoff}=await mediaTask(o),file=await uploadedFor(o,handoff,'ready');
+  const r=await chat(o,'Put the uploaded photo on the website now.',[resume(f),taskReply('UNTRUSTED_UNCLEARED_USE',{kind:'specification',operation:'change',projectId:o.project,expectedRevision:1,operations:[{type:'pages.setPhotos',pageId:'home',photos:[{id:file,alt:'An invented description'}]}]})]);
+  assert.notEqual(r.turn.assistant_text,'UNTRUSTED_UNCLEARED_USE');assert.equal(await row('SELECT id FROM project_spec_proposals WHERE id=?',r.input.id),null);await noEffect(o,f);
+ });
  const observationGrant=async(o,project=o.project)=>{for(const feature of ['core.editing','core.insights'])await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,'read','private-test-acceptance','synthetic task observations',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,project,feature);};
  const overview=o=>({kind:'interaction',operation:'showView',view:{version:1,projectId:o.project,widgets:['projects','traffic'],shortcuts:[]}});
  async function observedTask(o){await observationGrant(o);const {form}=await savedSelection(o,'Show status and page requests for my selected gardening website.');await follow(o,form,[null]);return {...form,projectId:o.project};}

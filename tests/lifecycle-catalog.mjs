@@ -7,7 +7,7 @@ await validateLifecycleReferences(catalog);
 const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,175);assert.equal(report.classCount,39);assert.equal(schemaFiles.length,3);
+ assert.equal(report.tableCount,176);assert.equal(report.classCount,39);assert.equal(schemaFiles.length,3);
  assert.equal(report.plannedClassCount,7);assert.equal(report.protectionClasses.length,46);
  assert.equal(report.protectionStatus,'decision-not-runtime-enforcement');
  for(const group of report.protectionClasses){assert.equal(group.profile.endToEndEncrypted,false);assert.equal(group.profile.customerUnlockRequired,false);}
@@ -29,6 +29,8 @@ try{
  for(const name of ['project_spec_creations','project_spec_applies','service_client_applies','service_client_activation_reviews']){
   const table=report.tables.find(t=>t.name===name);assert.equal(table.class,'configuration-authority');assert.ok(!table.columns.includes('spec_json'));assert.ok(table.ownerPath.includes('users'));
  }
+ assert.ok(report.tables.find(t=>t.name==='project_files').columns.includes('handoff_json'));
+ assert.equal(report.tables.find(t=>t.name==='publication_chat_links').class,'site-versions');
  assert.equal(report.tables.find(t=>t.name==='feature_preview_grants').class,'feature-preview-authority');
  assert.ok(report.tables.find(t=>t.name==='feature_preview_grants').ownerPath.includes('users'));
  assert.equal(report.tables.find(t=>t.name==='backend_extension_uses').class,'backend-artifacts');
@@ -68,5 +70,5 @@ try{
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
- console.log(`Lifecycle catalog passed: 175 tables, 39 current/7 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
+ console.log(`Lifecycle catalog passed: 176 tables, 39 current/7 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
 }finally{db.close();}
