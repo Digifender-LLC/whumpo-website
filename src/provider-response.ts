@@ -15,6 +15,7 @@ export function responseRejection(result: Record<string, unknown>, model: string
       if (item.type === 'reasoning') continue; // Never shown as an answer.
       if (item.type !== 'message') return 'tool_content';
       if (item.role !== undefined && item.role !== 'assistant') return 'message_invalid';
+      if (item.phase !== undefined && item.phase !== 'commentary' && item.phase !== 'final_answer') return 'message_invalid';
       if (!Array.isArray(item.content) || item.content.some((part: unknown) => !part || typeof part !== 'object' || !('type' in part) || part.type !== 'output_text' || !('text' in part) || typeof part.text !== 'string')) return 'message_invalid';
     }
   } else {

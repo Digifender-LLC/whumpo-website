@@ -91,11 +91,16 @@ export async function complete(config: AIConfig, messages: ChatMessage[], transp
   if (config.protocol === "responses") {
     if (result.status === "incomplete" && object(result.incomplete_details).reason === "max_output_tokens") throw new ProviderError("output_limit");
     if (result.status !== "completed" || !Array.isArray(result.output)) throw new ProviderError("invalid_response");
-    text = result.output.flatMap(item => {
-      const output = object(item);
-      if (output.type !== "message" || !Array.isArray(output.content)) return [];
-      return output.content.map(part => object(part)).filter(part => part.type === "output_text").map(part => part.text);
-    }).filter(value => typeof value === "string").join("\n");
+    const outputs = result.output.map(object).filter(item => item.type === 'message');
+    const messageText = (item: Record<string, unknown>) => (item.content as unknown[]).map(part => object(part).text as string).join('\n');
+    // Current Responses may emit explicit progress commentary before its answer.
+    // Validate every message, but only one non-commentary message is an answer.
+    // Never strip prose/fences from that answer or guess between multiple answers.
+    const outputError = answerRejection(outputs.map(messageText).join('\n'), config.apiKey);
+    if (outputError) throw new ProviderError('invalid_response', outputError);
+    const answers = outputs.filter(item => item.phase !== 'commentary');
+    if (answers.length !== 1) throw new ProviderError('invalid_response', 'message_invalid');
+    text = messageText(answers[0]);
   } else {
     const choice = object(Array.isArray(result.choices) ? result.choices[0] : null);
     if (choice.finish_reason === "length") throw new ProviderError("output_limit");
