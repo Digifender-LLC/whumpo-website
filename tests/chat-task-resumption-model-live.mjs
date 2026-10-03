@@ -13,8 +13,8 @@ const cases=[
 await mkdir('.secrets',{recursive:true,mode:0o700});
 const directory=await mkdtemp('.secrets/task-resumption-model-');
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',protocol:'responses',apiKey:(await readFile(process.env.WHUMPO_MUSE_KEY_FILE??'opencode.key','utf8')).trim()};
-const m=await currentFixtureModules(['src/ai-chat.ts','src/chat-interactions/store.ts','src/chat-interactions/model-continuation.ts','src/project-specification/store.ts']);
-const ai=await m.module('src/ai-chat.ts'),forms=await m.module('src/chat-interactions/store.ts'),follow=await m.module('src/chat-interactions/model-continuation.ts'),site=await m.module('src/project-specification/store.ts');
+const m=await currentFixtureModules(['src/index.ts','src/ai-chat.ts','src/chat-interactions/store.ts','src/chat-interactions/model-continuation.ts','src/project-specification/store.ts']);
+const worker=(await m.module('src/index.ts')).default,ai=await m.module('src/ai-chat.ts'),forms=await m.module('src/chat-interactions/store.ts'),follow=await m.module('src/chat-interactions/model-continuation.ts'),site=await m.module('src/project-specification/store.ts');
 const fixture=await databaseFixture({d1:true}),db=fixture.db,id=()=>crypto.randomUUID(),results=[];
 const startedAt=new Date().toISOString();let complete=false;
 try{
@@ -39,7 +39,7 @@ try{
    await db.prepare('UPDATE workspace_state SET revision=3 WHERE user_id=?').bind(user).run();
    const form=await forms.issueProjectIntake(scope,user,{originTurnId:origin,template:'project-select@1'}),submission=id();
    await forms.mutateInteraction(scope,user,{version:1,requestId:submission,interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers:{project}});
-   const transport=async(...args)=>{result.calls++;assert(result.calls<=4,'Unexpected additional model dispatch');const r=await fetch(...args),body=await r.clone().json();result.responses.push(body.output?.flatMap(x=>x.content??[]).find(x=>x.type==='output_text')?.text??null);return r;};
+   const transport=async(...args)=>{result.calls++;assert(result.calls<=8,'Unexpected additional model dispatch');const r=await fetch(...args),body=await r.clone().json();result.responses.push(body.output?.flatMap(x=>x.content??[]).find(x=>x.type==='output_text')?.text??null);return r;};
    const prepared=await follow.continueInformationTask(scope,user,submission,3,config,transport);
    assert.equal(prepared.submission.continuation.state,'succeeded');assert.equal(result.calls,2);
    const review=await site.readSpecificationProposal(scope,user,submission);
@@ -58,6 +58,23 @@ try{
    assert.equal((await site.readSpecification(scope,user,project)).revision,1);assert.equal((await site.readSpecification(scope,user,other)).revision,1);
    assert.equal((await db.prepare('SELECT count(*) n FROM publications').first()).n,0);assert.equal(result.calls,4);
    await ai.sendAIChat(scope,user,turn,revision,request,config,transport);assert.equal(result.calls,4,'Replay dispatched inference');
+   const reopenTurn=id(),reopenRevision=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(user).first()).revision;
+   await ai.sendAIChat(scope,user,reopenTurn,reopenRevision,'Show me that same Test Garden task’s prepared review again so I can decide whether to save it. Do not prepare a new change or save anything.',config,transport);
+   result.reopened=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(reopenTurn).first();assert.equal(result.reopened.status,'completed');
+   const link=await db.prepare('SELECT proposal_id FROM project_spec_chat_links WHERE turn_id=?').bind(reopenTurn).first();assert.equal(link?.proposal_id,submission);assert.equal(result.calls,6);assert.equal(JSON.parse(result.responses[5]).action.operation,'review');
+   const exact=await site.readSpecificationProposal(scope,user,submission),control={id:id(),revision:(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(user).first()).revision,action:{type:'specificationApply',reviewId:exact.id,proposalDigest:exact.proposal_digest,expectedRevision:exact.expected_revision}};
+   const approvalResponse=await worker.fetch(new Request('https://whumpo.com/api/chat/actions',{method:'POST',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+authority.token,'content-type':'application/json'},body:JSON.stringify(control)}),{DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
+   assert.equal(approvalResponse.status,200,await approvalResponse.clone().text());await approvalResponse.json();assert.equal((await site.readSpecification(scope,user,project)).revision,2);assert.equal(result.calls,6);
+   const receipt=await db.prepare('SELECT id,version_id FROM project_spec_applies WHERE proposal_id=?').bind(submission).first();assert(receipt);result.receipt=receipt;
+   await db.prepare('DELETE FROM project_spec_proposals WHERE id=?').bind(submission).run();
+   const savedTurn=id(),savedRevision=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(user).first()).revision,savedRequest='Did I save that Test Garden task’s headline change? Check the actual saved outcome; do not change anything or publish it.';
+   await ai.sendAIChat(scope,user,savedTurn,savedRevision,savedRequest,config,transport);
+   result.savedStatus=await db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=?').bind(savedTurn).first();assert.equal(result.savedStatus.status,'completed');
+   const savedProgress=await db.prepare('SELECT task_id,submission_id FROM chat_task_progress WHERE turn_id=?').bind(savedTurn).first();assert.equal(savedProgress?.task_id,form.envelope.scope.taskId);assert.equal(savedProgress.submission_id,submission);
+   assert.equal(JSON.parse(result.responses[7]).action,null);assert.match(result.savedStatus.assistant_text,/saved|revision 2/i);assert.doesNotMatch(result.savedStatus.assistant_text,/not (?:been )?saved|waiting for (?:your )?approval|still pending/i);
+   assert.equal(result.calls,8);await ai.sendAIChat(scope,user,savedTurn,savedRevision,savedRequest,config,transport);assert.equal(result.calls,8);
+   assert.equal((await site.readSpecification(scope,user,project)).revision,2);assert.equal((await site.readSpecification(scope,user,other)).revision,1);assert.equal((await db.prepare('SELECT count(*) n FROM publications').first()).n,0);
+
    result.success=true;
   }finally{console.warn=originalWarn;await db.prepare('DELETE FROM users WHERE id=?').bind(user).run();}
   console.log(JSON.stringify({request,success:result.success,calls:result.calls}));
@@ -65,6 +82,6 @@ try{
  complete=true;
 }finally{
  await fixture.close();
- await writeFile(directory+'/report.json',JSON.stringify({startedAt,completedAt:new Date().toISOString(),complete,results,localFixtureRemoved:true,scope:'Two frozen synthetic selected-task review/status conversations on local D1 with real Muse. No deployed/browser/device or general model-reliability claim.'},null,2)+'\n',{mode:0o600});
+ await writeFile(directory+'/report.json',JSON.stringify({startedAt,completedAt:new Date().toISOString(),complete,results,localFixtureRemoved:true,scope:'Two frozen synthetic selected-task pending-status, exact reopening, typed user save and post-cleanup receipt/status conversations on local D1 with real Muse. No deployed/browser/device or general model-reliability claim.'},null,2)+'\n',{mode:0o600});
  console.log(JSON.stringify({directory,complete,passed:results.filter(r=>r.success).length,total:cases.length}));
 }

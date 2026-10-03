@@ -6,12 +6,12 @@ import {chromium} from '@playwright/test';
 import {currentFixtureModules} from './current-modules.mjs';
 import {captureSelectedChatProject} from './chat-viewport.mjs';
 
-export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,release,evidenceDirectory,allowInference=false}){
- assert.equal(allowInference,true);assert(evidenceDirectory.startsWith('.secrets/'));
+export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,release,evidenceDirectory,allowInference=false,reviewResults=false,verificationKey}){
+ assert.equal(allowInference,true);assert(evidenceDirectory.startsWith('.secrets/'));if(reviewResults)assert(verificationKey?.virtualCredential,'Review acceptance requires a caller-owned signed test key');
  await mkdir(evidenceDirectory,{recursive:true,mode:0o700});
  const m=await currentFixtureModules(['src/chat-interactions/store.ts','src/feature-preview-grants.ts','src/billing.ts','src/project-specification/store.ts']);
  const store=await m.module('src/chat-interactions/store.ts'),grants=await m.module('src/feature-preview-grants.ts'),billing=await m.module('src/billing.ts'),site=await m.module('src/project-specification/store.ts');
- const scope=m.identity.admitWorkspace(db,await m.identity.resolveIdentity(db,{version:1,client:'web',kind:'session',token:workspaceToken}));
+ let scope=m.identity.admitWorkspace(db,await m.identity.resolveIdentity(db,{version:1,client:'web',kind:'session',token:workspaceToken}));
  const row=(q,...p)=>db.prepare(q).bind(...p).first(),rows=async(q,...p)=>(await db.prepare(q).bind(...p).all()).results;
  const original=(await row('SELECT id FROM projects WHERE owner_user_id=?',id)).id,steps=[],errors=[],requests=new Map();
  let phase='setup',success=false,acceptedTurn,loseContinuation=false,lostReplies=0;
@@ -24,6 +24,7 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
  const app=await chromium.launch({headless:true}),context=await app.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
  await context.addCookies([{name:'__Host-whumpo_session',value:workspaceToken,domain:'whumpo.com',path:'/',secure:true,httpOnly:true,sameSite:'Lax'}]);
  const page=await context.newPage();page.setDefaultTimeout(25000);page.on('pageerror',e=>errors.push(e.message));
+ const api=async(path,method='GET',data)=>{const response=await context.request.fetch('https://whumpo.com'+path,{method,headers:{origin:'https://whumpo.com'},...(data?{data}:{}),timeout:150000,maxRetries:0});assert.equal(response.status(),200,path);return response;};
  const card=f=>page.locator('[data-interaction-id="'+f.envelope.id+'"]');
  await page.route('**/api/chat/interactions/v1/continue',async route=>{
   const input=route.request().postDataJSON();requests.set(input.submissionId,input);
@@ -36,7 +37,7 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
   await page.getByRole('textbox',{name:'Message Whumpo',exact:true}).fill(text);
   const pending=page.waitForResponse(r=>r.url()==='https://whumpo.com/api/chat'&&r.request().method()==='POST',{timeout:150000});await page.getByRole('button',{name:'Send message',exact:true}).click();
   const response=await pending;assert.equal(response.status(),200);const input=response.request().postDataJSON();acceptedTurn=input.id;record.turn=await settled(input.id);assert.equal(record.turn.status,'completed','Expected completed Chat result');await verify(record.turn);
-  const after=await calls();await browser.json('/api/chat','POST',input);assert.deepEqual(await calls(),after,'Chat replay dispatched inference');record.calls={before,after};record.success=true;console.log(JSON.stringify({step:name,passed:true,deployed:true}));return record.turn;
+  const after=await calls();await api('/api/chat','POST',input);assert.deepEqual(await calls(),after,'Chat replay dispatched inference');record.calls={before,after};record.success=true;console.log(JSON.stringify({step:name,passed:true,deployed:true}));return record.turn;
  }
  async function issued(turn,template){const f=await row('SELECT id FROM chat_interactions WHERE origin_turn_id=? AND user_id=?',turn.id,id);assert(f,'Expected maintained form');const form=await store.readInteraction(scope,id,f.id);assert.equal(form.envelope.definition.template,template);return form;}
  async function submit(name,form,verify){
@@ -57,7 +58,7 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
   const saved=await store.readInteraction(scope,id,form.envelope.id);
   await card(form).getByText('Whumpo’s follow-up is ready in Chat. Review any preview before approving changes or publishing.',{exact:true}).waitFor();
   await verify(saved);
-  const after=await calls(),input=requests.get(saved.submission.id);assert(input);await browser.json('/api/chat/interactions/v1/continue','POST',input);assert.deepEqual(await calls(),after,'Continuation replay dispatched inference');
+  const after=await calls(),input=requests.get(saved.submission.id);assert(input);await api('/api/chat/interactions/v1/continue','POST',input);assert.deepEqual(await calls(),after,'Continuation replay dispatched inference');
   await page.reload();await card(saved).getByText('Whumpo’s follow-up is ready in Chat.',{exact:false}).waitFor();assert.deepEqual(await calls(),after,'Reload dispatched inference');record.calls={before,after};record.success=true;console.log(JSON.stringify({step:name,passed:true,deployed:true}));return saved;
  }
  try{
@@ -90,11 +91,42 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
    await page.setViewportSize({width,height:844});
    await captureSelectedChatProject(page,{interactionId:selection.envelope.id,projectName:'Test Garden',path:evidenceDirectory+'/selected-'+width+'.png'});
   }
-  assert.equal((await row('SELECT count(*) n FROM publications')).n,0);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',id)).n,2);assert.equal((await site.readSpecification(scope,id,target)).revision,1);assert.equal((await site.readSpecification(scope,id,original)).revision,1);assert.equal((await billing.getBilling(scope,id)).standardAI.creditCharge,0);assert.deepEqual(errors,[]);success=true;
+  if(reviewResults){
+   await chat('reopen-exact-task-review','Show me that same Test Garden task’s prepared headline review again so I can decide whether to save it. Do not prepare a new change or save anything.',async turn=>{
+    assert.equal((await row('SELECT proposal_id FROM project_spec_chat_links WHERE turn_id=?',turn.id)).proposal_id,selection.submission.id);
+    assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE user_id=?',id)).n,reviews);
+   });
+   phase='signed-user-private-save';const priorCalls=await calls();
+   const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');
+   const {authenticatorId}=await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
+   await cdp.send('WebAuthn.addCredential',{authenticatorId,credential:verificationKey.virtualCredential('whumpo.com',id)});
+   await page.waitForFunction(()=>[...document.querySelectorAll('button')].filter(b=>b.textContent?.trim()==='Save reviewed private version').length===3);
+   const receiptResponse=page.waitForResponse(r=>r.url()==='https://whumpo.com/api/chat/actions'&&r.request().method()==='POST',{timeout:60000});
+   await page.getByRole('button',{name:'Save reviewed private version',exact:true}).last().click();
+   const response=await receiptResponse;assert.equal(response.status(),200);const input=response.request().postDataJSON();
+   assert.equal(input.action.type,'specificationApply');assert.equal(input.action.reviewId,selection.submission.id);
+   await page.getByText('Saved private website revision 2.',{exact:false}).waitFor();
+   assert.equal((await row("SELECT count(*) n FROM identity_ceremony_receipts WHERE account_id=? AND kind='reauth'",id)).n,1);
+   const token=(await context.cookies()).find(c=>c.name==='__Host-whumpo_session').value;
+   scope=m.identity.admitWorkspace(db,await m.identity.resolveIdentity(db,{version:1,client:'web',kind:'session',token}));
+   assert.equal((await site.readSpecification(scope,id,original)).revision,2);
+   await api('/api/chat/actions','POST',input);assert.deepEqual(await calls(),priorCalls);
+   const receipt=await row('SELECT id,version_id,revision FROM project_spec_applies WHERE proposal_id=? AND user_id=?',selection.submission.id,id);assert.equal(receipt.revision,2);
+   steps.push({name:phase,success:true,receipt,passkeyVerified:true,replayWithoutInference:true});
+   await db.prepare('DELETE FROM project_spec_proposals WHERE id=? AND user_id=?').bind(selection.submission.id,id).run();
+   const result=await chat('saved-result-after-proposal-cleanup','Did I save that Test Garden task’s headline change? Check the actual saved outcome; do not change anything or publish it.',async turn=>{
+    const progress=await row('SELECT task_id,submission_id FROM chat_task_progress WHERE turn_id=?',turn.id);assert.equal(progress?.task_id,selected.envelope.scope.taskId);assert.equal(progress.submission_id,selection.submission.id);
+    assert.match(turn.assistant_text,/saved|revision 2/i);assert.doesNotMatch(turn.assistant_text,/not (?:been )?saved|waiting for (?:your )?approval|still pending/i);
+    assert.equal((await row('SELECT count(*) n FROM project_spec_applies WHERE proposal_id=?',selection.submission.id)).n,1);
+   });
+   const finalCalls=await calls();await page.reload();await page.getByText(result.assistant_text,{exact:true}).waitFor();assert.deepEqual(await calls(),finalCalls);
+   for(const width of [360,390]){await page.setViewportSize({width,height:844});await page.getByText(result.assistant_text,{exact:true}).evaluate(e=>e.scrollIntoView({block:'center'}));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:evidenceDirectory+'/saved-result-'+width+'.png'});}
+  }
+  assert.equal((await row('SELECT count(*) n FROM publications')).n,0);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',id)).n,2);assert.equal((await site.readSpecification(scope,id,target)).revision,1);assert.equal((await site.readSpecification(scope,id,original)).revision,reviewResults?2:1);assert.equal((await billing.getBilling(scope,id)).standardAI.creditCharge,0);assert.deepEqual(errors,[]);success=true;
  }finally{
   if(!success)await page.screenshot({path:evidenceDirectory+'/failure.png'}).catch(()=>{});await app.close();
   const usage=await rows('SELECT role,status,input_tokens,output_tokens,cost_basis,estimated_micros FROM inference_calls WHERE user_id=? ORDER BY created_at,id',id);
-  await writeFile(evidenceDirectory+'/report.json',JSON.stringify({release,at:new Date().toISOString(),success,phase,acceptedTurn,steps,usage,calls:await calls(),lostReplies,errors,scope:'Actual deployed Worker/current D1/browser and configured Muse; synthetic signed identity and public fictional brief only. No physical device, human enrollment, publication, provider activation, real billing, CMS or scanner acceptance.'},null,2)+'\n',{flag:'wx',mode:0o600});
+  await writeFile(evidenceDirectory+'/report.json',JSON.stringify({release,at:new Date().toISOString(),success,phase,acceptedTurn,reviewResults,steps,usage,calls:await calls(),lostReplies,errors,scope:'Actual deployed Worker/current D1/browser and configured Muse; synthetic signed identity and public fictional brief only. No physical device, human enrollment, publication, provider activation, real billing, CMS or scanner acceptance.'},null,2)+'\n',{flag:'wx',mode:0o600});
  }
  return {release,success,steps:steps.length,lostReplies,evidenceDirectory,realInference:true,physicalDevice:false};
 }
