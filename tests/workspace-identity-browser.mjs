@@ -1,3 +1,5 @@
+import {keyboardJourney} from './helpers/keyboard-journey.mjs';
+import {hearOrca} from './helpers/orca-output.mjs';
 // Opt-in mobile browser acceptance with real signed WebAuthn and actual current HTTP/D1.
 // Turnstile is synthetic. No remote bindings, active platform schema, inference or provider calls.
 import assert from 'node:assert/strict';
@@ -11,17 +13,18 @@ import {build as viteBuild} from 'vite';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {fixtureKeyring} from './helpers/connection-keyring.mjs';
+const accessibility=process.argv.includes('--accessibility');
 const grantJourney=process.argv.includes('--github-grant');let providerCalls=0,modelCalls=0;
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp('/tmp/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
 let browser,server,fixture,page,phase='build';const originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
-const requests=[],errors=[];let loseSecureReply=false;
+const requests=[],errors=[];let loseSecureReply=false,holdAddReply=false,releaseAddReply=null;
 try{
  await writeFile(html,'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whumpo identity acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script></body></html>');
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
  const bundled=await build({stdin:{contents:"export {default as worker} from './src/index';export {hashToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {sendConversation,readChat} from './src/chat';export {startGitHub,finishGitHub} from './src/github-connection';export {initializeConnectionKeys} from './src/connection-rotation';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
  const {worker,hashToken,admitWorkspace,resolveIdentity,sendConversation,readChat,startGitHub,finishGitHub,initializeConnectionKeys}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
- fixture=await databaseFixture({allowedArguments:['--github-grant']});const db=fixture.db;
+ fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility']});const db=fixture.db;
  const code=crypto.randomUUID();await db.prepare("INSERT INTO invitations VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'),NULL,NULL)").bind(await hashToken(code)).run();
  crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
  globalThis.fetch=async(url,...args)=>{if(grantJourney&&String(url)==='https://opencode.ai/zen/go/v1/responses'){modelCalls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Prepared.',action:{kind:'githubAccess',operation:'review'}})}]}],usage:{input_tokens:200,output_tokens:80}});}if(grantJourney&&String(url)==='https://api.github.com/applications/browser-grant/grant'){providerCalls++;return new Response(null,{status:204});}if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
@@ -34,6 +37,7 @@ try{
    const chunks=[];for await(const chunk of req)chunks.push(chunk);
    const response=await worker.fetch(new Request(url,{method:req.method,headers:req.headers,...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})}),env,{waitUntil:()=>{}});
    if(!response){res.writeHead(404).end();return;}
+   if(holdAddReply&&url.pathname.endsWith('/add/verify')&&response.status===200){holdAddReply=false;await new Promise(done=>{releaseAddReply=done;});}
    if(loseSecureReply&&url.pathname.endsWith('/recovery/secure')&&response.status===200){loseSecureReply=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
    const headers=Object.fromEntries(response.headers);headers['set-cookie']=response.headers.getSetCookie();res.writeHead(response.status,headers).end(Buffer.from(await response.arrayBuffer()));return;
   }
@@ -43,50 +47,74 @@ try{
  }catch{res.writeHead(500).end('Fixture error');}});
  await new Promise((done,reject)=>{server.once('error',reject);server.listen(8787,'127.0.0.1',done)});
  phase='browser signup';
- browser=await chromium.launch({headless:true,...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
+ browser=await chromium.launch({headless:!process.env.WHUMPO_ORCA_LOG,...(process.env.WHUMPO_ORCA_LOG?{args:['--force-renderer-accessibility','--ozone-platform=x11']} : {}),...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
  const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true,permissions:['clipboard-read','clipboard-write'],acceptDownloads:true});
  await context.addInitScript(()=>{
   window.turnstile={render:()=> 'synthetic',remove:()=>{},reset:()=>{},getResponse:()=> 'synthetic-turnstile'};
   const append=Element.prototype.append;Element.prototype.append=function(...nodes){const result=append.apply(this,nodes);for(const node of nodes)if(node instanceof HTMLIFrameElement&&node.title==='Recovery kit print view')node.contentWindow.print=()=>{window.__printedKit=node.contentDocument.body.textContent;node.contentWindow.dispatchEvent(new Event('afterprint'));};return result;};
  });
  page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
+ const {activate,enter}=keyboardJourney(page,accessibility);
+ async function focusHeading(text){if(accessibility){await page.getByRole('heading',{name:text,exact:true}).waitFor();await page.waitForFunction(t=>document.activeElement?.textContent===t,text);}}
  const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');
  async function authenticator(){return (await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})).authenticatorId}
  let auth=await authenticator();
- await page.goto(origin+'/workspace?signup=true');await page.getByLabel('Email',{exact:true}).fill('browser-identity@example.invalid');await page.getByLabel('Invitation code').fill(code);await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Create my first passkey'}).click();
+ if(accessibility){
+  phase='landing keyboard entry';
+  await page.route('**/stripe-pricing.json',route=>route.fulfill({json:{}}));
+  await page.goto(origin+'/');await page.getByText('Plans are coming soon',{exact:true}).waitFor();
+  const observations={mainLandmarks:await page.getByRole('main').count(),skipLinks:await page.getByRole('link',{name:'Skip to content',exact:true}).count(),cmsCopy:await page.getByText('A place for your words',{exact:true}).locator('..').innerText(),smallAccent:await page.locator('#how p').first().evaluate(e=>({text:e.textContent,color:getComputedStyle(e).color,fontSize:getComputedStyle(e).fontSize,background:getComputedStyle(e.closest('.landing')).backgroundColor}))};
+  for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});await page.screenshot({path:'/tmp/whumpo-landing-audit-'+width+'.png',fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+  await writeFile('.secrets/usability-landing-observations.json',JSON.stringify(observations,null,2));
+  assert.equal(observations.mainLandmarks,1);assert.equal(observations.skipLinks,1);assert.match(observations.cmsCopy,/not available in this preview/);
+  const luminance=rgb=>rgb.match(/\d+/g).slice(0,3).map(Number).map(n=>n/255).map(n=>n<=.04045?n/12.92:((n+.055)/1.055)**2.4).reduce((v,n,i)=>v+n*[.2126,.7152,.0722][i],0);
+  const ratio=(luminance(observations.smallAccent.background)+.05)/(luminance(observations.smallAccent.color)+.05);assert(ratio>=4.5,'Small landing text contrast '+ratio);
+  await activate(page.getByRole('link',{name:'Skip to content',exact:true}));assert(await page.getByRole('main').evaluate(e=>e===document.activeElement));
+
+  await page.setViewportSize({width:390,height:844});
+  await hearOrca('landing enters invited signup',()=>activate(page.getByRole('link',{name:'Meet Whumpo',exact:true})),[/A little hello/i,/heading/i]);
+ }else await page.goto(origin+'/workspace?signup=true');await enter(page.getByLabel('Email',{exact:true}),'browser-identity@example.invalid');await enter(page.getByLabel('Invitation code'),code);await activate(page.getByRole('checkbox'));await hearOrca('first passkey enters saved setup',()=>activate(page.getByRole('button',{name:'Create my first passkey'})),[/Make this account yours/i,/heading/i]);
  await page.getByRole('heading',{name:'Make this account yours.'}).waitFor();assert.equal(await page.getByLabel('Your name',{exact:true}).count(),0);
+ await focusHeading('Make this account yours.');
  assert.equal((await context.cookies()).filter(c=>c.name.includes('whumpo_session')).length,0);
  assert.equal((await cdp.send('WebAuthn.getCredentials',{authenticatorId:auth})).credentials.length,1);
  await cdp.send('WebAuthn.removeVirtualAuthenticator',{authenticatorId:auth});auth=await authenticator();
- await page.getByLabel('Name your next passkey').fill('Backup provider');
+ await enter(page.getByLabel('Name your next passkey'),'Backup provider');
  // Only the cancelled browser prompt is synthetic; successful registrations/assertions use Chromium's authenticator.
  await page.evaluate(()=>{const create=navigator.credentials.create.bind(navigator.credentials);navigator.credentials.create=async(...args)=>{navigator.credentials.create=create;throw new DOMException('Cancelled by fixture','NotAllowedError');};});
- await page.getByRole('button',{name:'Add a passkey',exact:true}).click();await page.getByRole('alert').filter({hasText:'The passkey step was not completed'}).waitFor();assert.equal((await db.prepare('SELECT count(*) n FROM identity_credentials').first()).n,1);
- await page.reload();await page.getByLabel('Name your next passkey').fill('Backup provider');await page.getByRole('button',{name:'Add a passkey',exact:true}).click();await page.getByText('Backup provider',{exact:true}).waitFor();
- await page.getByRole('button',{name:'Prepare recovery kit',exact:true}).click();await page.getByRole('heading',{name:'Save your recovery kit'}).waitFor();
- const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Download',exact:true}).click();const download=await downloaded;assert.equal(download.suggestedFilename(),'whumpo-recovery-kit.txt');const kit=await readFile(await download.path(),'utf8'),key=kit.match(/Recovery key:\n([a-f0-9]{64})/)[1];
- await page.getByRole('button',{name:'Copy',exact:true}).click();assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),kit);
- await page.getByRole('button',{name:'Print / PDF',exact:true}).click();assert.equal(await page.evaluate(()=>window.__printedKit),kit);assert.equal(await page.locator('iframe').count(),0);
+ await hearOrca('cancelled second passkey preserves progress',()=>activate(page.getByRole('button',{name:'Add a passkey',exact:true})),[/passkey step was not completed/i,/saved progress is unchanged/i]);await page.getByRole('alert').filter({hasText:'The passkey step was not completed'}).waitFor();assert.equal((await db.prepare('SELECT count(*) n FROM identity_credentials').first()).n,1);
+ await page.reload();await enter(page.getByLabel('Name your next passkey'),'Backup provider');
+ if(accessibility){
+  holdAddReply=true;await activate(page.getByRole('button',{name:'Add a passkey',exact:true}));
+  for(let n=0;!releaseAddReply&&n<300;n++)await new Promise(done=>setTimeout(done,20));assert(releaseAddReply);
+  const help=page.locator('summary').filter({hasText:'Passkeys and recovery help'});await activate(help);assert.match(await page.locator('details[open]').innerText(),/No hardware purchase is required/);assert.match(await page.locator('details[open]').innerText(),/sign in with a saved passkey to resume/);
+  releaseAddReply();releaseAddReply=null;await page.getByText('Backup provider',{exact:true}).waitFor();await page.waitForLoadState('networkidle');assert(await help.evaluate(e=>e===document.activeElement),'Late saved key must not steal newer focus');
+ }else await activate(page.getByRole('button',{name:'Add a passkey',exact:true}));
+ await page.getByText('Backup provider',{exact:true}).waitFor();
+ await hearOrca('prepared recovery kit heading',()=>activate(page.getByRole('button',{name:'Prepare recovery kit',exact:true})),[/Save your recovery kit/i,/heading/i]);await focusHeading('Save your recovery kit');await page.getByRole('heading',{name:'Save your recovery kit'}).waitFor();
+ const downloaded=page.waitForEvent('download');await activate(page.getByRole('button',{name:'Download',exact:true}));const download=await downloaded;assert.equal(download.suggestedFilename(),'whumpo-recovery-kit.txt');const kit=await readFile(await download.path(),'utf8'),key=kit.match(/Recovery key:\n([a-f0-9]{64})/)[1];
+ await activate(page.getByRole('button',{name:'Copy',exact:true}));assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),kit);
+ await activate(page.getByRole('button',{name:'Print / PDF',exact:true}));assert.equal(await page.evaluate(()=>window.__printedKit),kit);assert.equal(await page.locator('iframe').count(),0);
  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true})));await page.getByRole('button',{name:'Copy',exact:true}).waitFor({state:'detached'});
- await page.getByRole('button',{name:'I’ve saved my recovery kit'}).click();await page.getByRole('heading',{name:'Your kit is saved'}).waitFor();
+ await hearOrca('saved kit heading',()=>activate(page.getByRole('button',{name:'I’ve saved my recovery kit'})),[/Your kit is saved/i,/heading/i]);await focusHeading('Your kit is saved');await page.getByRole('heading',{name:'Your kit is saved'}).waitFor();
  assert(!(await page.locator('body').innerText()).includes(key));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  assert(requests.filter(r=>r.path.startsWith('/api/')).every(r=>r.path.startsWith('/api/auth/identity/v1/')));
- await page.reload();await page.getByRole('heading',{name:'Your kit is saved'}).waitFor();await page.getByRole('button',{name:'Verify a passkey and finish setup'}).click();await page.getByLabel('Your name',{exact:true}).waitFor();
+ await page.reload();await page.getByRole('heading',{name:'Your kit is saved'}).waitFor();await hearOrca('setup enters first welcome question',()=>activate(page.getByRole('button',{name:'Verify a passkey and finish setup'})),[/What should I call you/i,/heading/i]);await page.getByLabel('Your name',{exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);assert.equal(await page.evaluate(()=>document.cookie),'');
  const cookies=await context.cookies();assert.equal(cookies.filter(c=>c.name==='__Host-whumpo_session').length,1);assert(cookies.every(c=>c.secure&&c.httpOnly&&c.sameSite===(c.name==='__Host-whumpo_session'?'Lax':'Strict')));
  phase='first-project welcome';
  assert.equal(await page.getByRole('navigation',{name:'Workspace',exact:true}).count(),0);
- await page.getByLabel('Your name',{exact:true}).fill('Garden owner');await page.getByRole('button',{name:'Continue',exact:true}).click();
- await page.getByRole('button',{name:'Use this picture',exact:true}).click();await page.getByRole('button',{name:'Skip for now',exact:true}).click();
- await page.getByLabel('Your first idea',{exact:true}).fill('A website for my neighborhood landscaping business.');await page.getByRole('button',{name:'Continue',exact:true}).click();
- await page.getByLabel('Working name',{exact:true}).fill('Garden care');await page.getByRole('button',{name:'Continue',exact:true}).click();
- await page.getByRole('button',{name:'Skip for now',exact:true}).click();await page.getByRole('button',{name:'Use this starting feel',exact:true}).click();
+ await enter(page.getByLabel('Your name',{exact:true}),'Garden owner');await hearOrca('welcome picture question',()=>activate(page.getByRole('button',{name:'Continue',exact:true})),[/Pick a face for your space/i,/heading/i]);
+ await activate(page.getByRole('button',{name:'Use this picture',exact:true}));await activate(page.getByRole('button',{name:'Skip for now',exact:true}));
+ await enter(page.getByLabel('Your first idea',{exact:true}),'A website for my neighborhood landscaping business.');await activate(page.getByRole('button',{name:'Continue',exact:true}));
+ await enter(page.getByLabel('Working name',{exact:true}),'Garden care');await activate(page.getByRole('button',{name:'Continue',exact:true}));
+ await activate(page.getByRole('button',{name:'Skip for now',exact:true}));await activate(page.getByRole('button',{name:'Use this starting feel',exact:true}));
  assert(!requests.some(r=>r.path==='/api/chat'||r.path==='/api/workspace/dashboard'));
- await page.getByRole('button',{name:'Start my project',exact:true}).click();await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();
+ await activate(page.getByRole('button',{name:'Start my project',exact:true}));await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();
  assert.equal((await db.prepare('SELECT count(*) n FROM projects').first()).n,1);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  // A saved draft survives an ordinary reload of the current session.
- await page.getByRole('textbox',{name:'Message Whumpo'}).fill('My unsent garden idea');await page.reload();await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).inputValue(),'My unsent garden idea');
+ await enter(page.getByRole('textbox',{name:'Message Whumpo'}),'My unsent garden idea');await page.reload();await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).inputValue(),'My unsent garden idea');
  await page.waitForFunction(()=>!document.querySelector('button[aria-label="Send message"]')?.disabled);await page.waitForLoadState('networkidle');
  await page.waitForFunction(()=>[...document.images].every(image=>image.complete&&image.naturalWidth>0));
  await page.screenshot({path:'/tmp/whumpo-current-workspace-mobile.png',fullPage:true});
@@ -110,7 +138,7 @@ try{
   const second=await prepare();
   await page.goto(origin+'/workspace/connections');await page.getByRole('heading',{name:'Access removal reviews'}).waitFor();await page.getByRole('button',{name:'Revoke all GitHub app access',exact:true}).waitFor();assert.equal(modelCalls,2,'Opening saved reviews must not invoke the model');
   const beforeProof=requests.filter(r=>r.path.endsWith('/reauth/verify')).length;
-  await page.getByRole('button',{name:'Revoke all GitHub app access',exact:true}).click();await page.getByRole('region',{name:'GitHub access review'}).filter({hasText:'Access removal confirmed'}).first().waitFor();
+  await activate(page.getByRole('button',{name:'Revoke all GitHub app access',exact:true}));await page.getByRole('region',{name:'GitHub access review'}).filter({hasText:'Access removal confirmed'}).first().waitFor();
   assert.equal(providerCalls,1);assert.equal(modelCalls,2);assert.equal((await db.prepare('SELECT state FROM github_grant_revocations WHERE id=?').bind(second).first()).state,'revoked');assert.equal(requests.filter(r=>r.path.endsWith('/reauth/verify')).length,beforeProof+1);
   await page.reload();await page.getByRole('region',{name:'GitHub access review'}).filter({hasText:'Access removal confirmed'}).first().waitFor();assert.equal(await page.getByRole('button',{name:'Revoke all GitHub app access',exact:true}).count(),0);assert.equal(providerCalls,1);
   await page.setViewportSize({width:1280,height:900});await page.getByRole('region',{name:'GitHub access review'}).last().scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/whumpo-github-grant-desktop.png',fullPage:true});
@@ -119,7 +147,7 @@ try{
  const savedTurns=(await db.prepare('SELECT count(*) n FROM chat_turns').first()).n;
  phase='live workspace revocation';
  await db.prepare('DELETE FROM identity_sessions').run();
- await page.getByRole('textbox',{name:'Message Whumpo'}).fill('Please make a gardening website.');await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await enter(page.getByRole('textbox',{name:'Message Whumpo'}),'Please make a gardening website.');await activate(page.getByRole('button',{name:'Send message',exact:true}));
  await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).count(),0);
  assert.equal((await db.prepare('SELECT count(*) n FROM chat_turns').first()).n,savedTurns,'Revoked request must not create a Chat turn');
  assert.equal(await page.evaluate(()=>document.cookie),'');
@@ -128,4 +156,4 @@ try{
  if(grantJourney)console.log(JSON.stringify({suite:'github-grant-browser',modelCalls,providerCalls,realPasskeyConfirmation:true,liveProviderAccess:false}));
  console.log('Current workspace browser passed: real mobile entry, two Chromium passkeys, recovery kit, identity-before-profile gate, first-project welcome, draft reload and immediate workspace closure on session revocation. No live provider requests.');
 }catch(error){console.error(`Current workspace browser failed during ${phase}: ${error.message}`);console.error('Browser errors:',errors);if(page)console.error('Page:',page.url(),(await page.locator('body').innerText().catch(()=>'' )).replace(/[a-f0-9]{64}/g,'[redacted]').slice(0,1500));console.error('API paths:',requests.filter(r=>r.path.startsWith('/api/')));process.exitCode=1;}
-finally{globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}
+finally{releaseAddReply?.();globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}

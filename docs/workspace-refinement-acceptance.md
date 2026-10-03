@@ -1,3 +1,5 @@
+> October 3, 2026: the [current whole-owner audit](owner-usability-audit.md) records verified landing, identity, kit, welcome and recovery focus/contrast fixes with actual Orca output. WH-024 remains open for the rest of the original scope. Earlier synthetic fixtures and deployment records below retain their dated boundaries.
+
 # Workspace refinement acceptance — 29 September 2026
 
 The workspace uses Chat as its first/default full-page view. Dashboard and custom pages hide Chat completely. Settings and the profile photo stay inline at opposite ends of the sidebar footer; email is visible only inside Profile. There is no Tools or Add workspace button. Accounts without custom pages get an invitation to ask Whumpo for a workflow page.
