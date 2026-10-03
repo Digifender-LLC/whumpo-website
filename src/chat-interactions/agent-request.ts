@@ -1,3 +1,5 @@
+import {workspaceViewDefinition} from './view-definition';
+import type {WorkspaceView} from '../workspace-view-contract';
 import {purposes,informationDefinition,type InformationPurpose,type QuestionRequest} from './composition';
 import {contentFieldLimit} from './protocol';
 import type {Answers} from './types';
@@ -14,7 +16,9 @@ type Replace={kind:'interaction';operation:'replaceContent';previousInteractionI
 type ReplaceIntake={kind:'interaction';operation:'replaceProjectIntake';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number};
 type PhotoIntake={kind:'interaction';operation:'requestPhotoUpload';projectId:string};
 type ProposeAnswers={kind:'interaction';operation:'proposeAnswers';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;changes:Answers};
-export type InteractionAction=ResumeTask|PhotoIntake|Request|Read|Replace|Intake|SubmittedAnswers|ReplaceIntake|ProposeAnswers|RequestInformation|ReplaceInformation;
+type WorkspaceViewRequest={kind:'interaction';operation:'showView';view:WorkspaceView};
+type ReplaceView={kind:'interaction';operation:'replaceView';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;view:WorkspaceView};
+export type InteractionAction=ReplaceView|WorkspaceViewRequest|ResumeTask|PhotoIntake|Request|Read|Replace|Intake|SubmittedAnswers|ReplaceIntake|ProposeAnswers|RequestInformation|ReplaceInformation;
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 function answerChanges(value:unknown):boolean{
  try{
@@ -29,6 +33,8 @@ function answerChanges(value:unknown):boolean{
 export function interactionActionRequest(value:unknown):value is InteractionAction{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const a=value as Record<string,unknown>;if(a.kind!=='interaction')return false;
+ if(a.operation==='replaceView'){if(Object.keys(a).sort().join(',')!=='definitionDigest,expectedAnswerRevision,kind,operation,previousInteractionId,view'||!uuid(a.previousInteractionId)||typeof a.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(a.definitionDigest)||!Number.isSafeInteger(a.expectedAnswerRevision)||Number(a.expectedAnswerRevision)<0)return false;try{workspaceViewDefinition(a.view);return true;}catch{return false;}}
+ if(a.operation==='showView'){if(Object.keys(a).sort().join(',')!=='kind,operation,view')return false;try{workspaceViewDefinition(a.view);return true;}catch{return false;}}
  if(a.operation==='requestProjectBrief'||a.operation==='requestProjectSelection'||a.operation==='requestWritingStyle')return Object.keys(a).sort().join(',')==='kind,operation';
  if(a.operation==='resumeTask')return Object.keys(a).sort().join(',')==='kind,operation,projectId,submissionId,taskId'&&uuid(a.taskId)&&uuid(a.projectId)&&uuid(a.submissionId);
  if(a.operation==='requestPhotoUpload')return Object.keys(a).sort().join(',')==='kind,operation,projectId'&&uuid(a.projectId);

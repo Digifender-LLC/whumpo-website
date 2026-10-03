@@ -29,9 +29,16 @@ export function ViewComponentDisplay({value}:{value:unknown}){
 }
 /** Owner/revision/scoped cache, evicted on unmount. Never show old private facts
  * while access is being refreshed or after the current read fails. */
-export function SavedViewComponent({owner,pageId,revision,kind,projectId}:{owner:string;pageId:string;revision:number;kind:WidgetKind;projectId:string|null}){
- const query=useQuery({queryKey:['workspace-view-component',owner,pageId,revision,kind,projectId],queryFn:async({signal})=>{
-  const raw=await api('/workspace/views/v1/component',{method:'POST',body:JSON.stringify({version:1,pageId,revision,kind}),signal}),value=readViewComponentData(raw);
+export function SavedViewComponent(props:{owner:string;pageId:string;revision:number;kind:WidgetKind;projectId:string|null}){
+ const {owner,pageId,revision,kind,projectId}=props;
+ return <ViewComponentRead queryKey={['workspace-view-component',owner,pageId,revision,kind,projectId]} path="/workspace/views/v1/component" request={{version:1,pageId,revision,kind}} kind={kind} projectId={projectId}/>;
+}
+export function TemporaryViewComponent({owner,interactionId,digest,kind,projectId}:{owner:string;interactionId:string;digest:string;kind:WidgetKind;projectId:string|null}){
+ return <ViewComponentRead queryKey={['temporary-view-component',owner,interactionId,digest,kind,projectId]} path="/chat/interactions/v1/view-component" request={{version:1,interactionId,definitionDigest:digest,kind}} kind={kind} projectId={projectId}/>;
+}
+function ViewComponentRead({queryKey,path,request,kind,projectId}:{queryKey:(string|number|null)[];path:string;request:unknown;kind:WidgetKind;projectId:string|null}){
+ const query=useQuery({queryKey,queryFn:async({signal})=>{
+  const raw=await api(path,{method:'POST',body:JSON.stringify(request),signal}),value=readViewComponentData(raw);
   if(!value||value.kind!==kind||value.projectId!==projectId||value.binding!==viewBinding(kind,projectId))throw new APIError('Update Whumpo to read this view.',409,'client_update_required');
   return value;
  },staleTime:0,gcTime:0,retry:false,refetchOnWindowFocus:true});

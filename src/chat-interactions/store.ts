@@ -1,3 +1,4 @@
+import {workspaceViewDefinition,isWorkspaceViewDefinition} from './view-definition';
 import {assertWorkspace} from '../workspace-identity/admission';
 import {featurePredicate,assertFeature} from '../feature-admission';
 import {canonicalJSON,jsonDigest,copyJSON} from '../project-specification/v2/json';
@@ -311,6 +312,30 @@ async function prepareBrief(db:D1Database,user:string,request:ContentBriefReques
  const definition:Definition={version:1,kind:'form',template:'content-change@1',title:'Update your website text',summary:'Review the text, then prepare a private preview. Saving and publishing each require a separate review.',presentation:'inline',fields,cards:[{id:'project-status',binding:'project.status@1',display:'status',limit:1,reviewId:null}],submitBinding:'interaction.answers@1',continuationBinding:'site.content-prepare@1'};
  return prepareIssuedInteraction(db,user,request,proposal?proposedDefinition(definition,proposal.changes):definition,issueHash,replacement,[interactionGuard(db,'EXISTS(SELECT 1 FROM project_spec_heads h JOIN projects p ON p.id=h.project_id WHERE h.project_id=? AND h.version_id=? AND h.revision=? AND h.draft_revision=p.site_draft_revision)',[request.projectId,current.versionId,current.revision])]);
 }
+/** Prepare only; the current Chat turn commits issuance with its final reply. */
+export async function prepareWorkspaceView(db:D1Database,user:string,input:{originTurnId:string;view:unknown}):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,16384);
+ if(!request||Object.keys(request).sort().join(',')!=='originTurnId,view'||!identifier(request.originTurnId))throw new InteractionError('SHAPE');
+ let definition:ReturnType<typeof workspaceViewDefinition>;
+ try{definition=workspaceViewDefinition(request.view);}catch{throw new InteractionError('TEMPLATE');}
+ const issueHash=await jsonDigest({adapter:'workspace-view',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ await assertFeature(db,feature(user,definition.workspaceView.projectId));
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:definition.workspaceView.projectId},definition,issueHash,null,[]);
+}
+export async function prepareReplacementWorkspaceView(db:D1Database,user:string,input:ReplacementIdentity&{view:unknown}):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,16384);
+ if(!request||Object.keys(request).sort().join(',')!=='definitionDigest,expectedAnswerRevision,originTurnId,previousInteractionId,view'||!identifier(request.originTurnId)||!identifier(request.previousInteractionId)||typeof request.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(request.definitionDigest)||!Number.isSafeInteger(request.expectedAnswerRevision)||request.expectedAnswerRevision<0)throw new InteractionError('SHAPE');
+ let definition:ReturnType<typeof workspaceViewDefinition>;
+ try{definition=workspaceViewDefinition(request.view);}catch{throw new InteractionError('TEMPLATE');}
+ const issueHash=await jsonDigest({adapter:'workspace-view-correction',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ const previous=await readInteraction(db,user,request.previousInteractionId);
+ if(!isWorkspaceViewDefinition(previous.envelope.definition)||previous.envelope.scope.projectId!==definition.workspaceView.projectId)throw new InteractionStoreError(409,'adapter_unavailable');
+ if(previous.envelope.definitionDigest!==request.definitionDigest||previous.answerRevision!==request.expectedAnswerRevision||previous.replacementInteractionId||previous.state!=='open')throw changed();
+ await assertFeature(db,feature(user,definition.workspaceView.projectId));
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:definition.workspaceView.projectId},definition,issueHash,{request,previous},[]);
+}
 async function prepareIssuedInteraction(db:D1Database,user:string,request:{originTurnId:string;projectId:string|null},definition:Definition,issueHash:string,replacement:{request:ReplacementIdentity;previous:InteractionRead}|null,guards:D1PreparedStatement[]):Promise<InteractionPlan>{
  const previous=replacement?.previous??null;
  const conversation=await db.prepare('SELECT id FROM chat_conversations WHERE user_id=?').bind(user).first<{id:string}>();
@@ -357,7 +382,7 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  if(existing){if(existing.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,raw.requestId);}
  const envelope=await retainedEnvelope(saved),{request}=await validateMutation(raw,envelope);
  // Each admitted adapter must enforce its complete current question policy.
- if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!(isPhotoIntakeDefinition(envelope.definition)&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
+ if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!((isPhotoIntakeDefinition(envelope.definition)||isWorkspaceViewDefinition(envelope.definition))&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
  const resourceGuards:D1PreparedStatement[]=[];
  if(request.operation!=='cancel')resourceGuards.push(...selectedPhotoGuards(db,user,await readSelectedPhotos(db,user,saved.project_id,envelope.definition,request.answers)));
  if(request.operation!=='cancel'&&envelope.definition.template==='project-select@1'&&Object.hasOwn(request.answers,'project')){
