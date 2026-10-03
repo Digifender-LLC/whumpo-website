@@ -23,7 +23,7 @@ const inputSnapshot=await readBuildInputs(),source=execFileSync('git',['rev-pars
 const pendingHandlers=new Set();
 const originalFetch=globalThis.fetch,background=[],requests=[],calls=[],steps=[],errors=[];
 let fixture,browser,server,page,currentStep,script=[],success=false,phase='build',scope,user,project,layout,store,db;
-let temporary,originalTemporary,savedPage,removalReceipt,originalLayout,origin;
+let temporary,originalTemporary,savedPage,removalRevision,originalLayout,origin;
 const row=(q,...p)=>db.prepare(q).bind(...p).first();
 const run=(q,...p)=>db.prepare(q).bind(...p).run();
 const view=widgets=>({version:1,projectId:project,widgets,shortcuts:[]});
@@ -138,9 +138,9 @@ try{
  });
  const dashboard=(await current()).layout.dashboard;
  await chat('remove-view','Remove Garden pulse from my sidebar. Keep its project and my other page and Dashboard.',[()=>operation('removePage',{pageId:savedPage.id})],async(_turn,input)=>{
-  removalReceipt=input.id;assert(!(await current()).layout.tabs.some(t=>t.id===savedPage.id));assert(await row('SELECT id FROM projects WHERE id=?',project));assert.deepEqual((await current()).layout.dashboard,dashboard);
+  removalRevision=(await current()).revision;assert(!(await current()).layout.tabs.some(t=>t.id===savedPage.id));assert(await row('SELECT id FROM projects WHERE id=?',project));assert.deepEqual((await current()).layout.dashboard,dashboard);
  });
- await chat('undo-removal','Undo that removal so Garden pulse is back with the same contents. Leave the rest alone.',[{kind:'workspace',operation:'read'},()=>operation('undo',{receiptId:removalReceipt})],async()=>{
+ await chat('undo-removal','Undo that removal so Garden pulse is back with the same contents. Leave the rest alone.',[{kind:'workspace',operation:'read'},()=>operation('undo',{receiptRevision:removalRevision})],async()=>{
   const state=await current();assert.deepEqual(state.layout.tabs.find(t=>t.id===savedPage.id),savedPage);assert.deepEqual(state.layout.dashboard,dashboard);
  });
  phase='dismiss and reload';const temp=()=>page.locator('[data-interaction-id="'+temporary+'"]');

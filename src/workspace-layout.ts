@@ -31,7 +31,7 @@ export async function prepareLayoutChange(db:D1Database,user:string,input:unknow
  const current=await readLayout(db,user);if(request.expectedRevision!==current.revision)throw changed();
  let next=structuredClone(current.layout);
  if(request.operation==='undo'){
-  const target=await receiptRow(db,user,request.receiptId);if(!target||target.to_revision!==current.revision||canonicalJSON(parseLayout(JSON.parse(target.layout_json)))!==canonicalJSON(current.layout))throw changed();
+  const target=await db.prepare('SELECT * FROM workspace_layout_receipts WHERE user_id=? AND to_revision=?').bind(user,request.receiptRevision).first<ReceiptRow>();if(!target||target.to_revision!==current.revision||canonicalJSON(parseLayout(JSON.parse(target.layout_json)))!==canonicalJSON(current.layout))throw changed();
   next=parseLayout(JSON.parse(target.previous_json));
  }else if(request.operation==='setDashboard')next.dashboard=request.view;
  else if(request.operation==='createPage'){
