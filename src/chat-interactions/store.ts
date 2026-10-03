@@ -3,10 +3,11 @@ import {featurePredicate,assertFeature} from '../feature-admission';
 import {canonicalJSON,jsonDigest,copyJSON} from '../project-specification/v2/json';
 import {readSpecification} from '../project-specification/store';
 import type {ProjectSpecification} from '../project-specification/v2/types';
-import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers,validateDefinition} from './protocol';
+import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers,validateDefinition,isFieldVisible} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
 import {isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
+import {informationDefinition,informationQuestions,isInformationDefinition,type InformationPurpose,type QuestionRequest} from './composition';
 import {readOwnedResourceOptions} from './resource-options';
 import {readResourcePage,resourceCursor,type ResourceCursor} from './resource-shape';
 
@@ -139,6 +140,45 @@ async function prepareIntakeCorrection(db:D1Database,user:string,input:Replaceme
  return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},definition,issueHash,{request,previous},guards);
 }
 
+type InformationRequest={originTurnId:string;projectId:string;purpose:InformationPurpose;fields:QuestionRequest[]};
+type InformationReplacement=ReplacementIdentity&{fields:QuestionRequest[]};
+export async function issueInformation(db:D1Database,user:string,input:InformationRequest){
+ return persistInteraction(db,user,await prepareInformation(db,user,input));
+}
+export async function prepareInformation(db:D1Database,user:string,input:InformationRequest):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,16384);
+ if(!request||Object.keys(request).sort().join(',')!=='fields,originTurnId,projectId,purpose'||!identifier(request.originTurnId)||!identifier(request.projectId))throw new InteractionError('SHAPE');
+ const definition=informationDefinition(request.purpose,request.fields),issueHash=await jsonDigest({adapter:'custom-information',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ await assertFeature(db,feature(user,request.projectId));
+ return prepareIssuedInteraction(db,user,request,definition,issueHash,null,[]);
+}
+export async function replaceInformation(db:D1Database,user:string,input:InformationReplacement){
+ return persistInteraction(db,user,await prepareReplacementInformation(db,user,input));
+}
+export async function prepareReplacementInformation(db:D1Database,user:string,input:InformationReplacement):Promise<InteractionPlan>{
+ return prepareInformationCorrection(db,user,input);
+}
+async function prepareInformationCorrection(db:D1Database,user:string,input:InformationReplacement,proposal?:AnswerProposal):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,16384);
+ if(!request||Object.keys(request).sort().join(',')!=='definitionDigest,expectedAnswerRevision,fields,originTurnId,previousInteractionId'||!identifier(request.originTurnId)||!identifier(request.previousInteractionId)||typeof request.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(request.definitionDigest)||!Number.isSafeInteger(request.expectedAnswerRevision)||request.expectedAnswerRevision<0)throw new InteractionError('SHAPE');
+ await row(db,user,request.previousInteractionId);
+ const issueHash=proposal?.issueHash??await jsonDigest({adapter:'custom-information-correction',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ const previous=await readInteraction(db,user,request.previousInteractionId),old=previous.envelope.definition,projectId=previous.envelope.scope.projectId;
+ if(!projectId||!isInformationDefinition(old))throw new InteractionStoreError(409,'adapter_unavailable');
+ if(previous.envelope.definitionDigest!==request.definitionDigest||previous.answerRevision!==request.expectedAnswerRevision||previous.replacementInteractionId||!['open','submitted','expired'].includes(previous.state))throw changed();
+ await assertFeature(db,feature(user,projectId));
+ let definition=informationDefinition(old.purpose,request.fields);const defaults=carriedDefaults(previous);
+ for(const f of definition.fields){
+  // Stable identifiers retain meaning even when the owner changes the questions.
+  if(old.fields.some(prior=>(prior.id===f.id)!==(prior.questionId===f.questionId)))throw new InteractionError('QUESTION_CHANGED',f.id);
+  if(Object.hasOwn(defaults,f.id))f.default=defaults[f.id];
+ }
+ if(proposal)definition=proposedDefinition(definition,proposal.changes);
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId},definition,issueHash,{request,previous},[]);
+}
+
 /** Resource names are transient scoped reads, never embedded in the definition.
  * Selection only records an answer; submit rechecks ownership at commit. */
 export async function listInteractionResources(db:D1Database,user:string,input:unknown){
@@ -178,10 +218,13 @@ function carriedDefaults(previous:InteractionRead):Record<string,NonNullable<Fie
  return Object.fromEntries(Object.entries(validateAnswers(previous.envelope.definition,answers,{partial:!previous.submission})).map(([id,value])=>[id,{value,provenance:'user' as const}]));
 }
 function proposedDefinition(definition:Definition,changes:Answers):Definition{
- // Validate submitted field identities/types, then validate complete suggested
- // defaults too. Partial editing text is not a valid model-generated suggestion.
- validateAnswers(definition,changes,{partial:true});
- return validateDefinition({...definition,fields:definition.fields.map(field=>Object.hasOwn(changes,field.id)?{...field,default:{value:changes[field.id],provenance:'suggested'}}:field)});
+ // Validate individual values without requiring an unchanged controller in the
+ // proposal. Visibility is checked against the complete carried/suggested set.
+ validateAnswers({...definition,fields:definition.fields.map(({when,...field})=>field)},changes,{partial:true});
+ const next=validateDefinition({...definition,fields:definition.fields.map(field=>Object.hasOwn(changes,field.id)?{...field,default:{value:changes[field.id],provenance:'suggested'}}:field)});
+ const values=Object.fromEntries(next.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value]));
+ for(const f of next.fields)if(Object.hasOwn(changes,f.id)&&!isFieldVisible(f,values))throw new InteractionError('HIDDEN_VALUE',f.id);
+ return next;
 }
 export async function proposeAnswers(db:D1Database,user:string,input:ProposedAnswersRequest){
  return persistInteraction(db,user,await prepareProposedAnswers(db,user,input));
@@ -200,6 +243,7 @@ export async function prepareProposedAnswers(db:D1Database,user:string,input:Pro
   return prepareBrief(db,user,{originTurnId:request.originTurnId,projectId,contentIds:previous.envelope.definition.fields.map(f=>f.source!.contentId)},{request:{...identity,contentIds:previous.envelope.definition.fields.map(f=>f.source!.contentId)},previous},proposal);
  }
  if(isProjectIntakeTemplate(previous.envelope.definition.template))return prepareIntakeCorrection(db,user,identity,proposal);
+ if(isInformationDefinition(previous.envelope.definition))return prepareInformationCorrection(db,user,{...identity,fields:informationQuestions(previous.envelope.definition)},proposal);
  throw new InteractionStoreError(409,'adapter_unavailable');
 }
 /** Server-maintained fields only. Model-authored questions/defaults are not an issuance API. */
@@ -302,8 +346,8 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  const saved=await row(db,user,raw.interactionId),requestHash=await jsonDigest(raw,32768),existing=await db.prepare('SELECT request_hash FROM chat_interaction_requests WHERE user_id=? AND request_id=?').bind(user,raw.requestId).first<{request_hash:string}>();
  if(existing){if(existing.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,raw.requestId);}
  const envelope=await retainedEnvelope(saved),{request}=await validateMutation(raw,envelope);
- // Only maintained adapters with complete current policy checks are admitted.
- if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!(isPhotoIntakeDefinition(envelope.definition)&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
+ // Each admitted adapter must enforce its complete current question policy.
+ if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!(isPhotoIntakeDefinition(envelope.definition)&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
  const resourceGuards:D1PreparedStatement[]=[];
  if(request.operation!=='cancel'&&envelope.definition.template==='project-select@1'&&Object.hasOwn(request.answers,'project')){
   const selected=request.answers.project as string;

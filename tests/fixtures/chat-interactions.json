@@ -23,7 +23,7 @@
     "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": "site.content-prepare@1"
   },
   "custom": {
-    "version": 1, "kind": "form", "template": "custom@1", "title": "Plan your service page",
+    "version": 1, "kind": "form", "template": "custom@1", "purpose": "site.services@1", "title": "Plan your service page",
     "summary": "Tell Whumpo about the work you offer. This saves a brief and changes no website.", "presentation": "panel",
     "fields": [
       {"id": "area", "type": "text", "label": "Service area", "help": "A city or neighborhood is enough.", "required": true, "binding": "answer.value@1", "constraints": {"maxLength": 160}},

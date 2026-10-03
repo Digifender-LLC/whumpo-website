@@ -24,6 +24,18 @@ WH-113's [identity decision](workspace-identity.md) and WH-089's [feature catalo
 
 ## Wire objects and digest
 
+### WH-108 custom composition implementation contract — October 3, 2026 UTC
+
+The current custom adapter composes public website-planning questions for an owned project. `site.services@1` and `site.presentation@1` declare the use of the answers. The agent selects a bounded subset/order of question intents, stable field IDs, requiredness and simple conditions; the server supplies question wording, types, options and limits. This is composition of individual questions, not a fixed whole-form template. Arbitrary model-authored wording, credential questions, resource selectors and executable bindings are not admitted by this adapter. Broader composition and separately receipted model continuation remain in WH-108's original scope.
+
+The issued `custom@1` definition carries its purpose and each field's question ID. Both the client and storage adapter reconstruct and compare the admitted definition. Unknown intents, purpose mismatches, altered labels/options, custom destinations, source bindings and automatic effects refuse. Form creation and answer submission use existing current identity/feature checks, owned project guards, expiry, digest/revision checks, exact receipts and draft retention. Submission saves information only.
+
+Corrections preserve the project/task and immutable earlier submissions. A stable field ID cannot be reassigned to another question, and a retained question cannot silently change IDs. Only matching retained fields carry user/suggested defaults. Prose changes remain suggestions for explicit owner review. Hidden values are excluded from submitted snapshots.
+
+Submitted-answer inspection uses the existing bounded owner Chat lookup. It must select an exact interaction, task, project, submission and nonempty subset of fields; private drafts/defaults and unselected answers stay out of inference. Current ownership, feature admission, unreplaced submission and pending owner-turn state are rechecked before returning the minimized projection. The visible form states that submitted answers may be used for website planning; existing Contributor testing/data-use restrictions still apply. Catalog approval constrains what is asked, not what a user may type, and is not a sensitive-content detector.
+
+The source adapter is connected through `requestInformation`, `replaceInformation`, `proposeAnswers` and the current `readSubmittedAnswers` inspection. Verification is recorded in [custom composition evidence](verification.md#custom-chat-composition--october-3-2026-utc). This does not close WH-108. The old `readSubmittedIntake` action/reader has been removed; the dated checkpoints below describe its historical evidence, not an active compatibility path.
+
 The [shared TypeScript protocol](../src/chat-interactions/protocol.ts) defines the closed v1 structural subset; [synthetic fixtures](../tests/fixtures/chat-interactions.json) are readable examples. It uses Web Crypto and the maintained bounded canonical encoder. The [transport reader](../src/chat-interactions/input.ts) limits actual streamed UTF-8 bytes to 32 KiB before parsing. The former Node-only prototype was removed. Protocol validation alone grants no authority: domain storage and the current workspace capability enforce ownership, admission and exact state.
 
 An issued element contains exactly:
@@ -33,7 +45,7 @@ An issued element contains exactly:
   scope: { accountId, actorId, conversationId, projectId: UUID|null, taskId, originTurnId },
   createdAt: UTC timestamp, expiresAt: UTC timestamp,
   definition: { version: 1, kind: "form"|"view", template, title, summary,
-    presentation: "inline"|"panel"|"dialog", fields: [...], cards: [...],
+    presentation: "inline"|"panel"|"dialog", purpose?: declared custom purpose, fields: [...], cards: [...],
     submitBinding: "interaction.answers@1"|null,
     continuationBinding: "site.content-prepare@1"|null },
   definitionDigest: SHA-256 hex }
@@ -43,7 +55,7 @@ All scope IDs are server-resolved UUIDs. The current owner account supplies both
 
 Hash the entire issued object except `definitionDigest`: sorted object keys recursively, array order preserved, JSON strings/numbers and UTF-8 bytes, no Unicode normalization. Reject non-JSON/non-finite values. Changing scope, target, revision, field order/labels/defaults, conditions, template, bindings, timestamps or presentation requires **a new interaction ID and digest**; old snapshots retain their meaning. Digest equality is integrity evidence, not proof that a client is entitled to issue an element. Production reads use the stored server-issued object, never a client-resealed replacement.
 
-The current maintained agent adapter proposes only owned target references. Future custom composition will propose a definition through a separately admitted semantic adapter; it is not enabled. The server verifies references, rebuilds saved defaults/provenance from owned state, selects permissible bindings, assigns scope/identity/time, validates, and persists the issued object. A model cannot assert `saved` provenance, choose another actor/conversation, extend a deadline, or mint an active review by computing a hash.
+Maintained adapters propose owned target references. The current custom adapter proposes purpose-bound question descriptors; it cannot send arbitrary definitions or wording. The server verifies references, rebuilds saved defaults/provenance from owned state, selects permissible bindings, assigns scope/identity/time, validates, and persists the issued object. A model cannot assert `saved` provenance, choose another actor/conversation, extend a deadline, or mint an active review by computing a hash.
 
 ### Limits and fields
 
@@ -58,7 +70,7 @@ The current maintained agent adapter proposes only owned target references. Futu
 | Active work | At most 5 open forms per conversation, 20 per account, one automatic presentation per turn. Do not silently cancel old forms to fit a quota |
 | Drafts / expiry | Draft revision CAS; no more than one accepted draft save per second per interaction, bounded existing account rate limits as well. Issued answer window at most 7 days; no heartbeat extension |
 
-Every field has exactly `id,type,label,help,required,binding,constraints`, with optional `default,when,source,group`. `binding` is always `answer.value@1`; `id` is its key in the submitted snapshot. No model-authored endpoint, path expression or action payload appears in a field.
+Every field has exactly `id,type,label,help,required,binding,constraints`, with optional `default,when,source,group,questionId`. A `custom@1` definition requires a declared `purpose`; runtime admission additionally requires exact catalog question IDs and reconstructed wording/limits. These metadata fields are not accepted on maintained templates. `binding` is always `answer.value@1`; `id` is its key in the submitted snapshot. No model-authored endpoint, path expression or action payload appears in a field.
 
 | Field type | Closed constraints and value |
 | --- | --- |

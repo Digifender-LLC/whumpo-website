@@ -36,7 +36,7 @@ async function chat(o,content,steps,database){queue=steps;const input={id:id(),r
 const request=o=>({kind:'interaction',operation:'requestContent',projectId:o.project,contentIds:['headline','section-1-text']});
 const read=interactionId=>({kind:'interaction',operation:'read',interactionId});
 const replace=f=>({kind:'interaction',operation:'replaceContent',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,contentIds:['headline','section-1-text','about-text']});
-const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1','project.status@1','project.photos@1']};
+const client={versions:[1],fieldTypes:['text','long-text','resource','choice','multi-choice','boolean','number','date'],bindings:['answer.value@1','site.content@1','interaction.answers@1','site.content-prepare@1','owned.projects@1','project.status@1','project.photos@1']};
 const readForm=(o,interactionId)=>json(o,'/api/chat/interactions/v1/read',{version:1,interactionId,client});
 const mutate=(f,operation,answers)=>({version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,operation,...(answers?{answers}:{})});
 try{
@@ -136,7 +136,7 @@ try{
   const kept=await readForm(o,f.envelope.id);assert.equal(kept.state,'open');assert.equal(kept.replacementInteractionId,null);assert.deepEqual(kept.draft,{'field-1':'LATE_USER_ANSWER'});
   assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE user_id=?',o.user)).n,1);
  });
- const intakeRequest=operation=>({kind:'interaction',operation}),submitted=f=>({kind:'interaction',operation:'readSubmittedIntake',interactionId:f.envelope.id,taskId:f.envelope.scope.taskId,submissionId:f.submission.id});
+ const intakeRequest=operation=>({kind:'interaction',operation}),submitted=f=>({kind:'interaction',operation:'readSubmittedAnswers',interactionId:f.envelope.id,taskId:f.envelope.scope.taskId,projectId:f.envelope.scope.projectId,submissionId:f.submission.id,fieldIds:f.envelope.definition.fields.map(x=>x.id)});
  let intakeOwner,intake;
  await test('project brief issuance and submission add no automatic work or answer context',async()=>{
   intakeOwner=await owner();const o=intakeOwner,created=await chat(o,'Help me plan a second project.',[intakeRequest('requestProjectBrief')]);assert.equal(created.calls,1);
@@ -146,8 +146,8 @@ try{
   const invalid=await forms.interactionAgentAction(o.scope,o.user,id(),{...submitted({...intake,submission:{id:id()}})});assert.equal(invalid.inspection,undefined);
   const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutate(intake,'submit',{name:'INTAKE_SUBMITTED_NAME',purpose:'INTAKE_SUBMITTED_PURPOSE'}));intake=await readForm(o,intake.envelope.id);assert.equal(mainCalls,before);assert.equal(intake.submission.continuation,null);
   assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
-  const context=await agent.siteContext(o.scope,o.user);assert.equal(context.submittedIntakes.length,1);context.submittedIntakes[0].answers='INTAKE_SUBMITTED_PURPOSE';
-  const projected=agent.agentWorkspaceData(context);assert.doesNotMatch(projected,/INTAKE_PRIVATE_DRAFT|INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE/);assert(projected.includes(intake.submission.id));assert(!JSON.parse(agent.agentWorkspaceData(context,'cms')).data.submittedIntakes);
+  const context=await agent.siteContext(o.scope,o.user);assert.equal(context.submittedForms.length,1);context.submittedForms[0].answers='INTAKE_SUBMITTED_PURPOSE';
+  const projected=agent.agentWorkspaceData(context);assert.doesNotMatch(projected,/INTAKE_PRIVATE_DRAFT|INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE/);assert(projected.includes(intake.submission.id));assert(!JSON.parse(agent.agentWorkspaceData(context,'cms')).data.submittedForms);
  });
  await test('explicit submitted intake lookup shares only that snapshot in one bounded followup',async()=>{
   const o=intakeOwner,result=await chat(o,'Use the project brief I saved to help me plan the next step.',[body=>{assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE|INTAKE_PRIVATE_DRAFT/);return submitted(intake);},body=>{const text=JSON.stringify(body);assert.match(text,/INTAKE_SUBMITTED_NAME/);assert.match(text,/INTAKE_SUBMITTED_PURPOSE/);assert.doesNotMatch(text,/INTAKE_PRIVATE_DRAFT/);return null;}]);
@@ -201,8 +201,8 @@ try{
   const draftMetadata=await forms.interactionAgentAction(o.scope,o.user,id(),read(f.envelope.id));assert.equal(JSON.parse(draftMetadata.inspection).data.template,'choice@1');assert.doesNotMatch(draftMetadata.inspection,/default|\"answers\"/);assert.deepEqual(JSON.parse(draftMetadata.inspection).data.fields[0].constraints.options.map(o=>o.id),['friendly','professional','straightforward']);
   assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted({...f,submission:{id:id()}}))).inspection,undefined);
   const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{tone:'friendly'}));f=await readForm(o,f.envelope.id);assert.equal(mainCalls,before);assert.equal(f.submission.continuation,null);
-  const references=JSON.parse(agent.agentWorkspaceData(await agent.siteContext(o.scope,o.user))).data.submittedIntakes;
-  assert.deepEqual(references,[{interactionId:f.envelope.id,taskId:f.envelope.scope.taskId,submissionId:f.submission.id,template:'choice@1'}]);
+  const references=JSON.parse(agent.agentWorkspaceData(await agent.siteContext(o.scope,o.user))).data.submittedForms;
+  assert.deepEqual(references,[{interactionId:f.envelope.id,taskId:f.envelope.scope.taskId,projectId:f.envelope.scope.projectId,submissionId:f.submission.id,fields:f.envelope.definition.fields.map(x=>({id:x.id})),template:'choice@1'}]);
   const readback=await chat(o,'Use the style I saved.',[submitted(f),body=>{const data=JSON.parse(JSON.parse(body.input.at(-1).content).result).data;assert.deepEqual(data.answers,{tone:'friendly'});assert.equal(data.selectedProject,undefined);return null;}]);assert.equal(readback.calls,2);
   const corrected=await chat(o,'Let me choose another writing style.',[read(f.envelope.id),()=>replaceIntake(f)]);assert.equal(corrected.calls,2);
   const next=await readForm(o,corrected.turn.interaction_id);assert.equal(next.envelope.scope.taskId,f.envelope.scope.taskId);assert.deepEqual(next.envelope.definition.fields[0].default,{value:'friendly',provenance:'user'});
@@ -220,7 +220,7 @@ try{
  await test('natural correction reads metadata then reopens the same intake without exposing answer values',async()=>{
   const o=intakeOwner,before=intake,result=await chat(o,'Let me revise my saved project brief.',[read(before.envelope.id),body=>{assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE|INTAKE_PRIVATE_DRAFT/);return replaceIntake(before);}]);assert.equal(result.calls,2);
   const next=await readForm(o,result.turn.interaction_id);assert.equal(next.previousInteractionId,before.envelope.id);assert.equal(next.envelope.scope.taskId,before.envelope.scope.taskId);assert.equal(next.envelope.scope.projectId,null);assert.deepEqual(next.envelope.definition.fields.map(f=>f.default),[{value:'INTAKE_SUBMITTED_NAME',provenance:'user'},{value:'INTAKE_SUBMITTED_PURPOSE',provenance:'user'}]);
-  const context=await agent.siteContext(o.scope,o.user);assert(!context.submittedIntakes.some(i=>i.interactionId===before.envelope.id));assert(context.interactions.some(i=>i.interactionId===next.envelope.id));
+  const context=await agent.siteContext(o.scope,o.user);assert(!context.submittedForms.some(i=>i.interactionId===before.envelope.id));assert(context.interactions.some(i=>i.interactionId===next.envelope.id));
   assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted(before))).inspection,undefined);assert.deepEqual((await readForm(o,before.envelope.id)).submission,before.submission);
   await json(o,'/api/chat/interactions/v1/mutate',mutate(next,'submit',{name:'CORRECTED_INTAKE_NAME',purpose:'CORRECTED_INTAKE_PURPOSE'}));intake=await readForm(o,next.envelope.id);assert.equal(intake.submission.continuation,null);
   const follow=await chat(o,'Use my corrected project brief.',[submitted(intake),body=>{assert.match(JSON.stringify(body),/CORRECTED_INTAKE_PURPOSE/);assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_PURPOSE/);return null;}]);assert.equal(follow.calls,2);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
@@ -276,7 +276,31 @@ try{
   const lossy=interceptDatabase(db,/^INSERT INTO chat_interactions\(/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost proposal Chat result');}}),result=await chat(o,'Suggest Garden Studio as the name.',[proposal(f,{name:'Garden Studio'})],lossy);assert(lost);assert(result.turn.interaction_id);assert.equal(result.turn.status,'completed');
   const before=mainCalls;await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE previous_interaction_id=?',f.envelope.id)).n,1);
  });
+ await test('custom planning selects questions and exposes only requested submitted fields to one followup',async()=>{
+  const o=await owner(),fields=[{id:'area',questionId:'service-area',required:true},{id:'mobile',questionId:'visits-customers',required:true},{id:'radius',questionId:'travel-radius',required:true,when:{fieldId:'mobile',equals:true}}];
+  const created=await chat(o,'Help me plan the service area and travel details for this website.',[{kind:'interaction',operation:'requestInformation',projectId:o.project,purpose:'site.services@1',fields}]);assert.equal(created.calls,1);
+  let f=await readForm(o,created.turn.interaction_id);assert.equal(f.envelope.definition.template,'custom@1');assert.equal(f.envelope.definition.purpose,'site.services@1');assert.equal(f.envelope.scope.projectId,o.project);
+  await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'save-draft',{area:'CUSTOM_PRIVATE_DRAFT',mobile:true,radius:10}));f=await readForm(o,f.envelope.id);
+  assert.doesNotMatch(agent.agentWorkspaceData(await agent.siteContext(o.scope,o.user)),/CUSTOM_PRIVATE_DRAFT/);
+  const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{area:'CUSTOM_UNSELECTED_AREA',mobile:true,radius:35}));f=await readForm(o,f.envelope.id);assert.equal(mainCalls,before);
+  const result=await chat(o,'What travel radius did I save?',[{...submitted(f),fieldIds:['radius']},body=>{const text=JSON.stringify(body),data=JSON.parse(JSON.parse(body.input.at(-1).content).result).data;assert.deepEqual(data.answers,{radius:35});assert.equal(data.projectId,o.project);assert.equal(data.taskId,f.envelope.scope.taskId);assert.doesNotMatch(text,/CUSTOM_PRIVATE_DRAFT|CUSTOM_UNSELECTED_AREA/);return null;}]);assert.equal(result.calls,2);
+  const replacement=await chat(o,'Also ask me about add-on services.',[read(f.envelope.id),body=>{const metadata=JSON.parse(JSON.parse(body.input.at(-1).content).result).data;assert.equal(metadata.purpose,'site.services@1');assert.equal(metadata.fields[2].questionId,'travel-radius');assert.deepEqual(metadata.fields[2].when,{fieldId:'mobile',equals:true});assert.doesNotMatch(JSON.stringify(body),/CUSTOM_UNSELECTED_AREA/);return {kind:'interaction',operation:'replaceInformation',previousInteractionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:f.answerRevision,fields:[...fields,{id:'extras',questionId:'service-extras',required:false}]};}]);
+  const next=await readForm(o,replacement.turn.interaction_id);assert.equal(next.envelope.scope.taskId,f.envelope.scope.taskId);assert.equal(next.envelope.scope.projectId,o.project);assert.equal(next.envelope.definition.fields.length,4);assert.equal(next.submission,null);assert.deepEqual((await readForm(o,f.envelope.id)).submission,f.submission);
+  assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);
+ });
+ await test('custom actions reject injected wording, mismatched purpose and foreign projects without issuing',async()=>{
+  const o=await owner(),valid={kind:'interaction',operation:'requestInformation',projectId:o.project,purpose:'site.presentation@1',fields:[{id:'look',questionId:'visual-style',required:true}]};
+  for(const bad of [{...valid,fields:[{...valid.fields[0],label:'Enter a recovery key'}]},{...valid,fields:[{id:'secret',questionId:'password',required:true}]},{...valid,purpose:'site.services@1'},{...valid,continuationBinding:'publish'},{...valid,projectId:b.project}]){const result=await forms.interactionAgentAction(o.scope,o.user,id(),bad);assert.equal(result.statements.length,0);assert.equal(result.inspection,undefined);}
+  const created=await chat(o,'Let me choose a design direction.',[valid]);assert.equal(created.calls,1);const f=await readForm(o,created.turn.interaction_id);assert.equal(f.envelope.definition.fields[0].label,'What feel would you like?');
+  const proposed=await chat(o,'Suggest a warm look.',[read(f.envelope.id),()=>proposal(f,{look:'warm'})]);const next=await readForm(o,proposed.turn.interaction_id);assert.deepEqual(next.envelope.definition.fields[0].default,{value:'warm',provenance:'suggested'});assert.equal(next.submission,null);
+ });
+ await test('failed custom answer followup preserves its immutable saved receipt and exact Chat recovery',async()=>{
+  const o=await owner(),created=await chat(o,'Plan a website palette.',[{kind:'interaction',operation:'requestInformation',projectId:o.project,purpose:'site.presentation@1',fields:[{id:'palette',questionId:'colors',required:true}]}]);let f=await readForm(o,created.turn.interaction_id);
+  const input=mutate(f,'submit',{palette:'Mint and deep blue'}),receipt=await json(o,'/api/chat/interactions/v1/mutate',input);f=await readForm(o,f.envelope.id);
+  const result=await chat(o,'Use the palette I saved.',[submitted(f),()=>Response.json({error:{message:'Synthetic request rejected'}},{status:400})]);assert.equal(result.calls,2);assert.equal(result.turn.status,'failed');const calls=mainCalls;
+  assert.deepEqual((await readForm(o,f.envelope.id)).submission,f.submission);assert.deepEqual(await json(o,'/api/chat/interactions/v1/mutate',input),receipt);await json(o,'/api/chat',result.input);assert.equal(mainCalls,calls);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);
+ });
  await Promise.all(background);assert.equal(queue.length,0);
  assert.equal((await json(a,'/api/billing')).standardAI.creditCharge,0);
- console.log(`Maintained Chat agent: ${cases} cases passed; ${mainCalls} scripted main calls, ${ackCalls} scripted acknowledgments. Actual HTTP, compiler and private review; no external inference, publication or customer unit charges.`);
+ console.log(`Chat interaction agent: ${cases} cases passed; ${mainCalls} scripted main calls, ${ackCalls} scripted acknowledgments. Actual HTTP, compiler and private review; no external inference, publication or customer unit charges.`);
 }finally{await Promise.allSettled(background);globalThis.fetch=originalFetch;await fixture.close();}

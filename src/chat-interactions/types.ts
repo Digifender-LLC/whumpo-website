@@ -4,7 +4,7 @@ export type FieldType='text'|'long-text'|'choice'|'multi-choice'|'boolean'|'numb
 export type ContentSource={binding:'site.content@1';contentId:string;revision:number};
 type CommonField={id:string;label:string;help:string;required:boolean;binding:'answer.value@1';
  default?:{value:Answer;provenance:'saved'|'user'|'suggested'};
- when?:{fieldId:string;equals:Answer};source?:ContentSource;group?:number};
+ when?:{fieldId:string;equals:Answer};source?:ContentSource;group?:number;questionId?:string};
 export type Field=CommonField&(
  {type:'text'|'long-text';constraints:{maxLength:number}}|
  {type:'choice'|'multi-choice';constraints:{options:{id:string;label:string}[]}}|
@@ -15,7 +15,7 @@ export type Field=CommonField&(
 );
 export type Card={id:string;binding:string;display:string;limit:number;reviewId:string|null};
 export type Definition={version:1;kind:'form'|'view';template:'content-change@1'|'project-brief@1'|'project-select@1'|'choice@1'|'custom@1'|'status@1';
- title:string;summary:string;presentation:'inline'|'panel'|'dialog';fields:Field[];cards:Card[];
+ purpose?:string;title:string;summary:string;presentation:'inline'|'panel'|'dialog';fields:Field[];cards:Card[];
  submitBinding:'interaction.answers@1'|null;continuationBinding:'site.content-prepare@1'|null};
 export type InteractionScope={accountId:string;actorId:string;conversationId:string;projectId:string|null;taskId:string;originTurnId:string};
 export type UnsignedInteraction={version:1;id:string;scope:InteractionScope;createdAt:string;expiresAt:string;definition:Definition};
