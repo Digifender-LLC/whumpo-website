@@ -15,8 +15,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "whumpo-control-chat-test",
-      "database_id": "dc420103-f80a-4f71-891e-e4d19287a7db"
+      "database_name": "whumpo-control-task-test",
+      "database_id": "9a07c1b0-0925-4ef1-8ffa-46d9464cafc9"
     }
   ],
   "r2_buckets": [

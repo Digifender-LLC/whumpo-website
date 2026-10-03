@@ -40,7 +40,7 @@ export function informationDefinition(purpose:unknown,input:unknown):Definition{
   if(r.questionId==='travel-radius'&&(!r.when||r.when.equals!==true||!fields.slice(0,index).some(f=>f.id===r.when!.fieldId&&f.questionId==='visits-customers')))throw new InteractionError('CONDITION',r.id);
   return {...q.field,id:r.id,questionId:r.questionId,required:r.required,...(Object.hasOwn(r,'when')?{when:r.when}:{})};
  });
- return validateDefinition({version:1,kind:'form',template:'custom@1',purpose,...purposes[purpose as InformationPurpose],presentation:'inline',fields:compiled,cards:[],submitBinding:'interaction.answers@1',continuationBinding:null});
+ return validateDefinition({version:1,kind:'form',template:'custom@1',purpose,...purposes[purpose as InformationPurpose],presentation:'inline',fields:compiled,cards:[],submitBinding:'interaction.answers@1',continuationBinding:'agent.task-continue@1'});
 }
 export function informationQuestions(definition:Definition):QuestionRequest[]{
  return definition.fields.map(f=>({id:f.id,questionId:f.questionId!,required:f.required,...(f.when?{when:f.when as QuestionRequest['when']}:{})}));

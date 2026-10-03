@@ -20,7 +20,7 @@ export async function submittedReferences(db:D1Database,user:string){
  for(const r of results){
   let f;try{f=await readInteraction(db,user,r.id);}catch(error){if(error instanceof InteractionStoreError&&[404,409,410].includes(error.status))continue;throw error;}
   const e=f.envelope;
-  if(f.state!=='submitted'||!f.submission||f.replacementInteractionId||f.submission.continuation!==null||!(isProjectIntakeTemplate(e.definition.template)&&e.scope.projectId===null||isInformationDefinition(e.definition)&&e.scope.projectId!==null))continue;
+  if(f.state!=='submitted'||!f.submission||f.replacementInteractionId||(f.submission.continuation!==null&&e.definition.continuationBinding!=='agent.task-continue@1')||!(isProjectIntakeTemplate(e.definition.template)&&e.scope.projectId===null||isInformationDefinition(e.definition)&&e.scope.projectId!==null))continue;
   references.push({interactionId:e.id,taskId:e.scope.taskId,projectId:e.scope.projectId,submissionId:f.submission.id,template:e.definition.template,...(e.definition.purpose?{purpose:e.definition.purpose}:{}),fields:e.definition.fields.map(field=>({id:field.id,...(field.questionId?{questionId:field.questionId}:{})}))});
  }
  await assertWorkspace(db,user);return references;
@@ -32,7 +32,7 @@ export async function readSubmittedAnswers(db:D1Database,user:string,turnId:stri
  await assertWorkspace(db,user);const request=copyJSON(input,4096);
  if(!request||Object.keys(request).sort().join(',')!=='fieldIds,interactionId,projectId,submissionId,taskId'||!Array.isArray(request.fieldIds)||!request.fieldIds.length||request.fieldIds.length>12||new Set(request.fieldIds).size!==request.fieldIds.length||request.fieldIds.some(v=>typeof v!=='string'))throw new InteractionError('SHAPE');
  const f=await readInteraction(db,user,request.interactionId),e=f.envelope,s=f.submission;
- if(e.scope.taskId!==request.taskId||e.scope.projectId!==request.projectId||!s||s.id!==request.submissionId||f.state!=='submitted'||f.replacementInteractionId||s.continuation!==null||!(isProjectIntakeTemplate(e.definition.template)&&e.scope.projectId===null||isInformationDefinition(e.definition)&&e.scope.projectId!==null))throw new InteractionStoreError(409,'adapter_unavailable');
+ if(e.scope.taskId!==request.taskId||e.scope.projectId!==request.projectId||!s||s.id!==request.submissionId||f.state!=='submitted'||f.replacementInteractionId||(s.continuation!==null&&e.definition.continuationBinding!=='agent.task-continue@1')||!(isProjectIntakeTemplate(e.definition.template)&&e.scope.projectId===null||isInformationDefinition(e.definition)&&e.scope.projectId!==null))throw new InteractionStoreError(409,'adapter_unavailable');
  const gate={userId:user,projectId:e.scope.projectId,featureId:'core.editing' as const,operation:'prepare' as const};
  await assertFeature(db,gate);
  const a=validateAnswers(e.definition,s.answers);

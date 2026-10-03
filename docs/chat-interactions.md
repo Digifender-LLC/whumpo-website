@@ -24,11 +24,21 @@ WH-113's [identity decision](workspace-identity.md) and WH-089's [feature catalo
 
 ## Wire objects and digest
 
+### WH-108 receipted model continuation contract — October 3, 2026 UTC
+
+Custom service/presentation forms now use `agent.task-continue@1` in source. The deployed October 3 00:20 UTC version still has the earlier information-only handoff until the coordinated cutover is verified. **Save and continue** first commits the immutable answer receipt, then explicitly requests one owner Chat continuation keyed by that submission. A saved draft, ordinary read, page reload or receipt replay never dispatches inference. An unavailable model leaves the answers saved and continuation not started; the owner may explicitly continue later or stop it.
+
+The continuation shares the current standard-AI request, internal inference budget and bounded one-inspection loop. Its claim commits atomically with the Chat turn and reservations. Context contains the issuing task's original request, declared question meanings and submitted answers, plus only the pinned project's current metadata. Other projects, conversation history, private drafts/defaults, profile and provider context are excluded. The model may answer, inspect that website, prepare a reviewed edit, or save its first private website through existing handlers. A first private website uses the existing first-only creation contract; changing an existing website requires its exact review. It cannot change project, invoke account/provider operations, publish, spend, approve or recursively present another form.
+
+Current task revision, immutable submission, project ownership, feature admission and continuation state are checked at claim, dispatch and final commit. Continuation turns have `ai_context_allowed=0`, keeping their answer-bearing replies out of unrelated later Chat history. A lost acknowledgment recovers the same receipt; it never restarts dispatch. Failure keeps the answer snapshot. Reconciliation uses the existing Chat/cost receipts and fences closed work; an unknown provider cost remains unknown even when a closed work attempt is resolved. Pending review references come from the existing task-linked domain receipts, not model assertions.
+
+This extends the current continuation table and current-schema guards; it does not introduce a second inference ledger, old-schema reader or migration overlay. Current verification is recorded in [model continuation evidence](verification.md#custom-form-model-continuation--october-3-2026-utc). The subsequent coordinated test cutover remains separate. Continuation start/finish timestamps measure observed operation duration, including recovery delay; internal inference receipts retain token evidence and subscription-shadow/unknown cost basis. No real API price or provider-only latency is inferred. Maintained account intake and deterministic content-preview adapters retain their own declared handoffs.
+
 ### WH-108 custom composition implementation contract — October 3, 2026 UTC
 
 The current custom adapter composes public website-planning questions for an owned project. `site.services@1` and `site.presentation@1` declare the use of the answers. The agent selects a bounded subset/order of question intents, stable field IDs, requiredness and simple conditions; the server supplies question wording, types, options and limits. This is composition of individual questions, not a fixed whole-form template. Arbitrary model-authored wording, credential questions, resource selectors and executable bindings are not admitted by this adapter. Broader composition and separately receipted model continuation remain in WH-108's original scope.
 
-The issued `custom@1` definition carries its purpose and each field's question ID. Both the client and storage adapter reconstruct and compare the admitted definition. Unknown intents, purpose mismatches, altered labels/options, custom destinations, source bindings and automatic effects refuse. Form creation and answer submission use existing current identity/feature checks, owned project guards, expiry, digest/revision checks, exact receipts and draft retention. Submission saves information only.
+The issued `custom@1` definition carries its purpose and each field's question ID. Both the client and storage adapter reconstruct and compare the admitted definition. Unknown intents, purpose mismatches, altered labels/options, custom destinations, source bindings and undeclared effects refuse. Form creation and answer submission use existing current identity/feature checks, owned project guards, expiry, digest/revision checks, exact receipts and draft retention. The submission operation saves information only. The current **Save and continue** control then explicitly starts the separately receipted follow-up described above; receipt recovery never starts it.
 
 Corrections preserve the project/task and immutable earlier submissions. A stable field ID cannot be reassigned to another question, and a retained question cannot silently change IDs. Only matching retained fields carry user/suggested defaults. Prose changes remain suggestions for explicit owner review. Hidden values are excluded from submitted snapshots.
 
@@ -47,7 +57,7 @@ An issued element contains exactly:
   definition: { version: 1, kind: "form"|"view", template, title, summary,
     presentation: "inline"|"panel"|"dialog", purpose?: declared custom purpose, fields: [...], cards: [...],
     submitBinding: "interaction.answers@1"|null,
-    continuationBinding: "site.content-prepare@1"|null },
+    continuationBinding: "site.content-prepare@1"|"agent.task-continue@1"|null },
   definitionDigest: SHA-256 hex }
 ```
 

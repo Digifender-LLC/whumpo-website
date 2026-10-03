@@ -118,6 +118,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     return { status: 400, error: 'Send a message of 1 to 1,000 characters with a valid request ID.' };
   await assertWorkspace(db,userId);
   dnsOptions={...dnsOptions,transport:workspaceTransport(db,userId,dnsOptions?.transport),githubTransport:workspaceTransport(db,userId,dnsOptions?.githubTransport),hostingTransport:workspaceTransport(db,userId,dnsOptions?.hostingTransport),healthTransport:workspaceTransport(db,userId,dnsOptions?.healthTransport)};
+  if(await db.prepare('SELECT id FROM chat_interaction_continuations WHERE id=?').bind(input.id).first())return {status:409,error:'Use the saved form to continue this task.'};
   const storedText=control?control.label:content,actionJSON=control?JSON.stringify(control.action):null;
   const matches=(row:{user_text:string;action_json:string|null;revision:number}|null)=>row!==null&&row.user_text===storedText&&row.action_json===actionJSON&&row.revision===Number(input.revision)+1;
   const previous = await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string;action_json:string|null;revision:number }>();
