@@ -1,6 +1,25 @@
 # Routine Chat test release — October 3, 2026 UTC
 
-## Current release: intake/selection accepted in deployed testing
+## Current release: private-review results accepted within WH-110C
+
+Release `5611a3bc-f364-4400-a508-0109455670e5`, runtime source `29bd978d015391e512088caf725b96d2dc8c0eb1`, is verified **October 3 at 09:40 UTC**. It preserves the existing database and complete **175-table/798-object** schema. All four exact Worker identities, database/service/secret-binding names and **39 assets** match the sealed archive: runtime `bb060845-fac8-4016-97c4-bd4503cf436c`, apps `c1788e76-8326-4371-8ade-fa151a8a2fb3`, sites `3e80eff6-02de-4ca1-8e5e-9267f929beee`, platform `8f5130b5-78e8-4cf3-b970-cbf46e9d898a`.
+
+The ten-step deployed real-Muse/Chromium journey passes additional-project intake, private creation with a lost reply, corrected brief, separate same-project name review, project selection, headline review, pending task status, reopening that exact review, signed virtual-passkey private save, and saved-result lookup after proposal cleanup. The selected website reaches private revision 2; the other site's name/content remain at revision 1. There are two projects, zero publications and zero standard-AI customer-unit charges. Exact replay, typed-save replay and reload make no extra inference calls. Nine main request receipts plus six lookup continuations represent **15 main-model calls**. All six acknowledgment receipts remain uncertain under WH-020; this release does not accept general model/acknowledgment reliability.
+
+Settled 360/390px selected-project and saved-result captures were inspected. The browser save executes the real reauthentication and exact typed approval routes. A post-journey login check then failed because its fixture hardcoded counter 2 after Chromium had already advanced the virtual key to 2. The server correctly rejected the repeated counter. The original aggregate probe remains failed; its successful ten-step journey report is not rewritten. A separate same-release deployed check reproduced counters `[1,2]` after browser reauthentication, then accepted the next counters (2 for the first key, 3 for the second), verified logout and session revocation, and used zero model calls. The future private runner reads the verified fixture counter instead of guessing it.
+
+The final record composes that successful Chat journey, separate signed identity acceptance, fresh Worker/schema/binding/asset/health checks and verified cleanup. Both probe accounts and their dependent data are removed. The prior signed first-project/profile gate and encrypted-PKCE start/cancel checks ran before the model journey; no provider consent/action occurred. No database reset, owner invitation change, customer publication, new paid service, real billing, CMS or scanner work was performed.
+
+Private evidence:
+
+- `.secrets/task-review-results-final-verification.json`: current composed verification at 09:40 UTC; explicitly records the earlier aggregate failure.
+- `.secrets/task-review-results-form-live-5611a3bc-f364-4400-a508-0109455670e5/report.json` and `selected-*`/`saved-result-*` images: ten successful steps at 09:35 UTC, exact saved receipt, bounded synthetic lookup evidence and observed/uncertain inference receipts.
+- `.secrets/task-review-results-form-probe-cleanup.json` and `.secrets/task-review-results-form-diagnostics.json`: cleanup and successful diagnostic-observer closure.
+- `.secrets/task-review-auth-verification.json`: separate signed identity/counter acceptance and cleanup at 09:38 UTC.
+
+This accepts the **private-review/results portion** of #98, not the complete child or parent. Publication/restore/withdrawal, status/traffic, admitted media/consent handoffs and connected adverse/outage recovery remain #98; #99 retains the original-scope audit. #95 remains open and the parent count is **24/122**. Human enrollment, physical-device, provider and real-customer acceptance remain separate. Earlier attempts below are preserved.
+
+## Previous release: intake/selection accepted in deployed testing
 
 Release `6edf35f2-f64a-435f-85c8-693a717e5d24` deploys source `0994c52` on the unchanged current database/schema. All four exact Worker/binding/schema/39-asset checks pass: runtime `0a0b889d-1000-42da-a787-0daf1776c1b4`, apps `1cf56906-0cb8-4217-8ec0-b68308fee7a9`, sites `30737e53-c29c-4ea7-8ebc-1cb2b450a270`, platform `913dcbab-56cc-4beb-a041-a130aabd39d4`.
 

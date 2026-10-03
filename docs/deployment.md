@@ -1,6 +1,6 @@
 # Whumpo test deployment
 
-**Current release, October 3, 2026:** [workspace views cutover](workspace-view-release.md) `0955f19c-b69e-4dae-b7e7-972e5df3aa3c`, source `81a7b9f`, verifies all four Workers, 175 tables/796 objects, service/secret bindings and 39 platform assets. Signed mobile real-Muse view lifecycle, shared exact comparisons, access revocation and settled 360/390px rendering pass. Synthetic fixtures are removed and the obsolete database is retired. Use the [current release protocol](releases.md), with no numbered migration replay. Acknowledgment reliability, human/device/provider and broader product acceptance remain separate.
+**Current release, October 3, 2026:** [routine Chat private-review results](chat-routine-release.md) `5611a3bc-f364-4400-a508-0109455670e5`, source `29bd978`, verifies all four Workers, the unchanged 175-table/798-object schema, service/secret bindings and 39 platform assets. Ten real-Muse/browser steps pass with signed private save and post-cleanup result lookup. Separately verified signed identity/counters, inspected phone captures and synthetic cleanup pass. The earlier aggregate fixture failure and uncertain acknowledgments remain recorded. Use the [current release protocol](releases.md); no numbered migrations or reset were used. Full parent, physical-device, provider and customer acceptance remain open.
 
 
 ## Earlier deployment records

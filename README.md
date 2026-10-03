@@ -6,7 +6,7 @@ Whumpo is an invitation-only AI website and application platform in private test
 
 For future work, use the [product and delivery roadmap](docs/roadmap/README.md), the [architecture and sequencing alignment](docs/roadmap/alignment.md), its [prioritized task backlog](docs/roadmap/backlog.md), and [agent execution guide](docs/roadmap/execution.md). Run `node tools/roadmap.mjs next` for planning candidates, then check their linked GitHub issues for current ownership and completion evidence.
 
-Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. The test platform runs the complete current schema and shared workspace identity/admission contract; see [current deployment evidence](docs/workspace-view-release.md). CMS functional testing remains deferred.
+Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. The test platform runs the complete current schema and shared workspace identity/admission contract; see [current deployment evidence](docs/chat-routine-release.md). CMS functional testing remains deferred.
 
 ## Current product
 
