@@ -46,8 +46,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "whumpo-control-task-test",
-      "database_id": "9a07c1b0-0925-4ef1-8ffa-46d9464cafc9"
+      "database_name": "whumpo-control-memory-test",
+      "database_id": "4e4c7449-d80a-49d1-bc67-b86034708f13"
     }
   ],
   "observability": {
