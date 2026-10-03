@@ -1,6 +1,37 @@
 # Routine Chat test release — October 3, 2026 UTC
 
-## Current release: task status and traffic
+## Current release: task-linked private photos
+
+Release `8f92ad86-e7e1-4013-9923-785ba410adc3`, runtime source `706e85abef9b19e369a0115b9693e7ca97d2386d`, passed its deployed journey **October 3 at 11:49 UTC** and final readback **11:51 UTC**. All four Worker identities, database/service/secret-binding names, the **176-table/802-object schema** and **39 assets** match the archive. Current database is `whumpo-control-chat-media-test` (`d811d64e-74b2-4d73-999d-a384d6e809f1`).
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `462c47e5-e1f3-4088-aa38-5d03c5046a18` |
+| apps | `c36002a3-e302-4906-86e5-8520f2503663` |
+| sites | `5973e6f1-bbcc-4a6f-acd0-3539076cc0d0` |
+| platform | `88720620-c091-4edf-90c1-747ff271a9b1` |
+
+The real-Muse/deployed-Chromium journey uses signed synthetic identity, actual onboarding HTTP and a synthetic private website. Explicit project selection issues a task-linked uploader. The browser prepares and uploads a synthetic JPEG to private R2; the verifier deliberately loses its successful HTTP response. Reload resolves the original exact upload through metadata readback, without sending bytes or invoking another model. Its content route returns 423 because it is held. Natural follow-ups correctly report private saved/held status, preserve that result after uploader dismissal, and report current status as unavailable after scoped read access is revoked. Reload adds no inference or project effect. Both generated keys, logout and revocation pass. All seven stages pass with no browser errors. Inspected 360/390px captures are private evidence; the post-reload status capture includes a transient recovered-request notice and is not physical-device or full visual acceptance.
+
+There are four observed orchestrator request receipts and three uncertain acknowledgments; lookup follow-ups are separately dispatched calls. WH-020 retains acknowledgment and general model-reliability acceptance. File bytes, keys and digests do not enter the photo-task model projection. Scanning remains unavailable; no photo was displayed, selected for website use or published.
+
+[Local adapter evidence](chat-routine-journeys.md#task-linked-private-photo-handoff--october-3-utc) records 143 SQLite continuation scenarios, 13 focused current-D1 scenarios, nine D1/private-R2 handoff cases, existing file/recovery checks, the eleven-call actual built-browser journey and two frozen seven-call real-Muse conversations. The local browser additionally verifies that a dismissed handoff with no reservation can safely release browser recovery only after exact server closure proof. Reserved requests retain their original handoff. Earlier fixture/observer failures remain preserved.
+
+The owner-authorized cutover initialized a distinct empty database with the complete current schema. Preflight found zero accounts/projects/provider or billing obligations and empty R2; the unused invitation was fenced. The first fence attempt used a nonexistent operator-query column and was rejected without deleting the invitation or creating a database; the corrected current-schema query succeeded. Existing `test-20261002` / revision 1 key policy was initialized through the existing verified-backup tool; off-device custody remains unaccepted. After successful application checks, all 14 account Worker bindings were inspected and unreferenced database `851d4479-8f66-4572-bf60-a7e8991f65ff` was retired at 11:50 UTC. Other databases were preserved. This uses no migration, old protocol or compatibility reader.
+
+Synthetic account/project/file rows and the exact R2 object were removed and cleanup reconciled. Final readback has zero users, projects, photos, cleanup entries and interactions, empty R2, and one fresh unused owner invitation. No customer publication, provider consent, real billing, new paid service, CMS testing or scanner implementation occurred.
+
+Private evidence:
+
+- `.secrets/task-media-final-verification.json`: final same-release reconciliation, assets, bindings/schema, cleanup, retirement and invitation.
+- `.secrets/task-media-live-8f92ad86-e7e1-4013-9923-785ba410adc3/report.json` and captures: all seven deployed stages and request receipt states.
+- `.secrets/task-media-local/`: local handler/browser/build/check logs, captures and preserved failed attempts.
+- `.secrets/task-media-model-sGoHp8/report.json`: two passing real-model/local-D1/private-R2 conversations.
+- `.secrets/task-media-database-retirement.json`, `task-media-key-initialization.json` and `task-media-invitation.json`: verified operator actions without public secret values.
+
+This accepts the admitted photo adapter within **WH-110C/#98**. Consent and broader adverse/outage recovery remain #98; #99 retains original-scope acceptance and #95 stays open. Parent count remains **24/122**. CSAM, Daybreak and CMS functional testing remain deferred.
+
+## Previous release: task status and traffic
 
 Release `26d0acd8-ff05-45a4-810d-d593b8f29256`, runtime source `74c95a31e2bb9f93bd35d60e73b3e45603cf2ca3`, passed the deployed journey **October 3 at 10:58 UTC** and final readback at **10:59 UTC**. All four Worker identities, database/service/secret-binding names, the unchanged **176-table/801-object schema** and **39 assets** match the archive. Current database remains `whumpo-control-publication-test` (`851d4479-8f66-4572-bf60-a7e8991f65ff`). No database reset or migration was needed.
 
