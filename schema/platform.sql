@@ -4098,11 +4098,13 @@ CREATE TABLE chat_task_progress (
  task_revision INTEGER NOT NULL CHECK(task_revision>=0),
  submission_id TEXT NOT NULL REFERENCES chat_interaction_submissions(id) ON DELETE CASCADE,
  previous_turn_id TEXT UNIQUE REFERENCES chat_task_progress(turn_id) ON DELETE CASCADE,
+ created_project_id TEXT CHECK(created_project_id IS NULL OR created_project_id=task_id),
  state TEXT NOT NULL CHECK(state IN ('active','finished','canceled')),
  summary TEXT NOT NULL CHECK(length(summary)<=1000),
  questions_json TEXT NOT NULL CHECK(json_valid(questions_json) AND json_type(questions_json)='array' AND json_array_length(questions_json)<=3 AND length(questions_json)<=6000)
 );
 CREATE UNIQUE INDEX chat_task_progress_root ON chat_task_progress(submission_id) WHERE previous_turn_id IS NULL;
+CREATE UNIQUE INDEX chat_task_created_project ON chat_task_progress(task_id) WHERE created_project_id IS NOT NULL;
 CREATE INDEX chat_task_progress_owner ON chat_task_progress(user_id,submission_id);
 CREATE TRIGGER chat_task_progress_admitted BEFORE INSERT ON chat_task_progress
 WHEN NOT EXISTS(
@@ -4124,6 +4126,18 @@ WHEN NOT EXISTS(
  OR json_type(q.value,'$.id') IS NOT 'text' OR length(json_extract(q.value,'$.id')) NOT BETWEEN 1 AND 40
  OR json_type(q.value,'$.question') IS NOT 'text' OR length(json_extract(q.value,'$.question')) NOT BETWEEN 1 AND 300)
  OR (NEW.state!='active' AND json_array_length(NEW.questions_json)!=0)
+ OR (NEW.created_project_id IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM project_spec_creations created JOIN projects p ON p.id=created.project_id AND p.owner_user_id=created.user_id
+   JOIN chat_interaction_submissions submitted ON submitted.id=NEW.submission_id AND submitted.user_id=NEW.user_id
+   JOIN chat_interactions form ON form.id=submitted.interaction_id AND form.task_id=NEW.task_id
+  WHERE created.id=NEW.turn_id AND created.user_id=NEW.user_id AND created.project_id=NEW.created_project_id
+   AND json_extract(form.envelope_json,'$.definition.template')='project-brief@1'))
 BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
 CREATE TRIGGER chat_task_progress_immutable BEFORE UPDATE ON chat_task_progress
 BEGIN SELECT RAISE(ABORT,'chat_task_progress_immutable'); END;
+
+-- A created-project locator survives project deletion; it is not access authority.
+CREATE TRIGGER chat_task_created_project_retained BEFORE DELETE ON chat_task_progress
+WHEN OLD.created_project_id IS NOT NULL AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+ AND EXISTS(SELECT 1 FROM chat_interaction_tasks WHERE id=OLD.task_id)
+BEGIN SELECT RAISE(ABORT,'chat_task_project_receipt_retained'); END;

@@ -135,10 +135,10 @@ export function validateDefinition(input:unknown):Definition {
   if(d.kind==='view')check(d.template==='status@1'&&d.fields.length===0&&d.cards.length>0&&d.submitBinding===null&&d.continuationBinding===null,'TEMPLATE');
   else {
     check(['content-change@1','project-brief@1','project-select@1','choice@1','custom@1'].includes(d.template)&&d.fields.length>0&&d.submitBinding==='interaction.answers@1','TEMPLATE');
-    check(d.continuationBinding===null||d.continuationBinding==='site.content-prepare@1'||['custom@1','project-select@1'].includes(d.template)&&d.continuationBinding==='agent.task-continue@1','BINDING');
+    check(d.continuationBinding===null||d.continuationBinding==='site.content-prepare@1'||['custom@1','project-select@1','project-brief@1'].includes(d.template)&&d.continuationBinding==='agent.task-continue@1','BINDING');
     if(d.template==='content-change@1')check(d.continuationBinding==='site.content-prepare@1','TEMPLATE');
     if(d.template==='project-brief@1'){
-      check(d.continuationBinding===null&&d.fields.length===2&&d.fields[0].id==='name'&&d.fields[0].type==='text'&&d.fields[0].constraints.maxLength<=100&&d.fields[0].required&&d.fields[1].id==='purpose'&&d.fields[1].type==='long-text'&&d.fields[1].constraints.maxLength<=1000&&d.fields[1].required&&!d.fields.some(f=>f.source||f.when),'TEMPLATE');
+      check(d.continuationBinding==='agent.task-continue@1'&&d.fields.length===2&&d.fields[0].id==='name'&&d.fields[0].type==='text'&&d.fields[0].constraints.maxLength<=100&&d.fields[0].required&&d.fields[1].id==='purpose'&&d.fields[1].type==='long-text'&&d.fields[1].constraints.maxLength<=1000&&d.fields[1].required&&!d.fields.some(f=>f.source||f.when),'TEMPLATE');
     }
     if(d.template==='project-select@1')check(d.continuationBinding==='agent.task-continue@1'&&d.fields.length===1&&d.fields[0].id==='project'&&d.fields[0].type==='resource'&&d.fields[0].constraints.collection==='projects'&&!d.fields[0].constraints.multiple&&d.fields[0].required&&!d.fields[0].when,'TEMPLATE');
     if(d.template==='choice@1')check(d.continuationBinding===null&&d.fields.length===1&&['choice','multi-choice'].includes(d.fields[0].type)&&!d.fields[0].when,'TEMPLATE');
@@ -182,9 +182,9 @@ export async function sealDefinition(input:unknown):Promise<IssuedInteraction>{
   check(Date.parse(e.expiresAt)>Date.parse(e.createdAt)&&Date.parse(e.expiresAt)-Date.parse(e.createdAt)<=604800000,'TIME');
   e.definition=validateDefinition(e.definition);
   if(e.definition.workspaceView)check(e.definition.workspaceView.projectId===e.scope.projectId,'PROJECT');
-  const projectNeeded=e.definition.fields.some(f=>f.source||f.type==='attachment'||('collection' in f.constraints&&f.constraints.collection==='photos'))||e.definition.cards.some(c=>['project','review'].includes(bindings[c.binding].scope??''))||(e.definition.continuationBinding!==null&&e.definition.template!=='project-select@1');
+  const projectNeeded=e.definition.fields.some(f=>f.source||f.type==='attachment'||('collection' in f.constraints&&f.constraints.collection==='photos'))||e.definition.cards.some(c=>['project','review'].includes(bindings[c.binding].scope??''))||(e.definition.continuationBinding!==null&&!['project-select@1','project-brief@1'].includes(e.definition.template));
   check(!projectNeeded||e.scope.projectId!==null,'PROJECT');
-  if(e.definition.template==='project-select@1')check(e.scope.projectId===null,'PROJECT');
+  if(['project-select@1','project-brief@1'].includes(e.definition.template))check(e.scope.projectId===null,'PROJECT');
   return {...e,definitionDigest:await hash(e)};
 }
 export async function verifyEnvelope(input:unknown):Promise<IssuedInteraction>{

@@ -6,7 +6,7 @@ Error.stackTraceLimit=0;
 const modules=await currentFixtureModules(['src/index.ts','src/site-agent.ts','src/ai-chat.ts','src/agent-inspection.ts','src/chat-interactions/store.ts','src/chat-interactions/agent.ts','src/chat-interactions/protocol.ts','src/project-specification/store.ts','src/chat-interactions/task-context.ts','src/chat-interactions/model-continuation.ts']);
 const worker=(await modules.module('src/index.ts')).default,agent=await modules.module('src/site-agent.ts'),ai=await modules.module('src/ai-chat.ts'),inspection=await modules.module('src/agent-inspection.ts');
 const store=await modules.module('src/chat-interactions/store.ts'),forms=await modules.module('src/chat-interactions/agent.ts'),protocol=await modules.module('src/chat-interactions/protocol.ts'),site=await modules.module('src/project-specification/store.ts');
-const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();
+const fixture=await databaseFixture({allowedArguments:['--intake-only']}),{db}=fixture,id=()=>crypto.randomUUID();
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-only',protocol:'responses'};
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:config.baseURL,AI_MODEL:config.model,AI_PROTOCOL:config.protocol,AI_API_KEY:config.apiKey};
@@ -20,7 +20,7 @@ globalThis.fetch=async(url,init)=>{
 };
 const http=(o,path,data,database=db)=>worker.fetch(new Request('https://whumpo.com'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),{...env,DB:database},{waitUntil(p){background.push(p);}});
 async function json(o,path,data,database){const r=await http(o,path,data,database);assert.equal(r.status,200,await r.clone().text());return r.json();}
-async function test(name,fn){try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
+async function test(name,fn){if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
 async function owner(withWebsite=true){
  const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=id();
  await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -51,6 +51,20 @@ async function savedSelection(o,request='Change the services on my landscaping w
  const mutation={version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers:{project:o.project}};
  const before=mainCalls,receipt=await json(o,'/api/chat/interactions/v1/mutate',mutation);assert.equal(mainCalls,before,'Saving selection alone must not infer');
  return {form:await store.readInteraction(o.scope,o.user,f.envelope.id),mutation,receipt};
+}
+const newBrief={name:'Neighborhood Garden',purpose:'A website for local seasonal planting services.'};
+const newWebsite=()=>({kind:'project',purpose:newBrief.purpose,config:{name:newBrief.name,headline:'Seasonal garden care',description:'Local planting services',theme:'forest',aboutTitle:'Our work',aboutText:'Care for gardens through the seasons.',sections:[{heading:'Services',text:'Planting and seasonal care.'}],photos:[]}});
+async function savedBrief(o,answers=newBrief,request='Build another website for my seasonal planting business.'){
+ const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Tell me about your project.',datetime('now'),'ai','completed' FROM workspace_state WHERE user_id=?",turn,request,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
+ const f=await store.issueProjectIntake(o.scope,o.user,{originTurnId:turn,template:'project-brief@1'}),mutation={version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers};
+ const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutation);assert.equal(mainCalls,before);assert.equal(await row('SELECT id FROM projects WHERE id=?',f.envelope.scope.taskId),null);
+ return {form:await store.readInteraction(o.scope,o.user,f.envelope.id),mutation,target:f.envelope.scope.taskId};
+}
+async function grantNew(o,target){await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing','prepare','private-test-acceptance','synthetic new project fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,target);}
+async function correctBrief(o,form,answers=newBrief){
+ const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,'Correct the new project brief','Review these answers.',datetime('now'),'ai','completed' FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
+ const f=await store.replaceProjectIntake(o.scope,o.user,{originTurnId:turn,previousInteractionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:form.answerRevision});
+ await store.mutateInteraction(o.scope,o.user,{version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers});return store.readInteraction(o.scope,o.user,f.envelope.id);
 }
 async function follow(o,f,steps=[],database){queue=steps;const input={version:1,submissionId:f.submission.id,expectedChatRevision:await revision(o)},before=mainCalls,data=await json(o,'/api/chat/interactions/v1/continue',input,database);return {data,input,calls:mainCalls-before};}
 const read=o=>({kind:'specification',operation:'read',projectId:o.project});
@@ -274,6 +288,47 @@ try{
  });
  for(const action of [{kind:'project',purpose:'Unrequested project',config:{}},{kind:'backend',operation:'list',projectId:id()},{kind:'review',operation:'publish',targetId:id()}])await test('selected website task rejects '+action.kind+' effects',async()=>{
   const o=await owner(),{form}=await savedSelection(o);const result=await follow(o,form,[action]);assert.equal(result.data.continuation.state,'failed');await noEffect(o,form);
+ });
+ await run('DELETE FROM users');
+ await test('new-project brief creates one private draft with an immutable task-bound result',async()=>{
+  const o=await owner(),{form,target,mutation}=await savedBrief(o);const before=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id);assert.equal(before.newProject,true);assert.deepEqual(before.context.projects,[]);
+  const r=await follow(o,form,[body=>{const text=JSON.stringify(body);assert.match(text,/Neighborhood Garden/);assert.match(text,/not-created/);assert.doesNotMatch(text,/SUBMITTED_PUBLIC_SERVICE_AREA|A greener neighborhood/);return newWebsite();}]);assert.equal(r.calls,1);assert.equal(r.data.continuation.state,'succeeded');
+  assert.equal((await row('SELECT name,purpose FROM projects WHERE id=? AND owner_user_id=?',target,o.user)).purpose,newBrief.purpose);assert.equal((await site.readSpecification(o.scope,o.user,target)).revision,1);assert.equal((await row('SELECT created_project_id FROM chat_task_progress WHERE turn_id=?',form.submission.id)).created_project_id,target);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',target)).n,0);
+  const calls=mainCalls;await json(o,'/api/chat/interactions/v1/continue',r.input);await json(o,'/api/chat/interactions/v1/mutate',mutation);await json(o,'/api/chat/interactions/v1/reconcile',{version:1,submissionId:form.submission.id});assert.equal(mainCalls,calls);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,2);
+  await assert.rejects(()=>run('UPDATE chat_task_progress SET created_project_id=NULL WHERE turn_id=?',form.submission.id),/immutable/);await assert.rejects(()=>run('DELETE FROM chat_task_progress WHERE turn_id=?',form.submission.id),/retained/);
+  await run('DELETE FROM users WHERE id=?',o.user);assert.equal(await row('SELECT turn_id FROM chat_task_progress WHERE task_id=?',target),null);assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);
+ });
+ await test('new-project clarification resumes before creation and retains the same target after creation',async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o);await follow(o,form,[taskReply('Which season should we feature?',null,{state:'active',summary:'Name and purpose supplied; season not specified.',openQuestions:[{id:'season',question:'Which season should we feature?'}]})]);assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);
+  const refs=await taskContext.taskReferences(o.scope,o.user);assert.equal(refs[0].projectId,target);assert.equal(refs[0].purpose,'project.intake@1');assert.doesNotMatch(JSON.stringify(refs),/Name and purpose/);
+  const resumed=await chat(o,'Spring, for this new project.',[resume({...form,projectId:target}),body=>{assert.match(JSON.stringify(body),/Spring/);assert.match(JSON.stringify(body),/not-created/);return newWebsite();}]);assert.equal(resumed.turn.status,'completed');assert.equal((await row('SELECT created_project_id FROM chat_task_progress WHERE turn_id=?',resumed.input.id)).created_project_id,target);
+  await grantNew(o,target);const again=await chat(o,'Continue this new-project task and show the planned next step.',[resume({...form,projectId:target}),body=>{assert.match(JSON.stringify(body),/Seasonal garden care/);return null;}]);assert.equal(again.turn.status,'completed');assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,2);
+ });
+ await test('new-project corrected brief preserves created target and requires a separate change review',async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o);await follow(o,form,[newWebsite()]);await grantNew(o,target);
+  const corrected=await correctBrief(o,form,{...newBrief,name:'Renamed Garden'}),task=await taskContext.prepareInformationTask(o.scope,o.user,corrected.submission.id);assert.equal(task.newProject,false);assert.equal(task.form.projectId,target);
+  const changed={kind:'specification',operation:'change',projectId:target,expectedRevision:1,operations:[{type:'project.setName',name:'Renamed Garden'}]};const r=await follow(o,corrected,[{kind:'specification',operation:'read',projectId:target},changed]);assert.equal(r.data.continuation.state,'succeeded');assert.equal((await row('SELECT project_id FROM project_spec_proposals WHERE id=?',corrected.submission.id)).project_id,target);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,2);assert.equal((await site.readSpecification(o.scope,o.user,target)).revision,1);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,newBrief);
+ });
+ for(const lost of ['delete','transfer'])await test('new-project '+lost+' retains creation evidence and refuses recreation',async()=>{
+  const o=await owner(),other=await owner(),{form,target}=await savedBrief(o);await follow(o,form,[newWebsite()]);await grantNew(o,target);
+  if(lost==='delete')await run('DELETE FROM projects WHERE id=?',target);else await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,target);
+  const corrected=await correctBrief(o,form),before=mainCalls;await assert.rejects(()=>taskContext.prepareInformationTask(o.scope,o.user,corrected.submission.id),e=>[403,404].includes(e.status));assert.equal(mainCalls,before);assert.equal((await row('SELECT created_project_id FROM chat_task_progress WHERE turn_id=?',form.submission.id)).created_project_id,target);assert.deepEqual(await taskContext.taskReferences(o.scope,o.user),[]);
+ });
+ for(const boundary of ['dispatch','result'])await test('new-project account permission race at '+boundary+' commits no project',async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o);let raced=false;const racing=interceptDatabase(db,boundary==='dispatch'?/UPDATE standard_ai_requests SET state='dispatched'/:/INSERT INTO projects/,async()=>{if(!raced){raced=true;await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND project_id IS NULL',o.user);}});
+  const r=await follow(o,form,boundary==='dispatch'?[]:[newWebsite()],racing);assert(raced);assert.equal(r.data.continuation.state,'failed');assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);assert.equal((await row('SELECT count(*) n FROM chat_task_progress WHERE task_id=?',target)).n,0);
+ });
+ await test('new-project late task change rolls back both creation and result custody',async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o);let raced=false;const racing=interceptDatabase(db,/INSERT INTO projects/,async()=>{if(!raced){raced=true;await run('UPDATE chat_interaction_tasks SET revision=revision+1 WHERE id=?',target);}});const r=await follow(o,form,[newWebsite()],racing);assert(raced);assert.equal(r.data.continuation.state,'failed');assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);
+ });
+ await test('new-project lost final acknowledgment recovers its creation without replay',async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o);let lost=false;const lossy=interceptDatabase(db,/INSERT INTO projects/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost new-project acknowledgment');}});const r=await follow(o,form,[newWebsite()],lossy);assert(lost);assert.equal(r.data.continuation.state,'succeeded');const before=mainCalls;await json(o,'/api/chat/interactions/v1/continue',r.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM projects WHERE id=?',target)).n,1);
+ });
+ await test('new-project unsupported workload can remain a question without a substitute website',async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o,{name:'Video tool',purpose:'A video processing server.'},'Create a video processing service.');const r=await follow(o,form,[body=>{assert.match(JSON.stringify(body),/Never replace an application, CMS or provider request with a website/);return taskReply('This website adapter cannot create the video service. No project was created.',null,{state:'active',summary:'Video processing needs an admitted workload adapter; no website substitution.',openQuestions:[]});}]);assert.equal(r.data.continuation.state,'succeeded');assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);
+ });
+ for(const change of ['name','purpose','other-project','publish'])await test('new-project task rejects '+change+' substitutions',async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o);let action=newWebsite();if(change==='name')action.config.name='Unrequested name';if(change==='purpose')action.purpose='Unrequested purpose';if(change==='other-project')action={kind:'specification',operation:'read',projectId:o.project};if(change==='publish')action={kind:'review',operation:'publish',targetId:o.project};const r=await follow(o,form,[action]);assert.equal(r.data.continuation.state,'failed');assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);
  });
  console.log(`Chat model continuation: ${cases} actual-handler scenarios passed; ${mainCalls} scripted main calls, ${ackCalls} ack calls. No external model, publication or payment.`);
 }finally{globalThis.fetch=originalFetch;await Promise.allSettled(background);await fixture.close();}

@@ -26,10 +26,11 @@ export async function reconcileInformationTask(db:D1Database,user:string,submiss
   // same transaction that releases the task, leaving provider cost unresolved.
   await db.batch([
    interactionGuard(db,`EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND status='uncertain' AND input_tokens IS NULL AND output_tokens IS NULL)
+    AND NOT EXISTS(SELECT 1 FROM chat_task_progress WHERE turn_id=? AND created_project_id IS NOT NULL)
     AND NOT EXISTS(SELECT 1 FROM site_versions WHERE id=?)
     AND NOT EXISTS(SELECT 1 FROM project_spec_creations WHERE id=?)
     AND NOT EXISTS(SELECT 1 FROM project_spec_proposals WHERE id=?)
-    AND NOT EXISTS(SELECT 1 FROM project_spec_chat_links WHERE turn_id=? OR proposal_id=?)`,[submissionId,user,submissionId,submissionId,submissionId,submissionId,submissionId]),
+    AND NOT EXISTS(SELECT 1 FROM project_spec_chat_links WHERE turn_id=? OR proposal_id=?)`,[submissionId,user,submissionId,submissionId,submissionId,submissionId,submissionId,submissionId]),
    db.prepare("UPDATE chat_interaction_continuations SET state='failed',reason='unavailable',finished_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND state='unknown'").bind(submissionId)
   ]);
  }

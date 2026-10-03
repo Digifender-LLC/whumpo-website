@@ -43,7 +43,7 @@ try{
    const revised=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,cleared));
    assert(revised.envelope.definition.fields.every(f=>!f.default));
    const again=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,revised));assert(again.envelope.definition.fields.every(f=>!f.default));
-   const retained=(await store.readInteraction(o.scope,o.user,form.envelope.id)).submission;assert.deepEqual({...retained,continuation:null},{...submitted.submission,continuation:null});if(template==='project-select@1'){assert.equal(retained.continuation.state,'failed');assert.equal(retained.continuation.reason,'stopped');}
+   const retained=(await store.readInteraction(o.scope,o.user,form.envelope.id)).submission;assert.deepEqual({...retained,continuation:null},{...submitted.submission,continuation:null});if(template!=='choice@1'){assert.equal(retained.continuation.state,'failed');assert.equal(retained.continuation.reason,'stopped');}
   }
  });
  await test('maintained writing choices reject forged options, unsupported clients and invalid selections',async()=>{
@@ -71,7 +71,7 @@ try{
   assert.deepEqual((await json(o,'export')).turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction.submission.answers,{tone:'professional'});
  });
  await test('fixed maintained issuance and exact origin replay',async()=>{
-  const o=await owner(),{form,input}=await issue(o);assert.equal(form.projectName,null);assert.equal(form.envelope.scope.projectId,null);assert.equal(form.envelope.definition.continuationBinding,null);assert.deepEqual(form.envelope.definition.fields.map(f=>f.id),['name','purpose']);
+  const o=await owner(),{form,input}=await issue(o);assert.equal(form.projectName,null);assert.equal(form.envelope.scope.projectId,null);assert.equal(form.envelope.definition.continuationBinding,'agent.task-continue@1');assert.deepEqual(form.envelope.definition.fields.map(f=>f.id),['name','purpose']);
   assert.equal((await store.issueProjectIntake(o.scope,o.user,input)).envelope.id,form.envelope.id);
   await denies(()=>store.issueProjectIntake(o.scope,o.user,{...input,template:'project-select@1'}));
   for(const extra of [{questions:['Password?']},{defaults:{name:'secret'}},{projectId:id()},{template:'custom@1'}])await assert.rejects(()=>store.issueProjectIntake(o.scope,o.user,{...input,...extra}),e=>e.code==='SHAPE');
@@ -82,13 +82,14 @@ try{
   await json(o,'interactions/v1/mutate',draft);const current=await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client});assert.deepEqual(current.draft,draft.answers);
   const submit=request(current),before=await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user);const saved=await json(o,'interactions/v1/mutate',submit);assert.equal(saved.requestId,submit.requestId);
   assert.deepEqual(await json(o,'interactions/v1/mutate',submit),saved);await json(o,'interactions/v1/mutate',{...submit,answers:{...submit.answers,name:'Changed'}},409);
-  const submitted=await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client});assert.deepEqual(submitted.submission.answers,submit.answers);assert.equal(submitted.submission.continuation,null);assert.equal(submitted.draft,null);
-  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations WHERE id=?',submit.requestId)).n,0);
-  await assert.rejects(()=>run('INSERT INTO chat_interaction_continuations(id) VALUES(?)',submit.requestId),/chat_interaction_changed/);
-  for(const action of ['continue','stop','reconcile'])await json(o,'interactions/v1/'+action,{version:1,submissionId:submit.requestId,...(action==='continue'?{expectedChatRevision:before.revision}:{})},409);
+  const submitted=await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client});assert.deepEqual(submitted.submission.answers,submit.answers);assert.equal(submitted.submission.continuation.state,'not-started');assert.equal(submitted.draft,null);
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations WHERE id=?',submit.requestId)).n,1);
+  await assert.rejects(()=>run('INSERT INTO chat_interaction_continuations(id) VALUES(?)',submit.requestId),/chat_interaction_changed|UNIQUE/);
+  await json(o,'interactions/v1/continue',{version:1,submissionId:submit.requestId,expectedChatRevision:before.revision},503);
+  for(const action of ['stop','reconcile']){const result=await json(o,'interactions/v1/'+action,{version:1,submissionId:submit.requestId});assert.equal(result.continuation.reason,'stopped');}
   assert.deepEqual(await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user),before);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
-  const history=await json(o,'history?before=10000'),fact=history.turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction;assert(presentation.readHistoryInteraction(fact));assert.equal(fact.submission.continuation,null);
-  assert.equal((await json(o,'export')).turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction.submission.continuation,null);
+  const history=await json(o,'history?before=10000'),fact=history.turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction;assert(presentation.readHistoryInteraction(fact));assert.equal(fact.submission.continuation.reason,'stopped');
+  assert.equal((await json(o,'export')).turns.find(t=>t.id===form.envelope.scope.originTurnId).interaction.submission.continuation.reason,'stopped');
   assert.deepEqual((await store.listInteractions(o.scope,o.user,{version:1,projectId:null,limit:20,before:null})).items,[]);
  });
  await test('lost issuance and submission acknowledgments recover without duplicate work',async()=>{
@@ -155,9 +156,9 @@ try{
  });
  await test('correcting a submitted brief preserves its immutable receipt and starts no work',async()=>{
   const o=await owner(),{form}=await issue(o),submit=request(form);const receipt=await store.mutateInteraction(o.scope,o.user,submit),before=await store.readInteraction(o.scope,o.user,form.envelope.id),input=await replacement(o,before),next=await store.replaceProjectIntake(o.scope,o.user,input);
-  assert.deepEqual(Object.fromEntries(next.envelope.definition.fields.map(f=>[f.id,f.default.value])),submit.answers);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission,before.submission);assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).replacementInteractionId,next.envelope.id);
+  assert.deepEqual(Object.fromEntries(next.envelope.definition.fields.map(f=>[f.id,f.default.value])),submit.answers);const retained=(await store.readInteraction(o.scope,o.user,form.envelope.id)).submission;assert.deepEqual({...retained,continuation:null},{...before.submission,continuation:null});assert.equal(retained.continuation.reason,'stopped');assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).replacementInteractionId,next.envelope.id);
   assert.deepEqual(await store.mutateInteraction(o.scope,o.user,submit),receipt);const revised=request(next,'submit',{name:'Revised garden',purpose:'A new submitted description.'});await store.mutateInteraction(o.scope,o.user,revised);
-  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations c JOIN chat_interaction_submissions s ON s.id=c.id WHERE s.user_id=?',o.user)).n,0);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,0);
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations c JOIN chat_interaction_submissions s ON s.id=c.id WHERE s.user_id=?',o.user)).n,2);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,0);
   assert.equal((await store.replaceProjectIntake(o.scope,o.user,input)).envelope.id,next.envelope.id);await denies(()=>store.replaceProjectIntake(o.scope,o.user,{...input,expectedAnswerRevision:0}));
  });
  await test('correction carries owned selection but drops a removed or transferred default',async()=>{

@@ -39,7 +39,7 @@
     "fields": [
       {"id": "name", "type": "text", "label": "Project name", "help": "", "required": true, "binding": "answer.value@1", "constraints": {"maxLength": 100}},
       {"id": "purpose", "type": "long-text", "label": "What should it do?", "help": "", "required": true, "binding": "answer.value@1", "constraints": {"maxLength": 1000}}
-    ], "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": null
+    ], "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": "agent.task-continue@1"
   },
   "projectSelection": {
     "version": 1, "kind": "form", "template": "project-select@1", "title": "Choose your project",
