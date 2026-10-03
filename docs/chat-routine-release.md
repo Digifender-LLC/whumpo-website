@@ -1,6 +1,14 @@
 # Routine Chat test release — October 3, 2026 UTC
 
-## Current correction release: deployed, task resumption still fails
+## Current task-status release: conversational steps pass, final browser verification open
+
+Release `6edf35f2-f64a-435f-85c8-693a717e5d24` deploys source `0994c52` on the unchanged current database/schema. All four exact Worker/binding/schema/39-asset checks pass: runtime `0a0b889d-1000-42da-a787-0daf1776c1b4`, apps `1cf56906-0cb8-4217-8ec0-b68308fee7a9`, sites `30737e53-c29c-4ea7-8ebc-1cb2b450a270`, platform `913dcbab-56cc-4beb-a041-a130aabd39d4`.
+
+All seven real Muse/deployed-browser conversational steps passed, including exact pending-review task resumption, no extra proposals and no replay inference. The run then failed its post-reload 360px visibility assertion after `scrollIntoViewIfNeeded`; the heading was at the bottom of the conversation. The old probe did not retain geometry, so its precise failed comparison is unknown. No browser page errors occurred. Seven main receipts/four lookups and four uncertain acknowledgment receipts were recorded. Synthetic cleanup passed; post-model second-key/logout and final aggregate assertions were not reached. The overall report remains failed at `read-reload-and-mobile` and is preserved privately under `routine-chat-task-status-live-6edf35f2-f64a-435f-85c8-693a717e5d24`.
+
+The shared browser capture now explicitly positions the picker after phone reflow and checks the heading AND selected control inside the conversation, the selected name, 44px touch height and no horizontal overflow. It reports geometry on failure. Actual Worker/current-local-D1/built-browser selected-task verification passes with five scripted main calls, lost-response/reload recovery and 360/390px captures after resumption. No product UI/runtime change was made for that fixture correction. A fresh full deployed run remains required before acceptance and old-database retirement. Earlier attempts are retained below; #97 and parent #95 remain open.
+
+## Earlier correction release (superseded runtime)
 
 Release `8f6cb76e-2eac-4b6b-94ee-2b41910fed88` deploys source `c5ab256` against the same current database and 175-table/798-object schema. All four deployments and exact bindings/assets/schema passed. Worker versions: runtime `4f0647d1-08d8-4e15-9c7e-9b6a9f95bb44`, apps `f38fb0ed-5344-4566-a2cf-e24bfc546415`, sites `c7c68a3d-deba-40c0-86cf-b88b332234ae`, platform `da7460bb-c0dc-4008-8ba5-c3ad98dc0bd3`.
 
