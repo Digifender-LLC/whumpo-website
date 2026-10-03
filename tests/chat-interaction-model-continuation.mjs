@@ -10,7 +10,8 @@ const fixture=await databaseFixture({allowedArguments:['--intake-only']}),{db}=f
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-only',protocol:'responses'};
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:config.baseURL,AI_MODEL:config.model,AI_PROTOCOL:config.protocol,AI_API_KEY:config.apiKey};
-let queue=[],mainCalls=0,ackCalls=0,cases=0;const requests=[],background=[],originalFetch=globalThis.fetch;
+let queue=[],mainCalls=0,ackCalls=0,cases=0;const requests=[],background=[],originalFetch=globalThis.fetch,originalWarn=console.warn,warnings=[];
+console.warn=(message)=>{warnings.push(String(message));};
 const response=action=>Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'UNTRUSTED_MODEL_PROSE',action})}]}],usage:{input_tokens:100,output_tokens:200}});
 globalThis.fetch=async(url,init)=>{
  assert.equal(String(url),config.baseURL+'/responses','Unexpected external request');
@@ -329,6 +330,21 @@ try{
  });
  for(const change of ['name','purpose','other-project','publish'])await test('new-project task rejects '+change+' substitutions',async()=>{
   const o=await owner(),{form,target}=await savedBrief(o);let action=newWebsite();if(change==='name')action.config.name='Unrequested name';if(change==='purpose')action.purpose='Unrequested purpose';if(change==='other-project')action={kind:'specification',operation:'read',projectId:o.project};if(change==='publish')action={kind:'review',operation:'publish',targetId:o.project};const r=await follow(o,form,[action]);assert.equal(r.data.continuation.state,'failed');assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);
+  const warning=JSON.parse(warnings.at(-1));assert.equal(warning.event,'ai_proposal_rejected');assert.equal(warning.reason,change==='name'?'task_name':change==='purpose'?'task_purpose':'task_action');assert.equal(warning.task,'project-intake');
+ });
+ for(const [defect,reason]of [['extra-action-key','project_shape'],['missing-config-field','project_config'],['invalid-task-memory','task_progress'],['missing-task-questions','task_progress'],['invalid-envelope','proposal_shape']])await test('new-project rejection reports only fixed diagnostics for '+defect,async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o),action=newWebsite(),canary='PRIVATE_MODEL_DIAGNOSTIC_CANARY';let response;
+  if(defect==='extra-action-key')action[canary]=canary;
+  if(defect==='missing-config-field'){delete action.config.photos;action.config.aboutText=canary;}
+  if(defect==='invalid-task-memory')response=taskReply(canary,action,{state:canary,summary:canary,openQuestions:[]});
+  if(defect==='missing-task-questions')response=taskReply(canary,action,{state:'finished',summary:canary});
+  if(defect==='invalid-envelope')response=taskReply('',action);
+  const before=warnings.length,r=await follow(o,form,[response??action]);
+  assert.equal(r.data.continuation.state,'failed');assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);assert.equal(warnings.length,before+1);
+  const warning=JSON.parse(warnings.at(-1));assert.equal(warning.reason,reason);assert.equal(warning.task,'project-intake');
+  assert.deepEqual(Object.keys(warning).sort(),['elapsedMs','event','operation','reason','task']);assert.doesNotMatch(warnings.at(-1),/PRIVATE_MODEL_DIAGNOSTIC_CANARY|Neighborhood Garden|seasonal planting|synthetic-only|UNTRUSTED_MODEL_PROSE/);
+  const calls=mainCalls;await json(o,'/api/chat/interactions/v1/continue',r.input);assert.equal(mainCalls,calls);assert.equal(warnings.length,before+1);
+  await run('DELETE FROM users WHERE id=?',o.user);
  });
  console.log(`Chat model continuation: ${cases} actual-handler scenarios passed; ${mainCalls} scripted main calls, ${ackCalls} ack calls. No external model, publication or payment.`);
-}finally{globalThis.fetch=originalFetch;await Promise.allSettled(background);await fixture.close();}
+}finally{globalThis.fetch=originalFetch;await Promise.allSettled(background);console.warn=originalWarn;await fixture.close();}
