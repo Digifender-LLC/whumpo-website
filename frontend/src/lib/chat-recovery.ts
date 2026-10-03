@@ -1,3 +1,4 @@
+import {clearChatLocation} from './chat-location';
 import {clearPhotoRecovery} from './photo-upload-recovery';
 import {chatControl} from '../../../src/chat-controls';
 import {clearInteractionRecovery} from './interaction-recovery';
@@ -38,4 +39,4 @@ export function writeRecovery(store:Store,owner:string,value:Recovery):void{
  if(!value.draft&&!value.pending){store.removeItem(recoveryKey);return;}
  const raw=JSON.stringify({version:2,owner,draft:value.draft,pending:value.pending,updatedAt:value.updatedAt});if(raw.length>maxRecord)throw Error('Recovery is too large');store.setItem(recoveryKey,raw);
 }
-export function clearChatRecovery(){clearInteractionRecovery();clearPhotoRecovery();try{sessionStorage.removeItem(recoveryKey);}catch{/* Storage may be unavailable in this browser. */}}
+export function clearChatRecovery(){clearChatLocation();clearInteractionRecovery();clearPhotoRecovery();try{sessionStorage.removeItem(recoveryKey);}catch{/* Storage may be unavailable in this browser. */}}
