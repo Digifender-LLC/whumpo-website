@@ -52,7 +52,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const { results: history } = task?{results:[]}:await db.prepare("SELECT id,user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' AND ai_context_allowed=1 ORDER BY revision DESC LIMIT 4").bind(userId).all<{id:string;user_text:string;assistant_text:string}>();
   const websiteFollowup=!!context.latest&&history[0]?.id===context.latest.id;
   const focus=task?'website':firstProject?(firstApp?'all':'website'):agentPromptFocus(content,websiteFollowup);
-  const system = task?agentPrompt(context,focus)+'\n'+informationTaskPrompt+'\n'+taskProgressPrompt:pageDesign?appPageDesignPrompt(pageDesign):agentPrompt(context,focus)+(firstProject&&firstApp?`\nThis request is specifically the first private application build for existing project ${firstProject.id}. Use its complete saved purpose and audience. The only allowed actions are capabilities plan and backend buildApplication for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Prefer reference:"private-task-list@1" when it fully fits. Otherwise first request a capability plan recording the missing visitor-transition behavior, then use its planId with source and a non-sensitive synthetic expected-output check derived from the brief. Never substitute a website or CMS, create another project, inspect another service, publish, activate, connect or purchase anything. A successful synthetic check prepares an owner approval only. If the brief needs unavailable capabilities or is too vague to derive a meaningful check, ask before building. One capability planning lookup is available; the complete brief is in context.`:firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is specification with operation:create and all page config fields (including photos:[]) for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
+  const system = task?agentPrompt(context,focus)+'\n'+informationTaskPrompt(task)+'\n'+taskProgressPrompt:pageDesign?appPageDesignPrompt(pageDesign):agentPrompt(context,focus)+(firstProject&&firstApp?`\nThis request is specifically the first private application build for existing project ${firstProject.id}. Use its complete saved purpose and audience. The only allowed actions are capabilities plan and backend buildApplication for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Prefer reference:"private-task-list@1" when it fully fits. Otherwise first request a capability plan recording the missing visitor-transition behavior, then use its planId with source and a non-sensitive synthetic expected-output check derived from the brief. Never substitute a website or CMS, create another project, inspect another service, publish, activate, connect or purchase anything. A successful synthetic check prepares an owner approval only. If the brief needs unavailable capabilities or is too vague to derive a meaningful check, ask before building. One capability planning lookup is available; the complete brief is in context.`:firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is specification with operation:create and all page config fields (including photos:[]) for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
   // Keep each transport message within its limit without dropping system policy.
   // Budget reservations still include every byte across all chunks.
   const messages: ChatMessage[] = [];
@@ -128,7 +128,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     let firstRaw=result.text;
     if(task){
       try{firstRaw=scopedResponse(result.text).raw;}catch(error){await observeInference(db,userId,id,result);throw error;}
-      if(!informationTaskProposalAllowed(firstRaw,task.form.projectId)){await observeInference(db,userId,id,result);throw new ProposalError();}
+      if(!informationTaskProposalAllowed(firstRaw,task)){await observeInference(db,userId,id,result);throw new ProposalError();}
     }
     let resumeRequest;
     try{const candidate=JSON.parse(result.text);if(candidate&&typeof candidate==='object'&&!Array.isArray(candidate)&&Object.keys(candidate).every(k=>['reply','action'].includes(k))&&typeof candidate.reply==='string'&&candidate.reply.trim()&&candidate.reply.length<=2000&&interactionActionRequest(candidate.action)&&candidate.action.operation==='resumeTask')resumeRequest=candidate.action;}catch{}
@@ -140,10 +140,10 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       if(!canFollow)throw new ProposalError();
       try{task=await prepareInformationTask(db,userId,resumeRequest.submissionId,true);}catch{throw new ProposalError();}
       if(task.data.taskId!==resumeRequest.taskId||task.form.projectId!==resumeRequest.projectId)throw new ProposalError();
-      const lookup=await prepareSiteAction(db,userId,id,JSON.stringify({reply:'Read the current website for this task.',action:{kind:'specification',operation:'read',projectId:task.form.projectId}}),task.context,dnsOptions);
+      const lookup=task.newProject?{reply:'This intake task has not created a project yet; use its submitted brief and current clarification.'}:await prepareSiteAction(db,userId,id,JSON.stringify({reply:'Read the current website for this task.',action:{kind:'specification',operation:'read',projectId:task.form.projectId}}),task.context,dnsOptions);
       const next:ChatMessage[]=[];
       const add=(role:'system'|'user',value:string)=>appendContext(role,value,next);
-      add('system',agentPrompt(task.context,'website')+'\n'+informationTaskPrompt+'\n'+taskProgressPrompt+'\nThis is the final model step. The current same-project specification is included below; no further lookup is available. Interpret only the owner request for this saved task.');
+      add('system',agentPrompt(task.context,'website')+'\n'+informationTaskPrompt(task)+'\n'+taskProgressPrompt+'\nThis is the final model step. The current task status is included below; no further lookup is available. Interpret only the owner request for this saved task.');
       add('user',agentWorkspaceData(task.context,'website'));
       add('user',JSON.stringify({kind:'submitted_task_context',data:task.data}));
       const lookupText='inspection' in lookup&&typeof lookup.inspection==='string'?lookup.inspection:lookup.reply;
@@ -177,11 +177,11 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(!open)return {status:200};
     const taskResult=task?scopedResponse(result.text):null;
     if(taskResult)result.text=taskResult.raw;
-    if(task&&!informationTaskProposalAllowed(result.text,task.form.projectId))throw new ProposalError();
+    if(task&&!informationTaskProposalAllowed(result.text,task))throw new ProposalError();
     if(pageDesign&&!appPageDesignProposalAllowed(result.text,pageDesign.projectId))throw new ProposalError();
     if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id,firstApp?'app':'website'))throw new ProposalError();
     if(firstProject&&!await welcomeDraftProject(db,userId,firstProject.id))throw new Error('welcome_first_draft_changed');
-    proposal ??= await prepareSiteAction(db,userId,id,result.text,task?.context??context,dnsOptions,pageDesign??undefined);
+    proposal ??= await prepareSiteAction(db,userId,id,result.text,task?.context??context,dnsOptions,pageDesign??undefined,task?.newProject?task.form.projectId:undefined);
     // Claim in the same transaction as the version and reply, after model validation.
     // This also refuses a project removed while the provider was responding.
     const firstDraftClaim=firstProject&&!firstApp&&proposal.statements.length?[db.prepare('INSERT INTO welcome_first_drafts(turn_id,project_id,user_id) VALUES(?,?,?)').bind(id,firstProject.id,userId)]:[];
@@ -190,7 +190,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       ...(task?informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id):[]),
       ...firstDraftClaim,
       ...proposal.statements,
-      ...(task&&taskResult?[taskProgressStatement(db,userId,id,task,taskResult.progress)]:[]),
+      ...(task&&taskResult?[taskProgressStatement(db,userId,id,task,taskResult.progress,proposal.createdProjectId)]:[]),
       db.prepare("UPDATE chat_turns SET assistant_text = ?, input_tokens = ?, output_tokens = ? WHERE id = ? AND user_id = ?").bind(proposal.reply,result.inputTokens,result.outputTokens,id,userId)
     ]);
     await reconcileChat(db, userId);

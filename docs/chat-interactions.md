@@ -1,6 +1,6 @@
 # Owner Chat interaction contract v1
 
-**October 3 WH-110 source checkpoint:** [routine Chat journeys](chat-routine-journeys.md#selected-project-implementation-checkpoint--october-3-utc) connects maintained project selection to the existing bounded website task continuation. It supersedes the earlier information-only project-selection behavior below in current source. The picker remains account-scoped; saved selection and explicit continuation are separate receipts, and existing forms/reviews never change targets. Additional-project briefs and writing-style forms still only save answers. The source change is not deployed; the current verified deployment is the [WH-109 workspace-view release](workspace-view-release.md). Earlier “current deployment” headings below are dated historical checkpoints.
+**October 3 WH-110 source checkpoint:** [routine Chat journeys](chat-routine-journeys.md#selected-project-implementation-checkpoint--october-3-utc) connects maintained project selection to the existing bounded website task continuation. It supersedes the earlier information-only project-selection and project-brief behavior below in current source. The picker remains account-scoped; saved selection and explicit continuation are separate receipts, and existing forms/reviews never change targets. Additional-project briefs now use the same explicit continuation to clarify or create a first private website through the existing project handler; a server-written task creation locator prevents duplicates across corrections or lost replies. Writing-style forms still only save answers. The source change is not deployed; the current verified deployment is the [WH-109 workspace-view release](workspace-view-release.md). Earlier “current deployment” headings below are dated historical checkpoints.
 
 **October 3 WH-108 acceptance:** [original-scope audit](chat-composition-acceptance.md) accepts the current bounded custom-form and task implementation. It supersedes the earlier source-only/open-WH-108 checkpoints below. Agent-managed views and full owner/model/device acceptance remain WH-109–112; Contributor is still limited to non-sensitive sole-owner testing.
 
@@ -317,6 +317,8 @@ This completes the bounded history/resume handoff under WH-106/#87, with focused
 
 ## Maintained project intake storage — October 2, 2026 UTC
 
+Historical checkpoint: the October 3 WH-110 contract above supersedes the null-continuation behavior for project selection and additional-project briefs. Their submission and explicit model continuation remain separate operations.
+
 The trusted `prepareProjectIntake` / `issueProjectIntake` adapters accept only an existing owned origin turn and `project-brief@1`, `project-select@1` or the fixed writing-style `choice@1`. Initial server-maintained definitions supply the exact questions, limits and no defaults. The correction handoff below can copy earlier explicit user answers. They share the content form's guarded issuance transaction, conversation quotas, immutable request hash, answer CAS, seven-day draft policy and exact recovery. Issuance requires current account-scoped `core.editing/prepare` admission. The prepared statements can be composed with the final Chat result; no arbitrary-definition HTTP endpoint is added.
 
 A project brief records a name (100 characters) and purpose (1,000). Project selection records one current owned project UUID. These account-scoped information requests have no continuation binding: submission stores the immutable answers and receipt, with `continuation:null`. It creates no project, changes no existing form's target, and starts no model, compiler or background work. Continue/stop/reconcile refuse such submissions. The current schema also refuses insertion of a continuation for an information-only definition. Current read/history rejects a missing required content continuation instead of misreporting it as absent work.
@@ -329,6 +331,8 @@ This storage/HTTP handoff for WH-106/#87 is connected to the maintained renderer
 
 
 ## Maintained project intake in Chat — October 2, 2026 UTC
+
+Historical checkpoint: current project selection and briefs use **Save and continue** with separate saved-answer and follow-up receipts. Writing-style answers retain information-only behavior.
 
 The existing inline renderer now admits `project-brief@1` and `project-select@1` alongside website content briefs. Project names/descriptions use the shared required-field validation, seven-day draft recovery, collapse/resume, discard and exact interrupted-request readback. Project selection uses a native HTML select with a 44px minimum target, no automatic first choice, current owner-only names and bounded cursor pages. Loading/failure or an unavailable saved choice prevents saving that selection. Resource reads use abortable account/form/digest query keys and zero inactive cache retention; collapsing or leaving the form releases its resource list. Saved selectors are read-only and resolve current names without changing their immutable answer UUID.
 

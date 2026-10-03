@@ -144,7 +144,7 @@ try{
   await json(o,'/api/chat/interactions/v1/mutate',mutate(intake,'save-draft',{name:'INTAKE_PRIVATE_DRAFT'}));intake=await readForm(o,intake.envelope.id);
   const metadata=await forms.interactionAgentAction(o.scope,o.user,id(),read(intake.envelope.id));assert.doesNotMatch(metadata.inspection,/INTAKE_PRIVATE_DRAFT/);
   const invalid=await forms.interactionAgentAction(o.scope,o.user,id(),{...submitted({...intake,submission:{id:id()}})});assert.equal(invalid.inspection,undefined);
-  const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutate(intake,'submit',{name:'INTAKE_SUBMITTED_NAME',purpose:'INTAKE_SUBMITTED_PURPOSE'}));intake=await readForm(o,intake.envelope.id);assert.equal(mainCalls,before);assert.equal(intake.submission.continuation,null);
+  const before=mainCalls;await json(o,'/api/chat/interactions/v1/mutate',mutate(intake,'submit',{name:'INTAKE_SUBMITTED_NAME',purpose:'INTAKE_SUBMITTED_PURPOSE'}));intake=await readForm(o,intake.envelope.id);assert.equal(mainCalls,before);assert.equal(intake.submission.continuation.state,'not-started');
   assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
   const context=await agent.siteContext(o.scope,o.user);assert.equal(context.submittedForms.length,1);context.submittedForms[0].answers='INTAKE_SUBMITTED_PURPOSE';
   const projected=agent.agentWorkspaceData(context);assert.doesNotMatch(projected,/INTAKE_PRIVATE_DRAFT|INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE/);assert(projected.includes(intake.submission.id));assert(!JSON.parse(agent.agentWorkspaceData(context,'cms')).data.submittedForms);
@@ -169,7 +169,7 @@ try{
    assert.deepEqual(await json(o,'/api/chat/interactions/v1/mutate',input),receipt);
    await json(o,'/api/chat',result.input);assert.equal(mainCalls,before);
    assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
-   assert.equal(await row('SELECT id FROM chat_interaction_continuations WHERE id=?',input.requestId),null);
+   assert.equal((await row('SELECT state FROM chat_interaction_continuations WHERE id=?',input.requestId)).state,'not-started');
   }
  });
  await test('submitted lookup refuses mismatched identity, unowned forms, completed turns and forged action data',async()=>{
@@ -221,8 +221,8 @@ try{
   const o=intakeOwner,before=intake,result=await chat(o,'Let me revise my saved project brief.',[read(before.envelope.id),body=>{assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_NAME|INTAKE_SUBMITTED_PURPOSE|INTAKE_PRIVATE_DRAFT/);return replaceIntake(before);}]);assert.equal(result.calls,2);
   const next=await readForm(o,result.turn.interaction_id);assert.equal(next.previousInteractionId,before.envelope.id);assert.equal(next.envelope.scope.taskId,before.envelope.scope.taskId);assert.equal(next.envelope.scope.projectId,null);assert.deepEqual(next.envelope.definition.fields.map(f=>f.default),[{value:'INTAKE_SUBMITTED_NAME',provenance:'user'},{value:'INTAKE_SUBMITTED_PURPOSE',provenance:'user'}]);
   const context=await agent.siteContext(o.scope,o.user);assert(!context.submittedForms.some(i=>i.interactionId===before.envelope.id));assert(context.interactions.some(i=>i.interactionId===next.envelope.id));
-  assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted(before))).inspection,undefined);assert.deepEqual((await readForm(o,before.envelope.id)).submission,before.submission);
-  await json(o,'/api/chat/interactions/v1/mutate',mutate(next,'submit',{name:'CORRECTED_INTAKE_NAME',purpose:'CORRECTED_INTAKE_PURPOSE'}));intake=await readForm(o,next.envelope.id);assert.equal(intake.submission.continuation,null);
+  assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted(before))).inspection,undefined);const retained=(await readForm(o,before.envelope.id)).submission;assert.deepEqual({...retained,continuation:null},{...before.submission,continuation:null});assert.equal(retained.continuation.reason,'stopped');
+  await json(o,'/api/chat/interactions/v1/mutate',mutate(next,'submit',{name:'CORRECTED_INTAKE_NAME',purpose:'CORRECTED_INTAKE_PURPOSE'}));intake=await readForm(o,next.envelope.id);assert.equal(intake.submission.continuation.state,'not-started');
   const follow=await chat(o,'Use my corrected project brief.',[submitted(intake),body=>{assert.match(JSON.stringify(body),/CORRECTED_INTAKE_PURPOSE/);assert.doesNotMatch(JSON.stringify(body),/INTAKE_SUBMITTED_PURPOSE/);return null;}]);assert.equal(follow.calls,2);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
  });
  await test('agent correction rejects answer injection and wrong-template substitution',async()=>{
@@ -259,7 +259,7 @@ try{
   await json(o,'/api/chat/interactions/v1/mutate',mutate(f,'submit',{name:'Original garden',purpose:'PRIVATE_PURPOSE_BEFORE_PROPOSAL'}));f=await readForm(o,f.envelope.id);
   const result=await chat(o,'Change the proposed name to Garden Studio.',[read(f.envelope.id),()=>proposal(f,{name:'Garden Studio'})]),next=await readForm(o,result.turn.interaction_id);
   assert.deepEqual(next.envelope.definition.fields.map(x=>x.default),[{value:'Garden Studio',provenance:'suggested'},{value:'PRIVATE_PURPOSE_BEFORE_PROPOSAL',provenance:'user'}]);assert.equal(next.submission,null);assert.equal(next.envelope.scope.projectId,null);
-  assert.deepEqual((await readForm(o,f.envelope.id)).submission,f.submission);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
+  assert.deepEqual((await readForm(o,f.envelope.id)).submission,{...f.submission,continuation:{...f.submission.continuation,state:'failed',reason:'stopped'}});assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,1);
   assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted(f))).inspection,undefined);
   assert.equal((await forms.interactionAgentAction(o.scope,o.user,id(),submitted({...next,submission:{id:id()}}))).inspection,undefined);
  });

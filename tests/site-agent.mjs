@@ -50,5 +50,15 @@ try{
   const invalid=await send(scope(fresh.id),fresh,{kind:'specification',operation:'change',projectId:fresh.project,expectedRevision:2,operations});assert.equal(await db.prepare('SELECT id FROM project_spec_proposals WHERE id=?').bind(invalid).first(),null);assert.match((await db.prepare('SELECT assistant_text FROM chat_turns WHERE id=?').bind(invalid).first()).assistant_text,/not supported/);
  }
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM site_versions WHERE project_id=?').bind(other.project).first()).n,0);
+ // Ordinary Chat still binds new projects to its own request; a submitted task
+ // target is a server-only extension, never a model-controlled project ID.
+ const beforeProject=(await readChat(scope(owner.id),owner.id)).state.revision;
+ const created=await send(scope(owner.id),owner,{kind:'project',purpose:'Bread classes',config:{...config,name:'Bread school'}});
+ assert.equal((await db.prepare('SELECT owner_user_id FROM projects WHERE id=?').bind(created).first()).owner_user_id,owner.id);
+ assert.equal((await db.prepare('SELECT project_id FROM project_spec_creations WHERE id=?').bind(created).first()).project_id,created);
+ assert.equal(await db.prepare('SELECT turn_id FROM chat_task_progress WHERE turn_id=?').bind(created).first(),null);
+ assert.doesNotMatch((await db.prepare('SELECT assistant_text FROM chat_turns WHERE id=?').bind(created).first()).assistant_text,/Project ID:/);
+ const callsBeforeReplay=calls;await sendAIChat(scope(owner.id),owner.id,created,beforeProject,'Make a warm bakery site',cfg,provider(null));assert.equal(calls,callsBeforeReplay);
+ assert.equal((await db.prepare('SELECT count(*) n FROM projects WHERE id=?').bind(created).first()).n,1);
  console.log('Site agent passed: current first saves and exact reviewed edits, retired action/schema refusal, ownership, escaped output, immutable ancestry, lost creation acknowledgement and non-billable retries. Scripted interpretation only.');
 }finally{await store.close();}
