@@ -1,3 +1,4 @@
+import {SiteSafetyPage} from './site-safety';
 import {SavedChatTurn} from './saved-chat-turn';
 import {useChatLocation} from './use-chat-location';
 import {AccountHelp,AccountHelpProvider,AccountSecurityPage} from './account-help';
@@ -45,7 +46,7 @@ export const useWorkspace=()=>useContext(Context);
 export function Workspace(){
  useMobileViewport();
  const location=useRouterState({select:s=>s.location});
- return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><AccountHelpProvider>{location.pathname==='/workspace/security'?<AccountSecurityPage/>:<WorkspaceProfile/>}</AccountHelpProvider></IdentityGate>;
+ return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><AccountHelpProvider>{location.pathname==='/workspace/security'?<AccountSecurityPage/>:location.pathname==='/workspace/safety'?<SiteSafetyPage/>:<WorkspaceProfile/>}</AccountHelpProvider></IdentityGate>;
 }
 function WorkspaceProfile(){
  const profile=useQuery({queryKey:['session'],queryFn:async()=>{

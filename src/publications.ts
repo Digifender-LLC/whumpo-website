@@ -4,6 +4,14 @@ export const siteURL = (projectId: string) => `https://${projectId}.whumpo.site`
 export type PublicationCommand = {reply:string; statements:D1PreparedStatement[]};
 const uuid = /^[0-9a-f-]{36}$/;
 
+/** Shared effect: schema triggers own the exact revision, expiry, receipt and
+ * publication-side effects. Chat additionally binds its newly inserted turn. */
+export function publicationConfirmationStatement(db:D1Database,user:string,review:string,confirmation:string,chatTurn?:string){
+ return chatTurn
+  ? db.prepare("UPDATE publication_actions SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(confirmation,review,user,chatTurn,user)
+  : db.prepare("UPDATE publication_actions SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND kind='unpublish' AND status='pending'").bind(confirmation,review,user);
+}
+
 /** Planning and confirmation are distinct. All writes are gated on the new chat turn. */
 export async function publicationCommand(db:D1Database,userId:string,turnId:string,command:string):Promise<PublicationCommand | undefined> {
  const [verb,arg,...rest]=command.split(/\s+/);
@@ -20,7 +28,7 @@ export async function publicationCommand(db:D1Database,userId:string,turnId:stri
   if (!action) return result('Confirmation not found. Request a fresh publication review.');
   if(action.status==='applied')return result("That confirmation was already applied. Ask for the project’s current status.");
   if(action.expires_at<=new Date().toISOString())return result("That review expired. Ask for a fresh publication, restore or withdrawal review.");
-  return result(action.kind==='unpublish'?'The site is unpublished. Saved previews remain private and available.':`The reviewed version is published at ${siteURL(action.project_id)}\nVersion: ${action.version_id}\nAvailability has not been checked yet.`,[db.prepare("UPDATE publication_actions SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(turnId,arg,userId,turnId,userId)]);
+  return result(action.kind==='unpublish'?'The site is unpublished. Saved previews remain private and available.':`The reviewed version is published at ${siteURL(action.project_id)}\nVersion: ${action.version_id}\nAvailability has not been checked yet.`,[publicationConfirmationStatement(db,userId,arg,turnId,turnId)]);
  }
  if(verb==='/restore'&&!arg)return result("Choose the exact saved version you want to restore.");
  const target=verb==='/unpublish'
