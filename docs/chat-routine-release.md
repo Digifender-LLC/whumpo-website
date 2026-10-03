@@ -2,7 +2,7 @@
 
 **Subsequent acceptance:** [the WH-110 original-scope audit](chat-routine-acceptance.md) accepts all admitted routine adapters and recovery. The releases below retain their exact observations and earlier open-status checkpoints; no new runtime deployment was needed for that test/documentation audit. Provider, physical-device, customer and general model-quality gates remain separate.
 
-**Subsequent platform update:** source `4b853fb` deploys owner entry/recovery focus, landing bypass/contrast and truthful preview wording as platform `a0467ecf-f106-46f8-8e6d-0bd827f1d3be`. [Exact readback and acceptance boundaries](owner-usability-audit.md#deployment) verify unchanged other Workers/schema/bindings and all 40 current public assets. The coordinated release below remains the backend baseline.
+**Subsequent platform update:** source `980ae5f` deploys late-welcome focus protection and actual Chat reply announcements as platform `4a147e32-7185-4309-b794-eeb7c4140b43`, retaining the earlier entry/recovery/landing improvements. [Exact readback and acceptance boundaries](owner-usability-audit.md#deployment) verify unchanged other Workers/schema/bindings and all 40 current public assets at 2026-10-03T17:28:42.997Z. The coordinated release below remains the backend baseline.
 
 ## Previous coordinated release: Chat connection handoffs and saved status
 
