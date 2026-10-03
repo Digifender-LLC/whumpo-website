@@ -1,6 +1,37 @@
 # Routine Chat test release — October 3, 2026 UTC
 
-## Current release: task-linked private photos
+## Current release: Chat connection handoffs and saved status
+
+Release `5dfb930c-7241-4516-97fd-dff9f461de1e`, runtime source `577702e510c99c6038812585516dda9b30ef66ea`, passes its eight-stage deployed journey at **13:50 UTC** and final independent readback at **13:51 UTC**. Four exact Worker identities, database/service/secret-binding names, the **177-table/806-object schema** and **39 assets** match the archived candidate. Current database is `whumpo-control-chat-connections-test` (`99b6b952-c6a4-4596-84c9-980d17933b90`).
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `112fd92c-2a0c-47d4-8fb4-1199a295e511` |
+| apps | `900d9770-c4bd-4187-9416-89643f418dcd` |
+| sites | `579befb0-3481-4cba-ae12-2d86c36a6618` |
+| platform | `64b8f1c2-59d9-463f-95cb-4224f564b77a` |
+
+The real-Muse/deployed-Chromium journey uses a signed synthetic identity, actual onboarding HTTP and a synthetic private website. Explicit selection issues the exact task's maintained Cloudflare controls. The browser signs reauthentication, deliberately drops the successful OAuth-start reply and recovers pending status without another start or inference. A second explicit start navigates to an intercepted synthetic provider page; no request reaches the consent provider. An access-denied callback returns to the exact original card. After 101 newer synthetic messages, reload and another tab still recover that origin through current owned reads.
+
+A natural same-task question selects the terminal saved-status tool. The server reports no saved connection, distinguishes that observation from provider/callback proof, preserves the task association and excludes the reply from later model context. Sending the message keeps the old card's locator. A deliberately unavailable status route hides the previous observation and authorization control; explicit read-only retry recovers without inference or OAuth. Revoking the scoped connect grant disables authorization and survives reload. Both generated keys, logout and session revocation pass. The private website version is unchanged; publication, token-vault and exchange counts remain zero. All eight stages pass with no browser errors, and the 360/390px captures were inspected. These are browser/device-emulation checks, not physical-phone acceptance.
+
+There are two observed orchestrator request receipts and one uncertain acknowledgment; the same-task lookup includes its separate model dispatch. WH-020 retains acknowledgment and general model reliability. This deployed probe covers Cloudflare cancellation and no-authorization status. The [local evidence](chat-connection-handoffs.md) separately covers both providers, active/expired/revoking/unknown states and successful synthetic token-exchange response loss: 21 handoff cases and 21 terminal-status cases on each of SQLite/local D1, complete nine-call built-browser journey, two three-call real-Muse conversations, and focused existing continuation/agent/provider/lifecycle/type/build regressions. GitHub configuration and actual customer provider consent are not activated by this release.
+
+The first deployed probe passed model issuance and lost-start recovery, then timed out waiting for the synthetic consent-page heading; cleanup succeeded. The retained second verifier gives that intercepted HTML an explicit UTF-8 encoding and ASCII heading and records failure diagnostics. The complete rerun passes on the **same runtime release**, without weakening a runtime guard or changing Whumpo source. The original failure remains in its report/log; it is not reported as an initial pass.
+
+The owner-authorized cutover checked every current table, found no accounts/projects/provider or billing obligations and empty private R2, fenced the unused invitation and initialized a distinct empty database. The existing `test-20261002` / revision 1 key policy was initialized through the verified encrypted-backup tool; independent off-device custody remains unaccepted. After the journey and synthetic cleanup, all **14 account Worker bindings** were checked before retiring the unreferenced `d811d64e-74b2-4d73-999d-a384d6e809f1` baseline. Other databases are preserved. Final state has zero users/projects/photos/cleanup/interactions, empty R2 and one fresh unused invitation stored privately. No migration, old reader, real provider consent/token exchange, remote customer publication, real billing, new paid service, CMS testing or scanner work occurred.
+
+Private evidence:
+
+- `.secrets/connection-status-final-verification.json`: final exact release/schema/assets, cleanup, retirement, key policy and invitation readback.
+- `.secrets/connection-status-live-5dfb930c-7241-4516-97fd-dff9f461de1e-attempt-2/report.json` and captures: successful eight-stage deployed journey.
+- `.secrets/connection-status-live-5dfb930c-7241-4516-97fd-dff9f461de1e/report.json`: preserved first attempt and confirmed cleanup.
+- `.secrets/connection-status-database-retirement.json`, `connection-status-key-initialization.json` and `connection-status-invitation.json`: verified operator receipts; no public secret values.
+- `.secrets/task-connection-status-verification.json`: the source/local checkpoint.
+
+This accepts the bounded consent/status adapter portion of **WH-110C/#98**. Broader outage/recovery and remaining routine scope stay open; #99 retains the full original-scope audit and #95 stays open. Parent count remains **24/122**. CSAM, Daybreak and CMS testing remain deferred.
+
+## Previous release: task-linked private photos
 
 Release `8f92ad86-e7e1-4013-9923-785ba410adc3`, runtime source `706e85abef9b19e369a0115b9693e7ca97d2386d`, passed its deployed journey **October 3 at 11:49 UTC** and final readback **11:51 UTC**. All four Worker identities, database/service/secret-binding names, the **176-table/802-object schema** and **39 assets** match the archive. Current database is `whumpo-control-chat-media-test` (`d811d64e-74b2-4d73-999d-a384d6e809f1`).
 
