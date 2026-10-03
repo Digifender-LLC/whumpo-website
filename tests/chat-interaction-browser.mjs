@@ -1,6 +1,7 @@
 import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 // Actual current Worker + built workspace. Identity rows and website content are
-// synthetic; no passkey ceremony, live provider, inference or remote schema use.
+// synthetic; virtual passkeys and scripted inference only. No real provider,
+// physical-device acceptance or remote schema use.
 import assert from 'node:assert/strict';
 Error.stackTraceLimit=0;
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
@@ -16,7 +17,7 @@ import {hearOrca} from './helpers/orca-output.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp('/tmp/whumpo-form-browser-'),html=`frontend/form-fixture-${process.pid}.html`;
-let browser,server,fixture,page,phase='build',network=0,loseOperation=null,receiptsUnavailable=false,holdOperation=null,releaseHeld=null,cardUnavailable=false,comparisonUnavailable=false,resourcesUnavailable=false,loseContinuation=false,loseConnectionStart=false,loseConnectionCallback=false,connectionStatusUnavailable=false,photoStatusUnavailable=false,losePhotoUpload=false,stopPhotoUpload=false;
+let browser,server,fixture,page,phase='build',network=0,loseOperation=null,receiptsUnavailable=false,holdOperation=null,releaseHeld=null,cardUnavailable=false,comparisonUnavailable=false,resourcesUnavailable=false,loseContinuation=false,loseConnectionStart=false,loseConnectionCallback=false,connectionStatusUnavailable=false,photoStatusUnavailable=false,losePhotoUpload=false,stopPhotoUpload=false,loseChatAction=false,releaseModel=null;
 const originalFetch=globalThis.fetch,requests=[],errors=[],modelSteps=[],background=[],activeRequests=new Set();let modelCalls=0,consentTokenCalls=0,resultSummary;
 try{
  await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><link rel="icon" type="image/svg+xml" href="/brand/whumpo-favicon-rounded.svg"><title>Whumpo form acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script><script type="module">import {queryClient} from "/@fs/'+resolve('frontend/src/lib/api.ts')+'";window.fixtureQueryKeys=()=>queryClient.getQueryCache().getAll().map(q=>q.queryKey);</script></body></html>');
@@ -24,7 +25,7 @@ try{
  const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts','src/site-host.ts']);
  const host=(await modules.module('src/site-host.ts')).default;let siteChecks=0;
  const worker=(await modules.module('src/index.ts')).default,store=await modules.module('src/chat-interactions/store.ts'),site=await modules.module('src/project-specification/store.ts');
- fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only','--media-only','--consent-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+ fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only','--media-only','--consent-only','--recovery-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
  async function owner(){
   const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=crypto.randomUUID();
   await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -78,6 +79,7 @@ try{
    if(response.status===500)errors.push('Unexpected HTTP 500: '+url.pathname);
    if(loseConnectionCallback&&url.pathname==='/api/connections/cloudflare/callback'&&response.status===303){loseConnectionCallback=false;res.writeHead(503,{'content-type':'text/html','cache-control':'no-store'}).end('<h1>Synthetic lost callback response</h1>');return;}
    if(loseConnectionStart&&url.pathname==='/api/connections/cloudflare/start'&&response.status===200){loseConnectionStart=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
+   if(loseChatAction&&url.pathname==='/api/chat/actions'&&response.status===200){loseChatAction=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
    if(loseContinuation&&url.pathname.endsWith('/interactions/v1/continue')&&response.status===200){loseContinuation=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
    if(losePhotoUpload&&req.method==='PUT'&&url.pathname.includes('/files/')&&response.status===200){losePhotoUpload=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
    if(holdOperation&&input?.operation===holdOperation&&url.pathname.endsWith('/mutate')){holdOperation=null;await new Promise(done=>{releaseHeld=done;});}
@@ -307,6 +309,43 @@ try{
 
  await page.setViewportSize({width:390,height:844});env.ENVIRONMENT='local';
  }
+ async function recoveryJourney(){
+  await selectedProjectJourney();
+  const baseCalls=modelCalls,originalA=(await site.readSpecification(a.scope,a.user,a.project)).versionId;
+  const formCard=id=>page.locator('[data-interaction-id="'+id+'"]');
+  const followState=id=>row('SELECT state,reason FROM chat_interaction_continuations WHERE id=?',id);
+  const untouched=async()=>{assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,2);assert.equal((await site.readSpecification(a.scope,a.user,a.project)).versionId,originalA);assert.equal((await row('SELECT count(*) n FROM publications WHERE version_id IS NOT NULL')).n,0);};
+  const newForm=async text=>{const f=await issue(c,null,'custom@1');await page.reload();await formCard(f.envelope.id).locator('[data-interaction-field="area"] input').fill(text);await formCard(f.envelope.id).getByRole('radio',{name:'No',exact:true}).check();return f;};
+  const saved=id=>store.readInteraction(c.scope,c.user,id);
+  const failed='The task follow-up could not finish. Your answers are saved; ask Whumpo to continue with a fresh form.';
+  const snapshot=async(id,label)=>{for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});await formCard(id).locator('p[tabindex="-1"]').last().evaluate(e=>{window.scrollTo(0,0);const scroll=e.closest('.chat-scroll');scroll.scrollTop+=e.getBoundingClientRect().top-scroll.getBoundingClientRect().top-24;});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-recovery-'+label+'-'+width+'.png'});}};
+  phase='existing private approval survives inference outage and lost committed response';
+  const key=authenticator(origin),cdp=await context.newCDPSession(page);await run("INSERT INTO identity_credentials VALUES(?,?,?,0,'Recovery fixture passkey','active',NULL,unixepoch(),NULL)",key.id,c.user,key.publicKey);await cdp.send('WebAuthn.enable');
+  const {authenticatorId}=await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});await cdp.send('WebAuthn.addCredential',{authenticatorId,credential:key.virtualCredential('localhost',c.user)});
+  const actionCount=()=>requests.filter(r=>r.path==='/api/chat/actions').length,beforeActions=actionCount();
+  loseChatAction=true;await page.getByRole('button',{name:'Save reviewed private version',exact:true}).click();await page.getByText('Saved private website revision 2.',{exact:false}).waitFor({timeout:60000});assert.equal(modelCalls,baseCalls);assert.equal(actionCount(),beforeActions+1);assert.equal(loseChatAction,false);
+  const token=(await context.cookies()).find(cookie=>cookie.name==='__Host-whumpo_session').value;c.scope=await modules.identity.admitWorkspace(db,await modules.identity.resolveIdentity(db,{version:1,client:'web',kind:'session',token}));
+  await page.reload();await page.getByText('Saved private website revision 2.',{exact:false}).waitFor();assert.equal(actionCount(),beforeActions+1);assert.equal(modelCalls,baseCalls);await untouched();
+  phase='saved form during inference outage resumes only on explicit request';
+  const waiting=await newForm('Recovery service area');await formCard(waiting.envelope.id).getByRole('button',{name:'Save and continue',exact:true}).click();await formCard(waiting.envelope.id).getByText('Your answers are saved. The AI is unavailable; continue this task later or stop its follow-up.',{exact:true}).waitFor();
+  let f=await saved(waiting.envelope.id);assert.equal(f.submission.continuation.state,'not-started');assert.equal(f.submission.answers.area,'Recovery service area');const before=continuations();await page.reload();await formCard(waiting.envelope.id).getByRole('button',{name:'Continue task',exact:true}).waitFor();assert.equal(continuations(),before);assert.equal(modelCalls,baseCalls);await snapshot(waiting.envelope.id,'saved');
+  Object.assign(env,{ENVIRONMENT:'test',AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_PROTOCOL:'responses',AI_API_KEY:'synthetic-only'});
+  const change={kind:'specification',operation:'change',projectId:c.project,expectedRevision:2,operations:[{type:'content.replace',contentId:'section-1-text',text:'Recovery service area'}]};
+  modelSteps.push({kind:'specification',operation:'read',projectId:c.project},change);await formCard(waiting.envelope.id).getByRole('button',{name:'Continue task',exact:true}).click();await formCard(waiting.envelope.id).getByText('Whumpo’s follow-up is ready in Chat.',{exact:false}).waitFor({timeout:60000});assert.equal(modelCalls,baseCalls+2);assert.equal((await saved(waiting.envelope.id)).submission.id,f.submission.id);assert.equal((await site.readSpecificationProposal(c.scope,c.user,f.submission.id)).project_id,c.project);await untouched();
+  phase='rejected inference preserves saved answers and exact terminal replay';
+  const rejected=await newForm('Rejected request keeps these answers');modelSteps.push(()=>Response.json({error:{message:'Synthetic rejection'}},{status:400}));await formCard(rejected.envelope.id).getByRole('button',{name:'Save and continue',exact:true}).click();await formCard(rejected.envelope.id).getByText(failed,{exact:true}).waitFor({timeout:60000});f=await saved(rejected.envelope.id);assert.equal(f.submission.continuation.state,'failed');assert.equal(f.submission.answers.area,'Rejected request keeps these answers');const rejectedCalls=modelCalls;
+  assert.equal((await post('/api/chat/interactions/v1/continue',{version:1,submissionId:f.submission.id,expectedChatRevision:(await row('SELECT revision FROM workspace_state WHERE user_id=?',c.user)).revision})).status(),200);await page.reload();await formCard(rejected.envelope.id).getByText(failed,{exact:true}).waitFor();assert.equal(modelCalls,rejectedCalls);assert.equal(await formCard(rejected.envelope.id).getByRole('button',{name:'Continue task',exact:true}).count(),0);await untouched();
+  phase='unknown inference outcome survives reload and explicit read-only reconciliation';
+  const unknown=await newForm('Unknown response keeps these answers');modelSteps.push(()=>{throw Error('Synthetic interrupted provider response');});await formCard(unknown.envelope.id).getByRole('button',{name:'Save and continue',exact:true}).click();await formCard(unknown.envelope.id).getByRole('button',{name:'Check task status',exact:true}).waitFor({timeout:60000});f=await saved(unknown.envelope.id);assert.equal(f.submission.continuation.state,'unknown');assert.equal(f.submission.answers.area,'Unknown response keeps these answers');const unknownCalls=modelCalls,unknownRequests=continuations();await page.reload();await formCard(unknown.envelope.id).getByRole('button',{name:'Check task status',exact:true}).waitFor();assert.equal(continuations(),unknownRequests);assert.equal(modelCalls,unknownCalls);await snapshot(unknown.envelope.id,'unknown');
+  await formCard(unknown.envelope.id).getByRole('button',{name:'Check task status',exact:true}).click();await formCard(unknown.envelope.id).getByText(failed,{exact:true}).waitFor();assert.equal((await followState(f.submission.id)).state,'failed');assert.equal((await row('SELECT state FROM standard_ai_requests WHERE id=?',f.submission.id)).state,'uncertain');assert.equal(modelCalls,unknownCalls);await untouched();
+  phase='pending work reload and timeout fence its late result without redispatch';
+  const pending=await newForm('Late result must not change my site');let entered;const reached=new Promise(done=>{entered=done;}),hold=new Promise(done=>{releaseModel=done;});modelSteps.push(async()=>{entered();await hold;return {...change,operations:[{type:'content.replace',contentId:'section-1-text',text:'Rejected late result'}]};});await formCard(pending.envelope.id).getByRole('button',{name:'Save and continue',exact:true}).click();await reached;
+  f=await saved(pending.envelope.id);assert.equal(f.submission.continuation.state,'pending');const pendingCalls=modelCalls;await page.reload();await formCard(pending.envelope.id).getByRole('button',{name:'Check task status',exact:true}).waitFor();assert.equal(modelCalls,pendingCalls);
+  const duplicate=await post('/api/chat/interactions/v1/continue',{version:1,submissionId:f.submission.id,expectedChatRevision:(await row('SELECT revision FROM workspace_state WHERE user_id=?',c.user)).revision});assert.equal((await duplicate.json()).continuation.state,'pending');assert.equal((await (await post('/api/chat/interactions/v1/stop',{version:1,submissionId:f.submission.id})).json()).continuation.state,'pending');assert.equal(modelCalls,pendingCalls);
+  await run("UPDATE chat_turns SET created_at='2026-01-01T00:00:00Z' WHERE id=?",f.submission.id);await formCard(pending.envelope.id).getByRole('button',{name:'Check task status',exact:true}).click();await formCard(pending.envelope.id).getByText(failed,{exact:true}).waitFor();assert.equal((await followState(f.submission.id)).state,'failed');releaseModel();releaseModel=null;
+  for(let n=0;n<100&&activeRequests.size;n++)await new Promise(done=>setTimeout(done,30));assert.equal(activeRequests.size,0);await page.reload();await formCard(pending.envelope.id).getByText(failed,{exact:true}).waitFor();assert.equal(modelCalls,pendingCalls);assert.equal((await saved(pending.envelope.id)).submission.answers.area,'Late result must not change my site');assert.equal(await row('SELECT 1 FROM project_spec_proposals WHERE id=?',f.submission.id),null);assert.equal((await row('SELECT state FROM standard_ai_requests WHERE id=?',f.submission.id)).state,'uncertain');await untouched();await snapshot(pending.envelope.id,'closed');
+  assert.equal(modelCalls,baseCalls+5);assert.equal(modelSteps.length,0);env.ENVIRONMENT='local';
+ }
  async function newProjectJourney(){
  phase='natural new-project intake clarifies without creating and resumes the same task';
  Object.assign(env,{ENVIRONMENT:'test',AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_PROTOCOL:'responses',AI_API_KEY:'synthetic-only'});await page.goto(origin+'/_fixture/intake');
@@ -352,7 +391,10 @@ try{
  const directRequests=continuations();await page.reload();await page.getByText('Created your project “Seasonal Studio” and its first private website draft.',{exact:false}).waitFor();assert.equal(modelCalls,startCalls+10);assert.equal(continuations(),directRequests);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',d.user)).n,3);assert.equal((await row('SELECT count(*) n FROM projects WHERE id=?',direct.task_id)).n,1);assert.equal((await row('SELECT count(*) n FROM publications')).n,0);
  await page.setViewportSize({width:390,height:844});await page.getByText('Created your project “Seasonal Studio” and its first private website draft.',{exact:false}).scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/whumpo-new-project-result-390.png'});env.ENVIRONMENT='local';
  }
- if(process.argv.includes('--intake-only')){
+ if(process.argv.includes('--recovery-only')){
+  await recoveryJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
+  resultSummary='Task recovery browser passed: actual current Worker/local D1/built UI, private save with inference unavailable and lost committed response, unstarted saved answers/explicit resume, rejected and unknown replies, pending reload/duplicate/stop/timeout with late-result refusal, unchanged unrelated work. Ten scripted main calls; 360/390/1280px captures. No external inference or publication.';
+ }else if(process.argv.includes('--intake-only')){
   await newProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='New-project browser passed: actual Worker/current local D1/built UI; natural intake, clarification before creation, same-task resumption, correction with separate private review, lost creation/review replies and reload without redispatch or duplicate projects. Ten scripted main calls; 360/390/1280px captures. No external inference, publication or physical-device acceptance.';
  }else if(process.argv.includes('--consent-only')){

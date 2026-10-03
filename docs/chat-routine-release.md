@@ -1,5 +1,7 @@
 # Routine Chat test release — October 3, 2026 UTC
 
+**Subsequent acceptance:** [the WH-110 original-scope audit](chat-routine-acceptance.md) accepts all admitted routine adapters and recovery. The releases below retain their exact observations and earlier open-status checkpoints; no new runtime deployment was needed for that test/documentation audit. Provider, physical-device, customer and general model-quality gates remain separate.
+
 ## Current release: Chat connection handoffs and saved status
 
 Release `5dfb930c-7241-4516-97fd-dff9f461de1e`, runtime source `577702e510c99c6038812585516dda9b30ef66ea`, passes its eight-stage deployed journey at **13:50 UTC** and final independent readback at **13:51 UTC**. Four exact Worker identities, database/service/secret-binding names, the **177-table/806-object schema** and **39 assets** match the archived candidate. Current database is `whumpo-control-chat-connections-test` (`99b6b952-c6a4-4596-84c9-980d17933b90`).
