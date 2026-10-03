@@ -15,6 +15,7 @@
 
 .mobile-navigation,.mobile-landing-nav{display:none}
 .workspace-dialog{max-height:min(88dvh,900px);overflow-y:auto;overscroll-behavior:contain}
+.workspace-dialog.account-help-dialog{overflow:hidden}
 @media(max-width:760px){
  .workspace-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;height:var(--workspace-height,100dvh);width:100%;padding-top:env(safe-area-inset-top);}
  .desktop-sidebar{display:none}

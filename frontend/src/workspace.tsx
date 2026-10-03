@@ -1,4 +1,5 @@
 import {useChatLocation} from './use-chat-location';
+import {AccountHelp,AccountHelpProvider,AccountSecurityPage} from './account-help';
 import {parseLayout} from '../../src/workspace-view-contract';
 import {SpecificationReviewDetails} from './specification-review-details';
 import {ChatInteraction} from './chat-interaction';
@@ -43,7 +44,7 @@ export const useWorkspace=()=>useContext(Context);
 export function Workspace(){
  useMobileViewport();
  const location=useRouterState({select:s=>s.location});
- return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><WorkspaceProfile/></IdentityGate>;
+ return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><AccountHelpProvider>{location.pathname==='/workspace/security'?<AccountSecurityPage/>:<WorkspaceProfile/>}</AccountHelpProvider></IdentityGate>;
 }
 function WorkspaceProfile(){
  const profile=useQuery({queryKey:['session'],queryFn:async()=>{
@@ -53,8 +54,8 @@ function WorkspaceProfile(){
  }});
  useEffect(()=>{const theme=profile.data?.theme??'system',media=matchMedia('(prefers-color-scheme: dark)'),apply=()=>document.documentElement.classList.toggle('dark',theme==='dark'||theme==='system'&&media.matches);apply();media.addEventListener('change',apply);return()=>media.removeEventListener('change',apply);},[profile.data?.theme]);
  useEffect(()=>{if(profile.data&&!profile.data.onboardingComplete)document.title="Welcome — Whumpo";},[profile.data?.onboardingComplete]);
- if(profile.isPending)return <div className="min-h-dvh grid place-items-center"><LoaderCircle className="animate-spin size-6" aria-label="Opening your workspace"/></div>;
- if(profile.error)return <main className="page-pad"><h1>Couldn’t open your workspace</h1><p role="alert">{message(profile.error)}</p><Button onClick={()=>profile.refetch()}>Try again</Button></main>;
+ if(profile.isPending)return <main className="min-h-dvh grid place-content-center justify-items-center gap-5"><LoaderCircle className="animate-spin size-6" aria-label="Opening your workspace"/><AccountHelp/></main>;
+ if(profile.error)return <main className="page-pad space-y-4"><h1 className="text-2xl font-bold">Couldn’t open your workspace</h1><p role="alert">{message(profile.error)}</p><div className="flex flex-wrap gap-3"><Button onClick={()=>profile.refetch()}>Try again</Button><AccountHelp/></div></main>;
  if(!profile.data)return null;
  if(!profile.data.onboardingComplete)return <Onboarding profile={profile.data}/>;
  return <WorkspaceSession key={profile.data.accountId} account={profile.data}/>;

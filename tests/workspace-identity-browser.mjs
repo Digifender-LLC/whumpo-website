@@ -1,3 +1,4 @@
+import {accountHelpJourney} from './helpers/account-help-journey.mjs';
 import {accessibilityAudit} from './helpers/accessibility-audit.mjs';
 import {ownerUsabilityJourney} from './helpers/owner-usability-journey.mjs';
 import {keyboardJourney} from './helpers/keyboard-journey.mjs';
@@ -15,7 +16,7 @@ import {build as viteBuild} from 'vite';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {fixtureKeyring} from './helpers/connection-keyring.mjs';
-const accessibility=process.argv.includes('--accessibility'),a11y=accessibilityAudit();
+const accessibility=process.argv.includes('--accessibility'),accountHelp=process.argv.includes('--account-help'),a11y=accessibilityAudit();
 const grantJourney=process.argv.includes('--github-grant');
 if(accessibility&&grantJourney)throw Error('Run the owner accessibility and GitHub grant journeys separately.');
 let providerCalls=0,modelCalls=0;
@@ -29,7 +30,7 @@ try{
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
  const bundled=await build({stdin:{contents:"export {default as worker} from './src/index';export {hashToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {sendConversation,readChat} from './src/chat';export {startGitHub,finishGitHub} from './src/github-connection';export {initializeConnectionKeys} from './src/connection-rotation';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
  const {worker,hashToken,admitWorkspace,resolveIdentity,sendConversation,readChat,startGitHub,finishGitHub,initializeConnectionKeys}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
- fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility']});const db=fixture.db;
+ fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility','--account-help']});const db=fixture.db;
  const code=crypto.randomUUID();await db.prepare("INSERT INTO invitations VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'),NULL,NULL)").bind(await hashToken(code)).run();
  crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
  globalThis.fetch=async(url,...args)=>{if(accessibility&&String(url)==='https://opencode.ai/zen/go/v1/responses'){const body=JSON.parse(args[0].body),ack=body.max_output_tokens===256;if(!ack){audit.calls++;assert(audit.steps.length,'Unexpected inference request');}return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(ack?{intent:'editing'}:{reply:'Scripted owner request prepared.',action:audit.steps.shift()})}]}],usage:{input_tokens:100,output_tokens:100}});}if(grantJourney&&String(url)==='https://opencode.ai/zen/go/v1/responses'){modelCalls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Prepared.',action:{kind:'githubAccess',operation:'review'}})}]}],usage:{input_tokens:200,output_tokens:80}});}if(grantJourney&&String(url)==='https://api.github.com/applications/browser-grant/grant'){providerCalls++;return new Response(null,{status:204});}if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
@@ -42,7 +43,7 @@ try{
    const chunks=[];for await(const chunk of req)chunks.push(chunk);
    const body=Buffer.concat(chunks);
    if(req.method==='POST'&&url.pathname==='/api/chat'){audit.posts.push(JSON.parse(body));if(audit.stopChat){audit.stopChat=false;audit.failChat=true;res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'Synthetic send interruption'}));return;}}
-   if(req.method==='GET'&&(audit.failChat&&url.pathname==='/api/chat'||audit.failDashboard&&url.pathname==='/api/workspace/dashboard')){res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'Synthetic read interruption'}));return;}
+   if(req.method==='GET'&&(audit.failChat&&url.pathname==='/api/chat'||audit.failDashboard&&url.pathname==='/api/workspace/dashboard'||audit.failProfile&&url.pathname==='/api/profile'||audit.failWelcome&&url.pathname==='/api/onboarding')){res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'Synthetic read interruption'}));return;}
    const identity=url.pathname.startsWith('/api/auth/identity/v1/'),canonical=env.ENVIRONMENT==='test'&&!identity;
    const target=canonical?new URL(url.pathname+url.search,'https://whumpo.com'):url;
    const requestHeaders=canonical?{...req.headers,host:'whumpo.com',...(req.headers.origin?{origin:'https://whumpo.com'}:{})}:req.headers;
@@ -50,6 +51,7 @@ try{
    if(audit.loseChat&&url.pathname==='/api/chat'&&req.method==='POST'&&response.status===200){audit.loseChat=false;audit.failChat=true;res.writeHead(200,{'content-type':'application/json'}).end();return;}
    if(audit.holdDashboard&&url.pathname==='/api/workspace/dashboard'&&response.status===200){audit.holdDashboard=false;await new Promise(done=>{audit.releaseDashboard=done;});}
    if(!response){res.writeHead(404).end();return;}
+   if(audit.holdProfile&&url.pathname==='/api/profile'&&req.method==='GET'&&response.status===200){audit.holdProfile=false;await new Promise(done=>{audit.releaseProfile=done;});}
    if(holdWelcomeReply&&url.pathname==='/api/onboarding'&&req.method==='PUT'&&response.status===200){holdWelcomeReply=false;await new Promise(done=>{releaseWelcomeReply=done;});}
    if(holdAddReply&&url.pathname.endsWith('/add/verify')&&response.status===200){holdAddReply=false;await new Promise(done=>{releaseAddReply=done;});}
    if(loseSecureReply&&url.pathname.endsWith('/recovery/secure')&&response.status===200){loseSecureReply=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
@@ -68,7 +70,7 @@ try{
   const append=Element.prototype.append;Element.prototype.append=function(...nodes){const result=append.apply(this,nodes);for(const node of nodes)if(node instanceof HTMLIFrameElement&&node.title==='Recovery kit print view')node.contentWindow.print=()=>{window.__printedKit=node.contentDocument.body.textContent;node.contentWindow.dispatchEvent(new Event('afterprint'));};return result;};
  });
  page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
- const {reach,activate,enter}=keyboardJourney(page,accessibility);
+ const {reach,activate,enter}=keyboardJourney(page,accessibility||accountHelp);
  async function focusHeading(text){if(accessibility){await page.getByRole('heading',{name:text,exact:true}).waitFor();await page.waitForFunction(t=>document.activeElement?.textContent===t,text);}}
  const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');
  async function authenticator(){return (await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})).authenticatorId}
@@ -117,6 +119,7 @@ try{
  await page.reload();await page.getByRole('heading',{name:'Your kit is saved'}).waitFor();await hearOrca('setup enters first welcome question',()=>activate(page.getByRole('button',{name:'Verify a passkey and finish setup'})),[/What should I call you/i,/heading/i]);await page.getByLabel('Your name',{exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);assert.equal(await page.evaluate(()=>document.cookie),'');
  const cookies=await context.cookies();assert.equal(cookies.filter(c=>c.name==='__Host-whumpo_session').length,1);assert(cookies.every(c=>c.secure&&c.httpOnly&&c.sameSite===(c.name==='__Host-whumpo_session'?'Lax':'Strict')));
+ if(accountHelp)await accountHelpJourney({page,context,db,state:audit,requests,origin,activate,enter,phase:value=>{phase=value;},holdWelcomeSave:()=>{holdWelcomeReply=true;return {pending:()=>!!releaseWelcomeReply,release:()=>{releaseWelcomeReply?.();releaseWelcomeReply=null;}};}});
  phase='first-project welcome';
  assert.equal(await page.getByRole('navigation',{name:'Workspace',exact:true}).count(),0);
  await enter(page.getByLabel('Your name',{exact:true}),'Garden owner');await hearOrca('welcome picture question',()=>activate(page.getByRole('button',{name:'Continue',exact:true})),[/Pick a face for your space/i,/heading/i]);
@@ -168,6 +171,8 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  }
  if(accessibility)await ownerUsabilityJourney({page,context,db,env,state:audit,origin,activate,enter,reach,phase:value=>{phase=value;},audit:a11y.check});
+ if(accountHelp){await page.goto(origin+'/workspace/settings');await activate(page.getByRole('button',{name:'Account help',exact:true}));await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('heading',{name:'Account security',exact:true}).waitFor();await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();}
+ await page.waitForLoadState('networkidle');
  const savedTurns=(await db.prepare('SELECT count(*) n FROM chat_turns').first()).n;
  phase='live workspace revocation';
  await db.prepare('DELETE FROM identity_sessions').run();
@@ -177,8 +182,9 @@ try{
  assert.equal(await page.evaluate(()=>document.cookie),'');
  assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);
  assert.equal(errors.length,0,errors.join('\n'));a11y.finish();
+ if(accountHelp)console.log('Account help journey passed: signed enrollment, unsaved welcome answer and keyboard dialog return, profile/welcome failures, independent security route/reload, sign-out during held profile read and committed welcome save with late-response fencing, fresh sign-in and first-project admission, settings access and revoked-session clearing. Zero external inference/provider calls; physical devices and human support remain unaccepted.');
  if(grantJourney)console.log(JSON.stringify({suite:'github-grant-browser',modelCalls,providerCalls,realPasskeyConfirmation:true,liveProviderAccess:false}));
  if(accessibility)console.log('Owner usability journey passed: keyboard draft/retry, private comparison/preview/save, Dashboard outage and newer focus, unavailable billing/connections, 360/390/1280px and night mode.');
  console.log('Current workspace browser passed: real mobile entry, two Chromium passkeys, recovery kit, identity-before-profile gate, first-project welcome, draft reload and immediate workspace closure on session revocation. No live provider requests.');
 }catch(error){console.error(`Current workspace browser failed during ${phase}: ${error.message}`);console.error('Browser errors:',errors);if(page)console.error('Page:',page.url(),(await page.locator('body').innerText().catch(()=>'' )).replace(/[a-f0-9]{64}/g,'[redacted]').slice(0,1500));console.error('API paths:',requests.filter(r=>r.path.startsWith('/api/')));process.exitCode=1;}
-finally{audit.releaseDashboard?.();releaseWelcomeReply?.();releaseAddReply?.();globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await Promise.allSettled(background);await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}
+finally{audit.releaseDashboard?.();audit.releaseProfile?.();releaseWelcomeReply?.();releaseAddReply?.();globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await Promise.allSettled(background);await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}

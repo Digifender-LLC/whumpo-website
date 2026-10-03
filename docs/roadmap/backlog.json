@@ -5527,7 +5527,10 @@
         "docs/chat-interactions.md",
         "docs/chat-workspace-continuity.md",
         "frontend/src/lib/chat-location.ts",
-        "tests/chat-location.mjs"
+        "tests/chat-location.mjs",
+        "frontend/src/account-help.tsx",
+        "tests/helpers/account-help-journey.mjs",
+        "tests/workspace-identity-browser.mjs"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/100",
       "owner": null,
