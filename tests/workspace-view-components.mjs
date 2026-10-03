@@ -18,4 +18,8 @@ for(const value of [
  {...header,kind:'usage',binding:'account.usage@1',data:{standardIncluded:true,advancedEnabled:false}},
  {...header,kind:'performance',binding:'project.performance@1',status:'unavailable',data:null},
 ]){const html=render(m.ViewComponentDisplay,value);assert(!html.includes('Update Whumpo'));assert(!html.includes('<button'));assert(!html.includes('<a '));assert(!html.includes('<img'));assert(!html.includes('binding'));}
+const review={review:{id:crypto.randomUUID(),proposalDigest:'b'.repeat(64),expectedRevision:1},project:{id:projectId,name:'Review <script>PRIVATE_FACT()</script>'},operation:'change',expiresAt:new Date(Date.now()+600000).toISOString()};
+const queue={...header,kind:'reviews',binding:'workspace.reviews@1',data:{items:[review],denied:0,unavailable:0}},queueHTML=render(m.ViewComponentDisplay,queue);
+assert(queueHTML.includes('&lt;script&gt;'));assert(!queueHTML.includes('<script>'));assert(queueHTML.includes('Approve changes only through their separate review in Chat'));assert(!queueHTML.includes('<button'));assert(!queueHTML.includes('proposalDigest'));
+for(const data of [{items:[],denied:1,unavailable:0},{items:[],denied:0,unavailable:1}]){const html=render(m.ViewComponentDisplay,{...queue,data});assert(!html.includes('No current website change reviews'));assert(!html.includes('PRIVATE_FACT'));}
 console.log('Shared view components passed: identical trusted project element in Chat/page, escaped facts, current-only validation, honest denial/unavailability, registered metrics/activity and no effect/link authority.');

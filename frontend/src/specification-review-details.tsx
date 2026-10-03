@@ -14,7 +14,7 @@ export function SpecificationComparison({value}:{value:unknown}){
    <h4 className="bg-secondary/40 px-3 py-2 font-medium break-words">{change.label}</h4>
    <dl className="grid sm:grid-cols-2"><div className="min-w-0 p-3"><dt className="text-xs font-medium text-muted-foreground mb-1">Before</dt><dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{change.before===null?<span className="italic text-muted-foreground">Not included</span>:change.before===''?<span className="italic text-muted-foreground">Empty</span>:change.before}</dd></div><div className="min-w-0 border-t sm:border-t-0 sm:border-l bg-primary/5 p-3"><dt className="text-xs font-medium text-muted-foreground mb-1">After</dt><dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{change.after===null?<span className="italic text-muted-foreground">Not included</span>:change.after===''?<span className="italic text-muted-foreground">Empty</span>:change.after}</dd></div></dl>
   </li>)}</ol>:<p>The website text and theme are unchanged. Saving creates a new private version.</p>}
-  <p className="text-xs text-muted-foreground">Review expires <time dateTime={display.expiresAt}>{new Date(display.expiresAt).toLocaleString()}</time>. Use the review button below to save this exact change.</p>
+  <p className="text-xs text-muted-foreground">Review expires <time dateTime={display.expiresAt}>{new Date(display.expiresAt).toLocaleString()}</time>. Saving this exact change needs its separate approval in Chat.</p>
  </div>;
 }
 function CurrentComparison({owner,review}:{owner:string;review:SpecificationReviewIdentity}){

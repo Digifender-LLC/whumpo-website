@@ -26,6 +26,7 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'owner.activity@1': {mode:'read',feature:viewComponents.activity.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
   'cms.status@1': {mode:'read',feature:viewComponents.cms.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
   'project.performance@1': {mode:'read',feature:viewComponents.performance.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
+  'workspace.reviews@1': {mode:'read',feature:viewComponents.reviews.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });

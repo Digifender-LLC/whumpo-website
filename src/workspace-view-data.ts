@@ -1,7 +1,10 @@
+import {readSpecificationReviewIdentity,type SpecificationReviewIdentity} from './project-specification/review-display';
 import {copyJSON} from './project-specification/v2/json';
 import {exact,object,uuid,viewComponents,type WidgetKind} from './workspace-view-contract';
 
 export type ProjectFacts={projectId:string;name:string;state:'draft'|'building'|'live'|'error';websitePublished:boolean};
+export type WorkspaceReviewSummary={review:SpecificationReviewIdentity;project:{id:string;name:string};operation:'change'|'restore';expiresAt:string};
+export type WorkspaceReviewQueue={items:WorkspaceReviewSummary[];denied:number;unavailable:number};
 export type ViewFacts={
  projects:{items:ProjectFacts[]};
  usage:{standardIncluded:true;advancedEnabled:false};
@@ -9,6 +12,7 @@ export type ViewFacts={
  activity:{items:{id:string;projectId:string|null;summary:string;createdAt:string}[]};
  traffic:{enabledAt:string;days:30;rows:{project_id:string;day:string;requests:number}[];metric:'successful_html_requests'};
  cms:{items:{projectId:string;name:string;publishedArticles:number}[]};
+ reviews:WorkspaceReviewQueue;
  performance:never;
 };
 type Header<K extends WidgetKind>={version:1;kind:K;binding:string;projectId:string|null;asOf:string};
@@ -33,6 +37,7 @@ export function readViewComponentData(input:unknown):ViewComponentData|null{
   if(c.kind==='storage')valid=exact(d,['files','bytes'])&&integer(d.files)&&integer(d.bytes);
   if(c.kind==='activity')valid=exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=20&&d.items.every(a=>shape(a,['id','projectId','summary','createdAt'])&&text(a.id,200)&&(a.projectId===null?c.projectId===null:scoped(a.projectId))&&text(a.summary,500)&&iso(a.createdAt));
   if(c.kind==='traffic')valid=exact(d,['enabledAt','days','rows','metric'])&&iso(d.enabledAt)&&d.days===30&&d.metric==='successful_html_requests'&&Array.isArray(d.rows)&&d.rows.length<=600&&d.rows.every(r=>shape(r,['project_id','day','requests'])&&scoped(r.project_id)&&typeof r.day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.day)&&iso(r.day+'T00:00:00.000Z')&&integer(r.requests));
+  if(c.kind==='reviews')valid=exact(d,['items','denied','unavailable'])&&Array.isArray(d.items)&&integer(d.denied)&&integer(d.unavailable)&&d.items.length+Number(d.denied)+Number(d.unavailable)<=5&&d.items.every(r=>shape(r,['review','project','operation','expiresAt'])&&!!readSpecificationReviewIdentity(r.review)&&shape(r.project,['id','name'])&&scoped(r.project.id)&&text(r.project.name,100)&&['change','restore'].includes(String(r.operation))&&iso(r.expiresAt)&&r.expiresAt>String(c.asOf))&&new Set(d.items.map(r=>(r as {review:{id:string}}).review.id)).size===d.items.length;
   if(c.kind==='cms')valid=exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=20&&(c.projectId===null||d.items.length===1)&&d.items.every(p=>shape(p,['projectId','name','publishedArticles'])&&scoped(p.projectId)&&text(p.name,100)&&integer(p.publishedArticles));
   return valid?c as ViewComponentData:null;
  }catch{return null;}
