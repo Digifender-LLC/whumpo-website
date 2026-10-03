@@ -10,7 +10,7 @@ import type {Answer,Answers} from '../../src/chat-interactions/types';
 import {Button} from '../../frontend/src/components/ui/button';
 import '../../frontend/src/styles.css';
 const owner='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222',digest='a'.repeat(64);
-const common={help:'',required:true,binding:'answer.value@1'},definition=validateDefinition({version:1,kind:'form',template:'custom@1',title:'Typed field fixture',summary:'No server issuance',presentation:'inline',cards:[],submitBinding:'interaction.answers@1',continuationBinding:null,fields:[
+const common={help:'',required:true,binding:'answer.value@1'},definition=validateDefinition({version:1,kind:'form',template:'custom@1',purpose:'site.services@1',title:'Typed field fixture',summary:'No server issuance',presentation:'inline',cards:[],submitBinding:'interaction.answers@1',continuationBinding:null,fields:[
  {...common,id:'features',type:'multi-choice',label:'Web features',constraints:{options:[{id:'contact',label:'Contact form'},{id:'gallery',label:'Photo gallery'},{id:'hours',label:'Opening hours'}]}},
  {...common,id:'enabled',type:'boolean',label:'Show business hours?',constraints:{}},
  {...common,id:'amount',type:'number',label:'Starting amount',constraints:{min:0,max:100,step:0.5}},
@@ -30,7 +30,7 @@ function Fixture(){
 }
 createRoot(document.getElementById('root')!).render(<Fixture/>);
 
-const resourceFields=validateDefinition({version:1,kind:'form',template:'custom@1',title:'Resources component fixture',summary:'No server issuance',presentation:'inline',cards:[],submitBinding:'interaction.answers@1',continuationBinding:null,fields:[
+const resourceFields=validateDefinition({version:1,kind:'form',template:'custom@1',purpose:'site.services@1',title:'Resources component fixture',summary:'No server issuance',presentation:'inline',cards:[],submitBinding:'interaction.answers@1',continuationBinding:null,fields:[
  {...common,id:'projects',type:'resource',label:'Projects',constraints:{collection:'projects',multiple:true,maxItems:2}},
  {...common,id:'photos',type:'attachment',label:'Project photos',constraints:{collection:'photos',multiple:true,maxItems:2}},
  {...common,id:'cover',type:'attachment',label:'Cover photo',constraints:{collection:'photos',multiple:false,maxItems:1}}
@@ -43,7 +43,7 @@ function ResourceFixture(){
 }
 
 
-const conditionalDefinition=validateDefinition({version:1,kind:'form',template:'custom@1',title:'Service details',summary:'Component fixture; no server issuance',presentation:'inline',cards:[],submitBinding:'interaction.answers@1',continuationBinding:null,fields:[
+const conditionalDefinition=validateDefinition({version:1,kind:'form',template:'custom@1',purpose:'site.services@1',title:'Service details',summary:'Component fixture; no server issuance',presentation:'inline',cards:[],submitBinding:'interaction.answers@1',continuationBinding:null,fields:[
  {...common,id:'mobile',type:'boolean',label:'Do you travel to customers?',constraints:{}},
  {...common,id:'radius',type:'number',label:'Travel radius in miles',constraints:{min:0,max:100,step:1},when:{fieldId:'mobile',equals:true}},
  {...common,id:'area',type:'text',label:'Town you serve',constraints:{maxLength:100},when:{fieldId:'mobile',equals:false}},

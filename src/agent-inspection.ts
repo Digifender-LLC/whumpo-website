@@ -8,7 +8,7 @@ export function inspectionRequest(raw:string){
  let data;try{data=JSON.parse(raw);}catch{return false;}
  if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).some(k=>!['reply','action'].includes(k))||typeof data.reply!=='string'||!data.reply.trim()||data.reply.length>2000)return false;
  const a=data.action;
- if(interactionActionRequest(a))return a.operation==='read'||a.operation==='readSubmittedIntake';
+ if(interactionActionRequest(a))return a.operation==='read'||a.operation==='readSubmittedAnswers';
  if(a&&typeof a==='object'&&!Array.isArray(a)&&(a.kind==='specification'&&a.operation==='read'||a.kind==='serviceClients'&&['read','history','activations'].includes(a.operation)))return Object.keys(a).every(k=>['kind','operation','projectId'].includes(k))&&typeof a.projectId==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(a.projectId);
  if(capabilityRequest(a))return true;
  if(a&&typeof a==='object'&&!Array.isArray(a)&&knowledgeRequest(a))return true;

@@ -76,7 +76,7 @@ function fieldValue(f:Field,v:unknown,owned?:OwnedResources) {
   }else fail('FIELD_TYPE');
 }
 function field(f:Field,prior:Field[]) {
-  shape(f,['id','type','label','help','required','binding','constraints'],['default','when','source','group']);
+  shape(f,['id','type','label','help','required','binding','constraints'],['default','when','source','group','questionId']);
   identifier(f.id);text(f.label,80);text(f.help,240,true);check(typeof f.required==='boolean','VALUE');
   check(f.binding==='answer.value@1','BINDING');
   check(['text','long-text','choice','multi-choice','boolean','number','date','datetime','resource','attachment'].includes(f.type),'FIELD_TYPE');
@@ -92,6 +92,7 @@ function field(f:Field,prior:Field[]) {
     shape(f.constraints,['collection','multiple','maxItems']);check(['projects','photos'].includes(f.constraints.collection)&&(f.type!=='attachment'||('collection' in f.constraints&&f.constraints.collection==='photos')),'BINDING');
     check(typeof f.constraints.multiple==='boolean','VALUE');integer(f.constraints.maxItems,1,f.constraints.multiple?5:1);
   }else shape(f.constraints,[]);
+  if(own(f,'questionId'))identifier(f.questionId);
   if(own(f,'group'))integer(f.group,0,2);
   if(own(f,'when')){
     const when=f.when;shape(when,['fieldId','equals']);check(when,'SHAPE');const controller=prior.find(x=>x.id===when.fieldId);
@@ -107,11 +108,13 @@ function field(f:Field,prior:Field[]) {
 }
 export function validateDefinition(input:unknown):Definition {
   const d=copyJSON<Definition>(input,bounds.definitionBytes);
-  shape(d,['version','kind','template','title','summary','presentation','fields','cards','submitBinding','continuationBinding']);
+  shape(d,['version','kind','template','title','summary','presentation','fields','cards','submitBinding','continuationBinding'],['purpose']);
+  if(d.template==='custom@1')text(d.purpose,80);else check(!own(d,'purpose'),'PURPOSE');
   check(d.version===1,'VERSION');check(['form','view'].includes(d.kind),'KIND');
   text(d.title,100);text(d.summary,400);check(['inline','panel','dialog'].includes(d.presentation),'PRESENTATION');
   list(d.fields,bounds.fields);list(d.cards,bounds.cards);unique(d.fields,'id');unique(d.cards,'id');
   d.fields.forEach((f,i)=>field(f,d.fields.slice(0,i)));
+  if(d.template!=='custom@1')check(!d.fields.some(f=>own(f,'questionId')),'PURPOSE');
   for(const c of d.cards){
     shape(c,['id','binding','display','limit','reviewId']);identifier(c.id);
     const b=own(bindings,c.binding)?bindings[c.binding]:null;

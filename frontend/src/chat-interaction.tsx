@@ -10,6 +10,7 @@ import {deliverInteraction,recoverInteraction} from './lib/interaction-delivery'
 import {useInteractionRecovery} from './use-interaction-recovery';
 import {Button} from './components/ui/button';
 import {isPhotoIntakeDefinition,isProjectIntakeTemplate} from '../../src/chat-interactions/maintained';
+import {isInformationDefinition} from '../../src/chat-interactions/composition';
 import {ChatInteractionCards} from './chat-interaction-cards';
 import {ChatInteractionFields} from './chat-interaction-fields';
 import {fieldAnswerSnapshot} from './lib/interaction-fields';
@@ -20,7 +21,7 @@ const route='/chat/interactions/v1/';
 const receipt=(requestId:string)=>send<InteractionReceipt>(route+'receipt',{version:1,requestId});
 function startingAnswers(form:InteractionRead):Answers{return form.submission?.answers??form.draft??Object.fromEntries(form.envelope.definition.fields.filter(f=>f.default).map(f=>[f.id,f.default!.value]));}
 
-/** Only maintained content and information-only project templates are admitted. */
+/** Maintained templates and exact admitted information compositions only. */
 export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInChat}:{id:string;owner:string;chatRevision:number;busy:boolean;onAnswerInChat:()=>void}){
  const recovery=useInteractionRecovery(owner,id),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false),[resourceReady,setResourceReady]=useState(false);
  const onResourceReady=useCallback((ready:boolean)=>setResourceReady(ready),[]);
@@ -32,7 +33,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   const iso=(v:unknown):v is string=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
   if(value.version!==1||!Number.isSafeInteger(value.answerRevision)||value.answerRevision<0||!iso(value.observedAt)||!(value.draftRetainUntil===null||iso(value.draftRetainUntil))||!['open','submitted','canceled','superseded','expired'].includes(value.state))throw new APIError('Update Whumpo to open this form.',409,'client_update_required');
   await verifyEnvelope(value.envelope);await requireCurrentClient(value.envelope,client);
-  const d=value.envelope.definition,content=d.template==='content-change@1',photo=isPhotoIntakeDefinition(d),scoped=content||photo;
+  const d=value.envelope.definition,content=d.template==='content-change@1',photo=isPhotoIntakeDefinition(d),custom=isInformationDefinition(d),scoped=content||photo||custom;
   if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||(!scoped&&!isProjectIntakeTemplate(d.template))||(scoped?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||d.continuationBinding!==null))||d.presentation!=='inline'||(!photo&&(content?d.cards.length!==1||d.cards.some(c=>c.id!=='project-status'||c.binding!=='project.status@1'||c.display!=='status'||c.limit!==1||c.reviewId!==null):d.cards.length!==0))||(photo&&(value.draft!==null||value.submission!==null)))throw new APIError('This form needs a supported current template.',409,'client_update_required');
   if(value.draft!==null)validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
   return value;

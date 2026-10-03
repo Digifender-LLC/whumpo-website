@@ -3308,7 +3308,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/chat-interaction-browser.mjs](../../tests/chat-interaction-browser.mjs)
 - [src/chat-interactions/maintained.ts](../../src/chat-interactions/maintained.ts)
 - [tests/chat-interaction-intake.mjs](../../tests/chat-interaction-intake.mjs)
-- [src/chat-interactions/intake-context.ts](../../src/chat-interactions/intake-context.ts)
+- [src/chat-interactions/submitted-context.ts](../../src/chat-interactions/submitted-context.ts)
 - [frontend/src/chat-resource-picker.tsx](../../frontend/src/chat-resource-picker.tsx)
 
 ### Execution coordination
@@ -3476,6 +3476,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
 - [src/chat-interactions/agent.ts](../../src/chat-interactions/agent.ts)
 - [tests/chat-interaction-agent.mjs](../../tests/chat-interaction-agent.mjs)
+- [src/chat-interactions/composition.ts](../../src/chat-interactions/composition.ts)
+- [src/chat-interactions/submitted-context.ts](../../src/chat-interactions/submitted-context.ts)
+- [tests/chat-interaction-composition.mjs](../../tests/chat-interaction-composition.mjs)
 
 ### Execution coordination
 
@@ -3489,6 +3492,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/93. Planning owner: Unassigned
 - 2026-10-02 UTC: WH-107/#90 is accepted to its original renderer scope after criterion-by-criterion audit at 33e8f70. Current root claims WH-108 in https://github.com/zemdregon/whumpo/issues/93; reuse current templates, typed storage/receipts and bounded agent loop. Complete original conditional/custom semantic admission, task context, prose proposals and continuation scope; source/local/live/device evidence stays distinct.
 - 2026-10-02 UTC: shared conditional rendering and explicit snapshot exclusion plus same-task prose answer proposals are implemented. Existing current receipts, revision/ownership guards and bounded owner inference loop are reused; suggested defaults remain unapproved and private until submission. Focused protocol, numeric/conditional, SQLite/local D1, scripted agent, natural Chat, actual built component/full workspace browser, type/compiler and build checks passed. Full custom purpose/question admission, minimized task context and separately receipted model continuation remain open; no WH-108 completion claim. See docs/chat-interactions.md.
 - 2026-10-02 23:42 UTC: source e293ce1 deployed as platform 1eba60f3-b783-4730-b7bc-937828458bd9; exact 39 assets, current schema/bindings and other three Workers verified. Signed-in live 390px proposed-answer review, private preview, separate exact save, choice submission and history focus passed with synthetic fixture cleanup. No real model, publication or photo upload. Full WH-108 scope remains open; details in docs/chat-test-release.md.
+- 2026-10-03 UTC: source/local progress composes purpose-bound public service/presentation questions through existing typed storage and renderer, preserves same-task correction/proposal meanings, and replaces the old intake-only reader with explicit selected-field submitted-answer inspection. Ten actual-handler scenarios pass on SQLite/local D1; 32 scripted agent cases pass with bounded inspection and preserved failure receipts. No new inference route, arbitrary wording/resource admission or automatic continuation. Full WH-108 criteria remain open; broader task state, custom admission, separately receipted model continuation and real-model owner-experience acceptance remain required.
 
 ## WH-109 — Compose and maintain dashboards and custom views through the agent
 
