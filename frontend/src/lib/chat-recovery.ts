@@ -1,7 +1,7 @@
-import {clearChatLocation} from './chat-location';
-import {clearPhotoRecovery} from './photo-upload-recovery';
+import {clearChatLocation,readChatLocation} from './chat-location';
+import {clearPhotoRecovery,preparePhotoRecovery} from './photo-upload-recovery';
 import {chatControl} from '../../../src/chat-controls';
-import {clearInteractionRecovery} from './interaction-recovery';
+import {clearInteractionRecovery,prepareInteractionRecovery} from './interaction-recovery';
 import type {ChatRequest} from './chat-delivery';
 export const recoveryKey='whumpo.chat-recovery';
 export const draftLifetime=24*60*60*1000;
@@ -40,3 +40,10 @@ export function writeRecovery(store:Store,owner:string,value:Recovery):void{
  const raw=JSON.stringify({version:2,owner,draft:value.draft,pending:value.pending,updatedAt:value.updatedAt});if(raw.length>maxRecord)throw Error('Recovery is too large');store.setItem(recoveryKey,raw);
 }
 export function clearChatRecovery(){clearChatLocation();clearInteractionRecovery();clearPhotoRecovery();try{sessionStorage.removeItem(recoveryKey);}catch{/* Storage may be unavailable in this browser. */}}
+/** Also runs before welcome/security: a newly loaded account must not retain
+ * another account's device records merely because Chat has not mounted yet. */
+export function scopeChatRecovery(owner:string){
+ for(const prepare of [()=>readRecovery(sessionStorage,owner),()=>readChatLocation(sessionStorage,owner),()=>prepareInteractionRecovery(sessionStorage,owner),()=>preparePhotoRecovery(sessionStorage,owner)]){
+  try{prepare();}catch{/* Each editor reports storage unavailability when opened. */}
+ }
+}
