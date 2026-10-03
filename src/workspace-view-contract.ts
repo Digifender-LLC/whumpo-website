@@ -5,6 +5,7 @@ export const viewComponents={
  projects:{version:1,binding:'project.status@1',feature:'core.editing'},usage:{version:1,binding:'account.usage@1',feature:'core.editing'},
  storage:{version:1,binding:'project.storage@1',feature:'core.editing'},activity:{version:1,binding:'owner.activity@1',feature:'core.editing'},
  traffic:{version:1,binding:'project.traffic@1',feature:'core.insights'},cms:{version:1,binding:'cms.status@1',feature:'core.editing'},
+ reviews:{version:1,binding:'workspace.reviews@1',feature:'core.editing'},
  performance:{version:1,binding:'project.performance@1',feature:'core.insights'}
 } as const;
 export type WidgetKind=keyof typeof viewComponents;
@@ -22,7 +23,7 @@ export const exact=(v:Record<string,unknown>,keys:string[])=>Object.keys(v).sort
 const pageId=(v:unknown):v is string=>typeof v==='string'&&/^tab-[a-z0-9-]{1,40}$/.test(v);
 const label=(v:unknown):v is string=>typeof v==='string'&&!!v.trim()&&v===v.trim()&&v.length<=40&&!/[\x00-\x1f\x7f]/.test(v);
 export function parseView(input:unknown):WorkspaceView{
- const v=copy(input,12000);if(!object(v)||!exact(v,['version','projectId','widgets','shortcuts'])||v.version!==1||!(v.projectId===null||uuid(v.projectId))||!Array.isArray(v.widgets)||!v.widgets.length||v.widgets.length>7||new Set(v.widgets).size!==v.widgets.length||v.widgets.some(k=>typeof k!=='string'||!Object.hasOwn(viewComponents,k))||!Array.isArray(v.shortcuts)||v.shortcuts.length>5||new Set(v.shortcuts).size!==v.shortcuts.length||v.shortcuts.some(k=>typeof k!=='string'||!Object.hasOwn(workspaceShortcuts,k))||v.shortcuts.length>0&&!v.projectId)throw invalid();
+ const v=copy(input,12000);if(!object(v)||!exact(v,['version','projectId','widgets','shortcuts'])||v.version!==1||!(v.projectId===null||uuid(v.projectId))||!Array.isArray(v.widgets)||!v.widgets.length||v.widgets.length>widgetKinds.length||new Set(v.widgets).size!==v.widgets.length||v.widgets.some(k=>typeof k!=='string'||!Object.hasOwn(viewComponents,k))||!Array.isArray(v.shortcuts)||v.shortcuts.length>5||new Set(v.shortcuts).size!==v.shortcuts.length||v.shortcuts.some(k=>typeof k!=='string'||!Object.hasOwn(workspaceShortcuts,k))||v.shortcuts.length>0&&!v.projectId)throw invalid();
  return v as WorkspaceView;
 }
 export function parseTab(input:unknown):WorkspaceTab{if(!object(input)||!exact(input,['id','label','view'])||!pageId(input.id)||!label(input.label))throw invalid();return {id:input.id,label:input.label,view:parseView(input.view)};}

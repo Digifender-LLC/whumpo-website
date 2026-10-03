@@ -118,7 +118,7 @@
     "test:ack-timing": "node tests/ack-timing.mjs",
     "test:app-activation": "node tests/app-activation.mjs",
     "test:app-activation-http": "node tests/app-activation-http.mjs",
-    "test:workspace-dashboard": "node tests/workspace-dashboard.mjs && node tests/workspace-layout.mjs && node tests/workspace-dashboard-http.mjs && node tests/workspace-view-bindings.mjs && node tests/workspace-view-components.mjs && node tests/chat-temporary-views.mjs",
+    "test:workspace-dashboard": "node tests/workspace-dashboard.mjs && node tests/workspace-layout.mjs && node tests/workspace-dashboard-http.mjs && node tests/workspace-view-bindings.mjs && node tests/workspace-view-components.mjs && node tests/chat-temporary-views.mjs && node tests/workspace-review-bindings.mjs",
     "test:profile": "node tests/profile.mjs",
     "test:app-auth": "node tests/app-auth.mjs",
     "deploy:apps": "wrangler deploy --config wrangler.apps.jsonc",

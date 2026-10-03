@@ -1,3 +1,4 @@
+import {readWorkspaceReviews,filterWorkspaceReviewAccess,type WorkspaceReviewQueue} from './workspace-reviews';
 import {assertFeature} from './feature-admission';
 import {FeatureInclusionError} from './feature-inclusion';
 import {assertWorkspace} from './workspace-identity/admission';
@@ -26,12 +27,20 @@ export async function readViewBinding(db:D1Database,user:string,kind:WidgetKind,
    const {results}=await readWorkspaceStorage(db,user,projectId);data={files:results.reduce((n,p)=>n+p.files,0),bytes:results.reduce((n,p)=>n+p.bytes,0)};
   }else if(kind==='activity'){
    const {results}=await readWorkspaceActivity(db,user,projectId);data={items:results.map(a=>({id:a.id,projectId:a.project_id,summary:a.summary,createdAt:a.created_at}))};
-  }else if(kind==='traffic')data=await readTraffic(db,user,projectId);
+  }else if(kind==='reviews')data=await readWorkspaceReviews(db,user,projectId);
+  else if(kind==='traffic')data=await readTraffic(db,user,projectId);
   else status='unavailable';
  }catch(error){status=error instanceof FeatureInclusionError?'denied':'unavailable';}
  // Discard already-read facts after late access changes; never return stale data
  // alongside a denied/unavailable status. Identity failure propagates to the gate.
  await revalidate?.();
+ if(kind==='reviews'&&status==='ready'){
+  // A layout read may race with a review change; refresh through its authoritative
+  // validator, then fence the page and per-project eligibility again.
+  try{data=await readWorkspaceReviews(db,user,projectId);}catch{status='unavailable';}
+  await revalidate?.();
+  if(status==='ready')data=await filterWorkspaceReviewAccess(db,user,data as WorkspaceReviewQueue);
+ }
  if(before!==null&&before!==await ownedIds())status='unavailable';
  await assertWorkspace(db,user);
  try{await assertFeature(db,gate);}catch(error){if(!(error instanceof FeatureInclusionError))throw error;status='denied';}

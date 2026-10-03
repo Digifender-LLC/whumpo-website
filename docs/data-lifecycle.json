@@ -562,7 +562,7 @@
       ],
       "scope": "project",
       "purpose": "Full private website/service configuration, compiler locks, manifests, target references, previews, release candidates and comparison copies, including forward-restored snapshots.",
-      "currentRetention": "Proposals expire after ten minutes; preparing another proposal clears expired project proposals and a bounded global batch. Expiry is not a timed purge. Saved full snapshots have count/byte bounds, not age expiry. Exact website removal cascades dependent full snapshots and removes associated proposal/comparison copies; current heads and unexpired unapplied/activation reviews retain dependencies. Current Chat comparison reads are private/no-store, opened on demand and never persisted in sessionStorage, transcript exports or inference context. Their owner/review/digest/revision-scoped query has zero inactive retention; collapse/navigation/account reset clears it, and failed or refreshing reads hide earlier facts. The existing protected preview and exact approval remain separate.",
+      "currentRetention": "Proposals expire after ten minutes; preparing another proposal clears expired project proposals and a bounded global batch. Expiry is not a timed purge. Saved full snapshots have count/byte bounds, not age expiry. Exact website removal cascades dependent full snapshots and removes associated proposal/comparison copies; current heads and unexpired unapplied/activation reviews retain dependencies. Current Chat comparison reads are private/no-store, opened on demand and never persisted in sessionStorage, transcript exports or inference context. Their owner/review/digest/revision-scoped query has zero inactive retention; collapse/navigation/account reset clears it, and failed or refreshing reads hide earlier facts. The existing protected preview and exact approval remain separate. Shared workspace review queues retain no new server copy. They discover up to five recent unapplied/unexpired owned website change/restore proposals, validate each through the existing exact comparison reader, and return bounded identities/project labels only. Comparison text is fetched separately on explicit expansion through that same reader and transient shared component. Queue refresh never extends review expiry or applies changes.",
       "proposedRetention": "Retain active saved configurations until exact removal or closure. Enumerate every full snapshot, proposal, preview, comparison and Chat/inspection copy during erasure. Restore creates a forward version under current safety and ownership checks; deleted bytes cannot be recreated from metadata receipts.",
       "deletionAuthority": "Exact owner website/project/account review and current dependency/hold checks. Direct retained-head or review deletion is not a supported bypass; eligible parent cascades do not constitute a customer closure workflow.",
       "exportPolicy": "Allowlist owned cleared configurations, pinned compiler/version provenance and compatible artifacts. Label private desired settings separately from enabled services; exclude internal envelopes/authority digests, visitor records and credentials. Current whole-account export remains unimplemented.",
@@ -574,7 +574,11 @@
         "frontend/src/specification-review-details.tsx",
         "src/project-specification/service-clients/store.ts",
         "docs/version-retention.md",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "src/workspace-reviews.ts",
+        "src/workspace-view-data.ts",
+        "src/workspace-view-bindings.ts",
+        "frontend/src/workspace-view-components.tsx"
       ],
       "storageStatus": "current",
       "protection": {
@@ -584,13 +588,15 @@
           "browser-private-cache"
         ],
         "readers": [
-          "Owner exact proposal/version/configuration handlers; published outputs through separate serving gates"
+          "Owner exact proposal/version/configuration handlers; published outputs through separate serving gates",
+          "Saved-page and temporary-Chat review queues require current workspace/feature/project access, revalidate exact review authority, and expose no fields for denied/unavailable entries. Browser results share the current comparison renderer and account-bound zero-inactive-retention query cache; no approval control is created from queue data."
         ],
         "processors": [
           "Current compiler, comparison/restore and selected maintenance inspection"
         ],
         "remainingExposure": [
-          "Full specifications and private previews are readable; a compiler manifest does not grant publication authority."
+          "Full specifications and private previews are readable; a compiler manifest does not grant publication authority.",
+          "Owned project names and current review identity/expiry are transient private view data; exact before/after website content is read on comparison expansion. Existing safety holds, expiry, current base/compiler and feature/ownership checks remain authoritative. No raw query, generated HTML, external destination, visitor data or credential is added to view configuration."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
