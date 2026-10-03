@@ -38,7 +38,9 @@ import {listInteractions} from './chat-interactions/store';
 import {taskReferences} from './chat-interactions/task-context';
 import {submittedReferences} from './chat-interactions/submitted-context';
 
-export class ProposalError extends Error { constructor(){super('The proposed website action could not be accepted');} }
+// Fixed operator categories only. Never put model text or customer values here.
+export type ProposalFailure='proposal_shape'|'task_progress'|'task_action'|'task_purpose'|'task_name'|'task_target'|'project_shape'|'project_config'|'project_id';
+export class ProposalError extends Error { constructor(readonly reason:ProposalFailure='proposal_shape'){super('The proposed website action could not be accepted');} }
 type ServiceSummary={site_live?:number;backend_live?:number;cms_articles?:number};
 type ProjectContext=ServiceSummary&{details_revision:number;id:string;name:string;purpose:string;status:string;audience:string;style_notes:string;preferred_theme:string};
 export type AgentContext={taskReferences?:Awaited<ReturnType<typeof taskReferences>>;submittedForms?:Awaited<ReturnType<typeof submittedReferences>>;interactions?:Awaited<ReturnType<typeof listInteractions>>['items'];profile?:Awaited<ReturnType<typeof agentProfile>>;workspace?:Awaited<ReturnType<typeof readLayout>>;backends?:{id:string;project_id:string;digest:string}[];dnsConnection?:{enabled:boolean;connected:boolean;expiresAt:string|null};domains?:{id:string;project_id:string;hostname:string;expires_at:string;verified_at:string|null}[];projectIndex:(ServiceSummary&{id:string;name:string;status:string;details_revision:number})[];projects:ProjectContext[];photos:{id:string;project_id:string;name:string;width:number;height:number}[];latest:{id:string;project_id:string;component_id:string;config_json:string}|null};
@@ -251,10 +253,10 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
   }
  }
  if(action.kind==='project'){
-  if(Object.keys(action).some(k=>!['kind','purpose','config'].includes(k))||typeof action.purpose!=='string'||!action.purpose.trim()||action.purpose.length>1000)throw new ProposalError();
-  let config;try{config=photoConfig(action.config);if(config.photos.length)throw new ProposalError();}catch{throw new ProposalError();}
+  if(Object.keys(action).some(k=>!['kind','purpose','config'].includes(k))||typeof action.purpose!=='string'||!action.purpose.trim()||action.purpose.length>1000)throw new ProposalError('project_shape');
+  let config;try{config=photoConfig(action.config);if(config.photos.length)throw new ProposalError();}catch{throw new ProposalError('project_config');}
   const projectId=newProjectId??turnId;
-  if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(projectId))throw new ProposalError();
+  if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(projectId))throw new ProposalError('project_id');
   const draft=await createWebsite(db,userId,turnId,projectId,config),now=new Date().toISOString();
   return {reply:`Created your project “${config.name}” and its first private website draft. Open the preview below, then tell me what to change. Nothing has been published.`,createdProjectId:projectId,statements:[
    db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at,preferred_theme) SELECT ?,?,?,?,'draft',?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND status='pending')").bind(projectId,userId,config.name,action.purpose.trim(),now,now,config.theme,turnId,userId),

@@ -1,6 +1,6 @@
 import {interactionActionRequest} from './chat-interactions/agent-request';
 import {taskResponse,taskProgressStatement,taskProgressPrompt} from './chat-interactions/task-progress';
-import {informationTaskClaim,informationTaskGuards,informationTaskPrompt,informationTaskProposalAllowed,prepareInformationTask,taskContinuationContent} from './chat-interactions/task-context';
+import {informationTaskClaim,informationTaskGuards,informationTaskPrompt,informationTaskProposalFailure,prepareInformationTask,taskContinuationContent} from './chat-interactions/task-context';
 import {policyInputBound} from './ai';
 import {standardAIReservationStatement,standardAIDispatchStatement,dispatchStandardAI,cancelStandardAI,markStandardAIUncertain,closeStandardAIAttempt} from './standard-ai-usage';
 import {reconcileStandardChat} from './standard-ai-recovery';
@@ -124,11 +124,12 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     let result = await complete({ ...config, maxOutputTokens: outputLimit, timeoutMs:canFollow?45000:config.timeoutMs, sessionId: `tellumo-${userId}` }, messages, modelTransport);
     if(result.inputTokens>boundInput()||result.outputTokens>outputLimit)throw new ProviderError('invalid_response');
     // Validate task-only memory separately; ordinary agent envelopes stay strict.
-    function scopedResponse(raw:string){try{return taskResponse(raw,task!.progress);}catch{throw new ProposalError();}}
+    function scopedResponse(raw:string){try{return taskResponse(raw,task!.progress);}catch{throw new ProposalError('task_progress');}}
     let firstRaw=result.text;
     if(task){
       try{firstRaw=scopedResponse(result.text).raw;}catch(error){await observeInference(db,userId,id,result);throw error;}
-      if(!informationTaskProposalAllowed(firstRaw,task)){await observeInference(db,userId,id,result);throw new ProposalError();}
+      const failure=informationTaskProposalFailure(firstRaw,task);
+      if(failure){await observeInference(db,userId,id,result);throw new ProposalError(failure);}
     }
     let resumeRequest;
     try{const candidate=JSON.parse(result.text);if(candidate&&typeof candidate==='object'&&!Array.isArray(candidate)&&Object.keys(candidate).every(k=>['reply','action'].includes(k))&&typeof candidate.reply==='string'&&candidate.reply.trim()&&candidate.reply.length<=2000&&interactionActionRequest(candidate.action)&&candidate.action.operation==='resumeTask')resumeRequest=candidate.action;}catch{}
@@ -177,7 +178,8 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(!open)return {status:200};
     const taskResult=task?scopedResponse(result.text):null;
     if(taskResult)result.text=taskResult.raw;
-    if(task&&!informationTaskProposalAllowed(result.text,task))throw new ProposalError();
+    const taskFailure=task?informationTaskProposalFailure(result.text,task):null;
+    if(taskFailure)throw new ProposalError(taskFailure);
     if(pageDesign&&!appPageDesignProposalAllowed(result.text,pageDesign.projectId))throw new ProposalError();
     if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id,firstApp?'app':'website'))throw new ProposalError();
     if(firstProject&&!await welcomeDraftProject(db,userId,firstProject.id))throw new Error('welcome_first_draft_changed');
@@ -245,6 +247,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       return {status:200};
     }
     if(cause instanceof ProposalError || String(cause).includes('site_version_quota') || String(cause).includes('project_quota') || String(cause).includes('version_photo_owner')) {
+      if(cause instanceof ProposalError)console.warn(JSON.stringify({event:'ai_proposal_rejected',operation:id,reason:cause.reason,task:task?.form.intake?'project-intake':task?.form.selection?'project-selection':task?'information':'none',elapsedMs:Date.now()-started}));
       await closeStandardAIAttempt(db,userId,id);
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind((cause instanceof ProposalError || String(cause).includes('version_photo_owner')) ? 'The proposed change did not pass validation, so nothing was applied and your credits were not used. Try describing a smaller change.' : String(cause).includes('project_quota') ? 'Your account has reached its 20-project test limit. No project or draft was created and your credits were not used.' : 'This project has reached its 25 saved-version limit. No change was applied and your credits were not used.',id,userId).run();
       return {status:200};

@@ -29,20 +29,29 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
   const response=await route.fetch({timeout:150000,maxRetries:0});
   if(loseContinuation&&response.status()===200){loseContinuation=false;lostReplies++;await route.fulfill({status:200,contentType:'application/json',body:''});}else await route.fulfill({response});
  });
- async function settled(turnId){let turn;for(let n=0;n<130;n++){turn=await row('SELECT id,status,assistant_text FROM chat_turns WHERE id=? AND user_id=?',turnId,id);if(turn&&turn.status!=='pending')break;await new Promise(done=>setTimeout(done,1000));}assert.equal(turn?.status,'completed','Expected completed Chat result');return turn;}
+ async function settled(turnId){let turn;for(let n=0;n<130;n++){turn=await row('SELECT id,status,assistant_text FROM chat_turns WHERE id=? AND user_id=?',turnId,id);if(turn&&turn.status!=='pending')break;await new Promise(done=>setTimeout(done,1000));}assert(turn&&turn.status!=='pending','Expected terminal Chat result');return turn;}
  async function chat(name,text,verify){
   phase=name;const record={name,success:false},before=await calls();steps.push(record);assert(before.main+before.lookups<24,'Bounded real-model call ceiling');
   await page.getByRole('textbox',{name:'Message Whumpo',exact:true}).fill(text);
   const pending=page.waitForResponse(r=>r.url()==='https://whumpo.com/api/chat'&&r.request().method()==='POST',{timeout:150000});await page.getByRole('button',{name:'Send message',exact:true}).click();
-  const response=await pending;assert.equal(response.status(),200);const input=response.request().postDataJSON();acceptedTurn=input.id;record.turn=await settled(input.id);await verify(record.turn);
+  const response=await pending;assert.equal(response.status(),200);const input=response.request().postDataJSON();acceptedTurn=input.id;record.turn=await settled(input.id);assert.equal(record.turn.status,'completed','Expected completed Chat result');await verify(record.turn);
   const after=await calls();await browser.json('/api/chat','POST',input);assert.deepEqual(await calls(),after,'Chat replay dispatched inference');record.calls={before,after};record.success=true;console.log(JSON.stringify({step:name,passed:true,deployed:true}));return record.turn;
  }
  async function issued(turn,template){const f=await row('SELECT id FROM chat_interactions WHERE origin_turn_id=? AND user_id=?',turn.id,id);assert(f,'Expected maintained form');const form=await store.readInteraction(scope,id,f.id);assert.equal(form.envelope.definition.template,template);return form;}
  async function submit(name,form){
   phase=name;const record={name,success:false},before=await calls();steps.push(record);
   await card(form).getByRole('button',{name:'Save and continue',exact:true}).click();
-  await card(form).getByText('Whumpo’s follow-up is ready in Chat. Review any preview before approving changes or publishing.',{exact:true}).waitFor({timeout:150000});
-  const saved=await store.readInteraction(scope,id,form.envelope.id);assert.equal(saved.submission.continuation.state,'succeeded');record.turn=await settled(saved.submission.id);
+  let saved;
+  for(let n=0;n<150;n++){
+   saved=await store.readInteraction(scope,id,form.envelope.id);
+   if(['succeeded','failed'].includes(saved.submission?.continuation?.state))break;
+   await new Promise(done=>setTimeout(done,1000));
+  }
+  record.continuationState=saved.submission?.continuation?.state;
+  if(saved.submission)record.turn=await settled(saved.submission.id);
+  assert.equal(record.continuationState,'succeeded','Expected successful task continuation');
+  assert.equal(record.turn.status,'completed','Expected completed task result');
+  await card(form).getByText('Whumpo’s follow-up is ready in Chat. Review any preview before approving changes or publishing.',{exact:true}).waitFor();
   const after=await calls(),input=requests.get(saved.submission.id);assert(input);await browser.json('/api/chat/interactions/v1/continue','POST',input);assert.deepEqual(await calls(),after,'Continuation replay dispatched inference');
   await page.reload();await card(saved).getByText('Whumpo’s follow-up is ready in Chat.',{exact:false}).waitFor();assert.deepEqual(await calls(),after,'Reload dispatched inference');record.calls={before,after};record.success=true;console.log(JSON.stringify({step:name,passed:true,deployed:true}));return saved;
  }
