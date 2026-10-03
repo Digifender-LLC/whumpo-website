@@ -1,4 +1,3 @@
-import type {WorkspaceShortcut} from '../../../src/workspace-shortcuts';
 import type {AppMaintenancePresentation} from '../../../src/app-maintenance-shape';
 import type {AppRestorePresentation} from '../../../src/app-restore-review-shape';
 import type {AppPageReviewPresentation} from '../../../src/app-page-review-shape';
@@ -15,7 +14,7 @@ export function requireCurrentAccountIdentity(value:unknown):asserts value is {a
 export const send=<T>(path:string,body:unknown={},method='POST')=>api<T>(path,{method,body:JSON.stringify(body)});
 export type Profile={accountId:string;revision:number;avatar_id:string;onboardingComplete:boolean;name:string;about_me:string;email:string;share_context:number;theme:string;hasPhoto:number;photoSafety?:'none'|'pending'|'approved'|'blocked'};
 export type Project={id:string;name:string;status:string;purpose:string;cms_articles:number};
-export type Layout={widgets:string[];tabs:{id:string;label:string;projectId:string|null;widgets:string[];shortcuts?:WorkspaceShortcut[]}[]};
+export type Layout=import('../../../src/workspace-view-contract').WorkspaceLayout;
 export type Traffic={enabledAt:string|null;days:number;rows:{project_id:string;day:string;requests:number}[];metric:string};
 export type Dashboard={traffic?:Traffic;revision:number;layout:Layout;projects:Project[];measuredAt:string;billing:{plan:{id:string;name:string}};activity:{id:string;project_id:string;summary:string;created_at:string}[];storage:{project_id:string;bytes:number}[];capacity:{preferences:{revision:number;preferred_plan:string;billing_interval:string;draft_overage_cents:number}}};
 export type Turn={interaction_id?:string;github_grant_review?:import('../../../src/github-grant-shape').GitHubGrantReview;app_maintenance_review?:AppMaintenancePresentation;app_restore_review?:AppRestorePresentation;app_page_review?:AppPageReviewPresentation;application_review?:ApplicationReviewPresentation;id:string;revision:number;user_text:string;action_json:string|null;assistant_text:string;status:string;[key:string]:unknown};

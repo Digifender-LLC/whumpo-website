@@ -19,7 +19,8 @@ try{
  assert.equal((await call('/api/onboarding','PUT',{revision:0,stage:'review',prompt:'review',project_name:'Synthetic Bakery',idea:'A fictional bakery project',audience:'Neighbors',preferred_theme:'forest'})).status,200);
  assert.equal((await call('/api/onboarding/complete','POST',{revision:1})).status,200);
  const project=(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(user).first()).id;
- assert.equal((await call('/api/workspace/layout','PUT',{revision:0,layout:{widgets:['projects','activity'],tabs:[{id:'tab-bakery',label:'Bakery overview',projectId:project,widgets:['projects','activity'],shortcuts:['project','versions']}]}})).status,200);
+ await db.prepare("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','prepare','private-test-acceptance','synthetic browser fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)").bind(crypto.randomUUID(),user).run();
+ assert.equal((await call('/api/workspace/views/v1/mutate','POST',{version:1,requestId:crypto.randomUUID(),expectedRevision:0,operation:'createPage',page:{id:'tab-bakery',label:'Bakery overview',view:{version:1,projectId:project,widgets:['projects','activity'],shortcuts:['project','versions']}}})).status,200);
  server=createServer(async(req,res)=>{try{
   if(req.headers.host!=='localhost:8787'){res.writeHead(403).end();return;}
   const url=new URL(req.url,origin);

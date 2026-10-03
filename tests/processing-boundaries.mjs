@@ -40,7 +40,7 @@ try{
  enriched.internal=markers.internal;enriched.profile={name:'Shared name',about_me:'Shared bio',email:markers.email,photo:markers.photo};
  for(const field of ['projectIndex','projects','photos','domains','backends'])for(const entry of enriched[field]??[])entry.internal=markers.internal;
  enriched.workspace.internal=markers.internal;enriched.workspace.layout.internal=markers.internal;
- enriched.workspace.layout.tabs=[{id:'tab-garden',label:'Garden',projectId:project,widgets:['projects'],internal:markers.internal}];enriched.latest.internal=markers.internal;
+ enriched.workspace.layout.tabs=[{id:'tab-garden',label:'Garden',view:{version:1,projectId:project,widgets:['projects'],shortcuts:[],internal:markers.internal},internal:markers.internal}];enriched.latest.internal=markers.internal;
  for(const focus of ['all','website','cms'])checkPrivate(m.agentWorkspaceData(enriched,focus),true);
  const invalid=structuredClone(original);invalid.latest.config_json=JSON.stringify({...JSON.parse(invalid.latest.config_json),private:markers.internal});assert.throws(()=>m.agentWorkspaceData(invalid),/Invalid/);
  // Inspecting project metadata cannot read a visitor's document or backend state.
@@ -84,6 +84,6 @@ try{
  const contact=await m.worker.fetch(new Request(base+'/contact/'+project),broken);assert.equal(contact.status,503);checkPrivate(await contact.text());
  checkPrivate(JSON.stringify(logs));assert.ok(logs.some(x=>x.includes('request.failed')));assert.ok(logs.some(x=>x.includes('contact.failed')));
  // Strict current layout admission rejects hidden extensions instead of spreading them.
- await db.prepare('INSERT INTO workspace_preferences(user_id,layout_json,updated_at) VALUES(?,?,?)').bind(owner.account,JSON.stringify({widgets:['projects'],tabs:[],private:markers.internal}),now()).run();await assert.rejects(m.readLayout(scope,owner.account),{status:400});
+ await db.prepare('INSERT INTO workspace_preferences(user_id,layout_json,updated_at) VALUES(?,?,?)').bind(owner.account,JSON.stringify({version:1,dashboard:{version:1,projectId:null,widgets:['projects'],shortcuts:[]},tabs:[],private:markers.internal}),now()).run();await assert.rejects(m.readLayout(scope,owner.account),{status:400});
  console.log('Processing boundaries passed: actual two-step Chat plus acknowledgments, profile opt-in/withdrawal, field projection, owner/visitor/credential/object exclusion, source and transcript export, private-media ownership, strict layout and sanitized Worker/contact diagnostics. Synthetic current data only; no scanner, CMS, live inference or restore claim.');
 }finally{globalThis.fetch=previousFetch;console.error=previousError;console.warn=previousWarn;await fixture.close();}
