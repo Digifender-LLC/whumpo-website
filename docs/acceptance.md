@@ -38,6 +38,8 @@ Internal safety evidence/correction storage and an operator preview/apply tool a
 
 **WH-108 model continuation source, October 3 UTC:** the current custom form binding now connects saved answers to the bounded owner Chat loop, with atomic receipts, task/project pins, private context and explicit no-redispatch recovery. The binding and current schema are deployed; the connected local browser and one real Muse/local-D1 sample verify continuation separately from the inference-free live release probe. See [continuation verification](verification.md#custom-form-model-continuation--october-3-2026-utc) and [current-test cutover preparation](chat-test-release.md#model-continuation-cutover-preparation--october-3-2026-utc). WH-108 remains open for its full composition/task acceptance.
 
+**WH-108 task memory source, October 3 UTC:** saved custom-form tasks now retain bounded decision summaries, unanswered questions and pending-review references across later natural Chat replies. Forty SQLite/local-D1 handler cases, the full built mobile browser and one real Muse two-turn sample pass. The new 173-table schema and task-routing changes are **not yet deployed**; the current test release above remains authoritative for deployed behavior. See [task memory evidence](verification.md#bounded-task-memory-and-natural-replies--october-3-2026-utc). Full WH-108 scope remains open.
+
 ## Current delivery priorities
 
 1. Continue the [execution roadmap](roadmap/README.md): the [authority audit and A1–A3 remediation](tenant-authority-audit.md) are complete to their defined scope; continue production-inference privacy/quality evidence, device/assistive-technology acceptance and incident/recovery operations. Implementation milestones do not close those acceptance gates.

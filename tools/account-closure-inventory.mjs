@@ -20,6 +20,7 @@ const metrics={
  chatTurns:['chat_turns','user_id'],
  chatConversations:['chat_conversations','user_id'],
  chatInteractionTasks:['chat_interaction_tasks','user_id'],
+ chatTaskProgress:['chat_task_progress','user_id'],
  chatInteractions:['chat_interactions','user_id'],
  chatInteractionRequests:['chat_interaction_requests','user_id'],
  chatInteractionSubmissions:['chat_interaction_submissions','user_id'],
