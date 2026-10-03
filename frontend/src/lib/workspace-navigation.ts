@@ -1,14 +1,16 @@
-/** A locator only. The interaction handler still checks current ownership,
- * retention and the exact maintained definition before displaying any data. */
-export function chatInteractionTarget(search:string):string|null{
- const values=new URLSearchParams(search).getAll('interaction');
- return values.length===1&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(values[0])?values[0]:null;
+import {chatLocationId,type ChatLocation} from './chat-location';
+/** URL values are locators only; ambiguous or repeated targets are refused. */
+export function chatLocationTarget(search:string):ChatLocation|null{
+ const params=new URLSearchParams(search),kinds=(['interaction','turn'] as const).filter(kind=>params.has(kind));
+ if(kinds.length!==1)return null;
+ const kind=kinds[0],values=params.getAll(kind);
+ return values.length===1&&chatLocationId(values[0])?{kind,id:values[0]}:null;
 }
 /** Callback query text never supplies a destination or a success assertion. */
 export function providerReturn(search:string):{view:'chat'|'connections'|'billing';notice:string;interactionId?:string}|undefined{
  const params=new URLSearchParams(search);
  if(params.has('connection')){
-  const id=chatInteractionTarget(search),known=params.get('connection')==='github'||params.get('connection')==='cloudflare';
+  const target=chatLocationTarget(search),id=target?.kind==='interaction'?target.id:null,known=params.get('connection')==='github'||params.get('connection')==='cloudflare';
   const interactionId=known&&id?id:undefined;
   return {view:interactionId?'chat':'connections',...(interactionId?{interactionId}:{}),notice:params.has('connection_error')||params.has('error')?'Authorization needs a status check. Your saved connection may be unchanged or its outcome unconfirmed.':'Checking the latest connection status…'};
  }

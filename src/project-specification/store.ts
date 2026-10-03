@@ -9,6 +9,7 @@ import {projectPage} from './v2/schema';
 import {requireSpecificationPhotos,inlineSpecificationPhotos} from '../specification-photos';
 import {assertFeature} from '../feature-admission';
 import {readSpecificationReviewDisplay} from './review-display';
+import {chatTurnGroups} from '../chat-turn-groups';
 
 const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -169,9 +170,11 @@ export async function specificationAction(db:D1Database,user:string,turn:string,
 }
 
 export async function specificationChatLinks(db:D1Database,user:string,turns:Record<string,unknown>[]){
- const {results}=await db.prepare('SELECT l.turn_id,l.proposal_id,l.reply_digest FROM project_spec_chat_links l JOIN chat_turns t ON t.id=l.turn_id WHERE t.user_id=? ORDER BY t.revision DESC LIMIT 100').bind(user).all<{turn_id:string;proposal_id:string;reply_digest:string}>();
+ for(const ids of chatTurnGroups(turns)){
+ const {results}=await db.prepare(`SELECT l.turn_id,l.proposal_id,l.reply_digest FROM project_spec_chat_links l JOIN chat_turns t ON t.id=l.turn_id WHERE t.user_id=? AND l.turn_id IN (${ids.map(()=>'?').join(',')})`).bind(user,...ids).all<{turn_id:string;proposal_id:string;reply_digest:string}>();
  for(const link of results){const turn=turns.find(t=>t.id===link.turn_id);if(!turn||turn.status!=='completed'||typeof turn.assistant_text!=='string'||await sha256(turn.assistant_text)!==link.reply_digest)continue;
   try{const q=await readSpecificationProposal(db,user,link.proposal_id);turn.specification_review={id:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision};}catch(error){if(!(error instanceof BackendError))throw error;}
+ }
  }
 }
 const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
