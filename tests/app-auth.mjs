@@ -1,40 +1,29 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
-import {build} from 'esbuild';
-import wrangler from 'wrangler';
 import {authenticator} from './app-authenticator.mjs';
-async function module(path){const b=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));}
-const auth=await module('src/app-auth.ts'),data=await module('src/app-data.ts'),{saveBackend,testBackend}=await module('src/backend-versions.ts'),{prepareApplication,confirmApplication}=await module('src/app-activation.ts');
-const {applicationGateway}=await module('src/app-gateway.ts');
-const platform=(await module('src/index.ts')).default;
-const pages=await module('src/app-pages.ts');
-const appHost=(await module('src/app-host.ts')).default;
-const {backendAction}=await module('src/backend-chat.ts');
-const {hashToken}=await module('src/security.ts');
-const {replacementAppRecoveryCode}=await module('src/app-recovery.ts');
-const dir=await mkdtemp('/tmp/townhello-app-auth-');
-execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
-const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
+import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
+const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,scopes=new Map(),scope=user=>scopes.get(user);
+const {appAuth:auth,appData:data,appPages:pages,appHost,worker:platform,hashToken}=m,{saveBackend,testBackend}=m.backend,{prepareApplication,confirmApplication}=m.appActivation,{applicationGateway}=m.appGateway,{backendAction}=m.backendChat,{replacementAppRecoveryCode}=m.appRecovery;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 async function app(){
- const user=id(),project=id(),version=id(),test=id();
- await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.test',now()).run();
+ const authority=await workspaceFixture(db,m),user=authority.account,project=id(),version=id(),test=id();
+ scopes.set(user,await authority.scope());
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'App auth fixture','','draft',?,?)").bind(project,user,now(),now()).run();
- await saveBackend(db,user,project,version,'export default ({state,input})=>({state:input,result:state})');
- await testBackend(db,{fetch:()=>Response.json({ok:true,value:{state:{},result:{}}})},user,project,version,test,{state:{},input:{}});
- const a={user,project,version,test};await configure(a,'enable');return a;
+ await saveBackend(scope(user),user,project,version,'export default ({state,input})=>({state:input,result:state})');
+ await testBackend(scope(user),{fetch:()=>Response.json({ok:true,value:{state:{},result:{}}})},user,project,version,test,{state:{},input:{}});
+ const a={...authority,user,project,version,test};await configure(a,'enable');return a;
 }
-async function configure(a,operation){const review=id();await prepareApplication(db,a.user,a.project,review,operation,...(operation==='enable'?[a.version,a.test]:[null,null]));await confirmApplication(db,a.user,review);}
+async function configure(a,operation){const review=id();await prepareApplication(scope(a.user),a.user,a.project,review,operation,...(operation==='enable'?[a.version,a.test]:[null,null]));await confirmApplication(scope(a.user),a.user,review);}
 const begin=(a,kind='login',secret='')=>auth.appPasskeyOptions(db,a.project,kind,false,secret);
 const verify=(a,kind,options,response,database=db,session='')=>auth.appPasskeyVerify(database,a.project,kind,options.challengeToken,response,false,session);
-async function signup(a){const invite=await auth.createAppInvitation(db,a.user,a.project),opt=await begin(a,'signup',invite.code),key=authenticator(),result=await verify(a,'signup',opt,key.registration(opt.options));return {...result,key,invite};}
+async function signup(a){const invite=await auth.createAppInvitation(scope(a.user),a.user,a.project),opt=await begin(a,'signup',invite.code),key=authenticator(),result=await verify(a,'signup',opt,key.registration(opt.options));return {...result,key,invite};}
 async function denied(promise,status){await assert.rejects(promise,e=>status?e.status===status:true);}
 try {
  const a=await app(),b=await app();
- await denied(auth.createAppInvitation(db,b.user,a.project),404);
+ await denied(auth.createAppInvitation(scope(b.user),b.user,a.project),404);
  await denied(begin(a,'signup','a'.repeat(64)),403);
- const invite=await auth.createAppInvitation(db,a.user,a.project),key=authenticator();
+ const invite=await auth.createAppInvitation(scope(a.user),a.user,a.project),key=authenticator();
  await denied(begin(b,'signup',invite.code),403);
  let opt=await begin(a,'signup',invite.code);
  assert.equal(opt.options.authenticatorSelection.userVerification,'required');assert.equal(opt.options.authenticatorSelection.residentKey,'required');
@@ -55,20 +44,20 @@ try {
  await denied(verify(a,'login',opt,key.assertion(opt.options,2)),400);
  opt=await begin(a);await denied(verify(a,'login',opt,key.assertion(opt.options,1)),401);
  // Same invitation can have competing valid registration challenges: only one visitor commits.
- const raceInvite=await auth.createAppInvitation(db,a.user,a.project),raceOpts=await Promise.all([begin(a,'signup',raceInvite.code),begin(a,'signup',raceInvite.code)]);
+ const raceInvite=await auth.createAppInvitation(scope(a.user),a.user,a.project),raceOpts=await Promise.all([begin(a,'signup',raceInvite.code),begin(a,'signup',raceInvite.code)]);
  const race=await Promise.allSettled(raceOpts.map(o=>verify(a,'signup',o,authenticator().registration(o.options))));
  assert.equal(race.filter(r=>r.status==='fulfilled').length,1);
  assert.equal((await db.prepare('SELECT count(*) n FROM app_visitors WHERE project_id=?').bind(a.project).first()).n,3);
  // Duplicate credential insertion rolls back the visitor and leaves its invite usable.
- const duplicateInvite=await auth.createAppInvitation(db,a.user,a.project);
+ const duplicateInvite=await auth.createAppInvitation(scope(a.user),a.user,a.project);
  const duplicateKey=authenticator(),duplicateOptions=await begin(a,'signup',duplicateInvite.code);
  await verify(a,'signup',duplicateOptions,duplicateKey.registration(duplicateOptions.options));
- const retryInvite=await auth.createAppInvitation(db,a.user,a.project),retryOptions=await begin(a,'signup',retryInvite.code);
+ const retryInvite=await auth.createAppInvitation(scope(a.user),a.user,a.project),retryOptions=await begin(a,'signup',retryInvite.code);
  await denied(verify(a,'signup',retryOptions,duplicateKey.registration(retryOptions.options)));
  assert.equal((await db.prepare('SELECT count(*) n FROM app_visitors WHERE project_id=?').bind(a.project).first()).n,4);
  assert.ok(await begin(a,'signup',retryInvite.code));
  // Lost commit acknowledgment does not lead to automatic enrollment replay.
- const lostInvite=await auth.createAppInvitation(db,a.user,a.project),lostOptions=await begin(a,'signup',lostInvite.code),lostKey=authenticator();
+ const lostInvite=await auth.createAppInvitation(scope(a.user),a.user,a.project),lostOptions=await begin(a,'signup',lostInvite.code),lostKey=authenticator();
  const lossy=new Proxy(db,{get(target,name){if(name==='batch')return async statements=>{await target.batch(statements);throw Error('lost acknowledgment');};const value=target[name];return typeof value==='function'?value.bind(target):value;}});
  const lostResponse=lostKey.registration(lostOptions.options);
  await denied(verify(a,'signup',lostOptions,lostResponse,lossy));
@@ -76,7 +65,7 @@ try {
  opt=await begin(a);assert.ok((await verify(a,'login',opt,lostKey.assertion(opt.options))).session);
  // A configuration change invalidates even an otherwise valid signed assertion.
  opt=await begin(a);await configure(a,'enable');await denied(verify(a,'login',opt,key.assertion(opt.options,2)),409);
- const staleInvite=await auth.createAppInvitation(db,a.user,a.project);opt=await begin(a,'signup',staleInvite.code);await configure(a,'enable');await denied(verify(a,'signup',opt,authenticator().registration(opt.options)),409);
+ const staleInvite=await auth.createAppInvitation(scope(a.user),a.user,a.project);opt=await begin(a,'signup',staleInvite.code);await configure(a,'enable');await denied(verify(a,'signup',opt,authenticator().registration(opt.options)),409);
  // Recovery keeps the same private data and replaces every old credential/session.
  await data.transitionAppData(db,{fetch:()=>Response.json({ok:true,value:{state:{private:'saved'},result:true}})},signed.session,a.project,id(),0,{});
  await denied(auth.recoverAppVisitor(db,b.project,registered.recoveryCode),401);
@@ -97,8 +86,8 @@ try {
  await denied(verify(a,'login',opt,replacement.assertion(opt.options,2),recoveryRace),409);
  await denied(data.readAppData(db,restored.session,a.project),401);
  // Owner revocation clears keys, recovery and sessions; another owner's authority is rejected.
- await denied(auth.revokeAppVisitor(db,b.user,a.project,other.visitorId),404);
- await auth.revokeAppVisitor(db,a.user,a.project,other.visitorId);
+ await denied(auth.revokeAppVisitor(scope(b.user),b.user,a.project,other.visitorId),404);
+ await auth.revokeAppVisitor(scope(a.user),a.user,a.project,other.visitorId);
  await denied(data.readAppData(db,other.session,a.project),401);
  await denied(auth.recoverAppVisitor(db,a.project,other.recoveryCode),401);
  assert.equal((await db.prepare('SELECT count(*) n FROM app_passkeys WHERE visitor_id=?').bind(other.visitorId).first()).n,0);
@@ -118,13 +107,13 @@ try {
  // A transferred project cannot issue invitations or accept its prior visitor credentials.
  opt=await begin(b);await db.prepare('UPDATE projects SET owner_user_id=? WHERE id=?').bind(a.user,b.project).run();
  await denied(verify(b,'login',opt,zero.key.assertion(opt.options)),404);
- await denied(auth.createAppInvitation(db,b.user,b.project),404);
+ await denied(auth.createAppInvitation(scope(b.user),b.user,b.project),404);
  const raw=JSON.stringify((await db.prepare('SELECT * FROM app_invitations').all()).results)+JSON.stringify((await db.prepare('SELECT * FROM app_sessions').all()).results)+JSON.stringify((await db.prepare('SELECT * FROM app_recovery_codes').all()).results);
  for(const secret of [invite.code,registered.session,registered.recoveryCode,recovered.session,recovered.recoveryCode])assert.ok(!raw.includes(secret));
  // Exercise the HTTP adapter with the same real D1 and signed credentials.
- const c=await app(),pageId=id();await pages.prepareAppPage(db,c.user,c.project,pageId,{title:'Private journal',description:'Test',buttonLabel:'Save',fields:[{key:'hello',label:'Note',type:'text'}]});await pages.confirmAppPage(db,c.user,pageId);
+ const c=await app(),pageId=id();await pages.prepareAppPage(scope(c.user),c.user,c.project,pageId,{title:'Private journal',description:'Test',buttonLabel:'Save',fields:[{key:'hello',label:'Note',type:'text'}]});await pages.confirmAppPage(scope(c.user),c.user,pageId);
  const host='https://app-'+c.project+'.whumpo.site',jar=new Map();let executions=0;
- const env={...proxy.env,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:async(_url,init)=>{executions++;const payload=JSON.parse(init.body).input;assert.deepEqual(Object.keys(payload),['state','input']);return Response.json({ok:true,value:{state:payload.input,result:'saved'}});}}};
+ const env={...store.env,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:{fetch:async(_url,init)=>{executions++;const payload=JSON.parse(init.body).input;assert.deepEqual(Object.keys(payload),['state','input']);return Response.json({ok:true,value:{state:payload.input,result:'saved'}});}}};
  async function request(path,method='GET',payload,settings={}){
   const headers={'cf-connecting-ip':'192.0.2.9',...(!settings.noOrigin?{origin:settings.origin??host}:{}),'content-type':'application/json',cookie:settings.cookie??[...jar].map(([k,v])=>k+'='+v).join('; ')};
   const response=await applicationGateway(new Request((settings.host??host)+'/'+path,{method,headers,body:payload===undefined?undefined:JSON.stringify(payload)}),settings.env??env);
@@ -138,13 +127,13 @@ try {
  assert.equal((await request('auth/login/options','POST',{large:'x'.repeat(17000)})).response.status,413);
  assert.equal((await request('auth/login/options','POST',[],{})).response.status,400);
  assert.equal((await request('auth/login/options','POST',{}, {env:{...env,AUTH_LIMITER:{limit:async()=>({success:false})}}})).response.status,429);
- const httpInvite=await auth.createAppInvitation(db,c.user,c.project),httpKey=authenticator();
+ const httpInvite=await auth.createAppInvitation(scope(c.user),c.user,c.project),httpKey=authenticator();
  const httpOptions=await request('auth/signup/options','POST',{inviteCode:httpInvite.code});assert.equal(httpOptions.response.status,200);assert.deepEqual(Object.keys(httpOptions.result),['options']);
  for(const value of httpOptions.cookies){assert.match(value,/^__Host-/);assert.match(value,/; HttpOnly; SameSite=Strict;/);assert.match(value,/; Secure$/);assert.ok(!value.includes('Domain='));}
  const httpCredential=httpKey.registration(httpOptions.result.options);
  assert.equal((await request('auth/signup/verify','POST',{credential:httpCredential},{cookie:'',noSave:true})).response.status,400);
  const httpSignup=await request('auth/signup/verify','POST',{credential:httpCredential});assert.equal(httpSignup.response.status,200);assert.deepEqual(Object.keys(httpSignup.result).sort(),['authenticated','recoveryCode']);
- assert.equal((await request('data','GET',undefined,{cookie:'tellumo_session='+'a'.repeat(64)})).response.status,401);
+ assert.equal((await request('data','GET',undefined,{cookie:'__Host-whumpo_session='+c.token})).response.status,401);
  assert.deepEqual((await request('data')).result,{revision:0,state:{}});
  const operation=id();const saved=await request('data','POST',{id:operation,revision:0,input:{hello:'private'},pageId});assert.equal(saved.response.status,200);assert.equal(saved.result.state,'complete');assert.equal(executions,1);
  assert.deepEqual((await request('receipts/'+operation)).result,saved.result);
@@ -159,10 +148,9 @@ try {
  assert.deepEqual((await request('data')).result.state,{hello:'private'});
  await request('auth/logout','POST',{});assert.equal((await request('data')).response.status,401);
  // Owner workspace routes never return visitor documents, session tokens or keys.
- const ownerToken='1'.repeat(64),foreignToken='2'.repeat(64),staleToken='3'.repeat(64);
- for(const [token,user,created]of [[ownerToken,c.user,now()],[foreignToken,a.user,now()],[staleToken,c.user,new Date(Date.now()-700000).toISOString()]])await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)').bind(await hashToken(token),user,new Date(Date.now()+3600000).toISOString(),created).run();
+ const ownerToken=c.token,foreignToken=a.token,staleToken=(await workspaceSession(db,m,{account:c.user,credential:c.credential},-700)).token;
  const accessPath='/api/projects/'+c.project+'/application-access';
- async function ownerRequest(suffix='',method='GET',token=ownerToken,origin='https://whumpo.com',payload={}){return platform.fetch(new Request('https://whumpo.com'+accessPath+suffix,{method,headers:{cookie:'tellumo_session='+token,origin,'content-type':'application/json'},body:method==='POST'?JSON.stringify(payload):undefined}),env,{waitUntil(){}});}
+ async function ownerRequest(suffix='',method='GET',token=ownerToken,origin='https://whumpo.com',payload={}){return platform.fetch(new Request('https://whumpo.com'+accessPath+suffix,{method,headers:{cookie:'__Host-whumpo_session='+token,origin,'content-type':'application/json'},body:method==='POST'?JSON.stringify(payload):undefined}),env,{waitUntil(){}});}
  assert.equal((await ownerRequest('','GET','')).status,401);
  assert.equal((await ownerRequest('','GET',foreignToken)).status,404);
  assert.equal((await ownerRequest('/invitations','POST',staleToken)).status,401);
@@ -173,7 +161,7 @@ try {
  const view=await(await ownerRequest()).json();assert.equal(view.publicAccessReady,true);assert.equal(view.visitors.length,2);
  assert.deepEqual(Object.keys(view.visitors[0]).sort(),['created_at','id','passkeys','revoked','sessions']);
  const serialized=JSON.stringify(view);for(const secret of [createdInvite.code,httpSignup.result.recoveryCode,foreign.session])assert.ok(!serialized.includes(secret));
- const chatHeaders={cookie:'tellumo_session='+ownerToken,origin:'https://whumpo.com','content-type':'application/json'};
+ const chatHeaders={cookie:'__Host-whumpo_session='+ownerToken,origin:'https://whumpo.com','content-type':'application/json'};
  const chatState=await(await platform.fetch(new Request('https://whumpo.com/api/chat',{headers:chatHeaders}),env,{waitUntil(){}})).json();
  const chatReply=await platform.fetch(new Request('https://whumpo.com/api/chat',{method:'POST',headers:chatHeaders,body:JSON.stringify({id:id(),revision:chatState.state.revision,content:'/visitor-access '+c.project})}),env,{waitUntil(){}});
  assert.equal(chatReply.status,503);const transcript=await chatReply.json();assert.ok(!JSON.stringify(transcript).includes('active visitor(s)'));assert.ok(!JSON.stringify(transcript).includes(createdInvite.code));
@@ -190,30 +178,30 @@ try {
  assert.equal((await ownerRequest('/visitors/'+remaining.id+'/revoke','POST')).status,200);
  // Page publication requires exact, current owner approval and cannot be confirmed by AI.
  const d=await app(),form={title:'Private notes',description:'Your own journal',buttonLabel:'Save note',fields:[{key:'note',label:'Note',type:'text'}]},reviewOne=id(),reviewTwo=id();
- await pages.prepareAppPage(db,d.user,d.project,reviewOne,form);await pages.prepareAppPage(db,d.user,d.project,reviewTwo,form);
+ await pages.prepareAppPage(scope(d.user),d.user,d.project,reviewOne,form);await pages.prepareAppPage(scope(d.user),d.user,d.project,reviewTwo,form);
  assert.equal(await pages.liveAppPage(db,d.project),null);
- await denied(pages.confirmAppPage(db,a.user,reviewOne),404);
- await denied(backendAction(db,d.user,id(),{kind:'backend',operation:'confirmAppPage',reviewId:reviewOne}));
- await pages.confirmAppPage(db,d.user,reviewOne);await denied(pages.confirmAppPage(db,d.user,reviewTwo),409);
+ await denied(pages.confirmAppPage(scope(a.user),a.user,reviewOne),404);
+ await denied(backendAction(scope(d.user),d.user,id(),{kind:'backend',operation:'confirmAppPage',reviewId:reviewOne}));
+ await pages.confirmAppPage(scope(d.user),d.user,reviewOne);await denied(pages.confirmAppPage(scope(d.user),d.user,reviewTwo),409);
  assert.equal((await pages.liveAppPage(db,d.project)).id,reviewOne);
- await denied(pages.prepareAppPage(db,d.user,d.project,id(),{...form,fields:[{key:'constructor',label:'Bad',type:'text'}]}),400);
+ await denied(pages.prepareAppPage(scope(d.user),d.user,d.project,id(),{...form,fields:[{key:'constructor',label:'Bad',type:'text'}]}),400);
  const assets={fetch:async request=>new Response(new URL(request.url).pathname==='/index.html'?'controlled application shell':'controlled asset')};
  const pageURL='https://app-'+d.project+'.whumpo.site/';
  const rendered=await appHost.fetch(new Request(pageURL),{...env,ASSETS:assets});assert.equal(rendered.status,200);assert.match(rendered.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.ok(!rendered.headers.get('content-security-policy').includes('unsafe-inline'));
  assert.equal((await appHost.fetch(new Request('https://whumpo.com/apps/'+d.project+'/'),{...env,ASSETS:assets})).status,404);
  assert.equal((await appHost.fetch(new Request('https://whumpo.site/index.html'),{...env,ASSETS:assets})).status,404);
  // Hide the page after signature verification but before session issuance.
- const dInvite=await auth.createAppInvitation(db,d.user,d.project),dOptions=await auth.appPasskeyOptions(db,d.project,'signup',false,dInvite.code,reviewOne),dKey=authenticator(),hide=id();
- await pages.prepareAppPage(db,d.user,d.project,hide,null);
- const hideDuringCommit=new Proxy(db,{get(target,name){if(name==='batch')return async statements=>{await pages.confirmAppPage(db,d.user,hide);return target.batch(statements);};const value=target[name];return typeof value==='function'?value.bind(target):value;}});
+ const dInvite=await auth.createAppInvitation(scope(d.user),d.user,d.project),dOptions=await auth.appPasskeyOptions(db,d.project,'signup',false,dInvite.code,reviewOne),dKey=authenticator(),hide=id();
+ await pages.prepareAppPage(scope(d.user),d.user,d.project,hide,null);
+ const hideDuringCommit=new Proxy(db,{get(target,name){if(name==='batch')return async statements=>{await pages.confirmAppPage(scope(d.user),d.user,hide);return target.batch(statements);};const value=target[name];return typeof value==='function'?value.bind(target):value;}});
  await denied(auth.appPasskeyVerify(hideDuringCommit,d.project,'signup',dOptions.challengeToken,dKey.registration(dOptions.options),false,'',reviewOne));
  assert.equal((await db.prepare('SELECT count(*) n FROM app_visitors WHERE project_id=?').bind(d.project).first()).n,0);
  assert.equal((await appHost.fetch(new Request(pageURL),{...env,ASSETS:assets})).status,404);
- await pages.confirmAppPage(db,d.user,reviewOne);assert.equal(await pages.liveAppPage(db,d.project),null);
- const publishAgain=id();await pages.prepareAppPage(db,d.user,d.project,publishAgain,form);await pages.confirmAppPage(db,d.user,publishAgain);
+ await pages.confirmAppPage(scope(d.user),d.user,reviewOne);assert.equal(await pages.liveAppPage(db,d.project),null);
+ const publishAgain=id();await pages.prepareAppPage(scope(d.user),d.user,d.project,publishAgain,form);await pages.confirmAppPage(scope(d.user),d.user,publishAgain);
  const liveVisitor=await signup(d),transitionId=id();
- const revokePage=id();await pages.prepareAppPage(db,d.user,d.project,revokePage,null);
- const interrupted=await data.transitionAppData(db,{fetch:async()=>{await pages.confirmAppPage(db,d.user,revokePage);return Response.json({ok:true,value:{state:{note:'must not commit'},result:'done'}});}},liveVisitor.session,d.project,transitionId,0,{note:'test'});
+ const revokePage=id();await pages.prepareAppPage(scope(d.user),d.user,d.project,revokePage,null);
+ const interrupted=await data.transitionAppData(db,{fetch:async()=>{await pages.confirmAppPage(scope(d.user),d.user,revokePage);return Response.json({ok:true,value:{state:{note:'must not commit'},result:'done'}});}},liveVisitor.session,d.project,transitionId,0,{note:'test'});
  assert.equal(interrupted.state,'conflict');assert.equal((await db.prepare('SELECT revision FROM app_documents WHERE visitor_id=?').bind(liveVisitor.visitorId).first()).revision,0);
  await denied(data.readAppData(db,liveVisitor.session,d.project),401);
  // A lost recovery acknowledgment remains recoverable with the code saved first.
@@ -225,4 +213,4 @@ try {
  console.log('App gateway passed: host isolation, HttpOnly secure project cookies, browser challenge binding, bounded JSON, origin/rate checks, no CORS, private state/receipts, idempotent retry, recovery and logout. Handler tests do not establish live deployment availability.');
  console.log('Owner access routes passed: authenticated metadata, foreign-owner/CSRF/recent-session denial, single-display invitations, cancellation during enrollment, irreversible revocation and disabled-app management.');
  console.log('Application pages passed: strict form schema, owner-only approval, competing reviews, AI confirmation denial, controlled host/CSP, hidden-page denial, stale sign-in rollback, historical replay and in-flight transition revocation.');
-} finally {await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+} finally {await store.close();}

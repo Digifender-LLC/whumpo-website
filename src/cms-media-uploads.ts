@@ -2,7 +2,7 @@ import {cmsConnection} from './cms-status';
 import {callCMS,callSignedCMS} from './cms-bridge';
 import {cmsCapabilitiesPath,supportsCMSUpload} from './cms-capability-contract';
 import {signCMSMediaUpload} from './cms-media-upload-bridge';
-import {cleanPhoto} from './files';
+import {cleanPhoto} from './photo-format';
 import {CMSProjectError} from './cms-error';
 import {cmsItemId} from './cms-content-shape';
 import {cmsMediaMetadata} from './cms-media';

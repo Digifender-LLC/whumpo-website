@@ -1,14 +1,13 @@
 import {gatewayEvidenceReport} from '../tools/report-gateway.mjs';
-import assert from 'node:assert/strict';import {mkdtemp,readFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';import wrangler from 'wrangler';
+import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {build} from 'esbuild';
+import {databaseFixture} from './helpers/current-database.mjs';
 const built=await build({stdin:{contents:"export * from './src/gateway-provider-receipt';export * from './src/gateway-inference';export * from './src/gateway-spend';export * from './src/inference-routing';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {captureGatewayReceipt,runGatewayInference,reserveGatewaySpend,releaseGatewaySpend,planInferenceRoute}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const scenario=JSON.parse(await readFile('tests/fixtures/inference-routing-scenario.json','utf8'));
-const dir=await mkdtemp('/tmp/whumpo-gateway-inference-');let proxy;
+const store=await databaseFixture({d1:true}),db=store.db;
 try{
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
- proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB;
  const owner=crypto.randomUUID(),other=crypto.randomUUID(),task=crypto.randomUUID();
- for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,password_salt,password_hash,created_at) VALUES(?,?,'test','test',?)").bind(user,user+'@example.test',new Date().toISOString()).run();
+ for(const user of [owner,other])await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").bind(user,user+'@example.test',new Date().toISOString()).run();
  const now=Date.now(),candidate={...scenario.candidates[0],model:'@cf/example/model',rateValidFrom:now-1,rateValidUntil:now+3600000,benchmark:{...scenario.candidates[0].benchmark,validUntil:now+3600000}};
  const decision=planInferenceRoute([candidate],{...scenario.request,ownerId:owner,taskId:task,now});
  const buckets={task:crypto.randomUUID(),account:crypto.randomUUID(),platform:crypto.randomUUID()};
@@ -75,4 +74,4 @@ try{
  for(const secret of [config.apiToken,messages[0].content,'A private bakery draft.',owner+'@example.test'])assert.ok(!JSON.stringify(full).includes(secret));
  await assert.rejects(gatewayEvidenceReport(db,101));assert.deepEqual(await db.prepare('SELECT held_micros,spent_micros FROM gateway_spend_buckets WHERE id=?').bind(buckets.account).first(),balance);
  console.log('Actual D1 dispatch passed: one concurrent call, immutable request/result, owner/route isolation, replayed answers, database-loss recovery, unknown holds and overrun refusal. No real provider calls.');
-}finally{await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await store.close();}

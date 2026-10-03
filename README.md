@@ -6,14 +6,14 @@ Whumpo is an invitation-only AI website and application platform in private test
 
 For future work, use the [product and delivery roadmap](docs/roadmap/README.md), the [architecture and sequencing alignment](docs/roadmap/alignment.md), its [prioritized task backlog](docs/roadmap/backlog.md), and [agent execution guide](docs/roadmap/execution.md). Run `node tools/roadmap.mjs next` for planning candidates, then check their linked GitHub issues for current ownership and completion evidence.
 
-Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. Current client, Chat, website and CMS contracts are deployed with schema 0119; CMS functional testing remains deferred.
+Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. The test platform runs the complete current schema and shared workspace identity/admission contract; see [current deployment evidence](docs/chat-routine-release.md). CMS functional testing remains deferred.
 
 ## Current product
 
 - [Installable workspace](docs/dashboard-pwa.md) with phone home-screen icons, browser installation guidance and a public offline reconnect screen.
-- React workspace with Chat first, a separate dashboard, workflow pages, mobile navigation, and separate Profile and Settings screens. Chat accepts natural-language messages, retains account-scoped drafts/interrupted requests across reloads, and uses explicit review controls for critical actions.
-- Passkeys by default, invite/Turnstile signup, optional password sign-in, recovery codes and revocable sessions. Guided conversational onboarding persists without requiring AI or an external account.
-- Muse-assisted current specification drafts, exact reviews for private edits/restores, saved versions, source export, and separate publication reviews. Supported static/photo sites publish to customer subdomains.
+- React workspace with Chat first, agent-managed dashboards and custom pages, mobile navigation, and separate Profile and Settings screens. Shared components show current project, activity and review data in Chat or saved pages; requested layout changes support exact replay and undo. Chat accepts natural-language messages, retains account-scoped drafts/interrupted requests across reloads, and uses explicit review controls for critical actions.
+- Passkey-only workspace access, invite/Turnstile signup, two-key enrollment, a downloadable recovery kit and revocable sessions. Restricted recovery cannot access the workspace. Guided conversational onboarding persists without requiring AI or an external account.
+- Muse-assisted current specification drafts, exact reviews for private edits/restores, saved versions, source export, and separate publication reviews. Publication, restore and withdrawal tasks retain their exact reviews and recorded outcomes in Chat; models cannot approve them. Task status and page-request views share the dashboard readers, refresh without inference, and clear unavailable or revoked facts. See [current verification scope](docs/chat-routine-release.md). Supported static/photo sites publish to customer subdomains.
 - Maintained capability lookup and versioned private project/service settings with pinned compilers and exact owner reviews; saving configuration does not publish or activate a service.
 - Bounded customer backend execution in a separate QuickJS Worker, reviewed application activation, controlled visitor pages and scoped visitor accounts/data. This is not a general-purpose VPS or unrestricted deployment environment.
 - CMS content editing, reviews and private media viewing are implemented; bounded image and WordPress taxonomy/media import workflows have connected local-native/browser acceptance. First live customer provisioning and broader migration coverage remain open; CMS testing is owner-deferred. See [EmDash](docs/emdash.md).
@@ -47,7 +47,7 @@ The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http:
 | Public website host | `src/site-host.ts`, `wrangler.sites.jsonc` |
 | Controlled visitor frontend | `web/visitor.js` → `public-app/visitor.js` |
 | Separate visitor/runtime services | `wrangler.apps.jsonc`, `wrangler.runtime.jsonc` |
-| Database changes | Numbered `migrations/` SQL files |
+| Database schema | `schema/platform.sql` and current identity SQL composed by `tools/current-schema.mjs` |
 
 Run `pnpm build` to generate assets. Never hand-edit bundles.
 
@@ -55,7 +55,7 @@ Run `pnpm build` to generate assets. Never hand-edit bundles.
 
 The owner authorized Workers Paid ($5/month) resources, with GitHub restricted to free-tier use. New paid services, purchases and customer deployments still require the applicable review. R2 `FILES` remains private; customer credentials never enter generated source or model context. Scope resource access by owner and preserve publication/activation confirmations.
 
-For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.json`, inspect the private archive, and use `pnpm deploy apply RELEASE_ID`. Preparation pins compiled bundles/assets, SQL, four previous versions and CMS registrations before mutation; application journals migrations and each Worker step for recovery. See the [release and recovery protocol](docs/releases.md), including the required compatibility review and uncertain-operation holds. The owner authorizes all pending migrations in this private test environment; all through 0117 are applied. Current typed Chat/schema-2 website changes (0118/0119) await the coordinated test cutover and obsolete-fixture reset described in [current version policy](docs/current-version-policy.md). Provider activation remains separate. The standalone `node tools/deploy-platform.mjs` retains its build guard and registered CMS bindings but does not create a four-Worker journal. Verify live behavior after deployment. See [deployment evidence](docs/deployment.md) and [domain boundaries](docs/whumpo-migration.md).
+For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.json`, inspect the private archive, and use `pnpm deploy apply RELEASE_ID`. The version-3 review pins the complete current schema; occupied old schemas reject, and reset initialization requires a distinct empty database. The journal records schema initialization and each Worker step. See the [release protocol](docs/releases.md). The [current Chat test release](docs/chat-test-release.md) deploys the 173-table current schema and all four Workers; the obsolete test database is retired. Signed HTTP and live mobile Chromium acceptance pass. Physical-device, provider and whole-platform recovery acceptance remain separate. Provider activation and CMS functional testing remain deferred. The standalone platform wrapper requires an already current database.
 
 `pnpm invite` creates a one-use invitation in ignored `.secrets/`. Share it privately. Never commit keys, session cookies, recovery codes or provider credentials. The supplied key files and `.secrets/` remain ignored.
 
@@ -65,7 +65,7 @@ For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.js
 - [Workload placement contract](docs/workload-placement.md) — logical resources, scoped adapters and lifecycle/export requirements; broader hosting remains conditional
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
 - [Capability catalog and planner](docs/capability-planner.md) — reuse existing configuration and helpers; record bounded missing behavior before generating source
-- [Data lifecycle proposal](docs/data-lifecycle.md) and [background-job decision](docs/background-jobs.md) — retention/export/closure boundaries and durable recovery design
+- [Data lifecycle proposal](docs/data-lifecycle.md), [protection contract](docs/data-protection.md) and [background-job decision](docs/background-jobs.md) — storage access, key recovery, retention/export/closure and durable operations
 - [Customer benchmarks and inference privacy](docs/customer-benchmarks.md) — synthetic outcome checks, cost evidence and real-model evaluation gates
 - [Content safety and US customer eligibility](docs/content-safety.md) — CSAM scanning is planned and owner-deferred; existing holds are not detection. Wider safety acceptance remains open
 - [Chat tools and navigation](docs/workspace-agent.md)

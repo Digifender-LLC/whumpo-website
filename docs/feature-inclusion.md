@@ -1,6 +1,6 @@
 # Current feature inclusion and private preview grants
 
-**WH-090A / [#63](https://github.com/zemdregon/whumpo/issues/63), October 1, 2026. Source implementation; no test-platform rollout yet.** Parent [WH-090 / #62](https://github.com/zemdregon/whumpo/issues/62) remains open for admission adapters and connected acceptance. This is an inclusion input, not the complete feature authorization described by the [tier contract](plan-feature-contract.md).
+**WH-090A / [#63](https://github.com/zemdregon/whumpo/issues/63). Current test deployment verified October 2, 2026 (UTC).** Inclusion and the shared identity/admission adapters are deployed. [Composed acceptance](feature-acceptance.md) records the current provider scope and remaining product gates. This resolver supplies inclusion; the [tier contract](plan-feature-contract.md) additionally requires identity, configuration, consent and action authority.
 
 ## One current paid-plan source
 
@@ -18,7 +18,7 @@ The current result has `contract: "whumpo-feature-inclusion"`, `version: 1`, `pu
 
 ## Explicit preview authority
 
-Schema `0120_feature_preview_grants.sql` adds operator-owned metadata. Each row names one account, account/project scope, feature, operation, exact interval, non-secret review reference and `private-test-acceptance` purpose. A new grant lasts at most seven days and must start within seven days of issuance. The operator must choose actual timestamps; there is no automatic grant or refresh. Issuance accepts only the explicit local/test operator environment. Customer HTTP routes, models, Chat and jobs cannot issue or revoke grants.
+The canonical `schema/platform.sql` includes operator-owned `feature_preview_grants` metadata in the complete current schema. Each row names one account, account/project scope, feature, operation, exact interval, non-secret review reference and `private-test-acceptance` purpose. A new grant lasts at most seven days and must start within seven days of issuance. The operator must choose actual timestamps; there is no automatic grant or refresh. Issuance accepts only the explicit local/test operator environment. Customer HTTP routes, models, Chat and jobs cannot issue or revoke grants.
 
 Paid coverage takes precedence when it includes the feature. Otherwise, a matching unrevoked grant may supply inclusion. Account grants do not match project requests; one project's grant does not cover another. Grant operation/feature matches are exact. Expiry and revocation take effect on the next authoritative read. The result is not a bearer capability and must not be cached as execution permission.
 
@@ -57,27 +57,27 @@ node tools/feature-preview.mjs --input .secrets/feature-grant.json --apply EXACT
 
 The first command is read-only. The digest binds the closed input, current environment, Cloudflare account and control database. It is an operator review guard, not a credential or customer approval. `--apply` uses the existing authenticated operator database connection. A changed destination or payload refuses. An uncertain outcome must use readback or the same exact ID.
 
-Read and revoke use `{ "version": 1, "command": "read" | "revoke", "scope": { "userId": "ACCOUNT_UUID", "projectId": null }, "id": "GRANT_UUID" }`. Read needs no `--apply`; revoke uses the same preview/digest process. No live grant was issued while implementing this packet.
+Read and revoke use `{ "version": 1, "command": "read" | "revoke", "scope": { "userId": "ACCOUNT_UUID", "projectId": null }, "id": "GRANT_UUID" }`. Read needs no `--apply`; revoke uses the same preview/digest process. The original interface implementation issued no remote grants. The later [test-platform acceptance](feature-acceptance.md) records temporary synthetic grants and their explicit revocation/cleanup.
 
 ## Required downstream admission
 
-[Packet B / #64](https://github.com/zemdregon/whumpo/issues/64) must combine inclusion with the single current authenticated principal, owner/membership/resource authority, current provider configuration and consent, readiness/safety/privacy gates, exact review and funding where relevant. The [identity contract](workspace-identity.md) owns restricted purpose, epoch and proof; this module neither implements nor fabricates those credentials. Existing current authentication remains unchanged until WH-114/115's coordinated cutover.
+[Packet B / #64](https://github.com/zemdregon/whumpo/issues/64) must combine inclusion with the single current authenticated principal, owner/membership/resource authority, current provider configuration and consent, readiness/safety/privacy gates, exact review and funding where relevant. The [identity contract](workspace-identity.md) owns restricted purpose, epoch and proof; this module neither implements nor fabricates those credentials. The deployed shared identity runtime supplies module-private workspace authority; restricted enrollment/recovery grants cannot become ordinary workspace sessions.
 
 Adapters must recheck the current interval/grant and principal at OAuth activation, review confirmation and final dispatch, and invalidate returned provider data if authority changes during a read. A UI result, prepared review or token does not freeze inclusion. Atomic database predicates must close local write races; uncertain external effects retain their original read-only reconciliation path. Never repeat a send because inclusion was lost or a response was delayed.
 
 Owner local history, supported export, security, revocation and basic recovery remain reachable under their existing identity/ownership checks. They do not need a paid-feature grant. Previously published sites are not automatically taken down. A revoked collaborator is not an owner with protected historical access. Standard owner assistance remains non-billable; runtime visitor AI and advanced-model funding stay separate.
 
-The [current connection adapters](feature-admission.md) now enforce inclusion in the existing GitHub/Cloudflare HTTP and Chat handlers. Packet B remains open for the shared restricted-principal handoff from WH-114/115, followed by [packet C / #65](https://github.com/zemdregon/whumpo/issues/65)'s complete entrypoint/race acceptance and controlled test deployment. No fallback reader, legacy plan grant, paid activation, provider operation or CMS testing is introduced.
+The [current connection adapters](feature-admission.md) enforce inclusion and the shared restricted-principal boundary in GitHub/Cloudflare HTTP and Chat handlers. [Packet C / #65](https://github.com/zemdregon/whumpo/issues/65) records their composed acceptance and independent test-platform readback. Future collaboration and provider implementations must register their own adapters and acceptance; inclusion of a planned feature does not implement it.
 
 ## Verification
 
 The focused suite exercises actual current schema and handlers using disposable SQLite and local D1. It checks cumulative tier/feature/operation decisions, current invoice intervals and annual coverage, strict unknown/foreign scopes, exact preview matching, expiry/revocation, immutable and lost-acknowledgement receipts, operator destination/input review and parent cleanup. Feature inclusion alone dispatches nothing. Existing billing, invoice-period and subscription suites verify that the extension preserves the current paid coverage and public billing contract. Lifecycle and closure checks cover the new data class. Detailed results are recorded in issue #63.
 
-### Verified locally on October 1, 2026
+### Current evidence, October 2, 2026 (UTC)
 
-- `node tests/feature-inclusion.mjs` and `node tests/feature-inclusion.mjs --d1`: 728 tier/feature/operation/scope decisions in each backend, plus expiry, revocation, identical concurrent issuance, owner isolation, immutable records, lost write acknowledgement, operator digest and parent cascade cases. The D1 test uses a disposable local database with all 120 schema files; it creates no remote grant.
-- `tests/billing.mjs`, `tests/plan-periods.mjs`, `tests/subscriptions.mjs`: current invoice billing, overlapping same-tier coverage, future intervals, invalid interval refusal, annual boundaries and subscription lifecycle passed. The public billing response stays unchanged.
-- Lifecycle catalog, account-closure inventory and maintenance inventory checks passed; 149 tables are classified across 32 data classes.
-- `pnpm check`, `pnpm build`, operator syntax checks, roadmap validation/alignment/render check and `git diff --check` passed.
+- `node tests/feature-inclusion.mjs --d1`: 728 tier/feature/operation/scope decisions, expiry, revocation, concurrent issuance, owner isolation, immutable records, annual coverage, lost acknowledgements, destination-bound operator review and parent cleanup. The fixture initializes the complete current schema in disposable local D1.
+- The original billing, invoice-period and subscription evidence is recorded on #63. The current `tests/feature-retention.mjs` additionally exercises actual elapsed invoice/preview intervals through owner HTTP handlers and the public host; it verifies retained publication, exact source downloads and denial for foreign/revoked owners.
+- The deployed schema contains 156 tables and 702 catalog objects. The lifecycle inventory classifies 156 tables in 37 classes; identity cutover evidence is in [identity-web.md](identity-web.md).
+- Shared restricted-purpose, epoch, session, credential and commit-race evidence, UI presentation and the live operator probe are recorded in [feature acceptance](feature-acceptance.md).
 
-These are local implementation results. Schema 0120 and this foundation have not been deployed; no live grant, provider activation or CMS functional test was performed. Full admission and deployment acceptance remain with #64 and #65.
+Provider transport in local suites is synthetic. Live preview acceptance uses a disposable synthetic identity, without provider exchange, inference, customer publication or real-money activation. CMS functional testing, CSAM and Daybreak remain deferred.

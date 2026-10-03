@@ -1,9 +1,11 @@
+import {currentSchemaArtifact,inspectSchema} from './current-schema.mjs';
 import {verifyBuildSnapshot} from './build-snapshot.mjs';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {build} from 'esbuild';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 import {cmsMasterKey,runWrangler,activeWorker} from './cms-release.mjs';
+import {assertArtifactConfiguration} from './artifact-protection.mjs';
 export async function withPlatformLock(db,work){
  const token=crypto.randomUUID();
  await db.prepare("UPDATE cms_platform_deploy_lock SET token=?,expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+15 minutes') WHERE id=1 AND expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(token).run();
@@ -15,15 +17,19 @@ export async function withPlatformLock(db,work){
  try{return await work(guard);}finally{await db.prepare("UPDATE cms_platform_deploy_lock SET expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=1 AND token=?").bind(token).run();}
 }
 export async function deployPlatform(prepared){
+ const base=prepared?.config??JSON.parse(await readFile('wrangler.jsonc','utf8'));
+ assertArtifactConfiguration(base);
  if(prepared)await prepared.verify();else await verifyBuildSnapshot();
- const base=prepared?.config??JSON.parse(await readFile('wrangler.jsonc','utf8')),api=prepared?.api??cloudflareClient(base.account_id),db=prepared?.db??remoteD1(api,base.d1_databases.find(x=>x.binding==='DB').database_id);
+ const api=prepared?.api??cloudflareClient(base.account_id),db=prepared?.db??remoteD1(api,base.d1_databases.find(x=>x.binding==='DB').database_id);
+ const expectedSchema=prepared?.schema??(await currentSchemaArtifact()).expected;
+ const verifySchema=async()=>{if(JSON.stringify(await inspectSchema(db))!==JSON.stringify(expectedSchema))throw Error('Platform deployment requires the complete current schema; use the reviewed four-Worker cutover');};
  const work=async guard=>{
- await guard();
+ await guard();await verifySchema();
  try{
   const {results:instances}=await db.prepare("SELECT c.*,d.origin,d.secret_digest FROM cms_instances c JOIN cms_deployments d ON d.project_id=c.project_id WHERE d.state IN ('verified','connected') ORDER BY c.project_id").all();
   if(instances.length>5)throw Error('CMS binding capacity exceeded');
   const dir=resolve('.secrets/cms');await mkdir(dir,{recursive:true,mode:0o700});const configPath=resolve(dir,'platform.json'),secretPath=resolve(dir,'platform-secrets.json');
-  const config={...base,main:resolve(base.main),assets:{...base.assets,directory:resolve(base.assets.directory)},d1_databases:base.d1_databases.map(d=>({...d,...(d.migrations_dir?{migrations_dir:resolve(d.migrations_dir)}:{})})),services:[...(base.services??[])]};
+  const config={...base,main:resolve(base.main),assets:{...base.assets,directory:resolve(base.assets.directory)},d1_databases:base.d1_databases.map(d=>({...d})),services:[...(base.services??[])]};
   if(prepared){
    await prepared.verify();
    const services=instances.map(row=>({binding:'CMS_'+row.project_id.replaceAll('-',''),service:row.worker_name}));
@@ -42,7 +48,7 @@ export async function deployPlatform(prepared){
    }
    await writeFile(secretPath,JSON.stringify({CMS_BRIDGE_MASTER_KEY:master}),{mode:0o600});args.push('--secrets-file',secretPath);
   }
-  await guard();if(prepared)await prepared.verify();
+  await guard();await verifySchema();if(prepared)await prepared.verify();
   await writeFile(configPath,JSON.stringify(config,null,2),{mode:0o600});await runWrangler(args,prepared?.logFile??resolve(dir,'platform-deploy.log'));
   if(prepared)await prepared.onDeployed();
   const active=await activeWorker(api,base.name,prepared?.tag);if(!active)throw Error('Platform deployment did not resolve to one active version');

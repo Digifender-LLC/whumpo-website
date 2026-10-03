@@ -5,6 +5,3 @@ export type WelcomeStage = 'profile'|'project'|'review';
 export function welcomeStage(prompt:WelcomePrompt):WelcomeStage {
  return prompt==='review'?'review':['name','picture','bio'].includes(prompt)?'profile':'project';
 }
-export function firstWelcomePrompt(stage:WelcomeStage):WelcomePrompt {
- return stage==='profile'?'name':stage==='project'?'idea':'review';
-}

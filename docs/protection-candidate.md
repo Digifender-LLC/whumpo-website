@@ -1,0 +1,95 @@
+# Protection candidate acceptance
+
+**WH-117C → WH-117D, October 2, 2026 UTC.** This is the source acceptance and release handoff for [DP-01–05](data-protection.md#required-wh-117-work), [#85](https://github.com/zemdregon/whumpo/issues/85), [#86](https://github.com/zemdregon/whumpo/issues/86) and parent [#82](https://github.com/zemdregon/whumpo/issues/82). Every environment is testing. Source acceptance does not imply a deployed cutover, physical custody, provider reconciliation or whole-platform restoration.
+
+## Child C acceptance audit
+
+The child specifies synthetic checks against actual selectors/handlers and isolated restore/key/artifact controls. DP-03 explicitly supplies a bounded input to WH-008/019; DP-04 explicitly separates offline checks from actual custody. The implemented scope meets those source/local criteria at `964fa38`. Earlier checkpoint paragraphs that kept C open while these foundations were being built are superseded by this audit; their evidence and limits remain recorded.
+
+| Original requirement | Current implementation and inspected evidence | Result |
+| --- | --- | --- |
+| Processing, tenant/purpose and profile consent | Actual Chat orchestration, acknowledgment inputs, inspection and profile selectors are exercised by `tests/processing-boundaries.mjs`. Six main-model and three acknowledgment calls use synthetic transport. Profile opt-in/withdrawal, extra selected fields, foreign owner and visitor/backend-state canaries are checked. Existing route eligibility is retained. | Source/local accepted; no confidential Contributor approval. |
+| Private media, exports, no-store and diagnostics | The same fixture invokes actual Worker source/transcript downloads and checks no-store, owned history and foreign-owner refusal. Private photo refusal occurs before object access. Raw exception canaries do not enter response or diagnostic output. | Source/local accepted; wider account export/closure remains WH-018/019. |
+| Current manifest and isolated key/data restore | `tools/restore-admission.mjs` checks the exact schema/compiler/cipher, table inventory, real stored encrypted-key proof and referenced object bodies. `tests/restore-admission.mjs` passes 67 holds on SQLite and 64 on disposable local D1, including correct/missing/wrong keys, stale epoch, removed owner, cancelled action, withdrawal, unknown effect and absent/changed evidence. | Source/local accepted. No result enables serving, dispatch or key retirement. |
+| Evidence independent of the candidate | `tools/restore-inventory.mjs` keeps an exact private operator-file schema outside application backups. Actual archive readback, permanent withdrawals, cumulative constraints and current-source comparison are implemented. Existing inventory fixture passes 47 refusals/three read-only copies; freshness fixture passes 17 refusals/nine verified isolated checks/six copies, including missed revocation, source races, timeout and whole-batch overflow. | Source/local accepted. Reachable correct source wiring and separate operational custody remain necessary. |
+| Key/artifact custody and operator readback | Nine required secret names/readers/dependencies are declared in `tools/secret-custody.mjs`. `tests/secret-custody.mjs` passes 63 refusals; release/build checks exclude key/credential/backup/inventory files. `tests/connection-key-backup.mjs` passes 54 refusals with encrypted private files, a distinct recovery key and fresh-process readback. | Source/local accepted. Local directories are not an offsite or independently operated backup. |
+| Exact provider outcomes without guessing | Direct confirmed OAuth rejection/revocation receipts, separately encrypted refresh custody and immutable original provider identity are implemented. Reviewed GitHub grant removal has exact human scope, current passkey proof and one dispatch. SQLite/local D1 and the actual signed browser journey are recorded in the key lifecycle/verification docs. Unknown or genuinely lost outcomes retain custody and hold; no timeout/reconnect makes them successful. | Source/local accepted for the documented outcomes; real provider acceptance and broader reconciliation remain explicit gates. |
+| Account recovery and deferred work | No content-key reconstruction or repeated unlock path was added. All isolated checks keep serving/dispatch/retirement false. Scanner, Daybreak and CMS functional acceptance remain deferred. | Preserved. |
+
+The twelve-script protection profile, final inventory reruns, lifecycle catalogue (165 tables/42 negative cases), runner isolation and roadmap checks are recorded in [verification](verification.md). This audit inspected the fixture inputs/assertions as well as their success reports. It does not convert synthetic providers or independent temporary files into live acceptance.
+
+**Child C's bounded source/local implementation can close. Parent WH-117 and child D stay open.** Unknown external operations remain unavailable. This does not authorize key retirement or move any parent requirement out of its acceptance gate. Continuous suppression operation, deletion execution and whole-platform recovery retain WH-008/018/019/059 as stated in the original DP-03 contract.
+
+## Test environment before cutover
+
+Read-only observation completed at **2026-10-02T10:48:53.765Z**:
+
+- Control database `whumpo-control-test`, ID `9a321890-cd09-4ecb-9dc6-882aa902845f`: 156 application tables / 702 catalog objects; schema SHA-256 `4d5e8d0a37a8d0039d543cdbad9109078fe05042813f1d15c9e835c2cddd42ad`.
+- Candidate: 165 tables / 760 objects; schema SHA-256 `22db386885791534ac2ddc25f062009d406faaf6b53e0a4b5a6196b00f586447`.
+- No users, projects, sessions, provider token/PKCE/revocation records, GitHub/Cloudflare connections, billing customers/subscriptions/orders/invoices, CMS registrations or project-file rows. Nonempty tables contain one invitation, the deployment lock, fair-use control, five plan rows, four maintenance-health rows and one traffic-metadata row.
+- Platform `09e87bad-a1ed-4cee-8bd8-109f13fe93fc`; runtime `7c902e8b-287e-4e63-b08a-eacf370eb801`; apps `4900069c-cc00-44a3-97ee-96f9db4d26aa`; sites `c60d6775-bb22-43a0-8bdc-76b2d7196720`.
+- Binding names show the obsolete `CONNECTION_ENCRYPTION_KEY`; `CONNECTION_ENCRYPTION_KEYRING` is absent. Current release observation correctly refuses that unclassified secret. No secret value was inspected, printed or changed. Other configured binding names remain in private metadata.
+
+Private evidence is `.secrets/protection-cutover-inventory.json`. Counts are a point-in-time prerequisite, not a lock or evidence of absent external resources. The initial compound UNION count query exceeded D1's provider limit; bounded scalar-subquery counts succeeded without remote mutation. Repeat the current inventory after admission is fenced and immediately before the cutover.
+
+## Required child D sequence
+
+1. Claim one operator and confirm the candidate source, exact target schema, configured services and current provider obligations. Run the combined current key/rotation/restore/identity checks appropriate to the final source; retain separate CPU/byte/D1 measurements and their limits.
+2. Prepare fresh current key material and separately protected encrypted backup/recovery files with the existing custody tool. Record metadata/readback, not key values. Physical/offsite custody still needs explicit evidence; do not infer it from `.secrets` or two directories on one host.
+3. Fence new test enrollment, recheck the empty account/credential state and inspect referenced private object/provider resources. Use the owner-authorized obsolete-test reset, not an old-format reader or conversion. Select a distinct empty database in all control bindings and explicitly bootstrap current key policy using the actual domain initializer.
+4. Perform an explicit reviewed secret-binding transition. The current release validator must continue rejecting obsolete names; do not add an alias or permanent exception. Removing/adding a secret can deploy a Worker version, so record that operation's outcome and refresh the baseline before preparing the sealed four-Worker release. Never discard a needed key merely because live row counts are zero; account for retained permitted restore sources and unknown outcomes.
+5. Build and seal the exact current candidate, review the mixed-Worker interval, then use the existing runtime → apps → sites → platform release journal. Verify schema, Worker versions, bindings, assets, current key policy and ordinary/anonymous authority behavior. Create a fresh private owner invitation after the cutover. Retire the obsolete database only after release completion and recorded reference/obligation checks.
+6. Feed measured configured/deployed acceptance and remaining limits into WH-048 and parent #82. Keep real-provider/device, confidential-inference, physical/offsite custody and whole-platform recovery claims separate. CSAM, Daybreak and CMS tests remain deferred.
+
+### Operator D1 batch prerequisite
+
+The operator REST adapter now supports immutable bound statements and one current `{batch: [...]}` request, returning ordered results or a refusal for incomplete/failed results. It never emulates a batch with sequential writes or retries a mutation after a lost response. This supplies the existing key initializer and source-snapshot API, rather than introducing another key-policy writer.
+
+`tests/remote-d1.mjs` exercises 12 refusals, binding isolation, a late SQLite rollback, response loss without redispatch and the actual current key initializer through a synthetic REST boundary. The real test database additionally passed a read-only three-statement batch with ordered independent bindings and a zero-user count. No remote key-policy write, transaction-failure probe, database creation or deployment occurred. The synthetic rollback does not claim a live provider fault-injection result.
+
+Official interfaces checked October 2, 2026: [D1 REST batch body](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/query/), [D1 batch transaction semantics](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch), and [secret upload/deletion deployment behavior](https://developers.cloudflare.com/workers/configuration/secrets/). Existing tools keep raw provider errors and authentication material out of normal output.
+
+## Test cutover preparation — October 2, 2026 UTC
+
+The distinct replacement database `whumpo-control-protection-test` (`15f87c0c-8c4f-491f-a349-ff9c2c8a62b8`) has been created and independently checked empty. All three control bindings now select it in source. The sealed release must initialize its exact current schema; no old rows or schema are copied.
+
+One unused invitation was removed under the platform deployment lock. Repeated live checks confirm zero users/invitations; the account, project, session, credential, provider, publication and billing obligation counts are zero. The private R2 bucket has no objects. Historical releases/provider time travel are not permitted restore authority for this reset; there is no old-format restore reader. No actual account or credential was deleted.
+
+Fresh key ID `test-20261002` has an encrypted capsule and distinct recovery file outside all repositories. Actual capsule readback passed in a separate process. These remain local copies; off-device/independently operated custody has not been accepted, and retirement is not enabled. Private metadata is in `.secrets/protection-key-custody.json`.
+
+The explicit Wrangler secret bulk operation completed and active metadata confirms `CONNECTION_ENCRYPTION_KEYRING` configured, obsolete `CONNECTION_ENCRYPTION_KEY` removed, and other secret names preserved. That operation deployed platform version `da49fc20-59e7-46f2-a102-e06de64c6294` with the preceding code; it is the new release baseline, not acceptance of the candidate. The private transition journal records CLI completion and readback. No enrolled customer can enter during the interval.
+
+Combined current-source checks passed: both TypeScript projects/compiler gates, keyrings on disposable D1, rotation (29 refusals), and eight actual handler journeys for cancellation/disconnection/unknown OAuth outcomes. Local rotation measured 432 encrypted bytes before/after, 18 batch SQL statements, 64 D1 rows read/13 written, 3 ms crypto elapsed and 117855 µs Node runner CPU. These measurements do not establish deployed Worker billed CPU.
+
+Mixed-Worker review: runtime → apps → sites → platform retains existing service interfaces. The old database has no admitted customers, publications or provider work; the replacement starts without invitations or accounts. Current key policy will be initialized with the actual domain handler and verified capsule only after the complete release is verified, before issuing an invitation. Missing policy refuses credential work. Keep the old database until the release lock is released and no active Worker refers to it. Actual release/schema/key-policy/asset readback remains pending at this preparation checkpoint.
+
+## Deployed current protection and retirement
+
+Release **`7c4f9344-bd6c-4fc7-a3ab-964e631ad8f3`**, source **`df90276ee4a742eced50e10b884bc55402f2d5a1`**, completed October 2, 2026. Every operation has direct command completion and exact provider readback in the release journal. The source manifest's dirty flag records only the untouched untracked shared `node_modules` symlink; that directory is excluded from the archive. No uncommitted runtime source was included.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `18493982-c8fc-497e-8ae5-20193a3f35a4` |
+| apps | `103dafa3-edf2-4f57-a169-8eaa47867e1c` |
+| sites | `533134b5-5500-4a42-977b-fc4697d2f057` |
+| platform | `5ef6f2ab-b125-4b3a-af93-6f05d72ccd0c` |
+
+All three DB bindings select `15f87c0c-8c4f-491f-a349-ff9c2c8a62b8`. The exact 165-table/760-object schema matches SHA-256 `22db386885791534ac2ddc25f062009d406faaf6b53e0a4b5a6196b00f586447`. All service bindings and secret names match the reviewed archive; no CMS registration was present. The actual domain initializer then registered key ID `test-20261002` and policy revision 1/review `wh117d-20261002` using the verified stored capsule. Registry fingerprints match the recovered material; no key material is stored in D1 or public evidence.
+
+Live verification at **2026-10-02T13:23:22.715Z** checked all 39 platform assets against archive hashes, home/workspace/health responses, anonymous no-store refusals, rejected obsolete routes/cookies and foreign-origin input, and a 404 on an unregistered customer subdomain. Two locally generated ES256 authenticator keys exercised actual deployed login/state/private cookies, project-first admission, profile saving, first-project creation, Chat read access, logout and session revocation. This is signed HTTP fixture acceptance, not physical-device or human invitation/Turnstile enrollment.
+
+An exact temporary feature preview allowed only Cloudflare **connect** for that fixture. The deployed start handler wrote current encrypted PKCE state; independently recovered backup material decrypted it and reproduced the returned S256 challenge. Cancellation saved the cancelled state; withdrawing the preview made another start return 403. No authorization URL was followed, token exchange sent or provider account connected. The fixture account, projects, credentials, sessions, preview grant, flow and provider rows were removed and verified absent. Private records: `.secrets/protection-key-initialization.json`, `.secrets/protection-release-verification.json` and the probe cleanup journal.
+
+After release completion, all **13** account Workers were inspected for old database references (none). A fresh count of every old application table found only known deployment/plan/health/traffic control rows; the deployment lease was released. The empty baseline `9a321890-cd09-4ecb-9dc6-882aa902845f` was deleted with confirmed response and absence readback at **2026-10-02T13:42:14.097Z**. The other ten databases remain present. Subsequent release status confirms every current version, binding and schema without the retired database. One new one-use owner invitation was privately issued after acceptance. The earlier invitation is invalid; no invitation value is in public evidence.
+
+### Measured overhead and limits
+
+- Current deployed PKCE: **64 plaintext bytes → 142 ciphertext bytes**, including the current key ID/IV/authentication tag and encoding. Twenty bounded start/cancel writes confirmed the same size and zero provider dispatch; their disposable account was removed.
+- Existing 10% Workers logging sampled one of those successful starts: **6 ms CPU, 507 ms Worker wall time** for the complete authenticated/authorized handler. This is actual deployed telemetry, not an isolated cipher benchmark, a latency percentile, a marginal CPU delta or an account billing total. The earlier single end-to-end probe measured 546 ms including network time. Private metadata-only CPU evidence: `.secrets/protection-cpu-readback.json`.
+- Local rotation evidence above retains exact bytes/SQL/row/CPU measurements. The deployed probe does not turn Node CPU into billed Worker CPU or prove a live provider-token rotation.
+- After retirement, the account's ten databases total **5,959,680 bytes** in provider inventory. Published Workers Paid D1 includes 5 GB storage, 25 billion reads/month and 50 million writes/month; excess rates are $0.75/GB-month, $0.001/million reads and $1/million writes. Workers Standard includes 30 million CPU-ms/month; extra CPU is $0.02/million ms. These are account-shared allowances. Storage inventory is observed; remaining monthly read/write/CPU allowance and eventual invoice cost are not inferred. Sources checked October 2: [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Workers telemetry](https://developers.cloudflare.com/api/resources/workers/subresources/observability/subresources/telemetry/methods/query/).
+- Customer support still needs to distinguish account recovery, local key-capsule recovery and loss of the recovery key. No routine unlock prompt was added. Recovery files remain separately protected **on one computer**. Off-device/independently operated custody is still unaccepted; the owner location question is pending. No key-retirement admission is enabled.
+
+### Remaining acceptance
+
+WH-117D/#86 and parent #82 remain open for independently operated/off-device custody evidence and final requirement-by-requirement acceptance, now supplied with actual candidate release, live encryption/readback and measured overhead. Unknown provider outcomes still hold; real consent/revocation, confidential inference, physical devices and whole-platform restore remain their recorded gates. WH-048 can consume this candidate evidence but cannot treat it as complete beta acceptance. CSAM, Daybreak and CMS functional testing remain deferred.

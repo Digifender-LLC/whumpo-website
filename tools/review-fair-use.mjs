@@ -15,5 +15,5 @@ try{
  const db=remoteD1(cloudflareClient(config.account_id),config.d1_databases.find(b=>b.binding==='DB').database_id);
  console.log(JSON.stringify(await runFairUseOperator(service,db,input,args[3]),null,2));
 }catch{
- console.error('Review request unavailable. Check the private JSON input, operator authorization and migrations through 0092. For writes, preview first and use its exact --apply digest. If a write outcome is uncertain, read or retry the same request ID; do not create a replacement.');process.exitCode=1;
+ console.error('Review request unavailable. Check the private JSON input, operator authorization and the complete current schema. For writes, preview first and use its exact --apply digest. If a write outcome is uncertain, read or retry the same request ID; do not create a replacement.');process.exitCode=1;
 }

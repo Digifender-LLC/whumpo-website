@@ -1,11 +1,14 @@
+import {interactionActionRequest} from './chat-interactions/agent-request';
+import {taskResponse,taskProgressStatement,taskProgressPrompt} from './chat-interactions/task-progress';
+import {informationTaskClaim,informationTaskGuards,informationTaskPrompt,informationTaskProposalFailure,prepareInformationTask,taskContinuationContent} from './chat-interactions/task-context';
 import {policyInputBound} from './ai';
-import {standardAIReservationStatement,dispatchStandardAI,markStandardAIUncertain,closeStandardAIAttempt} from './standard-ai-usage';
+import {standardAIReservationStatement,standardAIDispatchStatement,dispatchStandardAI,cancelStandardAI,markStandardAIUncertain,closeStandardAIAttempt} from './standard-ai-usage';
 import {reconcileStandardChat} from './standard-ai-recovery';
 import {appPageDesignProjectId,readAppPageDesign,appPageDesignPrompt,appPageDesignData,appPageDesignProposalAllowed} from './app-page-design';
 import {inspectionRequest,inspectionMessages,inspectionAllowance} from './agent-inspection';
 import {firstDraftProjectId,firstAppProjectId,welcomeDraftProject,firstDraftProposalAllowed} from './first-draft';
 import { startAcknowledgment } from './acknowledgment';
-import { ensureInferenceBudget, inferenceReservation, dispatchInference, observeInference, uncertainInference } from './model-costs';
+import { ensureInferenceBudget, inferenceReservation, inferenceDispatchStatement, dispatchInference, observeInference, uncertainInference } from './model-costs';
 import { museTestRoute } from './model-policy';
 import {cloudflareStatus} from './cloudflare-connection';
 import type {DNSChatOptions} from './dns-chat';
@@ -28,7 +31,9 @@ export async function reconcileChat(db: D1Database, userId: string) {
   }
 }
 
-export async function sendAIChat(db: D1Database, userId: string, id: string, revision: number, content: string, config: AIConfig, transport: typeof fetch = globalThis.fetch.bind(globalThis), dnsOptions?:DNSChatOptions, internalIntent=false) {
+export async function sendAIChat(db: D1Database, userId: string, id: string, revision: number, content: string, config: AIConfig, transport: typeof fetch = globalThis.fetch.bind(globalThis), dnsOptions?:DNSChatOptions, internalIntent=false, formSubmissionId?:string) {
+  if(formSubmissionId&&(formSubmissionId!==id||content!==taskContinuationContent||internalIntent))return {status:409,error:'The submitted task identity changed.'};
+  if(!formSubmissionId&&await db.prepare('SELECT id FROM chat_interaction_continuations WHERE id=?').bind(id).first())return {status:409,error:'Use the saved form to continue this task.'};
   const previous = await db.prepare('SELECT user_text,revision,action_json FROM chat_turns WHERE id = ? AND user_id = ?').bind(id, userId).first<{ user_text: string; revision: number; action_json:string|null }>();
   if (previous) return previous.action_json===null && previous.user_text === content && previous.revision === revision + 1 ? { status: 200 } : { status: 409, error: 'This message ID was already used for another request' };
   const pageDesignId=internalIntent?appPageDesignProjectId(content):undefined,pageDesign=pageDesignId?await readAppPageDesign(db,userId,pageDesignId):null;
@@ -37,34 +42,43 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   const firstProjectId=internalIntent?(firstDraftProjectId(content)??firstAppProjectId(content)):undefined;
   const firstProject=firstProjectId?await welcomeDraftProject(db,userId,firstProjectId):null;
   if(firstProjectId&&!firstProject)return {status:409,error:'That first project is no longer waiting for its first build. Refresh Chat to see your saved work.'};
-  const context = await siteContext(db,userId);
+  let task=formSubmissionId?await prepareInformationTask(db,userId,formSubmissionId):null;
+  const context = task?task.context:await siteContext(db,userId);
   if(firstProject)context.projects=[firstProject,...context.projects.filter(p=>p.id!==firstProject.id)].slice(0,5);
+  if(!task){
   const dnsStatus=await cloudflareStatus(db,userId,dnsOptions?.config);
   context.dnsConnection={enabled:dnsStatus.enabled,connected:dnsStatus.connected,expiresAt:dnsStatus.expiresAt};
-  const { results: history } = await db.prepare("SELECT id,user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' AND ai_context_allowed=1 ORDER BY revision DESC LIMIT 4").bind(userId).all<{id:string;user_text:string;assistant_text:string}>();
+  }
+  const { results: history } = task?{results:[]}:await db.prepare("SELECT id,user_text,assistant_text FROM chat_turns WHERE user_id = ? AND status = 'completed' AND ai_context_allowed=1 ORDER BY revision DESC LIMIT 4").bind(userId).all<{id:string;user_text:string;assistant_text:string}>();
   const websiteFollowup=!!context.latest&&history[0]?.id===context.latest.id;
-  const focus=firstProject?(firstApp?'all':'website'):agentPromptFocus(content,websiteFollowup);
-  const system = pageDesign?appPageDesignPrompt(pageDesign):agentPrompt(context,focus)+(firstProject&&firstApp?`\nThis request is specifically the first private application build for existing project ${firstProject.id}. Use its complete saved purpose and audience. The only allowed actions are capabilities plan and backend buildApplication for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Prefer reference:"private-task-list@1" when it fully fits. Otherwise first request a capability plan recording the missing visitor-transition behavior, then use its planId with source and a non-sensitive synthetic expected-output check derived from the brief. Never substitute a website or CMS, create another project, inspect another service, publish, activate, connect or purchase anything. A successful synthetic check prepares an owner approval only. If the brief needs unavailable capabilities or is too vague to derive a meaningful check, ask before building. One capability planning lookup is available; the complete brief is in context.`:firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is specification with operation:create and all page config fields (including photos:[]) for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
+  const focus=task?'website':firstProject?(firstApp?'all':'website'):agentPromptFocus(content,websiteFollowup);
+  const system = task?agentPrompt(context,focus)+'\n'+informationTaskPrompt(task)+'\n'+taskProgressPrompt:pageDesign?appPageDesignPrompt(pageDesign):agentPrompt(context,focus)+(firstProject&&firstApp?`\nThis request is specifically the first private application build for existing project ${firstProject.id}. Use its complete saved purpose and audience. The only allowed actions are capabilities plan and backend buildApplication for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Prefer reference:"private-task-list@1" when it fully fits. Otherwise first request a capability plan recording the missing visitor-transition behavior, then use its planId with source and a non-sensitive synthetic expected-output check derived from the brief. Never substitute a website or CMS, create another project, inspect another service, publish, activate, connect or purchase anything. A successful synthetic check prepares an owner approval only. If the brief needs unavailable capabilities or is too vague to derive a meaningful check, ask before building. One capability planning lookup is available; the complete brief is in context.`:firstProject?`\nThis request is specifically the first private website draft for existing project ${firstProject.id}. Use its full saved purpose, audience and style. Reuse its name and selected theme. The only allowed action is specification with operation:create and all page config fields (including photos:[]) for that exact projectId, or action:null to ask one essential question or explain an unsupported requirement. Never create another project, run another tool, publish, connect a service or purchase anything. No inspection call is needed; the complete brief is in context.`:'');
   // Keep each transport message within its limit without dropping system policy.
   // Budget reservations still include every byte across all chunks.
   const messages: ChatMessage[] = [];
-  function appendContext(role:'system'|'user',text:string){
+  function appendContext(role:'system'|'user',text:string,target:ChatMessage[]=messages){
   for(let offset=0;offset<text.length;){
     let end=Math.min(offset+16000,text.length);
     if(end<text.length){const newline=text.lastIndexOf('\n',end-1);if(newline>=offset)end=newline+1;else if(/[\uD800-\uDBFF]/.test(text[end-1]))end--;}
-    messages.push({role,content:text.slice(offset,end)});offset=end;
+    target.push({role,content:text.slice(offset,end)});offset=end;
   }
   }
   appendContext('system',system);
+
   appendContext('user',pageDesign?appPageDesignData(pageDesign):agentWorkspaceData(context,focus));
-  if(!pageDesign)for (const turn of history.reverse()) messages.push({ role: 'user', content: turn.user_text.slice(0, 600) }, { role: 'assistant', content: turn.assistant_text.slice(0, 900) });
+  if(task)appendContext('user',JSON.stringify({kind:'submitted_task_context',data:task.data}));
+  if(!pageDesign&&!task)for (const turn of history.reverse()) messages.push({ role: 'user', content: turn.user_text.slice(0, 600) }, { role: 'assistant', content: turn.assistant_text.slice(0, 900) });
+  if(!task&&focus!=='cms'&&context.taskReferences?.length)appendContext('system','Saved task routing: first determine whether the current owner is asking about an earlier task/change or requesting unrelated work. Questions about a prepared change, its approval, saved outcome, progress, photo uploads, connection authorization status, or current project status/traffic for that same task require the task lookup: {"kind":"interaction","operation":"resumeTask","taskId":EXACT_TASK_ID,"projectId":EXACT_PROJECT_ID,"submissionId":EXACT_SUBMISSION_ID}. Use the exact taskReferences locator even when its state is finished or hasPendingReview is false. Finished describes the agent step, never user approval. This single lookup supplies the task answers, authoritative review/save/upload results, current project/traffic observations, connection-provider locators AND current saved website to the final step. For "that same task" status or page-request questions, use resumeTask even if an inspect traffic action could read the project: the task lookup preserves its context and records progress. Ordinary inspect traffic is for unrelated requests without a saved-task reference. specification.read supplies saved content only and cannot answer what happened to a task; do not choose it for task status or review questions. Task references are locators/status hints, not proof of approval. If multiple tasks fit, ask which task. When the owner wants to correct answers ON A FORM or edit its questions, use interaction.read then proposeAnswers or the appropriate replace action to show a corrected form for review. Do not resumeTask for form corrections: it cannot create replacement forms. Only explicitly saving that corrected form starts its continuation. For answers to an open task question, skipped details or requested task cancellation/resumption, use resumeTask. Unrelated requests use ordinary tools and must not load task answers.');
   messages.push({ role: 'user', content: pageDesign?'Design the visitor page for this approved application and prepare my review. Keep it unpublished.':firstProject?`Build the first private ${firstApp?'application, check a synthetic example, and prepare my approval':'website draft'} for project ${firstProject.id} using my saved brief. Keep it private.`:content });
   const budgetDate=new Date();
   const billing = await ensureBilling(db, userId,budgetDate);
   await ensureInferenceBudget(db,userId,billing.period,billing.plan.id);
   // Standard work has bounded calls, not a customer-unit admission threshold.
   const boundInput = () => policyInputBound(messages);
-  const outputLimit = 2048;
+  // Muse Responses counts reasoning against this allowance. A real view-save
+  // request exhausted 2,048 tokens before emitting its small action. Keep both
+  // bounded calls within the adapter's existing ceiling and reserve both below.
+  const outputLimit = 4096;
   async function noReservation(){
     const prior=await db.prepare('SELECT user_text,revision,action_json FROM chat_turns WHERE id=? AND user_id=?').bind(id,userId).first<{user_text:string;revision:number;action_json:string|null}>();
     if(prior)return prior.action_json===null&&prior.user_text===content&&prior.revision===revision+1?{status:200}:{status:409,error:'This message ID was already used for another request'};
@@ -73,16 +87,18 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     return {status:409,error:'Another request is still being processed. Refresh Chat before sending a new message.'};
   }
   // Reserve internal costs for both bounded calls before dispatch.
-  const followupInputBound=boundInput()+inspectionAllowance;
+  const followupInputBound=Math.max(boundInput()+inspectionAllowance,context.taskReferences?.length?70000:0);
   const canFollow=(!firstProject||firstApp)&&!pageDesign&&messages.length<=48;
   const reservedInput=boundInput()+(canFollow?followupInputBound:0);
-  const requestHash=await hashToken(JSON.stringify({content,revision}));
+  const requestHash=await hashToken(JSON.stringify({content,revision,...(task?{task:task.data.taskId,taskRevision:task.taskRevision,submissionId:id,definitionDigest:task.form.envelope.definitionDigest,answersDigest:task.form.submission.answersDigest}:{})}));
   const now = budgetDate.toISOString();
+  const taskClaim=task?informationTaskClaim(db,userId,task,revision):[];
   let inserted;
   try {
     inserted = await db.batch([
+      ...taskClaim,
       standardAIReservationStatement(db,userId,id,requestHash,budgetDate,revision),
-      db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Working on your request…',?,'ai','pending' FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM standard_ai_requests WHERE id=? AND user_id=? AND request_hash=? AND state='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, userId, revision, userId,id,userId,requestHash),
+      db.prepare("INSERT INTO chat_turns (id,user_id,revision,user_text,assistant_text,created_at,mode,status,ai_context_allowed) SELECT ?,user_id,revision+1,?,'Working on your request…',?,'ai','pending',? FROM workspace_state WHERE user_id = ? AND revision = ? AND NOT EXISTS (SELECT 1 FROM chat_turns WHERE user_id = ? AND status = 'pending') AND EXISTS(SELECT 1 FROM standard_ai_requests WHERE id=? AND user_id=? AND request_hash=? AND state='reserved') ON CONFLICT(id) DO NOTHING").bind(id, content, now, task?0:1, userId, revision, userId,id,userId,requestHash),
       inferenceReservation(db,userId,id,billing.period,config,reservedInput,outputLimit*(canFollow?2:1)),
       db.prepare('UPDATE workspace_state SET revision = revision + 1 WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM chat_turns WHERE id = ? AND user_id = ?)').bind(userId, revision, id, userId)
     ]);
@@ -92,24 +108,67 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(String(cause).includes('inference_budget')) return {status:503,error:'AI is temporarily unavailable while the platform’s testing capacity is reviewed. Your credits were not used. Your saved work and Dashboard controls remain available.'};
     throw cause;
   }
-  if (inserted[1].meta.changes !== 1) return noReservation();
-  if (!(await dispatchStandardAI(db, userId, id))) return { status: 200 };
-  if (!(await dispatchInference(db,userId,id))) return {status:200};
-  if(dnsOptions?.background)dnsOptions.background(startAcknowledgment(db,userId,id,billing.period,content,config,transport));
+  if (inserted[taskClaim.length+1].meta.changes !== 1) return noReservation();
+  let routingResult:import('./ai').Completion|undefined,taskFollowupDispatched=false;
+  let inspectionGuards:D1PreparedStatement[]=[];
+  const modelTransport:typeof fetch=async(input,init)=>{if(inspectionGuards.length)await db.batch(inspectionGuards);if(task)await db.batch(informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id));if(task&&!formSubmissionId)taskFollowupDispatched=true;return transport(input,init);};
   const started = Date.now();
   try {
-    let result = await complete({ ...config, maxOutputTokens: outputLimit, timeoutMs:canFollow?45000:config.timeoutMs, sessionId: `tellumo-${userId}` }, messages, transport);
+    if(task){
+      const sent=await db.batch([...informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id),standardAIDispatchStatement(db,userId,id),inferenceDispatchStatement(db,userId,id)]);
+      if(sent.at(-2)?.meta.changes!==1||sent.at(-1)?.meta.changes!==1)return {status:200};
+    }else{
+      if (!(await dispatchStandardAI(db, userId, id))) return { status: 200 };
+      if (!(await dispatchInference(db,userId,id))) return {status:200};
+    }
+    if(!task&&dnsOptions?.background)dnsOptions.background(startAcknowledgment(db,userId,id,billing.period,content,config,transport));
+    let result = await complete({ ...config, maxOutputTokens: outputLimit, timeoutMs:canFollow?45000:config.timeoutMs, sessionId: `tellumo-${userId}` }, messages, modelTransport);
     if(result.inputTokens>boundInput()||result.outputTokens>outputLimit)throw new ProviderError('invalid_response');
+    // Validate task-only memory separately; ordinary agent envelopes stay strict.
+    function scopedResponse(raw:string){try{return taskResponse(raw,task!.progress);}catch{throw new ProposalError('task_progress');}}
+    let firstRaw=result.text;
+    if(task){
+      try{firstRaw=scopedResponse(result.text).raw;}catch(error){await observeInference(db,userId,id,result);throw error;}
+      const failure=informationTaskProposalFailure(firstRaw,task);
+      if(failure){await observeInference(db,userId,id,result);throw new ProposalError(failure);}
+    }
+    let resumeRequest;
+    try{const candidate=JSON.parse(result.text);if(candidate&&typeof candidate==='object'&&!Array.isArray(candidate)&&Object.keys(candidate).every(k=>['reply','action'].includes(k))&&typeof candidate.reply==='string'&&candidate.reply.trim()&&candidate.reply.length<=2000&&interactionActionRequest(candidate.action)&&candidate.action.operation==='resumeTask')resumeRequest=candidate.action;}catch{}
     let proposal;
-    if(canFollow&&inspectionRequest(result.text)){
+    if(!task&&!internalIntent&&resumeRequest){
+      // This consumes the existing single lookup/follow-up slot. Rebuild the
+      // context so general history and other projects do not follow the lookup.
+      routingResult=result;
+      if(!canFollow)throw new ProposalError();
+      try{task=await prepareInformationTask(db,userId,resumeRequest.submissionId,true);}catch{throw new ProposalError();}
+      if(task.data.taskId!==resumeRequest.taskId||task.form.projectId!==resumeRequest.projectId)throw new ProposalError();
+      const lookup=task.newProject?{reply:'This intake task has not created a project yet; use its submitted brief and current clarification.'}:await prepareSiteAction(db,userId,id,JSON.stringify({reply:'Read the current website for this task.',action:{kind:'specification',operation:'read',projectId:task.form.projectId}}),task.context,dnsOptions);
+      const next:ChatMessage[]=[];
+      const add=(role:'system'|'user',value:string)=>appendContext(role,value,next);
+      add('system',agentPrompt(task.context,'website')+'\n'+informationTaskPrompt(task)+'\n'+taskProgressPrompt+'\nThis is the final model step. The current task status is included below; no further lookup is available. Interpret only the owner request for this saved task.');
+      add('user',agentWorkspaceData(task.context,'website'));
+      add('user',JSON.stringify({kind:'submitted_task_context',data:task.data}));
+      const lookupText='inspection' in lookup&&typeof lookup.inspection==='string'?lookup.inspection:lookup.reply;
+      add('user',JSON.stringify({type:'workspace_lookup_result',result:lookupText}));
+      add('user',content);
+      if(next.length>48||policyInputBound(next)>followupInputBound)throw new ProposalError();
+      await db.batch([...informationTaskGuards(db,userId,task,'succeeded',id),
+        db.prepare('UPDATE chat_turns SET ai_context_allowed=0 WHERE id=? AND user_id=?').bind(id,userId),
+        db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,JSON.stringify({type:'task_lookup',taskId:task.data.taskId,submissionId:task.form.submission.id,previousTurnId:task.progress!.turnId}),result.inputTokens,result.outputTokens)]);
+      const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`tellumo-${userId}`},next,modelTransport);
+      if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
+      result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
+    }else
+    if(canFollow&&inspectionRequest(firstRaw)){
       if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id,'app'))throw new ProposalError();
-      const lookup=await prepareSiteAction(db,userId,id,result.text,context,dnsOptions);
+      const lookup=await prepareSiteAction(db,userId,id,firstRaw,task?.context??context,dnsOptions);
+      inspectionGuards=lookup.inspectionGuards??[];
       const inspection='inspection' in lookup&&typeof lookup.inspection==='string'?lookup.inspection:lookup.reply;
       const next=inspectionMessages(messages,inspection);
       if(next&&new TextEncoder().encode(JSON.stringify(next)).length+512<=followupInputBound){
         // Persist the lookup before dispatch; lost acknowledgments never retry it.
-        await db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,inspection,result.inputTokens,result.outputTokens).run();
-        const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`tellumo-${userId}`},next,transport);
+        await db.batch([...inspectionGuards,...(task?informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id):[]),db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,inspection,result.inputTokens,result.outputTokens)]);
+        const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`tellumo-${userId}`},next,modelTransport);
         if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
         result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
       }else proposal=lookup;
@@ -118,20 +177,31 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     // Timeout reconciliation or an operator waiver may have closed this turn while the provider ran.
     const open=await db.prepare("SELECT t.id FROM chat_turns t JOIN standard_ai_requests o ON o.id=t.id AND o.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='pending' AND o.state IN ('dispatched','uncertain')").bind(id,userId).first();
     if(!open)return {status:200};
+    const taskResult=task?scopedResponse(result.text):null;
+    if(taskResult)result.text=taskResult.raw;
+    const taskFailure=task?informationTaskProposalFailure(result.text,task):null;
+    if(taskFailure)throw new ProposalError(taskFailure);
+    // A terminal connection read supplies facts only after inference. Preserve
+    // earlier task decisions; invented model status must not become task memory.
+    if(task&&taskResult&&JSON.parse(taskResult.raw).action?.operation==='connectionStatus')taskResult.progress={state:task.progress?.state??'active',summary:task.progress?.summary??'',openQuestions:task.progress?.openQuestions??[]};
     if(pageDesign&&!appPageDesignProposalAllowed(result.text,pageDesign.projectId))throw new ProposalError();
     if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id,firstApp?'app':'website'))throw new ProposalError();
     if(firstProject&&!await welcomeDraftProject(db,userId,firstProject.id))throw new Error('welcome_first_draft_changed');
-    proposal ??= await prepareSiteAction(db,userId,id,result.text,context,dnsOptions,pageDesign??undefined);
+    proposal ??= await prepareSiteAction(db,userId,id,result.text,task?.context??context,dnsOptions,pageDesign??undefined,task?.newProject?task.form.projectId:undefined);
     // Claim in the same transaction as the version and reply, after model validation.
     // This also refuses a project removed while the provider was responding.
     const firstDraftClaim=firstProject&&!firstApp&&proposal.statements.length?[db.prepare('INSERT INTO welcome_first_drafts(turn_id,project_id,user_id) VALUES(?,?,?)').bind(id,firstProject.id,userId)]:[];
     await db.batch([
+      ...inspectionGuards,
+      ...(task?informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id):[]),
       ...firstDraftClaim,
       ...proposal.statements,
+      ...(task&&taskResult?[taskProgressStatement(db,userId,id,task,taskResult.progress,proposal.createdProjectId)]:[]),
       db.prepare("UPDATE chat_turns SET assistant_text = ?, input_tokens = ?, output_tokens = ? WHERE id = ? AND user_id = ?").bind(proposal.reply,result.inputTokens,result.outputTokens,id,userId)
     ]);
     await reconcileChat(db, userId);
   } catch (cause) {
+    if(routingResult&&!taskFollowupDispatched)await observeInference(db,userId,id,routingResult);
     await uncertainInference(db,userId,id);
     if(String(cause).includes('chat_result_closed'))return {status:200};
     // Recover a committed answer/draft after an acknowledgement was lost. Never regenerate.
@@ -147,7 +217,24 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='The project changed while I was preparing the custom draft. No draft was saved. Ask me to inspect it and prepare a fresh plan.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
     }
-    if(/specification_(changed|expired|quota|held|current_required)|service_client_(changed|quota|activation_changed)/.test(String(cause))){
+    if(String(cause).includes('workspace_layout_changed')){
+      await closeStandardAIAttempt(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='Your workspace or access changed while I was preparing the page. No layout change was saved. Ask me to read the current workspace before trying again.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      return {status:200};
+    }
+    if(String(cause).includes('chat_interaction_changed')){
+      if(task){
+        const receipt=await db.prepare('SELECT state FROM standard_ai_requests WHERE id=? AND user_id=?').bind(id,userId).first<{state:string}>();
+        if(receipt?.state==='reserved'){
+          await cancelStandardAI(db,userId,id);
+          await db.prepare("UPDATE inference_calls SET status='released' WHERE id=? AND user_id=? AND status='reserved'").bind(id,userId).run();
+        }
+      }
+      await closeStandardAIAttempt(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind(task?'The task, website or access changed. Your submitted answers remain saved; no new website review was prepared.':'The form, website or access changed while I was preparing the form. No new form was saved. Read its current state and ask for a fresh form.',id,userId).run();
+      return {status:200};
+    }
+    if(/publication_changed|specification_(changed|expired|quota|held|current_required)|service_client_(changed|quota|activation_changed)/.test(String(cause))){
       await closeStandardAIAttempt(db,userId,id);
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='The website changed, its review storage is full, or the content is held for safety checks. No configuration was applied. Read the saved website and ask for a fresh review.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
@@ -164,6 +251,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       return {status:200};
     }
     if(cause instanceof ProposalError || String(cause).includes('site_version_quota') || String(cause).includes('project_quota') || String(cause).includes('version_photo_owner')) {
+      if(cause instanceof ProposalError)console.warn(JSON.stringify({event:'ai_proposal_rejected',operation:id,reason:cause.reason,task:task?.form.intake?'project-intake':task?.form.selection?'project-selection':task?'information':'none',elapsedMs:Date.now()-started}));
       await closeStandardAIAttempt(db,userId,id);
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind((cause instanceof ProposalError || String(cause).includes('version_photo_owner')) ? 'The proposed change did not pass validation, so nothing was applied and your credits were not used. Try describing a smaller change.' : String(cause).includes('project_quota') ? 'Your account has reached its 20-project test limit. No project or draft was created and your credits were not used.' : 'This project has reached its 25 saved-version limit. No change was applied and your credits were not used.',id,userId).run();
       return {status:200};

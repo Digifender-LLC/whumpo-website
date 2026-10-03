@@ -46,5 +46,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const credentials=process.env.CLOUDFLARE_API_TOKEN?{type:'api_token',token:process.env.CLOUDFLARE_API_TOKEN}:undefined;
   const api=cloudflareClient(config.account_id,fetch,credentials),db=remoteD1(api,config.d1_databases.find(b=>b.binding==='DB').database_id);
   const report=await maintenanceReport(db);console.log(JSON.stringify(report,null,2));if(report.attention)process.exitCode=2;
- }catch{console.error('Maintenance report unavailable. Check operator authorization, configuration and migrations. No settings changed.');process.exitCode=1;}
+ }catch{console.error('Maintenance report unavailable. Check operator authorization, configuration and the current schema. No settings changed.');process.exitCode=1;}
 }

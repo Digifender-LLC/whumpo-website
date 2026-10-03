@@ -1,4 +1,5 @@
 import {BackendError} from '../../backend-error';
+import {chatTurnGroups} from '../../chat-turn-groups';
 import {contentPolicyVersion} from '../../content-policy';
 import {contentRiskPolicyVersion} from '../../content-risk';
 import {previewHeaders,photoConfig} from '../../components';
@@ -126,11 +127,13 @@ export async function serviceClientAction(db:D1Database,user:string,turn:string,
  }catch(e){return safe(e);}
 }
 export async function serviceClientChatLinks(db:D1Database,user:string,turns:Record<string,unknown>[]){
- const {results:saved}=await db.prepare('SELECT a.id,v.id version_id FROM service_client_applies a JOIN service_client_versions v ON v.id=a.version_id AND v.project_id=a.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.user_id WHERE a.user_id=? AND NOT EXISTS(SELECT 1 FROM service_client_held WHERE id=v.id) ORDER BY a.revision DESC LIMIT 100').bind(user).all<{id:string;version_id:string}>();
+ for(const ids of chatTurnGroups(turns)){
+ const {results:saved}=await db.prepare(`SELECT a.id,v.id version_id FROM service_client_applies a JOIN service_client_versions v ON v.id=a.version_id AND v.project_id=a.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.user_id WHERE a.user_id=? AND a.id IN (${ids.map(()=>'?').join(',')}) AND NOT EXISTS(SELECT 1 FROM service_client_held WHERE id=v.id)`).bind(user,...ids).all<{id:string;version_id:string}>();
  for(const row of saved){const turn=turns.find(t=>t.id===row.id);if(turn?.status==='completed')turn.service_client_version_id=row.version_id;}
 
- const {results}=await db.prepare('SELECT l.turn_id,l.proposal_id,l.reply_digest FROM service_client_chat_links l JOIN chat_turns t ON t.id=l.turn_id WHERE t.user_id=? ORDER BY t.revision DESC LIMIT 100').bind(user).all<{turn_id:string;proposal_id:string;reply_digest:string}>();
+ const {results}=await db.prepare(`SELECT l.turn_id,l.proposal_id,l.reply_digest FROM service_client_chat_links l JOIN chat_turns t ON t.id=l.turn_id WHERE t.user_id=? AND l.turn_id IN (${ids.map(()=>'?').join(',')})`).bind(user,...ids).all<{turn_id:string;proposal_id:string;reply_digest:string}>();
  for(const row of results){const turn=turns.find(t=>t.id===row.turn_id);if(!turn||turn.status!=='completed'||typeof turn.assistant_text!=='string'||await sha256(turn.assistant_text)!==row.reply_digest)continue;try{const q=await readServiceClientProposal(db,user,row.proposal_id);turn.service_client_review={id:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision};}catch(e){if(!(e instanceof BackendError))throw e;}}
+ }
 }
 const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 async function previewPhotos(db:D1Database,user:string,version:string,html:string,files?:R2Bucket){

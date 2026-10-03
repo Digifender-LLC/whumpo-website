@@ -16,7 +16,7 @@ Cloudflare OAuth is documented as available on Free plans. Current OAuth scope i
 
 ## Credentials and concurrency
 
-Tokens are AES-256-GCM encrypted under the existing separate `CONNECTION_ENCRYPTION_KEY`. Authenticated encryption binds provider, user, record ID and purpose. Plaintext/ciphertext never enters chat, ordinary API status, exports or logging. Provider hosts and paths are fixed, requests do not follow redirects, responses are bounded at 256 KiB, and individual provider calls time out after ten seconds.
+Tokens are AES-256-GCM encrypted in current source under the separate `CONNECTION_ENCRYPTION_KEYRING`; see [current format and pending rotation/cutover](../connection-key-lifecycle.md). Authenticated encryption binds provider, user, record ID and purpose. Plaintext/ciphertext never enters chat, ordinary API status, exports or logging. Provider hosts and paths are fixed, requests do not follow redirects, responses are bounded at 256 KiB, and individual provider calls time out after ten seconds.
 
 Only Bearer tokens with positive, explicit lifetimes of at most eight hours and exactly the requested scopes can become active. RFC 6749 permits omitted response scope to mean the original scope; an explicit missing or broader grant is rejected. No offline/refresh access is requested. Unexpected refresh tokens are retained only as encrypted revocation work and rejected for activation. Invalid token envelopes report that the user should revoke the application in Cloudflare. Token expiry is derived from the provider response; this is not an assertion about Cloudflare's default lifetime.
 
@@ -54,7 +54,7 @@ Save the client credentials to ignored `.secrets/cloudflare-oauth.json`, keeping
 {"clientId":"CLIENT_ID","clientSecret":"CLIENT_SECRET"}
 ```
 
-Install them as Worker secrets `CLOUDFLARE_CLIENT_ID` and `CLOUDFLARE_CLIENT_SECRET` only after validation. Generate the dedicated 256-bit vault key once if absent; reuse and securely retain an existing key. Do not rotate it casually: encrypted GitHub and Cloudflare connections depend on it. Customer consent takes place on Cloudflare, not in chat. Private clients accept only members of the parent account. External-account testers require a later public-client review and publisher-domain verification; no public promotion has been performed.
+Install them as Worker secrets `CLOUDFLARE_CLIENT_ID` and `CLOUDFLARE_CLIENT_SECRET` only after validation. The current keyring/ciphertext format must be installed only through the coordinated WH-117 candidate cutover. Securely retain required key versions; a replacement key cannot decrypt prior ciphertext or prove old remote tokens were revoked. Do not change active material outside the reviewed rotation/custody flow. Customer consent takes place on Cloudflare, not in chat. Private clients accept only members of the parent account. External-account testers require a later public-client review and publisher-domain verification; no public promotion has been performed.
 
 Sources checked September 29, 2026:
 

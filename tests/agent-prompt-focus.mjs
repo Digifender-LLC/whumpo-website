@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict';import {build} from 'esbuild';const b=await build({entryPoints:['src/site-agent.ts'],bundle:true,format:'esm',platform:'node',write:false});const {agentPrompt,agentWorkspaceData,agentPromptFocus}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
-const context={projectIndex:[],projects:[],photos:[{name:'unused photo canary'}],backends:[{id:'unused backend canary'}],latest:{config_json:'unused website canary'}};
+import assert from 'node:assert/strict';import {build} from 'esbuild';Error.stackTraceLimit=0;const b=await build({entryPoints:['src/site-agent.ts'],bundle:true,format:'esm',platform:'node',write:false});const {agentPrompt,agentWorkspaceData,agentPromptFocus}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+const context={projectIndex:[],projects:[],photos:[{name:'unused photo canary'}],backends:[{id:'unused backend canary'}],latest:{component_id:'site-page@1',config_json:JSON.stringify({name:'Example',headline:'unused website canary',description:'Local services',theme:'ocean',aboutTitle:'About',aboutText:'About our work',sections:[]})},interactions:Array.from({length:6},(_,i)=>({interactionId:'form-'+i,projectId:'project',task:{id:'task',answers:'PRIVATE_FORM_CANARY'},state:'open',answerRevision:0,hasDraft:true,continuation:null,draft:{secret:'PRIVATE_FORM_CANARY'}}))};
 const full=agentPrompt(context),focused=agentPrompt(context,'cms');
 assert.equal(agentPromptFocus('Edit my CMS article'),'cms');assert.equal(agentPromptFocus('Draft an EmDash post'),'cms');
 for(const request of ['CMS plus DNS changes','CMS and GitHub backups','CMS and websites','CMS with backend functions','CMS credits','CMS forms and visitors','CMS account settings','A website with a database','A website with visitor accounts','Website and DNS','Add a website tool','Website service settings','Add contact intake to my website','Build my app','Change the theme to forest'])assert.equal(agentPromptFocus(request),'all');
@@ -16,6 +16,8 @@ assert.ok(!full.includes('unused website canary'));
 assert.ok(agentWorkspaceData(context,'website').includes('unused photo canary'));
 assert.ok(!agentWorkspaceData(context,'website').includes('unused backend canary'));
 assert.ok(!agentWorkspaceData(context,'cms').includes('unused website canary'));assert.ok(full.includes('Backend action'));assert.ok(full.includes('Website creation'));
+assert.equal(JSON.parse(agentWorkspaceData(context)).data.interactions.length,5);assert.ok(!agentWorkspaceData(context).includes('PRIVATE_FORM_CANARY'));assert.ok(!agentWorkspaceData(context,'cms').includes('interactions'));
+assert.ok(website.includes('"kind":"interaction"'));assert.ok(website.includes('smallest useful maintained form'));assert.ok(!focused.includes('"kind":"interaction"'));
 assert.ok(Buffer.byteLength(focused)<Buffer.byteLength(full),'A focused catalog omits unrelated actions');
 assert.ok(!website.includes('"kind":"preview"'));assert.ok(!website.includes('"kind":"edit"'));
 console.log(JSON.stringify({fullBytes:Buffer.byteLength(full),websiteBytes:Buffer.byteLength(website),cmsBytes:Buffer.byteLength(focused)}));

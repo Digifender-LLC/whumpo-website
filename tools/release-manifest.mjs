@@ -1,6 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {lstat,readdir,readFile,writeFile,mkdir,rename,copyFile,open} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
+import {assertArtifactPath} from './artifact-protection.mjs';
 
 export const workerOrder=['runtime','apps','sites','platform'];
 export const configFiles={runtime:'wrangler.runtime.jsonc',apps:'wrangler.apps.jsonc',sites:'wrangler.sites.jsonc',platform:'wrangler.jsonc'};
@@ -15,6 +16,7 @@ export async function fileInventory(directory,prefix=''){
  const result=[];
  for(const name of (await readdir(directory)).sort()){
   const path=join(directory,name),entry=await lstat(path),relative=prefix+name;
+  assertArtifactPath(relative);
   if(entry.isSymbolicLink())throw Error('Release artifacts cannot contain symlinks');
   if(entry.isDirectory())result.push(...await fileInventory(path,relative+'/'));
   else if(entry.isFile())result.push({path:relative,bytes:entry.size,sha256:digest(await readFile(path))});
@@ -41,29 +43,20 @@ export async function readJSON(path){
  try{return JSON.parse(text);}catch{throw Error('Invalid JSON document; inspect the private file locally');}
 }
 
-export function migrationPlan(files,applied){
- const names=files.map(f=>f.path);
- if(!names.length||names.some(n=>!/^\d{4}_[a-z0-9_]+\.sql$/.test(n))||new Set(names.map(n=>n.slice(0,4))).size!==names.length)throw Error('Invalid migration archive');
- if(new Set(applied).size!==applied.length||applied.some(n=>!names.includes(n)))throw Error('Remote schema includes unknown migrations');
- const sorted=[...applied].sort();
- if(!same(sorted,names.slice(0,sorted.length)))throw Error('Remote migrations are not a prefix of the archived schema');
- return {files,applied:sorted,pending:names.slice(sorted.length)};
-}
-
-// Current test releases only. SQL hashes pin the reset; no old-binary support contract.
-export function validateCompatibility(plan,migrations){
- if(!plan||plan.version!==2||plan.environment!=='test'||plan.mixedWorkersCompatible!==true||typeof plan.review!=='string'||!plan.review.trim())throw Error('A current test-release and mixed-Worker review is required');
- if(['previousWorkersCompatible','restoreReview','restoreEvidence'].some(k=>Object.hasOwn(plan,k)))throw Error('Retired release compatibility fields are not supported');
- if(!same(plan.migrations,migrations.pending.map(name=>({name,sha256:migrations.files.find(f=>f.path===name).sha256}))))throw Error('Release review must pin the exact pending migrations');
- if(!['none','update','reset'].includes(plan.schemaChange)||(!migrations.pending.length?plan.schemaChange!=='none':plan.schemaChange==='none'))throw Error('Invalid schema change classification');
- if(migrations.pending.length&&(typeof plan.schemaReview!=='string'||!plan.schemaReview.trim()))throw Error('Pending schema changes require a schema review');
- if(plan.schemaChange==='reset'&&(plan.testDataResetAuthorized!==true||typeof plan.cutoverReview!=='string'||!plan.cutoverReview.trim()))throw Error('Test resets require explicit data-reset authorization and a current cutover review');
+// A current release accepts one exact schema, or initializes a distinct empty
+// database. Numbered SQL replay and in-place account conversion are unsupported.
+export function validateCompatibility(plan,schema){
+ if(!plan||plan.version!==3||plan.environment!=='test'||plan.mixedWorkersCompatible!==true||typeof plan.review!=='string'||!plan.review.trim())throw Error('A current test-release and mixed-Worker review is required');
+ if(['migrations','previousWorkersCompatible','restoreReview','restoreEvidence'].some(k=>Object.hasOwn(plan,k)))throw Error('Retired release compatibility fields are not supported');
+ if(plan.schemaSha256!==schema.sqlSha256)throw Error('Release review must pin the complete current schema');
+ if(!['none','initialize'].includes(schema.mode)||plan.schemaChange!==schema.mode)throw Error('Invalid schema change classification');
+ if(schema.mode==='initialize'&&(plan.testDataResetAuthorized!==true||typeof plan.cutoverReview!=='string'||!plan.cutoverReview.trim()))throw Error('Empty-database initialization requires data-reset authorization and a current cutover review');
  return plan;
 }
 
 export async function sealRelease(directory,manifest){
  const files=await fileInventory(join(directory,'payload'));
- const result={...manifest,format:1,files,payloadDigest:digest(JSON.stringify(files))};
+ const result={...manifest,format:2,files,payloadDigest:digest(JSON.stringify(files))};
  const text=JSON.stringify(result,null,2)+'\n';
  await writeFile(join(directory,'manifest.json'),text,{flag:'wx',mode:0o600});
  await writeFile(join(directory,'manifest.sha256'),digest(text)+'\n',{flag:'wx',mode:0o600});
@@ -73,21 +66,23 @@ export async function verifyRelease(directory){
  const text=await readFile(join(directory,'manifest.json'),'utf8');
  if(digest(text)!==(await readFile(join(directory,'manifest.sha256'),'utf8')).trim())throw Error('Release manifest changed');
  const manifest=JSON.parse(text);
- if(manifest.format!==1||!same(manifest.order,workerOrder)||!same(manifest.files,await fileInventory(join(directory,'payload')))||manifest.payloadDigest!==digest(JSON.stringify(manifest.files)))throw Error('Release artifact mismatch');
+ if(manifest.format!==2||!same(manifest.order,workerOrder)||!same(manifest.files,await fileInventory(join(directory,'payload')))||manifest.payloadDigest!==digest(JSON.stringify(manifest.files)))throw Error('Release artifact mismatch');
  if(manifest.compatibility?.buildInputs!==manifest.build?.inputs?.sha256)throw Error('Compatibility review does not match the archived build');
  for(const role of workerOrder)if(!manifest.workers?.[role]?.tag||!manifest.before?.workers?.[role]?.id)throw Error('Incomplete four-Worker manifest');
- validateCompatibility(manifest.compatibility,manifest.migrations);
+ validateCompatibility(manifest.compatibility,manifest.schema);
+ if(digest(await readFile(join(directory,'payload/schema/current.sql')))!==manifest.schema.sqlSha256)throw Error('Archived schema differs from the reviewed schema');
  return manifest;
 }
 
 export function newJournal(manifest){
- return {release:manifest.id,manifestDigest:digest(JSON.stringify(manifest)),status:'prepared',steps:Object.fromEntries(['migrations',...workerOrder].map(key=>[key,{status:'pending'}]))};
+ return {release:manifest.id,manifestDigest:digest(JSON.stringify(manifest)),status:'prepared',steps:Object.fromEntries(['schema',...workerOrder].map(key=>[key,{status:'pending'}]))};
 }
 
 export function assertWorker(manifest,role,worker){
  if(!worker||worker.tag!==manifest.workers[role].tag)throw Error('Candidate Worker version was not confirmed');
  const expected=manifest.workers[role];
  if(!same(worker.services,expected.services))throw Error('Worker service bindings changed');
+ if(!same(worker.databases,expected.databases))throw Error('Worker database bindings changed');
  for(const name of manifest.before.workers[role].secrets)if(!worker.secrets.includes(name))throw Error('Worker lost a required secret binding');
  if(role==='platform'&&manifest.cms.some(c=>['verified','connected'].includes(c.deployment_state))&&!worker.secrets.includes('CMS_BRIDGE_MASTER_KEY'))throw Error('CMS master secret binding missing');
 }
@@ -97,13 +92,13 @@ export function assertWorker(manifest,role,worker){
 export function reconcileRelease(manifest,journal,observed){
  if(journal.release!==manifest.id||journal.manifestDigest!==digest(JSON.stringify(manifest)))throw Error('Journal belongs to another release');
  if(!same(manifest.cms,observed.cms))throw Error('CMS registrations changed; reconcile before continuing');
- const target=manifest.migrations.files.map(f=>f.path),baseline=manifest.migrations.applied;
- const state=journal.steps.migrations;
+ const state=journal.steps.schema;
  if(state.status==='pending'){
-  if(!same(observed.migrations,baseline))throw Error('Remote schema changed before release');
- }else if(same(observed.migrations,target))state.status='confirmed';
+  if(!same(observed.schema,manifest.schema.before))throw Error('Remote schema changed before release');
+ }else if(state.operationConfirmed!==true)throw Error('Schema command outcome is unresolved; inspect the operation before continuing');
+ else if(same(observed.schema,manifest.schema.expected))state.status='confirmed';
  else if(state.status==='confirmed')throw Error('Applied schema drifted');
- else throw Error('Migration outcome is unresolved; inspect applied names and private logs');
+ else throw Error('Schema initialization outcome is unresolved; inspect the actual schema and private logs');
  for(const role of workerOrder){
   const step=journal.steps[role],live=observed.workers[role];
   if(step.status==='pending'){
@@ -122,20 +117,21 @@ export async function applyRelease(directory,driver){
  const manifest=await verifyRelease(directory);
  await driver.verifyToolchain(manifest,directory);
  const journalPath=join(directory,'journal.json');
- return driver.withLock(async guard=>{
+ return driver.withLock(manifest,async guard=>{
   let journal;try{journal=await readJSON(journalPath);}catch(e){if(e.code!=='ENOENT')throw e;journal=newJournal(manifest);}
   journal=reconcileRelease(manifest,journal,await driver.observe(manifest));
   const save=()=>atomicJSON(journalPath,journal);
   await save();
-  for(const role of ['migrations',...workerOrder]){
+  for(const role of ['schema',...workerOrder]){
    if(journal.steps[role].status==='confirmed')continue;
    await guard();await verifyRelease(directory);
    reconcileRelease(manifest,journal,await driver.observe(manifest));
    // Persist intent before the first possible external side effect.
    journal.status='applying';journal.steps[role]={status:'running',startedAt:new Date().toISOString()};await save();
    try{
-    if(role==='migrations'){
-     if(manifest.migrations.pending.length)await driver.migrate(manifest,directory);
+    if(role==='schema'){
+     if(manifest.schema.mode==='initialize')await driver.initialize(manifest,directory);
+     journal.steps.schema.operationConfirmed=true;await save();
     }else await driver.deploy(role,manifest,directory,guard,async()=>{journal.steps[role].operationConfirmed=true;await save();});
     await guard();
     reconcileRelease(manifest,journal,await driver.observe(manifest));

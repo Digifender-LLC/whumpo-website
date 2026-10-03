@@ -8,7 +8,7 @@ const service=await import('data:text/javascript;base64,'+Buffer.from(bundled.ou
 const {resolveFeatureInclusion:resolve,issueFeaturePreviewGrant:issue,revokeFeaturePreviewGrant:revoke,readFeaturePreviewGrant:read,ensureBilling}=service;
 
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID(),at=Date.parse('2030-02-15T12:00:00Z')/1000,date=n=>new Date(n*1000);
-async function owner(){const user=id();await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(user,user+'@example.invalid',date(at).toISOString()).run();return user;}
+async function owner(){const user=id();await db.prepare("INSERT INTO users VALUES(?,?,?)").bind(user,user+'@example.invalid',date(at).toISOString()).run();return user;}
 async function project(user){const p=id();await db.prepare("INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,'Fixture',?,?)").bind(p,user,date(at).toISOString(),date(at).toISOString()).run();return p;}
 const request=(userId,projectId=null,featureId='connections.github',operation='read')=>({userId,projectId,featureId,operation});
 const grant=(r,extra={})=>({id:id(),...r,purpose:'private-test-acceptance',reviewReference:'https://github.com/zemdregon/whumpo/issues/63',startsAt:at,endsAt:at+3600,...extra});

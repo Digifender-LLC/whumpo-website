@@ -14,4 +14,4 @@ else try{
  const code=await build({entryPoints:['src/fair-use-report.ts'],bundle:true,format:'esm',platform:'node',write:false});
  const {fairUseReport}=await import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));
  console.log(JSON.stringify({...await fairUseReport(db,account),...(financeReview?{financeReview}:{})},null,2));
-}catch{console.error('Fair-use report unavailable. Check operator authorization, applied migrations, the account identifier and any supplied finance summary. No settings were changed.');process.exitCode=1;}
+}catch{console.error('Fair-use report unavailable. Check operator authorization, the current schema, the account identifier and any supplied finance summary. No settings were changed.');process.exitCode=1;}

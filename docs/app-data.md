@@ -2,6 +2,18 @@
 
 **Current Chat contract, October 1, 2026:** [Natural-language Chat](natural-language-chat.md) replaces the historical command and guided-navigation examples below. Current app-maintenance inventories return saved review IDs and plain-language guidance. Exact approval controls and their owned immutable receipt checks remain authoritative. The reply cleanup is source-verified separately from test deployment in the [current-version policy](current-version-policy.md).
 
+## Current owner and visitor authority — October 2, 2026
+
+Current local verification uses the complete schema and admitted workspace scopes for owner program tests, activation, invitations, access management and page reviews. Visitor sign-in, sessions, document transitions, recovery and deletion keep their separate project-scoped authority. A valid workspace cookie cannot authenticate a visitor. The visitor passkey suite verifies actual signatures, challenge/replay checks, host separation and page withdrawal during sign-in/transition; owner stale-proof cases use a distinct aged current session.
+
+The 17 visitor-deletion authority/recovery cases pass again, including ambient account changes, replacement sessions, stale document review, rollback, lost replies and read-only receipt recovery after page withdrawal. That final withdrawal uses current owner admission. The browser deletion harness shares the converted fixture but has not been rerun at this checkpoint. Actual local QuickJS/HTTP activation also passes. [Exact scope and commands](verification.md#backend-execution-and-visitor-authority) distinguish synthetic owner setup, signed visitor ceremonies and actual runtime execution. The follow-through below covers document/program recovery and lifecycle; remaining build/design fixtures, coordinated remote cutover and physical-device acceptance stay open.
+
+### Current recovery and lifecycle follow-through
+
+The complete-schema document-recovery, upgrade and visitor-lifecycle suites now pass with current owner authority. Typed restoration/upgrade/retained-program controls use the mounted current-cookie route; anonymous, foreign-Origin and aged-session requests are denied. Lost responses are injected after their actual capture/claim/approval/cancellation transaction. Actual workerd/QuickJS transformations preserve atomic code/document replacement, before-copies and separate reactivation; restoration never recreates an erased visitor or reruns uncertain work. Streamed export stops when its account is deleted, and scheduled cleanup preserves current receipts and aggregate quota.
+
+[Verification](verification.md#application-recovery-upgrades-and-lifecycle) records the three commands, synthetic/actual-runtime boundaries and remaining acceptance. These are customer application transformations and forward changes using retained data under the current contract. Platform test databases are initialized directly from the current schema, with no numbered migration replay or support for retired identity records. No remote cutover or physical-device acceptance is included.
+
 ## Find unfinished application work — September 30, 2026
 
 `/app-maintenance [PROJECT_ID or all] [PAGE]`, “show unfinished app work”, “show app maintenance” and “show pending app work” read unfinished app-access, visitor-page, upgrade, document-restore and program-rollback reviews. The list is owner-scoped, with an optional exact owned project and 20 results per page. Failed, uncertain and changed upgrade checks appear first, followed by deterministic expiry/family/ID order. Applied, cancelled and expired reviews are omitted; retained recovery points remain separately accessible through `/app-recovery`.
@@ -276,6 +288,10 @@ The UI shows new codes once in a private, read-only field with an explicit Copy 
 
 Verification includes owner/foreign/anonymous routes, CSRF and recent-session denial, cancellation after challenge issuance, disabled-app revocation, metadata field allowlisting and guided chat without credential disclosure. Local browser inspection confirmed dashboard and Chat navigation, confirmation dismissal and a 390px layout without horizontal overflow. Browser fixtures are synthetic; no production visitor access was granted or revoked during testing.
 
+
+## Current direct visitor-page withdrawal — October 3, 2026 UTC
+
+Owners can use **Site & app safety** independently of Chat/profile/generated Dashboard reads to review taking a visitor app offline. The action uses the existing null-configuration page review, pinned to current program/page revisions. It removes the visitor page and API, revokes sessions/pending sign-ins and prevents their in-flight data commits. Program configuration, private visitor documents and operation history are preserved; republication needs a separate current owner review. The safety API reads publication metadata only and cannot disclose visitor content or enable an app. Current identity, exact review replay, expiry and existing count bounds apply. See the [shared contract and verification](chat-workspace-continuity.md#direct-backend-and-visitor-app-safety--october-3-2026-utc) for source/local/deployment status. Historical command examples below are internal handler syntax, not user-facing slash commands.
 
 ## Controlled visitor pages (migration 0057)
 

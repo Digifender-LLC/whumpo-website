@@ -4,15 +4,14 @@ The business-directory starter adds a small hosted CRUD application to the exist
 
 ## Customer workflow
 
-1. Create a project through chat. Publish its website before publishing a directory.
-2. Use Details → Directories or `/directory` to choose a project, then `/directory PROJECT_ID` to inspect the private draft.
-3. Add a listing with `/directory-add PROJECT_ID | title | description | optional HTTPS link`.
-4. Read the exact proposed change and press **Confirm reviewed directory change**, or send `/confirm-directory REVIEW_ID`.
-5. `/directory-edit PROJECT_ID LISTING_ID | title | description | optional HTTPS link` replaces a listing after review. `/directory-remove PROJECT_ID LISTING_ID` reviews removal from the private draft.
-6. `/directory-publish PROJECT_ID` reviews the complete snapshot for public exposure. Confirm it separately. The chat receipt links to the published directory.
-7. `/directory-off PROJECT_ID` reviews taking both public endpoints offline. Private data and review history remain.
+1. Start a project, then ask Chat to inspect or create its directory. Publish the website before publishing a directory.
+2. Ask to add a listing with its title, description and optional HTTPS link.
+3. Read the exact proposed change and press **Confirm reviewed directory change**.
+4. Ask to edit or remove a listing, then confirm that exact private-draft change.
+5. Ask to publish the directory. Review and confirm the complete public snapshot separately. The saved receipt links to it.
+6. Ask to take the directory offline and confirm the review. Both public endpoints stop serving it; private data and review history remain.
 
-Natural-language requests use the same read/review operations. The model cannot authorize a review. Guided commands use no AI units; natural-language interpretation uses the normal metered provider. Listing text and link casing are preserved. Pipe separators belong to the guided syntax; natural-language fields may contain pipes.
+Customer Chat accepts natural language. Internal dispatch strings in domain handlers and fixtures are not a public command interface. Models prepare reviews; only the owner's typed review control can authorize them. Standard owner assistance has zero customer-unit debits, with provider usage accounted for internally. Listing text, link casing and literal pipe characters are preserved. See [natural-language Chat](natural-language-chat.md).
 
 ## Publication and APIs
 
@@ -25,7 +24,7 @@ Draft create/update/delete operations do not change the public snapshot. Publica
 
 ## Data and authorization
 
-Migration 0030 stores one private draft and one separately approved public snapshot per project, plus exact review snapshots and digests. Each review expires after ten minutes. Any intervening directory action invalidates older reviews. Publication also checks the parent publication revision. Database triggers enforce owner identity, compare-and-swap revisions, atomic review application and a matching explicit guided confirmation turn. A stale confirmation rolls back its chat receipt; retrying an applied review cannot apply it twice.
+The complete current schema stores one private draft and one separately approved public snapshot per project, plus exact review snapshots and digests. Each review expires after ten minutes. Any intervening directory action invalidates older reviews. Publication also checks the parent publication revision. Database triggers enforce owner identity, compare-and-swap revisions, atomic review application and a matching explicit owner confirmation turn. A stale confirmation rolls back its chat receipt; retrying an applied review cannot apply it twice.
 
 Titles are at most 100 characters, descriptions 500, and HTTPS links 250. Control characters, executable URL schemes and embedded credentials are rejected. The renderer escapes all tenant text and uses a script-free sandboxed document. Links are displayed, never fetched by the backend. Listing IDs cannot select another project's records. Shared code and synthetic examples contain no customer content; no tenant data is promoted into the component library.
 
@@ -33,18 +32,20 @@ The test allows 25 listings and a 24 KiB snapshot per project, 100 retained edit
 
 ## Verification
 
-The disposable D1 suite tests owner/project boundaries, private CRUD reviews, exact public snapshots, concurrent/stale revisions, replay, public read-only behavior, parent-publication invalidation, escaped hostile HTML, rejected link schemes, AI confirmation restrictions, schema bounds and cleanup. Browser inspection covers desktop and 390-pixel responsive layout using synthetic community listings. Production acceptance is recorded separately in deployment.md.
+The current-schema checkpoint passes `node --stack-trace-limit=0 tests/directories.mjs` and `node --stack-trace-limit=0 tests/directory-history.mjs` on local D1. Current owner admission covers maintenance, while public reads remain independent. Typed owner controls authorize exact changes; fixtures also exercise internal proposal adapters. See [verification](verification.md#website-contacts-directories-and-first-project-handoff). No browser/device or remote acceptance was added.
+
+The disposable D1 suites test owner/project boundaries, private CRUD reviews, exact public snapshots, concurrent/stale revisions, replay, public read-only behavior, parent-publication invalidation, escaped hostile HTML, rejected link schemes, AI confirmation restrictions, schema bounds and cleanup. Earlier browser inspection covered desktop and 390-pixel responsive layout using synthetic community listings; that historical evidence does not establish current browser/device acceptance. Test-platform deployment evidence is recorded separately in [deployment](deployment.md).
 
 This starter advances the small dynamic apps/APIs requirement. It does not provide arbitrary schemas, generated backend execution, customer-site authentication, rollback for arbitrary application schemas or a portable backend export. Those remain broader MVP work.
 
 ## Saved data, restoration and downloads
 
-Migration 0031 adds immutable source-snapshot ancestry and chat-bound export links. `/directory-history PROJECT_ID` lists up to 100 applied edit/publication snapshots with revision, application time, listing count, digest and any restoration source. Pending proposals and offline-only operations are not recovery sources.
+The current schema includes immutable source-snapshot ancestry and chat-bound export links. Ask Chat for the project's directory history to list up to 100 applied edit/publication snapshots with revision, application time, listing count, digest and any restoration source. Pending proposals and offline-only operations are not recovery sources.
 
-`/directory-restore PROJECT_ID SNAPSHOT_ID` prepares an exact replacement of the private draft. The review shows both the current draft and proposed replacement, including removed records. Confirmation uses the existing ten-minute, owner-scoped revision check. A concurrent change invalidates the review. The original listing IDs and complete listing data are preserved, and the new applied snapshot records its source. Restoration never modifies the public directory or the immutable website version. A separate directory publication review makes restored data public. An empty saved collection can be restored too.
+Ask to restore a saved snapshot to prepare an exact replacement of the private draft. The review shows both the current draft and proposed replacement, including removed records. Confirmation uses the existing ten-minute, owner-scoped revision check. A concurrent change invalidates the review. The original listing IDs and complete listing data are preserved, and the new applied snapshot records its source. Restoration never modifies the public directory or the immutable website version. A separate directory publication review makes restored data public. An empty saved collection can be restored too.
 
-`/directory-export PROJECT_ID SNAPSHOT_ID` attaches an authenticated download link to the chat turn. It returns private JSON with format `tellumo-directory`, schema version 1, project metadata, snapshot identity/time, source ancestry, listing SHA-256 and exact saved listings. The digest covers the serialized listing array, not the complete export wrapper. This is a data export, not an executable backend bundle or import endpoint. Public readers cannot download private history.
+Ask to download a saved directory snapshot to attach an authenticated download link to the chat turn. It returns private JSON with format `tellumo-directory`, schema version 1, project metadata, snapshot identity/time, source ancestry, listing SHA-256 and exact saved listings. The digest covers the serialized listing array, not the complete export wrapper. This is a data export, not an executable backend bundle or import endpoint. Public readers cannot download private history.
 
 API reads: `GET /api/projects/PROJECT_ID/directory/history` and `GET /api/projects/PROJECT_ID/directory/snapshots/SNAPSHOT_ID/export`. They enforce both owner and project boundaries. Exports use an attachment filename, JSON content type, no-store and nosniff. Each request rechecks ownership and artifact digest. The public JSON route continues serving only the approved public snapshot.
 
-Natural language may list history, prepare restoration, or attach an export. It cannot confirm restoration. Database triggers verify the copied source is an applied snapshot from the same owner/project with identical bytes/digest and prevent ancestry changes. Confirmations continue to require a matching guided user turn. Review history is retained until project/account cleanup; exporting does not change retention or grant another account access.
+Natural language may list history, prepare restoration, or attach an export. It cannot confirm restoration. Database triggers verify the copied source is an applied snapshot from the same owner/project with identical bytes/digest and prevent ancestry changes. Confirmations require a matching explicit owner control receipt. Review history is retained until project/account cleanup; exporting does not change retention or grant another account access.

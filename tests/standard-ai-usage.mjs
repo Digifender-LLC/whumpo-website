@@ -1,16 +1,12 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {databaseFixture} from './helpers/current-database.mjs';
 const code=await build({entryPoints:['src/standard-ai-usage.ts'],bundle:true,format:'esm',platform:'node',write:false});
 const {reserveStandardAI,readStandardAI,dispatchStandardAI,markStandardAIUncertain,completeStandardAI,cancelStandardAI}=await import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-standard-ai-');
-execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
-const proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false}),db=proxy.env.DB;
+const fixture=await databaseFixture({d1:true}),db=fixture.db;
 try{
  const user=crypto.randomUUID(),other=crypto.randomUUID(),id=crypto.randomUUID(),hash='a'.repeat(64),now=new Date().toISOString();
- for(const owner of [user,other])await db.prepare("INSERT INTO users VALUES(?,?,'00','fixture',?)").bind(owner,owner+'@example.test',now).run();
+ for(const owner of [user,other])await db.prepare("INSERT INTO users VALUES(?,?,?)").bind(owner,owner+'@example.test',now).run();
  const reservations=await Promise.all([reserveStandardAI(db,user,id,hash),reserveStandardAI(db,user,id,hash)]);
  assert.equal(reservations.filter(r=>r.created).length,1);
  assert.equal(await readStandardAI(db,other,id),null);
@@ -53,4 +49,4 @@ try{
  assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  console.log('Standard inference bridge passed: internal cost reservation/settlement, cancelled reserve cleanup, bounded inspection continuation, foreign/closed/wrong-month denial, retained provider ceiling and zero customer ledger changes.');
  console.log('Standard AI receipts passed: duplicate/competing admission, owner isolation, dispatch/cancel race, uncertain-result retention, exact completion replay, immutable identity and zero customer/provider ledger mutation.');
-}finally{await proxy.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{await fixture.close();}

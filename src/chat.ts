@@ -1,3 +1,5 @@
+import {interactionChatLinks} from './chat-interactions/links';
+import {assertWorkspace,workspaceTransport,requireFreshWorkspace} from './workspace-identity/admission';
 import {serviceClientActivationChatLinks} from './project-specification/service-clients/activation';
 import {linkChatReviewReply,readChatReviewReceipts,backendReviewChatActions} from './chat-review-receipts';
 import {chatControl} from './chat-controls';
@@ -5,6 +7,7 @@ import {transcriptRequests,transcriptReply,isTranscriptRequest} from './chat-tra
 import {usageReviewCommand,prepareUsageReviewChat} from './usage-review-requests';
 import {readStandardAIHistory,readStandardAIRequest,describeStandardAIHistory,describeStandardAIRequest} from './standard-ai-history';
 import {describeConnections} from './connection-chat';
+import {githubGrantChatControl,githubGrantChatActions} from './github-grant-chat';
 import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
 import {appRecoveryChatActions} from './app-recovery-chat-actions';
@@ -61,36 +64,62 @@ export async function readChat(db: D1Database, userId: string, aiEnabled = false
   // when its complete server-generated review receipt was saved; /backups can recover it otherwise.
   const result = await db.batch([
     db.prepare('SELECT revision FROM workspace_state WHERE user_id = ?').bind(userId),
-    db.prepare("SELECT t.id, t.revision, t.user_text, t.action_json, t.assistant_text, t.created_at, t.mode, t.status, CASE WHEN csr.status='pending' AND t.status='completed' AND csr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM cms_instances WHERE project_id=csr.project_id) AND instr(t.assistant_text,'Use the confirmation button for setup '||csr.id||' to approve this exact setup request.')>0 THEN csr.id ELSE NULL END AS cms_confirmation_id, CASE WHEN bl.kind='export' AND t.status='completed' AND br.status='applied' THEN br.id ELSE NULL END AS backend_state_export_id, CASE WHEN bl.kind='review' AND t.status='completed' AND br.status='ready' AND br.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND br.base_revision=bs.revision AND br.before_json=bs.state_json AND instr(t.assistant_text,'use the confirmation button for review '||br.id||'. A newer data revision invalidates this review.')>0 THEN br.id ELSE NULL END AS backend_state_confirmation_id, de.review_id AS directory_export_id, der.project_id AS directory_export_project_id, CASE WHEN dr.status='pending' AND t.status='completed' AND dr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND dr.expected_revision=ds.revision THEN dr.id ELSE NULL END AS directory_confirmation_id, CASE WHEN dc.kind='publish' AND dc.status='applied' AND ds2.live_json=dc.snapshot_json AND ds2.publication_revision=dp.revision AND dp.version_id IS NOT NULL THEN dc.project_id ELSE NULL END AS directory_project_id, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind, e.version_id AS export_version_id, CASE WHEN r.status='pending' AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM project_files WHERE id=r.file_id) THEN r.id ELSE NULL END AS photo_confirmation_id, CASE WHEN vr.status='pending' AND vr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM site_versions WHERE id=vr.version_id) THEN vr.id ELSE NULL END AS version_confirmation_id, CASE WHEN cr.status='pending' AND cr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') THEN cr.id ELSE NULL END AS contact_confirmation_id,CASE WHEN dpr.status='pending' AND dpr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM domain_claims WHERE id=dpr.claim_id AND token=dpr.proof_token AND expires_at=dpr.proof_expires_at) THEN dpr.id ELSE NULL END AS domain_proof_confirmation_id,cmp.version_id AS comparison_version_id,cmp.baseline_id AS comparison_baseline_id, CASE WHEN gb.state='pending' AND gb.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND substr(t.assistant_text,-length('Use the confirmation button for backup '||gb.id||' to authorize this exact backup.'))='Use the confirmation button for backup '||gb.id||' to authorize this exact backup.' THEN gb.id ELSE NULL END AS backup_confirmation_id, CASE WHEN gb.state='complete' AND gb.commit_sha IS NOT NULL THEN 'https://github.com/'||gb.repo_owner||'/'||gb.repo_name||'/tree/'||gb.commit_sha||'/'||gb.path ELSE NULL END AS backup_url FROM chat_turns t LEFT JOIN domain_proof_removals dpr ON dpr.id=t.id AND dpr.user_id=t.user_id LEFT JOIN cms_setup_reviews csr ON csr.id=t.id AND csr.user_id=t.user_id LEFT JOIN backend_state_links bl ON bl.turn_id=t.id LEFT JOIN backend_state_reviews br ON br.id=bl.review_id AND br.user_id=t.user_id LEFT JOIN backend_state bs ON bs.project_id=br.project_id LEFT JOIN directory_exports de ON de.turn_id=t.id LEFT JOIN directory_reviews der ON der.id=de.review_id AND der.user_id=t.user_id LEFT JOIN directory_reviews dr ON dr.id=t.id AND dr.user_id=t.user_id LEFT JOIN directories ds ON ds.project_id=dr.project_id LEFT JOIN directory_reviews dc ON dc.confirmed_by=t.id AND dc.user_id=t.user_id LEFT JOIN directories ds2 ON ds2.project_id=dc.project_id LEFT JOIN publications dp ON dp.project_id=dc.project_id LEFT JOIN github_backups gb ON gb.id=t.id AND gb.user_id=t.user_id LEFT JOIN chat_comparisons cmp ON cmp.turn_id=t.id LEFT JOIN contact_reviews cr ON cr.id=t.id AND cr.user_id=t.user_id LEFT JOIN version_removals vr ON vr.id=t.id AND vr.user_id=t.user_id LEFT JOIN photo_removals r ON r.id=t.id AND r.user_id=t.user_id LEFT JOIN chat_exports e ON e.turn_id=t.id LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_actions a ON a.id = t.id AND a.user_id=t.user_id LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ORDER BY t.revision DESC LIMIT 100").bind(userId),
+    chatTurnQuery(db,userId),
     db.prepare("SELECT COUNT(*) AS projects, COALESCE(SUM(CASE WHEN site_live=1 OR backend_live=1 OR cms_articles>0 THEN 1 ELSE 0 END),0) AS live, COALESCE(SUM(cms_articles),0) AS cms_articles FROM project_service_status WHERE owner_user_id = ?").bind(userId)
   ]);
-  const exports=await cmsExportLinks(db,userId);
-  for(const link of exports){const turn=(result[1].results as Record<string,unknown>[]).find(t=>t.id===link.turn_id);if(turn)Object.assign(turn,{cms_export_project_id:link.project_id,cms_export_request_id:link.draft_request_id});}
-  const links=await cmsPreviewLinks(db,userId);
-  for(const turn of result[1].results as Record<string,unknown>[]){const link=links.find(l=>l.turn_id===turn.id);if(link){turn.cms_preview_project_id=link.project_id;turn.cms_preview_request_id=link.draft_request_id;}}
-  const cmsReviews=await cmsPublicationLinks(db,userId);
-  for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsReviews.find(r=>r.turn_id===turn.id);if(r){turn.cms_publication_review_id=r.id;if(r.status==='published'&&!r.withdrawn)turn.cms_publication_url=`https://${r.project_id}.whumpo.site/cms/${r.collection}/${r.item_id}`;if(r.status==='approved'||r.status==='pending'&&String(r.expires_at)>new Date().toISOString())turn.cms_publication_confirmation_id=r.id;}}
-  const cmsImports=await cmsWordPressLinks(db,userId);
-  for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsImports.find(r=>r.turn_id===turn.id);if(r){turn.cms_import_review_id=r.id;if(r.can_confirm&&(r.status==='approved'||r.status==='pending'&&r.expires_at>new Date().toISOString()))turn.cms_import_confirmation_id=r.id;if(r.status==='imported'){turn.cms_preview_project_id=r.project_id;turn.cms_preview_request_id=r.id;}}}
-  const cmsDiscards=await cmsDiscardLinks(db,userId);
-  for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsDiscards.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_discard_confirmation_id=r.id;turn.cms_discard_recovery=r.status==='approved';}}
-  const cmsRemovals=await cmsUnpublishLinks(db,userId);
-  for(const turn of result[1].results as Record<string,unknown>[]){const r=cmsRemovals.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_unpublish_confirmation_id=r.id;turn.cms_unpublish_recovery=r.status==='approved';}}
-  for(const turn of result[1].results as Record<string,unknown>[]){if(turn.status==='completed'&&typeof turn.user_text==='string'&&isTranscriptRequest(turn.user_text)&&turn.assistant_text===transcriptReply)turn.chat_transcript_download=true;}
-  const reviewReceipts=await readChatReviewReceipts(db,userId,result[1].results as Record<string,unknown>[]);
-  await backendReviewChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
-  await applicationChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
-  await appRecoveryChatActions(db,userId,result[1].results as Record<string,unknown>[],reviewReceipts);
-  await appMaintenanceChatActions(db,userId,result[1].results as Record<string,unknown>[]);
-  await serviceClientChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
-  await serviceClientActivationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
-  await specificationChatLinks(db,userId,result[1].results as Record<string,unknown>[]);
+  await projectChatTurns(db,userId,result[1].results as Record<string,unknown>[]);
   const firstDraft=await welcomeDraftProject(db,userId);
   return { firstDraft, mode: aiEnabled ? 'ai' : 'guided', greeting: Number((result[2].results[0] as {projects:number}|undefined)?.projects)>0 ? 'Your workspace is ready. Tell me what you would like to build or change next.' : greeting, state: result[0].results[0], turns: result[1].results.reverse(), stats: result[2].results[0] };
 }
 
+
+/** A bounded current projection shared by recent Chat and exact saved messages.
+ * Text alone never supplies approval authority; the same receipt/domain readers
+ * recheck each linked operation. Reading one message invokes no model or action. */
+function chatTurnQuery(db:D1Database,userId:string,turnId?:string){
+  return db.prepare(`SELECT t.id, t.revision, t.user_text, t.action_json, t.assistant_text, t.created_at, t.mode, t.status, CASE WHEN csr.status='pending' AND t.status='completed' AND csr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT EXISTS(SELECT 1 FROM cms_instances WHERE project_id=csr.project_id) AND instr(t.assistant_text,'Use the confirmation button for setup '||csr.id||' to approve this exact setup request.')>0 THEN csr.id ELSE NULL END AS cms_confirmation_id, CASE WHEN bl.kind='export' AND t.status='completed' AND br.status='applied' THEN br.id ELSE NULL END AS backend_state_export_id, CASE WHEN bl.kind='review' AND t.status='completed' AND br.status='ready' AND br.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND br.base_revision=bs.revision AND br.before_json=bs.state_json AND instr(t.assistant_text,'use the confirmation button for review '||br.id||'. A newer data revision invalidates this review.')>0 THEN br.id ELSE NULL END AS backend_state_confirmation_id, de.review_id AS directory_export_id, der.project_id AS directory_export_project_id, CASE WHEN dr.status='pending' AND t.status='completed' AND dr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND dr.expected_revision=ds.revision THEN dr.id ELSE NULL END AS directory_confirmation_id, CASE WHEN dc.kind='publish' AND dc.status='applied' AND ds2.live_json=dc.snapshot_json AND ds2.publication_revision=dp.revision AND dp.version_id IS NOT NULL THEN dc.project_id ELSE NULL END AS directory_project_id, COALESCE(v.id,a.version_id) AS version_id, CASE WHEN a.status = 'pending' AND a.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now') AND a.expected_revision = s.revision THEN a.id ELSE NULL END AS confirmation_id, done.project_id AS published_project_id, done.kind AS publication_kind, e.version_id AS export_version_id, CASE WHEN r.status='pending' AND r.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM project_files WHERE id=r.file_id) THEN r.id ELSE NULL END AS photo_confirmation_id, CASE WHEN vr.status='pending' AND vr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM site_versions WHERE id=vr.version_id) THEN vr.id ELSE NULL END AS version_confirmation_id, CASE WHEN cr.status='pending' AND cr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') THEN cr.id ELSE NULL END AS contact_confirmation_id,CASE WHEN dpr.status='pending' AND dpr.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM domain_claims WHERE id=dpr.claim_id AND token=dpr.proof_token AND expires_at=dpr.proof_expires_at) THEN dpr.id ELSE NULL END AS domain_proof_confirmation_id,cmp.version_id AS comparison_version_id,cmp.baseline_id AS comparison_baseline_id, CASE WHEN gb.state='pending' AND gb.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND substr(t.assistant_text,-length('Use the confirmation button for backup '||gb.id||' to authorize this exact backup.'))='Use the confirmation button for backup '||gb.id||' to authorize this exact backup.' THEN gb.id ELSE NULL END AS backup_confirmation_id, CASE WHEN gb.state='complete' AND gb.commit_sha IS NOT NULL THEN 'https://github.com/'||gb.repo_owner||'/'||gb.repo_name||'/tree/'||gb.commit_sha||'/'||gb.path ELSE NULL END AS backup_url FROM chat_turns t LEFT JOIN domain_proof_removals dpr ON dpr.id=t.id AND dpr.user_id=t.user_id LEFT JOIN cms_setup_reviews csr ON csr.id=t.id AND csr.user_id=t.user_id LEFT JOIN backend_state_links bl ON bl.turn_id=t.id LEFT JOIN backend_state_reviews br ON br.id=bl.review_id AND br.user_id=t.user_id LEFT JOIN backend_state bs ON bs.project_id=br.project_id LEFT JOIN directory_exports de ON de.turn_id=t.id LEFT JOIN directory_reviews der ON der.id=de.review_id AND der.user_id=t.user_id LEFT JOIN directory_reviews dr ON dr.id=t.id AND dr.user_id=t.user_id LEFT JOIN directories ds ON ds.project_id=dr.project_id LEFT JOIN directory_reviews dc ON dc.confirmed_by=t.id AND dc.user_id=t.user_id LEFT JOIN directories ds2 ON ds2.project_id=dc.project_id LEFT JOIN publications dp ON dp.project_id=dc.project_id LEFT JOIN github_backups gb ON gb.id=t.id AND gb.user_id=t.user_id LEFT JOIN chat_comparisons cmp ON cmp.turn_id=t.id LEFT JOIN contact_reviews cr ON cr.id=t.id AND cr.user_id=t.user_id LEFT JOIN version_removals vr ON vr.id=t.id AND vr.user_id=t.user_id LEFT JOIN photo_removals r ON r.id=t.id AND r.user_id=t.user_id LEFT JOIN chat_exports e ON e.turn_id=t.id LEFT JOIN site_versions v ON v.id = t.id LEFT JOIN publication_chat_links pl ON pl.turn_id=t.id LEFT JOIN publication_actions a ON a.id=pl.review_id AND a.user_id=t.user_id AND EXISTS(SELECT 1 FROM projects ap WHERE ap.id=a.project_id AND ap.owner_user_id=t.user_id) LEFT JOIN publications s ON s.project_id=a.project_id LEFT JOIN publication_actions done ON done.confirmed_by=t.id AND done.user_id=t.user_id WHERE t.user_id = ? ${turnId?'AND t.id = ?':''} ORDER BY t.revision DESC LIMIT ${turnId?1:100}`).bind(userId,...(turnId?[turnId]:[]));
+}
+async function projectChatTurns(db:D1Database,userId:string,turns:Record<string,unknown>[]){
+  const exports=await cmsExportLinks(db,userId);
+  for(const link of exports){const turn=(turns as Record<string,unknown>[]).find(t=>t.id===link.turn_id);if(turn)Object.assign(turn,{cms_export_project_id:link.project_id,cms_export_request_id:link.draft_request_id});}
+  const links=await cmsPreviewLinks(db,userId);
+  for(const turn of turns as Record<string,unknown>[]){const link=links.find(l=>l.turn_id===turn.id);if(link){turn.cms_preview_project_id=link.project_id;turn.cms_preview_request_id=link.draft_request_id;}}
+  const cmsReviews=await cmsPublicationLinks(db,userId);
+  for(const turn of turns as Record<string,unknown>[]){const r=cmsReviews.find(r=>r.turn_id===turn.id);if(r){turn.cms_publication_review_id=r.id;if(r.status==='published'&&!r.withdrawn)turn.cms_publication_url=`https://${r.project_id}.whumpo.site/cms/${r.collection}/${r.item_id}`;if(r.status==='approved'||r.status==='pending'&&String(r.expires_at)>new Date().toISOString())turn.cms_publication_confirmation_id=r.id;}}
+  const cmsImports=await cmsWordPressLinks(db,userId);
+  for(const turn of turns as Record<string,unknown>[]){const r=cmsImports.find(r=>r.turn_id===turn.id);if(r){turn.cms_import_review_id=r.id;if(r.can_confirm&&(r.status==='approved'||r.status==='pending'&&r.expires_at>new Date().toISOString()))turn.cms_import_confirmation_id=r.id;if(r.status==='imported'){turn.cms_preview_project_id=r.project_id;turn.cms_preview_request_id=r.id;}}}
+  const cmsDiscards=await cmsDiscardLinks(db,userId);
+  for(const turn of turns as Record<string,unknown>[]){const r=cmsDiscards.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_discard_confirmation_id=r.id;turn.cms_discard_recovery=r.status==='approved';}}
+  const cmsRemovals=await cmsUnpublishLinks(db,userId);
+  for(const turn of turns as Record<string,unknown>[]){const r=cmsRemovals.find(r=>r.turn_id===turn.id);if(r&&(r.status==='approved'||r.status==='pending'&&!r.withdrawn&&String(r.expires_at)>new Date().toISOString())){turn.cms_unpublish_confirmation_id=r.id;turn.cms_unpublish_recovery=r.status==='approved';}}
+  for(const turn of turns as Record<string,unknown>[]){if(turn.status==='completed'&&typeof turn.user_text==='string'&&isTranscriptRequest(turn.user_text)&&turn.assistant_text===transcriptReply)turn.chat_transcript_download=true;}
+  const reviewReceipts=await readChatReviewReceipts(db,userId,turns as Record<string,unknown>[]);
+  await githubGrantChatActions(db,userId,turns as Record<string,unknown>[],reviewReceipts);
+  await backendReviewChatActions(db,userId,turns as Record<string,unknown>[],reviewReceipts);
+  await applicationChatActions(db,userId,turns as Record<string,unknown>[],reviewReceipts);
+  await appRecoveryChatActions(db,userId,turns as Record<string,unknown>[],reviewReceipts);
+  await appMaintenanceChatActions(db,userId,turns as Record<string,unknown>[]);
+  await serviceClientChatLinks(db,userId,turns as Record<string,unknown>[]);
+  await serviceClientActivationChatLinks(db,userId,turns as Record<string,unknown>[]);
+  await specificationChatLinks(db,userId,turns as Record<string,unknown>[]);
+  await interactionChatLinks(db,userId,turns as {id:unknown;[key:string]:unknown}[]);
+}
+export async function readSavedChatTurn(db:D1Database,userId:string,turnId:string){
+  await assertWorkspace(db,userId);
+  if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(turnId))return null;
+  const {results}=await chatTurnQuery(db,userId,turnId).all<Record<string,unknown>>();
+  if(!results.length)return null;
+  await projectChatTurns(db,userId,results);
+  const turn=results[0];
+  // A completed retention removal or changed reply cannot survive this read.
+  const current=await db.prepare('SELECT id FROM chat_turns WHERE id=? AND user_id=? AND revision=? AND user_text=? AND assistant_text=? AND status=?').bind(turn.id,userId,turn.revision,turn.user_text,turn.assistant_text,turn.status).first();
+  await assertWorkspace(db,userId);
+  return current?turn:null;
+}
+
 /** Public messages have no command interpreter, including slash-prefixed text. */
-export function sendConversation(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+export async function sendConversation(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+  await assertWorkspace(db,userId);
   if(Object.keys(input).some(k=>!['id','revision','content'].includes(k)))return Promise.resolve({status:400,error:'Send a plain chat message.'});
   // Private operator statements and transcript exports must never enter inference.
   const content=typeof input.content==='string'?input.content.trim():'';
@@ -98,9 +127,11 @@ export function sendConversation(db:D1Database,userId:string,input:Record<string
   return sendChat(db,userId,input,ai,options,!privateRequest);
 }
 /** Only authenticated UI actions may reach the internal receipt adapters. */
-export function sendChatControl(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+export async function sendChatControl(db:D1Database,userId:string,input:Record<string,unknown>,ai?:AIConfig,options?:DNSChatOptions){
+  await assertWorkspace(db,userId);
   const control=chatControl(input.action);
   if(!control||Object.keys(input).some(k=>!['id','revision','action'].includes(k)))return Promise.resolve({status:400,error:'Choose a valid reviewed action.'});
+  if(control.recentAuth)await requireFreshWorkspace(db,userId);
   return sendChat(db,userId,{id:input.id,revision:input.revision,content:control.command},ai,options,false,control);
 }
 /** Internal action adapter retained for existing validated handlers and offline fixtures. */
@@ -108,6 +139,9 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const content = typeof input.content === 'string' ? input.content.trim() : '';
   if (!content || content.length > 1000 || !Number.isSafeInteger(input.revision) || typeof input.id !== 'string' || !/^[0-9a-f-]{36}$/.test(input.id))
     return { status: 400, error: 'Send a message of 1 to 1,000 characters with a valid request ID.' };
+  await assertWorkspace(db,userId);
+  dnsOptions={...dnsOptions,transport:workspaceTransport(db,userId,dnsOptions?.transport),githubTransport:workspaceTransport(db,userId,dnsOptions?.githubTransport),hostingTransport:workspaceTransport(db,userId,dnsOptions?.hostingTransport),healthTransport:workspaceTransport(db,userId,dnsOptions?.healthTransport)};
+  if(await db.prepare('SELECT id FROM chat_interaction_continuations WHERE id=?').bind(input.id).first())return {status:409,error:'Use the saved form to continue this task.'};
   const storedText=control?control.label:content,actionJSON=control?JSON.stringify(control.action):null;
   const matches=(row:{user_text:string;action_json:string|null;revision:number}|null)=>row!==null&&row.user_text===storedText&&row.action_json===actionJSON&&row.revision===Number(input.revision)+1;
   const previous = await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string;action_json:string|null;revision:number }>();
@@ -154,7 +188,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const health=healthChatCommand(db,userId,command,dnsOptions);
   const backend=backendChatCommand(db,userId,input.id,content,dnsOptions?.backendRuntime);
   const cms=dnsOptions?.cmsPublication?.(input.id,content)??cmsContentCommand(content,input.id,dnsOptions?.cmsContent)??cmsChatCommand(db,userId,input.id,content,dnsOptions?.cms);
-  const external=cms??backend??hosting??dns??backup??health;
+  const githubGrant=control?.action.type==='githubGrant'?githubGrantChatControl(db,userId,command,dnsOptions):undefined;
+  const external=githubGrant??cms??backend??hosting??dns??backup??health;
   const comparison=await diffCommand(db,userId,input.id,command);
   const directory=await directoryCommand(db,userId,input.id,content);
   const contact=await contactCommand(db,userId,input.id,command);
@@ -168,6 +203,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if(usageReviewReply)reply=usageReviewReply.reply;
   else if(maintenance){try{reply=describeAppMaintenance(await listAppMaintenance(db,userId,maintenance.projectId,maintenance.page),maintenance.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Application maintenance could not be read. Try again; nothing was executed.'};}}
   else if(pendingCMS){try{reply=describePendingCMS(await pendingCMSWork(db,userId,pendingCMS.projectId,pendingCMS.page),pendingCMS.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Publishing work could not be read. Try again; no operation was retried.'};}}
+  else if(githubGrant)reply='GitHub access removal request recorded. Open the saved review in Settings → External connections to check its state. Replaying this message will not send it again.';
   else if(cms)reply="CMS request recorded. Ask to inspect the saved setup or content request "+input.id+' to recover its saved state.';
   else if(backend)reply="Backend request recorded. Its result is not saved yet. Ask to read test receipt "+input.id+'. Replaying this message will not execute again.';
   else if(health)reply="Website check recorded; the result is not saved yet. Ask to read its current saved status.";
@@ -309,7 +345,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   if(external){
     const result=await external();
-    if(backend)await linkChatReviewReply(db,userId,input.id,result);
+    if(backend||githubGrant)await linkChatReviewReply(db,userId,input.id,result);
     await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=? AND user_id=?').bind(result,input.id,userId).run();
   }
   if(dnsOptions?.healthChecks&&publication&&command.startsWith('/confirm ')){

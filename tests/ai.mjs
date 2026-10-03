@@ -24,6 +24,23 @@ const responses = await complete({ ...config, protocol: 'responses' }, messages,
   return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello' }] }], usage: { input_tokens: 3, output_tokens: 4 } });
 });
 assert.equal(responses.text, 'Hello');
+// Current Muse emits a separate, explicitly marked progress message before JSON.
+// Progress is never prepended to an action or treated as a completed result.
+const progress={type:'message',role:'assistant',phase:'commentary',content:[{type:'output_text',text:'I will inspect the view.'}]};
+const finalText=JSON.stringify({reply:'Reading the current overview.',action:{kind:'interaction',operation:'read',interactionId:'12345678-1234-1234-1234-123456789abc'}});
+const finalMessage={type:'message',role:'assistant',content:[{type:'output_text',text:finalText}]};
+const responseBody=output=>Response.json({status:'completed',output,usage:{input_tokens:100,output_tokens:1500}});
+for(const final of [finalMessage,{...finalMessage,phase:'final_answer'}]){
+ const result=await complete({...config,protocol:'responses'},messages,async()=>responseBody([progress,final]));
+ assert.equal(result.text,finalText);assert.equal(result.outputTokens,1500);
+}
+for(const output of [[progress],[finalMessage,finalMessage],[{...progress,phase:'unknown'},finalMessage],[{...progress,role:'user'},finalMessage]]){
+ await assert.rejects(complete({...config,protocol:'responses'},messages,async()=>responseBody(output)),{kind:'invalid_response',reason:'message_invalid'});
+}
+await assert.rejects(complete({...config,protocol:'responses'},messages,async()=>responseBody([{...progress,content:[{type:'output_text',text:'test-secret'}]},finalMessage])),{kind:'invalid_response',reason:'credential_echo'});
+await assert.rejects(complete({...config,protocol:'responses'},messages,async()=>responseBody([{type:'function_call',name:'publish'},finalMessage])),{kind:'invalid_response',reason:'tool_content'});
+const invalidProse='Unmarked prose before '+finalText;
+assert.equal((await complete({...config,protocol:'responses'},messages,async()=>responseBody([{...finalMessage,content:[{type:'output_text',text:invalidProse}]}]))).text,invalidProse,'The adapter must not repair malformed action JSON');
 await assert.rejects(complete({ ...config, baseURL: 'http://example.test' }, messages), { kind: 'configuration' });
 await assert.rejects(complete(config, messages, async () => new Response('private upstream details test-secret', { status: 429 })), { message: 'AI provider rejected' });
 await assert.rejects(complete(config, messages, async () => Response.json({ choices: [{ finish_reason: 'length', message: { content: 'partial' } }] })), { kind: 'output_limit' });

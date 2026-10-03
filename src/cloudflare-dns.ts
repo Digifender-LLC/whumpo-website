@@ -23,7 +23,7 @@ export async function listDNSActions(db:D1Database,user:string){const {results}=
 export async function reviewTXT(db:D1Database,user:string,id:string,claimId:string,zoneId:string,config:CloudflareConfig|undefined,transport:typeof fetch=fetch){
  if(!uuid.test(id)||!uuid.test(claimId)||!zoneID.test(zoneId))throw new DomainError(400,'Choose a domain claim and Cloudflare zone.');
  const old=await db.prepare('SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=?').bind(id,user).first<Action>();if(old){if(old.record_type!=='TXT'||old.claim_id!==claimId||old.zone_id!==zoneId)throw new DomainError(409,'DNS review ID already used.');return view(await owned(db,user,old.id));}
- const p=await proof(db,user,claimId),scope=connectionFeature(user,'cloudflare',p.project_id,'prepare'),gate=featurePredicate(scope),access=await cloudflareAccess(db,user,config,transport,{projectId:p.project_id,operation:'prepare'}),zoneName=await zone(access,zoneId,p.hostname),name='_tellumo.'+p.hostname,content='tellumo-verification='+p.token,found=await inventory(access,zoneId,name);
+ const p=await proof(db,user,claimId),scope=connectionFeature(user,'cloudflare',p.project_id,'prepare'),gate=featurePredicate(db,scope),access=await cloudflareAccess(db,user,config,transport,{projectId:p.project_id,operation:'prepare'}),zoneName=await zone(access,zoneId,p.hostname),name='_tellumo.'+p.hostname,content='tellumo-verification='+p.token,found=await inventory(access,zoneId,name);
  if(found.records.some(r=>r.type==='CNAME'||r.type==='NS'))throw new DomainError(409,'A CNAME or delegation conflicts with this TXT proof. Resolve it in Cloudflare; Whumpo will not overwrite it.');
  const created=stamp(),expires=new Date(Date.now()+600000).toISOString();
  try{const r=await db.prepare(`INSERT INTO cloudflare_dns_actions(id,user_id,claim_id,project_id,token_id,zone_id,zone_name,record_name,content,inventory_hash,created_at,expires_at)
@@ -47,7 +47,7 @@ export async function reviewCNAME(db:D1Database,user:string,id:string,connection
  if(!uuid.test(id)||!uuid.test(connectionId)||!zoneID.test(zoneId))throw new DomainError(400,'Choose a hosting connection and Cloudflare zone.');
  const old=await db.prepare('SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=?').bind(id,user).first<Action>();
  if(old){if(old.record_type!=='CNAME'||old.connection_id!==connectionId||old.zone_id!==zoneId)throw new DomainError(409,'DNS review ID already used.');return view(await owned(db,user,old.id));}
- const {c,p}=await routingConnection(db,user,connectionId,hostingReady),scope=connectionFeature(user,'cloudflare',c.project_id,'prepare'),gate=featurePredicate(scope),access=await cloudflareAccess(db,user,config,transport,{projectId:c.project_id,operation:'prepare'}),zoneName=await zone(access,zoneId,c.hostname);
+ const {c,p}=await routingConnection(db,user,connectionId,hostingReady),scope=connectionFeature(user,'cloudflare',c.project_id,'prepare'),gate=featurePredicate(db,scope),access=await cloudflareAccess(db,user,config,transport,{projectId:c.project_id,operation:'prepare'}),zoneName=await zone(access,zoneId,c.hostname);
  if(c.hostname===zoneName)throw new DomainError(409,'Use a subdomain for direct CNAME routing. Apex routing is not supported.');
  const found=await inventory(access,zoneId,c.hostname,true);routingConflicts(found.records);
  const created=stamp(),expires=new Date(Date.now()+600000).toISOString();
@@ -61,7 +61,7 @@ export async function confirmDNS(db:D1Database,user:string,id:string,config:Clou
  const routing=a.record_type==='CNAME',marker=(routing?'Whumpo routing ':'Whumpo proof ')+a.id;
  // Configuration gates new writes; observation of a prior uncertain dispatch stays read-only.
  if(routing&&a.state==='review')await routingConnection(db,user,a.connection_id!,hostingReady);
- const scope=connectionFeature(user,'cloudflare',a.project_id,'confirm'),gate=featurePredicate(scope),dispatchScope=connectionFeature(user,'cloudflare',a.project_id,'dispatch'),dispatchGate=featurePredicate(dispatchScope);
+ const scope=connectionFeature(user,'cloudflare',a.project_id,'confirm'),gate=featurePredicate(db,scope),dispatchScope=connectionFeature(user,'cloudflare',a.project_id,'dispatch'),dispatchGate=featurePredicate(db,dispatchScope);
  const access=await cloudflareAccess(db,user,config,transport,a.state==='review'?{projectId:a.project_id,operation:'confirm'}:{recoveryId:a.id},a.state==='review'?a.token_id:undefined);
  const name=await zone(access,a.zone_id,a.record_name);if(name!==a.zone_name)throw new DomainError(409,'Cloudflare zone identity changed.');
  const found=await inventory(access,a.zone_id,a.record_name,routing);

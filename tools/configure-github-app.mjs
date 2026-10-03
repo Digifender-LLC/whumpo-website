@@ -16,7 +16,7 @@ export function verifyGitHubApp(app,secrets){
 }
 export function requireFreshGitHubSetup(report){
  const g=report.providers.github;
- if(g.retainedCredentials!==0||g.pendingRevocations!==0||g.missing.includes('CONNECTION_ENCRYPTION_KEY')||g.missing.length!==4)throw Error('Existing GitHub or vault configuration requires reconciliation; no secrets changed.');
+ if(g.retainedCredentials!==0||g.pendingRevocations!==0||g.missing.includes('CONNECTION_ENCRYPTION_KEYRING')||g.missing.length!==4)throw Error('Existing GitHub or vault configuration requires reconciliation; no secrets changed.');
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){

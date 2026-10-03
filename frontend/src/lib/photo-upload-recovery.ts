@@ -1,0 +1,29 @@
+import {samePhotoUpload,validPhotoUpload,type PhotoUpload} from '../../../src/photo-upload-shape';
+export const photoRecoveryKey='whumpo.photo-upload-recovery';
+type Store=Pick<Storage,'getItem'|'setItem'|'removeItem'>;
+type Record={version:1;owner:string;uploads:PhotoUpload[]};
+const uuid=(s:unknown)=>typeof s==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(s);
+/** Attempted requests have no draft TTL. Bytes never enter browser storage. */
+function read(store:Store,owner:string):Record{
+ if(!uuid(owner))throw Error('Photo recovery needs your current account.');
+ const raw=store.getItem(photoRecoveryKey);if(!raw)return {version:1,owner,uploads:[]};
+ let v:Record;try{v=JSON.parse(raw);}catch{throw Error('Photo recovery could not be read. Keep this tab open.');}
+ if(raw.length>60000||!v||Object.keys(v).sort().join(',')!=='owner,uploads,version'||v.version!==1||!uuid(v.owner)||!Array.isArray(v.uploads)||v.uploads.length>50||v.uploads.some(u=>!validPhotoUpload(u))||new Set(v.uploads.map(u=>u.projectId)).size!==v.uploads.length)throw Error('Photo recovery needs the current Whumpo format.');
+ if(v.owner!==owner){store.removeItem(photoRecoveryKey);return {version:1,owner,uploads:[]};}return v;
+}
+export function preparePhotoRecovery(store:Store,owner:string){read(store,owner);}
+export function readPhotoRecovery(store:Store,owner:string,project:string){return read(store,owner).uploads.find(u=>u.projectId===project)??null;}
+export function writePhotoRecovery(store:Store,owner:string,upload:PhotoUpload){
+ if(!validPhotoUpload(upload))throw Error('Invalid photo recovery details.');
+ const v=read(store,owner),existing=v.uploads.find(u=>u.projectId===upload.projectId);
+ if(existing&&!samePhotoUpload(existing,upload))throw Error('An earlier photo upload still needs confirmation.');
+ if(!existing)v.uploads.push(upload);if(v.uploads.length>50)throw Error('Too many unconfirmed uploads.');
+ store.setItem(photoRecoveryKey,JSON.stringify(v));
+}
+export function resolvePhotoRecovery(store:Store,owner:string,upload:PhotoUpload){
+ const v=read(store,owner),existing=v.uploads.find(u=>u.projectId===upload.projectId&&u.id===upload.id);
+ if(existing&&!samePhotoUpload(existing,upload))throw Error('The upload details changed before confirmation.');
+ v.uploads=v.uploads.filter(u=>u.projectId!==upload.projectId||u.id!==upload.id);
+ if(v.uploads.length)store.setItem(photoRecoveryKey,JSON.stringify(v));else store.removeItem(photoRecoveryKey);
+}
+export function clearPhotoRecovery(){try{sessionStorage.removeItem(photoRecoveryKey);}catch{/* Browser storage can be unavailable. */}}

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {connectionReadiness} from '../tools/report-connections.mjs';
 
-const names=['GITHUB_APP_ID','GITHUB_APP_SLUG','GITHUB_CLIENT_ID','GITHUB_CLIENT_SECRET','CLOUDFLARE_CLIENT_ID','CLOUDFLARE_CLIENT_SECRET','CONNECTION_ENCRYPTION_KEY'];
+const names=['GITHUB_APP_ID','GITHUB_APP_SLUG','GITHUB_CLIENT_ID','GITHUB_CLIENT_SECRET','CLOUDFLARE_CLIENT_ID','CLOUDFLARE_CLIENT_SECRET','CONNECTION_ENCRYPTION_KEYRING'];
 let secretNames=[],row={total:0,revoking:0},calls=[];
 const api=async(...args)=>{assert.deepEqual(args,['/workers/scripts/tellumo-platform/secrets']);calls.push('read');return {result:secretNames.map(name=>({name,irrelevant:'DO_NOT_PRINT'}))};};
 const db={prepare(sql){assert.match(sql,/^SELECT COUNT\(\*\).* FROM (github|cloudflare)_token_vault$/);assert.doesNotMatch(sql,/ciphertext|user_id|login/);return {first:async()=>row};}};
@@ -18,7 +18,7 @@ for(const provider of ['github','cloudflare']){
  const source=await readFile(`src/${provider}-connection.ts`,'utf8');
  assert.ok(source.includes(`const callback='${report.providers[provider].callback}'`));
 }
-secretNames=names.filter(n=>n!=='CONNECTION_ENCRYPTION_KEY');row={total:2,revoking:1};
+secretNames=names.filter(n=>n!=='CONNECTION_ENCRYPTION_KEYRING');row={total:2,revoking:1};
 report=await connectionReadiness(api,db,'tellumo-platform');
 assert.equal(report.providers.github.recoveryRequired,true);
 assert.equal(report.providers.cloudflare.pendingRevocations,1);

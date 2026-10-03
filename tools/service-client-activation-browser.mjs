@@ -9,7 +9,7 @@ export async function serviceClientActivationBrowser({platform,host,env,db,accou
  const server=createServer(async(req,res)=>{try{
   if(req.headers.host!=='localhost:8174'){res.writeHead(403).end();return;}
   const url=new URL(req.url,origin);
-  if(url.pathname==='/_acceptance/start'){res.writeHead(302,{'set-cookie':'tellumo_session='+account.token+'; HttpOnly; SameSite=Lax; Path=/','location':'/workspace'}).end();return;}
+  if(url.pathname==='/_acceptance/start'){res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+account.token+'; Secure; HttpOnly; SameSite=Lax; Path=/','location':'/workspace'}).end();return;}
   if(url.pathname==='/_acceptance/finish'){res.writeHead(200,{'content-type':'text/plain'}).end('Checking the disposable journey.');done();return;}
   const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>1048576){res.writeHead(413).end();return;}chunks.push(chunk);}const body=Buffer.concat(chunks);
   let response;

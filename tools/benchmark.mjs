@@ -6,13 +6,14 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {createHash,randomUUID} from 'node:crypto';
 import {fixtureEnvironment} from './verify.mjs';
+import {validateFixtureBenchmark} from './benchmark-evidence.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const scripts={site:'tests/customer-site-journey.mjs',edits:'tests/first-ai-journey.mjs',application:'tests/customer-app-journey.mjs',
  'application-build':'tests/application-build.mjs','page-design':'tests/app-page-design.mjs',conversation:'tests/benchmark-conversation.mjs',failures:'tests/standard-ai-chat.mjs'};
 async function sourceManifest(){
  const files=[];
  async function walk(path){for(const entry of await readdir(join(root,path),{withFileTypes:true})){const relative=path+'/'+entry.name;if(entry.isDirectory())await walk(relative);else if(entry.isFile())files.push(relative);else throw Error('Unexpected source entry');}}
- for(const dir of ['src','tests','tools','migrations','web','public-app'])await walk(dir);
+ for(const dir of ['src','tests','tools','schema','web','public-app','compiler-locks'])await walk(dir);
  for(const name of ['package.json','pnpm-lock.yaml','wrangler.jsonc','wrangler.runtime.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','worker-configuration.d.ts'])if((await lstat(join(root,name)).catch(()=>null))?.isFile())files.push(name);
  const entries=[];for(const path of files.sort())entries.push({path,sha256:createHash('sha256').update(await readFile(join(root,path))).digest('hex')});
  return {sha256:createHash('sha256').update(JSON.stringify(entries)).digest('hex'),files:entries};
@@ -48,7 +49,7 @@ export async function runBenchmark(){
    const result=await child(c.script,env);
    await writeFile(join(directory,c.id+'.log'),result.output,{flag:'wx',mode:0o600});
    let evidence=null;
-   try{evidence=JSON.parse(await readFile(join(home,c.id+'.json'),'utf8'));if(evidence.id!==c.id||evidence.mode!=='synthetic'||evidence.realProviderSamples!==0)throw Error('Invalid evidence');}catch{evidence=null;}
+   try{evidence=validateFixtureBenchmark(JSON.parse(await readFile(join(home,c.id+'.json'),'utf8')),c.id);}catch{evidence=null;}
    const passed=result.status===0&&!result.timedOut&&!!evidence;
    cases.push({id:c.id,harness:c.script,outcome:passed?'passed':'failed',harnessDurationMs:result.durationMs,
     failure:passed?null:result.timedOut?'timeout':result.status!==0?'harness_failed':'missing_evidence',

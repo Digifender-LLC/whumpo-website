@@ -1,0 +1,78 @@
+import assert from 'node:assert/strict';
+import {authenticator} from './webauthn-authenticator.mjs';
+import {hearOrca} from './orca-output.mjs';
+
+/** Actual current HTTP/D1 and built workspace. All seed content is synthetic;
+ * signed virtual WebAuthn approves the one private change. No model calls. */
+export async function savedChatTurnJourney({page,context,origin,db,site,modules,owner,interactionId,requests,keyboard,setUnavailable,setHeld,release,phase}){
+ const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first(),o=owner;
+ const target=crypto.randomUUID(),revision=(await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user)).revision+1;
+ const prepared=await site.prepareSpecification(o.scope,o.user,target,{kind:'specification',operation:'change',projectId:o.project,expectedRevision:1,operations:[{type:'content.replace',contentId:'headline',text:'Seasonal garden care'}]});
+ await o.scope.batch([o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Older planting review',?,datetime('now'),'ai','pending')").bind(target,o.user,revision,prepared.reply),...prepared.statements,o.scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(target),o.scope.prepare('UPDATE workspace_state SET revision=? WHERE user_id=?').bind(revision,o.user)]);
+ for(let n=1;n<=105;n++)await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Later garden question','Later saved reply',datetime('now'),'guided','completed')",crypto.randomUUID(),o.user,revision+n);
+ await run('UPDATE workspace_state SET revision=revision+105 WHERE user_id=?',o.user);
+ const actions=()=>requests.filter(r=>r.path==='/api/chat/actions').length,modelRequests=()=>requests.filter(r=>r.path==='/api/chat'&&r.method==='POST').length;
+ const panel=()=>page.locator('[data-saved-turn-id="'+target+'"]'),save=()=>panel().getByRole('button',{name:'Save reviewed private version',exact:true});
+ phase('older message search and keyboard return to Chat');
+ await page.goto(origin+'/_fixture/start');await page.getByRole('textbox',{name:'Message Whumpo'}).fill('Private unsent next thought');
+ assert.equal(await page.getByText('Older planting review',{exact:true}).count(),0);
+ await hearOrca('saved message history entry',()=>keyboard.reach(page.getByRole('button',{name:'Find past messages'})),[/Find past messages/i]);
+ await hearOrca('saved message history heading',()=>keyboard.activate(page.getByRole('button',{name:'Find past messages'})),[/Past messages & forms/i]);
+ const dialog=page.getByRole('dialog');await hearOrca('saved message search field',()=>keyboard.reach(dialog.getByRole('searchbox',{name:'Search saved messages'})),[/Search saved messages/i]);await keyboard.enter(dialog.getByRole('searchbox',{name:'Search saved messages'}),'Older planting review');await hearOrca('run saved message search',()=>keyboard.reach(dialog.getByRole('button',{name:'Search',exact:true})),[/Search/i,/button/i]);await keyboard.activate(dialog.getByRole('button',{name:'Search',exact:true}));
+ const open=dialog.locator('[data-history-turn-id="'+target+'"]').getByRole('button',{name:/Open in Chat/});
+ await hearOrca('open saved message choice',()=>keyboard.reach(open),[/Open in Chat/i]);await keyboard.activate(open);
+ await save().waitFor();await page.waitForFunction(id=>document.activeElement?.getAttribute('data-saved-turn-id')===id,target);
+ assert.equal(await page.getByRole('button',{name:'Save reviewed private version',exact:true}).count(),1);assert.equal(new URL(page.url()).searchParams.get('turn'),target);
+ assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).inputValue(),'Private unsent next thought');assert.equal(actions(),0);assert.equal(modelRequests(),0);
+ await hearOrca('saved message current-state refresh control',()=>keyboard.reach(panel().getByRole('button',{name:'Check saved message'})),[/Check saved message/i]);
+ for(const width of [360,390,1280]){
+  await page.setViewportSize({width,height:844});await panel().getByRole('heading',{name:'Saved message',exact:true}).scrollIntoViewIfNeeded();
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.screenshot({path:'/tmp/whumpo-saved-message-'+width+'.png'});
+ }
+ await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'reduce'});await page.evaluate(()=>document.documentElement.style.fontSize='200%');
+ await panel().getByRole('heading',{name:'Saved message',exact:true}).scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));const refreshBox=await panel().getByRole('button',{name:'Check saved message'}).boundingBox();assert(refreshBox.x>=0&&refreshBox.x+refreshBox.width<=390);assert(await panel().evaluate(e=>e.scrollWidth<=e.clientWidth),JSON.stringify(await panel().evaluate(p=>({width:p.clientWidth,scroll:p.scrollWidth,overflow:[...p.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>p.getBoundingClientRect().right).slice(0,6).map(e=>({tag:e.tagName,text:e.textContent?.slice(0,100),width:e.getBoundingClientRect().width,classes:e.className}))}))));await page.screenshot({path:'/tmp/whumpo-saved-message-large-text.png'});
+ await page.evaluate(()=>document.documentElement.style.removeProperty('font-size'));
+ await page.getByRole('textbox',{name:'Message Whumpo'}).focus();await page.setViewportSize({width:390,height:430});await page.waitForFunction(()=>document.documentElement.classList.contains('phone-keyboard'));
+ const composer=await page.getByRole('textbox',{name:'Message Whumpo'}).boundingBox();assert(composer.y>=0&&composer.y+composer.height<=430);await page.screenshot({path:'/tmp/whumpo-saved-message-keyboard.png'});await page.setViewportSize({width:390,height:844});
+ phase('saved location through navigation reload and another tab');
+ await page.goto(origin+'/workspace/dashboard');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor({state:'detached'});await page.goto(origin+'/workspace');await save().waitFor();await page.reload();await save().waitFor();
+ assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).inputValue(),'Private unsent next thought');
+ const second=await context.newPage();await second.goto(origin+'/workspace?turn='+target);await second.getByRole('button',{name:'Save reviewed private version',exact:true}).waitFor();assert.equal(await second.getByRole('textbox',{name:'Message Whumpo'}).inputValue(),'');await second.close();await page.bringToFront();
+ assert.equal(actions(),0);assert.equal(modelRequests(),0);
+ phase('ambiguous saved locators cannot reopen a remembered item');
+ await page.goto(origin+'/workspace?turn='+target+'&interaction='+target);await page.getByRole('alert').filter({hasText:'This saved Chat link is not valid.'}).waitFor();assert.equal(await page.locator('[data-saved-turn-id]').count(),0);assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.chat-location')),null);
+ await page.goto(origin+'/workspace?turn='+target);await save().waitFor();
+ phase('current form and message locators share one current navigation format');
+ await page.goto(origin+'/workspace?interaction='+interactionId);await page.locator('[data-interaction-id="'+interactionId+'"]').locator('#form-'+interactionId+'-field-1').waitFor();assert.equal(await page.locator('[data-saved-turn-id]').count(),0);assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('whumpo.chat-location')).kind),'interaction');
+ await page.reload();await page.locator('[data-interaction-id="'+interactionId+'"]').locator('#form-'+interactionId+'-field-1').waitFor();await page.goto(origin+'/workspace?turn='+target);await save().waitFor();assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('whumpo.chat-location')).kind),'turn');
+ phase('refresh outage removes all old controls and recovers without inference');
+ setUnavailable(true);await keyboard.activate(panel().getByRole('button',{name:'Check saved message'}));await panel().getByRole('alert').filter({hasText:'Saved message could not be checked.'}).waitFor();assert.equal(await save().count(),0);assert.equal(await panel().getByRole('link',{name:'Preview proposed website',exact:true}).count(),0);
+ setUnavailable(false);await keyboard.activate(panel().getByRole('button',{name:'Check saved message'}));await save().waitFor();assert.equal(actions(),0);
+ phase('exact saved review approval with signed passkey and no model');
+ const key=authenticator(origin),cdp=await context.newCDPSession(page);
+ await run("INSERT INTO identity_credentials VALUES(?,?,?,0,'Saved review test key','active',NULL,unixepoch(),NULL)",key.id,o.user,key.publicKey);
+ await cdp.send('WebAuthn.enable');const {authenticatorId}=await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});await cdp.send('WebAuthn.addCredential',{authenticatorId,credential:key.virtualCredential('localhost',o.user)});
+ await keyboard.activate(save());await page.getByText('Saved private website revision 2.',{exact:false}).waitFor({timeout:60000});await save().waitFor({state:'detached'});
+ assert.equal(actions(),1);assert.equal(modelRequests(),0);
+ const saved=await row('SELECT version_id FROM project_spec_applies WHERE proposal_id=? AND user_id=?',target,o.user);assert(saved);
+ const token=(await context.cookies()).find(c=>c.name==='__Host-whumpo_session').value;o.authority.token=token;o.scope=await modules.identity.admitWorkspace(db,await modules.identity.resolveIdentity(db,{version:1,client:'web',kind:'session',token}));
+ assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,2);
+ await run('DELETE FROM project_spec_proposals WHERE id=?',target);
+ phase('result reopening after review cleanup has one renderer and no repeated effect');
+ await page.goto(origin+'/workspace?turn='+saved.version_id);const result=()=>page.locator('[data-saved-turn-id="'+saved.version_id+'"]');await result().getByRole('link',{name:'Open private preview',exact:true}).waitFor();
+ assert.equal(await page.getByText('Saved private website revision 2.',{exact:false}).count(),1);assert.equal(await page.getByRole('button',{name:'Save reviewed private version',exact:true}).count(),0);
+ await page.reload();await result().getByRole('link',{name:'Open private preview',exact:true}).waitFor();assert.equal(actions(),1);assert.equal(modelRequests(),0);
+ await hearOrca('close saved message control',()=>keyboard.reach(page.getByRole('button',{name:'Close saved item',exact:true})),[/Close saved item/i]);await keyboard.activate(page.getByRole('button',{name:'Close saved item',exact:true}));
+ await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Message Whumpo');assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.chat-location')),null);assert(!new URL(page.url()).searchParams.has('turn'));
+ assert.equal(await page.getByText('Saved private website revision 2.',{exact:false}).count(),1);
+ phase('other account cannot read the saved message or keep the former locator');
+ await page.goto(origin+'/workspace?turn='+target);await panel().getByText('Older planting review',{exact:true}).waitFor();await page.goto(origin+'/_fixture/other');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.chat-location')),null);assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).inputValue(),'');
+ await page.goto(origin+'/workspace?turn='+target);await panel().getByRole('alert').filter({hasText:'This saved message is unavailable.'}).waitFor();assert.equal(await page.getByText('Older planting review',{exact:true}).count(),0);assert.equal(await save().count(),0);
+ phase('signed-out late saved response cannot restore private content');
+ await page.goto(origin+'/_fixture/start');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();setHeld(true);await page.goto(origin+'/workspace?turn='+target);
+ await release('wait');assert.equal((await context.request.post(origin+'/api/auth/identity/v1/logout',{headers:{origin},data:{version:1}})).status(),200);await page.evaluate(()=>window.dispatchEvent(new Event('whumpo:identity-changed')));await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).waitFor();await release('release');
+ await page.waitForLoadState('networkidle');assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.chat-location')),null);assert.equal(await page.getByText('Older planting review',{exact:true}).count(),0);assert.equal(await page.evaluate(()=>window.fixtureQueryKeys().some(k=>k[0]==='saved-chat-turn')),false);
+ assert.equal(actions(),1);assert.equal(modelRequests(),0);assert.equal((await row('SELECT count(*) n FROM inference_calls')).n,0);assert.equal((await row('SELECT count(*) n FROM publications WHERE version_id IS NOT NULL')).n,0);
+ await cdp.detach();
+}

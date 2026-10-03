@@ -21,11 +21,11 @@ Publishing, restoring or unpublishing advances the publication revision and disa
 
 The public host joins the active setting into its existing publication read. The only injected markup is a fixed platform-authored link. Its sandbox permits opening that link in a separate browsing context; generated scripts and forms remain disabled. The destination has its own restrictive CSP and denies framing. Both the link and form require an active setting matching the current publication. The database rechecks this relationship at submission insertion, protecting against publication/disable races after bot verification.
 
-[Saved service settings](project-service-clients.md) can also prepare this same independent contact review from the current saved configuration. Migration 0113 adds immutable provenance, full current-target checks at confirmation and submission-time blocking for later known holds on the linked configuration. Critical direct disable reviews remain available. This continuation is deployed in test release `03b74965-16b8-4a41-8848-33cb1e21867f`; see the linked evidence for its local and live scope.
+[Saved service settings](project-service-clients.md) can also prepare this same independent contact review from the current saved configuration. The complete current schema includes immutable provenance, full current-target checks at confirmation and submission-time blocking for later known holds on the linked configuration. Critical direct disable reviews remain available. Test release `03b74965-16b8-4a41-8848-33cb1e21867f` records the earlier deployment of this capability; it does not establish deployment of the pending current identity/schema cutover. See the linked evidence for its local and live scope.
 
 ## Submission boundary
 
-The public form accepts only name (1–100 characters), email (up to 254) and message (1–2,000), plus a random submission ID, settings revision and Turnstile token. POST requires exact Origin, URL-encoded input, unique allowlisted fields and a streaming 32 KiB body bound. The existing Workers rate limiter uses a separate contact/IP key. Production fails closed without Turnstile configuration.
+The public form accepts only name (1–100 characters), email (up to 254) and message (1–2,000), plus a random submission ID, settings revision and Turnstile token. POST requires exact Origin, URL-encoded input, unique allowlisted fields and a streaming 32 KiB body bound. The existing Workers rate limiter uses a separate contact/IP key. Deployed environments fail closed without Turnstile configuration.
 
 Server-side Siteverify validates success, the platform hostname, `contact` action and exact project `cdata`. The response is bounded to 8 KiB, redirects are rejected and the request has a ten-second timeout. Local development alone can omit the challenge. Incoming visitor data and verification responses are not logged. No uploaded attachments, sender-selected recipient, email delivery or model processing is supported.
 
@@ -42,6 +42,8 @@ All submitted text is rendered with `textContent`, including names and email add
 Messages become inaccessible at 30 days. Daily 03:17 UTC maintenance removes expired message rows and minimal receipts; physical deletion can therefore lag visibility expiry until that run. This is application retention, not a guarantee about provider backup retention. Project/account operator cleanup cascades through settings, reviews, messages and receipts. Customer-wide account deletion remains a separate unfinished lifecycle requirement.
 
 ## Verification
+
+The current-schema checkpoint passes `node --stack-trace-limit=0 tests/contacts.mjs` on local D1 with admitted owner scopes; public submissions and cleanup keep separate authority. Expiry injection occurs immediately before the actual confirmation transaction. Turnstile responses are synthetic. See [verification](verification.md#website-contacts-directories-and-first-project-handoff) for precise scope and remaining live/browser gates.
 
 `pnpm test:contacts` uses disposable local D1 state and controlled provider responses. It covers review/confirmation and replay, cross-owner access, duplicate and deleted-message replay, public rendering, Origin rejection, body bounds, Turnstile hostname/action/project checks, oversized verification responses, publication and disable races, atomic hourly/project/global caps, expiry inside confirmation, forbidden model confirmation/inbox reads, context exclusion and retention cleanup. Publication and site-agent regressions also pass.
 

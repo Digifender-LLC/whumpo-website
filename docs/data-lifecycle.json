@@ -1,297 +1,2352 @@
 {
-  "version": 1,
-  "reviewedAt": "2026-10-01",
+  "version": 2,
+  "reviewedAt": "2026-10-02",
   "policyStatus": "proposed-not-approved",
   "runtimeEnforcement": false,
   "contract": "docs/data-lifecycle.md",
   "classes": [
     {
-      "id": "feature-preview-authority", "tables": ["feature_preview_grants"], "scope": "mixed",
+      "id": "feature-preview-authority",
+      "tables": [
+        "feature_preview_grants"
+      ],
+      "scope": "mixed",
       "purpose": "Explicit operator-issued private-test inclusion for one account/project, feature, operation and interval. Not authentication, customer approval, provider consent or a subscription.",
       "currentRetention": "Immutable metadata retained under account/project after expiry or one-way revocation to prevent request-ID recreation. No age purge. Quotas bound lifetime row count; account/project deletion cascades.",
       "proposedRetention": "Ordinary account/project closure purges scoped test grants after admissions stop. Preserve only a separately justified minimal unresolved-operation identity; grants never survive export/restore as transferable authority.",
       "deletionAuthority": "Operator may revoke; only reviewed parent cleanup removes retained rows. Models and customer jobs cannot issue, refresh or remove grants.",
       "exportPolicy": "Allowlist scope, feature, operation, interval and revoked status. Exclude internal operator review references. Never export a grant as authority for another account or deployment.",
-      "references": ["src/feature-inclusion.ts", "src/feature-preview-grants.ts", "docs/feature-inclusion.md"]
+      "references": [
+        "src/feature-inclusion.ts",
+        "src/feature-preview-grants.ts",
+        "docs/feature-inclusion.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Owner status and restricted operator grant management; exact account/project/feature/operation scope"
+        ],
+        "processors": [
+          "Shared inclusion resolver and current domain admission; no model may create a grant"
+        ],
+        "remainingExposure": [
+          "Grant metadata can reveal commercial access and operator decisions."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "owner-identity", "tables": ["users", "customer_eligibility"], "scope": "owner",
+      "id": "owner-identity",
+      "tables": [
+        "users",
+        "customer_eligibility"
+      ],
+      "scope": "owner",
       "purpose": "Identify the account and its recorded US customer declaration.",
       "currentRetention": "Retained while the account exists; eligibility cascades. Other tables can prevent account deletion.",
       "proposedRetention": "Active account; ordinary personal fields enter closure purge. Only justified minimal proof survives in a separate restricted receipt.",
       "deletionAuthority": "Recently authenticated owner confirms exact account closure; restricted preservation review precedes purge.",
-      "exportPolicy": "Allowlist account identifier, email, creation time and customer declaration. Exclude password hashes/salts and recovery secrets.",
-      "references": ["src/index.ts", "src/passkeys.ts", "docs/content-safety.md"]
+      "exportPolicy": "Allowlist account identifier, email, creation time and US customer declaration. Account rows have no password fields.",
+      "references": [
+        "src/workspace-identity/canonical-inputs.sql",
+        "src/workspace-identity/http.ts",
+        "docs/content-safety.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current owner/profile handlers; restricted authentication and eligibility service"
+        ],
+        "processors": [
+          "Identity engine; no email/customer declaration in routine model context"
+        ],
+        "remainingExposure": [
+          "Email and jurisdiction declaration are readable personal data; operator access must be restricted."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "owner-auth", "tables": ["sessions", "passkeys", "recovery_codes", "auth_challenges", "invitations"], "scope": "mixed",
-      "purpose": "Owner authentication, invitation redemption and replay prevention; unused invitations/challenges may have no account.",
-      "currentRetention": "Expiry checks deny stale sessions/challenges. Challenges are consumed/pruned during auth. Invitations.used_by has NO ACTION; auth_challenges has no ownership FK. No general identity-retention sweeper.",
-      "proposedRetention": "Revoke sessions and open challenges on closure; retain only closure-cancel authentication during any approved grace period. Remove credential material at purge. Expired unclaimed auth material is independently swept.",
-      "deletionAuthority": "Owner security controls or reviewed account closure; operator manages unclaimed invitations. Never infer erasure solely from a missing FK.",
-      "exportPolicy": "Credential names and creation/last-use metadata only; omit public-key material, credential IDs, hashes, codes, challenges and bearer tokens.",
-      "references": ["src/index.ts", "src/passkeys.ts", "docs/owner-recovery.md"]
+      "id": "owner-identity-progress",
+      "tables": [
+        "identity_accounts",
+        "identity_attempts",
+        "identity_credentials"
+      ],
+      "scope": "owner",
+      "purpose": "Current policy epoch, verified enrollment/recovery progress and public passkey verification material. Private passkey keys are never received.",
+      "currentRetention": "Account-owned cascades. Pending verified progress is retained until authenticated cancellation or reviewed account deletion. Attempts referenced by credentials are retained; emergency removal fences all authority.",
+      "proposedRetention": "Preserve monotonic revocation and generation truth during any forward repair. Never restore historical sessions or an earlier kit verifier. Whole-account restore is not implemented.",
+      "deletionAuthority": "Shared identity engine handles reviewed cancellation/removal; complete account closure remains a separate lifecycle gate.",
+      "exportPolicy": "Allowlist stage, user-facing credential names and creation/last-use metadata. Exclude public keys, credential IDs, counters, kit verifiers and internal proof identifiers.",
+      "references": [
+        "src/workspace-identity/schema.sql",
+        "src/workspace-identity/ceremonies.ts",
+        "docs/identity-web.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "identity-verifiers",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Restricted enrollment/recovery handlers and current owner credential controls"
+        ],
+        "processors": [
+          "Identity ceremony/admission engine; no model context"
+        ],
+        "remainingExposure": [
+          "Credential IDs/public keys and progress are sensitive metadata even though private passkey keys are absent."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "profile-workspace", "tables": ["user_profiles", "welcome_onboarding", "welcome_first_drafts", "workspace_preferences", "workspace_state"], "scope": "owner",
-      "purpose": "Profile/name/bio/photo, welcome progress, saved workspace tabs and preferences.",
-      "currentRetention": "Account-linked storage; profile photo bytes are in D1 and replacement clears the current safety receipt. No age-based profile/chat-memory expiry.",
+      "id": "owner-identity-admission",
+      "tables": [
+        "identity_sessions",
+        "identity_grants",
+        "identity_challenges"
+      ],
+      "scope": "mixed",
+      "purpose": "Hashed ordinary sessions, restricted grants and one-use browser ceremonies.",
+      "currentRetention": "Expiry denies authority immediately. Daily maintenance removes at most 500 expired rows per table. Sessions last at most seven days from proof, grants thirty minutes, challenges five minutes. User deletion explicitly clears bound challenges; credential/account deletion cascades sessions/grants.",
+      "proposedRetention": "Retain only current authority; any restore must discard these records and require fresh verification. Never rehydrate browser sessions from backups.",
+      "deletionAuthority": "Verified logout, shared revocation engine and bounded expiry maintenance.",
+      "exportPolicy": "No bearer hashes, tokens, challenges, challenge payloads, proof bodies or authority IDs in customer exports, Chat or telemetry.",
+      "references": [
+        "src/workspace-identity/schema.sql",
+        "src/workspace-identity/ceremonies.ts",
+        "docs/identity-web.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "identity-verifiers",
+        "storage": [
+          "control-d1",
+          "browser-credential"
+        ],
+        "readers": [
+          "One-use ceremony and exact ordinary/restricted session handlers"
+        ],
+        "processors": [
+          "Identity verification, revocation and bounded expiry maintenance; no inference"
+        ],
+        "remainingExposure": [
+          "Bearer material exists in browser/request memory; readable proof metadata and backups must not re-create authority."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "owner-identity-kits",
+      "tables": [
+        "identity_kit_offers"
+      ],
+      "scope": "owner",
+      "purpose": "One-time kit preparation and explicit saved acknowledgment; stores a verifier, never the plaintext kit.",
+      "currentRetention": "Offers expire after thirty minutes; daily maintenance deletes at most 500 expired offers. Active kit verifier stays on identity_accounts until rotation/removal.",
+      "proposedRetention": "No recovery-key plaintext or verifier is exported/restored as transferable authority. Preserve current kit generation and revocation truth in forward repair.",
+      "deletionAuthority": "Shared kit preparation supersedes the prior offer; exact saved acknowledgment and reviewed rotation/completion activate it.",
+      "exportPolicy": "Allowlist saved/expiry metadata only. Exclude verifiers and nonce/request bindings. Plaintext delivery exists only in its original no-store preparation response.",
+      "references": [
+        "src/workspace-identity/schema.sql",
+        "src/workspace-identity/ceremonies.ts",
+        "docs/identity-web.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "identity-verifiers",
+        "storage": [
+          "control-d1",
+          "browser-download"
+        ],
+        "readers": [
+          "Exact recent-authenticated or restricted kit ceremony; original no-store response recipient"
+        ],
+        "processors": [
+          "Kit generation/verification and explicit save acknowledgment; no model context"
+        ],
+        "remainingExposure": [
+          "Customer-held print/download copies can outlive server rotation; copied old codes remain invalid."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "owner-identity-receipts",
+      "tables": [
+        "identity_ceremony_receipts",
+        "identity_effect_receipts",
+        "identity_recovery_reviews"
+      ],
+      "scope": "owner",
+      "purpose": "Bound operation receipts prevent duplicate identity effects; recovery reviews preserve exact lost-credential choices and progress.",
+      "currentRetention": "Ceremony/effect receipts last seven days with bounded 500-row expiry cleanup. Reviews follow their attempts/account and are not silently purged during pending recovery. Receipts cannot issue fresh bearer authority on replay.",
+      "proposedRetention": "Retain only the evidence necessary for current progress and unresolved effects. Restored receipts cannot re-create expired or revoked authority.",
+      "deletionAuthority": "Shared engine creates immutable receipts and revises exact reviews. Account cleanup cascades; bounded cleanup applies only to expired operation receipts.",
+      "exportPolicy": "Allowlist user-facing completion/progress status. Exclude request hashes, execution nonces, review credential IDs and internal proof bindings.",
+      "references": [
+        "src/workspace-identity/schema.sql",
+        "src/workspace-identity/ceremonies.ts",
+        "docs/identity-web.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "identity-verifiers",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current scoped identity readback and restricted operator recovery"
+        ],
+        "processors": [
+          "Identity commit/replay logic; no model context"
+        ],
+        "remainingExposure": [
+          "Receipts expose identity chronology and cannot be treated as credentials after restoration."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "identity-invitations",
+      "tables": [
+        "invitations"
+      ],
+      "scope": "mixed",
+      "purpose": "Single-use signup invitations, including spent invitations whose account was removed.",
+      "currentRetention": "used_at is immutable after redemption. User deletion clears used_by but leaves spending intact. There is no invitation age purge that could resurrect a spent code.",
+      "proposedRetention": "Operator retention may remove expired code hashes only without allowing old codes to be reissued. Do not restore historical invitation availability.",
+      "deletionAuthority": "Operator creates invitations; signup atomically spends one; the database preserves spent status through cancellation/deletion.",
+      "exportPolicy": "No invitation code or code hash in customer exports or logs.",
+      "references": [
+        "src/workspace-identity/schema.sql",
+        "src/workspace-identity/ceremonies.ts",
+        "docs/identity-web.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "identity-verifiers",
+        "storage": [
+          "control-d1",
+          "browser-credential"
+        ],
+        "readers": [
+          "Possessing invite holder through bounded signup; operator issuance"
+        ],
+        "processors": [
+          "Single-use invitation admission; no model context"
+        ],
+        "remainingExposure": [
+          "Invite plaintext is holder/operator material; historical spent rows must not become reusable."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "identity-admission-assertion",
+      "tables": [
+        "identity_admission_checks"
+      ],
+      "scope": "platform",
+      "purpose": "Always-empty SQL assertion table used to atomically reject workspace batches after identity revocation.",
+      "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
+      "proposedRetention": "Remain empty in every deployment and restore.",
+      "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
+      "exportPolicy": "No data exists to export.",
+      "references": [
+        "src/workspace-identity/schema.sql",
+        "src/workspace-identity/ceremonies.ts",
+        "docs/identity-web.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Internal SQL assertion mechanism; no customer data API"
+        ],
+        "processors": [
+          "Atomic admission predicates only"
+        ],
+        "remainingExposure": [
+          "The table must remain empty; a successful SQL assertion is not a reusable capability."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "profile-workspace",
+      "tables": [
+        "user_profiles",
+        "welcome_onboarding",
+        "welcome_first_drafts",
+        "workspace_preferences",
+        "workspace_state",
+        "workspace_layout_receipts"
+      ],
+      "scope": "owner",
+      "purpose": "Profile/name/bio/photo, welcome progress, saved workspace tabs and preferences. Current versioned view definitions and immutable layout change receipts.",
+      "currentRetention": "Account-linked storage; profile photo bytes are in D1 and replacement clears the current safety receipt. No age-based profile/chat-memory expiry. Layout before/after definitions, request metadata and turn provenance remain for the account lifetime, independently of Chat cleanup and page removal; no seven-day draft expiry applies.",
       "proposedRetention": "Retain while active or until explicit replacement/removal; ordinary closure purge includes agent-context copies. Pending/blocked images follow restricted safety review, never ordinary export.",
       "deletionAuthority": "Owner profile/workspace edits; exact account closure plus safety-case coordination for held images.",
       "exportPolicy": "Allowlist profile, preferences and workflow configuration. Include uploaded photo only with valid current checks; omit auth and internal safety references.",
-      "references": ["src/profile.ts", "src/onboarding.ts", "docs/workspace-agent.md"]
+      "references": [
+        "src/profile.ts",
+        "src/onboarding.ts",
+        "docs/workspace-agent.md",
+        "docs/data-protection.md",
+        "src/workspace-layout.ts",
+        "src/workspace-view-contract.ts",
+        "docs/workspace-views.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-private-cache"
+        ],
+        "readers": [
+          "Current owner profile/layout/onboarding handlers; held photo reads remain denied"
+        ],
+        "processors": [
+          "Selected name/bio only after share_context opt-in; JPEG preparation and current photo gates; normal display/layout handlers",
+          "Owner layout labels/project references and recent operation metadata may enter task context; arbitrary definition extensions are rejected."
+        ],
+        "remainingExposure": [
+          "Name, bio, base64 photo and welcome brief are readable. Profile opt-in does not authorize unrelated third-party secrets."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "projects", "tables": ["projects"], "scope": "owner",
+      "id": "projects",
+      "tables": [
+        "projects"
+      ],
+      "scope": "owner",
       "purpose": "Project identity, brief, preferences and ownership root.",
       "currentRetention": "No customer whole-project/account deletion workflow. Project rows own many cascades and external-resource references.",
       "proposedRetention": "Keep while active; close admissions and withdraw service before deletion. Preserve minimal resource/operation receipts independently until settled.",
       "deletionAuthority": "Exact recently authenticated owner project/account review; models cannot confirm deletion.",
       "exportPolicy": "Project ID, brief and user-facing settings; a manifest lists included versions/resources and any omissions.",
-      "references": ["docs/account-closure.md", "src/index.ts"]
+      "references": [
+        "docs/account-closure.md",
+        "src/index.ts",
+        "docs/data-protection.md",
+        "src/workspace-data.ts",
+        "src/workspace-view-bindings.ts",
+        "src/workspace-view-data.ts",
+        "frontend/src/workspace-view-components.tsx"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-private-cache"
+        ],
+        "readers": [
+          "Current owner/project domain handlers",
+          "Current owner registered Chat/view project facts with fresh inclusion and ownership checks; private query results expire on page/account changes."
+        ],
+        "processors": [
+          "Owner maintenance uses the exact requested brief/project context; no visitor maintainer invocation"
+        ],
+        "remainingExposure": [
+          "Private briefs/preferences are readable to the processing service and any selected eligible model."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "conversation", "tables": ["chat_turns", "agent_inspections", "activity_events", "chat_review_receipts"], "scope": "owner",
+      "id": "conversation",
+      "tables": [
+        "chat_turns",
+        "agent_inspections",
+        "activity_events",
+        "chat_review_receipts"
+      ],
+      "scope": "owner",
       "purpose": "Conversation continuity, saved agent inspection results, action history and metadata proving that a specific review was presented in a Chat reply.",
       "currentRetention": "Retained under account; current Chat transcript has an upper revision but is not a whole-account snapshot. Internal inspections and receipts can outlive visible messages. chat_review_receipts has a direct NO ACTION owner reference and cascades with its Chat turn; it does not grant confirmation authority.",
       "proposedRetention": "Retain active-account conversation until an approved user removal/retention policy; ordinary closure purge includes inspections and copied context. Extract only necessary unresolved-operation metadata first.",
       "deletionAuthority": "Owner closure or future reviewed conversation deletion; do not delete referenced authority/operation evidence without migration.",
       "exportPolicy": "Saved user/assistant turns and customer action summaries at a stable cutoff. Exclude private operator material and internal inspection dumps.",
-      "references": ["src/chat-transcript.ts", "src/chat.ts", "src/agent-inspection.ts"]
+      "references": [
+        "src/chat-transcript.ts",
+        "src/chat.ts",
+        "src/github-grant-chat.ts",
+        "frontend/src/github-grant-review.tsx",
+        "src/agent-inspection.ts",
+        "docs/data-protection.md",
+        "src/workspace-data.ts",
+        "src/workspace-view-bindings.ts",
+        "src/workspace-view-data.ts",
+        "frontend/src/workspace-view-components.tsx"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-private-cache",
+          "browser-download"
+        ],
+        "readers": [
+          "Current owner transcript/history/export and exact review presentation",
+          "Current owner bounded activity summaries through registered view reads; no submitted answers or third-party documents enter this display."
+        ],
+        "processors": [
+          "Maintenance model receives selected relevant history/inspection; class-specific protected reads and content-free diagnostics"
+        ],
+        "remainingExposure": [
+          "Turns and saved inspections may contain private content and recovery outcomes; customer copies and selected model processing remain separate exposure."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "site-versions", "tables": ["site_versions", "publications", "publication_actions", "version_removals", "chat_exports", "chat_comparisons"], "scope": "project",
+      "id": "site-versions",
+      "tables": [
+        "site_versions",
+        "publications",
+        "publication_actions",
+        "publication_chat_links",
+        "version_removals",
+        "chat_exports",
+        "chat_comparisons"
+      ],
+      "scope": "project",
       "purpose": "Immutable site artifacts, publication authority, comparisons and removal receipts.",
       "currentRetention": "Up to 25 saved versions; exact removal reviews, live/review/backup dependency guards, no automatic age pruning. Applied removal metadata prevents same-ID recreation.",
       "proposedRetention": "Active content until explicit removal/closure; keep non-content deletion tombstones independently of the deleted account and every restore candidate. Unpublish before purge.",
       "deletionAuthority": "Exact owner version/project/account review; check live and external-backup dependencies at commit time.",
       "exportPolicy": "Owned source/config/HTML and provenance, subject to current content/media clearance. Export is not automatic publication permission.",
-      "references": ["docs/version-retention.md", "docs/version-comparisons.md"]
+      "references": [
+        "docs/version-retention.md",
+        "docs/version-comparisons.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-download",
+          "public-artifact"
+        ],
+        "readers": [
+          "Owner private previews/diffs/exports and direct website-safety review/results; public host only exact admitted publications"
+        ],
+        "processors": [
+          "Compiler/rendering, exact review/publication and selected owner edits"
+        ],
+        "remainingExposure": [
+          "Published bytes and exported archives can be copied externally; private previous versions must remain owner-scoped."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "project-configurations", "tables": ["project_spec_proposals", "project_spec_versions", "service_client_proposals", "service_client_versions"], "scope": "project",
+      "id": "project-configurations",
+      "tables": [
+        "project_spec_proposals",
+        "project_spec_versions",
+        "service_client_proposals",
+        "service_client_versions"
+      ],
+      "scope": "project",
       "purpose": "Full private website/service configuration, compiler locks, manifests, target references, previews, release candidates and comparison copies, including forward-restored snapshots.",
-      "currentRetention": "Proposals expire after ten minutes; preparing another proposal clears expired project proposals and a bounded global batch. Expiry is not a timed purge. Saved full snapshots have count/byte bounds, not age expiry. Exact website removal cascades dependent full snapshots and removes associated proposal/comparison copies; current heads and unexpired unapplied/activation reviews retain dependencies.",
+      "currentRetention": "Proposals expire after ten minutes; preparing another proposal clears expired project proposals and a bounded global batch. Expiry is not a timed purge. Saved full snapshots have count/byte bounds, not age expiry. Exact website removal cascades dependent full snapshots and removes associated proposal/comparison copies; current heads and unexpired unapplied/activation reviews retain dependencies. Current Chat comparison reads are private/no-store, opened on demand and never persisted in sessionStorage, transcript exports or inference context. Their owner/review/digest/revision-scoped query has zero inactive retention; collapse/navigation/account reset clears it, and failed or refreshing reads hide earlier facts. The existing protected preview and exact approval remain separate. Shared workspace review queues retain no new server copy. They discover up to five recent unapplied/unexpired owned website change/restore proposals, validate each through the existing exact comparison reader, and return bounded identities/project labels only. Comparison text is fetched separately on explicit expansion through that same reader and transient shared component. Queue refresh never extends review expiry or applies changes.",
       "proposedRetention": "Retain active saved configurations until exact removal or closure. Enumerate every full snapshot, proposal, preview, comparison and Chat/inspection copy during erasure. Restore creates a forward version under current safety and ownership checks; deleted bytes cannot be recreated from metadata receipts.",
       "deletionAuthority": "Exact owner website/project/account review and current dependency/hold checks. Direct retained-head or review deletion is not a supported bypass; eligible parent cascades do not constitute a customer closure workflow.",
       "exportPolicy": "Allowlist owned cleared configurations, pinned compiler/version provenance and compatible artifacts. Label private desired settings separately from enabled services; exclude internal envelopes/authority digests, visitor records and credentials. Current whole-account export remains unimplemented.",
-      "references": ["docs/project-specification.md", "docs/project-service-clients.md", "src/project-specification/store.ts", "src/project-specification/service-clients/store.ts", "docs/version-retention.md"]
+      "references": [
+        "docs/project-specification.md",
+        "docs/project-service-clients.md",
+        "src/project-specification/store.ts",
+        "src/project-specification/review-display.ts",
+        "frontend/src/specification-review-details.tsx",
+        "src/project-specification/service-clients/store.ts",
+        "docs/version-retention.md",
+        "docs/data-protection.md",
+        "src/workspace-reviews.ts",
+        "src/workspace-view-data.ts",
+        "src/workspace-view-bindings.ts",
+        "frontend/src/workspace-view-components.tsx"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-private-cache"
+        ],
+        "readers": [
+          "Owner exact proposal/version/configuration handlers; published outputs through separate serving gates",
+          "Saved-page and temporary-Chat review queues require current workspace/feature/project access, revalidate exact review authority, and expose no fields for denied/unavailable entries. Browser results share the current comparison renderer and account-bound zero-inactive-retention query cache; no approval control is created from queue data."
+        ],
+        "processors": [
+          "Current compiler, comparison/restore and selected maintenance inspection"
+        ],
+        "remainingExposure": [
+          "Full specifications and private previews are readable; a compiler manifest does not grant publication authority.",
+          "Owned project names and current review identity/expiry are transient private view data; exact before/after website content is read on comparison expansion. Existing safety holds, expiry, current base/compiler and feature/ownership checks remain authoritative. No raw query, generated HTML, external destination, visitor data or credential is added to view configuration."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "configuration-authority", "tables": ["project_spec_applies", "project_spec_creations", "project_spec_heads", "project_spec_chat_links", "service_client_applies", "service_client_heads", "service_client_chat_links", "service_client_activation_reviews", "service_client_activation_links"], "scope": "project",
+      "id": "configuration-authority",
+      "tables": [
+        "project_spec_applies",
+        "project_spec_creations",
+        "project_spec_heads",
+        "project_spec_chat_links",
+        "service_client_applies",
+        "service_client_heads",
+        "service_client_chat_links",
+        "service_client_activation_reviews",
+        "service_client_activation_links"
+      ],
+      "scope": "project",
       "purpose": "Immutable private-save receipts, current revision pointers, exact Chat presentation links and metadata provenance for separately confirmed contact/form activation reviews.",
       "currentRetention": "Creation/apply/activation receipts retain IDs, digests, revisions and target metadata independently of full saved bytes. Receipt/head deletion is guarded while parents exist; eligible parent cascades remove them. Presentation links follow their turn/proposal/review. No terminal-receipt age purge; short review expiry is not erasure. Existing service review constraints still apply.",
       "proposedRetention": "Preserve minimum replay and unresolved-effect identity before erasing content, then use an approved metadata schedule. Extract independent restore suppression before account/project cascades; current same-database tombstones cannot suppress an older database restore. Minimize expired operational targets after dependent operations settle.",
       "deletionAuthority": "Exact owner lifecycle review coordinated with existing service withdrawal and unresolved-operation reconciliation. Neither Chat links nor private saves authorize activation; historical receipts cannot reactivate after a disable or restore erased configuration.",
       "exportPolicy": "Allowlist customer-visible save/activation status, time and version provenance. Exclude internal target envelopes, authority hashes and operational reference graphs. No source, form submissions or visitor data are stored in these metadata receipts.",
-      "references": ["docs/project-specification.md", "docs/project-service-clients.md", "src/project-specification/service-clients/activation.ts", "docs/contact-forms.md", "docs/backend-execution.md"]
+      "references": [
+        "docs/project-specification.md",
+        "docs/project-service-clients.md",
+        "src/project-specification/service-clients/activation.ts",
+        "docs/contact-forms.md",
+        "docs/backend-execution.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current owner exact review/readback handlers; internal guarded commits"
+        ],
+        "processors": [
+          "Version/revision/receipt admission and serving eligibility; model can prepare but cannot confirm"
+        ],
+        "remainingExposure": [
+          "Historical approvals and restored pointers cannot authorize a new effect or obsolete configuration."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "project-media", "tables": ["project_files", "version_photos", "photo_removals", "file_cleanup"], "scope": "mixed",
+      "id": "project-media",
+      "tables": [
+        "project_files",
+        "version_photos",
+        "photo_removals",
+        "file_cleanup"
+      ],
+      "scope": "mixed",
       "purpose": "Private project JPEG metadata/reference graph and queued physical R2 cleanup.",
-      "currentRetention": "Referenced photos retained; reviewed unused-photo removal queues object keys. Daily cleanup waits one hour and uses a bounded orphan pass. file_cleanup has no owner FK.",
+      "currentRetention": "Referenced photos retained; reviewed unused-photo removal queues object keys. Daily cleanup waits one hour and uses a bounded orphan pass. file_cleanup has no owner FK. The shared Photos/Chat uploader retains exact unresolved upload ID, project ID, name, checksum, size and dimensions in account-bound sessionStorage (whumpo.photo-upload-recovery). No image bytes, object keys or URLs are stored there. The record is written before dispatch, survives uploader dismissal/reload without a draft TTL, and is removed after matching ready readback, matching server-confirmed closure of an unreserved handoff, or account change/sign-out. Original files must be reselected after in-memory bytes are lost; cleaned bytes must match the saved checksum. Browser session restore and same-origin scripts may access these readable metadata records. Closing a Chat handoff does not delete uploaded objects or erase upload recovery. These copies are excluded from PWA Cache Storage and model context. Storage failure prevents new dispatch; metadata status reads perform no R2 access. Custom Chat photo selection introduces no second asset owner or image copy. Selection references use the Chat lifecycle; removing or withdrawing clearance from an asset prevents fresh selection metadata and further selected-task processing. Earlier submitted IDs remain immutable historical facts and cannot keep an otherwise removable photo alive. Current task upload source additionally stores immutable original handoff interaction ID and definition digest (or explicit null for direct uploads) in project_files and exact browser recovery metadata. This locator follows file custody, independently of Chat payload expiry/dismissal; it grants no retained interaction or media authority. Server-confirmed closure of an unreserved handoff can resolve browser recovery because new reservations are atomically refused after closure. Current originating-task inference may read only linked names/dimensions and upload/safety status under scoped read admission. Those explicit model-request/reply/summary copies follow existing AI and Chat retention; image bytes, object keys, file digests and unrelated uploads are excluded. Dismissal never clears a reserved upload or its unresolved operation.",
       "proposedRetention": "Retain referenced approved objects until removal/closure. Keep a private owner/object deletion manifest until R2 deletion and orphan reconciliation are confirmed; no ordinary export of held media.",
       "deletionAuthority": "Owner exact photo/closure review plus safety hold check; worker performs only previously authorized object cleanup.",
       "exportPolicy": "Approved JPEG bytes and safe metadata only; do not expose R2 keys, held content or scanner references.",
-      "references": ["src/files.ts", "docs/photos.md", "docs/content-safety.md"]
+      "references": [
+        "src/files.ts",
+        "docs/photos.md",
+        "docs/content-safety.md",
+        "docs/data-protection.md",
+        "src/photo-format.ts",
+        "src/photo-upload-shape.ts",
+        "frontend/src/project-photo-upload.tsx",
+        "frontend/src/lib/photo-upload-recovery.ts",
+        "frontend/src/lib/prepare-project-photo.ts",
+        "src/chat-interactions/selected-photos.ts",
+        "src/workspace-data.ts",
+        "src/workspace-view-bindings.ts",
+        "src/workspace-view-data.ts",
+        "frontend/src/workspace-view-components.tsx",
+        "src/chat-interactions/photo-handoff.ts",
+        "src/chat-interactions/photo-results.ts"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "private-r2",
+          "public-artifact",
+          "browser-private-cache"
+        ],
+        "readers": [
+          "Owner exact object reads only after current safety approval; public bytes only through approved publication",
+          "Current owner registered view reads of ready-photo counts/bytes only; no image bytes or object keys. Media clearance and publication gates remain separate."
+        ],
+        "processors": [
+          "Bounded JPEG envelope/metadata preparation, private storage and queued deletion; scanner processing remains unconfigured/deferred"
+        ],
+        "remainingExposure": [
+          "Readable object body/name/digest and public copies; object-key possession alone is not permission. Metadata removal is not content clearance.",
+          "Same-origin scripts and browser session restore can read account-bound unresolved upload metadata in sessionStorage; no image bytes or URLs are stored there. Explicit matching readback/account reset clears it, while closing a handoff preserves it."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "safety-checks", "tables": ["profile_photo_safety", "project_photo_safety", "photo_scan_tickets", "content_screening_decisions"], "scope": "owner",
+      "id": "safety-checks",
+      "tables": [
+        "profile_photo_safety",
+        "project_photo_safety",
+        "photo_scan_tickets",
+        "content_screening_decisions"
+      ],
+      "scope": "owner",
       "purpose": "Exact-byte policy requirements, approval expiry and scanner-attempt identity.",
       "currentRetention": "Bounded ledgers; expiry blocks serving but is not physical cleanup. Owner/file cascades and profile replacement can remove evidence. No restricted preservation store or live scanner.",
       "proposedRetention": "Retain current decisions while the artifact can be used; terminal routine checks get a reviewed 90-day metadata schedule. Open cases/unknown scans move to restricted handling before ordinary deletion.",
       "deletionAuthority": "Dedicated lifecycle/safety operator; a model verdict, owner closure or low risk score cannot release a legal preservation hold.",
       "exportPolicy": "Customer-facing availability/decision summaries where permitted; no authority hashes, detector internals, restricted evidence or suspected-illegal bytes.",
-      "references": ["docs/content-safety.md", "src/photo-scan-results.ts", "src/content-screening.ts"]
+      "references": [
+        "docs/content-safety.md",
+        "src/photo-scan-results.ts",
+        "src/content-screening.ts",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current gated media/content admission and restricted trusted-result path"
+        ],
+        "processors": [
+          "Existing recorded decision/risk gates and ticket validation; scanner execution deferred"
+        ],
+        "remainingExposure": [
+          "Policy outcomes and evidence references are sensitive; no detector coverage or retained-content legality claim from metadata."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "safety-cases", "tables": ["content_risk_evidence", "content_risk_reversals"], "scope": "owner",
+      "id": "safety-cases",
+      "tables": [
+        "content_risk_evidence",
+        "content_risk_reversals"
+      ],
+      "scope": "owner",
       "purpose": "Reviewed incident provenance and immutable corrections used for risk sampling.",
       "currentRetention": "No age purge; ordinary scoring decay does not delete evidence. Account cascade currently removes rows. No independent legal-hold store.",
       "proposedRetention": "Routine closed-case metadata: proposed 90 days after resolution, subject to counsel/privacy review. Statutory/legal cases: case-specific basis, scope, deadline and extension; no blanket permanent retention.",
       "deletionAuthority": "Named restricted case operator with required legal review and audited release; owner/agent cannot independently destroy held evidence.",
       "exportPolicy": "Separate lawful access/appeal process; general account bundle excludes raw evidence, reviewer references and operational risk internals.",
-      "references": ["docs/content-safety.md", "docs/safety-coverage.md"]
+      "references": [
+        "docs/content-safety.md",
+        "docs/safety-coverage.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Restricted reviewed evidence/correction handlers; no general customer/model disclosure"
+        ],
+        "processors": [
+          "Risk sampling uses scoped metadata; future response operations require separate approval"
+        ],
+        "remainingExposure": [
+          "Incident metadata is sensitive; separate restricted evidence/preservation operations remain incomplete."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "import-quarantine", "tables": ["backend_imports"], "scope": "project",
+      "id": "import-quarantine",
+      "tables": [
+        "backend_imports"
+      ],
+      "scope": "project",
       "purpose": "Untrusted imported source awaiting policy/security admission.",
       "currentRetention": "Stored source/digest/triage state; hourly triage never approves. No age cleanup; owner/project deletion cascades.",
       "proposedRetention": "Ordinary abandoned pending imports: proposed seven days after last user activity, after ruling out open scan/case preservation. Never activate or export held source to bypass admission.",
       "deletionAuthority": "Owner removal/closure or approved quarantine policy, after restricted-case review.",
       "exportPolicy": "Manifest may report a held import without bytes. Only separately cleared artifacts may enter normal code exports.",
-      "references": ["src/backend-imports.ts", "docs/content-safety.md"]
+      "references": [
+        "src/backend-imports.ts",
+        "docs/content-safety.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Exact owner/import preview under quarantine and restricted triage"
+        ],
+        "processors": [
+          "Bounded source/security triage; no execution/publication before current admission"
+        ],
+        "remainingExposure": [
+          "Imported source is untrusted and readable in the quarantine store; triage does not imply full safety clearance."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "directories", "tables": ["directories", "directory_reviews", "directory_exports"], "scope": "project",
+      "id": "directories",
+      "tables": [
+        "directories",
+        "directory_reviews",
+        "directory_exports"
+      ],
+      "scope": "project",
       "purpose": "Structured directory records, public snapshots and exact change/export authority.",
       "currentRetention": "Current draft/live data and immutable reviews remain with project; no age purge of review payloads.",
       "proposedRetention": "Active records until explicit removal/closure; strip duplicate obsolete snapshot payloads only after preserving required receipt identity. Reapply record deletion on restores.",
       "deletionAuthority": "Exact owner mutation/closure review; identify third-party personal data and lawful request routing.",
       "exportPolicy": "Owned directory snapshots/records in a separately labeled project-data section, with current safety/privacy authorization.",
-      "references": ["docs/directories.md"]
+      "references": [
+        "docs/directories.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-download",
+          "public-artifact"
+        ],
+        "readers": [
+          "Owner records/review/export; visitors only current public snapshot"
+        ],
+        "processors": [
+          "Deterministic record validation and reviewed publication; selected owner-maintenance context"
+        ],
+        "remainingExposure": [
+          "Directory records can contain personal details; approved public snapshots and downloads cannot be recalled."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "contacts", "tables": ["contact_submissions", "contact_receipts", "contact_reviews", "contact_settings"], "scope": "visitor",
+      "id": "contacts",
+      "tables": [
+        "contact_submissions",
+        "contact_receipts",
+        "contact_reviews",
+        "contact_settings"
+      ],
+      "scope": "visitor",
       "purpose": "Customer contact inbox and form admission/idempotency.",
       "currentRetention": "Submissions expire after 30 days; inbox hides expired data and daily maintenance removes expired submissions/receipts. Settings and review metadata are separate.",
       "proposedRetention": "Keep the existing 30-day message window unless explicitly changed. Closure disables intake immediately, purges ordinary content and retains only justified anti-replay metadata.",
       "deletionAuthority": "Project owner controls inbox; visitor privacy requests need verified scoped handling. Customer closure never authorizes transfer to an unrelated account.",
       "exportPolicy": "Separate explicitly requested visitor-data export; not default platform profile export, agent context or public site source ZIP.",
-      "references": ["src/contacts.ts", "docs/contact-forms.md"]
+      "references": [
+        "src/contacts.ts",
+        "docs/contact-forms.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Project owner inbox via scoped handlers; submitter receipt conveys no general inbox access"
+        ],
+        "processors": [
+          "Bounded form admission and owner-requested inspection/export; no visitor-triggered maintenance AI"
+        ],
+        "remainingExposure": [
+          "Contact names/messages are readable private visitor data; notifications/export and model sharing require their own admitted purpose."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "backend-artifacts", "tables": ["backend_versions", "backend_runs", "backend_state", "backend_state_reviews", "backend_state_links", "backend_form_reviews", "backend_form_settings", "backend_publications", "backend_publication_reviews", "backend_public_usage", "application_builds", "composition_plans", "backend_extension_uses"], "scope": "project",
+      "id": "backend-artifacts",
+      "tables": [
+        "backend_versions",
+        "backend_runs",
+        "backend_state",
+        "backend_state_reviews",
+        "backend_state_links",
+        "backend_form_reviews",
+        "backend_form_settings",
+        "backend_publications",
+        "backend_publication_reviews",
+        "backend_public_usage",
+        "application_builds",
+        "composition_plans",
+        "backend_extension_uses"
+      ],
+      "scope": "project",
       "purpose": "Bounded backend source, tests, state, saved snapshots, private capability plans, generated-extension provenance and live authority.",
       "currentRetention": "Account/project-linked artifacts and immutable review/operation metadata; some authority references block cascades. Backend snapshots may duplicate submitted personal data. Composition plans expire for new execution after fifteen minutes but have no age purge; retained extension provenance references the plan and prevents premature deletion. Count bounds do not establish timed retention.",
       "proposedRetention": "Active artifacts until removal/closure; disable execution and form ingress first. Settle dispatched work; scrub current and snapshot copies and keep minimum replay/deletion metadata separately.",
       "deletionAuthority": "Exact owner source/state/closure review; worker outcomes cannot authorize new external effects during closure.",
       "exportPolicy": "Cleared source/tests and compatibility manifest; private state requires separate explicit data scope. Never include secrets or execute source while exporting.",
-      "references": ["docs/app-data.md", "docs/account-closure.md", "src/composition-plans.ts", "docs/capability-planner.md"]
+      "references": [
+        "docs/app-data.md",
+        "docs/account-closure.md",
+        "src/composition-plans.ts",
+        "docs/capability-planner.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Owner exact backend/configuration/test/state handlers; direct safety reads publication/review metadata only; runtime only admitted program/input/state"
+        ],
+        "processors": [
+          "Bounded QuickJS, explicit test/review, selected maintenance context and deterministic public actions"
+        ],
+        "remainingExposure": [
+          "Code, input/output and state snapshots can embed private values; generated code never receives general control-worker bindings."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "shared-reuse", "tables": ["backend_nominations", "backend_component_instances"], "scope": "project",
+      "id": "shared-reuse",
+      "tables": [
+        "backend_nominations",
+        "backend_component_instances"
+      ],
+      "scope": "project",
       "purpose": "Opt-in reuse nomination and provenance of platform-authored reusable components.",
       "currentRetention": "Nomination/provenance follows referenced backend version/account. Not an independently approved cross-user code publishing pipeline.",
       "proposedRetention": "Withdraw pending nominations on closure. Any future shared release must have separate reviewed sanitized/licensed provenance and a removal/correction process independent of private tenant source.",
       "deletionAuthority": "Owner withdraws nomination; authorized maintainer handles already accepted generic artifacts under separate license/safety review.",
       "exportPolicy": "Customer code's component/license provenance; never another customer's source or nomination data.",
-      "references": ["docs/jarvis-reuse.md"]
+      "references": [
+        "docs/jarvis-reuse.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Owner nomination/provenance and separately reviewed platform component promotion"
+        ],
+        "processors": [
+          "Maintained component composer; no automatic cross-user retrieval"
+        ],
+        "remainingExposure": [
+          "An opt-in nomination is not authorization to expose customer-specific source, data or secrets globally."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "visitor-identity", "tables": ["app_visitors", "app_passkeys", "app_recovery_codes", "app_sessions", "app_auth_challenges", "app_invitations", "app_deletion_receipts", "app_deletion_reviews", "app_owner_erasures"], "scope": "visitor",
+      "id": "visitor-identity",
+      "tables": [
+        "app_visitors",
+        "app_passkeys",
+        "app_recovery_codes",
+        "app_sessions",
+        "app_auth_challenges",
+        "app_invitations",
+        "app_deletion_receipts",
+        "app_deletion_reviews",
+        "app_owner_erasures"
+      ],
+      "scope": "visitor",
       "purpose": "Per-project visitor identity, invitation/session access and erasure replay receipts.",
       "currentRetention": "Visitor deletion removes linked live/recovery data through explicit guards/triggers; expiring replay receipts are cleaned daily. NO ACTION references require coordinated cleanup.",
       "proposedRetention": "Revoke access immediately on reviewed erasure/closure. Retain minimal durable suppression independently of account cascades through every allowed backup/restore window; short replay receipts alone are insufficient.",
       "deletionAuthority": "Fresh visitor self-service or exact owner per-visitor review; platform closure must reconcile all visitors in the project.",
       "exportPolicy": "Visitor's own identity/document/history via authenticated visitor flow; owner account bundles omit credentials, recovery material and default visitor datasets.",
-      "references": ["src/app-lifecycle.ts", "docs/app-data.md"]
+      "references": [
+        "src/app-lifecycle.ts",
+        "docs/app-data.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "identity-verifiers",
+        "storage": [
+          "control-d1",
+          "browser-credential"
+        ],
+        "readers": [
+          "Project-scoped visitor auth/recovery/erasure; owner only admitted visitor administration"
+        ],
+        "processors": [
+          "Visitor passkey/session engine separate from owner identity and maintenance AI"
+        ],
+        "remainingExposure": [
+          "Visitor credential metadata and hashes are private; account erasure receipts survive only for their bounded replay purpose."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "visitor-app-data", "tables": ["app_documents", "app_runs", "app_daily_usage", "app_spaces", "app_activation_reviews", "app_page_reviews", "app_page_settings", "app_maintenance_chat_links"], "scope": "visitor",
+      "id": "visitor-app-data",
+      "tables": [
+        "app_documents",
+        "app_runs",
+        "app_daily_usage",
+        "app_spaces",
+        "app_activation_reviews",
+        "app_page_reviews",
+        "app_page_settings",
+        "app_maintenance_chat_links"
+      ],
+      "scope": "visitor",
       "purpose": "Visitor documents, bounded transition outcomes, application configuration and execution authority.",
       "currentRetention": "Visitor/app state and operation history; daily usage older than 35 days is pruned by UTC day. Multiple immutable review references block deletion.",
       "proposedRetention": "Application content remains while active; erasure covers result/next-state copies as well as current document. Non-content operation receipts survive only for defined replay/reconciliation needs.",
       "deletionAuthority": "Visitor erasure/owner reviewed app deletion or closure, with exact project/visitor ownership and publication withdrawal.",
       "exportPolicy": "Separate scoped visitor export; optional owner app-data export needs explicit authority and format selection. Existing visitor stream is not a globally consistent restore snapshot.",
-      "references": ["src/app-lifecycle.ts", "docs/app-data.md"]
+      "references": [
+        "src/app-lifecycle.ts",
+        "docs/app-data.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Exact current visitor document/receipt handlers; owner receives only admitted admin views and reviewed data operations; direct safety reads page/program revision and negative review metadata without visitor content"
+        ],
+        "processors": [
+          "Isolated runtime uses bounded per-visitor state/input; deterministic serving; no automatic owner-model processing"
+        ],
+        "remainingExposure": [
+          "Visitor documents and execution results are readable to their processor; owner project authority is not arbitrary cross-visitor disclosure."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "application-recovery", "tables": ["app_recovery_points", "app_recovery_documents", "app_migration_checks", "app_migration_documents", "app_migration_approvals", "app_migration_cancellations", "app_restore_reviews"], "scope": "visitor",
+      "id": "application-recovery",
+      "tables": [
+        "app_recovery_points",
+        "app_recovery_documents",
+        "app_migration_checks",
+        "app_migration_documents",
+        "app_migration_approvals",
+        "app_migration_cancellations",
+        "app_restore_reviews"
+      ],
+      "scope": "visitor",
       "purpose": "App migration staging, recovery copies, cancellation and rollback authority.",
       "currentRetention": "Stale staging is removed daily; applied/cancelled checks clear staging. Recovery points require explicit removal; ten active per app, no age-based backup expiry.",
       "proposedRetention": "Backups and user-visible saved recovery points must be distinguished. Proposed 30-day maximum for managed backup copies; retained user recovery points must be scrubbed for visitor erasures before serving/restoring.",
       "deletionAuthority": "Exact owner recovery-point/closure review; erasure suppression overrides recovery content. Restricted holds never make a snapshot publicly usable.",
       "exportPolicy": "Separately labeled recovery data only with explicit scope and suppression applied; never export erased visitors from old snapshots.",
-      "references": ["src/app-lifecycle.ts", "docs/app-data.md"]
+      "references": [
+        "src/app-lifecycle.ts",
+        "docs/app-data.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Exact owner-reviewed application recovery/state-change handlers; scoped visitor restoration"
+        ],
+        "processors": [
+          "Deterministic snapshot/check/apply/forward repair with independent receipts"
+        ],
+        "remainingExposure": [
+          "Recovery/staging copies contain private visitor data and can revive deleted rows unless deletion/revocation is reconciled."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "connections", "tables": ["github_connections", "github_token_vault", "github_token_staging", "github_revocation_claims", "github_oauth_states", "github_revocation_health", "cloudflare_token_vault", "cloudflare_oauth_states", "cloudflare_revocation_health"], "scope": "owner",
+      "id": "connections",
+      "tables": [
+        "connection_chat_links",
+        "github_connections",
+        "github_token_vault",
+        "github_token_staging",
+        "github_revocation_claims",
+        "github_oauth_states",
+        "github_revocation_health",
+        "cloudflare_token_vault",
+        "cloudflare_oauth_states",
+        "cloudflare_revocation_health",
+        "connection_oauth_exchanges",
+        "connection_oauth_outcomes",
+        "connection_rotation_guards",
+        "github_refresh_custody",
+        "github_grant_revocations"
+      ],
+      "scope": "owner",
       "purpose": "Customer-authorized provider access and durable credential revocation.",
-      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely.",
+      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction. Exact dispatch rejection/revocation receipts contain only bounded metadata and remain until account closure/independent retention reconciliation; a restored receipt alone grants no authority. GitHub refresh credentials use a separate encrypted purpose and RESTRICT references; access expiry or single-token revocation cannot delete their pending grant custody. Numeric GitHub identity is bound once from the exact issued token's authenticated lookup and retained independently of later connections; missing lookup evidence remains unknown. This metadata is not revocation proof. Reviewed app-grant revocation can remove the exact matched ciphertext only after a directly acknowledged, atomically saved 204. Immutable review/outcome metadata remains; unknown effects and unidentified grants stay held. The shared customer renderer and Chat controls have local and bounded deployed test acceptance (Chat connection release 5dfb930c, October 3). Real provider consent/permissions/revocation and customer/device acceptance remain pending. Current source stores immutable connection_chat_links alongside OAuth start in one transaction. They contain provider, hashed state, original owner/session ID, interaction ID/digest and timestamps only. They survive one-time OAuth state consumption/replacement and card dismissal for return navigation; they expire at the originating card seven-day retention deadline and hourly Chat maintenance removes up to 100 expired links. Account/interaction/project deletion cascades them. A return requires the exact current owner/session and current project ownership. Consumed, expired or replayed OAuth state never regains exchange authority. Dismissal or link expiry does not delete already-started credential custody. No credential, verifier, approval or redirect URL is copied into Chat. This locator grants no restored authority. Task-scoped status uses a transient metadata fingerprint and existing saved-status readers after inference. Only provider-name locators enter task context; the server reply follows existing Chat retention and is excluded from later model context. No credential, provider login or fingerprint is persisted in that reply, and no new data class or authority is introduced.",
       "proposedRetention": "Cancel callbacks/new consent on closure; revoke credentials before deleting ciphertext/key access. Keep unresolved revocation work in isolated minimal closure records, without preserving unrelated customer content.",
       "deletionAuthority": "Customer disconnect/closure authorizes access revocation, not deleting repositories/zones. Operator reconciles failed revocation.",
-      "exportPolicy": "Provider names, customer connection status and selected resource metadata only. Never tokens, ciphertext, PKCE verifier, auth state or encryption material.",
-      "references": ["src/github-connection.ts", "src/cloudflare-connection.ts", "docs/maintenance.md"]
+      "exportPolicy": "Provider names, customer connection status and selected resource metadata only. Never tokens, ciphertext, PKCE verifier, auth state or encryption material. Exclude OAuth Chat-return locators; the ordinary Chat lifecycle owns interaction history.",
+      "references": [
+        "src/github-connection.ts",
+        "src/cloudflare-connection.ts",
+        "docs/maintenance.md",
+        "src/connection-vault.ts",
+        "docs/data-protection.md",
+        "docs/connection-key-lifecycle.md",
+        "src/connection-rotation.ts",
+        "src/connection-write-policy.ts",
+        "src/connection-oauth-response.ts",
+        "tests/connection-oauth-outcomes.mjs",
+        "tools/connection-key-backup.mjs",
+        "tests/connection-key-backup.mjs",
+        "tools/operator-private-files.mjs",
+        "tools/restore-inventory.mjs",
+        "tests/restore-inventory.mjs",
+        "docs/restore-admission.md",
+        "tests/github-refresh-custody.mjs",
+        "src/github-grant-revocation.ts",
+        "tests/github-grant-revocation.mjs",
+        "tests/github-grant-chat.mjs",
+        "src/chat-interactions/connection-handoff.ts",
+        "src/chat-interactions/connection-results.ts",
+        "tests/chat-task-connection-status.mjs",
+        "src/connection-handoff-shape.ts",
+        "frontend/src/connection-consent.tsx",
+        "tests/connection-handoff.mjs"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "provider-vault",
+        "storage": [
+          "control-d1",
+          "provider-custody",
+          "worker-secret"
+        ],
+        "readers": [
+          "Exact current owner/credential-admitted provider adapters; narrow revocation worker retains only cleanup custody",
+          "Owned Chat handoff reads saved status metadata only; authorization secrets remain outside the browser/model handoff payload"
+        ],
+        "processors": [
+          "OAuth PKCE/token exchange, current scoped provider calls and recorded read-only uncertain recovery; no credential in model context"
+        ],
+        "remainingExposure": [
+          "Authorized Worker plus the retained exact key can decrypt tokens. Local fenced rotation does not establish independent key custody, permitted restore admission or deployed cutover. Unknown provider outcomes retain recovery obligations."
+        ],
+        "decision": "extend-key-lifecycle",
+        "rationale": "Database-only exposure must not supply reusable provider access; extend the existing authenticated vault, not customer unlock UX.",
+        "requirements": [
+          "DP-01",
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "github-backups", "tables": ["github_backups"], "scope": "project",
+      "id": "github-backups",
+      "tables": [
+        "github_backups"
+      ],
+      "scope": "project",
       "purpose": "Immutable reviewed source-backup intent, committed destination and uncertain-write reconciliation.",
       "currentRetention": "Receipt retains source version; unresolved dispatch and private files_json can remain. External repository commits survive disconnect and platform deletion.",
       "proposedRetention": "Settle unknown outcomes; minimize payload after preserving necessary receipt. Customer-owned repository/commits remain under customer control; no implicit deletion or history rewrite.",
       "deletionAuthority": "Owner-reviewed backup initially; any external removal is a separate exact approval and capability. Closure only revokes Whumpo access.",
       "exportPolicy": "Customer destination/commit/status and own artifact; exclude credentials/provider raw errors. Explain external copies separately.",
-      "references": ["docs/integrations/github-backups.md", "docs/version-retention.md"]
+      "references": [
+        "docs/integrations/github-backups.md",
+        "docs/version-retention.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "provider-custody"
+        ],
+        "readers": [
+          "Current owner exact reviewed destination and bounded recorded reconciliation"
+        ],
+        "processors": [
+          "Fixed GitHub source-backup adapter; credential access remains in connection vault"
+        ],
+        "remainingExposure": [
+          "External repository copies remain under customer/provider custody; metadata is not proof of deletion or confirmed write."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "domains-dns", "tables": ["domain_claims", "domain_connections", "domain_reconciliations", "domain_proof_removals", "cloudflare_dns_actions"], "scope": "project",
+      "id": "domains-dns",
+      "tables": [
+        "domain_claims",
+        "domain_connections",
+        "domain_reconciliations",
+        "domain_proof_removals",
+        "cloudflare_dns_actions"
+      ],
+      "scope": "project",
       "purpose": "Owned-domain verification, reviewed DNS and custom-hosting serving authority.",
       "currentRetention": "Unknown provider operations are retained; RESTRICT references intentionally block cascades. Verification tokens and provider IDs may remain in receipts.",
       "proposedRetention": "Stop Whumpo serving and reconcile owned custom-hostname detach. Retain minimum unknown-operation/proof metadata until settled. Never cancel registration, delete a zone or remove unrelated DNS implicitly.",
       "deletionAuthority": "Exact owner routing/disconnect/removal review plus provider ownership evidence; customer zone/repository ownership remains external.",
       "exportPolicy": "Hostname, intended configuration and customer-visible receipts; omit proof tokens, operational identifiers and internal reconciliation notes.",
-      "references": ["docs/domains.md", "docs/integrations/cloudflare-dns.md", "docs/integrations/domain-hosting.md"]
+      "references": [
+        "docs/domains.md",
+        "docs/integrations/cloudflare-dns.md",
+        "docs/integrations/domain-hosting.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "provider-custody",
+          "public-artifact"
+        ],
+        "readers": [
+          "Current owner verified-domain operations; host serves only admitted domain/project routing"
+        ],
+        "processors": [
+          "Fixed DNS proof/review/write/readback and explicit disconnect"
+        ],
+        "remainingExposure": [
+          "DNS/hostname metadata is public or provider-held; disconnection does not delete purchased domains or unrelated zone data."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "cms-resources", "tables": ["cms_instances", "cms_setup_reviews", "cms_resource_jobs", "cms_deployments"], "scope": "project",
+      "id": "cms-resources",
+      "tables": [
+        "cms_instances",
+        "cms_setup_reviews",
+        "cms_resource_jobs",
+        "cms_deployments"
+      ],
+      "scope": "project",
       "purpose": "Platform-managed CMS Worker, database, private media bucket, session namespace and binding/key identities.",
       "currentRetention": "Control records and provider resources have different lifecycles; deleting rows does not delete resources. Some registrations/cross-references prevent cascades.",
       "proposedRetention": "Keep exact resource manifest and key authority until withdrawal, export, restricted preservation and confirmed teardown finish. Isolate per-project resources; shared platform resources must never be deleted.",
       "deletionAuthority": "Owner exact CMS/project/closure review plus operator resource ownership reconciliation. CMS testing remains owner-deferred.",
       "exportPolicy": "Customer content/configuration manifest, not provider credentials, secret digests or executable provisioning authority.",
-      "references": ["docs/emdash.md", "tools/cms-release.mjs", "docs/account-closure.md"]
+      "references": [
+        "docs/emdash.md",
+        "tools/cms-release.mjs",
+        "docs/account-closure.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "cms-native",
+          "worker-secret"
+        ],
+        "readers": [
+          "Platform deployment/bridge and exact owner CMS controls, subject to existing deployment gates"
+        ],
+        "processors": [
+          "Signed scoped bridge and registry handling; no CMS functional execution in this decision"
+        ],
+        "remainingExposure": [
+          "Per-instance keys and native database/media/session stores are separate restore dependencies; metadata alone does not inventory their content."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "cms-content", "tables": ["cms_draft_requests", "cms_edit_requests", "cms_publication_reviews", "cms_discard_reviews", "cms_unpublish_reviews", "cms_export_links", "cms_preview_links"], "scope": "project",
+      "id": "cms-content",
+      "tables": [
+        "cms_draft_requests",
+        "cms_edit_requests",
+        "cms_publication_reviews",
+        "cms_discard_reviews",
+        "cms_unpublish_reviews",
+        "cms_export_links",
+        "cms_preview_links"
+      ],
+      "scope": "project",
       "purpose": "CMS draft/edit bodies, frozen HTML/snapshots, public and private article references.",
       "currentRetention": "Immutable content/operation receipts without general TTL; account/project/native-CMS copies differ and some FKs block deletion.",
       "proposedRetention": "Active content until removal/closure. Withdraw all native/frozen surfaces and apply artifact-wide safety/erasure rules before exporting or scrubbing every duplicate.",
       "deletionAuthority": "Exact owner content/discard/unpublish/closure review; no automatic native CMS acceptance or resource teardown.",
       "exportPolicy": "Cleared content, revisions and taxonomy in a portable project section; existing draft downloads are not whole-CMS exports.",
-      "references": ["docs/emdash.md", "docs/safety-coverage.md"]
+      "references": [
+        "docs/emdash.md",
+        "docs/safety-coverage.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "cms-native",
+          "public-artifact"
+        ],
+        "readers": [
+          "Owner exact draft/preview/export/review; visitors only separately published CMS output"
+        ],
+        "processors": [
+          "Maintained signed bridge and content preparation; all CMS functional testing remains deferred"
+        ],
+        "remainingExposure": [
+          "Draft/edit/snapshot copies may contain private content; native CMS/provider backups are not covered by control D1 alone."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "cms-media-imports", "tables": ["cms_media_uploads", "cms_wordpress_sources", "cms_import_reviews", "cms_import_taxonomy_jobs", "cms_publication_media"], "scope": "project",
+      "id": "cms-media-imports",
+      "tables": [
+        "cms_media_uploads",
+        "cms_wordpress_sources",
+        "cms_import_reviews",
+        "cms_import_taxonomy_jobs",
+        "cms_publication_media"
+      ],
+      "scope": "project",
       "purpose": "Private CMS images, WordPress XML, imported taxonomy/media plans and publication manifests.",
       "currentRetention": "Control metadata plus native R2/D1 copies; no complete safety admission or retained-byte cleanup policy. Some FKs restrict resource deletion.",
       "proposedRetention": "Pending imports use the proposed bounded quarantine policy after case review. Approved media follows references; closure must remove raw XML, native bytes, frozen copies and thumbnails/derivatives where present.",
       "deletionAuthority": "Exact owner removal/closure plus mandatory safety and case checks. Do not infer cleared status from an existing CMS receipt.",
       "exportPolicy": "Only cleared exact media/content; held imports appear as omission status, never a bypass through raw-download endpoints.",
-      "references": ["docs/emdash.md", "docs/safety-coverage.md"]
+      "references": [
+        "docs/emdash.md",
+        "docs/safety-coverage.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "cms-native"
+        ],
+        "readers": [
+          "Owner exact import/media review and scoped bridge; no public draft media access"
+        ],
+        "processors": [
+          "Configured source-only media/import boundaries; CMS functional testing and detector activation deferred"
+        ],
+        "remainingExposure": [
+          "XML/media metadata and prepared copies may contain personal data; no blanket source/import clearance."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "standard-ai", "tables": ["standard_ai_requests", "inference_calls", "inference_budgets"], "scope": "owner",
+      "id": "standard-ai",
+      "tables": [
+        "standard_ai_requests",
+        "inference_calls",
+        "inference_budgets"
+      ],
+      "scope": "owner",
       "purpose": "Non-billable standard request replay, provider dispatch/cost receipts and internal test budgets.",
       "currentRetention": "Immutable account/Chat-linked receipts; uncertain dispatch holds remain. No general terminal-history purge; some internal acknowledgment text is stored.",
       "proposedRetention": "Keep minimum unresolved-operation metadata until confirmed. Proposed 90-day terminal diagnostics; scrub content/acknowledgments at closure and retain only justified aggregate economics.",
       "deletionAuthority": "Owner closure plus trusted outcome reconciliation; do not erase an unknown spend or invent zero usage.",
       "exportPolicy": "Customer request status and timing/token metadata where exposed; standard AI remains zero customer credits. Exclude internal costs, provider auth and operator diagnostics.",
-      "references": ["docs/standard-ai-accounting.md"]
+      "references": [
+        "docs/standard-ai-accounting.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current owner bounded request/status and restricted operator accounting"
+        ],
+        "processors": [
+          "Deterministic reservation/dispatch/usage reconciliation; acknowledged/failed/uncertain calls retained"
+        ],
+        "remainingExposure": [
+          "Usage/model/receipt metadata can reveal activity; shadow cost is not an invoice and standard assistance has zero customer debit."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "billing", "tables": ["stripe_customers", "stripe_subscription_orders", "stripe_subscriptions", "stripe_paid_invoices", "capacity_preferences"], "scope": "owner",
+      "id": "billing",
+      "tables": [
+        "stripe_customers",
+        "stripe_subscription_orders",
+        "stripe_subscriptions",
+        "stripe_paid_invoices",
+        "capacity_preferences"
+      ],
+      "scope": "owner",
       "purpose": "Current plan preferences, sandbox subscriptions, invoice coverage and checkout idempotency.",
       "currentRetention": "Current records cascade with owner deletion; paid invoice receipts are immutable. Stripe sandbox is configured; real payments are disabled. Obsolete test billing tables and rows were removed.",
       "proposedRetention": "Ordinary preferences are purged; unsettled payments/refunds/credits require resolution. Minimum real invoice/transaction records use a separately approved accountant/legal schedule; no guessed tax-retention term.",
       "deletionAuthority": "Owner closure starts cancellation/settlement; qualified finance operator decides required minimal record retention. Closure cannot silently forfeit balances.",
       "exportPolicy": "Customer plan/credit/usage/payment history with explanatory test/live status; no provider secrets, other tenants or private margin data.",
-      "references": ["docs/payments.md", "docs/plan-lifecycle.md", "docs/pricing-and-model-policy.md"]
+      "references": [
+        "docs/payments.md",
+        "docs/plan-lifecycle.md",
+        "docs/pricing-and-model-policy.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "provider-custody"
+        ],
+        "readers": [
+          "Current owner billing/invoice status and signed sandbox webhook/domain handlers"
+        ],
+        "processors": [
+          "Stripe sandbox lifecycle and invoice coverage; no payment secrets or card data in model context"
+        ],
+        "remainingExposure": [
+          "Provider customer/subscription/invoice identifiers remain personal/commercial metadata; real-money retention obligations are unresolved."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "premium-gateway", "tables": ["gateway_spend_buckets", "gateway_spend_attempts", "gateway_inference_requests", "gateway_provider_receipts"], "scope": "mixed",
+      "id": "premium-gateway",
+      "tables": [
+        "gateway_spend_buckets",
+        "gateway_spend_attempts",
+        "gateway_inference_requests",
+        "gateway_provider_receipts"
+      ],
+      "scope": "mixed",
       "purpose": "Inactive funded-inference reservations, immutable result/receipt identity and account/platform budgets.",
       "currentRetention": "RESTRICT references intentionally retain spend/result records; scopes can include global budgets. API/Gateway provider dispatch is not active.",
       "proposedRetention": "Never release unknown reservations on closure. Move minimum receipt authority to a reviewed restricted financial lifecycle, scrub result payloads, preserve aggregate platform budgets independently.",
       "deletionAuthority": "Explicit funding/outcome reconciliation and approved financial retention migration before account erasure.",
       "exportPolicy": "Future customer-funded approvals and charges only; provider result content uses applicable content/privacy scope, global budget and log IDs excluded.",
-      "references": ["docs/pricing-and-model-policy.md", "docs/standard-ai-accounting.md"]
+      "references": [
+        "docs/pricing-and-model-policy.md",
+        "docs/standard-ai-accounting.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "provider-custody"
+        ],
+        "readers": [
+          "Inactive reviewed gateway request/readback and restricted spending-accounting handlers"
+        ],
+        "processors": [
+          "Reserved future exact Gateway/model route; activation requires separate current privacy/funding review"
+        ],
+        "remainingExposure": [
+          "Stored answer/result content is private; provider/cache/log copies require exact evidence before activation."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "usage-reviews", "tables": ["usage_review_requests", "fair_use_reviews", "fair_use_project_lifecycle"], "scope": "owner",
+      "id": "usage-reviews",
+      "tables": [
+        "usage_review_requests",
+        "fair_use_reviews",
+        "fair_use_project_lifecycle"
+      ],
+      "scope": "owner",
       "purpose": "Customer usage appeals, private operator investigations and metadata-only churn observation.",
       "currentRetention": "Removed-project observations expire after 90 days; investigations/customer requests have no general purge and cascade with account. Monitor is nonblocking.",
       "proposedRetention": "Proposed 90 days after resolution/removal for necessary metadata, with explicit open-case review. Closure/export must remain available regardless of usage concerns.",
       "deletionAuthority": "Customer closure and qualified review operator; minimum unresolved case handling cannot retain unrelated site/chat content by default.",
       "exportPolicy": "Customer's submitted request and customer-visible response; exclude private operator investigation details and model context copies.",
-      "references": ["docs/usage-review-requests.md", "docs/pricing-and-model-policy.md"]
+      "references": [
+        "docs/usage-review-requests.md",
+        "docs/pricing-and-model-policy.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Owner appeal and restricted operator fair-use investigation"
+        ],
+        "processors": [
+          "Deterministic review queue and aggregate abuse/usage signals; no ordinary maintainer access to operator evidence"
+        ],
+        "remainingExposure": [
+          "Appeals may contain sensitive free text; financial Monitor does not disable mandatory content controls."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "project-observability", "tables": ["site_health_checks", "site_traffic_daily"], "scope": "project",
+      "id": "project-observability",
+      "tables": [
+        "site_health_checks",
+        "site_traffic_daily"
+      ],
+      "scope": "project",
       "purpose": "Site health receipts and content-free daily request totals.",
       "currentRetention": "Health checks older than 30 days and traffic older than the 30-day UTC window are pruned. Account/project cascades remove remaining rows.",
       "proposedRetention": "Keep existing windows initially. Account closure purges linkable rows; only truly non-identifying platform aggregates may survive.",
       "deletionAuthority": "Documented automatic retention or reviewed account/project closure.",
       "exportPolicy": "Owned daily totals and customer-visible health results, not raw request logs or visitor identifiers.",
-      "references": ["src/site-health.ts", "src/site-traffic.ts", "docs/maintenance.md"]
+      "references": [
+        "src/site-health.ts",
+        "src/site-traffic.ts",
+        "docs/maintenance.md",
+        "docs/data-protection.md",
+        "src/workspace-data.ts",
+        "src/workspace-view-bindings.ts",
+        "src/workspace-view-data.ts",
+        "frontend/src/workspace-view-components.tsx"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-private-cache"
+        ],
+        "readers": [
+          "Owner aggregate traffic/health and bounded operator diagnostics",
+          "Current owner registered view reads of aggregate page-request counts; no visitor identity or model-invented measurements."
+        ],
+        "processors": [
+          "Deterministic request counters and health probes; selected aggregate explanation by owner agent"
+        ],
+        "remainingExposure": [
+          "Request totals are not unique visitors. No individual identity or private response-body analytics should be invented."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     },
     {
-      "id": "platform-operations", "tables": ["plan_catalog", "fair_use_control", "storage_usage", "site_health_budget", "site_traffic_metadata", "maintenance_health", "cms_platform_deploy_lock"], "scope": "platform",
+      "id": "platform-operations",
+      "tables": [
+        "plan_catalog",
+        "fair_use_control",
+        "storage_usage",
+        "site_health_budget",
+        "site_traffic_metadata",
+        "maintenance_health",
+        "cms_platform_deploy_lock",
+        "connection_key_registry",
+        "connection_key_policy",
+        "connection_key_rotations",
+        "connection_rotation_batches"
+      ],
+      "scope": "platform",
       "purpose": "Shared product policy, aggregate counters and operator coordination/health.",
-      "currentRetention": "Shared singleton/period metadata; health budget older than 62 days is pruned. No per-customer deletion authority.",
+      "currentRetention": "Shared singleton/period metadata; health budget older than 62 days is pruned. No per-customer deletion authority. Key identities, policy revisions and aggregate rotation receipts are operator records without plaintext or owner identifiers; key identity deletion is blocked pending independent custody/restore proof.",
       "proposedRetention": "Retain platform configuration and bounded aggregate operating records; never put raw personal data or credentials into these global rows.",
       "deletionAuthority": "Operator maintenance only; account closure never deletes shared platform resources or policy.",
       "exportPolicy": "Only applicable public plan/policy version; no internal aggregate costs, locks or cross-account state.",
-      "references": ["src/maintenance.ts", "tools/maintenance-inventory.mjs", "docs/maintenance.md"]
+      "references": [
+        "src/maintenance.ts",
+        "tools/maintenance-inventory.mjs",
+        "docs/maintenance.md",
+        "docs/data-protection.md",
+        "src/connection-rotation.ts",
+        "src/connection-write-policy.ts",
+        "src/connection-oauth-response.ts",
+        "tests/connection-oauth-outcomes.mjs",
+        "tools/connection-key-backup.mjs",
+        "tests/connection-key-backup.mjs",
+        "tools/operator-private-files.mjs",
+        "tools/restore-inventory.mjs",
+        "tests/restore-inventory.mjs",
+        "docs/restore-admission.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Restricted operator configuration and bounded public/owner status projections"
+        ],
+        "processors": [
+          "Deterministic quotas, catalogue, locks and metadata-only maintenance"
+        ],
+        "remainingExposure": [
+          "Shared controls/counters must not disclose another tenant; configuration state is not customer permission."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "brand-kits",
+      "tables": [],
+      "scope": "project",
+      "purpose": "Versioned brand assets, shared styles and reusable sections.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
+      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Owner current brand-kit controls; scoped approved reuse only."
+        ],
+        "processors": [
+          "Selected owner maintenance and deterministic composition; public output only after separate review."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-091"
+      ]
+    },
+    {
+      "id": "guest-feedback",
+      "tables": [],
+      "scope": "mixed",
+      "purpose": "Expiring accountless preview comments and guest-link authority.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
+      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Exact guest capability and owner review; a guest is not a workspace member."
+        ],
+        "processors": [
+          "Deterministic preview/comment handling; maintenance sees only explicitly admitted comments with a reviewed privacy route."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-092"
+      ]
+    },
+    {
+      "id": "lead-records",
+      "tables": [],
+      "scope": "project",
+      "purpose": "Private lead stages, notes and due dates derived from admitted submissions.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
+      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Current owner/authorized member and exact record scope."
+        ],
+        "processors": [
+          "Deterministic record/workflow adapters; approved selected inference only, never automatic mailbox export."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-093"
+      ]
+    },
+    {
+      "id": "connector-content",
+      "tables": [],
+      "scope": "owner",
+      "purpose": "Bounded external mailbox/calendar/CRM content and reviewed action receipts.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
+      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Current scoped consent and exact owner/member requested use."
+        ],
+        "processors": [
+          "Reviewed provider connector; confidential data requires a separately approved model route and minimization."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-056"
+      ]
+    },
+    {
+      "id": "chat-interaction-assertion",
+      "tables": [
+        "chat_interaction_checks",
+        "workspace_layout_checks"
+      ],
+      "scope": "platform",
+      "purpose": "Always-empty SQL assertion tables used to atomically reject stale Chat interaction or workspace layout state, feature inclusion, project ownership and revision checks.",
+      "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
+      "proposedRetention": "Remain empty in every deployment and restore.",
+      "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
+      "exportPolicy": "No data exists to export.",
+      "references": [
+        "schema/platform.sql",
+        "src/chat-interactions/store.ts",
+        "src/chat-interactions/continuation.ts",
+        "docs/chat-interactions.md",
+        "src/workspace-layout.ts",
+        "docs/workspace-views.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Internal SQL assertion mechanism; no customer data API"
+        ],
+        "processors": [
+          "Atomic admission predicates only"
+        ],
+        "remainingExposure": [
+          "The table must remain empty; a successful SQL assertion is not a reusable capability."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "chat-interactions",
+      "tables": [
+        "chat_conversations",
+        "chat_interaction_tasks",
+        "chat_interactions",
+        "chat_interaction_requests",
+        "chat_interaction_submissions",
+        "chat_interaction_continuations",
+        "chat_task_progress"
+      ],
+      "scope": "owner",
+      "purpose": "Issued maintained definitions, draft answers, immutable information submissions and separate admitted continuation receipts. Bounded submitted-task decision summaries and unresolved questions linked to the exact owner Chat result. Server-written creation locators bind an additional project to the originating task independently of untrusted model summaries.",
+      "currentRetention": "Owner-approved LC-10, deployed for the existing form storage: unsubmitted form payloads/defaults and drafts become unavailable seven days after the last saved edit (issuance when untouched); hourly maintenance erases up to 100 eligible payloads per pass. Explicit cancel erases its payload immediately. Minimal immutable identity/digest/request-hash metadata survives for replay protection. Submitted answers and unresolved continuations are excluded. Form authority expiry remains distinct from payload retention. Project and account deletion refuse pending/unknown continuations. The account guard runs before the parent user row disappears, so cascades cannot erase unresolved custody. After explicit reconciliation, project deletion cascades content but request tombstones remain until account removal. The current maintained form client expires local unsent answers after seven days since the last local edit, independently retains exact unresolved requests, and clears form recovery on detected account change/sign-out. A server-unavailable form clears its locally edited draft while preserving any unresolved request. Browser/query copies are excluded from PWA Cache Storage. Account-scoped project-intake records do not cascade with a selected project; immutable submitted selection UUIDs remain historical facts with no resource authority. Maintained writing-style submissions have no downstream continuation record. Current project selection, additional-project briefs and custom website-planning forms use the separately receipted model continuation; saving answers alone never dispatches it. Explicit user-requested correction successors carry earlier answers as user-provenance defaults and receive their own seven-day draft clock; predecessor retention is unchanged. Unavailable selected projects are omitted from new defaults, while original submitted facts remain immutable. Project-status card definitions retain only the maintained binding reference under the existing form policy. Read results are private/no-store, opened on demand, never persisted in sessionStorage, history or export and never sent to inference. The mounted query has zero inactive retention, is aborted/evicted on collapse/navigation, and uses the shared account/sign-out fence. Failed, denied or refreshing reads do not show cached project values. Current local recovery also preserves bounded finite numbers, booleans and unique string lists, including zero, false and empty lists. Incomplete numeric or local-time text stays in the same seven-day local draft, not a server submission; explicit request creation validates a separate typed snapshot. Unresolved exact typed requests retain their independent receipt lifetime and account/sign-out clearing. No extra storage class, model context or default is created. Shared resource option queries are also keyed by field and collection, hide earlier names while refreshing or after failure/denial, and retain metadata only while mounted with zero inactive retention. Recovery holds selected IDs only. The reusable photo option adapter introduces no persisted photo answer or runtime photo-form admission; its attachment-copy lifecycle remains a prerequisite for new issuance. Maintained photo upload handoffs reuse the current view envelope and seven-day untouched interaction retention. They store a fixed binding and owned project scope only, with no photo IDs, defaults, answers, bytes or automatic continuation. Only explicit cancel is admitted; it removes the interaction payload and retains its exact receipt. Original upload recovery belongs to the existing file-storage class and is independent of handoff expiry/discard. Current retained history explicitly identifies form versus view and never treats a handoff as evidence of upload or clearance. Current source stores append-only task progress with the immutable submission, task revision and Chat turn. It follows submitted interaction custody and cascades with its submission/task/account; project-scoped task memory also follows its project. Account-scoped additional-project creation locators deliberately survive project deletion. The immutable server-written created_project_id is unique per task and admitted only alongside that owned project and its actual private specification creation receipt. It grants no current resource access. Current reads and subsequent effects recheck ownership and feature admission; removal or transfer cannot cause the same task to recreate a project. Direct deletion of the creation progress record is refused while its task and owner remain. Account/task cascade removes the locator with its independent submitted-task custody. No seven-day draft erasure applies to submitted task memory. It is excluded from ordinary model context; current metadata exposes only task/project/submission IDs, declared purpose, state and question count. Explicit same-task continuation sends the summary/questions, validated submitted fields and current specification to one bounded follow-up. Failed/unknown work never overwrites the last successful state. Broader export/closure and restore suppression retain their roadmap owners. Composed gallery-photo answers/defaults and browser recovery contain opaque existing photo IDs only. LC-10 expiry/discard removes unsubmitted references without deleting the independent asset. Submitted IDs remain historical facts after photo removal and cannot authorize access; current lookups/continuations recheck ownership, digest and clearance. Allowed selected photo names/dimensions may enter existing inspection, model-request, reply, summary and independently approved website copies; those follow their existing retention rather than asset deletion automatically erasing them. Temporary owner-task views reuse the immutable Chat interaction envelope, same task correction links and seven-day issuance expiry/untouched payload retention. They store the current WorkspaceView selectors and fixed registered cards, never query results. Refresh does not extend retention. Explicit dismissal uses the existing cancel request, wipes the payload and retains the exact receipt; late readbacks cannot reopen it. View correction supersedes the earlier interaction in the same task and scope. No submission or continuation is admitted for a view.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Current scoped cancel and the fixed seven-day LC-10 maintenance predicate, enforced by schema constraints. Direct receipt deletion and submitted-payload erasure are refused. Account/project cascades are not a complete closure or independently restore-safe erasure workflow; broader LC policies and backup suppression remain open.",
+      "exportPolicy": "Current Chat v2 transcript export includes retained unsubmitted drafts with answer revision, saved/observed timestamps, alongside allowlisted titles, defaults, accepted answers, state and correction links. Ordinary history omits unsent draft values, including copied replacement defaults. Canceled/overdue payloads project only removal metadata, before and after physical cleanup. No active bindings, digests, actor scope, preview URLs or approval controls. Whole-account export remains separate.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md",
+        "src/chat-interactions/store.ts",
+        "src/chat-interactions/history.ts",
+        "src/chat-interactions/continuation.ts",
+        "docs/chat-interactions.md",
+        "src/chat-interactions/retention.ts",
+        "frontend/src/lib/interaction-recovery.ts",
+        "frontend/src/use-interaction-recovery.ts",
+        "frontend/src/chat-interaction.tsx",
+        "src/chat-interactions/maintained.ts",
+        "src/chat-interactions/submitted-context.ts",
+        "frontend/src/chat-resource-picker.tsx",
+        "src/chat-interactions/cards.ts",
+        "src/chat-interactions/card-shape.ts",
+        "frontend/src/chat-interaction-cards.tsx",
+        "frontend/src/chat-interaction-field.tsx",
+        "frontend/src/chat-date-time-field.tsx",
+        "frontend/src/lib/interaction-fields.ts",
+        "src/chat-interactions/resource-options.ts",
+        "src/chat-interactions/resource-shape.ts",
+        "src/chat-interactions/task-progress.ts",
+        "src/chat-interactions/task-context.ts",
+        "src/chat-interactions/selected-photos.ts",
+        "src/chat-interactions/view-definition.ts",
+        "src/chat-interactions/view-cards.ts",
+        "frontend/src/workspace-view-components.tsx",
+        "docs/workspace-views.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1",
+          "browser-download",
+          "browser-private-cache"
+        ],
+        "readers": [
+          "Current owner, project ownership and current identity on domain/HTTP/history/export reads; no public or visitor access."
+        ],
+        "processors": [
+          "Deterministic maintained and purpose-bound custom form builders, schema validation, fresh owned-project selection and the existing private preview compiler. Raw submission invokes no work; the custom Save and continue client explicitly dispatches the separately receipted owner-model continuation after submission. Explicit selected-field reads and same-task continuation revalidate ownership, feature, task, definition and submitted values; only eligible submitted fields and declared public-planning meanings enter the bounded provider request. Draft/default values remain excluded.",
+          "Explicit owner-task resumption selects exact current task/project/submission references. One same-task model follow-up receives minimized submitted fields, bounded summary/open questions and the current website specification; unrelated history/profile/projects are excluded. Memory is untrusted and grants no authority. Summaries may include submitted public-planning facts and owner follow-up details, so retain the existing inference privacy gate.",
+          "Temporary view issuance/correction composes only maintained WorkspaceView components under the owner task. Component reads share current feature/identity/project admission with saved pages, and revalidate interaction state after fetching. Rendering, refresh, dismissal and receipt recovery invoke no model. Historical view facts include only fixed title/summary and removal metadata, never live metrics or executable bindings."
+        ],
+        "remainingExposure": [
+          "Defaults and submitted text are private content readable by authorized platform processors and privileged operators. The maintained form client keeps edited answers, exact unresolved requests and collapse metadata in account-bound sessionStorage (whumpo.chat-forms.v1), with a seven-day local draft timeout, account-mismatch and sign-out clearing, and late-response fencing. Same-origin JavaScript and browser session restore can access or copy these readable records; unresolved requests have separate retention. Current read results are transient query data and are removed on navigation/reset or the server-reported draft cutoff. Native resource queries also use zero inactive retention and abort signals. No PWA cache, arbitrary question wording or arbitrary binding/destination is added; custom forms compose approved questions for declared public website purposes. Selected submitted-intake inspections may create existing Chat/agent-inspection/provider and independently admitted project copies, with existing inference disclosure and retention; current-turn relevance is model guidance rather than semantic server enforcement. Whole-account closure, submitted retention, attachment copies and independent restore suppression remain incomplete.",
+          "Temporary-view measurements use owner/interaction/digest/component-scoped transient browser query entries, removed on unmount/account reset and hidden during refresh, failure or pending dismissal. Exact unresolved cancellation is held in existing account-bound interaction recovery storage until read back; no automatic resend or provider call. No new storage table, credential copy or PWA cache is added."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Reuse managed-readable project/Chat protection, current workspace admission and bounded allowlisted projections; no additional customer unlock or copy of credentials.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "staging-releases",
+      "tables": [],
+      "scope": "project",
+      "purpose": "Private release candidates, environments and exact promotion receipts.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
+      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Current role/project/environment authority; no public preview by default."
+        ],
+        "processors": [
+          "Current compiler/release adapters with fresh exact approvals and eligibility; no restored approval replay."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-101"
+      ]
+    },
+    {
+      "id": "workspace-memberships",
+      "tables": [],
+      "scope": "mixed",
+      "purpose": "Membership, role and approval relationships between accounts and workspaces.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
+      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Current owner/member role-filtered views; accountless guests excluded."
+        ],
+        "processors": [
+          "Shared identity/inclusion admission with immediate revocation; no independent credential engine."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-054"
+      ]
+    },
+    {
+      "id": "job-outbox",
+      "tables": [],
+      "scope": "mixed",
+      "purpose": "Exact domain intent, actor/resource pins and durable delivery/recovery metadata. WH-052 supplies the shared decision; the first implementing domain registers its exact journal/outbox storage here, with later domains extending that same contract.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
+      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
+      "references": [
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md",
+        "docs/job-envelope.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Current domain actor or narrowly authorized platform obligation."
+        ],
+        "processors": [
+          "Fixed admitted deterministic adapter; no inherited owner model credentials, context or funding."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-018",
+        "WH-036",
+        "WH-069",
+        "WH-074"
+      ]
+    }
+  ],
+  "protectionContract": "docs/data-protection.md",
+  "protectionStatus": "decision-not-runtime-enforcement",
+  "protectionProfiles": [
+    {
+      "id": "managed-readable",
+      "applicationEncoding": "readable-records",
+      "providerAtRest": "Cloudflare-managed D1/R2 protection where those products store admitted records; not end-to-end encryption.",
+      "transit": "HTTPS for browser/provider APIs and protected Cloudflare bindings; local fixtures are isolated loopback. External destinations require the exact domain contract.",
+      "keyCustody": "Cloudflare manages storage encryption keys; Whumpo processors and privileged operators can read admitted fields.",
+      "serverReadable": true,
+      "endToEndEncrypted": false,
+      "customerUnlockRequired": false,
+      "recovery": {
+        "account": "Current signed-in/recovered identity can access only retained data under present ownership and policy; account recovery is not content reconstruction.",
+        "content": "Readable retained records require no customer content-unlock key. Deleted, expired or external copies are not reconstructed by passkeys.",
+        "backup": "D1 history is not a complete backup of R2, Worker secrets, independent suppressions or provider state. Whole-platform restore remains unaccepted.",
+        "rotation": "Provider-managed storage-key rotation is outside application control. Current schema/format only; obsolete testing data may be reset after unresolved obligations are accounted for.",
+        "missingKey": "No application content key for this profile; do not invent decryption or promise recovery when a required provider/service resource is unavailable.",
+        "restore": "Current schema and independent revocation/deletion/withdrawal evidence must be reconciled before serving or dispatch. Restored receipts create no authority."
+      },
+      "references": [
+        "docs/data-protection.md"
+      ]
+    },
+    {
+      "id": "identity-verifiers",
+      "applicationEncoding": "verifiers-and-public-material",
+      "providerAtRest": "Cloudflare-managed D1/R2 protection where those products store admitted records; not end-to-end encryption.",
+      "transit": "HTTPS for browser/provider APIs and protected Cloudflare bindings; local fixtures are isolated loopback. External destinations require the exact domain contract.",
+      "keyCustody": "Customer/device holds private passkey keys and any delivered recovery material. Whumpo stores verifiers/hashes plus readable ceremony metadata, not recoverable private keys. Owner recovery kits and visitor recovery codes use separate protocols.",
+      "serverReadable": true,
+      "endToEndEncrypted": false,
+      "customerUnlockRequired": false,
+      "recovery": {
+        "account": "Current signed-in/recovered identity can access only retained data under present ownership and policy; account recovery is not content reconstruction.",
+        "content": "Authentication verifiers cannot reconstruct bearer tokens, printed kit secrets or lost private passkey keys. Recovered authority is separate from content availability.",
+        "backup": "D1 history is not a complete backup of R2, Worker secrets, independent suppressions or provider state. Whole-platform restore remains unaccepted.",
+        "rotation": "Owner identity rotates kit generations and revokes epochs/credentials; separate visitor recovery rotates project-scoped codes. Never restore spent invitations, prior recovery authority or expired sessions.",
+        "missingKey": "Lost customer authentication keys use the explicit restricted recovery path if available; no secret can be recovered from its hash. Missing content keys remain missing.",
+        "restore": "Current schema and independent revocation/deletion/withdrawal evidence must be reconciled before serving or dispatch. Restored receipts create no authority."
+      },
+      "references": [
+        "docs/data-protection.md"
+      ]
+    },
+    {
+      "id": "provider-vault",
+      "applicationEncoding": "mixed-aead-and-metadata",
+      "providerAtRest": "Cloudflare-managed D1/R2 protection where those products store admitted records; not end-to-end encryption.",
+      "transit": "HTTPS for browser/provider APIs and protected Cloudflare bindings; local fixtures are isolated loopback. External destinations require the exact domain contract.",
+      "keyCustody": "Current source uses CONNECTION_ENCRYPTION_KEYRING as a Worker secret with explicit retained key IDs. Selected token/PKCE fields use AES-GCM; surrounding status, owner, scope and destination metadata stays readable. Child WH-117D must accept the deployed binding/current-format cutover.",
+      "serverReadable": true,
+      "endToEndEncrypted": false,
+      "customerUnlockRequired": false,
+      "recovery": {
+        "account": "Current signed-in/recovered identity can access only retained data under present ownership and policy; account recovery is not content reconstruction.",
+        "content": "Authorized provider adapter can decrypt only the exact owner/provider/purpose/record context using the platform-held key; recovery kit does not reconstruct it.",
+        "backup": "Data backups do not contain the Worker key. DP-03/04 require separately protected current key custody and matching key IDs for every admitted restore source.",
+        "rotation": "Current source has authenticated wv2 key IDs, immutable material identity, atomic forward-only write fencing, durable OAuth exchange holds and bounded CAS rotation/readback. SQLite/local D1 acceptance is recorded in the key-lifecycle contract. Independent restore/custody and coordinated deployment remain WH-117C/D; live zero-reference counts never authorize key retirement.",
+        "missingKey": "Unseal/configuration fails; retained encrypted revocation obligations must stay visible. Do not reconnect, mark remote revocation complete, or use plaintext automatically.",
+        "restore": "Current schema and independent revocation/deletion/withdrawal evidence must be reconciled before serving or dispatch. Restored receipts create no authority."
+      },
+      "references": [
+        "docs/data-protection.md",
+        "docs/connection-key-lifecycle.md"
+      ]
+    },
+    {
+      "id": "planned-adapter",
+      "applicationEncoding": "not-admitted",
+      "providerAtRest": "Cloudflare-managed D1/R2 protection where those products store admitted records; not end-to-end encryption.",
+      "transit": "HTTPS for browser/provider APIs and protected Cloudflare bindings; local fixtures are isolated loopback. External destinations require the exact domain contract.",
+      "keyCustody": "No current storage or key custody is implemented by this reservation. The named feature packet must register its exact reader, processor, storage and key evidence.",
+      "serverReadable": true,
+      "endToEndEncrypted": false,
+      "customerUnlockRequired": false,
+      "recovery": {
+        "account": "Current signed-in/recovered identity can access only retained data under present ownership and policy; account recovery is not content reconstruction.",
+        "content": "Planned data has no current recovery/export implementation; use the feature contract before admission.",
+        "backup": "D1 history is not a complete backup of R2, Worker secrets, independent suppressions or provider state. Whole-platform restore remains unaccepted.",
+        "rotation": "No key or data-format transition is activated. Implement only the current encoding with approved rotation/reset evidence.",
+        "missingKey": "Future adapter must refuse missing required keys; this reservation supplies no decryption authority.",
+        "restore": "Current schema and independent revocation/deletion/withdrawal evidence must be reconciled before serving or dispatch. Restored receipts create no authority."
+      },
+      "references": [
+        "docs/data-protection.md"
+      ]
+    }
+  ],
+  "protectionRequirements": [
+    {
+      "id": "DP-01",
+      "title": "Current credential key lifecycle",
+      "status": "required-wh117",
+      "references": [
+        "docs/data-protection.md",
+        "src/connection-vault.ts",
+        "src/github-connection.ts",
+        "src/cloudflare-connection.ts"
+      ]
+    },
+    {
+      "id": "DP-02",
+      "title": "Processing, export and diagnostic boundaries",
+      "status": "required-wh117",
+      "references": [
+        "docs/data-protection.md",
+        "docs/inference-privacy.md",
+        "src/profile.ts",
+        "src/agent-inspection.ts"
+      ]
+    },
+    {
+      "id": "DP-03",
+      "title": "Isolated current restore admission",
+      "status": "required-wh117",
+      "references": [
+        "docs/data-protection.md",
+        "docs/releases.md",
+        "docs/account-closure.md",
+        "docs/restore-admission.md",
+        "tools/restore-admission.mjs",
+        "tests/restore-admission.mjs"
+      ]
+    },
+    {
+      "id": "DP-04",
+      "title": "Key and artifact custody evidence",
+      "status": "required-wh117",
+      "references": [
+        "docs/data-protection.md",
+        "tools/prepare-release.mjs"
+      ]
+    },
+    {
+      "id": "DP-05",
+      "title": "Catalogue drift gate",
+      "status": "metadata-implemented",
+      "references": [
+        "docs/data-protection.md",
+        "tools/lifecycle-catalog.mjs",
+        "tests/lifecycle-catalog.mjs"
+      ]
     }
   ]
 }

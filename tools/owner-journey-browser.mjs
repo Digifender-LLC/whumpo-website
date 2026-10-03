@@ -1,23 +1,21 @@
 // Explicit local acceptance: actual handlers and disposable D1, scripted inference only.
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile,writeFile,mkdir} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
 import {createInterface} from 'node:readline';
 import {resolve,sep} from 'node:path';
 import {build} from 'esbuild';
-import wrangler from 'wrangler';
+import {databaseFixture} from '../tests/helpers/current-database.mjs';
+import {workspaceFixture} from '../tests/helpers/workspace-identity.mjs';
 const dir=await mkdtemp('/tmp/whumpo-owner-journey-'),origin='http://localhost:8175',root=resolve('dist');
-const originalFetch=globalThis.fetch,background=[],requests=[];let proxy,server,input,finish;
+const originalFetch=globalThis.fetch,background=[],requests=[];let fixture,server,input,finish;
 const finished=new Promise(resolve=>{finish=resolve;});let lose='',providerCalls=0,ackCalls=0,earlyWorkspaceReads=0;
 try{
- const b=await build({stdin:{contents:"export {default as platform} from './src/index';export {hashToken} from './src/security';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
- const {platform,hashToken}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
- execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply','tellumo-control','--local','--persist-to',dir],{stdio:'pipe',maxBuffer:16*1024*1024});
- proxy=await wrangler.getPlatformProxy({persist:{path:dir+'/v3'},remoteBindings:false});const db=proxy.env.DB,user=crypto.randomUUID(),token=(crypto.randomUUID()+crypto.randomUUID()).replaceAll('-',''),now=new Date().toISOString();
- await db.prepare("INSERT INTO users VALUES(?,?,'00','passkey-only',?)").bind(user,'owner-journey@example.invalid',now).run();
- await db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').bind(await hashToken(token),user,new Date(Date.now()+3600000).toISOString(),now).run();
- const env={DB:db,FILES:proxy.env.FILES,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_PROTOCOL:'responses',AI_API_KEY:'synthetic-only-no-real-credential'},ctx={waitUntil:p=>background.push(p)};
+ const b=await build({stdin:{contents:"export {default as platform} from './src/index';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+ const {platform}=m;
+ fixture=await databaseFixture({d1:true,r2:true});const db=fixture.db,authority=await workspaceFixture(db,m),user=authority.account,token=authority.token;
+ const env={DB:db,FILES:fixture.env.FILES,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_PROTOCOL:'responses',AI_API_KEY:'synthetic-only-no-real-credential'},ctx={waitUntil:p=>background.push(p)};
  globalThis.fetch=async(url,init)=>{
   assert.equal(String(url),'https://opencode.ai/zen/go/v1/responses','External request refused');const body=JSON.parse(init.body),ack=body.max_output_tokens===256;let action;
   assert.ok(!init.body.includes('PRIVATE_BIO_FIXTURE'));
@@ -39,7 +37,7 @@ try{
   }
   if(url.pathname.startsWith('/_fixture/')&&req.method==='POST'){
    const action=url.pathname.split('/').at(-1);
-   if(action==='start'){res.writeHead(303,{'set-cookie':'tellumo_session='+token+'; HttpOnly; SameSite=Lax; Path=/','location':'/workspace'}).end();return;}
+   if(action==='start'){res.writeHead(303,{'set-cookie':'__Host-whumpo_session='+token+'; Secure; HttpOnly; SameSite=Lax; Path=/','location':'/workspace'}).end();return;}
    if(['lose-profile','lose-welcome','lose-completion'].includes(action))lose=action.slice(5);
    else if(action==='finish'){res.writeHead(200,{'content-type':'text/plain'}).end('Checking disposable evidence.');finish();return;}
    else{res.writeHead(404).end();return;}
@@ -74,4 +72,4 @@ try{
  assert.equal(requests.filter(r=>r.path==='/api/chat/actions').length,1);assert.equal(requests.find(r=>r.path==='/api/chat/actions').action.type,'specificationApply');
  await mkdir('.secrets',{recursive:true});await writeFile('.secrets/owner-journey-browser.json',JSON.stringify({checkedAt:new Date().toISOString(),scope:'Actual local platform handlers and disposable D1; scripted inference, synthetic signed-in account; no real authentication ceremony/customer publication',earlyWorkspaceReads,projects:1,versions:2,providerCalls,ackCalls,requests},null,2),{mode:0o600});
  console.log('Owner journey passed: welcome recovery, one private project, two private versions, four scripted calls, fresh/expired reviews, no publication or early workspace reads.');
-}finally{input?.close();if(server?.listening)await new Promise(done=>server.close(done));await Promise.allSettled(background);globalThis.fetch=originalFetch;await proxy?.dispose();await rm(dir,{recursive:true,force:true});}
+}finally{input?.close();if(server?.listening)await new Promise(done=>server.close(done));await Promise.allSettled(background);globalThis.fetch=originalFetch;await fixture?.close();await rm(dir,{recursive:true,force:true});}

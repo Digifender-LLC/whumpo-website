@@ -2,9 +2,9 @@ import {hashToken} from './security';
 import {describeBackendPublication,readBackendPublicationReview,readBackendPublication} from './backend-publication';
 import {describeBackendForm,readBackendFormReview} from './backend-forms';
 type Turn=Record<string,unknown>;
-type Kind='application'|'appPage'|'appRestore'|'backendPublication'|'backendForm';
+type Kind='githubGrant'|'application'|'appPage'|'appRestore'|'backendPublication'|'backendForm';
 type Receipt={kind:Kind;review_id:string};
-const prefixes:Record<string,Kind>={'Application review':'application','Application page review':'appPage','Application data restore review':'appRestore','Backend publish review':'backendPublication','Backend unpublish review':'backendPublication','Website tool review':'backendForm'};
+const prefixes:Record<string,Kind>={'GitHub access review':'githubGrant','Application review':'application','Application page review':'appPage','Application data restore review':'appRestore','Backend publish review':'backendPublication','Backend unpublish review':'backendPublication','Website tool review':'backendForm'};
 /** Call only with a validated handler's reply, never a model's answer. */
 export async function linkChatReviewReply(db:D1Database,user:string,turn:string,reply:string){
  const match=/^(.+ review) ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\n/.exec(reply);

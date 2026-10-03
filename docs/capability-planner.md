@@ -2,9 +2,17 @@
 
 **WH-065 — September 30, 2026. Implemented and deployed to test; verification scope is recorded below.** [Execution issue](https://github.com/zemdregon/whumpo/issues/13). This implements the discovery/planning layer after the [WH-064 specification decision](project-specification.md). Whole-project specification persistence, compilation and module runtime services remain WH-066–069. A catalog entry describes a contract, not an installed customer service.
 
+## Current account verification — October 2, 2026
+
+The planner and inspection fixtures now initialize the complete current schema and use admitted owner scopes from the same bundle as the domain handlers. Prepared draft statements commit through that same scope. Current D1 tests verify missing/foreign/stale/expired plans, exact replay, lost acknowledgment and atomic source/provenance/activity rollback after an intervening backend change. The supported website fixture makes two synthetic model calls, passes a 1,433-byte relevant lookup and generates no backend source. The private library application path remains separately verified through actual QuickJS.
+
+[Verification](verification.md#reusable-components-application-builds-and-bounded-planning) distinguishes synthetic inference from real runtime execution. Current application build/page-design checks pass; their optional live provider branches were not run. These tests add no provider activation or shared customer-source retrieval, and they do not complete the pending remote identity cutover.
+
 ## Owner experience
 
 Chat remains natural language. The agent first uses existing content/theme edits, deterministic diagnostics, shared contact/directory services or exact library helpers where they fit. It can request a capability plan for one to four needs and receive only those contracts and their dependencies in the existing bounded lookup continuation. The plan is a private receipt; it changes no website, setting, permission or service.
+
+**October 2 source addition:** `chat.content-brief` depends on `site.content` and exposes the maintained owner Chat text form with one to eight current content targets. Prefer an ordinary question for a simple missing detail. Whumpo supplies field labels/defaults; the agent can request, read metadata or propose a replacement set of fields on the same task/project. It cannot author questions, submit answers or approve a review. Issuance commits with the Chat result; deterministic preview preparation, private saving and publication retain separate steps. The [first handoff](chat-interactions.md#maintained-agent-handoff--october-2-2026-utc) is locally verified with scripted inference, not deployed or accepted for custom forms, visitor intake or real-model quality.
 
 An ordinary landscaping site can use the existing page renderer and contact service. A matching private task list can use the pinned `private-task-list@1` artifact without generating source. Adding a display field to an existing tested function uses the existing form review. Adding a persisted field to a general record schema, staff file access or staff notification rules is explicitly **unavailable** until the relevant module implementation exists. An appointment request must not be described as a complete booking engine.
 

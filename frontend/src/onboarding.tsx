@@ -1,7 +1,7 @@
+import {AccountHelp} from './account-help';
 import {SubscriptionPanel} from './subscription-panel';
-import {clearChatRecovery} from './lib/chat-recovery';
 import {saveWelcomeProfile,saveWelcomeProgress,finishWelcome,type WelcomeDraft as Draft,type Welcome} from './lib/welcome-delivery';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
 import {ArrowLeft,ArrowRight,Check,Sparkles} from 'lucide-react';
@@ -12,28 +12,39 @@ import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';
 import {Label} from './components/ui/label';
 import {ProfilePicturePicker,profilePicture,avatarChoices} from './profile-picture-picker';
-import {welcomePrompts,welcomeStage,firstWelcomePrompt,type WelcomePrompt} from '../../src/welcome-prompts';
+import {welcomePrompts,welcomeStage,type WelcomePrompt} from '../../src/welcome-prompts';
 const themes=[['ocean','Fresh & bright','#60B5FF'],['clay','Warm & cozy','#e7ab89'],['forest','Calm & natural','#78b9a1']] as const;
 export function Onboarding({profile}:{profile:Profile}){
  const state=useQuery({queryKey:['onboarding'],queryFn:()=>api<Welcome>('/onboarding')});
- if(state.isPending)return <main className="min-h-dvh grid place-items-center"><p role="status">Getting your welcome ready…</p></main>;
- if(state.error)return <main className="page-pad space-y-4"><h1 className="text-2xl font-bold">Let’s pick up where you left off.</h1><p role="alert">{message(state.error)}</p><Button onClick={()=>void state.refetch()}>Try again</Button></main>;
- if(state.data?.complete)return <main className="min-h-dvh grid place-items-center"><Button onClick={()=>void queryClient.invalidateQueries({queryKey:['session']})}>Open your workspace</Button></main>;
+ if(state.isPending)return <main className="min-h-dvh grid place-content-center justify-items-center gap-5"><p role="status">Getting your welcome ready…</p><AccountHelp/></main>;
+ if(state.error)return <main className="page-pad space-y-4"><h1 className="text-2xl font-bold">Let’s pick up where you left off.</h1><p role="alert">{message(state.error)}</p><div className="flex flex-wrap gap-3"><Button onClick={()=>void state.refetch()}>Try again</Button><AccountHelp/></div></main>;
+ if(state.data?.complete)return <main className="min-h-dvh grid place-content-center justify-items-center gap-5"><Button onClick={()=>void queryClient.invalidateQueries({queryKey:['session']})}>Open your workspace</Button><AccountHelp/></main>;
  return <WelcomeConversation profile={profile} initial={state.data!.state!}/>;
 }
 function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  const [draft,setDraft]=useState(initial),[name,setName]=useState(profile.name),[bio,setBio]=useState(profile.about_me),[share,setShare]=useState(!!profile.share_context),[busy,setBusy]=useState(false),[photoBusy,setPhotoBusy]=useState(false),[error,setError]=useState(''),[returnToReview,setReturnToReview]=useState(false);
- const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),mounted=useRef(false),lock=useRef(false),errorPanel=useRef<HTMLDivElement>(null);
- const prompt=draft.prompt??firstWelcomePrompt(draft.stage),index=welcomePrompts.indexOf(prompt),chapter=['profile','project','review'].indexOf(welcomeStage(prompt)),waiting=busy||photoBusy;
- useEffect(()=>{if(mounted.current){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'center',behavior:'instant'});}mounted.current=true;},[prompt]);
- useEffect(()=>{if(error){const panel=errorPanel.current;if(panel&&(document.activeElement===document.body||panel.closest('form')?.contains(document.activeElement)))panel.focus();}},[error]);
+ const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),lock=useRef(false),errorPanel=useRef<HTMLDivElement>(null);
+ const actionFocus=useRef<{origin:Element|null;moved:boolean}|null>(null);
+ const mayFocus=()=>{const focus=actionFocus.current;return focus?!focus.moved&&(document.activeElement===focus.origin||document.activeElement===document.body):document.activeElement===document.body;};
+ const prompt=draft.prompt,index=welcomePrompts.indexOf(prompt),chapter=['profile','project','review'].indexOf(welcomeStage(prompt)),waiting=busy||photoBusy;
+ useLayoutEffect(()=>{if(mayFocus()){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'center',behavior:'instant'});}},[prompt]);
+ useLayoutEffect(()=>{if(error&&mayFocus())errorPanel.current?.focus();},[error]);
  async function persist(nextPrompt:WelcomePrompt){
   const input={revision:draft.revision,stage:welcomeStage(nextPrompt),prompt:nextPrompt,project_name:draft.project_name,idea:draft.idea,audience:draft.audience,preferred_theme:draft.preferred_theme};
   const next=await saveWelcomeProgress(input,()=>send<Welcome>('/onboarding',input,'PUT'),()=>api<Welcome>('/onboarding'));
   if(next.complete){await queryClient.invalidateQueries({queryKey:['session']});return;}
   if(next.state)setDraft(next.state);
  }
- async function action(work:()=>Promise<void>){if(lock.current||photoBusy)return;lock.current=true;setBusy(true);setError('');try{await work();}catch(e){setError(message(e));}finally{lock.current=false;setBusy(false);}}
+ async function action(work:()=>Promise<void>){
+  if(lock.current||photoBusy)return;
+  const focus={origin:document.activeElement,moved:false};actionFocus.current=focus;
+  const observe=(event:FocusEvent)=>{if(event.target!==focus.origin&&event.target!==document.body)focus.moved=true;};
+  document.addEventListener('focusin',observe);lock.current=true;setBusy(true);setError('');
+  try{await work();}catch(e){setError(message(e));}finally{
+   lock.current=false;setBusy(false);
+   requestAnimationFrame(()=>{document.removeEventListener('focusin',observe);if(actionFocus.current===focus)actionFocus.current=null;});
+  }
+ }
  async function proceed(){await action(async()=>{
   if(prompt==='name'){
    if(!name.trim())throw Error('What should we call you?');
@@ -65,7 +76,7 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  const optional=prompt==='bio'||prompt==='audience'||prompt==='style';
  const nextLabel=prompt==='review'?'Start my project':returnToReview?'Save and review':prompt==='picture'?'Use this picture':prompt==='bio'&&!bio.trim()||prompt==='audience'&&!draft.audience.trim()?'Skip for now':prompt==='style'?'Use this starting feel':'Continue';
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-xl">
-  <div className="flex items-center justify-between gap-4"><Brand/><Button variant="ghost" className="min-h-11" disabled={waiting} onClick={()=>void action(async()=>{await send('/auth/logout');clearChatRecovery();queryClient.clear();location.assign('/workspace');})}>Sign out</Button></div>
+  <div className="flex items-center justify-between flex-wrap gap-2"><Brand/><AccountHelp/></div>
   <ol aria-label="Welcome progress" className="mt-8 mb-6 flex gap-3">{['About you','Your first idea','Ready to begin'].map((label,i)=><li key={label} aria-current={chapter===i?'step':undefined} className="flex-1"><div className={'h-1.5 rounded-full mb-2 '+(i<=chapter?'bg-primary':'bg-muted')}/><span className={'text-xs '+(i===chapter?'font-semibold':'text-muted-foreground')}>{label}</span></li>)}</ol>
   <p className="text-xs text-muted-foreground mb-6">Guided welcome · no AI usage · answers save when you continue</p>
   {answered.length>0&&prompt!=='review'&&<details key={'answers-'+prompt} className="mb-6 rounded-2xl border bg-card px-4"><summary className="cursor-pointer py-3 text-sm font-medium min-h-11">Your answers so far <span className="text-muted-foreground">({answered.length})</span></summary><dl className="pb-3 space-y-3">{answered.map(row=><div key={row.prompt} className="flex items-start justify-between gap-3"><div className="min-w-0"><dt className="text-xs text-muted-foreground">{row.label}</dt><dd className="text-sm whitespace-pre-wrap break-words line-clamp-3">{row.value}</dd></div><Button type="button" variant="ghost" className="min-h-11 shrink-0" disabled={waiting} onClick={()=>go(row.prompt)} aria-label={'Edit '+row.label.toLowerCase()}>Edit</Button></div>)}</dl></details>}

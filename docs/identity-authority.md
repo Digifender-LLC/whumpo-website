@@ -1,10 +1,12 @@
 # Current identity authority foundation
 
-**WH-114A / [#70](https://github.com/zemdregon/whumpo/issues/70), October 1, 2026. Source implementation in isolation; not activated or deployed.** Parent [WH-114 #68](https://github.com/zemdregon/whumpo/issues/68) and [WH-115 #69](https://github.com/zemdregon/whumpo/issues/69) remain open. This implements the shared authority part of the [accepted identity protocol](workspace-identity.md), without a password reader, old-session adapter or parallel runtime policy.
+**WH-114A / [#70](https://github.com/zemdregon/whumpo/issues/70), October 1, 2026. Current source deployed to the private test platform October 2, 2026.** Parent [WH-114 #68](https://github.com/zemdregon/whumpo/issues/68) and [WH-115 #69](https://github.com/zemdregon/whumpo/issues/69) remain open. This implements the shared authority part of the [accepted identity protocol](workspace-identity.md), without a password reader, old-session adapter or parallel runtime policy.
+
+[Final release and retirement evidence](identity-web.md#deployed-current-identity-and-retirement--october-2-2026) records exact live verification. Earlier dated/local evidence below does not establish physical-device or human recovery acceptance.
 
 ## Implemented contract
 
-[schema.sql](../src/workspace-identity/schema.sql) defines the five authority tables below; [verified ceremonies](identity-ceremonies.md) now extend it with challenge/receipt tables and a current-key candidate view; [shared kits and enrollment completion](identity-kits.md) add current offers and terminal effect receipts. It sits outside `migrations/` until enrollment and recovery are complete and the reviewed test reset is ready. Its owner reference is canonical `users(id)`. It does not inspect password fields or existing session, passkey or recovery-code tables. Merely applying this SQL is not an authentication cutover.
+[schema.sql](../src/workspace-identity/schema.sql) defines the five authority tables below; [verified ceremonies](identity-ceremonies.md) now extend it with challenge/receipt tables and a current-key candidate view; [shared kits and enrollment completion](identity-kits.md) add current offers and terminal effect receipts. It is assembled into the deployed complete schema by `tools/current-schema.mjs`. Its owner reference is canonical `users(id)`. It does not inspect password fields or existing session, passkey or recovery-code tables. Merely applying this SQL is not an authentication cutover.
 
 | Records | Current invariant |
 | --- | --- |
@@ -28,11 +30,11 @@ The predicate proves identity only. Callers must also check current resource own
 
 Use the predicate in a conditional write, check the affected row or read the uniquely claimed effect receipt, and gate all dependent writes on that claim. A zero-row conditional write does not automatically abort a batch. Do not assert identity once and then run unconditional effects. Where a successful effect advances its own revision/epoch, subsequent statements must follow the unique winning receipt instead of reusing a now-stale admission predicate. [D1 batches](https://developers.cloudflare.com/d1/worker-api/d1-database/) run sequentially and roll back on statement failure; local SQL and a remote provider effect are not one distributed transaction.
 
-This foundation has no authority issuance API that accepts `verified: true`. [WH-114B #71](https://github.com/zemdregon/whumpo/issues/71) now implements [cryptographic ceremonies](identity-ceremonies.md), one-use challenges, invitation consumption and guarded session/grant issuance using the maintained verifier. Kit-bound completion and connected acceptance remain open. Authority-test fixture inserts remain synthetic database state; ceremony tests separately exercise real signature verification. Neither proves physical-device acceptance or complete enrollment.
+This foundation has no authority issuance API that accepts `verified: true`. [Cryptographic ceremonies](identity-ceremonies.md) implement one-use challenges, invitation consumption and guarded issuance. [Kit completion](identity-kits.md) and [restricted recovery](identity-recovery.md) are connected through the deployed platform adapter. Authority fixture inserts are synthetic state; ceremony suites separately verify real signatures and physical-device acceptance remains open.
 
 ## Lifecycle handoff
 
-The five tables are not in the active schema inventory yet. The current 149-table/32-class platform inventory and its deployed state are unchanged by this isolated foundation. Register the complete identity schema in lifecycle classification/export/deletion and maintenance at [WH-114C #72](https://github.com/zemdregon/whumpo/issues/72), before activation.
+The complete current identity schema is registered in the 156-table/37-class platform lifecycle inventory and deployed through the current-schema cutover. Account export/redaction/deletion and bounded maintenance use those classifications. See [integration evidence](identity-web.md).
 
 | Data | Prospective lifecycle requirement |
 | --- | --- |

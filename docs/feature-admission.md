@@ -1,6 +1,6 @@
 # Current connection eligibility adapters
 
-**WH-090B / [#64](https://github.com/zemdregon/whumpo/issues/64), October 1, 2026. Source implementation; not deployed.** This implements inclusion at the existing GitHub and Cloudflare owner handlers. The complete principal contract and composed acceptance remain open under WH-114/115, #64 and [#65](https://github.com/zemdregon/whumpo/issues/65).
+**WH-090B / [#64](https://github.com/zemdregon/whumpo/issues/64). Shared identity integration deployed and verified October 2, 2026 (UTC).** Current GitHub/Cloudflare owner handlers compose feature inclusion with the shared workspace principal. [Packet C / #65](https://github.com/zemdregon/whumpo/issues/65) and [feature acceptance](feature-acceptance.md) record composed local and test-platform evidence; future collaboration/provider adapters retain their own delivery gates.
 
 ## Current entrypoints
 
@@ -37,26 +37,18 @@ Confirmation of an unsent review always follows the normal confirm/dispatch chec
 
 Settings and Chat distinguish saved consent from current inclusion. Cached repository discovery is hidden when read inclusion is lost. History, disconnect and uncertain-outcome checks remain available while ordinary connection actions are disabled. Planned providers remain unimplemented, and neither a connection nor an included feature implies provider health, publication or commercial acceptance.
 
-## Identity handoff and remaining acceptance
+## Current identity admission
 
-Current HTTP authentication still uses `currentUser`/`recentSession`; Chat still uses its existing owned durable turn claim. These adapters do not implement the [restricted identity principal](workspace-identity.md), account authority epochs, incomplete-identity admission or new membership roles. User IDs passed to domain functions remain server-owned identity inputs, not accepted client or model authority. Inclusion checks are not proof that a session remains current.
+HTTP resolves the current `__Host-whumpo_session` with `workspaceIdentity`, then passes one `admitWorkspace` database scope to the domain handlers and Chat. A module-private capability binds account, purpose, session, credential and authority epoch to that database. A copied object, raw database, foreign account or restricted enrollment/recovery grant cannot supply workspace authority.
 
-**#64 stays open:** WH-114/115 must supply the shared principal at final admission and provider boundaries, followed by direct/Chat/future-job tests for session/grant revocation, incomplete identity, restricted purpose and membership changes. Do not add an alternative authentication engine here. This is the remaining runtime handoff required before #65's composed test release and before claiming complete WH-090 authorization.
+Every scoped database statement shares its actual transaction with the current identity assertion. The feature predicate additionally checks identity at the local effect admission point. Session revocation, account epoch changes, removed credentials, expired sessions and loss of current feature inclusion stop unsent work. OAuth start also requires a fresh passkey proof; starting a new request cannot refresh an old proof.
 
-No remote grant, schema application, provider activation, real-money billing or customer publication occurred in this implementation. CSAM, Daybreak and CMS functional testing remain deferred.
+Provider access checks the same workspace and current feature/credential before transport and revalidates returned data. If a requested OAuth exchange finishes after session loss, the exact cleanup-custody capability can retain its returned token for revocation. It cannot activate that token or read provider data. Scheduled credential cleanup remains narrowly scoped maintenance and does not obtain an owner workspace capability. The outer HTTP response also fences identity changes after asynchronous work.
+
+[Composed tests](feature-acceptance.md) cover signed enrollment and recovery with Business, Business Pro and exact preview grants, along with held-session, epoch, credential, expiry and commit races. Collaboration roles and new business-job adapters are still planned; their implementing packets must supply current membership and principal evidence. Physical authenticator and human recovery acceptance remain with the identity workstream.
 
 ## Verification
 
 `tests/feature-admission.mjs` runs actual handlers against disposable SQLite or local D1 (`--d1`). It covers denied tiers through direct/HTTP/Chat paths, exact grants, revoked OAuth activation, atomic start/dispatch races, invalidated provider responses, independent prepare/confirm/dispatch permissions and exact read-only recovery after eligibility loss. `tests/connection-history-ui.mjs` checks the rendered connection panel after disconnection and after lost inclusion.
 
-Existing provider suites retain their original behavioral checks and now seed explicit current Business invoice coverage for success cases. They test provider transport using synthetic credentials/responses; they do not prove real provider acceptance or the future identity protocol. Detailed passing results and any remaining verification are recorded on #64.
-
-### Local results, October 1, 2026
-
-- Feature admission: 32 refusal cases plus positive and recovery journeys passed on SQLite and local D1. The D1 fixture applies the complete current schema to a disposable local database.
-- GitHub connection, GitHub backups, backup Chat and all 13 GitHub token-lifecycle cases passed.
-- Cloudflare connection, TXT/DNS Chat, CNAME routing and DNS agent suites passed. Two stale text assertions were updated to the current natural-language responses; runtime commands were not restored.
-- Connection status Chat, rendered history/eligibility UI and the 728-decision inclusion regression passed.
-- Type checks, build, roadmap validation/alignment/render verification and whitespace checks passed.
-
-All provider/model responses in these suites are synthetic. No real provider request, remote grant or deployment was part of this verification. Principal/session-epoch acceptance remains pending as described above.
+Existing provider suites seed explicit current Business invoice coverage and synthetic provider credentials/responses. The inclusion interface suite supplies the full current tier/catalogue/operation matrix; the composed identity suite proves that included connections cannot elevate a restricted or revoked actor. The retention suite exercises real interval expiry and preserved public/private read paths. Exact commands, counts, deployment identifiers, cleanup and limits are in [feature acceptance](feature-acceptance.md).

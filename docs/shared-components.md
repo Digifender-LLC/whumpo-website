@@ -4,6 +4,14 @@ Current planning interface: the [versioned capability planner](capability-planne
 
 The [specification compiler](project-specification-compiler.md) now adds a locally verified content compilation library, pinned artifact identities and a build gate. The mounted current adapter creates schema-2 private drafts directly and saves later changes through exact owner reviews; see [storage](project-specification-storage.md).
 
+## Current identity verification — October 2, 2026
+
+Library, nomination, application-build and planner checks now use the complete current schema and admitted owner authority. Actual isolated QuickJS verifies the platform-authored artifact examples and bounded task-list behavior; copying records immutable provenance in a private owned version. A library build still needs its synthetic check and separate owner approval. A supported website plan uses existing components with zero generated backend source in the connected synthetic fixture.
+
+Nomination records still grant only maintainer review of an exact version. Consent and withdrawal are operator-managed until a dedicated owner review control exists; historical slash-command examples below do not expose customer controls. Current tests verify expiry, terminal withdrawal, lost-write readback, quota and owner isolation, source-free replies and no model nomination authority. Screening, license approval and separate synthetic candidate publication remain required before reuse of customer-origin code. No catalog promotion or source sharing occurs here.
+
+[Verification](verification.md#reusable-components-application-builds-and-bounded-planning) records all seven commands and synthetic/runtime limits. The live model harness was updated but not run. Remote identity cutover and physical-device acceptance remain separate.
+
 ## Decision
 
 Whumpo assembles the first site from reviewed, versioned components before asking a model to generate new code. A sign-in flow, contact form or pricing page should normally select an existing component and fill validated configuration. AI handles layout composition, requirements that are not covered, and later customization.

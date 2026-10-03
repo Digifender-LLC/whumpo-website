@@ -1,7 +1,7 @@
 import {noteSourceExport} from './fair-use-observation';
 import {requireSpecificationAvailable} from './specification-safety';
 import { versionPhotos, type PhotoAsset } from './photo-versions';
-import { FileError } from './files';
+import {FileError} from './photo-format';
 import { strToU8, zipSync } from 'fflate';
 import { siteConfig, photoConfig, previewHeaders } from './components';
 import { hashToken } from './security';
