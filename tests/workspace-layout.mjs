@@ -93,11 +93,14 @@ try{
   }
  });
  await test('removing a stale page remains possible; undo cannot restore its lost project authority',async()=>{
-  const o=await owner(),other=await owner();await apply(o,change('createPage',0,{page:page(o)}));
-  await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,o.project);
-  const removed=await apply(o,change('removePage',1,{pageId:'tab-garden'}));
-  await assert.rejects(apply(o,change('undo',2,{receiptId:removed.requestId})),{code:'project_missing'});
-  assert.deepEqual((await m.readLayout(o.scope,o.user)).layout.tabs,[]);
+  for(const loss of ['transfer','delete']){
+   const o=await owner(),other=await owner();await apply(o,change('createPage',0,{page:page(o)}));
+   if(loss==='transfer')await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,o.project);
+   else await run('DELETE FROM projects WHERE id=?',o.project);
+   const removed=await apply(o,change('removePage',1,{pageId:'tab-garden'}));
+   await assert.rejects(apply(o,change('undo',2,{receiptId:removed.requestId})),{code:'project_missing'});
+   assert.deepEqual((await m.readLayout(o.scope,o.user)).layout.tabs,[]);
+  }
  });
  await test('agent preparation performs no layout writes; a failed final Chat transaction saves nothing',async()=>{
   const o=await owner(),turnId=await turn(o),action={kind:'workspace',version:1,operation:'createPage',expectedRevision:0,page:page(o)};

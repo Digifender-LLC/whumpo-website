@@ -3544,7 +3544,7 @@ Dashboards and custom views are supporting surfaces the agent builds around the 
 ### Verification
 
 - Extend tests/workspace-dashboard.mjs with shared bindings, stale revisions, isolation, restore and zero-inference rendering cases
-- Run pnpm check and connected Chat-to-view-to-Chat browser fixtures through the quality manager; inspect narrow-screen images
+- Run pnpm check and the maintained connected Chat-to-view-to-Chat browser fixtures against the actual Worker and disposable current D1; inspect narrow-screen images
 - Exercise current layouts, explicit current-schema test cutover, project removal, inaccessible metrics and user-requested layout correction
 
 ### Dependencies and blockers
@@ -3573,6 +3573,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/94. Planning owner: Unassigned
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
 - 2026-10-03 UTC: WH-107/#90 and WH-108/#93 are accepted. Source-grounded WH-109 contract in docs/workspace-views.md identifies current widgets/shared project projection, missing shared components/layout receipts/undo and the immediate-write workspaceAction gap. Owner current-version-only instructions supersede the old migration wording: use explicit disposable cutovers and current-definition undo, no legacy adapter. Original scope and remaining criteria retained; implementation is not claimed complete.
 - 2026-10-03 UTC: current root claims execution in #94 on codex/identity-admission after inspecting current source and upstream closures. Planned implementation contract is committed separately from runtime; first code work is shared current view definitions/bindings and atomic layout history/receipt preparation.
+- 2026-10-03 UTC: shared exact website review queues/comparisons are locally verified in 03fa3cf; WH-109 remains open for full lifecycle/cutover/audit. The current tool inventory has no callable quality-manager browser runner; verification uses maintained Playwright fixtures with the actual Worker, built client, current D1 and inspected narrow-screen images. This updates tooling wording without reducing the connected browser or original acceptance scope.
 
 ## WH-110 — Complete routine owner workflows within Chat
 
