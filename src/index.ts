@@ -75,7 +75,7 @@ import { ownedExport } from './exports';
 import { componentCatalog, previewHeaders } from './components';
 import { publicPlans, domainBenefit } from "./plans";
 import { launchFeatureCatalogue } from "./plan-features";
-import { readChat, sendConversation, sendChatControl } from "./chat";
+import { readChat, readSavedChatTurn, sendConversation, sendChatControl } from "./chat";
 import {chatControl} from "./chat-controls";
 import { BillingError, getBilling } from "./billing";
 import { configuredAI } from "./ai-chat";
@@ -455,6 +455,12 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   const interaction=await handleInteractionRequest(request,env.DB,user.id,configuredAI(env),transport,{github:githubConfig(env),config:cloudflareConfig(env)});if(interaction)return interaction;
   if (method === "GET" && pathname === "/api/chat/export") return exportChatTranscript(request,env.DB,user.id);
   if (method === "GET" && pathname === "/api/chat/history") return chatHistory(request,env.DB,user.id);
+  if(method==='GET'&&pathname.startsWith('/api/chat/turns/')){
+    const id=pathname.slice('/api/chat/turns/'.length);
+    if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(id)||new URL(request.url).search)return error(400,'Choose a current saved message.');
+    const turn=await readSavedChatTurn(env.DB,user.id,id);
+    return turn?json({version:1,turn}):error(404,'This saved message is unavailable.');
+  }
   if (method === "GET" && pathname === "/api/chat") return json(await readChat(env.DB, user.id, !!configuredAI(env)));
   if (method === "POST" && (pathname === "/api/chat" || pathname === "/api/chat/actions")) {
     const data = await body(request);

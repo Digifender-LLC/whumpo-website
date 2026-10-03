@@ -5,8 +5,9 @@ import {mkdtemp,mkdir,writeFile,stat,open} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 
+const savedTurns=process.argv.includes('--saved-turns');
 const identityJourney=process.argv.includes('--identity'),recoveryJourney=process.argv.includes('--recovery'),accountHelp=process.argv.includes('--account-help');
-if([identityJourney,recoveryJourney,accountHelp].filter(Boolean).length>1)throw Error('Choose one identity, recovery or account-help journey.');
+if([identityJourney,recoveryJourney,accountHelp,savedTurns].filter(Boolean).length>1)throw Error('Choose one identity, recovery or account-help journey.');
 const wait=ms=>new Promise(done=>setTimeout(done,ms));
 async function run(command,args,options={}){
  const child=spawn(command,args,{stdio:'inherit',...options});
@@ -20,7 +21,7 @@ if(!process.argv.includes('--isolated-session')){
  const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
  const env={...process.env,WHUMPO_ORCA_SESSION:dir,WHUMPO_CHROMIUM:process.env.WHUMPO_CHROMIUM||chromium.executablePath(),XDG_CONFIG_HOME:dir+'/config',XDG_CACHE_HOME:dir+'/cache',XDG_DATA_HOME:dir+'/data',XDG_RUNTIME_DIR:dir+'/runtime'};
  delete env.DBUS_SESSION_BUS_ADDRESS;delete env.AT_SPI_BUS_ADDRESS;delete env.WAYLAND_DISPLAY;env.XDG_SESSION_TYPE='x11';
- await run('dbus-run-session',['--',process.execPath,fileURLToPath(import.meta.url),...(identityJourney?['--identity']:recoveryJourney?['--recovery']:accountHelp?['--account-help']:[]),'--isolated-session',dir],{env});
+ await run('dbus-run-session',['--',process.execPath,fileURLToPath(import.meta.url),...(identityJourney?['--identity']:recoveryJourney?['--recovery']:accountHelp?['--account-help']:savedTurns?['--saved-turns']:[]),'--isolated-session',dir],{env});
  console.log('Isolated Orca speech-generation evidence: '+dir+'/speech-evidence.jsonl');
 }else{
  const dir=process.argv.at(-1),children=[],files=[];
@@ -48,7 +49,7 @@ if(!process.argv.includes('--isolated-session')){
   const launcher="import runpy, sys\nfrom gi.repository import GLib\nfrom orca import debug\ndef flush():\n if debug.debugFile: debug.debugFile.flush()\n return True\nGLib.timeout_add(50, flush)\nsys.argv=['orca','--debug-file',sys.argv[1]]\nrunpy.run_path('/usr/bin/orca',run_name='__main__')\n";
   const orca=await service('python3',['-u','-c',launcher,dir+'/orca.log'],env);
   for(let i=0;i<50;i++){if(orca.startError)throw orca.startError;if(orca.exitCode!==null)throw Error('Private Orca failed');if(await stat(dir+'/orca.log').catch(()=>null))break;await wait(100);}
-  await run(process.execPath,accountHelp?['tests/workspace-identity-browser.mjs','--d1','--account-help']:identityJourney?['tests/workspace-identity-browser.mjs','--d1','--accessibility']:recoveryJourney?['tests/identity-browser.mjs','--d1']:['tests/chat-interaction-browser.mjs','--d1'],{env});
+  await run(process.execPath,accountHelp?['tests/workspace-identity-browser.mjs','--d1','--account-help']:identityJourney?['tests/workspace-identity-browser.mjs','--d1','--accessibility']:recoveryJourney?['tests/identity-browser.mjs','--d1']:['tests/chat-interaction-browser.mjs','--d1',...(savedTurns?['--saved-turns']:[])],{env});
  }finally{
   for(const child of children.reverse()){
    if(child.exitCode===null&&child.signalCode===null){child.kill('SIGTERM');await Promise.race([new Promise(done=>child.once('exit',done)),wait(1500)]);if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');}
