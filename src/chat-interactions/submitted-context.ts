@@ -47,7 +47,7 @@ export async function readSubmittedAnswers(db:D1Database,user:string,turnId:stri
  await assertFeature(db,gate);
  if(!await db.prepare("SELECT id FROM chat_turns WHERE id=? AND user_id=? AND mode='ai' AND status='pending'").bind(turnId,user).first())throw new InteractionStoreError(409,'interaction_changed');
  const feature=featurePredicate(db,gate);
- const guards=[interactionGuard(db,feature.sql,feature.params),...selectedPhotoGuards(db,user,photos),interactionGuard(db,`EXISTS(
+ const guards=[interactionGuard(db,feature.sql,feature.params),...(selected?[interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=? AND name=?)',[selected.id,user,selected.name])]:[]),...selectedPhotoGuards(db,user,photos),interactionGuard(db,`EXISTS(
   SELECT 1 FROM chat_interactions i JOIN chat_interaction_submissions s ON s.interaction_id=i.id AND s.user_id=i.user_id
   WHERE i.id=? AND i.user_id=? AND i.definition_digest=? AND i.answer_revision=? AND i.state='submitted' AND i.removed_at IS NULL
    AND s.id=? AND s.answers_digest=? AND NOT EXISTS(SELECT 1 FROM chat_interactions child WHERE child.previous_interaction_id=i.id))

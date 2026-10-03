@@ -11,7 +11,7 @@ import {canRecoverChat} from './lib/chat-delivery';
 import {deliverInteraction,recoverInteraction} from './lib/interaction-delivery';
 import {useInteractionRecovery} from './use-interaction-recovery';
 import {Button} from './components/ui/button';
-import {isPhotoIntakeDefinition,isProjectIntakeTemplate} from '../../src/chat-interactions/maintained';
+import {isPhotoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition} from '../../src/chat-interactions/maintained';
 import {isInformationDefinition} from '../../src/chat-interactions/composition';
 import {ChatInteractionCards} from './chat-interaction-cards';
 import {ChatInteractionFields} from './chat-interaction-fields';
@@ -36,7 +36,7 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
   if(value.version!==1||!Number.isSafeInteger(value.answerRevision)||value.answerRevision<0||!iso(value.observedAt)||!(value.draftRetainUntil===null||iso(value.draftRetainUntil))||!['open','submitted','canceled','superseded','expired'].includes(value.state))throw new APIError('Update Whumpo to open this form.',409,'client_update_required');
   await verifyEnvelope(value.envelope);await requireCurrentClient(value.envelope,client);
   const d=value.envelope.definition,content=d.template==='content-change@1',photo=isPhotoIntakeDefinition(d),custom=isInformationDefinition(d),view=isWorkspaceViewDefinition(d),scoped=content||photo||custom||(view&&d.workspaceView?.projectId!==null);
-  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||(!scoped&&!view&&!isProjectIntakeTemplate(d.template))||(scoped?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||d.continuationBinding!==null))||d.presentation!=='inline'||(!photo&&!view&&(content?d.cards.length!==1||d.cards.some(c=>c.id!=='project-status'||c.binding!=='project.status@1'||c.display!=='status'||c.limit!==1||c.reviewId!==null):d.cards.length!==0))||((photo||view)&&(value.draft!==null||value.submission!==null)))throw new APIError('This form needs a supported current template.',409,'client_update_required');
+  if(value.envelope.id!==id||value.envelope.scope.accountId!==owner||value.envelope.scope.actorId!==owner||(!scoped&&!view&&!isProjectIntakeTemplate(d.template))||(scoped?(!value.envelope.scope.projectId||typeof value.projectName!=='string'||!value.projectName.trim()||value.projectName.length>100):(value.envelope.scope.projectId!==null||value.projectName!==null||d.continuationBinding!==(isProjectIntakeTemplate(d.template)?projectIntakeDefinition(d.template).continuationBinding:null)))||d.presentation!=='inline'||(!photo&&!view&&(content?d.cards.length!==1||d.cards.some(c=>c.id!=='project-status'||c.binding!=='project.status@1'||c.display!=='status'||c.limit!==1||c.reviewId!==null):d.cards.length!==0))||((photo||view)&&(value.draft!==null||value.submission!==null)))throw new APIError('This form needs a supported current template.',409,'client_update_required');
   if(value.draft!==null)validateAnswers(value.envelope.definition,value.draft,{partial:true});if(value.submission)validateAnswers(value.envelope.definition,value.submission.answers);
   return value;
  },staleTime:0,gcTime:0,refetchInterval:q=>['pending','unknown'].includes(q.state.data?.submission?.continuation?.state??'')?5000:false});

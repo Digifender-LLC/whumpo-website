@@ -10,7 +10,7 @@ const fixture=JSON.parse(await readFile('tests/fixtures/chat-interactions.json',
 const copy=x=>structuredClone(x),id=n=>`11111111-1111-4111-8111-${String(n).padStart(12,'0')}`;
 const answers={headline:'Care for your car, at your door.',services:'Interior refresh. Exterior detail. Ask for a quote.'};
 const custom={area:'Example town',mobile:false,sizes:['car']};
-const envelope=(definition=fixture.contentChange)=>({version:1,id:id(1),scope:{accountId:id(2),actorId:id(2),conversationId:id(3),projectId:id(4),taskId:id(5),originTurnId:id(6)},createdAt:'2026-10-01T12:00:00.000Z',expiresAt:'2026-10-08T12:00:00.000Z',definition:copy(definition)});
+const envelope=(definition=fixture.contentChange)=>({version:1,id:id(1),scope:{accountId:id(2),actorId:id(2),conversationId:id(3),projectId:definition.template==='project-select@1'?null:id(4),taskId:id(5),originTurnId:id(6)},createdAt:'2026-10-01T12:00:00.000Z',expiresAt:'2026-10-08T12:00:00.000Z',definition:copy(definition)});
 const client={versions:[1],fieldTypes:['text','long-text','choice','multi-choice','boolean','number','date','datetime','resource','attachment'],bindings:Object.keys(bindings)};
 let count=0;
 async function test(name,fn){try{await fn();count++;}catch(e){console.error('Failed:',name);throw e;}}
@@ -65,6 +65,7 @@ await invalid('wrong view component',d=>d.cards[0].display='preview','BINDING','
 await invalid('unnecessary review identity',d=>d.cards[0].reviewId=id(9),'REFERENCE','view');
 await invalid('changed maintained brief field',d=>d.fields[0].id='password','TEMPLATE','projectBrief');
 await invalid('project selector cannot collect photos',d=>d.fields[0].constraints.collection='photos','TEMPLATE','projectSelection');
+await invalid('retired project selector continuation rejected',d=>d.continuationBinding=null,'TEMPLATE','projectSelection');
 await test('resource negotiation and maintained choices',async()=>{
   const c={...client,bindings:client.bindings.filter(b=>b!=='owned.projects@1')};
   await rejectsAsync(async()=>await requireCurrentClient(await sealDefinition(envelope(fixture.projectSelection)),c),'CLIENT_UPDATE_REQUIRED');

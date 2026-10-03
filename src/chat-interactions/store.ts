@@ -123,7 +123,7 @@ async function prepareIntakeCorrection(db:D1Database,user:string,input:Replaceme
  const issueHash=proposal?.issueHash??await jsonDigest({adapter:'project-intake',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  const previous=await readInteraction(db,user,request.previousInteractionId),template=previous.envelope.definition.template;
- if(previous.envelope.scope.projectId!==null||!isProjectIntakeTemplate(template)||previous.envelope.definition.continuationBinding!==null)throw new InteractionStoreError(409,'adapter_unavailable');
+ if(previous.envelope.scope.projectId!==null||!isProjectIntakeTemplate(template)||previous.envelope.definition.continuationBinding!==projectIntakeDefinition(template).continuationBinding)throw new InteractionStoreError(409,'adapter_unavailable');
  if(previous.envelope.definitionDigest!==request.definitionDigest||previous.answerRevision!==request.expectedAnswerRevision||previous.replacementInteractionId||!['open','submitted','expired'].includes(previous.state))throw changed();
  await assertFeature(db,feature(user,null));
  let definition=projectIntakeDefinition(template);const defaults=carriedDefaults(previous),guards:D1PreparedStatement[]=[];
