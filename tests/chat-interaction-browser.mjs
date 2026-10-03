@@ -22,7 +22,7 @@ try{
  const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts','src/site-host.ts']);
  const host=(await modules.module('src/site-host.ts')).default;let siteChecks=0;
  const worker=(await modules.module('src/index.ts')).default,store=await modules.module('src/chat-interactions/store.ts'),site=await modules.module('src/project-specification/store.ts');
- fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+ fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
  async function owner(){
   const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=crypto.randomUUID();
   await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -105,6 +105,36 @@ try{
  modelSteps.push({kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id},body=>{assert.match(JSON.stringify(body),/seasonal planting/);assert.match(JSON.stringify(body),new RegExp(selectedForm.submission.id));return taskReply('Your seasonal planting review is still ready. Nothing has been saved or published.',{state:'finished',summary:'Existing seasonal planting review awaits owner approval.',openQuestions:[]});});
  await page.getByRole('textbox',{name:'Message Whumpo'}).fill('Continue that selected-project task. Is the review still ready?');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+5);await page.reload();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor();assert.equal(modelCalls,selectionCalls+5);
  for(const width of [360,390]){await page.setViewportSize({width,height:844});await captureSelectedChatProject(page,{interactionId:selectionRow.id,projectName:'Garden',path:'/tmp/whumpo-selected-resume-'+width+'.png'});assert.equal(modelCalls,selectionCalls+5);}
+
+ if(process.argv.includes('--observations-only')){
+  phase='same-task status and traffic view uses shared reads and refresh without inference';
+  for(const feature of ['core.editing','core.insights'])await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,'read','private-test-acceptance','synthetic task view browser',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",crypto.randomUUID(),c.user,c.project,feature);
+  await run("INSERT INTO site_traffic_daily VALUES(?,date('now'),7)",c.project);
+  const resume={kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id};
+  modelSteps.push(resume,body=>{assert.match(JSON.stringify(body),/projectObservations/);return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Show the requested current project information.',action:{kind:'interaction',operation:'showView',view:{version:1,projectId:c.project,widgets:['projects','traffic'],shortcuts:[]}},taskState:{state:'finished',summary:'Displayed this project’s saved status and page requests.',openQuestions:[]}})}]}],usage:{input_tokens:100,output_tokens:100}});});
+  await page.getByRole('textbox',{name:'Message Whumpo'}).fill('Show status and page requests for that same project here.');await page.getByRole('button',{name:'Send message',exact:true}).click();
+  const traffic=()=>page.locator('[data-view-component="traffic"]'),refresh=()=>traffic().getByRole('button',{name:'Refresh page requests',exact:true});
+  await traffic().getByText('Recorded page requests · last 30 UTC dates',{exact:true}).waitFor({timeout:60000});assert.equal(await traffic().locator('p.text-4xl').innerText(),'7');assert.equal(modelCalls,selectionCalls+7);
+  const latest=await row("SELECT i.id,i.origin_turn_id FROM chat_interactions i WHERE i.user_id=? AND json_extract(i.envelope_json,'$.definition.kind')='view' ORDER BY i.created_at DESC LIMIT 1",c.user);
+  assert.equal((await row('SELECT task_id FROM chat_task_progress WHERE turn_id=?',latest.origin_turn_id)).task_id,selectedForm.envelope.scope.taskId);
+  for(const width of [360,390,1280]){
+   await page.setViewportSize({width,height:844});await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+   for(const [part,locator] of [['status',page.locator('[data-view-component="projects"]')],['traffic',traffic()],['refresh',refresh()]]){
+    await locator.evaluate(e=>e.scrollIntoView({block:'start',behavior:'instant'}));
+    assert(await locator.evaluate(e=>{const r=e.getBoundingClientRect(),s=document.querySelector('.chat-scroll').getBoundingClientRect();return r.top>=s.top-1&&r.top<s.bottom;}));
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:'/tmp/whumpo-task-observations-'+part+'-'+width+'.png'});
+   }
+   assert((await refresh().boundingBox()).height>=44);
+  }
+  await run('UPDATE site_traffic_daily SET requests=12 WHERE project_id=?',c.project);await refresh().click();await traffic().getByText('12',{exact:true}).first().waitFor();assert.equal(modelCalls,selectionCalls+7);
+  phase='traffic read outage clears old counts and recovers without inference';
+  await page.route('**/api/chat/interactions/v1/view-component',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"Synthetic observation outage"}'}));
+  await refresh().click();await traffic().getByText('Synthetic observation outage',{exact:false}).waitFor();assert.equal(await traffic().locator('p.text-4xl').count(),0);
+  await page.unroute('**/api/chat/interactions/v1/view-component');await refresh().click();await traffic().getByText('12',{exact:true}).first().waitFor();
+  await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.insights'",c.user);await refresh().click();await traffic().getByText('This information is not available with your current access.',{exact:false}).waitFor();assert.equal(await traffic().locator('p.text-4xl').count(),0);
+  await page.reload();await traffic().getByText('This information is not available with your current access.',{exact:false}).waitFor();assert.equal(modelCalls,selectionCalls+7);assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',c.project)).n,0);
+ }
  if(process.argv.includes('--reviews-only')||process.argv.includes('--publications-only')){
   const key=authenticator(origin),cdp=await context.newCDPSession(page);
   await run("INSERT INTO identity_credentials VALUES(?,?,?,0,'Browser test passkey','active',NULL,unixepoch(),NULL)",key.id,c.user,key.publicKey);
@@ -212,6 +242,9 @@ try{
  if(process.argv.includes('--intake-only')){
   await newProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='New-project browser passed: actual Worker/current local D1/built UI; natural intake, clarification before creation, same-task resumption, correction with separate private review, lost creation/review replies and reload without redispatch or duplicate projects. Ten scripted main calls; 360/390/1280px captures. No external inference, publication or physical-device acceptance.';
+ }else if(process.argv.includes('--observations-only')){
+  await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
+  resultSummary='Task-observation browser passed: actual Worker/current D1/built UI; selected task status and traffic, read refresh/outage/access loss/reload without inference, unchanged private website. Seven scripted main calls; 360/390/1280px captures. No publication, external inference or physical-device acceptance.';
  }else if(process.argv.includes('--selection-only')||process.argv.includes('--reviews-only')||process.argv.includes('--publications-only')){
   await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary=(process.argv.includes('--publications-only')?'Task-publication browser passed: actual Worker/current D1/built UI; cancelled passkey recovery, same-task publish/reopen/confirm/restore/withdrawal/status, exact original reviews and reload without extra inference; 19 scripted calls. Local synthetic publication only.':process.argv.includes('--reviews-only')?'Task-review browser passed: actual Worker/current D1/built UI; exact same-task review reopening, trusted user private save, receipt after proposal disposal, status/resumption and reload without inference. Nine scripted calls; phone captures; no publication or external model.':'Selected-project browser passed: actual Worker/current local D1/built UI; natural request, explicit picker, private review, lost-result recovery, reload without redispatch and task resumption. Five scripted main calls; settled 360/390/1280px captures. No external inference, publication or physical-device acceptance.');

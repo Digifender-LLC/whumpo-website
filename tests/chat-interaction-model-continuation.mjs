@@ -6,7 +6,7 @@ Error.stackTraceLimit=0;
 const modules=await currentFixtureModules(['src/index.ts','src/site-agent.ts','src/ai-chat.ts','src/agent-inspection.ts','src/chat-interactions/store.ts','src/chat-interactions/agent.ts','src/chat-interactions/protocol.ts','src/project-specification/store.ts','src/chat-interactions/task-context.ts','src/chat-interactions/model-continuation.ts','src/publications.ts']);
 const worker=(await modules.module('src/index.ts')).default,agent=await modules.module('src/site-agent.ts'),ai=await modules.module('src/ai-chat.ts'),inspection=await modules.module('src/agent-inspection.ts');
 const store=await modules.module('src/chat-interactions/store.ts'),forms=await modules.module('src/chat-interactions/agent.ts'),protocol=await modules.module('src/chat-interactions/protocol.ts'),site=await modules.module('src/project-specification/store.ts');
-const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only','--publications-only']}),{db}=fixture,id=()=>crypto.randomUUID();
+const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only','--publications-only','--observations-only']}),{db}=fixture,id=()=>crypto.randomUUID();
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-only',protocol:'responses'};
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:config.baseURL,AI_MODEL:config.model,AI_PROTOCOL:config.protocol,AI_API_KEY:config.apiKey};
@@ -21,7 +21,7 @@ globalThis.fetch=async(url,init)=>{
 };
 const http=(o,path,data,database=db)=>worker.fetch(new Request('https://whumpo.com'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),{...env,DB:database},{waitUntil(p){background.push(p);}});
 async function json(o,path,data,database){const r=await http(o,path,data,database);assert.equal(r.status,200,await r.clone().text());return r.json();}
-async function test(name,fn){if(process.argv.includes('--publications-only')&&!name.startsWith('task-publication '))return;if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
+async function test(name,fn){if(process.argv.includes('--observations-only')&&!name.startsWith('task-observation '))return;if(process.argv.includes('--publications-only')&&!name.startsWith('task-publication '))return;if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
 async function owner(withWebsite=true){
  const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=id();
  await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -522,6 +522,72 @@ try{
   const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,99,'fixture','fixture',datetime('now'),'ai','pending')",turn,o.user);
   await assert.rejects(run('INSERT INTO publication_chat_links VALUES(?,?)',turn,otherForm.submission.id),/publication_changed/);
   assert.equal((await row('SELECT review_id FROM publication_chat_links WHERE turn_id=?',form.submission.id)).review_id,form.submission.id);
+ });
+
+ const observationGrant=async(o,project=o.project)=>{for(const feature of ['core.editing','core.insights'])await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,'read','private-test-acceptance','synthetic task observations',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,project,feature);};
+ const overview=o=>({kind:'interaction',operation:'showView',view:{version:1,projectId:o.project,widgets:['projects','traffic'],shortcuts:[]}});
+ async function observedTask(o){await observationGrant(o);const {form}=await savedSelection(o,'Show status and page requests for my selected gardening website.');await follow(o,form,[null]);return {...form,projectId:o.project};}
+ const observations=async(o,f)=>(await taskContext.prepareInformationTask(o.scope,o.user,f.submission.id,true)).data.projectObservations;
+ const countTraffic=async(o,count=7)=>run("INSERT INTO site_traffic_daily(project_id,day,requests) VALUES(?,date('now'),?) ON CONFLICT(project_id,day) DO UPDATE SET requests=excluded.requests",o.project,count);
+ await test('task-observation exact project facts, overview and refresh preserve the original continuation',async()=>{
+  const o=await owner(),f=await observedTask(o),other=await owner();await countTraffic(o);await countTraffic(other,999);
+  const before=await observations(o,f);assert.equal(before.projects.status,'ready');assert.equal(before.projects.data.items[0].websitePublished,false);assert.equal(before.traffic.data.rows.reduce((n,r)=>n+r.requests,0),7);assert(!JSON.stringify(before).includes(other.project));assert.match(before.trafficNotice,/not unique visitors/);
+  const shown=await chat(o,'Show that project’s status and traffic here.',[resume(f),body=>{assert(JSON.stringify(body).includes('projectObservations'));assert(JSON.stringify(body).includes('successful_html_requests'));return taskReply('UNTRUSTED_METRICS',overview(o));}]);
+  assert.equal(shown.turn.status,'completed');assert.doesNotMatch(shown.turn.assistant_text,/UNTRUSTED_METRICS/);
+  assert.equal((await row('SELECT task_id FROM chat_task_progress WHERE turn_id=?',shown.input.id)).task_id,f.envelope.scope.taskId);
+  const v=await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',shown.input.id),view=await store.readInteraction(o.scope,o.user,v.id);
+  assert.deepEqual(view.envelope.definition.workspaceView,overview(o).view);assert.equal((await store.readInteraction(o.scope,o.user,f.envelope.id)).state,'submitted');
+  const input={version:1,interactionId:v.id,definitionDigest:view.envelope.definitionDigest,kind:'traffic'},calls=mainCalls;
+  const displayed=await json(o,'/api/chat/interactions/v1/view-component',input);assert.deepEqual(displayed.data,before.traffic.data);
+  await countTraffic(o,12);assert.equal((await json(o,'/api/chat/interactions/v1/view-component',input)).data.rows[0].requests,12);
+  await json(o,'/api/chat',shown.input);assert.equal(mainCalls,calls);assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE origin_turn_id=?',shown.input.id)).n,1);
+  const current=await chat(o,'How many page requests for that task now?', [resume(f),taskReply('There are 12 recorded page requests, including repeats and bots.')]);assert.equal(current.turn.status,'completed');await noEffect(o,f);
+ });
+ for(const unavailable of ['missing','malformed','outage','denied'])await test('task-observation '+unavailable+' telemetry is unknown and never a zero count',async()=>{
+  const o=await owner(),f=await observedTask(o);await countTraffic(o,8);const metadata=await row('SELECT enabled_at FROM site_traffic_metadata WHERE id=1');
+  let database=o.scope;
+  if(unavailable==='missing')await run('DELETE FROM site_traffic_metadata');
+  if(unavailable==='malformed')await run("UPDATE site_traffic_metadata SET enabled_at='invalid-time' WHERE id=1");
+  if(unavailable==='outage')database=await o.authority.scope(interceptDatabase(db,/^SELECT t.project_id,t.day,t.requests/,()=>{throw Error('Synthetic telemetry outage');}));
+  if(unavailable==='denied')await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.insights'",o.user);
+  try{
+   const data=(await taskContext.prepareInformationTask(database,o.user,f.submission.id,true)).data.projectObservations;
+   assert.equal(data.projects.status,'ready');assert.equal(data.traffic.status,unavailable==='denied'?'denied':'unavailable');assert.equal(data.traffic.data,null);
+   assert.equal(data.projects.data.items[0].websitePublished,false);
+  }finally{await run('INSERT INTO site_traffic_metadata VALUES(1,?) ON CONFLICT(id) DO UPDATE SET enabled_at=excluded.enabled_at',metadata.enabled_at);}
+ });
+ await test('task-observation empty available telemetry is a measured empty window',async()=>{
+  const o=await owner(),f=await observedTask(o),data=await observations(o,f);assert.equal(data.traffic.status,'ready');assert.deepEqual(data.traffic.data.rows,[]);assert.equal(data.traffic.data.days,30);assert(data.traffic.data.enabledAt);
+ });
+ for(const invalid of ['account','foreign','other-owned','extra-widget','shortcut','invented-metric','recursive'])await test('task-observation rejects '+invalid+' view outside the admitted task',async()=>{
+  const o=await owner(),f=await observedTask(o),action=overview(o);
+  if(invalid==='account')action.view.projectId=null;
+  if(invalid==='foreign')action.view.projectId=(await owner()).project;
+  if(invalid==='other-owned'){const target=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Other','Other','draft',datetime('now'),datetime('now'))",target,o.user);action.view.projectId=target;}
+  if(invalid==='extra-widget')action.view.widgets.push('storage');
+  if(invalid==='shortcut')action.view.shortcuts=['project'];
+  if(invalid==='invented-metric')action.view.metrics={visitors:999};
+  if(invalid==='recursive')Object.assign(action,{operation:'requestProjectSelection'});
+  const r=await chat(o,'Show this task’s overview.',[resume(f),taskReply('UNTRUSTED_OUT_OF_SCOPE',action)]);assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_OUT_OF_SCOPE/);assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',r.input.id),null);await noEffect(o,f);
+ });
+ for(const when of ['dispatch','response','commit'])await test('task-observation access loss at '+when+' fences facts and views',async()=>{
+  const o=await owner(),f=await observedTask(o);await countTraffic(o);const revoke=()=>run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.insights'",o.user);
+  let database=db;const steps=[resume(f)];
+  if(when==='dispatch')database=interceptDatabase(db,/^INSERT INTO agent_inspections/,revoke);
+  else{steps.push(async()=>{if(when==='response')await revoke();return taskReply('UNTRUSTED_REVOKED_FACT',overview(o));});if(when==='commit')database=interceptDatabase(db,/^INSERT INTO chat_interactions\(/,revoke);}
+  const r=await chat(o,'Show traffic in the same task.',steps,database);assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_REVOKED_FACT/);assert.equal(r.calls,when==='dispatch'?1:2);assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',r.input.id),null);await noEffect(o,f);
+ });
+ await test('task-observation ordinary traffic lookup shares typed scope and guards',async()=>{
+  const o=await owner(),other=await owner();await observationGrant(o);await countTraffic(o,4);await countTraffic(other,77);
+  const action={kind:'inspect',scope:'traffic',targetId:o.project};assert(inspection.inspectionRequest(JSON.stringify({reply:'Check the recorded page requests.',action})));
+  const direct=await agent.prepareSiteAction(o.scope,o.user,id(),JSON.stringify({reply:'Read traffic.',action}),await agent.siteContext(o.scope,o.user));const data=JSON.parse(direct.inspection);assert.equal(data.observation.status,'ready');assert.equal(data.observation.data.rows[0].requests,4);assert(!direct.inspection.includes(other.project));assert(direct.inspectionGuards.length);
+  const r=await chat(o,'How much traffic does my gardening site have?', [action,async()=>{await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.insights'",o.user);return null;}]);assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_MODEL_PROSE/);
+ });
+
+ await test('task-observation ordinary account traffic discards facts after project ownership changes',async()=>{
+  const o=await owner(),other=await owner();await observationGrant(o,null);await countTraffic(o,5);
+  const r=await chat(o,'How many page requests across my sites?', [{kind:'inspect',scope:'traffic'},async()=>{await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,o.project);return null;}]);
+  assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_MODEL_PROSE/);
  });
  console.log(`Chat model continuation: ${cases} actual-handler scenarios passed; ${mainCalls} scripted main calls, ${ackCalls} ack calls. No external model, remote customer publication or payment.`);
 }finally{globalThis.fetch=originalFetch;await Promise.allSettled(background);console.warn=originalWarn;await fixture.close();}

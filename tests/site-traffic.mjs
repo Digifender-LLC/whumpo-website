@@ -11,6 +11,7 @@ const url=id=>'https://'+id+'.whumpo.site/';
 const served=id=>host.fetch(new Request(url(id)),{DB:db});
 try{
  const user=await account(),other=await account(),a=await create(user,'Traffic fixture');
+ await db.prepare("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.insights','read','private-test-acceptance','synthetic traffic reader',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)").bind(crypto.randomUUID(),user).run();
  assert.equal((await served(a.project)).status,404);assert.deepEqual((await readTraffic(scope(user),user)).rows,[]);
  const review=await chat(user,'/publish '+a.version);await chat(user,'/confirm '+review.id);
  await Promise.all(Array.from({length:12},()=>served(a.project)));
