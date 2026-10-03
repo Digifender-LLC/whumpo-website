@@ -125,3 +125,13 @@ Verified evidence:
 - Type/compiler checking, frontend build, processing boundaries, lifecycle catalog (175 tables/39 current classes), roadmap validation/alignment/render and diff checks pass. An initial frontend type failure exposed a pure data type importing the server reader; the types now belong to the pure shared contract, and checking passes without suppression.
 
 This completes the review-component packet only. WH-109 remains open for complete natural-language lifecycle, coordinated test cutover and original-scope acceptance.
+
+## Connected natural-language lifecycle — October 3, 2026 UTC
+
+The built-client `tests/workspace-view-lifecycle.mjs` fixture uses the actual Worker HTTP handlers and a disposable current D1 database. It starts with an unrelated saved page, then submits eight ordinary messages through the mobile Chat composer: temporary overview, correction, save that view as a page, update its components, rename, update Dashboard, remove the page and undo removal. Scripted model selection has passed all eight steps with 11 main responses and eight acknowledgments. Every exact request replay makes zero additional model calls. Seven layout receipts include fixture setup and the six requested persistent changes; unrelated page definitions and unrequested Dashboard content are preserved.
+
+The browser uses the actual mobile Your pages sheet, navigates Chat → page → Chat, refreshes project facts with no inference, dismisses the temporary view and checks its tombstone after page navigation/reload. Settings and Profile remain directly reachable independently of generated pages. There are zero website versions, proposals or publications. The 360/390px saved-page images were inspected: no horizontal overflow, readable project facts and explicit inaccessible traffic data. The fixture uses Chromium with synthetic identity, not physical-phone enrollment.
+
+Two initial fixture problems were corrected before the full run passed: `ENVIRONMENT=local` intentionally disables inference, so this loopback harness proxies to the canonical test-origin handler; and mobile pages must open through the Your pages sheet. Product guards/navigation were unchanged. The fixture defaults to scripted responses. Real Muse requires explicit `RUN_LIVE_MUSE=1` plus a private key-file path, with a 28-response ceiling and a per-run report of exact synthetic replies/actions, errors and cleanup. A scripted pass is not real-model evidence.
+
+The layout regression also now exercises actual project deletion as well as ownership transfer: a stale page can be removed, and undo cannot resurrect its lost project authority. All twelve SQLite domain cases pass. Coordinated deployment and the parent acceptance audit remain open.
