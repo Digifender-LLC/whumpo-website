@@ -75,3 +75,29 @@ A read-only inventory at **2026-10-03T00:53:09.769Z** confirms the four Worker v
 The inference-free live release probe explicitly intercepts only custom model continuation after saving answers and then stops that unstarted follow-up through the real API. It verifies the deployed form submission and preserves zero live-model calls; it must not be cited as real-model continuation acceptance. Connected scripted continuation is exercised through the actual local Worker/D1/browser and recorded in [verification](verification.md#custom-form-model-continuation--october-3-2026-utc).
 
 A distinct replacement, **`whumpo-control-task-test`** (`9a07c1b0-0925-4ef1-8ffa-46d9464cafc9`), has now been created and verified empty. The three local DB bindings target it; active Worker bindings are unchanged. The private creation receipt is `.secrets/task-test-database.json`. Admission fencing, initialization, coordinated deployment and remote acceptance are still pending.
+
+
+## Verified model continuation release — October 3, 2026 UTC
+
+Release **`cc5abfdb-fd7c-4d50-a9d7-39dd28ecc15a`** completed the current schema initialization and coordinated runtime → apps → sites → platform cutover. Independent verification completed at **2026-10-03T01:15:07.681Z**. All **39 assets**, every service/secret binding and the exact **172-table/786-object** schema match the archive. Database: `whumpo-control-task-test` (`9a07c1b0-0925-4ef1-8ffa-46d9464cafc9`), inventory digest `faf5af19d14f143e471322fe83dc80677678044510ccb374734e7544b353b0a6`.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `706225db-3b75-4cf9-ae5d-81ea43b1d210` |
+| apps | `7bba899c-f469-4f0a-a908-4125e74ac3f1` |
+| sites | `64c36aa5-fa89-436f-9cf3-e070a825f889` |
+| platform | `738fcb2a-cbc3-4ccf-811e-734bb3200886` |
+
+The sealed manifest records baseline `051e1f2` with a dirty source flag because the final agent-catalog wording was committed during preparation. Independent blob-by-blob verification proves all **448 archived source files exactly match committed `f96c38448d5675fd50a5c9117533ca467c726966`**, with no extra archived source. The immutable archive remains unchanged; `.secrets/task-release-source-proof.json` records this correspondence.
+
+The existing key capsule verified and initialized the current key registry/policy without changing Worker secrets. Signed HTTP acceptance exercised two generated ES256 keys, first-project onboarding, logout/revocation, encrypted PKCE start/cancel and withdrawn-feature refusal. A synthetic signed-in **390px Chromium** journey passed proposed-answer review, private preview, exact separate save, choices, conditional custom-form draft/reload/submission, hidden-answer exclusion and history focus. Anonymous private routes refused with no-store responses, retired routes/cookies refused, foreign-origin identity requests refused, and an unregistered customer subdomain returned 404.
+
+The live release probe deliberately intercepted custom model dispatch, verified the saved answers and stopped that unstarted follow-up through the actual API. It made zero model, publication, photo-byte or payment calls. This does not prove deployed real-model continuation; the connected scripted browser and one real Muse/local-D1 sample have separate evidence in [verification](verification.md#custom-form-model-continuation--october-3-2026-utc). Synthetic account/project/interaction cleanup was confirmed. Human enrollment/device, broad model quality, multi-turn task state and the full WH-108/112 acceptance remain open.
+
+Private evidence: `.secrets/task-release-verification.json`, `.secrets/task-release-probe-cleanup.json`, `.secrets/task-key-initialization.json`, the source correspondence record and the sealed release archive. No CSAM, Daybreak, CMS functional testing, provider activation or real-money billing occurred.
+
+### Retirement and final cleanup
+
+The obsolete database was deleted and its absence verified on October 3, 2026 at 01:16 UTC after checking all 14 account Workers for references and every old table for customer/external obligations. Other databases were preserved. Final read-only inventory at 01:23 UTC confirms the current exact schema, all four Worker versions, ten remaining account databases and empty private R2. All customer, project, interaction, inference, provider and billing tables are empty; only the expected six control/catalog/telemetry tables contain rows. A fresh one-use, seven-day owner invitation was then saved privately. No invitation or credential value is recorded here.
+
+Private evidence: `.secrets/task-database-retirement.json`, `.secrets/task-final-inventory.json` and the private invitation file. The release is complete within the verification scope above; broader WH-108, real-device, provider and customer acceptance remain open.
