@@ -12,6 +12,8 @@ export async function readTraffic(db:D1Database,user:string,projectId:string|nul
  ]);
  return {enabledAt:metadata?.enabled_at??null,days:30,rows:rows.results,metric:'successful_html_requests' as const};
 }
+export const trafficNotice='Successful public HTML GET requests only; includes repeat visits, bots and checks. Best-effort counts, not unique visitors or billing measurements. Images, APIs and controlled visitor apps are excluded. No visitor identifiers are stored. The window is the last 30 UTC dates including today; no history before collection began is available.';
 export function trafficDescription(traffic:Awaited<ReturnType<typeof readTraffic>>){
- return `Recorded page requests: ${traffic.rows.reduce((sum,row)=>sum+row.requests,0)} over the last 30 UTC dates (including today).\nCollection enabled: ${traffic.enabledAt??'unavailable'}. No earlier history is available.\nSuccessful public HTML GET requests only; includes repeat visits, bots and checks. Best-effort counts, not unique visitors or billing measurements. Images, APIs and controlled visitor apps are excluded. No visitor identifiers are stored.\n`+traffic.rows.map(row=>`${row.day} · project ${row.project_id}: ${row.requests}`).join('\n');
+ if(!traffic.enabledAt)return 'Traffic information is unavailable. No reliable count can be reported.';
+ return `Recorded page requests: ${traffic.rows.reduce((sum,row)=>sum+row.requests,0)} over the last 30 UTC dates (including today).\nCollection enabled: ${traffic.enabledAt}. No earlier history is available.\n${trafficNotice}\n`+traffic.rows.map(row=>`${row.day} · project ${row.project_id}: ${row.requests}`).join('\n');
 }

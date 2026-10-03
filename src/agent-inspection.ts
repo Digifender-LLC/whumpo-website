@@ -25,7 +25,7 @@ export function inspectionRequest(raw:string){
  }
  if(!a||typeof a!=='object'||Array.isArray(a)||a.kind!=='inspect'||Object.keys(a).some(k=>!['kind','scope','targetId'].includes(k))||!inspectionScopes.includes(a.scope))return false;
  const target=Object.hasOwn(a,'targetId');if(target&&(typeof a.targetId!=='string'||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(a.targetId)))return false;
- return !(['project','version'].includes(a.scope)&&!target||!['project','version','versions'].includes(a.scope)&&target);
+ return !(['project','version'].includes(a.scope)&&!target||!['project','version','versions','traffic'].includes(a.scope)&&target);
 }
 export function inspectionMessages(messages:ChatMessage[],result:string):ChatMessage[]|undefined{
  if(new TextEncoder().encode(result).length>8000||messages.length>48)return;

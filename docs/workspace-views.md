@@ -171,3 +171,7 @@ The separate eight acknowledgment responses all exhausted their 256-token allowa
 ## Coordinated deployed acceptance — October 3, 2026 UTC
 
 Release `0955f19c-b69e-4dae-b7e7-972e5df3aa3c`, source `81a7b9f`, passed the actual deployed eight-step real-Muse lifecycle and shared exact review/permission-loss checks. All four Workers, 175 tables/796 objects and 39 assets were verified; synthetic accounts were removed and the unreferenced old database retired. The settled mobile capture and rejected retired-API checks add zero inference. [Release and visual evidence](workspace-view-release.md) supersedes earlier pending-deployment statements; the [original-scope audit](workspace-views-acceptance.md) accepts WH-109. Acknowledgment reliability and full owner/device/customer acceptance remain separate.
+
+## Task-scoped observation handoff — October 3, 2026
+
+WH-110 reuses `readViewBinding` for current project and traffic facts supplied to website task continuations. Read/ownership predicates fence model dispatch and reply commit. A task can show its exact project's maintained status/traffic view, with progress attached to its originating task and no form submission, sidebar mutation or approval. Ordinary traffic inspection uses this same current reader. See [routine adapter scope and verification](chat-routine-journeys.md#project-status-and-traffic-adapter--october-3-2026); deployment and model acceptance remain separate.
