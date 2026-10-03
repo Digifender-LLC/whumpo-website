@@ -19,9 +19,10 @@ const originalFetch=globalThis.fetch,requests=[],errors=[],modelSteps=[],backgro
 try{
  await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><link rel="icon" type="image/svg+xml" href="/brand/whumpo-favicon-rounded.svg"><title>Whumpo form acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script><script type="module">import {queryClient} from "/@fs/'+resolve('frontend/src/lib/api.ts')+'";window.fixtureQueryKeys=()=>queryClient.getQueryCache().getAll().map(q=>q.queryKey);</script></body></html>');
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
- const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts']);
+ const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts','src/site-host.ts']);
+ const host=(await modules.module('src/site-host.ts')).default;let siteChecks=0;
  const worker=(await modules.module('src/index.ts')).default,store=await modules.module('src/chat-interactions/store.ts'),site=await modules.module('src/project-specification/store.ts');
- fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+ fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
  async function owner(){
   const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=crypto.randomUUID();
   await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -46,6 +47,7 @@ try{
  }
  let form=await issue(a);const env={...fixture.env,DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(promise){background.push(promise);}};
  globalThis.fetch=async(url,init)=>{
+  if(process.argv.includes('--publications-only')&&String(url)==='https://'+c.project+'.whumpo.site/'){siteChecks++;return host.fetch(new Request(url,init),{...env,DB:db},ctx);}
   if(String(url)==='https://opencode.ai/zen/go/v1/responses'&&JSON.parse(init.body).max_output_tokens===256)return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'{\"intent\":\"editing\"}'}]}],usage:{input_tokens:10,output_tokens:10}});
   if(String(url)==='https://opencode.ai/zen/go/v1/responses'&&modelSteps.length){modelCalls++;const step=modelSteps.shift(),action=typeof step==='function'?await step(JSON.parse(init.body)):step;if(action instanceof Response)return action;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Task follow-up prepared.',action})}]}],usage:{input_tokens:100,output_tokens:100}});}
   network++;throw Error('Unexpected external request');
@@ -103,7 +105,7 @@ try{
  modelSteps.push({kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id},body=>{assert.match(JSON.stringify(body),/seasonal planting/);assert.match(JSON.stringify(body),new RegExp(selectedForm.submission.id));return taskReply('Your seasonal planting review is still ready. Nothing has been saved or published.',{state:'finished',summary:'Existing seasonal planting review awaits owner approval.',openQuestions:[]});});
  await page.getByRole('textbox',{name:'Message Whumpo'}).fill('Continue that selected-project task. Is the review still ready?');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+5);await page.reload();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor();assert.equal(modelCalls,selectionCalls+5);
  for(const width of [360,390]){await page.setViewportSize({width,height:844});await captureSelectedChatProject(page,{interactionId:selectionRow.id,projectName:'Garden',path:'/tmp/whumpo-selected-resume-'+width+'.png'});assert.equal(modelCalls,selectionCalls+5);}
- if(process.argv.includes('--reviews-only')){
+ if(process.argv.includes('--reviews-only')||process.argv.includes('--publications-only')){
   const key=authenticator(origin),cdp=await context.newCDPSession(page);
   await run("INSERT INTO identity_credentials VALUES(?,?,?,0,'Browser test passkey','active',NULL,unixepoch(),NULL)",key.id,c.user,key.publicKey);
   await cdp.send('WebAuthn.enable');
@@ -117,6 +119,10 @@ try{
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].filter(b=>b.textContent?.trim()==='Save reviewed private version').length===2);
   const lastTurn=await row('SELECT id FROM chat_turns WHERE user_id=? ORDER BY revision DESC LIMIT 1',c.user);
   assert.equal((await row('SELECT proposal_id FROM project_spec_chat_links WHERE turn_id=?',lastTurn.id)).proposal_id,selectedForm.submission.id);assert.equal(modelCalls,selectionCalls+7);assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE user_id=?',c.user)).n,1);
+  const beforeApproval=requests.filter(r=>r.path==='/api/chat/actions').length;
+  await page.evaluate(()=>{const original=navigator.credentials.get.bind(navigator.credentials);navigator.credentials.get=async options=>{navigator.credentials.get=original;throw new DOMException('Synthetic passkey cancellation','NotAllowedError');};});
+  await save.last().click();await page.getByRole('alert').filter({hasText:'The passkey step was not completed.'}).waitFor();
+  assert.equal(requests.filter(r=>r.path==='/api/chat/actions').length,beforeApproval);assert.equal(modelCalls,selectionCalls+7);assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,1);
   await save.last().click();await page.getByText('Saved private website revision 2.',{exact:false}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+7);
   assert.equal((await row("SELECT count(*) n FROM identity_ceremony_receipts WHERE account_id=? AND kind='reauth'",c.user)).n,1);
   const token=(await context.cookies()).find(cookie=>cookie.name==='__Host-whumpo_session').value;
@@ -127,6 +133,32 @@ try{
   await send('Did I save that task’s change?');await page.getByText('Your task’s private save completed at revision 2. It has not been published.',{exact:true}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+9);
   await page.reload();await page.getByText('Your task’s private save completed at revision 2. It has not been published.',{exact:true}).waitFor();assert.equal(modelCalls,selectionCalls+9);assert.equal(await page.getByRole('button',{name:'Save reviewed private version',exact:true}).count(),0);
   assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=? AND version_id IS NOT NULL',c.project)).n,0);
+  if(process.argv.includes('--publications-only')){
+   phase='same-task publication reopen restore withdrawal and status';
+   for(const operation of ['read','prepare'])await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.publication',?,'private-test-acceptance','synthetic publication browser',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",crypto.randomUUID(),c.user,c.project,operation);
+   const current=(await site.readSpecification(c.scope,c.user,c.project)).versionId;
+   const original=(await row('SELECT id FROM site_versions WHERE project_id=? AND id!=? ORDER BY created_at,id LIMIT 1',c.project,current)).id;
+   const publication=()=>row('SELECT version_id,revision FROM publications WHERE project_id=?',c.project);
+   const confirmButton=()=>page.getByRole('button',{name:'Confirm reviewed change',exact:true});
+   const prepare=async(operation,targetId,text)=>{modelSteps.push(resume,{kind:'review',operation,targetId});await send(text);await confirmButton().waitFor({timeout:60000});return (await row('SELECT id FROM chat_turns WHERE user_id=? ORDER BY revision DESC LIMIT 1',c.user)).id;};
+   const review=await prepare('publish',current,'Publish the saved version from that same website task.');assert.equal((await publication()).version_id,null);
+   modelSteps.push(resume,{kind:'review',operation:'reopen',targetId:review});await send('Show that exact publication review again.');
+   await page.waitForFunction(()=>[...document.querySelectorAll('button')].filter(b=>b.textContent?.trim()==='Confirm reviewed change').length===2);
+   assert.equal((await row('SELECT count(*) n FROM publication_actions WHERE user_id=?',c.user)).n,1);
+   for(const width of [360,390]){await page.setViewportSize({width,height:844});await confirmButton().last().scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-publication-review-'+width+'.png'});}
+   let before=modelCalls;await confirmButton().last().click();await page.getByText('The reviewed version is published at',{exact:false}).waitFor({timeout:60000});assert.equal(modelCalls,before);assert.equal((await publication()).version_id,current);
+   await page.reload();await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();assert.equal(await confirmButton().count(),0);assert.equal(modelCalls,before);
+   await prepare('restore',original,'Restore the original saved version to this task’s public website.');assert.equal((await publication()).version_id,current);await confirmButton().click();
+   await page.waitForFunction(()=>![...document.querySelectorAll('button')].some(b=>b.textContent?.trim()==='Confirm reviewed change'));
+   assert.equal((await publication()).version_id,original);assert.equal((await site.readSpecification(c.scope,c.user,c.project)).versionId,current);
+   await prepare('unpublish',c.project,'Take this task’s website offline.');assert.equal((await publication()).version_id,original);await confirmButton().click();await page.getByText('The site is unpublished.',{exact:false}).waitFor({timeout:60000});assert.equal((await publication()).version_id,null);
+   modelSteps.push(resume,body=>{assert.match(JSON.stringify(body),/publicationResults/);return taskReply('The website was taken offline. Both saved versions are still available privately.',{state:'finished',summary:'Withdrawal completed; private versions retained.',openQuestions:[]});});
+   await send('Did that withdrawal finish?');await page.getByText('The website was taken offline. Both saved versions are still available privately.',{exact:true}).waitFor({timeout:60000});
+   before=modelCalls;await page.reload();await page.getByText('The website was taken offline. Both saved versions are still available privately.',{exact:true}).waitFor();assert.equal(modelCalls,before);
+   assert.equal(siteChecks,2);assert.equal((await row("SELECT count(*) n FROM site_health_checks WHERE project_id=? AND state='healthy'",c.project)).n,2);assert.equal(modelCalls,selectionCalls+19);assert.equal((await publication()).revision,3);assert.equal((await row('SELECT count(*) n FROM publication_actions WHERE user_id=?',c.user)).n,3);
+   for(const width of [360,390]){await page.setViewportSize({width,height:844});await page.getByText('The website was taken offline. Both saved versions are still available privately.',{exact:true}).scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-publication-result-'+width+'.png'});}
+  }
+
   for(const width of [360,390]){await page.setViewportSize({width,height:844});await page.getByText('Your task’s private save completed at revision 2. It has not been published.',{exact:true}).evaluate(e=>e.scrollIntoView({block:'center'}));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-save-result-'+width+'.png'});}
  }
 
@@ -180,9 +212,9 @@ try{
  if(process.argv.includes('--intake-only')){
   await newProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='New-project browser passed: actual Worker/current local D1/built UI; natural intake, clarification before creation, same-task resumption, correction with separate private review, lost creation/review replies and reload without redispatch or duplicate projects. Ten scripted main calls; 360/390/1280px captures. No external inference, publication or physical-device acceptance.';
- }else if(process.argv.includes('--selection-only')||process.argv.includes('--reviews-only')){
+ }else if(process.argv.includes('--selection-only')||process.argv.includes('--reviews-only')||process.argv.includes('--publications-only')){
   await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
-  resultSummary=(process.argv.includes('--reviews-only')?'Task-review browser passed: actual Worker/current D1/built UI; exact same-task review reopening, trusted user private save, receipt after proposal disposal, status/resumption and reload without inference. Nine scripted calls; phone captures; no publication or external model.':'Selected-project browser passed: actual Worker/current local D1/built UI; natural request, explicit picker, private review, lost-result recovery, reload without redispatch and task resumption. Five scripted main calls; settled 360/390/1280px captures. No external inference, publication or physical-device acceptance.');
+  resultSummary=(process.argv.includes('--publications-only')?'Task-publication browser passed: actual Worker/current D1/built UI; cancelled passkey recovery, same-task publish/reopen/confirm/restore/withdrawal/status, exact original reviews and reload without extra inference; 19 scripted calls. Local synthetic publication only.':process.argv.includes('--reviews-only')?'Task-review browser passed: actual Worker/current D1/built UI; exact same-task review reopening, trusted user private save, receipt after proposal disposal, status/resumption and reload without inference. Nine scripted calls; phone captures; no publication or external model.':'Selected-project browser passed: actual Worker/current local D1/built UI; natural request, explicit picker, private review, lost-result recovery, reload without redispatch and task resumption. Five scripted main calls; settled 360/390/1280px captures. No external inference, publication or physical-device acceptance.');
  }else{
  phase='current form and keyboard validation';await page.goto(origin+'/_fixture/start');await field().waitFor();assert.equal(await field().inputValue(),'A greener neighborhood');
  await hearOrca('required field name and provenance',()=>field().focus(),[/Headline/i,/required/i,/Starting value: saved website text/i],true);

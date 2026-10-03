@@ -510,6 +510,7 @@
         "site_versions",
         "publications",
         "publication_actions",
+        "publication_chat_links",
         "version_removals",
         "chat_exports",
         "chat_comparisons"
