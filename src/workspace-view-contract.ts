@@ -2,10 +2,10 @@ import {copyJSON} from './project-specification/v2/json';
 import {workspaceShortcuts,type WorkspaceShortcut} from './workspace-shortcuts';
 /** Current maintained component registry; bindings own data, never layout JSON. */
 export const viewComponents={
- projects:{version:1,binding:'project.status@1'},usage:{version:1,binding:'account.usage@1'},
- storage:{version:1,binding:'project.storage@1'},activity:{version:1,binding:'owner.activity@1'},
- traffic:{version:1,binding:'site.traffic@1'},cms:{version:1,binding:'cms.status@1'},
- performance:{version:1,binding:'project.performance@1'}
+ projects:{version:1,binding:'project.status@1',feature:'core.editing'},usage:{version:1,binding:'account.usage@1',feature:'core.editing'},
+ storage:{version:1,binding:'project.storage@1',feature:'core.editing'},activity:{version:1,binding:'owner.activity@1',feature:'core.editing'},
+ traffic:{version:1,binding:'project.traffic@1',feature:'core.insights'},cms:{version:1,binding:'cms.status@1',feature:'core.editing'},
+ performance:{version:1,binding:'project.performance@1',feature:'core.insights'}
 } as const;
 export type WidgetKind=keyof typeof viewComponents;
 export const widgetKinds=Object.keys(viewComponents) as WidgetKind[];

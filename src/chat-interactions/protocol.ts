@@ -1,3 +1,4 @@
+import {viewComponents} from '../workspace-view-contract';
 /** Current protocol validation only. Domain storage owns issuance, authority and effects. */
 import {canonicalJSON,jsonDigest,SpecificationError} from '../project-specification/v2/json';
 import type {Field,Definition,Answers,OwnedResources,UnsignedInteraction,IssuedInteraction,Mutation,ClientCapabilities} from './types';
@@ -15,10 +16,10 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'site.content@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'readSpecification',scope:'project'},
   'agent.task-continue@1': {mode:'prepare',feature:'core.editing',source:'src/chat-interactions/task-context.ts',handler:'prepareInformationTask',scope:'project'},
   'site.content-prepare@1': {mode:'prepare',feature:'core.editing',source:'src/project-specification/store.ts',handler:'prepareSpecification',scope:'project'},
-  'workspace.projects@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'dashboardData',scope:'account',displays:['summary','table']},
+  'workspace.projects@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'account',displays:['summary','table']},
   'project.photos@1': {mode:'read',feature:'core.editing',source:'src/files.ts',handler:'readPhotoUpload',scope:'project',displays:['photos']},
-  'project.status@1': {mode:'read',feature:'core.editing',source:'src/workspace-dashboard.ts',handler:'readProjectStatuses',scope:'project',displays:['status','key-values']},
-  'project.traffic@1': {mode:'read',feature:'core.insights',source:'src/site-traffic.ts',handler:'readTraffic',scope:'project',displays:['summary','table']},
+  'project.status@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['status','key-values']},
+  'project.traffic@1': {mode:'read',feature:viewComponents.traffic.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['summary','table']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });

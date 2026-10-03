@@ -417,16 +417,22 @@
       "references": [
         "docs/account-closure.md",
         "src/index.ts",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "src/workspace-data.ts",
+        "src/workspace-view-bindings.ts",
+        "src/workspace-view-data.ts",
+        "frontend/src/workspace-view-components.tsx"
       ],
       "storageStatus": "current",
       "protection": {
         "profile": "managed-readable",
         "storage": [
-          "control-d1"
+          "control-d1",
+          "browser-private-cache"
         ],
         "readers": [
-          "Current owner/project domain handlers"
+          "Current owner/project domain handlers",
+          "Current owner registered Chat/view project facts with fresh inclusion and ownership checks; private query results expire on page/account changes."
         ],
         "processors": [
           "Owner maintenance uses the exact requested brief/project context; no visitor maintainer invocation"
@@ -464,7 +470,11 @@
         "src/github-grant-chat.ts",
         "frontend/src/github-grant-review.tsx",
         "src/agent-inspection.ts",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "src/workspace-data.ts",
+        "src/workspace-view-bindings.ts",
+        "src/workspace-view-data.ts",
+        "frontend/src/workspace-view-components.tsx"
       ],
       "storageStatus": "current",
       "protection": {
@@ -475,7 +485,8 @@
           "browser-download"
         ],
         "readers": [
-          "Current owner transcript/history/export and exact review presentation"
+          "Current owner transcript/history/export and exact review presentation",
+          "Current owner bounded activity summaries through registered view reads; no submitted answers or third-party documents enter this display."
         ],
         "processors": [
           "Maintenance model receives selected relevant history/inspection; class-specific protected reads and content-free diagnostics"
@@ -667,7 +678,11 @@
         "frontend/src/project-photo-upload.tsx",
         "frontend/src/lib/photo-upload-recovery.ts",
         "frontend/src/lib/prepare-project-photo.ts",
-        "src/chat-interactions/selected-photos.ts"
+        "src/chat-interactions/selected-photos.ts",
+        "src/workspace-data.ts",
+        "src/workspace-view-bindings.ts",
+        "src/workspace-view-data.ts",
+        "frontend/src/workspace-view-components.tsx"
       ],
       "storageStatus": "current",
       "protection": {
@@ -679,7 +694,8 @@
           "browser-private-cache"
         ],
         "readers": [
-          "Owner exact object reads only after current safety approval; public bytes only through approved publication"
+          "Owner exact object reads only after current safety approval; public bytes only through approved publication",
+          "Current owner registered view reads of ready-photo counts/bytes only; no image bytes or object keys. Media clearance and publication gates remain separate."
         ],
         "processors": [
           "Bounded JPEG envelope/metadata preparation, private storage and queued deletion; scanner processing remains unconfigured/deferred"
@@ -1654,16 +1670,22 @@
         "src/site-health.ts",
         "src/site-traffic.ts",
         "docs/maintenance.md",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "src/workspace-data.ts",
+        "src/workspace-view-bindings.ts",
+        "src/workspace-view-data.ts",
+        "frontend/src/workspace-view-components.tsx"
       ],
       "storageStatus": "current",
       "protection": {
         "profile": "managed-readable",
         "storage": [
-          "control-d1"
+          "control-d1",
+          "browser-private-cache"
         ],
         "readers": [
-          "Owner aggregate traffic/health and bounded operator diagnostics"
+          "Owner aggregate traffic/health and bounded operator diagnostics",
+          "Current owner registered view reads of aggregate page-request counts; no visitor identity or model-invented measurements."
         ],
         "processors": [
           "Deterministic request counters and health probes; selected aggregate explanation by owner agent"

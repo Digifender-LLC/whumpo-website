@@ -1,3 +1,5 @@
+import {readProjectStatuses,readWorkspaceActivity,readWorkspaceStorage} from './workspace-data';
+export {readProjectStatuses} from './workspace-data';
 import {readLayout} from './workspace-layout';
 export {readLayout,workspaceAction,defaultLayout,parseLayout} from './workspace-layout';
 export type {WorkspaceLayout,WidgetKind} from './workspace-view-contract';
@@ -17,16 +19,12 @@ export async function saveCapacity(db:D1Database,user:string,value:unknown){
  if(r.meta.changes!==1)throw new BillingError(409,'Preferences changed. Refresh before saving.');
  return readCapacity(db,user);
 }
-/** Shared owned projection; project-specific consumers filter before reading. */
-export async function readProjectStatuses(db:D1Database,user:string,projectId:string|null=null){
- return db.prepare('SELECT id,name,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id=? AND (? IS NULL OR id=?) ORDER BY updated_at DESC LIMIT 20').bind(user,projectId,projectId).all<{id:string;name:string;status:'draft'|'building'|'live'|'error';site_live:number;backend_live:number;cms_articles:number}>();
-}
 export async function dashboardData(db:D1Database,user:string){
  const [layout,billing,capacity,projects,activity,storage,traffic]=await Promise.all([
   readLayout(db,user),getBilling(db,user),readCapacity(db,user),
   readProjectStatuses(db,user),
-  db.prepare('SELECT project_id,summary,created_at FROM activity_events WHERE user_id=? ORDER BY created_at DESC LIMIT 20').bind(user).all(),
-  db.prepare("SELECT f.project_id,COUNT(*) AS files,SUM(f.size) AS bytes FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND f.status='ready' GROUP BY f.project_id").bind(user).all(),readTraffic(db,user)
+  readWorkspaceActivity(db,user),
+  readWorkspaceStorage(db,user),readTraffic(db,user)
  ]);
  return {...layout,billing,capacity,projects:projects.results,activity:activity.results,storage:storage.results,measuredAt:new Date().toISOString(),traffic,performance:null};
 }
