@@ -67,6 +67,11 @@ CREATE TABLE publication_actions (
  CHECK((kind = 'unpublish' AND version_id IS NULL) OR (kind != 'unpublish' AND version_id IS NOT NULL))
 );
 
+CREATE TABLE publication_chat_links (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ review_id TEXT NOT NULL REFERENCES publication_actions(id) ON DELETE CASCADE
+);
+
 CREATE TABLE chat_exports (
  turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
  version_id TEXT NOT NULL REFERENCES site_versions(id) ON DELETE CASCADE
@@ -3483,6 +3488,17 @@ WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.plan_id!=OLD.plan_id OR N
 BEGIN SELECT RAISE(ABORT,'stripe_order_identity'); END;
 
 CREATE TRIGGER stripe_invoice_immutable BEFORE UPDATE ON stripe_paid_invoices BEGIN SELECT RAISE(ABORT,'stripe_invoice_immutable'); END;
+
+CREATE TRIGGER publication_chat_link_admit BEFORE INSERT ON publication_chat_links BEGIN
+ SELECT RAISE(ABORT,'publication_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_turns t JOIN publication_actions a ON a.user_id=t.user_id
+  JOIN projects p ON p.id=a.project_id AND p.owner_user_id=t.user_id
+  JOIN publications s ON s.project_id=p.id AND s.revision=a.expected_revision
+  WHERE t.id=NEW.turn_id AND a.id=NEW.review_id AND a.status='pending'
+   AND a.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+CREATE TRIGGER publication_chat_link_immutable BEFORE UPDATE ON publication_chat_links
+ BEGIN SELECT RAISE(ABORT,'publication_changed'); END;
 
 CREATE TRIGGER publication_confirm_guard BEFORE UPDATE ON publication_actions
 BEGIN

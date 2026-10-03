@@ -1,3 +1,5 @@
+import {compareReview,DiffError} from './version-diff';
+import {BackendError} from './backend-error';
 export const siteURL = (projectId: string) => `https://${projectId}.whumpo.site`;
 export type PublicationCommand = {reply:string; statements:D1PreparedStatement[]};
 const uuid = /^[0-9a-f-]{36}$/;
@@ -30,5 +32,21 @@ export async function publicationCommand(db:D1Database,userId:string,turnId:stri
  return result(review+`\nAny attached backend tool is hidden after this change and needs a new form review. Any enabled contact form stops accepting messages after this change. Ask to review enabling the contact form for the new live version.\n\nConfirm within 10 minutes using this review’s confirmation button. Nothing changes until you confirm. Open “Review website changes” below to compare this action with the live site.`,[
  db.prepare('INSERT OR IGNORE INTO publications(project_id) SELECT id FROM projects WHERE id=? AND owner_user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(target.project_id,userId,turnId,userId),
  db.prepare('INSERT INTO publication_actions(id,user_id,project_id,kind,version_id,expected_revision,expires_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turnId,userId,target.project_id,kind,target.version_id,target.revision,expiry,turnId,userId)
+ ,publicationChatLink(db,userId,turnId,turnId)
  ]);
+}
+
+export function publicationChatLink(db:D1Database,user:string,turn:string,review:string){
+ return db.prepare('INSERT INTO publication_chat_links(turn_id,review_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,review,turn,user);
+}
+/** Reopen the exact existing review. The link is presentation, never approval. */
+export async function reopenPublicationReview(db:D1Database,user:string,turn:string,review:string):Promise<PublicationCommand>{
+ try{
+  const diff=await compareReview(db,user,review);
+  const verb=diff.kind==='unpublish'?'Take offline':diff.kind==='restore'?'Restore':'Publish';
+  return {reply:`${verb} “${diff.project.name}” at ${siteURL(diff.project.id)}?\n${diff.kind==='unpublish'?'The website will stop serving; saved versions stay private.':'All content and attached photos in this exact saved version become public, replacing the current website.'} Attached backend tools and contact intake stop until separately reviewed.\n\nThis reopens the original review with the same expiry. Compare the website changes below. Nothing changes until you confirm.`,statements:[publicationChatLink(db,user,turn,review)]};
+ }catch(error){
+  if(error instanceof DiffError||error instanceof BackendError)return {reply:error.message,statements:[]};
+  throw error;
+ }
 }

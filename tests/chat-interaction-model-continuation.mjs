@@ -3,10 +3,10 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 Error.stackTraceLimit=0;
-const modules=await currentFixtureModules(['src/index.ts','src/site-agent.ts','src/ai-chat.ts','src/agent-inspection.ts','src/chat-interactions/store.ts','src/chat-interactions/agent.ts','src/chat-interactions/protocol.ts','src/project-specification/store.ts','src/chat-interactions/task-context.ts','src/chat-interactions/model-continuation.ts']);
+const modules=await currentFixtureModules(['src/index.ts','src/site-agent.ts','src/ai-chat.ts','src/agent-inspection.ts','src/chat-interactions/store.ts','src/chat-interactions/agent.ts','src/chat-interactions/protocol.ts','src/project-specification/store.ts','src/chat-interactions/task-context.ts','src/chat-interactions/model-continuation.ts','src/publications.ts']);
 const worker=(await modules.module('src/index.ts')).default,agent=await modules.module('src/site-agent.ts'),ai=await modules.module('src/ai-chat.ts'),inspection=await modules.module('src/agent-inspection.ts');
 const store=await modules.module('src/chat-interactions/store.ts'),forms=await modules.module('src/chat-interactions/agent.ts'),protocol=await modules.module('src/chat-interactions/protocol.ts'),site=await modules.module('src/project-specification/store.ts');
-const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only']}),{db}=fixture,id=()=>crypto.randomUUID();
+const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only','--publications-only']}),{db}=fixture,id=()=>crypto.randomUUID();
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-only',protocol:'responses'};
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:config.baseURL,AI_MODEL:config.model,AI_PROTOCOL:config.protocol,AI_API_KEY:config.apiKey};
@@ -21,7 +21,7 @@ globalThis.fetch=async(url,init)=>{
 };
 const http=(o,path,data,database=db)=>worker.fetch(new Request('https://whumpo.com'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),{...env,DB:database},{waitUntil(p){background.push(p);}});
 async function json(o,path,data,database){const r=await http(o,path,data,database);assert.equal(r.status,200,await r.clone().text());return r.json();}
-async function test(name,fn){if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
+async function test(name,fn){if(process.argv.includes('--publications-only')&&!name.startsWith('task-publication '))return;if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
 async function owner(withWebsite=true){
  const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=id();
  await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -419,5 +419,109 @@ try{
   const laterDb={prepare:q=>db.prepare(q.replaceAll("strftime('%Y-%m-%dT%H:%M:%fZ','now')","strftime('%Y-%m-%dT%H:%M:%fZ','now','+11 minutes')")),batch:s=>db.batch(s)},later=await o.authority.scope(laterDb);
   const task=await taskContext.prepareInformationTask(later,o.user,form.submission.id,true);assert.deepEqual(task.data.websiteResults.items,[{reviewId:form.submission.id,state:'expired'}]);assert.equal(taskContext.informationTaskProposalFailure(JSON.stringify({reply:'expired',action:reopen(form)}),task),'task_target');
  });
- console.log(`Chat model continuation: ${cases} actual-handler scenarios passed; ${mainCalls} scripted main calls, ${ackCalls} ack calls. No external model, publication or payment.`);
+ // Publication adapter fixtures are entirely local, including simulated public hosting.
+ await run('DELETE FROM users');
+ const publicationGrant=async(o,operations=['read','prepare'])=>{for(const operation of operations)await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.publication',?,'private-test-acceptance','synthetic publication task',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,o.project,operation);};
+ const publicationAction=(operation,targetId)=>({kind:'review',operation,targetId});
+ const savedVersion=async o=>(await site.readSpecification(o.scope,o.user,o.project)).versionId;
+ const publicationConfirm=async(o,reviewId)=>json(o,'/api/chat/actions',{id:id(),revision:await revision(o),action:{type:'confirm',kind:'site',reviewId}});
+ const publicationState=async o=>{const r=await row('SELECT version_id,revision FROM publications WHERE project_id=?',o.project);return r?{...r}:null;};
+ async function publicationTask(o,operation='publish',targetId){
+  await publicationGrant(o);const {form}=await savedSelection(o,'Prepare the exact website publication review.');
+  const target=targetId??await savedVersion(o);assert(target);
+  const result=await follow(o,form,[publicationAction(operation,target)]);
+  assert.equal(result.data.continuation.state,'succeeded');return form;
+ }
+ await test('task-publication publish reopen restore withdraw and historical results stay in the original task',async()=>{
+  const o=await owner(),v1=await savedVersion(o),form=await publicationTask(o);
+  assert.deepEqual(await publicationState(o),{version_id:null,revision:0});
+  const again=await chat(o,'Show that publication review again.',[resume({...form,projectId:o.project}),body=>{
+   const text=JSON.stringify(body);assert(text.includes('publicationResults'));assert(text.includes(form.submission.id));return taskReply('UNTRUSTED_REVIEW_READY',publicationAction('reopen',form.submission.id));
+  }]);
+  assert.equal(again.turn.status,'completed');assert.equal(again.turn.confirmation_id,form.submission.id);assert.doesNotMatch(again.turn.assistant_text,/UNTRUSTED/);
+  assert.equal((await row('SELECT count(*) n FROM publication_actions WHERE user_id=?',o.user)).n,1);
+  const calls=mainCalls;await json(o,'/api/chat',again.input);assert.equal(mainCalls,calls);
+  await publicationConfirm(o,form.submission.id);assert.deepEqual(await publicationState(o),{version_id:v1,revision:1});
+  const repeated=await publicationConfirm(o,form.submission.id);assert.match(repeated.turns.at(-1).assistant_text,/already applied/);assert.equal((await publicationState(o)).revision,1);
+  const changed=(await savedSelection(o)).form;await follow(o,changed,[read(o),change(o)]);await confirm(o,changed.submission.id);const v2=await savedVersion(o);assert.notEqual(v1,v2);
+  const publish=await chat(o,'Publish the latest saved private version in that first task.',[resume({...form,projectId:o.project}),taskReply('Prepare exact publication.',publicationAction('publish',v2))]);
+  assert.equal(publish.turn.confirmation_id,publish.input.id);await publicationConfirm(o,publish.input.id);assert.deepEqual(await publicationState(o),{version_id:v2,revision:2});
+  const restore=await chat(o,'Restore the original saved version to the public site.',[resume({...form,projectId:o.project}),taskReply('Prepare exact restore.',publicationAction('restore',v1))]);
+  assert.equal(restore.turn.confirmation_id,restore.input.id);assert.deepEqual(await publicationState(o),{version_id:v2,revision:2});
+  await publicationConfirm(o,restore.input.id);assert.deepEqual(await publicationState(o),{version_id:v1,revision:3});assert.equal(await savedVersion(o),v2,'Public restore must not rewind the private editing head');
+  const off=await chat(o,'Take the site from that same task offline.',[resume({...form,projectId:o.project}),taskReply('Prepare withdrawal.',publicationAction('unpublish',o.project))]);
+  assert.equal(off.turn.confirmation_id,off.input.id);assert.equal((await publicationState(o)).version_id,v1);await publicationConfirm(o,off.input.id);
+  assert.deepEqual(await publicationState(o),{version_id:null,revision:4});
+  const current=(await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true)).data.publicationResults;
+  assert.equal(current.current.versionId,null);assert.equal(current.current.privateVersionId,v2);assert.deepEqual(current.versions.map(v=>v.privateRevision),[2,1]);assert.equal(current.items[0].kind,'unpublish');assert.equal(current.items[0].state,'applied');assert.equal(current.items[0].resultRevision,4);
+  const status=await chat(o,'Did that withdrawal finish?', [resume({...form,projectId:o.project}),taskReply('The recorded withdrawal completed. Your saved versions are still private.')]);
+  assert.equal(status.turn.status,'completed');assert.equal(status.turn.confirmation_id,null);assert.equal((await row('SELECT count(*) n FROM publication_actions WHERE user_id=?',o.user)).n,4);
+ });
+ for(const wrong of ['same-project-other-task','other-project','foreign-owner'])await test('task-publication rejects '+wrong+' review and never creates a link',async()=>{
+  const o=await owner(),form=await publicationTask(o),other=wrong==='same-project-other-task'?o:await owner();
+  if(wrong==='other-project'){await run('UPDATE projects SET owner_user_id=? WHERE id=?',o.user,other.project);await grantNew(o,other.project);}
+  const target=wrong==='other-project'?{...o,project:other.project}:other;
+  const otherForm=await publicationTask(target);
+  const r=await chat(o,'Open the first task’s publication review.',[resume({...form,projectId:o.project}),taskReply('UNTRUSTED_FOREIGN_REVIEW',publicationAction('reopen',otherForm.submission.id))]);
+  assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_FOREIGN/);assert.equal(await row('SELECT * FROM publication_chat_links WHERE turn_id=?',r.input.id),null);assert.equal((await publicationState(o)).revision,0);
+ });
+ for(const invalid of ['foreign-version','unobserved-version','confirm','extra-field'])await test('task-publication rejects '+invalid+' action',async()=>{
+  const o=await owner(),form=await publicationTask(o),other=await owner();let action=publicationAction('restore',invalid==='foreign-version'?await savedVersion(other):id());
+  if(invalid==='confirm')action={type:'confirm',kind:'site',reviewId:form.submission.id};
+  if(invalid==='extra-field')action={...publicationAction('publish',await savedVersion(o)),approved:true};
+  const r=await chat(o,'Review the task publication.',[resume({...form,projectId:o.project}),taskReply('UNTRUSTED_ACTION',action)]);
+  assert.equal(r.turn.status,'failed');assert.equal((await row('SELECT count(*) n FROM publication_actions WHERE user_id=?',o.user)).n,1);assert.equal((await publicationState(o)).revision,0);
+ });
+ for(const boundary of ['missing-read','missing-prepare','revoked-during-inference'])await test('task-publication '+boundary+' cannot disclose or prepare a result',async()=>{
+  const o=await owner(),form=await publicationTask(o);
+  if(boundary!=='revoked-during-inference')await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.publication' AND operation=?",o.user,boundary==='missing-read'?'read':'prepare');
+  const context=(await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true)).data.publicationResults;
+  if(boundary==='missing-read'){assert.equal(context.state,'denied');assert.equal(context.items.length,0);assert.equal(context.versions.length,0);assert.equal(context.current,null);}
+  if(boundary==='missing-prepare')assert.equal(context.canPrepare,false);
+  const r=await chat(o,'Open the saved publication review.',[resume({...form,projectId:o.project}),async()=>{
+   if(boundary==='revoked-during-inference')await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.publication'",o.user);
+   return taskReply('UNTRUSTED_DENIED',publicationAction('reopen',form.submission.id));
+  }]);assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_DENIED/);assert.equal(await row('SELECT * FROM publication_chat_links WHERE turn_id=?',r.input.id),null);
+ });
+ await test('task-publication applied and superseded reviews cannot be reopened',async()=>{
+  const o=await owner(),form=await publicationTask(o),second=await publicationTask(o);await publicationConfirm(o,second.submission.id);
+  const task=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true);assert.equal(task.data.publicationResults.items[0].state,'changed');
+  assert.equal(taskContext.informationTaskProposalFailure(JSON.stringify({reply:'reopen',action:publicationAction('reopen',form.submission.id)}),task),'task_target');
+  const applied=await taskContext.prepareInformationTask(o.scope,o.user,second.submission.id,true);assert.equal(applied.data.publicationResults.items[0].state,'applied');assert.equal(taskContext.informationTaskProposalFailure(JSON.stringify({reply:'reopen',action:publicationAction('reopen',second.submission.id)}),applied),'task_target');
+ });
+ await test('task-publication expiry is explicit and never extends the review',async()=>{
+  const o=await owner(),form=await publicationTask(o);
+  const laterDb={prepare:q=>db.prepare(q.replaceAll("strftime('%Y-%m-%dT%H:%M:%fZ','now')","strftime('%Y-%m-%dT%H:%M:%fZ','now','+11 minutes')")),batch:s=>db.batch(s)},later=await o.authority.scope(laterDb);
+  const task=await taskContext.prepareInformationTask(later,o.user,form.submission.id,true);assert.equal(task.data.publicationResults.items[0].state,'expired');assert.equal(taskContext.informationTaskProposalFailure(JSON.stringify({reply:'expired',action:publicationAction('reopen',form.submission.id)}),task),'task_target');
+ });
+ await test('task-publication late removal produces an unavailable response without another review',async()=>{
+  const o=await owner(),form=await publicationTask(o);
+  const r=await chat(o,'Reopen the pending publication.',[resume({...form,projectId:o.project}),async()=>{await run('DELETE FROM publication_actions WHERE id=?',form.submission.id);return taskReply('UNTRUSTED_READY',publicationAction('reopen',form.submission.id));}]);
+  assert.equal(r.turn.status,'completed');assert.match(r.turn.assistant_text,/not found/);assert.equal(r.turn.confirmation_id,null);assert.equal(await row('SELECT * FROM publication_chat_links WHERE turn_id=?',r.input.id),null);assert.equal((await publicationState(o)).revision,0);
+ });
+
+
+ await test('task-publication exact review link is checked atomically after model preparation',async()=>{
+  const o=await owner(),form=await publicationTask(o);let removed=false;
+  const racing=interceptDatabase(db,/^INSERT INTO publication_chat_links/,async()=>{removed=true;await run('DELETE FROM publication_actions WHERE id=?',form.submission.id);});
+  const r=await chat(o,'Open that exact pending publication review.',[resume({...form,projectId:o.project}),taskReply('UNTRUSTED_STALE',publicationAction('reopen',form.submission.id))],racing);
+  assert(removed);assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_STALE/);assert.equal(await row('SELECT * FROM publication_chat_links WHERE turn_id=?',r.input.id),null);assert.equal((await progress(form)).turn_id,form.submission.id);assert.equal((await publicationState(o)).revision,0);
+ });
+ await test('task-publication approval during inference cannot produce another confirmation',async()=>{
+  const o=await owner(),form=await publicationTask(o),publication=await modules.module('src/publications.ts');
+  const r=await chat(o,'Reopen the publication from that task.',[resume({...form,projectId:o.project}),async()=>{
+   const turn=id(),next=await revision(o)+1,action={type:'confirm',kind:'site',reviewId:form.submission.id};
+   const prepared=await publication.publicationCommand(o.scope,o.user,turn,'/confirm '+form.submission.id);
+   await o.scope.batch([o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status,action_json) VALUES(?,?,?,'Confirm publication',?,datetime('now'),'guided','completed',?)").bind(turn,o.user,next,prepared.reply,JSON.stringify(action)),...prepared.statements,o.scope.prepare('UPDATE workspace_state SET revision=? WHERE user_id=?').bind(next,o.user)]);
+   return taskReply('UNTRUSTED_PENDING',publicationAction('reopen',form.submission.id));
+  }]);assert.equal(r.turn.status,'completed');assert.match(r.turn.assistant_text,/changed or expired/);assert.equal(r.turn.confirmation_id,null);assert.equal((await publicationState(o)).revision,1);assert.equal(await row('SELECT * FROM publication_chat_links WHERE turn_id=?',r.input.id),null);
+ });
+ await test('task-publication immutable links reject foreign ownership at the storage boundary',async()=>{
+  const o=await owner(),form=await publicationTask(o),other=await owner(),otherForm=await publicationTask(other);
+  await assert.rejects(run('UPDATE publication_chat_links SET review_id=? WHERE turn_id=?',otherForm.submission.id,form.submission.id),/publication_changed/);
+  const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,99,'fixture','fixture',datetime('now'),'ai','pending')",turn,o.user);
+  await assert.rejects(run('INSERT INTO publication_chat_links VALUES(?,?)',turn,otherForm.submission.id),/publication_changed/);
+  assert.equal((await row('SELECT review_id FROM publication_chat_links WHERE turn_id=?',form.submission.id)).review_id,form.submission.id);
+ });
+ console.log(`Chat model continuation: ${cases} actual-handler scenarios passed; ${mainCalls} scripted main calls, ${ackCalls} ack calls. No external model, remote customer publication or payment.`);
 }finally{globalThis.fetch=originalFetch;await Promise.allSettled(background);console.warn=originalWarn;await fixture.close();}
