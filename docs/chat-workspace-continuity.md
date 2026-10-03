@@ -35,4 +35,8 @@ Earlier attempts remain recorded: a selector incorrectly required a field after 
 
 The focused `node tests/chat-interaction-browser.mjs --d1 --consent-only` journey also passes on this source: signed virtual-passkey authorization, synthetic OAuth start/cancel/success and Chat return, lost committed callback with one synthetic token exchange, older-history reload, another tab, terminal saved status and read outage/access loss without redispatch. It uses nine scripted main-model calls and no real consent or provider resource reads.
 
-This increment remains pending deployment. No server schema/authority change, external inference, provider activation, billing or customer publication is part of it. CSAM, Daybreak and CMS functional testing remain deferred. The broader WH-111 requirements above and WH-112 customer acceptance remain open.
+### Verified test deployment — October 3, 2026 UTC
+
+Source `3ccd6ed150affa914a11d656949401ff73c30fe2` is pushed and deployed on platform version `0a02e15e-0ded-45d7-804e-d7ea95779dca`. The required platform deployment wrapper and an independent readback passed at **2026-10-03T18:23:36.540Z**. All 40 served assets match the local build; the other three Workers, platform bindings, 177-table/806-object current schema and CMS registry are unchanged. Anonymous live 360/390/1280px landing/skip-link checks, entry/sign-in/recovery focus, health and private API denial pass. Authenticated form continuity and speech evidence remain the separately recorded local current-Worker/D1/R2 journey; this does not claim remote owner enrollment, human listening or physical-device acceptance.
+
+No server schema/authority change, external inference, provider activation, billing or customer publication is part of this increment. CSAM, Daybreak and CMS functional testing remain deferred. The broader WH-111 requirements above and WH-112 customer acceptance remain open; the accepted roadmap count remains 26/122.
