@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {chromium} from '@playwright/test';
 import {currentFixtureModules} from './current-modules.mjs';
+import {captureSelectedChatProject} from './chat-viewport.mjs';
 
 export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,release,evidenceDirectory,allowInference=false}){
  assert.equal(allowInference,true);assert(evidenceDirectory.startsWith('.secrets/'));
@@ -86,10 +87,8 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
   phase='read-reload-and-mobile';const before=await calls();await page.reload();await card(selection).getByText('Whumpo’s follow-up is ready in Chat.',{exact:false}).waitFor();assert.deepEqual(await calls(),before);
   await page.locator('.chat-scroll').hover();await page.mouse.wheel(0,-1600);await page.getByRole('button',{name:'Latest messages',exact:true}).waitFor();
   for(const width of [360,390]){
-   await page.setViewportSize({width,height:844});await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));await card(selection).getByRole('heading',{name:'Choose the project you mean',exact:true}).scrollIntoViewIfNeeded();
-   await page.waitForFunction(interactionId=>{const e=document.querySelector('[data-interaction-id="'+interactionId+'"] h2'),s=document.querySelector('.chat-scroll');return e&&s&&e.getBoundingClientRect().top>=s.getBoundingClientRect().top&&e.getBoundingClientRect().bottom<=s.getBoundingClientRect().bottom;},selection.envelope.id);
-   await page.waitForFunction(interactionId=>document.querySelector('[data-interaction-id="'+interactionId+'"] select')?.selectedOptions[0]?.textContent==='Test Garden',selection.envelope.id);
-   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:evidenceDirectory+'/selected-'+width+'.png'});
+   await page.setViewportSize({width,height:844});
+   await captureSelectedChatProject(page,{interactionId:selection.envelope.id,projectName:'Test Garden',path:evidenceDirectory+'/selected-'+width+'.png'});
   }
   assert.equal((await row('SELECT count(*) n FROM publications')).n,0);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',id)).n,2);assert.equal((await site.readSpecification(scope,id,target)).revision,1);assert.equal((await site.readSpecification(scope,id,original)).revision,1);assert.equal((await billing.getBilling(scope,id)).standardAI.creditCharge,0);assert.deepEqual(errors,[]);success=true;
  }finally{

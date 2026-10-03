@@ -56,3 +56,25 @@ export async function inspectChatViewport(page,context){
   await page.emulateMedia({reducedMotion:'no-preference'});await page.setViewportSize({width:390,height:844});
  }
 }
+
+/** Put a saved picker into a deliberate reading position after phone reflow. */
+export async function captureSelectedChatProject(page,{interactionId,projectName,path}){
+ const card=page.locator('[data-interaction-id="'+interactionId+'"]');
+ const heading=card.getByRole('heading',{name:'Choose the project you mean',exact:true});
+ await heading.evaluate(e=>e.scrollIntoView({block:'start',behavior:'instant'}));
+ const geometry=()=>page.evaluate(interactionId=>{
+  const card=document.querySelector('[data-interaction-id="'+interactionId+'"]'),heading=card?.querySelector('h2'),select=card?.querySelector('select'),scroll=document.querySelector('.chat-scroll');
+  if(!heading||!select||!scroll)return null;
+  const h=heading.getBoundingClientRect(),s=select.getBoundingClientRect(),frame=scroll.getBoundingClientRect();
+  return {heading:{top:h.top,bottom:h.bottom},selection:{top:s.top,bottom:s.bottom,height:s.height},frame:{top:frame.top,bottom:frame.bottom},name:select.selectedOptions[0]?.textContent,width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth};
+ },interactionId);
+ let view;
+ for(let n=0;n<60;n++){
+  view=await geometry();
+  if(view&&view.heading.top>=view.frame.top&&view.heading.bottom<=view.frame.bottom&&view.selection.top>=view.frame.top&&view.selection.bottom<=view.frame.bottom&&view.name===projectName)break;
+  await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+ }
+ assert(view&&view.heading.top>=view.frame.top&&view.heading.bottom<=view.frame.bottom&&view.selection.top>=view.frame.top&&view.selection.bottom<=view.frame.bottom&&view.name===projectName,JSON.stringify({message:'Saved picker must be readable inside the Chat scroll area',view}));
+ assert(view.selection.height>=44);assert.equal(view.overflow,false);
+ await page.screenshot({path});return view;
+}

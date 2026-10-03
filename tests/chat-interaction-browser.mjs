@@ -8,7 +8,7 @@ import {createRequire} from 'node:module';
 import {build as viteBuild} from 'vite';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
-import {inspectChatViewport} from './helpers/chat-viewport.mjs';
+import {inspectChatViewport,captureSelectedChatProject} from './helpers/chat-viewport.mjs';
 import {hearOrca} from './helpers/orca-output.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
@@ -98,6 +98,7 @@ try{
  for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});await selectedCard().scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await selectedCard().screenshot({path:'/tmp/whumpo-selected-task-'+width+'.png'});}
  modelSteps.push({kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id},body=>{assert.match(JSON.stringify(body),/seasonal planting/);assert.match(JSON.stringify(body),new RegExp(selectedForm.submission.id));return taskReply('Your seasonal planting review is still ready. Nothing has been saved or published.',{state:'finished',summary:'Existing seasonal planting review awaits owner approval.',openQuestions:[]});});
  await page.getByRole('textbox',{name:'Message Whumpo'}).fill('Continue that selected-project task. Is the review still ready?');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+5);await page.reload();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor();assert.equal(modelCalls,selectionCalls+5);
+ for(const width of [360,390]){await page.setViewportSize({width,height:844});await captureSelectedChatProject(page,{interactionId:selectionRow.id,projectName:'Garden',path:'/tmp/whumpo-selected-resume-'+width+'.png'});assert.equal(modelCalls,selectionCalls+5);}
  await page.setViewportSize({width:390,height:844});env.ENVIRONMENT='local';
  }
  async function newProjectJourney(){
