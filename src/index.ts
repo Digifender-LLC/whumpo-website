@@ -1,3 +1,5 @@
+import {connectionStartInput,connectionReturnPath,readConnectionHandoff} from './chat-interactions/connection-handoff';
+import {isConnectionProvider} from './connection-handoff-shape';
 import {readSavedViewComponent} from './workspace-view-bindings';
 import {readLayout,readLayoutHistory,readLayoutReceipt,mutateLayout} from './workspace-layout';
 import {WorkspaceViewError} from './workspace-view-contract';
@@ -395,12 +397,17 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   }
   const dnsConfirmation=pathname.match(/^\/api\/cloudflare\/dns\/([0-9a-f-]{36})\/confirm$/);
   if(method==='POST'&&dnsConfirmation)return json(await confirmDNS(env.DB,user.id,dnsConfirmation[1],cloudflareConfig(env),transport,!!hostingConfig(env)));
+  const consent=pathname.match(/^\/api\/connections\/(github|cloudflare)\/handoff$/);
+  if(method==='GET'&&consent&&isConnectionProvider(consent[1])){
+    const params=new URL(request.url).searchParams;
+    return json(await readConnectionHandoff(env.DB,user.id,consent[1],{interactionId:params.get('interactionId')??'',definitionDigest:params.get('definitionDigest')??''},{github:githubConfig(env),cloudflare:cloudflareConfig(env)}));
+  }
   if(method==='POST'&&pathname==='/api/connections/cloudflare/start'){
     await requireFreshWorkspace(env.DB,user.id);
-    return json(await startCloudflare(env.DB,user.id,cloudflareConfig(env)));
+    return json(await startCloudflare(env.DB,user.id,cloudflareConfig(env),connectionStartInput(await body(request))));
   }
   if(method==='GET'&&pathname==='/api/connections/cloudflare/callback'){
-    const params=new URL(request.url).searchParams;let destination='/workspace/?connection=cloudflare';
+    const params=new URL(request.url).searchParams;let destination=await connectionReturnPath(env.DB,user.id,'cloudflare',params.get('state')??'');
     try{if(params.has('error')){await cancelCloudflare(env.DB,user.id,params.get('state')??'');throw new ConnectionError(400,'Cloudflare authorization cancelled.');}await finishCloudflare(env.DB,user.id,params.get('state')??'',params.get('code')??'',cloudflareConfig(env));}
     catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof ConnectionVaultError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});
@@ -409,11 +416,11 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if(method==='GET'&&pathname==='/api/connections/cloudflare/zones')return json(await cloudflareZones(env.DB,user.id,cloudflareConfig(env),Number(new URL(request.url).searchParams.get('page')??1)));
   if (method === "POST" && pathname === "/api/connections/github/start") {
     await requireFreshWorkspace(env.DB,user.id);
-    return json(await startGitHub(env.DB,user.id,githubConfig(env)));
+    return json(await startGitHub(env.DB,user.id,githubConfig(env),connectionStartInput(await body(request))));
   }
   if (method === "GET" && pathname === "/api/connections/github/callback") {
     const params=new URL(request.url).searchParams;
-    let destination='/workspace/?connection=github';
+    let destination=await connectionReturnPath(env.DB,user.id,'github',params.get('state')??'');
     try{if(params.has('error')){await cancelGitHub(env.DB,user.id,params.get('state')??'');throw new ConnectionError(400,'GitHub authorization was cancelled.');}await finishGitHub(env.DB,user.id,params.get('state')??'',params.get('code')??'',githubConfig(env));}
     catch(cause){if(!(cause instanceof ConnectionError)&&!(cause instanceof ConnectionVaultError)&&!(cause instanceof FeatureInclusionError))throw cause;destination+='&connection_error=authorization';}
     return new Response(null,{status:303,headers:{location:destination,'cache-control':'no-store','referrer-policy':'no-referrer'}});

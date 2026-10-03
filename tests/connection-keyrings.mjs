@@ -23,7 +23,7 @@ try{
  await m.registerConnectionKeys(db,next,'key-review-b');
  const racingOwner=await workspaceFixture(db,m);await paidPlan(db,racingOwner.account,'business');let activated=false;
  const racingDB=interceptDatabase(db,/INSERT INTO github_oauth_states/,async()=>{if(!activated){activated=true;await m.beginConnectionRotation(db,next,{id:'keyring-rotation',reviewId:'key-review-b',expectedRevision:1});}});
- const racingResponse=await m.worker.fetch(new Request('https://whumpo.com/api/connections/github/start',{method:'POST',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+racingOwner.token}}),{DB:racingDB,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},GITHUB_CLIENT_ID:'fixture',GITHUB_CLIENT_SECRET:'synthetic',GITHUB_APP_ID:'123',GITHUB_APP_SLUG:'fixture',CONNECTION_ENCRYPTION_KEYRING:first});
+ const racingResponse=await m.worker.fetch(new Request('https://whumpo.com/api/connections/github/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+racingOwner.token}}),{DB:racingDB,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},GITHUB_CLIENT_ID:'fixture',GITHUB_CLIENT_SECRET:'synthetic',GITHUB_APP_ID:'123',GITHUB_APP_SLUG:'fixture',CONNECTION_ENCRYPTION_KEYRING:first});
  assert.equal(racingResponse.status,503);const rejected=await racingResponse.text();assert.match(rejected,/Platform recovery is required/);assert.doesNotMatch(rejected,/key-a|key-b|wv2|SQLITE|abababab/);assert.equal(activated,true);
 
  for(const provider of ['github','cloudflare']){

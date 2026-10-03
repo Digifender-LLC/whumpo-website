@@ -25,3 +25,16 @@ export function photoIntakeDefinition():Definition{return {version:1,kind:'view'
 export function isPhotoIntakeDefinition(d:Definition){
  const expected=photoIntakeDefinition();return d.version===1&&d.kind==='view'&&d.template==='status@1'&&d.title===expected.title&&d.summary===expected.summary&&d.presentation==='inline'&&d.fields.length===0&&d.cards.length===1&&d.cards[0].id==='photo-upload'&&d.cards[0].binding==='project.photos@1'&&d.cards[0].display==='photos'&&d.cards[0].limit===1&&d.cards[0].reviewId===null&&d.submitBinding===null&&d.continuationBinding===null;
 }
+
+/** Fixed consent handoff; generated text cannot choose scopes, URLs or credentials. */
+export function connectionIntakeDefinition(provider:'github'|'cloudflare'):Definition{
+ const label=provider==='github'?'GitHub':'Cloudflare';
+ return {version:1,kind:'view',template:'status@1',title:'Connect '+label,summary:'Review your saved connection status, then choose whether to authorize access with '+label+'. Connecting applies to your Whumpo account. Website changes and provider operations need their own approval.',presentation:'inline',fields:[],cards:[{id:'connection-consent',binding:'connection.'+provider+'@1',display:'consent',limit:1,reviewId:null}],submitBinding:null,continuationBinding:null};
+}
+export function connectionIntakeProvider(d:Definition):'github'|'cloudflare'|null{
+ for(const provider of ['github','cloudflare'] as const){
+  const e=connectionIntakeDefinition(provider);
+  if(d.version===1&&d.kind==='view'&&d.template==='status@1'&&d.title===e.title&&d.summary===e.summary&&d.presentation==='inline'&&d.fields.length===0&&d.cards.length===1&&d.cards[0].id==='connection-consent'&&d.cards[0].binding===e.cards[0].binding&&d.cards[0].display==='consent'&&d.cards[0].limit===1&&d.cards[0].reviewId===null&&d.submitBinding===null&&d.continuationBinding===null&&!d.workspaceView&&!d.purpose)return provider;
+ }
+ return null;
+}

@@ -54,10 +54,10 @@ try{
  const env={...fixture.env,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},CLOUDFLARE_CLIENT_ID:config.clientId,CLOUDFLARE_CLIENT_SECRET:config.clientSecret,CONNECTION_ENCRYPTION_KEYRING:config.key};
  let cookie='__Host-whumpo_session='+stale.token,base='https://whumpo.com';
  assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/zones'),env)).status,401);
- assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/start',{method:'POST',headers:{cookie,origin:'https://evil.test'}}),env)).status,403);
- assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/start',{method:'POST',headers:{cookie,origin:base}}),env)).status,401);
+ assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',cookie,origin:'https://evil.test'}}),env)).status,403);
+ assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',cookie,origin:base}}),env)).status,401);
  cookie='__Host-whumpo_session='+gateIdentity.token;
- assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/start',{method:'POST',headers:{cookie,origin:base}}),env)).status,200);
+ assert.equal((await worker.fetch(new Request(base+'/api/connections/cloudflare/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',cookie,origin:base}}),env)).status,200);
  const callback=await worker.fetch(new Request(base+'/api/connections/cloudflare/callback?code=fixture&state=bad',{headers:{cookie}}),env);assert.equal(callback.status,303);assert.equal(callback.headers.get('location'),'/workspace/?connection=cloudflare&connection_error=authorization');assert.equal(callback.headers.get('referrer-policy'),'no-referrer');
  await db.prepare('DELETE FROM users WHERE id=?').bind(owner).run();
  console.log('Cloudflare OAuth checks passed: PKCE, session/owner binding, callback replay, encrypted token isolation, exact scopes, bounded responses, disconnect races, staged-token safety, leased revocation, lost acknowledgement and authorized-zone filtering.');

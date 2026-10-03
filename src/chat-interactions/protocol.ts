@@ -18,6 +18,8 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'agent.task-continue@1': {mode:'prepare',feature:'core.editing',source:'src/chat-interactions/task-context.ts',handler:'prepareInformationTask',scope:'project'},
   'site.content-prepare@1': {mode:'prepare',feature:'core.editing',source:'src/project-specification/store.ts',handler:'prepareSpecification',scope:'project'},
   'workspace.projects@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'account',displays:['workspace','summary','table']},
+  'connection.github@1': {mode:'read',feature:'core.editing',source:'src/chat-interactions/connection-handoff.ts',handler:'readConnectionHandoff',scope:'account',displays:['consent']},
+  'connection.cloudflare@1': {mode:'read',feature:'core.editing',source:'src/chat-interactions/connection-handoff.ts',handler:'readConnectionHandoff',scope:'account',displays:['consent']},
   'project.photos@1': {mode:'read',feature:'core.editing',source:'src/files.ts',handler:'readPhotoUpload',scope:'project',displays:['photos']},
   'project.status@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace','status','key-values']},
   'project.traffic@1': {mode:'read',feature:viewComponents.traffic.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace','summary','table']},
