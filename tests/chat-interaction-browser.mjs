@@ -162,10 +162,16 @@ try{
   await secondTab.locator('[data-interaction-id="'+latest.id+'"]').getByText('Authorization is saved.',{exact:true}).waitFor();
   assert.equal(await secondTab.getByRole('heading',{name:'External connections',exact:true}).count(),0);await secondTab.close();
   assert.equal(starts(),3);assert.equal(consentTokenCalls,1);assert.equal(modelCalls,selectionCalls+7);
+  modelSteps.push(resume,{...resume,operation:'connectionStatus',providers:['cloudflare']});
+  await send('Did the Cloudflare authorization connect for that same gardening task?');
+  await page.getByText('Cloudflare: connected.',{exact:false}).waitFor({timeout:60000});
+  assert.equal(modelCalls,selectionCalls+9);assert.equal(starts(),3);assert.equal(consentTokenCalls,1);
+  const statusTurn=await row('SELECT id,ai_context_allowed FROM chat_turns WHERE user_id=? ORDER BY revision DESC LIMIT 1',c.user);assert.equal(statusTurn.ai_context_allowed,0);
+  assert.equal((await row('SELECT task_id FROM chat_task_progress WHERE turn_id=?',statusTurn.id)).task_id,selectedForm.envelope.scope.taskId);
   await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',connectGrant);await consent().getByRole('button',{name:'Check connection status',exact:true}).click();await consent().getByText('Connecting requires Business or Business Pro,',{exact:false}).waitFor();assert(await consent().getByRole('button',{name:'Authorize again with Cloudflare',exact:true}).isDisabled());
   assert(!requests.some(r=>r.path==='/api/connections/cloudflare/zones'||r.path.includes('/github/backups')||r.path.includes('/github/installations')));
   const session=(await context.cookies()).find(cookie=>cookie.name==='__Host-whumpo_session');assert(session);const currentScope=await modules.identity.admitWorkspace(db,await modules.identity.resolveIdentity(db,{version:1,client:'web',kind:'session',token:session.value}));
-  assert.equal((await site.readSpecification(currentScope,c.user,c.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',c.project)).n,0);assert.equal(starts(),3);assert.equal(consentTokenCalls,1);assert.equal(modelCalls,selectionCalls+7);
+  assert.equal((await site.readSpecification(currentScope,c.user,c.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',c.project)).n,0);assert.equal(starts(),3);assert.equal(consentTokenCalls,1);assert.equal(modelCalls,selectionCalls+9);
   await page.setViewportSize({width:390,height:844});
   await consent().getByRole('heading',{name:'Connect Cloudflare',exact:true}).evaluate(e=>{window.scrollTo(0,0);const scroll=e.closest('.chat-scroll');scroll.scrollTop+=e.getBoundingClientRect().top-scroll.getBoundingClientRect().top-24;});
 
@@ -351,7 +357,7 @@ try{
   resultSummary='New-project browser passed: actual Worker/current local D1/built UI; natural intake, clarification before creation, same-task resumption, correction with separate private review, lost creation/review replies and reload without redispatch or duplicate projects. Ten scripted main calls; 360/390/1280px captures. No external inference, publication or physical-device acceptance.';
  }else if(process.argv.includes('--consent-only')){
   await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
-  resultSummary='Task-consent browser passed: current Worker/local D1/built UI, same-task controls, signed virtual passkey, exact synthetic OAuth start/cancel/success/Chat return, lost committed callback with one token exchange, older-history reload and another tab, status outage/access loss without inference or redispatch. Seven scripted main calls; 360/390/1280px captures. No real provider consent, provider resource reads or publication.';
+  resultSummary='Task-consent browser passed: current Worker/local D1/built UI, same-task controls, signed virtual passkey, exact synthetic OAuth start/cancel/success/Chat return, lost committed callback with one token exchange, older-history reload and another tab, terminal same-task saved-status reply, status outage/access loss without redispatch. Nine scripted main calls; 360/390/1280px captures. No real provider consent, provider resource reads or publication.';
  }else if(process.argv.includes('--media-only')){
   await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='Task-media browser passed: actual Worker/current D1/private R2/built UI; task-linked uploader and private held metadata, lost accepted response/read outage/reload without repeat PUT, server-confirmed closure of an unreserved dismissed handoff, new upload and unchanged website. Eleven scripted main calls; 360/390/1280px captures. No external inference, scanner or publication.';

@@ -1,3 +1,4 @@
+import type {ConnectionReadOptions} from './connection-results';
 import type {AIConfig} from '../ai';
 import {sendAIChat} from '../ai-chat';
 import {BillingError} from '../billing';
@@ -36,14 +37,14 @@ export async function reconcileInformationTask(db:D1Database,user:string,submiss
  }
  return readModelSubmission(db,user,submissionId);
 }
-export async function continueInformationTask(db:D1Database,user:string,submissionId:string,revision:number,config?:AIConfig,transport:typeof fetch=globalThis.fetch.bind(globalThis)){
+export async function continueInformationTask(db:D1Database,user:string,submissionId:string,revision:number,config?:AIConfig,transport:typeof fetch=globalThis.fetch.bind(globalThis),connections:ConnectionReadOptions={}){
  const form=await readModelSubmission(db,user,submissionId);
  if(form.submission.continuation.state!=='not-started')return reconcileInformationTask(db,user,submissionId);
  if(!Number.isSafeInteger(revision)||revision<0)throw new InteractionError('NUMBER');
  if(revision>=2000)throw new BillingError(409,'This test workspace has reached its conversation limit. Your answers remain saved.');
  if(!config)throw new BillingError(503,'Your answers are saved. The AI is unavailable; continue this task later or stop its follow-up.');
  try{
-  const result=await sendAIChat(db,user,submissionId,revision,taskContinuationContent,config,transport,undefined,false,submissionId);
+  const result=await sendAIChat(db,user,submissionId,revision,taskContinuationContent,config,transport,connections,false,submissionId);
   if(result.status!==200)throw new BillingError(result.status,result.error??'Your answers are saved. Read the current task before continuing.');
  }catch(error){
   const current=await readModelSubmission(db,user,submissionId);
