@@ -74,7 +74,10 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   await ensureInferenceBudget(db,userId,billing.period,billing.plan.id);
   // Standard work has bounded calls, not a customer-unit admission threshold.
   const boundInput = () => policyInputBound(messages);
-  const outputLimit = 2048;
+  // Muse Responses counts reasoning against this allowance. A real view-save
+  // request exhausted 2,048 tokens before emitting its small action. Keep both
+  // bounded calls within the adapter's existing ceiling and reserve both below.
+  const outputLimit = 4096;
   async function noReservation(){
     const prior=await db.prepare('SELECT user_text,revision,action_json FROM chat_turns WHERE id=? AND user_id=?').bind(id,userId).first<{user_text:string;revision:number;action_json:string|null}>();
     if(prior)return prior.action_json===null&&prior.user_text===content&&prior.revision===revision+1?{status:200}:{status:409,error:'This message ID was already used for another request'};

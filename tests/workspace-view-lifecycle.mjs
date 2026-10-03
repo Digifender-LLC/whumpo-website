@@ -60,7 +60,7 @@ try{
     response=Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(output)}]}],usage:{input_tokens:1000,output_tokens:100}});
    }
    call.httpStatus=response.status;call.elapsedMs=Math.round(performance.now()-started);
-   try{const body=await response.clone().json();call.output=parseOutput(body);call.usage=body.usage;}catch{call.responseParseFailed=true;}
+   try{const body=await response.clone().json();call.providerStatus=body.status;call.incompleteReason=body.incomplete_details?.reason;call.usage=body.usage;call.output=parseOutput(body);}catch{call.responseParseFailed=true;}
    call.status='received';return response;
   }catch(error){call.status='unknown';call.error=error.name;throw error;}
  };
