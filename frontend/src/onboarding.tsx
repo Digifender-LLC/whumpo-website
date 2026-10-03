@@ -2,7 +2,7 @@ import {identityRequest} from './lib/identity';
 import {SubscriptionPanel} from './subscription-panel';
 import {clearChatRecovery} from './lib/chat-recovery';
 import {saveWelcomeProfile,saveWelcomeProgress,finishWelcome,type WelcomeDraft as Draft,type Welcome} from './lib/welcome-delivery';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
 import {ArrowLeft,ArrowRight,Check,Sparkles} from 'lucide-react';
@@ -24,17 +24,28 @@ export function Onboarding({profile}:{profile:Profile}){
 }
 function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  const [draft,setDraft]=useState(initial),[name,setName]=useState(profile.name),[bio,setBio]=useState(profile.about_me),[share,setShare]=useState(!!profile.share_context),[busy,setBusy]=useState(false),[photoBusy,setPhotoBusy]=useState(false),[error,setError]=useState(''),[returnToReview,setReturnToReview]=useState(false);
- const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),mounted=useRef(false),lock=useRef(false),errorPanel=useRef<HTMLDivElement>(null);
+ const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),lock=useRef(false),errorPanel=useRef<HTMLDivElement>(null);
+ const actionFocus=useRef<{origin:Element|null;moved:boolean}|null>(null);
+ const mayFocus=()=>{const focus=actionFocus.current;return focus?!focus.moved&&(document.activeElement===focus.origin||document.activeElement===document.body):document.activeElement===document.body;};
  const prompt=draft.prompt,index=welcomePrompts.indexOf(prompt),chapter=['profile','project','review'].indexOf(welcomeStage(prompt)),waiting=busy||photoBusy;
- useEffect(()=>{if(mounted.current||document.activeElement===document.body){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'center',behavior:'instant'});}mounted.current=true;},[prompt]);
- useEffect(()=>{if(error){const panel=errorPanel.current;if(panel&&(document.activeElement===document.body||panel.closest('form')?.contains(document.activeElement)))panel.focus();}},[error]);
+ useLayoutEffect(()=>{if(mayFocus()){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'center',behavior:'instant'});}},[prompt]);
+ useLayoutEffect(()=>{if(error&&mayFocus())errorPanel.current?.focus();},[error]);
  async function persist(nextPrompt:WelcomePrompt){
   const input={revision:draft.revision,stage:welcomeStage(nextPrompt),prompt:nextPrompt,project_name:draft.project_name,idea:draft.idea,audience:draft.audience,preferred_theme:draft.preferred_theme};
   const next=await saveWelcomeProgress(input,()=>send<Welcome>('/onboarding',input,'PUT'),()=>api<Welcome>('/onboarding'));
   if(next.complete){await queryClient.invalidateQueries({queryKey:['session']});return;}
   if(next.state)setDraft(next.state);
  }
- async function action(work:()=>Promise<void>){if(lock.current||photoBusy)return;lock.current=true;setBusy(true);setError('');try{await work();}catch(e){setError(message(e));}finally{lock.current=false;setBusy(false);}}
+ async function action(work:()=>Promise<void>){
+  if(lock.current||photoBusy)return;
+  const focus={origin:document.activeElement,moved:false};actionFocus.current=focus;
+  const observe=(event:FocusEvent)=>{if(event.target!==focus.origin&&event.target!==document.body)focus.moved=true;};
+  document.addEventListener('focusin',observe);lock.current=true;setBusy(true);setError('');
+  try{await work();}catch(e){setError(message(e));}finally{
+   lock.current=false;setBusy(false);
+   requestAnimationFrame(()=>{document.removeEventListener('focusin',observe);if(actionFocus.current===focus)actionFocus.current=null;});
+  }
+ }
  async function proceed(){await action(async()=>{
   if(prompt==='name'){
    if(!name.trim())throw Error('What should we call you?');
