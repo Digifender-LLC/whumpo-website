@@ -1,6 +1,33 @@
 # Routine Chat test release — October 3, 2026 UTC
 
-## Current release: private-review results accepted within WH-110C
+## Current release: publication task adapter
+
+Release `b99c54e0-5036-4e65-83e3-b933d051cb79`, runtime source `7daf3ce0c4a4657b3c66afae4a50aa9981bfb335`, passed deployed verification **October 3 at 10:19 UTC**. The complete current schema has **176 tables / 801 objects** in `whumpo-control-publication-test` (`851d4479-8f66-4572-bf60-a7e8991f65ff`). All **39 assets**, schema, service/secret-binding names and four Worker identities match the sealed archive:
+
+| Worker | Version |
+| --- | --- |
+| runtime | `15e231d1-3f8f-4a15-8237-e0b156156dd9` |
+| apps | `237a4fe7-04a6-404a-81f4-82cfd88ef2cd` |
+| sites | `15222a42-e6fc-4593-9475-8294d79381a0` |
+| platform | `583a5366-ad73-42f2-8991-43680454c90d` |
+
+The deployed real-Muse/Chromium journey starts from a synthetic current identity, real profile/onboarding HTTP flow, a synthetic private website and a maintained project picker. Explicit selection prepares one exact publication review; a natural follow-up reopens that same review with unchanged expiry; another asks its pending approval status. Reload dispatches no inference and prepares no duplicate. Private comparison readback succeeds. Both signed keys, logout and session revocation pass. All synthetic account/project/review/model data is removed. The five verification stages pass with three observed main request receipts and two uncertain acknowledgments; lookup continuations are separate calls. WH-020 retains acknowledgment and broader model reliability work.
+
+**Effect acceptance is local:** the actual Worker/current D1/built-browser sequence executes explicit user publish, restore and withdrawal, checks the private head is unchanged by public restore, and records two successful health checks through the actual local site Worker. The 19 scripted main calls also cover preceding private-save passkey cancellation/retry and reload recovery. Inspected 360/390/1280px local captures and 360/390px deployed captures are retained. The full current SQLite suite passes 112 cases (232 scripted main / 50 acknowledgment calls); the focused D1 suite passes 17 cases (60 / 18), including permission, ownership, model-approval, stale/expired review and commit-time races. Existing site-agent, publication and comparison regressions, type/build and catalogue/roadmap checks pass. Two separate real-Muse/local-D1 conversations pass with seven calls each. These local publication effects are not represented as remote publication acceptance.
+
+The coordinated reset used a new empty database, with no migration or old review reader. Preflight found no customers, provider/billing obligations or private R2 objects; the unused invitation was fenced. Existing key policy `test-20261002` / revision 1 was re-established from its verified backup. After application verification, all 14 account Worker bindings were inspected and the unreferenced former database `d5eb79e7-6e13-4402-87ac-90ec32ff7dd2` was retired at 10:20 UTC. Other databases were preserved. Release status still reconciles after retirement. A new private owner invitation is verified. The convenience Wrangler invitation import returned authentication error 10000; a fresh count confirmed zero invitations, then the authenticated D1 query path created and verified one invitation. The failed import is not described as successful.
+
+Private evidence:
+
+- `.secrets/task-publication-final-verification.json`: final same-release reconciliation, cleanup, key policy, baseline retirement and verified private invitation.
+- `.secrets/task-publication-live-b99c54e0-5036-4e65-83e3-b933d051cb79/report.json` and `review-*` images: deployed five-stage acceptance and observed/uncertain receipts.
+- `.secrets/task-publication-local/final-checks.json` and captures: local handler/browser acceptance, including the earlier fixture assertion/health-request failures.
+- `.secrets/task-publication-model-Ly0qiH/report.json`: final two real-Muse/local-D1 conversations; the earlier successful cohort remains preserved.
+- `.secrets/task-publication-database-retirement.json` and `.secrets/task-publication-invitation.json`: confirmed resource retirement and invitation metadata, without public secret values.
+
+WH-110C/#98 now has implemented and locally accepted publication/restore/withdrawal task adapters plus deployed private-review verification. **#98 remains open** for status/traffic, admitted media/consent and broader adverse/outage recovery. #99 retains full original-scope acceptance; #95 remains open. Parent count remains **24/122**. No remote customer publication, new paid service, provider consent, real billing, human enrollment, physical-device, CMS or scanner acceptance is claimed.
+
+## Previous release: private-review results accepted within WH-110C
 
 Release `5611a3bc-f364-4400-a508-0109455670e5`, runtime source `29bd978d015391e512088caf725b96d2dc8c0eb1`, is verified **October 3 at 09:40 UTC**. It preserves the existing database and complete **175-table/798-object** schema. All four exact Worker identities, database/service/secret-binding names and **39 assets** match the sealed archive: runtime `bb060845-fac8-4016-97c4-bd4503cf436c`, apps `c1788e76-8326-4371-8ade-fa151a8a2fb3`, sites `3e80eff6-02de-4ca1-8e5e-9267f929beee`, platform `8f5130b5-78e8-4cf3-b970-cbf46e9d898a`.
 

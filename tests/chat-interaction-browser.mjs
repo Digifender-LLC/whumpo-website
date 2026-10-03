@@ -145,7 +145,7 @@ try{
    modelSteps.push(resume,{kind:'review',operation:'reopen',targetId:review});await send('Show that exact publication review again.');
    await page.waitForFunction(()=>[...document.querySelectorAll('button')].filter(b=>b.textContent?.trim()==='Confirm reviewed change').length===2);
    assert.equal((await row('SELECT count(*) n FROM publication_actions WHERE user_id=?',c.user)).n,1);
-   for(const width of [360,390]){await page.setViewportSize({width,height:844});await confirmButton().last().scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-publication-review-'+width+'.png'});}
+   for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});await confirmButton().last().scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-publication-review-'+width+'.png'});}
    let before=modelCalls;await confirmButton().last().click();await page.getByText('The reviewed version is published at',{exact:false}).waitFor({timeout:60000});assert.equal(modelCalls,before);assert.equal((await publication()).version_id,current);
    await page.reload();await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();assert.equal(await confirmButton().count(),0);assert.equal(modelCalls,before);
    await prepare('restore',original,'Restore the original saved version to this task’s public website.');assert.equal((await publication()).version_id,current);await confirmButton().click();
@@ -156,7 +156,7 @@ try{
    await send('Did that withdrawal finish?');await page.getByText('The website was taken offline. Both saved versions are still available privately.',{exact:true}).waitFor({timeout:60000});
    before=modelCalls;await page.reload();await page.getByText('The website was taken offline. Both saved versions are still available privately.',{exact:true}).waitFor();assert.equal(modelCalls,before);
    assert.equal(siteChecks,2);assert.equal((await row("SELECT count(*) n FROM site_health_checks WHERE project_id=? AND state='healthy'",c.project)).n,2);assert.equal(modelCalls,selectionCalls+19);assert.equal((await publication()).revision,3);assert.equal((await row('SELECT count(*) n FROM publication_actions WHERE user_id=?',c.user)).n,3);
-   for(const width of [360,390]){await page.setViewportSize({width,height:844});await page.getByText('The website was taken offline. Both saved versions are still available privately.',{exact:true}).scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-publication-result-'+width+'.png'});}
+   for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});await page.getByText('The website was taken offline. Both saved versions are still available privately.',{exact:true}).scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-publication-result-'+width+'.png'});}
   }
 
   for(const width of [360,390]){await page.setViewportSize({width,height:844});await page.getByText('Your task’s private save completed at revision 2. It has not been published.',{exact:true}).evaluate(e=>e.scrollIntoView({block:'center'}));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-save-result-'+width+'.png'});}
