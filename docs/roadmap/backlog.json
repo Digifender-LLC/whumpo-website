@@ -5386,7 +5386,9 @@
         "frontend/src/workspace-pages.tsx",
         "tests/workspace-dashboard.mjs",
         "docs/chat-interactions.md",
-        "docs/workspace-views.md"
+        "docs/workspace-views.md",
+        "docs/workspace-views-acceptance.md",
+        "docs/workspace-view-release.md"
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/94",
       "owner": null,
@@ -5394,7 +5396,8 @@
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
         "2026-10-03 UTC: WH-107/#90 and WH-108/#93 are accepted. Source-grounded WH-109 contract in docs/workspace-views.md identifies current widgets/shared project projection, missing shared components/layout receipts/undo and the immediate-write workspaceAction gap. Owner current-version-only instructions supersede the old migration wording: use explicit disposable cutovers and current-definition undo, no legacy adapter. Original scope and remaining criteria retained; implementation is not claimed complete.",
         "2026-10-03 UTC: current root claims execution in #94 on codex/identity-admission after inspecting current source and upstream closures. Planned implementation contract is committed separately from runtime; first code work is shared current view definitions/bindings and atomic layout history/receipt preparation.",
-        "2026-10-03 UTC: shared exact website review queues/comparisons are locally verified in 03fa3cf; WH-109 remains open for full lifecycle/cutover/audit. The current tool inventory has no callable quality-manager browser runner; verification uses maintained Playwright fixtures with the actual Worker, built client, current D1 and inspected narrow-screen images. This updates tooling wording without reducing the connected browser or original acceptance scope."
+        "2026-10-03 UTC: shared exact website review queues/comparisons are locally verified in 03fa3cf; WH-109 remains open for full lifecycle/cutover/audit. The current tool inventory has no callable quality-manager browser runner; verification uses maintained Playwright fixtures with the actual Worker, built client, current D1 and inspected narrow-screen images. This updates tooling wording without reducing the connected browser or original acceptance scope.",
+        "2026-10-03 UTC: original six-criterion audit accepted. Frozen b765913 local real-Muse and deployed 81a7b9f eight-step mobile lifecycles pass, preserving unrelated views and exact replay. Release 0955f19c-b69e-4dae-b7e7-972e5df3aa3c verifies four Workers, current 175-table/796-object schema, 39 assets, shared exact review comparisons, current permission loss, zero-inference rendering and settled 360/390px images. Synthetic fixtures removed, all 14 account Worker inventories checked and obsolete DB retired. Retired layout route/undo argument rejected. Earlier model failures and separate acknowledgment uncertainty remain WH-020; physical devices and full owner/beta/commercial acceptance remain separate. Full evidence: docs/workspace-views-acceptance.md and docs/workspace-view-release.md; execution closure in #94."
       ]
     },
     {

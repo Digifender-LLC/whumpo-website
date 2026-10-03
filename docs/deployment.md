@@ -1,6 +1,6 @@
 # Whumpo test deployment
 
-**Current release, October 3, 2026:** [bounded task-memory cutover](chat-test-release.md#bounded-task-memory-release--october-3-2026-utc) `c3f3eaae-2d19-47b4-baf7-278d51e0256c`, source `5e903a6`, verifies all four Workers, 173 tables/791 objects, service/secret bindings and 39 platform assets. Signed HTTP/mobile form acceptance and one real Muse/deployed-Worker task conversation pass; a prior failed sample remains an explicit reliability limit. The obsolete database is retired and synthetic fixtures removed. Use the [current release protocol](releases.md), with no numbered migration replay. Human/device/provider and broader product acceptance remain separate.
+**Current release, October 3, 2026:** [workspace views cutover](workspace-view-release.md) `0955f19c-b69e-4dae-b7e7-972e5df3aa3c`, source `81a7b9f`, verifies all four Workers, 175 tables/796 objects, service/secret bindings and 39 platform assets. Signed mobile real-Muse view lifecycle, shared exact comparisons, access revocation and settled 360/390px rendering pass. Synthetic fixtures are removed and the obsolete database is retired. Use the [current release protocol](releases.md), with no numbered migration replay. Acknowledgment reliability, human/device/provider and broader product acceptance remain separate.
 
 
 ## Earlier deployment records
