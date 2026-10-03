@@ -1,6 +1,32 @@
 # Routine Chat test release — October 3, 2026 UTC
 
-## Current release: publication task adapter
+## Current release: task status and traffic
+
+Release `26d0acd8-ff05-45a4-810d-d593b8f29256`, runtime source `74c95a31e2bb9f93bd35d60e73b3e45603cf2ca3`, passed the deployed journey **October 3 at 10:58 UTC** and final readback at **10:59 UTC**. All four Worker identities, database/service/secret-binding names, the unchanged **176-table/801-object schema** and **39 assets** match the archive. Current database remains `whumpo-control-publication-test` (`851d4479-8f66-4572-bf60-a7e8991f65ff`). No database reset or migration was needed.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `b43f7c36-d6e4-4cd0-be1a-1b72ccda55e9` |
+| apps | `cd7ee52a-1abc-44a9-b23c-588dc9147cd8` |
+| sites | `e7ef37bc-81c7-48fe-a631-34153684ffb1` |
+| platform | `9f773c7c-2549-46d5-886b-d85a110cda4e` |
+
+The real-Muse/deployed-Chromium journey uses signed synthetic identity, actual onboarding HTTP and a synthetic private website. Explicit project selection produces its maintained status/traffic overview in Chat. A deterministic refresh sees the synthetic count change from 7 to 12 with no extra inference. A natural follow-up retains the same task and correctly describes its website as private while reporting recorded page requests. After the scoped traffic read grant is revoked, the card removes the count and the model reports it unavailable, never zero. Reload adds no inference or project effect. Both generated keys, logout and revocation pass; browser errors are empty. Settled 360/390px captures are retained, with the 390px image inspected. There are three observed orchestrator request receipts and two uncertain acknowledgment receipts; task lookup continuations are separate calls. WH-020 retains acknowledgment and general model-reliability acceptance.
+
+Source/local acceptance is recorded in [the adapter contract](chat-routine-journeys.md#project-status-and-traffic-adapter--october-3-2026): 130 SQLite scenarios, 18 focused current-D1 scenarios, the seven-call actual Worker/D1/built-browser journey and two frozen five-call real-Muse/local-D1 conversations. Outage/denial clears cached facts, refresh and replay make no model calls, scope/permission/ownership races refuse, and websites remain unchanged. Earlier provider, routing, assertion and capture failures are preserved there; passing later checks do not erase them.
+
+Final cleanup verifies zero users, projects, interactions and traffic rows, and exactly one existing owner invitation. No customer site was published; no provider consent, real billing, new paid service, CMS test or scanner work occurred. Physical-device/human enrollment and complete owner-experience acceptance remain separate.
+
+Private evidence:
+
+- `.secrets/task-observations-final-verification.json`: final release/readback, current database, cleanup and invitation count.
+- `.secrets/task-observations-live-26d0acd8-ff05-45a4-810d-d593b8f29256/report.json` and `traffic-*` captures: all six deployed stages and observed/uncertain request receipts.
+- `.secrets/task-observations-local/final-checks.json`, captures and preserved first browser failure: local source/build verification.
+- `.secrets/task-observations-model-GBn73q/report.json`: final two passing real-model conversations; earlier failed cohorts remain retained.
+
+This accepts the status/traffic adapter within **WH-110C/#98**, not the entire child or parent. Admitted media/consent and broader adverse/outage recovery remain #98; #99 keeps original-scope acceptance and #95 stays open. Parent count remains **24/122**. CSAM, Daybreak and CMS functional testing stay deferred.
+
+## Previous release: publication task adapter
 
 Release `b99c54e0-5036-4e65-83e3-b933d051cb79`, runtime source `7daf3ce0c4a4657b3c66afae4a50aa9981bfb335`, passed deployed verification **October 3 at 10:19 UTC**. The complete current schema has **176 tables / 801 objects** in `whumpo-control-publication-test` (`851d4479-8f66-4572-bf60-a7e8991f65ff`). All **39 assets**, schema, service/secret-binding names and four Worker identities match the sealed archive:
 
