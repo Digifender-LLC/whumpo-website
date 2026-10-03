@@ -1,7 +1,8 @@
+import {viewComponents} from '../workspace-view-contract';
 import {assertFeature} from '../feature-admission';
 import {FeatureInclusionError} from '../feature-inclusion';
 import {copyJSON} from '../project-specification/v2/json';
-import {readProjectStatuses} from '../workspace-dashboard';
+import {readViewBinding} from '../workspace-view-bindings';
 import {InteractionError} from './protocol';
 import {InteractionStoreError,readInteraction} from './store';
 import {readProjectStatusCard,type ProjectStatusCard} from './card-shape';
@@ -16,14 +17,9 @@ export async function readInteractionCard(db:D1Database,user:string,input:unknow
  if(r.definitionDigest!==e.definitionDigest)throw new InteractionError('DIGEST');
  const card=e.definition.cards.find(c=>c.id===r.cardId);
  if(e.definition.template!=='content-change@1'||!e.scope.projectId||!['open','submitted'].includes(current.state)||current.replacementInteractionId||!card||card.id!=='project-status'||card.binding!=='project.status@1'||card.display!=='status'||card.limit!==1||card.reviewId!==null)throw new InteractionStoreError(409,'adapter_unavailable');
- const gate={userId:user,projectId:e.scope.projectId,featureId:'core.editing' as const,operation:'read' as const};
- let status:ProjectStatusCard['status']='ready',data:ProjectStatusCard['data']=null;
- try{
-  await assertFeature(db,gate);
-  const {results}=await readProjectStatuses(db,user,e.scope.projectId),project=results[0];
-  if(results.length!==1||project.id!==e.scope.projectId||![0,1].includes(project.site_live))status='unavailable';
-  else data={projectId:project.id,name:project.name,state:project.status,websitePublished:project.site_live===1};
- }catch(error){status=error instanceof FeatureInclusionError?'denied':'unavailable';}
+ const gate={userId:user,projectId:e.scope.projectId,featureId:viewComponents.projects.feature,operation:'read' as const};
+ const shared=await readViewBinding(db,user,'projects',e.scope.projectId);
+ let status:ProjectStatusCard['status']=shared.status,data:ProjectStatusCard['data']=shared.kind==='projects'&&shared.status==='ready'?shared.data.items[0]:null;
  // A failed or late read must not expose previously fetched private data.
  const latest=await readInteraction(db,user,r.interactionId);
  if(latest.envelope.definitionDigest!==e.definitionDigest||latest.answerRevision!==current.answerRevision||latest.state!==current.state||latest.replacementInteractionId!==current.replacementInteractionId)throw new InteractionStoreError(409,'interaction_changed');

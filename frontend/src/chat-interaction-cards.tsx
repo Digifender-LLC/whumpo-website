@@ -1,3 +1,4 @@
+import {ProjectStatusFacts,CheckedAt} from './workspace-view-components';
 import {useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {readProjectStatusCard} from '../../src/chat-interactions/card-shape';
@@ -9,11 +10,7 @@ export function ProjectStatusDisplay({value}:{value:unknown}){
  const card=readProjectStatusCard(value);
  if(!card)return <p role="alert" className="text-sm">Update Whumpo to read this status.</p>;
  if(card.status!=='ready')return <p role="status" className="text-sm">{card.status==='denied'?'This status is not available with your current access.':'Project status is temporarily unavailable. Try refreshing it.'}</p>;
- return <div className="space-y-3 text-sm">
-  <p className="font-medium break-words">{card.data.name}</p>
-  <dl className="space-y-2"><div className="flex flex-wrap justify-between gap-x-4 gap-y-1"><dt className="text-muted-foreground">Project</dt><dd>{{draft:'Private draft',building:'Building',live:'Live services',error:'Needs attention'}[card.data.state]}</dd></div><div className="flex flex-wrap justify-between gap-x-4 gap-y-1"><dt className="text-muted-foreground">Website</dt><dd>{card.data.websitePublished?'Published':'Not published'}</dd></div></dl>
-  <p className="text-xs text-muted-foreground">Checked <time dateTime={card.asOf}>{new Date(card.asOf).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</time>. Saved status; refresh to check again.</p>
- </div>;
+ return <div className="space-y-3 text-sm"><ProjectStatusFacts value={card.data}/><CheckedAt value={card.asOf}/></div>;
 }
 function ProjectStatusRead({owner,interactionId,digest,projectId}:{owner:string;interactionId:string;digest:string;projectId:string}){
  const query=useQuery({queryKey:['chat-interaction-card',owner,interactionId,digest,'project-status'],queryFn:async({signal})=>{

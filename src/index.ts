@@ -1,3 +1,4 @@
+import {readSavedViewComponent} from './workspace-view-bindings';
 import {readLayout,readLayoutHistory,readLayoutReceipt,mutateLayout} from './workspace-layout';
 import {WorkspaceViewError} from './workspace-view-contract';
 import {handleInteractionRequest} from './chat-interactions/http';
@@ -152,6 +153,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='PUT'||method==='DELETE')return json(await updateProfilePhoto(env.DB,user.id,request));
   }
   if(method==='GET'&&pathname==='/api/workspace/dashboard')return json(await dashboardData(env.DB,user.id));
+  if(pathname==='/api/workspace/views/v1/component'&&method==='POST')return json(await readSavedViewComponent(env.DB,user.id,await body(request)));
   if(pathname==='/api/workspace/views/v1/layout'&&method==='GET')return json(await readLayout(env.DB,user.id));
   if(pathname==='/api/workspace/views/v1/history'&&method==='GET')return json(await readLayoutHistory(env.DB,user.id));
   if(pathname==='/api/workspace/views/v1/mutate'&&method==='POST')return json(await mutateLayout(env.DB,user.id,await body(request)));

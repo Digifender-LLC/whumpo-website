@@ -5,10 +5,10 @@ export async function recordTraffic(db:D1Database,project:string,now=new Date())
 export async function cleanupTraffic(db:D1Database){
  return db.prepare("DELETE FROM site_traffic_daily WHERE day<date('now','-29 days')").run();
 }
-export async function readTraffic(db:D1Database,user:string){
+export async function readTraffic(db:D1Database,user:string,projectId:string|null=null){
  const [metadata,rows]=await Promise.all([
   db.prepare('SELECT enabled_at FROM site_traffic_metadata WHERE id=1').first<{enabled_at:string}>(),
-  db.prepare("SELECT t.project_id,t.day,t.requests FROM site_traffic_daily t JOIN projects p ON p.id=t.project_id WHERE p.owner_user_id=? AND t.day>=date('now','-29 days') AND t.day<=date('now') ORDER BY t.day,t.project_id").bind(user).all<{project_id:string;day:string;requests:number}>()
+  db.prepare("SELECT t.project_id,t.day,t.requests FROM site_traffic_daily t JOIN projects p ON p.id=t.project_id WHERE p.owner_user_id=? AND (? IS NULL OR p.id=?) AND t.day>=date('now','-29 days') AND t.day<=date('now') ORDER BY t.day,t.project_id").bind(user,projectId,projectId).all<{project_id:string;day:string;requests:number}>()
  ]);
  return {enabledAt:metadata?.enabled_at??null,days:30,rows:rows.results,metric:'successful_html_requests' as const};
 }
