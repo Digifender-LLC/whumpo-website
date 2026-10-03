@@ -1,4 +1,6 @@
-# Current Chat test cutover — October 2, 2026 UTC
+# Chat test releases — October 2–3, 2026 UTC
+
+**Current:** [bounded task-memory release](#bounded-task-memory-release--october-3-2026-utc), verified October 3 at 02:18 UTC. Earlier sections retain their exact historical verification scope.
 
 This release carries the current WH-106 storage/recovery and WH-107 maintained Chat forms, choices, status/comparison cards, photo-upload handoff and mobile/accessibility work. The user authorizes disposable test resets and current-only deployment. It does not close those packets' remaining device or product acceptance.
 
@@ -111,3 +113,29 @@ Read-only inventory at **2026-10-03T01:55:57.938Z** found zero users/projects/mo
 Verify exact schema/versions/bindings/assets, signed HTTP and the existing mobile form journey; separately opt into one synthetic live Muse task-memory conversation with no publication or website apply. Retire only the old unreferenced empty database after all-account Worker checks and cleanup. No migration replay, legacy adapter, CMS functional test, scanner work, real billing or customer-provider consent is included. Private evidence uses the `.secrets/task-memory-*` files.
 
 The new database was created and verified empty as `4e4c7449-d80a-49d1-bc67-b86034708f13`. All three local control DB bindings select this target. The old unused invitation was removed under the deployment lease after fresh zero-obligation and Worker checks. These are preparation actions; the following verified release record will establish deployment.
+
+
+## Bounded task-memory release — October 3, 2026 UTC
+
+Release **`c3f3eaae-2d19-47b4-baf7-278d51e0256c`** completed current-schema initialization and runtime → apps → sites → platform deployment. Independent verification completed at **2026-10-03T02:18:29.472Z**. All **39 platform assets**, service/secret bindings and the **173-table/791-object** schema match the archive. Database: `whumpo-control-memory-test` (`4e4c7449-d80a-49d1-bc67-b86034708f13`), inventory `c3a49db2a5d26023a785b2f97a3803e624d1cddbcaafc39bcc838762e6dac248`.
+
+| Worker | Verified version |
+| --- | --- |
+| runtime | `7df8afe7-2f0a-4111-9ab4-1ff008802637` |
+| apps | `861ee4eb-dd38-467a-aab4-d03a7b7eff90` |
+| sites | `946cffc0-349a-4dbe-9a82-980f39fefdd7` |
+| platform | `40cd694f-ae27-4df0-b844-96656e5d54ab` |
+
+All **449 archived source files** independently match commit `5e903a6efa75bddf7cc46b4bdc5a1e503b16dd0a`; the dirty marker covers only the untracked dependency symlink. The existing verified key capsule initialized the current key policy, with matching fingerprints and unchanged Worker secrets. Signed HTTP covers current two-key login, first-project gating, revocation, encrypted PKCE start/cancel, withdrawn feature refusal, no-store private-route refusals and retired-route rejection. The existing 390px browser journey covers form corrections, private preview/exact save, choices, conditional custom submission, hidden-answer exclusion and history focus.
+
+A separately opted-in **real Muse/deployed-Worker** sample submitted a public service area, received one season question, reloaded, and answered naturally. The agent selected the saved task, cleared that question and prepared exactly one Area section edit combining the submitted area and later season answer. Two immutable task-progress receipts, unchanged saved website revision 2, zero publications/customer credits and no extra inference on exact replay/reload were verified. It used **3 main model calls across 2 turns**, with **57,474 ms** elapsed through the mobile browser checks. Observed subscription-shadow estimates were 961 and 2,176 micros for the main turns; these are internal estimates, not API invoices. The separate acknowledgment receipt was **uncertain**, with unknown tokens/cost retained, and did not prevent the main result.
+
+### Failure and evidence limits
+
+The first live sample saved initial task memory but its later Chat turn ended `failed`, so acceptance correctly stopped. Its account was removed in `finally`. The original probe retained the assertion and cleanup, but not the failed turn's reason; **the cause is unresolved**. A fresh independent fixture passed with the same deployed code. This establishes a bounded successful path, not consistent routing or model reliability. The helper now captures synthetic turn/request/inference states before cleanup on future failures. No rejected/unknown request was retransmitted to obtain a different result.
+
+The successful run's screenshot captured the loading shell immediately after reload; it is **not** visual evidence of the final rendered reply. The helper now waits for the actual saved owner message and checks width before future captures. That stronger final-frame check has syntax verification only at this checkpoint; no extra real-model run was made solely to replace the screenshot. Initial form interaction and reply submission were exercised in the real browser, and authoritative saved task/review receipts were verified separately. Physical phone, human passkey enrollment, broad model quality and full WH-108/112 acceptance remain open.
+
+The obsolete `whumpo-control-task-test` database (`9a07c1b0-0925-4ef1-8ffa-46d9464cafc9`) was retired at **02:19 UTC** after checking all 14 account Workers for references, zero customer/external obligations, released deployment lease and empty R2. The other ten databases were preserved. Final all-table inventory at **02:19:21 UTC** confirms current schema/versions and empty customer/project/model/provider/billing/publication tables; only six expected control/catalog tables have rows. Both synthetic attempts were removed. A fresh one-use, seven-day owner invitation was saved privately after this verification; its value is never committed.
+
+Private evidence: `.secrets/task-memory-release-verification.json`, `task-memory-release-source-proof.json`, `task-memory-key-initialization.json`, `task-memory-release-probe-cleanup.json`, `task-memory-release-first-attempt.log`, `task-memory-release-first-attempt-cleanup.json`, `task-memory-database-retirement.json`, `task-memory-final-inventory.json` and the sealed archive. No CSAM, Daybreak, CMS functional testing, provider activation or real-money billing occurred. WH-108 remains open for its original broader composition/resource selection and representative agent-selection acceptance.
