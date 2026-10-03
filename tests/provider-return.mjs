@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const b=await build({entryPoints:['frontend/src/lib/workspace-navigation.ts'],bundle:true,format:'esm',platform:'node',write:false});
-const {providerReturn}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+const {providerReturn,chatInteractionTarget}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 for(const provider of ['cloudflare','github']){
  const result=providerReturn('?connection='+provider+'&connection_error=authorization');
  assert.equal(result.view,'connections');assert.match(result.notice,/needs a status check/);
@@ -17,3 +17,6 @@ assert.equal(providerReturn('?connection=evil&interaction='+handoff).view,'conne
 const injected=providerReturn('?connection=evil&connection_error=PRIVATE_CODE&redirect=https://evil.invalid');
 assert.equal(injected.view,'connections');assert.ok(!injected.notice.includes('PRIVATE_CODE'));assert.ok(!injected.notice.includes('evil'));
 console.log('Provider return checks passed: exact callback failure markers, fixed destinations, no reflected query data and no premature success claims.');
+
+assert.equal(chatInteractionTarget('?interaction='+handoff),handoff);
+for(const search of ['', '?interaction=../settings','?interaction='+handoff+'&interaction='+handoff])assert.equal(chatInteractionTarget(search),null);

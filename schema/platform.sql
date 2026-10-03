@@ -122,18 +122,46 @@ CREATE TABLE domain_claims (
  UNIQUE(project_id,hostname)
 );
 
+-- Navigation provenance is independent of one-time OAuth state and credential
+-- custody. A consumed/replaced callback can still return to its original Chat.
+CREATE TABLE connection_chat_links (
+ provider TEXT NOT NULL CHECK(provider IN ('github','cloudflare')),
+ state_hash TEXT NOT NULL CHECK(length(state_hash)=64 AND state_hash NOT GLOB '*[^0-9a-f]*'),
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ authority_id TEXT NOT NULL,
+ interaction_id TEXT NOT NULL REFERENCES chat_interactions(id) ON DELETE CASCADE,
+ definition_digest TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL,
+ PRIMARY KEY(provider,state_hash)
+);
+CREATE INDEX connection_chat_links_retention ON connection_chat_links(expires_at);
+CREATE TRIGGER connection_chat_link_admit BEFORE INSERT ON connection_chat_links BEGIN
+ SELECT RAISE(ABORT,'connection_chat_link_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_interactions i WHERE i.id=NEW.interaction_id AND i.user_id=NEW.user_id
+   AND i.definition_digest=NEW.definition_digest AND i.state='open' AND i.removed_at IS NULL
+   AND i.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+   AND NEW.expires_at=strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(i.draft_saved_at,i.created_at),'+7 days')
+   AND NEW.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+   AND (i.project_id IS NULL OR EXISTS(SELECT 1 FROM projects p WHERE p.id=i.project_id AND p.owner_user_id=i.user_id))
+   AND NOT EXISTS(SELECT 1 FROM chat_interactions child WHERE child.previous_interaction_id=i.id)
+   AND json_extract(i.envelope_json,'$.definition.cards[0].binding')='connection.'||NEW.provider||'@1');
+ SELECT RAISE(ABORT,'connection_chat_link_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM github_oauth_states WHERE NEW.provider='github' AND user_id=NEW.user_id AND state_hash=NEW.state_hash AND authority_id=NEW.authority_id AND claimed=0 AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  UNION ALL
+  SELECT 1 FROM cloudflare_oauth_states WHERE NEW.provider='cloudflare' AND user_id=NEW.user_id AND state_hash=NEW.state_hash AND authority_id=NEW.authority_id AND claimed=0 AND cancelled=0 AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+CREATE TRIGGER connection_chat_link_immutable BEFORE UPDATE ON connection_chat_links
+ BEGIN SELECT RAISE(ABORT,'connection_chat_link_changed'); END;
+
 CREATE TABLE github_oauth_states (
  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  state_hash TEXT NOT NULL UNIQUE,
  authority_id TEXT NOT NULL REFERENCES identity_sessions(id) ON DELETE CASCADE,
  verifier_ciphertext TEXT NOT NULL,
  expires_at TEXT NOT NULL,
- claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1)),
- handoff_json TEXT NOT NULL DEFAULT 'null' CHECK(json_valid(handoff_json) AND (handoff_json='null' OR (json_type(handoff_json)='object' AND json_type(handoff_json,'$.interactionId')='text' AND json_type(handoff_json,'$.definitionDigest')='text')))
+ claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1))
 );
-CREATE TRIGGER github_oauth_handoff_immutable BEFORE UPDATE OF handoff_json ON github_oauth_states
-WHEN NEW.state_hash=OLD.state_hash AND NEW.handoff_json!=OLD.handoff_json
-BEGIN SELECT RAISE(ABORT,'oauth_handoff_immutable'); END;
 
 
 CREATE TABLE github_token_vault (
@@ -308,12 +336,8 @@ CREATE TABLE cloudflare_oauth_states (
  state_hash TEXT NOT NULL UNIQUE, authority_id TEXT NOT NULL REFERENCES identity_sessions(id) ON DELETE CASCADE,
  verifier_ciphertext TEXT NOT NULL, expires_at TEXT NOT NULL,
  claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1)),
- cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1)),
- handoff_json TEXT NOT NULL DEFAULT 'null' CHECK(json_valid(handoff_json) AND (handoff_json='null' OR (json_type(handoff_json)='object' AND json_type(handoff_json,'$.interactionId')='text' AND json_type(handoff_json,'$.definitionDigest')='text')))
+ cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1))
 );
-CREATE TRIGGER cloudflare_oauth_handoff_immutable BEFORE UPDATE OF handoff_json ON cloudflare_oauth_states
-WHEN NEW.state_hash=OLD.state_hash AND NEW.handoff_json!=OLD.handoff_json
-BEGIN SELECT RAISE(ABORT,'oauth_handoff_immutable'); END;
 
 
 CREATE TABLE cloudflare_token_vault (

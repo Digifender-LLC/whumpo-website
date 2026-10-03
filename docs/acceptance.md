@@ -1,6 +1,6 @@
 > October 1, 2026 sandbox resumption: the owner authorized Stripe test signup, billing and invoice integration and supplied a verified sandbox key. See [sandbox implementation and acceptance](stripe-sandbox.md). Earlier statements below that Stripe setup is absent/deferred are historical; real-money activation remains gated.
 
-**Undeployed source checkpoint, October 3:** [Chat connection handoffs](chat-connection-handoffs.md) have local handler/D1/browser and bounded real-Muse issuance acceptance. Current OAuth state adds an immutable Chat-return locator; the existing deployment below remains unchanged until a coordinated current-schema cutover. Provider/customer/device and full WH-110 acceptance remain open.
+**Undeployed source checkpoint, October 3:** [Chat connection handoffs](chat-connection-handoffs.md) have local handler/D1/browser and bounded real-Muse issuance acceptance. OAuth start now atomically saves an independent immutable Chat-return locator; consumed callbacks, older-history reload and multi-tab recovery pass locally without repeated consent or exchange; the existing deployment below remains unchanged until a coordinated current-schema cutover. Provider/customer/device and full WH-110 acceptance remain open.
 
 # Current MVP readiness — October 3, 2026 UTC
 
