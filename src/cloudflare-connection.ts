@@ -67,10 +67,10 @@ export async function startCloudflare(db:D1Database,userId:string,configuration:
  const challenge=btoa(Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))),b=>String.fromCharCode(b)).join('')).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
  const stamp=now();
  await db.prepare('DELETE FROM cloudflare_token_vault WHERE user_id=? AND expires_at<=?').bind(userId,stamp).run();
- const result=await db.prepare(`INSERT INTO cloudflare_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at,handoff_json)
- SELECT ?,?,?,?,?,? WHERE (${gate.sql}) AND (${origin.sql}) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)
- ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,authority_id=excluded.authority_id,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,handoff_json=excluded.handoff_json,claimed=0,cancelled=0
- WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await sealConnectionWrite(db,config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),origin.json,...gate.params,...origin.params,userId,stamp,stamp,userId,stamp).run();
+ const [result]=await db.batch([db.prepare(`INSERT INTO cloudflare_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at)
+ SELECT ?,?,?,?,? WHERE (${gate.sql}) AND (${origin.sql}) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)
+ ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,authority_id=excluded.authority_id,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,claimed=0,cancelled=0
+ WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await sealConnectionWrite(db,config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),...gate.params,...origin.params,userId,stamp,stamp,userId,stamp),...origin.links(stateHash)]);
  if(result.meta.changes!==1){await assertFeature(db,scope);throw new ConnectionError(409,'Disconnect existing Cloudflare access and finish pending authorization or revocation before connecting again. An interrupted authorization may take ten minutes to expire.');}
  const url=new URL('https://dash.cloudflare.com/oauth2/auth');for(const [k,v] of Object.entries({client_id:config.clientId,response_type:'code',redirect_uri:callback,scope:scopes.join(' '),state,code_challenge:challenge,code_challenge_method:'S256'}))url.searchParams.set(k,v);
  return {url:url.href};

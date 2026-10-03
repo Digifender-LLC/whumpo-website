@@ -29,7 +29,7 @@ import {Button} from './components/ui/button';
 import {Textarea} from './components/ui/textarea';
 import {Brand} from './components/brand';
 import {IdentityGate} from './identity/flow';
-import {providerReturn} from './lib/workspace-navigation';
+import {providerReturn,chatInteractionTarget} from './lib/workspace-navigation';
 import {DeferredArea} from './deferred-area';
 import {QueryRecovery} from './query-recovery';
 import {updatedReplies} from './lib/chat-announcements';
@@ -86,7 +86,7 @@ function WorkspaceSession({account}:{account:Profile}){
  const chatScroll=useChatScroll(view==='chat'&&!!profile.data,JSON.stringify([chat.data?.turns,ack,pendingText]));
  const mutation=useMutation({mutationFn:async(request:ChatRequest)=>presentWithAcknowledgment(submitChat(request,r=>r.action?send<Chat>('/chat/actions',{id:r.id,revision:r.revision,action:r.action}):send<Chat>('/chat',r),()=>api<Chat>('/chat')),{showAck:setAck,hideAck:()=>setAck(''),readAck:async()=>(await api<{ack:string|null}>('/chat/'+request.id+'/ack')).ack}),onSuccess:(result,request)=>{setDeliveryError('');queryClient.setQueryData(['chat',scope],result);setPending(null);restoredPending.current=false;setPendingText('');setDraft(current=>current.trim()===request.content?'':current);void queryClient.invalidateQueries({queryKey:['github-grant-reviews']});void queryClient.invalidateQueries({queryKey:['connections']});void queryClient.invalidateQueries({queryKey:['dashboard']});void queryClient.invalidateQueries({queryKey:['billing']});void queryClient.invalidateQueries({queryKey:['domain-controls'],refetchType:'none'});},onError:error=>{if(canRecoverChat(error)){setDeliveryError('The connection dropped before we could confirm your message. Retry checks the same request, without starting it again.');}else{setNotice(message(error));setPending(null);restoredPending.current=false;setPendingText('');void queryClient.invalidateQueries({queryKey:['chat']});}}});
  const open=(target:string,project?:string)=>navigate({to:'/workspace/$view',params:{view:target},search:{project}});
- const [returnedConnection,setReturnedConnection]=useState<string|null>(null),focusedReturn=useRef<string|null>(null);
+ const returnedConnection=chatInteractionTarget(location.searchStr),focusedReturn=useRef<string|null>(null);
  function resumeVisibleForm(id:string){
   if(!chat.data?.turns.some(turn=>turn.interaction_id===id))return null;
   return ()=>{
@@ -113,7 +113,7 @@ function WorkspaceSession({account}:{account:Profile}){
   return submitMessage(control.label,true,control.action);
  }
 
- useEffect(()=>{const result=providerReturn(location.searchStr);if(result){setNotice(result.notice);setReturnedConnection(result.interactionId??null);void queryClient.invalidateQueries({queryKey:['connections']});void queryClient.invalidateQueries({queryKey:['connection-handoff']});void queryClient.invalidateQueries({queryKey:['dashboard']});if(result.view==='chat')void navigate({to:'/workspace',search:{signup:false},replace:true});else void navigate({to:'/workspace/$view',params:{view:result.view},search:{},replace:true});}},[location.searchStr,navigate]);
+ useEffect(()=>{const result=providerReturn(location.searchStr);if(result){setNotice(result.notice);void queryClient.invalidateQueries({queryKey:['connections']});void queryClient.invalidateQueries({queryKey:['connection-handoff']});void queryClient.invalidateQueries({queryKey:['dashboard']});if(result.view==='chat')void navigate({to:'/workspace',search:{signup:false,interaction:result.interactionId},replace:true});else void navigate({to:'/workspace/$view',params:{view:result.view},search:{},replace:true});}},[location.searchStr,navigate]);
  useEffect(()=>{if(returnedConnection&&view==='chat'&&chat.data&&focusedReturn.current!==scope+returnedConnection){const resume=resumeVisibleForm(returnedConnection);if(resume){focusedReturn.current=scope+returnedConnection;resume();}}},[returnedConnection,view,chat.data]);
  useEffect(()=>{if(view!=='chat')document.querySelector('.workspace-main')?.scrollTo({top:0,behavior:'instant'});},[view,location.search.project]);
  useEffect(()=>{const field=composer.current;if(field){field.style.height='auto';field.style.height=Math.min(field.scrollHeight,160)+'px';}},[draft,view,profile.data]);
