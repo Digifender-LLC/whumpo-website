@@ -3539,13 +3539,13 @@ Dashboards and custom views are supporting surfaces the agent builds around the 
 - [ ] Concurrent layout edits use expected revisions and preserve unrelated cards/pages; historical layouts cannot restore lost permissions
 - [ ] No arbitrary queries, HTML/code, external destinations, invented metrics or permission changes can be stored as view configuration
 - [ ] Permission changes and unsupported data remain visible; render/refresh/poll create zero maintainer calls and no side effects
-- [ ] Existing saved tabs/shortcuts remain readable or migrate explicitly with a recoverable previous layout
+- [ ] Existing current-contract tabs/shortcuts remain usable; undo revalidates current definitions and permissions. Incompatible shapes use an explicit disposable test cutover without legacy readers or migrations
 
 ### Verification
 
 - Extend tests/workspace-dashboard.mjs with shared bindings, stale revisions, isolation, restore and zero-inference rendering cases
 - Run pnpm check and connected Chat-to-view-to-Chat browser fixtures through the quality manager; inspect narrow-screen images
-- Exercise current layouts, explicit forward data conversion, project removal, inaccessible metrics and user-requested layout correction
+- Exercise current layouts, explicit current-schema test cutover, project removal, inaccessible metrics and user-requested layout correction
 
 ### Dependencies and blockers
 
@@ -3562,14 +3562,17 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/workspace-pages.tsx](../../frontend/src/workspace-pages.tsx)
 - [tests/workspace-dashboard.mjs](../../tests/workspace-dashboard.mjs)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/workspace-views.md](../../docs/workspace-views.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/94. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
+- 2026-10-03 UTC: WH-107/#90 and WH-108/#93 are accepted. Source-grounded WH-109 contract in docs/workspace-views.md identifies current widgets/shared project projection, missing shared components/layout receipts/undo and the immediate-write workspaceAction gap. Owner current-version-only instructions supersede the old migration wording: use explicit disposable cutovers and current-definition undo, no legacy adapter. Original scope and remaining criteria retained; implementation is not claimed complete.
+- 2026-10-03 UTC: current root claims execution in #94 on codex/identity-admission after inspecting current source and upstream closures. Planned implementation contract is committed separately from runtime; first code work is shared current view definitions/bindings and atomic layout history/receipt preparation.
 
 ## WH-110 — Complete routine owner workflows within Chat
 
