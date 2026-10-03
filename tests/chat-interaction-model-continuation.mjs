@@ -45,6 +45,13 @@ async function saved(o,questions=fields,answers={area:'SUBMITTED_PUBLIC_SERVICE_
  const receipt=await json(o,'/api/chat/interactions/v1/mutate',mutation);
  return {form:await store.readInteraction(o.scope,o.user,form.envelope.id),mutation,receipt};
 }
+async function savedSelection(o,request='Change the services on my landscaping website to include seasonal care.'){
+ const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,?,'Choose your project.',datetime('now'),'ai','completed' FROM workspace_state WHERE user_id=?",turn,request,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
+ const f=await store.issueProjectIntake(o.scope,o.user,{originTurnId:turn,template:'project-select@1'});
+ const mutation={version:1,requestId:id(),interactionId:f.envelope.id,definitionDigest:f.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers:{project:o.project}};
+ const before=mainCalls,receipt=await json(o,'/api/chat/interactions/v1/mutate',mutation);assert.equal(mainCalls,before,'Saving selection alone must not infer');
+ return {form:await store.readInteraction(o.scope,o.user,f.envelope.id),mutation,receipt};
+}
 async function follow(o,f,steps=[],database){queue=steps;const input={version:1,submissionId:f.submission.id,expectedChatRevision:await revision(o)},before=mainCalls,data=await json(o,'/api/chat/interactions/v1/continue',input,database);return {data,input,calls:mainCalls-before};}
 const read=o=>({kind:'specification',operation:'read',projectId:o.project});
 const change=o=>({kind:'specification',operation:'change',projectId:o.project,expectedRevision:1,operations:[{type:'content.replace',contentId:'section-1-text',text:'SUBMITTED_PUBLIC_SERVICE_AREA'}]});
@@ -215,6 +222,58 @@ try{
  });
  await test('cancellation cannot carry a website change',async()=>{
   const o=await owner(),{form}=await saved(o);await follow(o,form,[null]);const r=await chat(o,'Cancel this task.',[resume(form),taskReply('Canceled.',change(o),{state:'canceled',summary:'Canceled.',openQuestions:[]})]);assert.equal(r.turn.status,'failed');assert.equal((await progress(form)).state,'active');assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE id=?',r.input.id)).n,0);
+ });
+ // Every scenario owns its fixtures; clear the earlier group before the bounded account cap.
+ await run('DELETE FROM users');
+ await test('project selection continues original request with only the chosen project and an exact private review',async()=>{
+  const o=await owner(),other=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'UNSELECTED_PROJECT_CANARY','UNSELECTED_PURPOSE_CANARY','draft',datetime('now'),datetime('now'))",other,o.user);
+  const {form,mutation,receipt}=await savedSelection(o);assert.equal(form.envelope.scope.projectId,null);
+  const current=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id);assert.equal(current.form.projectId,o.project);assert.equal(current.data.purpose,'project.selection@1');assert.equal(current.data.submittedAnswers[0].answer,o.project);
+  const result=await follow(o,form,[body=>{const text=JSON.stringify(body);assert.match(text,/seasonal care/);assert.match(text,/project.selection@1/);assert.doesNotMatch(text,/UNSELECTED_PROJECT_CANARY|UNSELECTED_PURPOSE_CANARY/);return read(o);},change(o)]);
+  assert.equal(result.calls,2);assert.equal(result.data.continuation.state,'succeeded');assert.equal((await row('SELECT project_id FROM project_spec_proposals WHERE id=?',form.submission.id)).project_id,o.project);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',o.project)).n,0);
+  const before=mainCalls;await json(o,'/api/chat/interactions/v1/continue',result.input);await json(o,'/api/chat/interactions/v1/reconcile',{version:1,submissionId:form.submission.id});assert.deepEqual(await json(o,'/api/chat/interactions/v1/mutate',mutation),receipt);assert.equal(mainCalls,before);
+  const refs=await taskContext.taskReferences(o.scope,o.user);assert.equal(refs[0].projectId,o.project);assert.equal(refs[0].purpose,'project.selection@1');
+  const prepared=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true);assert.equal(prepared.data.pendingReviews[0].reviewId,form.submission.id);
+  const continued=await chat(o,'Continue that seasonal-care task.',[resume({...form,projectId:o.project}),body=>{assert.doesNotMatch(JSON.stringify(body),/UNSELECTED_PROJECT_CANARY|UNSELECTED_PURPOSE_CANARY/);return taskReply('Your existing review is ready.',null,{state:'finished',summary:'Seasonal work remains in the exact pending review.',openQuestions:[]});}]);assert.equal(continued.turn.status,'completed');
+ });
+ for(const lost of ['account','project','transfer','delete'])await test('selected project refuses '+lost+' authority loss before model dispatch',async()=>{
+  const o=await owner(),other=await owner(),{form}=await savedSelection(o),before=mainCalls;
+  if(lost==='account'||lost==='project')await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND project_id IS ?',o.user,lost==='project'?o.project:null);
+  else if(lost==='transfer')await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,o.project);
+  else await run('DELETE FROM projects WHERE id=?',o.project);
+  const result=await http(o,'/api/chat/interactions/v1/continue',{version:1,submissionId:form.submission.id,expectedChatRevision:await revision(o)});assert([403,404,409].includes(result.status),await result.text());assert.equal(mainCalls,before);assert.equal((await state(form)).state,'not-started');
+ });
+ for(const boundary of ['dispatch','lookup','result'])for(const lost of ['account','project','transfer'])await test('selected '+lost+' permission race is fenced at '+boundary,async()=>{
+  const o=await owner(),other=await owner(),{form}=await savedSelection(o);let raced=false;
+  const pattern=boundary==='dispatch'?/UPDATE standard_ai_requests SET state='dispatched'/:boundary==='lookup'?/INSERT INTO agent_inspections/:/INSERT INTO project_spec_proposals/;
+  const racing=interceptDatabase(db,pattern,async()=>{if(raced)return;raced=true;if(lost==='transfer')await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,o.project);else await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND project_id IS ?',o.user,lost==='project'?o.project:null);});
+  const result=await follow(o,form,boundary==='dispatch'?[]:boundary==='lookup'?[read(o)]:[read(o),change(o)],racing);assert(raced);assert.equal(result.data.continuation.state,'failed');assert.equal(result.calls,boundary==='dispatch'?0:boundary==='lookup'?1:2);assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE id=?',form.submission.id)).n,0);
+ });
+ await test('correcting project choice keeps old reviews bound and excludes them from the new target',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);await follow(o,form,[read(o),change(o)]);
+  const second=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Second garden','Another garden','draft',datetime('now'),datetime('now'))",second,o.user);
+  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing','prepare','private-test-acceptance','synthetic selection correction',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,second);
+  const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,'Choose my other project instead','Review the corrected selection.',datetime('now'),'ai','completed' FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
+  const corrected=await store.replaceProjectIntake(o.scope,o.user,{originTurnId:turn,previousInteractionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:form.answerRevision});
+  const submission=id();await store.mutateInteraction(o.scope,o.user,{version:1,requestId:submission,interactionId:corrected.envelope.id,definitionDigest:corrected.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers:{project:second}});
+  const current=await taskContext.prepareInformationTask(o.scope,o.user,submission);assert.equal(current.form.projectId,second);assert.equal(current.data.taskId,form.envelope.scope.taskId);assert.deepEqual(current.data.pendingReviews,[]);assert.equal((await row('SELECT project_id FROM project_spec_proposals WHERE id=?',form.submission.id)).project_id,o.project);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,{project:o.project});assert.deepEqual(await taskContext.taskReferences(o.scope,o.user),[]);
+ });
+ await test('ordinary submitted-selection inspection retains ownership guards through the model result',async()=>{
+  const o=await owner(),other=await owner(),{form}=await savedSelection(o),e=form.envelope;
+  const result=await chat(o,'Which project did I choose?',[{kind:'interaction',operation:'readSubmittedAnswers',interactionId:e.id,taskId:e.scope.taskId,projectId:null,submissionId:form.submission.id,fieldIds:['project']},async()=>{await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,o.project);return null;}]);
+  assert.equal(result.calls,2);assert.equal(result.turn.status,'failed');assert.doesNotMatch(result.turn.assistant_text,/UNTRUSTED_MODEL_PROSE/);assert.equal((await state(form)).state,'not-started');
+ });
+ await test('selected task preserves unavailable and stopped receipts without model calls',async()=>{
+  const o=await owner(),{form}=await savedSelection(o),before=mainCalls;
+  await assert.rejects(()=>continuation.continueInformationTask(o.scope,o.user,form.submission.id,2,undefined),e=>e.status===503);assert.equal((await state(form)).state,'not-started');assert.equal(mainCalls,before);
+  await json(o,'/api/chat/interactions/v1/stop',{version:1,submissionId:form.submission.id});const stopped=await follow(o,form);assert.equal(stopped.data.continuation.reason,'stopped');assert.equal(stopped.calls,0);
+ });
+ await test('lost selected-project result acknowledgment recovers exactly once',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);let lost=false;const lossy=interceptDatabase(db,/INSERT INTO project_spec_proposals/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost selection result acknowledgment');}});
+  const result=await follow(o,form,[read(o),change(o)],lossy);assert(lost);assert.equal(result.data.continuation.state,'succeeded');const before=mainCalls;await json(o,'/api/chat/interactions/v1/continue',result.input);assert.equal(mainCalls,before);
+ });
+ for(const action of [{kind:'project',purpose:'Unrequested project',config:{}},{kind:'backend',operation:'list',projectId:id()},{kind:'review',operation:'publish',targetId:id()}])await test('selected website task rejects '+action.kind+' effects',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);const result=await follow(o,form,[action]);assert.equal(result.data.continuation.state,'failed');await noEffect(o,form);
  });
  console.log(`Chat model continuation: ${cases} actual-handler scenarios passed; ${mainCalls} scripted main calls, ${ackCalls} ack calls. No external model, publication or payment.`);
 }finally{globalThis.fetch=originalFetch;await Promise.allSettled(background);await fixture.close();}

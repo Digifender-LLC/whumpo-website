@@ -45,7 +45,7 @@
     "version": 1, "kind": "form", "template": "project-select@1", "title": "Choose your project",
     "summary": "Which project should we work on? Existing forms keep their original target.", "presentation": "inline",
     "fields": [{"id": "project", "type": "resource", "label": "Project", "help": "Choose a project you can access.", "required": true, "binding": "answer.value@1", "constraints": {"collection": "projects", "multiple": false, "maxItems": 1}}],
-    "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": null
+    "cards": [], "submitBinding": "interaction.answers@1", "continuationBinding": "agent.task-continue@1"
   },
   "choice": {
     "version": 1, "kind": "form", "template": "choice@1", "title": "Choose a writing style",

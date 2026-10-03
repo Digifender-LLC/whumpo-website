@@ -9,7 +9,7 @@ const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();le
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{network++;throw Error('Unexpected inference/provider request');};
 const run=(sql,...v)=>db.prepare(sql).bind(...v).run(),row=(sql,...v)=>db.prepare(sql).bind(...v).first();
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){}};
-const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','interaction.answers@1','owned.projects@1']};
+const client={versions:[1],fieldTypes:['text','long-text','resource','choice'],bindings:['answer.value@1','interaction.answers@1','owned.projects@1','agent.task-continue@1']};
 async function owner(){const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);const grant=id();await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','prepare','private-test-acceptance','synthetic intake fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",grant,user);const readGrant=id();await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','read','private-test-acceptance','synthetic resource fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",readGrant,user);return {authority,user,scope,grant,readGrant};}
 async function project(o,name='Garden'){const p=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,?,'Private purpose canary','draft',datetime('now'),datetime('now'))",p,o.user,name);return p;}
 async function origin(o){const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Plan a project','Review these details',datetime('now') FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);return turn;}
@@ -43,7 +43,7 @@ try{
    const revised=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,cleared));
    assert(revised.envelope.definition.fields.every(f=>!f.default));
    const again=await store.replaceProjectIntake(o.scope,o.user,await replacement(o,revised));assert(again.envelope.definition.fields.every(f=>!f.default));
-   assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission,submitted.submission);
+   const retained=(await store.readInteraction(o.scope,o.user,form.envelope.id)).submission;assert.deepEqual({...retained,continuation:null},{...submitted.submission,continuation:null});if(template==='project-select@1'){assert.equal(retained.continuation.state,'failed');assert.equal(retained.continuation.reason,'stopped');}
   }
  });
  await test('maintained writing choices reject forged options, unsupported clients and invalid selections',async()=>{
@@ -103,7 +103,8 @@ try{
   const items=[];let before=null;do{const page=await json(o,'interactions/v1/resources',resources(form,before));assert.equal(page.definitionDigest,form.envelope.definitionDigest);assert(page.items.length<=2);items.push(...page.items);before=page.nextBefore;}while(before);
   assert.equal(items.length,5);assert.equal(new Set(items.map(p=>p.id)).size,5);assert.deepEqual(items.map(p=>p.name),['Alpha','Alpha','Garden','Zebra','Zebra']);assert(!JSON.stringify(items).includes('Private purpose canary'));assert(!JSON.stringify(items).includes('FOREIGN_NAME_CANARY'));assert.deepEqual(Object.keys(items[0]).sort(),['id','name','photo']);
   await json(other,'interactions/v1/resources',resources(form),404);
-  for(const extra of [{limit:21},{fieldId:'purpose'},{before:{name:'Garden',id:'foreign'}},{projectId:id()}])await json(o,'interactions/v1/resources',{...resources(form),...extra},400);
+  await json(o,'interactions/v1/resources',{...resources(form),fieldId:'purpose'},409);
+  for(const extra of [{limit:21},{before:{name:'Garden',id:'foreign'}},{projectId:id()}])await json(o,'interactions/v1/resources',{...resources(form),...extra},400);
   await json(o,'interactions/v1/resources',{...resources(form),version:0},409);
   await json(o,'interactions/v1/read',{version:1,interactionId:form.envelope.id,client:{...client,fieldTypes:['text','long-text']}},409);
   const empty=await owner();const f=await issue(empty,'project-select@1');assert.deepEqual((await store.listInteractionResources(empty.scope,empty.user,resources(f.form))).items,[]);
@@ -118,7 +119,7 @@ try{
  await test('foreign or removed resource cannot become an answer; accepted selection does not retarget a task',async()=>{
   const o=await owner(),other=await owner(),own=await project(o),foreign=await project(other),{form}=await issue(o,'project-select@1');
   for(const operation of ['save-draft','submit'])for(const selected of [foreign,id()]){const failure=await json(o,'interactions/v1/mutate',request(form,operation,{project:selected}),422);assert.equal(failure.fieldId,'project');assert.equal(failure.code,'resource_unavailable');}
-  const submit=request(form,'submit',{project:own});await json(o,'interactions/v1/mutate',submit);const current=await store.readInteraction(o.scope,o.user,form.envelope.id);assert.equal(current.submission.continuation,null);assert.equal(current.envelope.scope.projectId,null);assert.equal((await row('SELECT project_id FROM chat_interaction_tasks WHERE id=?',current.envelope.scope.taskId)).project_id,null);
+  const submit=request(form,'submit',{project:own});await json(o,'interactions/v1/mutate',submit);const current=await store.readInteraction(o.scope,o.user,form.envelope.id);assert.equal(current.submission.continuation.state,'not-started');assert.equal(current.envelope.scope.projectId,null);assert.equal((await row('SELECT project_id FROM chat_interaction_tasks WHERE id=?',current.envelope.scope.taskId)).project_id,null);
   await run('DELETE FROM projects WHERE id=?',own);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,{project:own});assert.equal((await store.mutateInteraction(o.scope,o.user,submit)).requestId,submit.requestId);
  });
  await test('selected project ownership is checked again inside the save transaction',async()=>{
@@ -156,7 +157,7 @@ try{
   const o=await owner(),{form}=await issue(o),submit=request(form);const receipt=await store.mutateInteraction(o.scope,o.user,submit),before=await store.readInteraction(o.scope,o.user,form.envelope.id),input=await replacement(o,before),next=await store.replaceProjectIntake(o.scope,o.user,input);
   assert.deepEqual(Object.fromEntries(next.envelope.definition.fields.map(f=>[f.id,f.default.value])),submit.answers);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission,before.submission);assert.equal((await store.readInteraction(o.scope,o.user,form.envelope.id)).replacementInteractionId,next.envelope.id);
   assert.deepEqual(await store.mutateInteraction(o.scope,o.user,submit),receipt);const revised=request(next,'submit',{name:'Revised garden',purpose:'A new submitted description.'});await store.mutateInteraction(o.scope,o.user,revised);
-  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations')).n,0);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,0);
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_continuations c JOIN chat_interaction_submissions s ON s.id=c.id WHERE s.user_id=?',o.user)).n,0);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,0);
   assert.equal((await store.replaceProjectIntake(o.scope,o.user,input)).envelope.id,next.envelope.id);await denies(()=>store.replaceProjectIntake(o.scope,o.user,{...input,expectedAnswerRevision:0}));
  });
  await test('correction carries owned selection but drops a removed or transferred default',async()=>{
@@ -228,5 +229,5 @@ try{
   if(mode==='answer')assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).draft,{name:'Late user answer'});
  });
  assert.equal(network,0);assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);assert.equal((await row('SELECT count(*) n FROM chat_interaction_checks')).n,0);
- console.log(`Maintained project intake passed: ${cases} actual-handler cases (${process.argv.includes('--d1')?'local D1':'SQLite'}), owned paged selection, atomic scope/feature/session checks, exact loss/replay, null downstream work and real HTTP/history/export. No model/provider, project creation, activation, browser or deployment acceptance.`);
+ console.log(`Maintained project intake passed: ${cases} actual-handler cases (${process.argv.includes('--d1')?'local D1':'SQLite'}), owned paged selection, atomic scope/feature/session checks, exact loss/replay, saved selection continuation without automatic dispatch and real HTTP/history/export. No model/provider, project creation, activation, browser or deployment acceptance.`);
 }catch(error){console.error(error);process.exitCode=1;}finally{globalThis.fetch=originalFetch;await fixture.close();}
