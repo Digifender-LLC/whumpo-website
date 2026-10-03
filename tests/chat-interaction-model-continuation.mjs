@@ -307,7 +307,7 @@ try{
  });
  await test('new-project corrected brief preserves created target and requires a separate change review',async()=>{
   const o=await owner(),{form,target}=await savedBrief(o);await follow(o,form,[newWebsite()]);await grantNew(o,target);
-  const corrected=await correctBrief(o,form,{...newBrief,name:'Renamed Garden'}),task=await taskContext.prepareInformationTask(o.scope,o.user,corrected.submission.id);assert.equal(task.newProject,false);assert.equal(task.form.projectId,target);
+  const corrected=await correctBrief(o,form,{...newBrief,name:'Renamed Garden'}),task=await taskContext.prepareInformationTask(o.scope,o.user,corrected.submission.id);assert.equal(task.newProject,false);assert.equal(task.form.projectId,target);assert.equal(task.hasWebsite,true);assert.equal(task.data.websiteState,'saved');
   const changed={kind:'specification',operation:'change',projectId:target,expectedRevision:1,operations:[{type:'project.setName',name:'Renamed Garden'}]};const r=await follow(o,corrected,[{kind:'specification',operation:'read',projectId:target},changed]);assert.equal(r.data.continuation.state,'succeeded');assert.equal((await row('SELECT project_id FROM project_spec_proposals WHERE id=?',corrected.submission.id)).project_id,target);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,2);assert.equal((await site.readSpecification(o.scope,o.user,target)).revision,1);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,newBrief);
  });
  for(const lost of ['delete','transfer'])await test('new-project '+lost+' retains creation evidence and refuses recreation',async()=>{
@@ -321,6 +321,13 @@ try{
  });
  await test('new-project late task change rolls back both creation and result custody',async()=>{
   const o=await owner(),{form,target}=await savedBrief(o);let raced=false;const racing=interceptDatabase(db,/INSERT INTO projects/,async()=>{if(!raced){raced=true;await run('UPDATE chat_interaction_tasks SET revision=revision+1 WHERE id=?',target);}});const r=await follow(o,form,[newWebsite()],racing);assert(raced);assert.equal(r.data.continuation.state,'failed');assert.equal(await row('SELECT id FROM projects WHERE id=?',target),null);
+ });
+ await test('new-project corrected brief rejects recreating its existing website',async()=>{
+  const o=await owner(),{form,target}=await savedBrief(o);await follow(o,form,[newWebsite()]);await grantNew(o,target);
+  const corrected=await correctBrief(o,form,{...newBrief,name:'Renamed Garden'}),bad={kind:'specification',operation:'create',projectId:target,config:{...newWebsite().config,name:'Renamed Garden'}};
+  const r=await follow(o,corrected,[body=>{assert.match(JSON.stringify(body),/already created its project and first private website/);return bad;}]);
+  assert.equal(r.data.continuation.state,'failed');assert.equal(JSON.parse(warnings.at(-1)).reason,'task_action');assert.equal((await site.readSpecification(o.scope,o.user,target)).revision,1);assert.equal((await row('SELECT name FROM projects WHERE id=?',target)).name,newBrief.name);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',o.user)).n,2);
+  await run('DELETE FROM users WHERE id=?',o.user);
  });
  await test('new-project lost final acknowledgment recovers its creation without replay',async()=>{
   const o=await owner(),{form,target}=await savedBrief(o);let lost=false;const lossy=interceptDatabase(db,/INSERT INTO projects/,async()=>{},async()=>{if(!lost){lost=true;throw Error('Lost new-project acknowledgment');}});const r=await follow(o,form,[newWebsite()],lossy);assert(lost);assert.equal(r.data.continuation.state,'succeeded');const before=mainCalls;await json(o,'/api/chat/interactions/v1/continue',r.input);assert.equal(mainCalls,before);assert.equal((await row('SELECT count(*) n FROM projects WHERE id=?',target)).n,1);

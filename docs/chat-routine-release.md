@@ -1,5 +1,21 @@
 # Routine Chat test release — October 3, 2026 UTC
 
+## Current follow-up release: deployed, acceptance open
+
+Release `8af2c1aa-72dd-4b4d-81a0-3eac45b72e6c` deploys source `b1c657d` on the same current database/schema. It clarifies required task-summary fields and adds fixed, content-free rejection categories. Worker versions are runtime `e3827fe4-525b-42b5-b726-4b1d46e50298`, apps `c05ab191-08bc-4150-9902-1d151ae6e669`, sites `b7136e6d-8b06-47eb-a2e3-213bbf563465`, platform `38cef629-057c-488f-80f0-7cfbd1fcf51d`. Exact Worker/binding/schema/39-asset and identity-entry checks passed again. No reset or new invitation was needed.
+
+The retained follow-up attempts are distinct:
+
+1. Diagnostic observer setup stopped before model work because Wrangler rejects an explicit tail sampling rate of 1. Omitting the optional filter corrected the operator invocation. Synthetic cleanup passed.
+2. The form request passed, but a new test-harness poll overlapped draft saving and its full-form reader correctly returned `interaction_changed`. No continuation model call had occurred at the captured checkpoint. Cleanup passed; the harness now observes the immutable operation row until terminal before reading the complete form. Server consistency checks are unchanged.
+3. Real deployed Muse/browser passed the form request, private project creation with deliberately lost-response recovery, and proposed-name correction of that same brief. Continuing the correction then selected website creation instead of reading/changing the saved website. The domain refused the duplicate; the completed Chat reply said a website already existed, and no expected name review existed. The helper had marked the receipt completed before checking the actual review; it now reports step success only after the expected domain result is verified. The overall report always remained failed. Four main inference receipts, one lookup continuation and two acknowledgments were recorded; the scoped diagnostic tail connected and recorded no proposal rejection because this was an allowed but inappropriate action handled by the domain. Cleanup passed.
+
+Private reports/cleanup/diagnostics preserve all three attempts; the third full report is under `routine-chat-followup-attempt-3-live-8af2c1aa-72dd-4b4d-81a0-3eac45b72e6c`. Source now adds owned saved-website state, explicitly treats corrected intake as an edit of the existing project and rejects `create` for a saved website. A real Muse/local-D1 creation → correction → exact private name-review case passes with three calls and unchanged saved content; this source correction still needs deployment/full browser acceptance. [Details and bounded cohort evidence](chat-routine-journeys.md#saved-website-state-and-corrected-intake--october-3-utc).
+
+#97 and parent #95 remain open. The original unretained rejection below is not retroactively explained by the separately reproduced missing-summary-field failure. Parent completion remains 24/122; old-database retirement remains pending.
+
+## Initial current-schema cutover (superseded runtime)
+
 **Deployed; WH-110B application acceptance remains open.** Release `708ce636-2cb4-40c6-8ab5-8505ec20bbac` deploys committed source `0cafbb15b35f3102dd86d665d69e28c01f766fac`. It replaces the [workspace views release](workspace-view-release.md) as the active test runtime. Preparing or deploying this release does not close [#97](https://github.com/zemdregon/whumpo/issues/97), its parent [#95](https://github.com/zemdregon/whumpo/issues/95), or beta acceptance. The roadmap remains **24 of 122 parent tasks completed**.
 
 ## Deployment and resource state

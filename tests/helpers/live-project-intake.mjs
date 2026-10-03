@@ -38,20 +38,24 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
   const after=await calls();await browser.json('/api/chat','POST',input);assert.deepEqual(await calls(),after,'Chat replay dispatched inference');record.calls={before,after};record.success=true;console.log(JSON.stringify({step:name,passed:true,deployed:true}));return record.turn;
  }
  async function issued(turn,template){const f=await row('SELECT id FROM chat_interactions WHERE origin_turn_id=? AND user_id=?',turn.id,id);assert(f,'Expected maintained form');const form=await store.readInteraction(scope,id,f.id);assert.equal(form.envelope.definition.template,template);return form;}
- async function submit(name,form){
+ async function submit(name,form,verify){
   phase=name;const record={name,success:false},before=await calls();steps.push(record);
   await card(form).getByRole('button',{name:'Save and continue',exact:true}).click();
-  let saved;
+  let observed;
   for(let n=0;n<150;n++){
-   saved=await store.readInteraction(scope,id,form.envelope.id);
-   if(['succeeded','failed'].includes(saved.submission?.continuation?.state))break;
+   // Observe one immutable submission/operation row while browser draft saving
+   // may still be finishing. The full form reader correctly rejects mixed revisions.
+   observed=await row('SELECT c.id,c.state FROM chat_interaction_submissions s JOIN chat_interaction_continuations c ON c.id=s.id WHERE s.interaction_id=? AND s.user_id=?',form.envelope.id,id);
+   if(observed&&['succeeded','failed'].includes(observed.state))break;
    await new Promise(done=>setTimeout(done,1000));
   }
-  record.continuationState=saved.submission?.continuation?.state;
-  if(saved.submission)record.turn=await settled(saved.submission.id);
+  record.continuationState=observed?.state;
+  if(observed)record.turn=await settled(observed.id);
   assert.equal(record.continuationState,'succeeded','Expected successful task continuation');
   assert.equal(record.turn.status,'completed','Expected completed task result');
+  const saved=await store.readInteraction(scope,id,form.envelope.id);
   await card(form).getByText('Whumpo’s follow-up is ready in Chat. Review any preview before approving changes or publishing.',{exact:true}).waitFor();
+  await verify(saved);
   const after=await calls(),input=requests.get(saved.submission.id);assert(input);await browser.json('/api/chat/interactions/v1/continue','POST',input);assert.deepEqual(await calls(),after,'Continuation replay dispatched inference');
   await page.reload();await card(saved).getByText('Whumpo’s follow-up is ready in Chat.',{exact:false}).waitFor();assert.deepEqual(await calls(),after,'Reload dispatched inference');record.calls={before,after};record.success=true;console.log(JSON.stringify({step:name,passed:true,deployed:true}));return saved;
  }
@@ -61,16 +65,22 @@ export async function verifyLiveProjectIntake({db,id,browser,workspaceToken,rele
   await card(brief).locator('[data-interaction-field="name"] input').fill('Meadow Garden');
   const purpose='A simple informational gardening website about seasonal planting, with a headline and a Services section. Use only this description and the working name; do not invent addresses, contact details or prices. Use a calm green theme.';
   await card(brief).locator('[data-interaction-field="purpose"] textarea').fill(purpose);loseContinuation=true;
-  const saved=await submit('create-private-project-with-lost-reply',brief),target=saved.envelope.scope.taskId;
-  assert.equal((await row('SELECT created_project_id FROM chat_task_progress WHERE task_id=? AND created_project_id IS NOT NULL',target)).created_project_id,target);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',id)).n,2);assert.equal((await site.readSpecification(scope,id,target)).revision,1);assert.equal(lostReplies,1);await grant(target);
+  const saved=await submit('create-private-project-with-lost-reply',brief,async value=>{
+   const target=value.envelope.scope.taskId;
+   assert.equal((await row('SELECT created_project_id FROM chat_task_progress WHERE task_id=? AND created_project_id IS NOT NULL',target)).created_project_id,target);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',id)).n,2);assert.equal((await site.readSpecification(scope,id,target)).revision,1);assert.equal(lostReplies,1);
+  }),target=saved.envelope.scope.taskId;await grant(target);
   let correction;
   await chat('correct-created-project-brief','On the Meadow Garden project brief I just submitted, propose changing the working name to Meadow Garden Studio. Keep the same task and other answer; show me the corrected form so I can review it. Do not create another project or change the website.',async turn=>{correction=await issued(turn,'project-brief@1');assert.equal(correction.envelope.scope.taskId,target);assert.equal(correction.previousInteractionId,brief.envelope.id);});
   assert.equal(await card(correction).locator('[data-interaction-field="name"] input').inputValue(),'Meadow Garden Studio');
-  const corrected=await submit('prepare-same-project-name-review',correction),nameReview=await site.readSpecificationProposal(scope,id,corrected.submission.id);assert.equal(nameReview.project_id,target);assert.equal((await row('SELECT name FROM projects WHERE id=?',target)).name,'Meadow Garden');assert.equal((await site.readSpecification(scope,id,target)).revision,1);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',id)).n,2);
+  await submit('prepare-same-project-name-review',correction,async value=>{
+   const nameReview=await site.readSpecificationProposal(scope,id,value.submission.id);assert.equal(nameReview.project_id,target);assert.equal((await row('SELECT name FROM projects WHERE id=?',target)).name,'Meadow Garden');assert.equal((await site.readSpecification(scope,id,target)).revision,1);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',id)).n,2);
+  });
   let selected;
   await chat('request-project-selection','I want to change a headline on one of my websites, but I have not chosen which one yet. Show me a project picker. After I choose, prepare the headline Fresh gardens for every season. Keep this separate from the Meadow Garden naming task, and do not save or publish the change.',async turn=>{selected=await issued(turn,'project-select@1');});
   await card(selected).locator('select').selectOption(original);
-  const selection=await submit('prepare-selected-project-headline-review',selected),review=await site.readSpecificationProposal(scope,id,selection.submission.id);assert.equal(review.project_id,original);assert.equal((await site.readSpecification(scope,id,original)).revision,1);assert.match(await(await browser.call('/api/specification-reviews/'+review.id+'/preview')).text(),/Fresh gardens for every season/);
+  const selection=await submit('prepare-selected-project-headline-review',selected,async value=>{
+   const review=await site.readSpecificationProposal(scope,id,value.submission.id);assert.equal(review.project_id,original);assert.equal((await site.readSpecification(scope,id,original)).revision,1);assert.match(await(await browser.call('/api/specification-reviews/'+review.id+'/preview')).text(),/Fresh gardens for every season/);
+  });
   const reviews=(await row('SELECT count(*) n FROM project_spec_proposals WHERE user_id=?',id)).n;
   await chat('resume-selected-task','Continue the headline task for Test Garden. Is that prepared change still waiting for my approval? Do not change anything or start a new task.',async turn=>{const progress=await row('SELECT task_id,submission_id FROM chat_task_progress WHERE turn_id=?',turn.id);assert.equal(progress.task_id,selected.envelope.scope.taskId);assert.equal(progress.submission_id,selection.submission.id);assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE user_id=?',id)).n,reviews);});
   phase='read-reload-and-mobile';const before=await calls();await page.reload();await card(selection).getByText('Whumpo’s follow-up is ready in Chat.',{exact:false}).waitFor();assert.deepEqual(await calls(),before);
