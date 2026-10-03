@@ -20,6 +20,7 @@ const reportDir=process.env.WHUMPO_LIFECYCLE_EVIDENCE??dir;
 await mkdir(reportDir,{recursive:true,mode:0o700});
 const fixtureDigest=createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex');
 const inputSnapshot=await readBuildInputs(),source=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+const pendingHandlers=new Set();
 const originalFetch=globalThis.fetch,background=[],requests=[],calls=[],steps=[],errors=[];
 let fixture,browser,server,page,currentStep,script=[],success=false,phase='build',scope,user,project,layout,store,db;
 let temporary,originalTemporary,savedPage,removalReceipt,originalLayout,origin;
@@ -30,7 +31,7 @@ const assertView=(actual,widgets)=>assert.deepEqual({...actual,widgets:[...actua
 const current=()=>layout.readLayout(scope,user);
 const currentTemporary=()=>store.readInteraction(scope,user,temporary);
 const operation=async(operation,data)=>({kind:'workspace',version:1,expectedRevision:(await current()).revision,operation,...data});
-const parseOutput=body=>JSON.parse(body.output?.flatMap(x=>x.content??[]).filter(x=>x.type==='output_text').map(x=>x.text).join(''));
+const outputText=body=>body.output?.flatMap(x=>x.content??[]).filter(x=>x.type==='output_text').map(x=>x.text).join('');
 
 try{
  await viteBuild({build:{outDir:dir+'/web'},logLevel:'error'});
@@ -60,12 +61,12 @@ try{
     response=Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(output)}]}],usage:{input_tokens:1000,output_tokens:100}});
    }
    call.httpStatus=response.status;call.elapsedMs=Math.round(performance.now()-started);
-   try{const body=await response.clone().json();call.providerStatus=body.status;call.incompleteReason=body.incomplete_details?.reason;call.usage=body.usage;call.output=parseOutput(body);}catch{call.responseParseFailed=true;}
+   try{const body=await response.clone().json();call.providerStatus=body.status;call.incompleteReason=body.incomplete_details?.reason;call.usage=body.usage;call.messages=body.output?.filter(x=>x.type==='message');call.outputText=outputText(body);call.answerText=outputText({...body,output:body.output?.filter(x=>x.type!=='message'||x.phase!=='commentary')});call.output=JSON.parse(call.answerText);}catch{call.responseParseFailed=true;}
    call.status='received';return response;
   }catch(error){call.status='unknown';call.error=error.name;throw error;}
  };
  const root=resolve(dir+'/web');
- server=createServer(async(req,res)=>{try{
+ async function handle(req,res){try{
   const url=new URL(req.url,origin);
   if(req.headers.host!==new URL(origin).host){res.writeHead(403).end();return;}
   if(url.pathname==='/_fixture/start'){res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+authority.token+'; Secure; HttpOnly; SameSite=Lax; Path=/',location:'/workspace/chat'}).end();return;}
@@ -84,7 +85,8 @@ try{
   if(!path.startsWith(root+sep)){res.writeHead(404).end();return;}
   const bytes=await readFile(path),ext=path.split('.').at(-1);
   res.writeHead(200,{'content-type':{html:'text/html',js:'text/javascript',css:'text/css',svg:'image/svg+xml',png:'image/png',woff2:'font/woff2'}[ext]??'application/octet-stream','cache-control':'no-store'}).end(bytes);
- }catch(error){errors.push({phase,error:error.message});if(!res.headersSent)res.writeHead(500);res.end('Local lifecycle fixture failed');}});
+ }catch(error){errors.push({phase,error:error.message});if(!res.headersSent)res.writeHead(500);res.end('Local lifecycle fixture failed');}}
+ server=createServer((req,res)=>{const pending=handle(req,res);pendingHandlers.add(pending);void pending.finally(()=>pendingHandlers.delete(pending));});
  await new Promise((done,reject)=>{server.once('error',reject);server.listen(8787,'127.0.0.1',done);});origin='http://localhost:'+server.address().port;
  browser=await chromium.launch({headless:true,...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});page=await context.newPage();page.setDefaultTimeout(20000);page.on('pageerror',error=>errors.push({phase,error:error.message}));
@@ -154,7 +156,7 @@ try{
  await Promise.all(background);assert.deepEqual(await readBuildInputs(),inputSnapshot,'Source changed during lifecycle verification');success=true;
 }catch(error){if(page)await page.screenshot({path:reportDir+'/failure.png'}).catch(()=>{});console.error(JSON.stringify({phase,error:error.message}));throw error;}
 finally{
- await Promise.allSettled(background);globalThis.fetch=originalFetch;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await fixture?.close();
+ await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await Promise.allSettled([...pendingHandlers]);await Promise.allSettled(background);globalThis.fetch=originalFetch;await fixture?.close();
  const report={at:new Date().toISOString(),source,fixtureDigest,realProvider:live,success,phase,steps,calls,errors,localFixtureRemoved:true,scope:'Built 360/390px Chromium, actual Worker and synthetic local D1. Natural-language temporary/correct/save/update/rename/dashboard/remove/undo, unrelated content preservation, exact replay, zero-inference reads and durable dismissal. No deployed environment, physical device, customer publication, CMS or scanner acceptance.'};
  await writeFile(reportDir+'/report.json',JSON.stringify(report,null,2)+'\n',{mode:0o600});console.log(JSON.stringify({success,realProvider:live,steps:steps.filter(s=>s.success).length,calls:calls.length,evidence:reportDir}));
  if(reportDir!==dir)await rm(dir,{recursive:true,force:true});
