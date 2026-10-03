@@ -22,7 +22,9 @@ Whumpo is a private test-stage, Cloudflare-hosted AI website and application pla
 - Use Node.js 24 and pnpm 11. `pnpm check` type-checks both TypeScript projects. Run only the verification appropriate to the requested change and report exactly what ran.
 - Preserve unrelated working-tree changes. Inspect `git status` before edits and review the diff after.
 
-## Subagent routing
+## Subagent routing and orchestration
+
+The primary agent acts as an orchestrator, coordinating work through context-scoped subagents rather than performing coding and edits directly. This division of labor optimizes reasoning effort and keeps the main conversation focused on coordination and decision-making.
 
 When delegating to subagents, route work based on task complexity and requirements:
 
@@ -31,7 +33,9 @@ When delegating to subagents, route work based on task complexity and requiremen
 - **Sonnet 5.5**: Balanced capability for general-purpose work (multi-file refactoring, feature implementation, moderate complexity analysis, code review). The default choice for most substantive tasks.
 - **Opus 5.5**: Most capable reasoning for complex, high-stakes work (architecture decisions, cross-system design, deep codebase analysis, security review, intricate bug diagnosis). Use when a task requires sustained reasoning across multiple domains or when Sonnet's output quality is insufficient.
 
-Route simple, independent subtasks to faster models to reduce latency and cost. Reserve Opus for genuinely complex problems requiring deep reasoning or when task failure would be costly.
+**Orchestrator responsibilities**: Define the task scope, provide context and constraints, verify subagent work, and coordinate across multiple efforts. Route simple, independent subtasks to faster models to reduce latency and cost. Reserve Opus for genuinely complex problems requiring deep reasoning or when task failure would be costly.
+
+**Subagent responsibilities**: Execute focused work within defined scope—code writes, edits, file operations, targeted analysis. Report results clearly so the orchestrator can verify and coordinate the next step.
 
 ## Roadmap execution
 
