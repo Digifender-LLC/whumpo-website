@@ -1,12 +1,30 @@
 # Routine Chat test release — October 3, 2026 UTC
 
-## Current task-status release: conversational steps pass, final browser verification open
+## Current release: intake/selection accepted in deployed testing
 
 Release `6edf35f2-f64a-435f-85c8-693a717e5d24` deploys source `0994c52` on the unchanged current database/schema. All four exact Worker/binding/schema/39-asset checks pass: runtime `0a0b889d-1000-42da-a787-0daf1776c1b4`, apps `1cf56906-0cb8-4217-8ec0-b68308fee7a9`, sites `30737e53-c29c-4ea7-8ebc-1cb2b450a270`, platform `913dcbab-56cc-4beb-a041-a130aabd39d4`.
 
+Verified **October 3 at 08:41 UTC**, runtime source `0994c522c59ea3aa04a73165e783ed76c254b919`, browser verifier source `97266b8`. The complete second run passes all seven natural-language steps: request brief; create a private project while discarding its successful HTTP reply; correct that same brief; prepare a name review without duplicate creation; select another project explicitly; prepare its headline review; resume that exact task and report its pending approval without changing anything.
+
+Each result was checked against current stored domain state. Exact resubmission/replay/reload did not dispatch another model call. Both saved sites remained at revision 1, with two projects, zero publications and zero standard-AI customer-unit charges. Seven main inference receipts and four lookup continuations were observed. Four acknowledgment receipts remain uncertain: this is retained WH-020 model/acknowledgment reliability work, not silently counted as successful inference. The scoped proposal diagnostic observer connected, found zero rejection events and exited cleanly.
+
+Post-reload 360/390px captures passed and were inspected: the heading and selected project are within the conversation, touch height is at least 44px, and there is no horizontal overflow. The signed synthetic identity journey completed first-project/profile gating, independent second-key login, logout and revocation. Cloudflare PKCE start/cancel matched the existing sealed key backup; revoked preview access was denied. No provider consent/action was performed. All synthetic account/project/receipt rows were removed and checked. Public home/workspace/health, exact assets, anonymous denials, removed routes/cookie, foreign origin and an absent customer hostname passed.
+
+Private evidence: `routine-chat-release-verification.json`; `routine-chat-task-status-mobile-live-6edf35f2-f64a-435f-85c8-693a717e5d24/report.json` and `selected-360.png`/`selected-390.png`; `routine-chat-task-status-mobile-probe-cleanup.json`; `routine-chat-task-status-mobile-diagnostics.json`. These contain synthetic evidence and stay untracked. The current owner invitation remains unchanged and private. No human enrollment, physical phone/PWA, general model-quality, customer-beta, provider, real billing, CMS or scanner acceptance is claimed.
+
+[WH-110B scope audit](chat-routine-journeys.md#wh-110b-original-child-scope-acceptance--october-3-utc) accepts this child. Parent #95, remaining adapters #98 and complete parent acceptance #99 stay open; parent task count remains 24/122.
+
+### Preserved first attempt on this same release
+
 All seven real Muse/deployed-browser conversational steps passed, including exact pending-review task resumption, no extra proposals and no replay inference. The run then failed its post-reload 360px visibility assertion after `scrollIntoViewIfNeeded`; the heading was at the bottom of the conversation. The old probe did not retain geometry, so its precise failed comparison is unknown. No browser page errors occurred. Seven main receipts/four lookups and four uncertain acknowledgment receipts were recorded. Synthetic cleanup passed; post-model second-key/logout and final aggregate assertions were not reached. The overall report remains failed at `read-reload-and-mobile` and is preserved privately under `routine-chat-task-status-live-6edf35f2-f64a-435f-85c8-693a717e5d24`.
 
-The shared browser capture now explicitly positions the picker after phone reflow and checks the heading AND selected control inside the conversation, the selected name, 44px touch height and no horizontal overflow. It reports geometry on failure. Actual Worker/current-local-D1/built-browser selected-task verification passes with five scripted main calls, lost-response/reload recovery and 360/390px captures after resumption. No product UI/runtime change was made for that fixture correction. A fresh full deployed run remains required before acceptance and old-database retirement. Earlier attempts are retained below; #97 and parent #95 remain open.
+The shared browser capture now explicitly positions the picker after phone reflow and checks the heading AND selected control inside the conversation, the selected name, 44px touch height and no horizontal overflow. It reports geometry on failure. Actual Worker/current-local-D1/built-browser selected-task verification passes with five scripted main calls, lost-response/reload recovery and 360/390px captures after resumption. No product UI/runtime change was made for that fixture correction. At that checkpoint, a fresh full deployed run was required before acceptance and old-database retirement; #97 and parent #95 remained open.
+
+The fresh run above supersedes the earlier pending verification, without erasing the failed capture. Product UI/runtime did not change between these two attempts. Database retirement is recorded separately below.
+
+## Obsolete database retirement — verified October 3, 08:42 UTC
+
+After the successful full run and fixture removal, the operator revalidated the current release and inspected bindings for **all 14 account Workers**. None referenced obsolete `whumpo-control-views-test` (`adc2a117-0e31-42fc-a07c-6dcc1c96621f`). Its table inventory had no customer/account/provider/billing/publication obligations or pending file cleanup; its deployment lease was released and private R2 was empty. The exact old database was deleted and absence confirmed. All other databases were preserved; account inventory went from 11 to 10. Current database remains `whumpo-control-intake-test` (`d5eb79e7-6e13-4402-87ac-90ec32ff7dd2`). Private intent/readback is `routine-chat-database-retirement.json`. There is no old database reader or active fallback.
 
 ## Earlier correction release (superseded runtime)
 
