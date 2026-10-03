@@ -31,11 +31,12 @@ try{
   const rename=await apply(o,change('renamePage',3,{pageId:'tab-garden',label:'My garden'}));
   assert.equal(rename.layout.tabs[0].id,'tab-garden');assert.deepEqual(rename.layout.tabs[0].view,three.layout.tabs[0].view);
   const remove=await apply(o,change('removePage',4,{pageId:'tab-garden'}));assert.deepEqual(remove.layout.tabs,[two.layout.tabs[1]]);
-  const undo=await apply(o,change('undo',5,{receiptId:remove.requestId}));assert.deepEqual(undo.layout,rename.layout);assert.equal(undo.revision,6);
+  const undo=await apply(o,change('undo',5,{receiptRevision:remove.revision}));assert.deepEqual(undo.layout,rename.layout);assert.equal(undo.revision,6);
   const dashboard=await apply(o,change('setDashboard',6,{view:view(null,['usage'])}));assert.deepEqual(dashboard.layout.tabs,undo.layout.tabs);
   const history=await m.readLayoutHistory(o.scope,o.user);assert.deepEqual(history.items.map(x=>x.revision),[7,6,5,4,3,2,1]);
   assert.deepEqual(await m.readLayoutReceipt(o.scope,o.user,one.requestId),one);
-  await assert.rejects(apply(o,change('undo',7,{receiptId:remove.requestId})),{code:'workspace_layout_changed'});
+  await assert.rejects(apply(o,change('undo',7,{receiptId:remove.requestId})),{code:'invalid_view'});
+  await assert.rejects(apply(o,change('undo',7,{receiptRevision:remove.revision})),{code:'workspace_layout_changed'});
  });
  await test('current closed schema rejects executable data, old contracts, scope retargeting and no-op saves',async()=>{
   const o=await owner(),input=change('createPage',0,{page:page(o)});
@@ -60,7 +61,7 @@ try{
   const a=await owner(),b=await owner(),saved=await apply(a,change('createPage',0,{page:page(a)}));
   await assert.rejects(apply(b,change('createPage',0,{page:page(a)})),{code:'project_missing'});
   await assert.rejects(m.readLayoutReceipt(b.scope,b.user,saved.requestId),{code:'receipt_missing'});
-  await assert.rejects(apply(b,change('undo',0,{receiptId:saved.requestId})),{code:'workspace_layout_changed'});
+  await assert.rejects(apply(b,change('undo',0,{receiptRevision:saved.revision})),{code:'workspace_layout_changed'});
   assert.equal((await m.readLayout(b.scope,b.user)).revision,0);
  });
  await test('stale concurrent edits cannot clobber another page',async()=>{
@@ -82,7 +83,7 @@ try{
   const o=await owner(),input=change('createPage',0,{page:page(o)}),saved=await apply(o,input);await revoked(o);
   assert.deepEqual(await apply(o,input),saved);assert.deepEqual(await m.readLayoutReceipt(o.scope,o.user,saved.requestId),saved);
   await assert.rejects(apply(o,change('removePage',1,{pageId:'tab-garden'})));
-  await assert.rejects(apply(o,change('undo',1,{receiptId:saved.requestId})));
+  await assert.rejects(apply(o,change('undo',1,{receiptRevision:saved.revision})));
   assert.equal((await m.readLayout(o.scope,o.user)).revision,1);
  });
  await test('late project, feature and identity revocation rolls back even the initial preferences row',async()=>{
@@ -98,7 +99,7 @@ try{
    if(loss==='transfer')await run('UPDATE projects SET owner_user_id=? WHERE id=?',other.user,o.project);
    else await run('DELETE FROM projects WHERE id=?',o.project);
    const removed=await apply(o,change('removePage',1,{pageId:'tab-garden'}));
-   await assert.rejects(apply(o,change('undo',2,{receiptId:removed.requestId})),{code:'project_missing'});
+   await assert.rejects(apply(o,change('undo',2,{receiptRevision:removed.revision})),{code:'project_missing'});
    assert.deepEqual((await m.readLayout(o.scope,o.user)).layout.tabs,[]);
   }
  });

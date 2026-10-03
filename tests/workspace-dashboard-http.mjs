@@ -84,7 +84,7 @@ try{
   const o=await owner(),input=create(o),saved=await json(o,api+'/mutate',input);
   queue=[{kind:'workspace',operation:'read'},request=>{
    assert(JSON.stringify(request).includes(saved.requestId));
-   return {kind:'workspace',version:1,expectedRevision:1,operation:'undo',receiptId:saved.requestId};
+   return {kind:'workspace',version:1,expectedRevision:1,operation:'undo',receiptRevision:saved.revision};
   }];
   const result=await json(o,'/api/chat',{id:id(),revision:0,content:'Undo the page I just added to my sidebar.'});
   assert.equal(result.turns.at(-1).status,'completed');assert.equal((await json(o,api+'/layout')).revision,2);assert.deepEqual((await json(o,api+'/layout')).layout.tabs,[]);

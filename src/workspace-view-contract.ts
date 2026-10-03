@@ -34,7 +34,7 @@ export function parseLayout(input:unknown):WorkspaceLayout{
 type Base={version:1;requestId:string;expectedRevision:number};
 export type LayoutChange=Base&(
  {operation:'setDashboard';view:WorkspaceView}|{operation:'createPage';page:WorkspaceTab}|{operation:'updatePage';pageId:string;view:WorkspaceView}|
- {operation:'renamePage';pageId:string;label:string}|{operation:'removePage';pageId:string}|{operation:'undo';receiptId:string});
+ {operation:'renamePage';pageId:string;label:string}|{operation:'removePage';pageId:string}|{operation:'undo';receiptRevision:number});
 export function parseLayoutChange(input:unknown):LayoutChange{
  const r=copy(input,14000);if(!object(r)||r.version!==1||!uuid(r.requestId)||!Number.isSafeInteger(r.expectedRevision)||Number(r.expectedRevision)<0)throw invalid();
  const base=['version','requestId','expectedRevision','operation'];
@@ -43,6 +43,6 @@ export function parseLayoutChange(input:unknown):LayoutChange{
  if(r.operation==='updatePage'&&exact(r,[...base,'pageId','view'])&&pageId(r.pageId))return {...r,view:parseView(r.view)} as LayoutChange;
  if(r.operation==='renamePage'&&exact(r,[...base,'pageId','label'])&&pageId(r.pageId)&&label(r.label))return r as LayoutChange;
  if(r.operation==='removePage'&&exact(r,[...base,'pageId'])&&pageId(r.pageId))return r as LayoutChange;
- if(r.operation==='undo'&&exact(r,[...base,'receiptId'])&&uuid(r.receiptId))return r as LayoutChange;
+ if(r.operation==='undo'&&exact(r,[...base,'receiptRevision'])&&Number.isSafeInteger(r.receiptRevision)&&Number(r.receiptRevision)>0)return r as LayoutChange;
  throw invalid();
 }
