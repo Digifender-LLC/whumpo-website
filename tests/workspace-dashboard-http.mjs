@@ -89,6 +89,12 @@ try{
   const result=await json(o,'/api/chat',{id:id(),revision:0,content:'Undo the page I just added to my sidebar.'});
   assert.equal(result.turns.at(-1).status,'completed');assert.equal((await json(o,api+'/layout')).revision,2);assert.deepEqual((await json(o,api+'/layout')).layout.tabs,[]);
  });
+ await test('actual Chat issues a temporary view atomically and replay cannot redispatch it',async()=>{
+  const o=await owner(),v={...view(null),shortcuts:[]},saved=await chat(o,{kind:'interaction',operation:'showView',view:v});
+  assert.equal(saved.turn.status,'completed');assert.match(saved.turn.assistant_text,/overview/);assert(saved.turn.interaction_id);
+  const stored=await row('SELECT envelope_json FROM chat_interactions WHERE id=?',saved.turn.interaction_id);assert.deepEqual(JSON.parse(stored.envelope_json).definition.workspaceView,v);
+  assert.equal((await json(o,api+'/layout')).revision,0);const before=mainCalls+ackCalls;await json(o,'/api/chat',saved.input);assert.equal(mainCalls+ackCalls,before);assert.equal((await row('SELECT count(*) n FROM chat_interactions WHERE user_id=?',o.user)).n,1);
+ });
  await Promise.all(background);
  console.log(`Workspace HTTP/Chat: ${cases} cases passed on ${process.argv.includes('--d1')?'local D1':'SQLite'}; ${mainCalls} scripted main and ${ackCalls} acknowledgment calls. Actual Worker/auth/domain transactions, read-only refresh, lost response and stale effect checks; no live inference or deployment.`);
 }finally{globalThis.fetch=originalFetch;await fixture.close();}

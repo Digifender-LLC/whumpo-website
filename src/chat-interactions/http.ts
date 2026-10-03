@@ -1,6 +1,7 @@
 import type {AIConfig} from '../ai';
 import {BillingError} from '../billing';
 import {continueInformationTask,stopInformationTask,reconcileInformationTask} from './model-continuation';
+import {readTemporaryViewComponent} from './view-cards';
 import {readInteractionCard} from './cards';
 import {SpecificationError} from '../project-specification/v2/json';
 import {readInteractionInput} from './input';
@@ -23,6 +24,7 @@ export async function handleInteractionRequest(request:Request,db:D1Database,use
   if(request.method!=='POST'||url.search)throw new InteractionError('BODY');
   const data=await readInteractionInput(request),action=url.pathname.slice((prefix+'v1/').length);
   if(action==='list')return respond(await listInteractions(db,user,data));
+  if(action==='view-component')return respond(await readTemporaryViewComponent(db,user,data));
   if(action==='card')return respond(await readInteractionCard(db,user,data));
   if(action==='resources')return respond(await listInteractionResources(db,user,data));
   if(action==='read'){

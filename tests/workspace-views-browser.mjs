@@ -11,9 +11,9 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp('/tmp/whumpo-views-browser-'),html=`frontend/views-fixture-${process.pid}.html`,id=()=>crypto.randomUUID();
-let browser,server,fixture,page,origin,fail=false,hold=false,releaseHeld,network=0,phase='build';const originalFetch=globalThis.fetch,requests=[],errors=[];
+let browser,server,fixture,page,origin,fail=false,hold=false,releaseHeld,network=0,phase='build',loseDismiss=false,blockReceipt=false,holdDismiss=false,releaseDismiss;const originalFetch=globalThis.fetch,requests=[],errors=[];
 try{
- await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><title>Whumpo view acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script><script type="module">import {queryClient} from "/@fs/'+resolve('frontend/src/lib/api.ts')+'";window.fixtureQueryKeys=()=>queryClient.getQueryCache().getAll().map(q=>q.queryKey);window.fixtureRefreshSession=()=>queryClient.invalidateQueries({queryKey:["session"]});</script></body></html>');
+ await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><title>Whumpo view acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script><script type="module">import {queryClient} from "/@fs/'+resolve('frontend/src/lib/api.ts')+'";window.fixtureQueryKeys=()=>queryClient.getQueryCache().getAll().map(q=>q.queryKey);window.fixtureRefreshSession=()=>queryClient.invalidateQueries({queryKey:["session"]});window.fixtureRefreshChat=()=>queryClient.invalidateQueries({queryKey:["chat"]});</script></body></html>');
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
  const modules=await currentFixtureModules(['src/index.ts','src/workspace-layout.ts','src/chat-interactions/store.ts','src/project-specification/store.ts']);
  const worker=(await modules.module('src/index.ts')).default,layout=await modules.module('src/workspace-layout.ts'),store=await modules.module('src/chat-interactions/store.ts'),site=await modules.module('src/project-specification/store.ts');
@@ -27,18 +27,33 @@ try{
   await scope.batch([scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'Create a site',?,datetime('now'),'ai','pending')").bind(turn,user,prepared.reply),...prepared.statements,scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(turn),scope.prepare('UPDATE workspace_state SET revision=1 WHERE user_id=?').bind(user)]);
   await layout.mutateLayout(scope,user,{version:1,requestId:id(),expectedRevision:0,operation:'createPage',page:{id:'tab-garden',label:'Garden overview',view:{version:1,projectId:project,widgets:['projects','activity','storage','performance'],shortcuts:[]}}});
   const origin=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) VALUES(?,?,2,'Change my headline','Review the brief.',datetime('now'))",origin,user);await run('UPDATE workspace_state SET revision=2 WHERE user_id=?',user);
-  const form=await store.issueContentBrief(scope,user,{originTurnId:origin,projectId:project,contentIds:['headline']});return {authority,user,scope,project,readGrant,form};
+  const form=await store.issueContentBrief(scope,user,{originTurnId:origin,projectId:project,contentIds:['headline']});
+  const viewTurn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,3,'Show my project status in Chat','Pending',datetime('now'),'ai','pending')",viewTurn,user);await run('UPDATE workspace_state SET revision=3 WHERE user_id=?',user);
+  const plan=await store.prepareWorkspaceView(scope,user,{originTurnId:viewTurn,view:{version:1,projectId:project,widgets:['projects','activity','performance'],shortcuts:[]}});
+  await scope.batch([...plan.statements,scope.prepare("UPDATE chat_turns SET status='completed',assistant_text='Here is your overview.' WHERE id=?").bind(viewTurn)]);
+  return {authority,user,scope,project,readGrant,form,temporary:plan.interactionId};
  }
  const a=await owner('Private garden A'),b=await owner('Private garden B');
  const env={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},root=resolve(dir+'/web');
  globalThis.fetch=async()=>{network++;throw Error('No external request allowed');};
  server=createServer(async(req,res)=>{try{
   const url=new URL(req.url,origin);if(req.headers.host!==new URL(origin).host){res.writeHead(403).end();return;}
+  if(url.pathname==='/_fixture/correct'){
+   const old=await store.readInteraction(a.scope,a.user,a.temporary),turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,'Just show project status','Pending',datetime('now'),'ai','pending' FROM workspace_state WHERE user_id=?",turn,a.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',a.user);
+   const plan=await store.prepareReplacementWorkspaceView(a.scope,a.user,{originTurnId:turn,previousInteractionId:old.envelope.id,definitionDigest:old.envelope.definitionDigest,expectedAnswerRevision:old.answerRevision,view:{version:1,projectId:a.project,widgets:['projects'],shortcuts:[]}});
+   await a.scope.batch([...plan.statements,a.scope.prepare("UPDATE chat_turns SET status='completed',assistant_text='Updated overview.' WHERE id=?").bind(turn)]);a.temporary=plan.interactionId;
+   res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({interactionId:a.temporary}));return;
+  }
   if(url.pathname.startsWith('/_fixture/')){const selected=url.pathname==='/_fixture/other'?b:a;res.writeHead(url.pathname==='/_fixture/start'?302:204,{'set-cookie':'__Host-whumpo_session='+selected.authority.token+'; Secure; HttpOnly; SameSite=Lax; Path=/',...(url.pathname==='/_fixture/start'?{location:'/workspace/tab-garden'}:{})}).end();return;}
   if(url.pathname.startsWith('/api/')){
-   const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks),input=body.length?JSON.parse(body):null;const trace={path:url.pathname,kind:input?.kind,method:req.method};requests.push(trace);
+   const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks),input=body.length?JSON.parse(body):null;const trace={path:url.pathname,kind:input?.kind,method:req.method,operation:input?.operation};requests.push(trace);
    if(fail&&url.pathname.endsWith('/views/v1/component')){res.writeHead(503,{'content-type':'application/json'}).end('{"error":"View information could not be checked."}');return;}
+   if(blockReceipt&&url.pathname.endsWith('/interactions/v1/receipt')){res.writeHead(503,{'content-type':'application/json'}).end('{"error":"Receipt check temporarily unavailable."}');return;}
    const response=await worker.fetch(new Request(url,{method:req.method,headers:req.headers,...(['GET','HEAD'].includes(req.method)?{}:{body})}),env,{waitUntil(){throw Error('No background action expected');}}),bytes=Buffer.from(await response.arrayBuffer());trace.status=response.status;
+   if(input?.operation==='cancel'&&url.pathname.endsWith('/interactions/v1/mutate')){
+    if(holdDismiss){holdDismiss=false;await new Promise(done=>{releaseDismiss=done;});}
+    if(loseDismiss){loseDismiss=false;res.writeHead(503,{'content-type':'application/json'}).end('{"error":"Dismissal confirmation was interrupted."}');return;}
+   }
    if(hold&&input?.kind==='projects'&&url.pathname.endsWith('/views/v1/component')){hold=false;await new Promise(done=>{releaseHeld=done;});}
    for(const value of response.headers.getSetCookie())res.appendHeader('set-cookie',value);res.writeHead(response.status,Object.fromEntries([...response.headers].filter(([key])=>key!=='set-cookie')));res.end(bytes);return;
   }
@@ -56,6 +71,9 @@ try{
  phase='Chat uses the same project status';await page.getByRole('link',{name:'Chat',exact:true}).click();await page.waitForFunction(()=>!window.fixtureQueryKeys().some(k=>k[0]==='workspace-view-component'));
  const form=page.locator('section[aria-label="Website change brief"]'),panel=form.locator('details').filter({has:page.getByText('Current project status',{exact:true})});
  await panel.locator('summary').focus();await page.keyboard.press('Enter');await panel.getByText('Building',{exact:true}).waitFor();assert.equal(await panel.getByText('Private garden A',{exact:true}).count(),1);
+ phase='temporary view shares components at phone widths';const temporary=()=>page.locator('[data-interaction-id="'+a.temporary+'"]');
+ await temporary().getByText('Building',{exact:true}).waitFor();assert.equal(await temporary().getByRole('button',{name:'Save answers',exact:true}).count(),0);
+ for(const width of [360,390]){await page.setViewportSize({width,height:844});await temporary().getByRole('heading',{name:'Project overview',exact:true}).evaluate(el=>el.scrollIntoView({block:'start'}));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-temporary-view-'+width+'.png'});}
  phase='feature denial on both surfaces';await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',a.readGrant);await panel.getByRole('button',{name:'Refresh status'}).click();await panel.getByText('This status is not available with your current access.',{exact:true}).waitFor();assert.equal(await panel.getByText('Private garden A',{exact:true}).count(),0);
  await page.goto(origin+'/workspace/tab-garden');await project().getByText('This information is not available with your current access.',{exact:true}).waitFor();assert.equal(await project().getByText('Private garden A',{exact:true}).count(),0);
  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing','read','private-test-acceptance','restored synthetic view grant',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),a.user,a.project);await refresh().click();await project().getByText('Building',{exact:true}).waitFor();
@@ -64,8 +82,20 @@ try{
  await context.request.get(origin+'/_fixture/other');await page.evaluate(()=>window.fixtureRefreshSession());await project().getByText('Private garden B',{exact:true}).waitFor();releaseHeld();releaseHeld=null;
  await page.waitForFunction(user=>!window.fixtureQueryKeys().some(k=>k.includes(user)),a.user);assert.equal(await page.getByText('Private garden A',{exact:true}).count(),0);
  await refresh().click();await project().getByText('Private garden B',{exact:true}).waitFor();assert.equal(await page.getByText('Private garden A',{exact:true}).count(),0);
- assert.equal(network,0);assert.equal(errors.length,0,errors.join('\n'));assert(!requests.some(r=>r.path==='/api/chat/actions'||r.path==='/api/chat'&&r.method==='POST'||r.path.endsWith('/mutate')));
+ phase='temporary view dismissal survives response loss, navigation and reload';
+ await context.request.get(origin+'/_fixture/current');await page.goto(origin+'/workspace/chat');await temporary().getByText('Building',{exact:true}).waitFor();
+ phase='corrected view retires earlier facts without requiring navigation';const previousView=temporary();const response=await context.request.get(origin+'/_fixture/correct');const updated=await response.json();await page.evaluate(()=>window.fixtureRefreshChat());
+ await previousView.getByText('A newer view continues this task.',{exact:false}).waitFor();assert.equal(await previousView.locator('[data-view-component]').count(),0);
+ a.temporary=updated.interactionId;await temporary().getByText('Building',{exact:true}).waitFor();assert.equal(await temporary().locator('[data-view-component]').count(),1);
+ const dismissal=temporary().getByRole('button',{name:'Dismiss view',exact:true});assert((await dismissal.boundingBox()).height>=44);await dismissal.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/whumpo-temporary-view-dismiss-390.png'});await dismissal.focus();holdDismiss=true;loseDismiss=true;blockReceipt=true;await page.keyboard.press('Enter');
+ for(let i=0;i<100&&!releaseDismiss;i++)await new Promise(done=>setTimeout(done,10));assert(releaseDismiss);await page.getByRole('link',{name:'Dashboard',exact:true}).focus();releaseDismiss();releaseDismiss=null;
+ await temporary().getByRole('button',{name:'Check saved status',exact:true}).waitFor();assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'Dashboard');assert.equal(await temporary().locator('[data-view-component]').count(),0);
+ await page.reload();await temporary().getByRole('button',{name:'Check saved status',exact:true}).waitFor();assert.equal(await temporary().locator('[data-view-component]').count(),0);assert.equal(await temporary().getByRole('button',{name:'Dismiss view',exact:true}).count(),0);
+ blockReceipt=false;await temporary().getByRole('button',{name:'Check saved status',exact:true}).click();await temporary().getByRole('button',{name:'Check saved status',exact:true}).waitFor({state:'detached'});
+ await page.goto(origin+'/workspace/tab-garden');await project().getByText('Building',{exact:true}).waitFor();await page.getByRole('link',{name:'Chat',exact:true}).click();await temporary().getByText('This Chat item is no longer available.',{exact:false}).waitFor();assert.equal(await temporary().locator('[data-view-component]').count(),0);
+ assert.equal((await db.prepare('SELECT count(*) n FROM chat_interaction_requests WHERE interaction_id=?').bind(a.temporary).first()).n,1);
+ assert.equal(network,0);assert.equal(errors.length,0,errors.join('\n'));assert(!requests.some(r=>r.path==='/api/chat/actions'||r.path==='/api/chat'&&r.method==='POST'));assert.deepEqual(requests.filter(r=>r.path.endsWith('/mutate')).map(r=>r.operation),['cancel']);
  for(const table of ['inference_calls','standard_ai_requests','publications'])assert.equal((await db.prepare('SELECT count(*) n FROM '+table).first()).n,0);
- console.log('Shared views browser passed: actual Worker/local D1, built 360/390px pages, identical Chat/project display, keyboard reads, outage/denial hides old facts, cache eviction on navigation, account-switch late-response protection, zero model/domain actions. Screenshots in /tmp/whumpo-shared-view-{360,390}.png.');
+ console.log('Shared views browser passed: actual Worker/local D1, built 360/390px pages, identical Chat/project display, keyboard reads, outage/denial hides old facts, cache eviction on navigation, account-switch late-response protection; temporary views at both widths and exact durable dismissal after response loss/reload, no late focus stealing, linked view correction retires earlier facts without navigation, one cancel receipt and zero model/publication effects. Screenshots in /tmp/whumpo-shared-view-{360,390}.png.');
 }catch(error){console.error('Shared views browser phase:',phase);console.error(JSON.stringify({url:page?.url(),body:page?await page.locator('body').innerText().catch(()=>'(unavailable)'):null,requests:requests.slice(-16),errors}));throw error;}
-finally{releaseHeld?.();globalThis.fetch=originalFetch;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await fixture?.close();await rm(dir,{recursive:true,force:true});await rm(html,{force:true});}
+finally{releaseDismiss?.();releaseHeld?.();globalThis.fetch=originalFetch;await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await fixture?.close();await rm(dir,{recursive:true,force:true});await rm(html,{force:true});}

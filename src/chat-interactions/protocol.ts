@@ -1,3 +1,4 @@
+import {isWorkspaceViewDefinition} from './view-definition';
 import {viewComponents} from '../workspace-view-contract';
 /** Current protocol validation only. Domain storage owns issuance, authority and effects. */
 import {canonicalJSON,jsonDigest,SpecificationError} from '../project-specification/v2/json';
@@ -16,10 +17,15 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'site.content@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'readSpecification',scope:'project'},
   'agent.task-continue@1': {mode:'prepare',feature:'core.editing',source:'src/chat-interactions/task-context.ts',handler:'prepareInformationTask',scope:'project'},
   'site.content-prepare@1': {mode:'prepare',feature:'core.editing',source:'src/project-specification/store.ts',handler:'prepareSpecification',scope:'project'},
-  'workspace.projects@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'account',displays:['summary','table']},
+  'workspace.projects@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'account',displays:['workspace','summary','table']},
   'project.photos@1': {mode:'read',feature:'core.editing',source:'src/files.ts',handler:'readPhotoUpload',scope:'project',displays:['photos']},
-  'project.status@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['status','key-values']},
-  'project.traffic@1': {mode:'read',feature:viewComponents.traffic.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['summary','table']},
+  'project.status@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace','status','key-values']},
+  'project.traffic@1': {mode:'read',feature:viewComponents.traffic.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace','summary','table']},
+  'account.usage@1': {mode:'read',feature:viewComponents.usage.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
+  'project.storage@1': {mode:'read',feature:viewComponents.storage.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
+  'owner.activity@1': {mode:'read',feature:viewComponents.activity.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
+  'cms.status@1': {mode:'read',feature:viewComponents.cms.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
+  'project.performance@1': {mode:'read',feature:viewComponents.performance.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });
@@ -110,7 +116,8 @@ function field(f:Field,prior:Field[]) {
 }
 export function validateDefinition(input:unknown):Definition {
   const d=copyJSON<Definition>(input,bounds.definitionBytes);
-  shape(d,['version','kind','template','title','summary','presentation','fields','cards','submitBinding','continuationBinding'],['purpose']);
+  shape(d,['version','kind','template','title','summary','presentation','fields','cards','submitBinding','continuationBinding'],['purpose','workspaceView']);
+  if(own(d,'workspaceView'))check(isWorkspaceViewDefinition(d),'TEMPLATE');
   if(d.template==='custom@1')text(d.purpose,80);else check(!own(d,'purpose'),'PURPOSE');
   check(d.version===1,'VERSION');check(['form','view'].includes(d.kind),'KIND');
   text(d.title,100);text(d.summary,400);check(['inline','panel','dialog'].includes(d.presentation),'PRESENTATION');
@@ -123,6 +130,7 @@ export function validateDefinition(input:unknown):Definition {
     check(b?.mode==='read'&&b.displays?.includes(c.display),'BINDING');integer(c.limit,1,20);
     check(b.scope==='review'?typeof c.reviewId==='string'&&uuid.test(c.reviewId):c.reviewId===null,'REFERENCE');
   }
+  if(!own(d,'workspaceView'))check(!d.cards.some(c=>c.display==='workspace'),'TEMPLATE');
   if(d.kind==='view')check(d.template==='status@1'&&d.fields.length===0&&d.cards.length>0&&d.submitBinding===null&&d.continuationBinding===null,'TEMPLATE');
   else {
     check(['content-change@1','project-brief@1','project-select@1','choice@1','custom@1'].includes(d.template)&&d.fields.length>0&&d.submitBinding==='interaction.answers@1','TEMPLATE');
@@ -172,7 +180,8 @@ export async function sealDefinition(input:unknown):Promise<IssuedInteraction>{
   check([e.createdAt,e.expiresAt].every(v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v)&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v),'TIME');
   check(Date.parse(e.expiresAt)>Date.parse(e.createdAt)&&Date.parse(e.expiresAt)-Date.parse(e.createdAt)<=604800000,'TIME');
   e.definition=validateDefinition(e.definition);
-  const projectNeeded=e.definition.fields.some(f=>f.source||f.type==='attachment'||('collection' in f.constraints&&f.constraints.collection==='photos'))||e.definition.cards.some(c=>bindings[c.binding].scope!=='account')||e.definition.continuationBinding;
+  if(e.definition.workspaceView)check(e.definition.workspaceView.projectId===e.scope.projectId,'PROJECT');
+  const projectNeeded=e.definition.fields.some(f=>f.source||f.type==='attachment'||('collection' in f.constraints&&f.constraints.collection==='photos'))||e.definition.cards.some(c=>['project','review'].includes(bindings[c.binding].scope??''))||e.definition.continuationBinding;
   check(!projectNeeded||e.scope.projectId!==null,'PROJECT');
   return {...e,definitionDigest:await hash(e)};
 }
