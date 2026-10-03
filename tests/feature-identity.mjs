@@ -79,7 +79,7 @@ async function restricted(f,account,project,purpose){
   ['/api/github/backups/review','POST'],['/api/cloudflare/dns/review','POST'],
  ])await httpStatus(await f.browser.call(path,method),401);
  // Moving a genuine restricted grant into the session cookie cannot elevate it.
- await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',headers:{origin:base,cookie:identityCookies.session+'='+token}}),401);
+ await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',origin:base,cookie:identityCookies.session+'='+token}}),401);
  assert.match(await backupChatCommand(db,account,project,'/github-installations',{github:gh})(),/will not be dispatched again/);checks++;
  assert.match(await dnsChatCommand(db,account,project,'/dns-zones',{config:cf})(),/will not be dispatched again/);checks++;
 }
@@ -116,7 +116,7 @@ try{
   for(const provider of ['github','cloudflare']){
    assert.equal(configured[provider].inclusion.connect,true);assert.equal(configured[provider].enabled,true);assert.equal(configured[provider].connected,false);
    assert.equal(unconfigured[provider].inclusion.connect,true);assert.equal(unconfigured[provider].enabled,false);assert.equal(unconfigured[provider].connected,false);
-   const start=await f.browser.json('/api/connections/'+provider+'/start','POST');
+   const start=await f.browser.json('/api/connections/'+provider+'/start','POST',{handoff:null});
    const state=new URL(start.url).searchParams.get('state');assert.ok(state);
    await httpStatus(await f.browser.call('/api/connections/'+provider+'/callback?error=access_denied&state='+encodeURIComponent(state)),303);
   }
@@ -143,17 +143,17 @@ try{
   await refused(()=>features.requireFeature(held,r),'identity_changed');
  }
  const aged=await workspaceFixture(db,m,undefined,-601);await paidPlan(db,aged.account,'business');
- await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',headers:{origin:base,cookie:identityCookies.session+'='+aged.token}}),401);
- const fresh=await workspaceSession(db,m,aged);await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',headers:{origin:base,cookie:identityCookies.session+'='+fresh.token}}),200);
+ await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',origin:base,cookie:identityCookies.session+'='+aged.token}}),401);
+ const fresh=await workspaceSession(db,m,aged);await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',origin:base,cookie:identityCookies.session+'='+fresh.token}}),200);
  // Historical session fixture, without mutating an immutable proof/expiry record.
  const expired=m.newSessionToken(),account=await row('SELECT policy_version,auth_epoch FROM identity_accounts WHERE account_id=?',aged.account);
  await run("INSERT INTO identity_sessions VALUES(?,?,?,?,?,'web',?,'passkey',unixepoch()-3600,unixepoch()-3600,unixepoch()-1)",id(),await m.hashToken(expired),aged.account,account.policy_version,account.auth_epoch,aged.credential);
  assert.equal((await inclusion.resolveFeatureInclusion(db,request(aged.account,null,'github','connect'))).included,true);
  await refused(()=>m.resolveIdentity(db,{version:1,client:'web',kind:'session',token:expired}),'proof_required');
- await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',headers:{origin:base,cookie:identityCookies.session+'='+expired}}),401);
+ await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',origin:base,cookie:identityCookies.session+'='+expired}}),401);
  const racer=await workspaceFixture(db,m);await paidPlan(db,racer.account,'business');let intercepted=0;
  const racing=interceptDatabase(db,/INSERT INTO github_oauth_states/,async()=>{intercepted++;await racer.revoke();});
- await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',headers:{origin:base,cookie:identityCookies.session+'='+racer.token}},{...env,DB:racing}),409);
+ await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',origin:base,cookie:identityCookies.session+'='+racer.token}},{...env,DB:racing}),409);
  assert.equal(intercepted,1);assert.equal(await row('SELECT 1 FROM github_oauth_states WHERE user_id=?',racer.account),null);
  assert.equal((await row('SELECT count(*) n FROM inference_calls')).n,0);
  for(const table of ['github_token_vault','cloudflare_token_vault','identity_admission_checks'])assert.equal((await row('SELECT count(*) n FROM '+table)).n,0);

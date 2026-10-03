@@ -1,3 +1,5 @@
+import {prepareConnectionHandoff} from './chat-interactions/connection-handoff';
+import type {ConnectionHandoff} from './connection-handoff-shape';
 import {sealConnectionWrite} from './connection-write-policy';
 import {readOAuthTokenResponse} from './connection-oauth-response';
 import {assertWorkspace,workspacePrincipal,prepareOAuthCustody} from './workspace-identity/admission';
@@ -52,20 +54,23 @@ export async function cloudflareStatus(db:D1Database,userId:string,config:Cloudf
  const row=await db.prepare("SELECT created_at,expires_at FROM cloudflare_token_vault WHERE user_id=? AND state='active' ORDER BY expires_at DESC LIMIT 1").bind(userId).first<{created_at:string;expires_at:string}>();
  const pending=await db.prepare("SELECT COUNT(*) n FROM cloudflare_token_vault WHERE user_id=? AND state='revoking' AND expires_at>?").bind(userId,now()).first<{n:number}>();
  const expired=!!row&&row.expires_at<=now(),connected=!!config&&!!row&&!expired;
+ const flow=await db.prepare("SELECT 1 FROM cloudflare_oauth_states WHERE user_id=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND cancelled=0").bind(userId).first();
+ const recovery=await db.prepare("SELECT 1 FROM connection_oauth_exchanges WHERE user_id=? AND provider='cloudflare'").bind(userId).first();
  const inclusion=await connectionInclusion(db,userId,'cloudflare');
- return {enabled:!!config,inclusion,connected,expired:!!config&&expired,expiresAt:row?.expires_at??null,connectedAt:row?.created_at??null,revocationPending:!!pending?.n,dnsChangesEnabled:connected&&inclusion.read};
+ return {enabled:!!config,inclusion,connected,authorizationPending:!!flow,recoveryPending:!!recovery,expired:!!config&&expired,expiresAt:row?.expires_at??null,connectedAt:row?.created_at??null,revocationPending:!!pending?.n,dnsChangesEnabled:connected&&inclusion.read};
 }
-export async function startCloudflare(db:D1Database,userId:string,configuration:CloudflareConfig|undefined){
+export async function startCloudflare(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,handoff:ConnectionHandoff|null=null){
+ const origin=await prepareConnectionHandoff(db,userId,'cloudflare',handoff);
  if(await db.prepare("SELECT 1 FROM connection_oauth_exchanges WHERE user_id=? AND provider='cloudflare'").bind(userId).first())throw new ConnectionError(409,'A previous connection is awaiting provider recovery.');
  const config=required(configuration),scope=connectionFeature(userId,'cloudflare',null,'connect'),gate=featurePredicate(db,scope);await requireFeature(db,scope);
  const state=newSessionToken(),stateHash=await hashToken(state),verifier=newSessionToken();
  const challenge=btoa(Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))),b=>String.fromCharCode(b)).join('')).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
  const stamp=now();
  await db.prepare('DELETE FROM cloudflare_token_vault WHERE user_id=? AND expires_at<=?').bind(userId,stamp).run();
- const result=await db.prepare(`INSERT INTO cloudflare_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at)
- SELECT ?,?,?,?,? WHERE ${gate.sql} AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)
- ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,authority_id=excluded.authority_id,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,claimed=0,cancelled=0
- WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await sealConnectionWrite(db,config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),...gate.params,userId,stamp,stamp,userId,stamp).run();
+ const result=await db.prepare(`INSERT INTO cloudflare_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at,handoff_json)
+ SELECT ?,?,?,?,?,? WHERE (${gate.sql}) AND (${origin.sql}) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)
+ ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,authority_id=excluded.authority_id,verifier_ciphertext=excluded.verifier_ciphertext,expires_at=excluded.expires_at,handoff_json=excluded.handoff_json,claimed=0,cancelled=0
+ WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?) AND NOT EXISTS(SELECT 1 FROM cloudflare_token_vault WHERE user_id=? AND expires_at>?)`).bind(userId,stateHash,workspacePrincipal(db,userId).authorityId,await sealConnectionWrite(db,config.key,aad(userId,stateHash,'pkce'),verifier),new Date(Date.now()+600000).toISOString(),origin.json,...gate.params,...origin.params,userId,stamp,stamp,userId,stamp).run();
  if(result.meta.changes!==1){await assertFeature(db,scope);throw new ConnectionError(409,'Disconnect existing Cloudflare access and finish pending authorization or revocation before connecting again. An interrupted authorization may take ten minutes to expire.');}
  const url=new URL('https://dash.cloudflare.com/oauth2/auth');for(const [k,v] of Object.entries({client_id:config.clientId,response_type:'code',redirect_uri:callback,scope:scopes.join(' '),state,code_challenge:challenge,code_challenge_method:'S256'}))url.searchParams.set(k,v);
  return {url:url.href};

@@ -1200,10 +1200,10 @@
       ],
       "scope": "owner",
       "purpose": "Customer-authorized provider access and durable credential revocation.",
-      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction. Exact dispatch rejection/revocation receipts contain only bounded metadata and remain until account closure/independent retention reconciliation; a restored receipt alone grants no authority. GitHub refresh credentials use a separate encrypted purpose and RESTRICT references; access expiry or single-token revocation cannot delete their pending grant custody. Numeric GitHub identity is bound once from the exact issued token's authenticated lookup and retained independently of later connections; missing lookup evidence remains unknown. This metadata is not revocation proof. Reviewed app-grant revocation can remove the exact matched ciphertext only after a directly acknowledged, atomically saved 204. Immutable review/outcome metadata remains; unknown effects and unidentified grants stay held. The shared customer renderer and Chat controls are locally verified; real provider acceptance and the coordinated deployment remain pending.",
+      "currentRetention": "Encrypted credentials retained for pending revocation until confirmed or expired; OAuth expiry cleanup. Account cascades can destroy revocation authority prematurely. Current source retains unresolved dispatched exchanges without automatic expiry, restricting account deletion and key activation; transient rotation guards exist only inside a transaction. Exact dispatch rejection/revocation receipts contain only bounded metadata and remain until account closure/independent retention reconciliation; a restored receipt alone grants no authority. GitHub refresh credentials use a separate encrypted purpose and RESTRICT references; access expiry or single-token revocation cannot delete their pending grant custody. Numeric GitHub identity is bound once from the exact issued token's authenticated lookup and retained independently of later connections; missing lookup evidence remains unknown. This metadata is not revocation proof. Reviewed app-grant revocation can remove the exact matched ciphertext only after a directly acknowledged, atomically saved 204. Immutable review/outcome metadata remains; unknown effects and unidentified grants stay held. The shared customer renderer and Chat controls are locally verified; real provider acceptance and the coordinated deployment remain pending. Current OAuth states also retain a nullable exact Chat interaction ID/digest for return navigation. It expires/deletes with that state; dismissal does not delete already-started credential custody. No credential, verifier, approval or redirect URL is copied into Chat. This locator grants no restored authority.",
       "proposedRetention": "Cancel callbacks/new consent on closure; revoke credentials before deleting ciphertext/key access. Keep unresolved revocation work in isolated minimal closure records, without preserving unrelated customer content.",
       "deletionAuthority": "Customer disconnect/closure authorizes access revocation, not deleting repositories/zones. Operator reconciles failed revocation.",
-      "exportPolicy": "Provider names, customer connection status and selected resource metadata only. Never tokens, ciphertext, PKCE verifier, auth state or encryption material.",
+      "exportPolicy": "Provider names, customer connection status and selected resource metadata only. Never tokens, ciphertext, PKCE verifier, auth state or encryption material. Exclude transient OAuth Chat-return locators; the ordinary Chat lifecycle owns interaction history.",
       "references": [
         "src/github-connection.ts",
         "src/cloudflare-connection.ts",
@@ -1224,7 +1224,11 @@
         "tests/github-refresh-custody.mjs",
         "src/github-grant-revocation.ts",
         "tests/github-grant-revocation.mjs",
-        "tests/github-grant-chat.mjs"
+        "tests/github-grant-chat.mjs",
+        "src/chat-interactions/connection-handoff.ts",
+        "src/connection-handoff-shape.ts",
+        "frontend/src/connection-consent.tsx",
+        "tests/connection-handoff.mjs"
       ],
       "storageStatus": "current",
       "protection": {
@@ -1235,7 +1239,8 @@
           "worker-secret"
         ],
         "readers": [
-          "Exact current owner/credential-admitted provider adapters; narrow revocation worker retains only cleanup custody"
+          "Exact current owner/credential-admitted provider adapters; narrow revocation worker retains only cleanup custody",
+          "Owned Chat handoff reads saved status metadata only; authorization secrets remain outside the browser/model handoff payload"
         ],
         "processors": [
           "OAuth PKCE/token exchange, current scoped provider calls and recorded read-only uncertain recovery; no credential in model context"

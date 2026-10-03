@@ -128,8 +128,13 @@ CREATE TABLE github_oauth_states (
  authority_id TEXT NOT NULL REFERENCES identity_sessions(id) ON DELETE CASCADE,
  verifier_ciphertext TEXT NOT NULL,
  expires_at TEXT NOT NULL,
- claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1))
+ claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1)),
+ handoff_json TEXT NOT NULL DEFAULT 'null' CHECK(json_valid(handoff_json) AND (handoff_json='null' OR (json_type(handoff_json)='object' AND json_type(handoff_json,'$.interactionId')='text' AND json_type(handoff_json,'$.definitionDigest')='text')))
 );
+CREATE TRIGGER github_oauth_handoff_immutable BEFORE UPDATE OF handoff_json ON github_oauth_states
+WHEN NEW.state_hash=OLD.state_hash AND NEW.handoff_json!=OLD.handoff_json
+BEGIN SELECT RAISE(ABORT,'oauth_handoff_immutable'); END;
+
 
 CREATE TABLE github_token_vault (
  id TEXT PRIMARY KEY,
@@ -303,8 +308,13 @@ CREATE TABLE cloudflare_oauth_states (
  state_hash TEXT NOT NULL UNIQUE, authority_id TEXT NOT NULL REFERENCES identity_sessions(id) ON DELETE CASCADE,
  verifier_ciphertext TEXT NOT NULL, expires_at TEXT NOT NULL,
  claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1)),
- cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1))
+ cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1)),
+ handoff_json TEXT NOT NULL DEFAULT 'null' CHECK(json_valid(handoff_json) AND (handoff_json='null' OR (json_type(handoff_json)='object' AND json_type(handoff_json,'$.interactionId')='text' AND json_type(handoff_json,'$.definitionDigest')='text')))
 );
+CREATE TRIGGER cloudflare_oauth_handoff_immutable BEFORE UPDATE OF handoff_json ON cloudflare_oauth_states
+WHEN NEW.state_hash=OLD.state_hash AND NEW.handoff_json!=OLD.handoff_json
+BEGIN SELECT RAISE(ABORT,'oauth_handoff_immutable'); END;
+
 
 CREATE TABLE cloudflare_token_vault (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

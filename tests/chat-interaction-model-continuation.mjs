@@ -6,7 +6,7 @@ Error.stackTraceLimit=0;
 const modules=await currentFixtureModules(['src/index.ts','src/site-agent.ts','src/ai-chat.ts','src/agent-inspection.ts','src/chat-interactions/store.ts','src/chat-interactions/agent.ts','src/chat-interactions/protocol.ts','src/project-specification/store.ts','src/chat-interactions/task-context.ts','src/chat-interactions/model-continuation.ts','src/publications.ts']);
 const worker=(await modules.module('src/index.ts')).default,agent=await modules.module('src/site-agent.ts'),ai=await modules.module('src/ai-chat.ts'),inspection=await modules.module('src/agent-inspection.ts');
 const store=await modules.module('src/chat-interactions/store.ts'),forms=await modules.module('src/chat-interactions/agent.ts'),protocol=await modules.module('src/chat-interactions/protocol.ts'),site=await modules.module('src/project-specification/store.ts');
-const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only','--publications-only','--observations-only','--media-only']}),{db}=fixture,id=()=>crypto.randomUUID();
+const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only','--publications-only','--observations-only','--media-only','--consent-only']}),{db}=fixture,id=()=>crypto.randomUUID();
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-only',protocol:'responses'};
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:config.baseURL,AI_MODEL:config.model,AI_PROTOCOL:config.protocol,AI_API_KEY:config.apiKey};
@@ -21,7 +21,7 @@ globalThis.fetch=async(url,init)=>{
 };
 const http=(o,path,data,database=db)=>worker.fetch(new Request('https://whumpo.com'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),{...env,DB:database},{waitUntil(p){background.push(p);}});
 async function json(o,path,data,database){const r=await http(o,path,data,database);assert.equal(r.status,200,await r.clone().text());return r.json();}
-async function test(name,fn){if(process.argv.includes('--media-only')&&!name.startsWith('task-media '))return;if(process.argv.includes('--observations-only')&&!name.startsWith('task-observation '))return;if(process.argv.includes('--publications-only')&&!name.startsWith('task-publication '))return;if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{const existing=name.startsWith('task-media ')?new Set((await db.prepare('SELECT id FROM users').all()).results.map(u=>u.id)):null;await fn();assert.equal(queue.length,0);cases++;if(existing)for(const u of (await db.prepare('SELECT id FROM users').all()).results)if(!existing.has(u.id))await run('DELETE FROM users WHERE id=?',u.id);}catch(e){console.error(name,String(e));throw e;}}
+async function test(name,fn){if(process.argv.includes('--consent-only')&&!name.startsWith('task-consent '))return;if(process.argv.includes('--media-only')&&!name.startsWith('task-media '))return;if(process.argv.includes('--observations-only')&&!name.startsWith('task-observation '))return;if(process.argv.includes('--publications-only')&&!name.startsWith('task-publication '))return;if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{const existing=(name.startsWith('task-media ')||name.startsWith('task-consent '))?new Set((await db.prepare('SELECT id FROM users').all()).results.map(u=>u.id)):null;await fn();assert.equal(queue.length,0);cases++;if(existing)for(const u of (await db.prepare('SELECT id FROM users').all()).results)if(!existing.has(u.id))await run('DELETE FROM users WHERE id=?',u.id);}catch(e){console.error(name,String(e));throw e;}}
 async function owner(withWebsite=true){
  const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=id();
  await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -524,6 +524,25 @@ try{
   assert.equal((await row('SELECT review_id FROM publication_chat_links WHERE turn_id=?',form.submission.id)).review_id,form.submission.id);
  });
 
+
+ for(const provider of ['github','cloudflare'])await test('task-consent exact '+provider+' handoff retains task and never authorizes',async()=>{
+  const o=await owner(),{form}=await savedSelection(o,'Show connection controls for this website task.');
+  const result=await follow(o,form,[{kind:'interaction',operation:'requestConnection',projectId:o.project,provider}]);assert.equal(result.data.continuation.state,'succeeded');
+  const issued=await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',form.submission.id),handoff=await store.readInteraction(o.scope,o.user,issued.id);
+  assert.equal(handoff.envelope.scope.projectId,o.project);assert.equal(handoff.envelope.definition.cards[0].binding,'connection.'+provider+'@1');assert.equal((await row('SELECT task_id FROM chat_task_progress WHERE turn_id=?',form.submission.id)).task_id,form.envelope.scope.taskId);
+  const calls=mainCalls;await follow(o,form);assert.equal(mainCalls,calls);assert.equal(await row('SELECT 1 FROM '+provider+'_oauth_states WHERE user_id=?',o.user),null);assert.equal(await row('SELECT 1 FROM connection_oauth_exchanges WHERE user_id=?',o.user),null);await noEffect(o,form);
+ });
+ for(const invalid of ['foreign-project','account-scope','approval','provider'])await test('task-consent rejects '+invalid,async()=>{
+  const o=await owner(),other=await owner(),{form}=await savedSelection(o,'Show connection controls for this website task.');
+  const action={kind:'interaction',operation:'requestConnection',projectId:o.project,provider:'github'};
+  if(invalid==='foreign-project')action.projectId=other.project;if(invalid==='account-scope')action.projectId=null;if(invalid==='approval')action.approve=true;if(invalid==='provider')action.provider='arbitrary';
+  const result=await follow(o,form,[action]);assert.equal(result.data.continuation.state,'failed');assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',form.submission.id),null);assert.equal(await row('SELECT 1 FROM github_oauth_states WHERE user_id=?',o.user),null);await noEffect(o,form);
+ });
+ await test('task-consent late editing denial prevents issuance',async()=>{
+  const o=await owner(),{form}=await savedSelection(o,'Show connection controls for this website task.');
+  const result=await follow(o,form,[async()=>{await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.editing' AND operation='prepare'",o.user);return {kind:'interaction',operation:'requestConnection',projectId:o.project,provider:'cloudflare'};}]);
+  assert.equal(result.data.continuation.state,'failed');assert.equal(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',form.submission.id),null);assert.equal(await row('SELECT 1 FROM cloudflare_oauth_states WHERE user_id=?',o.user),null);
+ });
 
  const photoAction=o=>({kind:'interaction',operation:'requestPhotoUpload',projectId:o.project});
  async function mediaTask(o){

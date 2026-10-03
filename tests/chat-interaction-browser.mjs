@@ -1,6 +1,8 @@
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 // Actual current Worker + built workspace. Identity rows and website content are
 // synthetic; no passkey ceremony, live provider, inference or remote schema use.
 import assert from 'node:assert/strict';
+Error.stackTraceLimit=0;
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {resolve,sep} from 'node:path';
@@ -14,7 +16,7 @@ import {hearOrca} from './helpers/orca-output.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp('/tmp/whumpo-form-browser-'),html=`frontend/form-fixture-${process.pid}.html`;
-let browser,server,fixture,page,phase='build',network=0,loseOperation=null,receiptsUnavailable=false,holdOperation=null,releaseHeld=null,cardUnavailable=false,comparisonUnavailable=false,resourcesUnavailable=false,loseContinuation=false,photoStatusUnavailable=false,losePhotoUpload=false,stopPhotoUpload=false;
+let browser,server,fixture,page,phase='build',network=0,loseOperation=null,receiptsUnavailable=false,holdOperation=null,releaseHeld=null,cardUnavailable=false,comparisonUnavailable=false,resourcesUnavailable=false,loseContinuation=false,loseConnectionStart=false,connectionStatusUnavailable=false,photoStatusUnavailable=false,losePhotoUpload=false,stopPhotoUpload=false;
 const originalFetch=globalThis.fetch,requests=[],errors=[],modelSteps=[],background=[],activeRequests=new Set();let modelCalls=0,resultSummary;
 try{
  await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><link rel="icon" type="image/svg+xml" href="/brand/whumpo-favicon-rounded.svg"><title>Whumpo form acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script><script type="module">import {queryClient} from "/@fs/'+resolve('frontend/src/lib/api.ts')+'";window.fixtureQueryKeys=()=>queryClient.getQueryCache().getAll().map(q=>q.queryKey);</script></body></html>');
@@ -22,7 +24,7 @@ try{
  const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts','src/site-host.ts']);
  const host=(await modules.module('src/site-host.ts')).default;let siteChecks=0;
  const worker=(await modules.module('src/index.ts')).default,store=await modules.module('src/chat-interactions/store.ts'),site=await modules.module('src/project-specification/store.ts');
- fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only','--media-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+ fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only','--media-only','--consent-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
  async function owner(){
   const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=crypto.randomUUID();
   await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -58,6 +60,7 @@ try{
   if(url.pathname.startsWith('/_fixture/')){const selected=url.pathname==='/_fixture/other'?b:url.pathname==='/_fixture/photos'?u:url.pathname==='/_fixture/custom'?c:url.pathname==='/_fixture/intake'?d:a;res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+selected.authority.token+'; Secure; HttpOnly; SameSite=Lax; Path=/',location:'/workspace'}).end();return;}
   if(url.pathname.startsWith('/api/')){
    const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks),input=body.length&&req.headers['content-type']?.includes('application/json')?JSON.parse(body):null;requests.push({path:url.pathname,method:req.method,operation:input?.operation});
+   if(connectionStatusUnavailable&&url.pathname.endsWith('/handoff')){res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'Saved connection status could not be checked.'}));return;}
    if((photoStatusUnavailable&&req.method==='GET'||stopPhotoUpload&&req.method==='PUT')&&/^\/api\/projects\/[^/]+\/files\/[^/]+$/.test(url.pathname)){res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'Synthetic photo interruption'}));return;}
    if(comparisonUnavailable&&url.pathname.startsWith('/api/specification-reviews/')&&url.pathname.endsWith('/details')){res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'This comparison could not be checked.'}));return;}
    if(resourcesUnavailable&&url.pathname.endsWith('/interactions/v1/resources')){res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'Projects could not be checked.'}));return;}
@@ -72,6 +75,7 @@ try{
    const requestHeaders=canonical?{...req.headers,host:'whumpo.com',...(req.headers.origin?{origin:'https://whumpo.com'}:{})}:req.headers;
    const response=await worker.fetch(new Request(target,{method:req.method,headers:requestHeaders,...(['GET','HEAD'].includes(req.method)?{}:{body})}),identity?{...env,ENVIRONMENT:'local'}:env,ctx);
    if(response.status===500)errors.push('Unexpected HTTP 500: '+url.pathname);
+   if(loseConnectionStart&&url.pathname==='/api/connections/cloudflare/start'&&response.status===200){loseConnectionStart=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
    if(loseContinuation&&url.pathname.endsWith('/interactions/v1/continue')&&response.status===200){loseContinuation=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
    if(losePhotoUpload&&req.method==='PUT'&&url.pathname.includes('/files/')&&response.status===200){losePhotoUpload=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
    if(holdOperation&&input?.operation===holdOperation&&url.pathname.endsWith('/mutate')){holdOperation=null;await new Promise(done=>{releaseHeld=done;});}
@@ -107,6 +111,48 @@ try{
  for(const width of [360,390]){await page.setViewportSize({width,height:844});await captureSelectedChatProject(page,{interactionId:selectionRow.id,projectName:'Garden',path:'/tmp/whumpo-selected-resume-'+width+'.png'});assert.equal(modelCalls,selectionCalls+5);}
 
 
+ if(process.argv.includes('--consent-only')){
+  phase='same-task maintained consent and explicit OAuth cancellation return';
+  const key=authenticator(origin),cdp=await context.newCDPSession(page);
+  await run("INSERT INTO identity_credentials VALUES(?,?,?,0,'Browser test passkey','active',NULL,unixepoch(),NULL)",key.id,c.user,key.publicKey);
+  await cdp.send('WebAuthn.enable');
+  const {authenticatorId}=await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
+  await cdp.send('WebAuthn.addCredential',{authenticatorId,credential:key.virtualCredential('localhost',c.user)});
+  const keyring=fixtureKeyring();await initializeFixtureKeys(db,keyring);
+  Object.assign(env,{CLOUDFLARE_CLIENT_ID:'fixture-client',CLOUDFLARE_CLIENT_SECRET:'fixture-secret',CONNECTION_ENCRYPTION_KEYRING:keyring});
+  const connectGrant=crypto.randomUUID();await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'connections.cloudflare','connect','private-test-acceptance','synthetic consent browser',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",connectGrant,c.user);
+  const resume={kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id};
+  const send=async text=>{await page.getByRole('textbox',{name:'Message Whumpo'}).fill(text);await page.getByRole('button',{name:'Send message',exact:true}).click();};
+  modelSteps.push(resume,{kind:'interaction',operation:'requestConnection',projectId:c.project,provider:'cloudflare'});await send('Show Cloudflare connection controls for that same task.');
+  await page.getByRole('heading',{name:'Connect Cloudflare',exact:true}).waitFor({timeout:60000});
+  const latest=await row("SELECT i.id,i.origin_turn_id FROM chat_interactions i JOIN chat_turns t ON t.id=i.origin_turn_id WHERE i.user_id=? AND json_extract(i.envelope_json,'$.definition.cards[0].id')='connection-consent' ORDER BY t.revision DESC LIMIT 1",c.user);
+  assert.equal((await row('SELECT task_id FROM chat_task_progress WHERE turn_id=?',latest.origin_turn_id)).task_id,selectedForm.envelope.scope.taskId);
+  const consent=()=>page.locator('[data-interaction-id="'+latest.id+'"]'),starts=()=>requests.filter(r=>r.path==='/api/connections/cloudflare/start').length;
+  await consent().getByText('No active authorization is saved.',{exact:true}).waitFor();assert.equal(starts(),0);assert.equal(network,0);
+  for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});await consent().getByRole('button',{name:'Authorize with Cloudflare',exact:true}).scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));for(const button of await consent().getByRole('button').all())assert((await button.boundingBox()).height>=44);await consent().screenshot({path:'/tmp/whumpo-task-consent-'+width+'.png'});}
+  loseConnectionStart=true;await consent().getByRole('button',{name:'Authorize with Cloudflare',exact:true}).click();
+  await consent().getByText('An authorization is still pending.',{exact:false}).waitFor();await consent().getByText('The authorization page could not be opened.',{exact:false}).waitFor();assert.equal(starts(),1);assert.equal(modelCalls,selectionCalls+7);
+  await page.reload();await consent().getByText('An authorization is still pending.',{exact:false}).waitFor();assert.equal(starts(),1);
+  let authorizationURL;
+  await page.route('https://dash.cloudflare.com/oauth2/auth**',async route=>{authorizationURL=new URL(route.request().url());await route.fulfill({status:200,contentType:'text/html',body:'<h1>Synthetic provider consent</h1>'});});
+  await consent().getByRole('button',{name:'Authorize with Cloudflare',exact:true}).click();await page.getByRole('heading',{name:'Synthetic provider consent'}).waitFor();assert.equal(starts(),2);assert(authorizationURL);
+  const callback='/api/connections/cloudflare/callback?state='+authorizationURL.searchParams.get('state')+'&error=access_denied';await page.goto(origin+callback);
+  await consent().getByText('No active authorization is saved.',{exact:true}).waitFor();assert.equal(new URL(page.url()).pathname,'/workspace');assert.equal(modelCalls,selectionCalls+7);assert.equal(starts(),2);
+  assert.equal(await page.getByRole('heading',{name:'External connections',exact:true}).count(),0);
+  await page.reload();await consent().getByText('No active authorization is saved.',{exact:true}).waitFor();assert.equal(starts(),2);assert.equal(modelCalls,selectionCalls+7);
+  connectionStatusUnavailable=true;await consent().getByRole('button',{name:'Check connection status',exact:true}).click();await consent().getByText('Saved connection status could not be checked.',{exact:true}).waitFor();assert.equal(await consent().getByText('No active authorization is saved.',{exact:true}).count(),0);assert.equal(await consent().getByRole('button',{name:'Authorize with Cloudflare',exact:true}).count(),0);
+  connectionStatusUnavailable=false;await consent().getByRole('button',{name:'Check connection status',exact:true}).click();await consent().getByText('No active authorization is saved.',{exact:true}).waitFor();
+  await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',connectGrant);await consent().getByRole('button',{name:'Check connection status',exact:true}).click();await consent().getByText('Connecting requires Business or Business Pro,',{exact:false}).waitFor();assert(await consent().getByRole('button',{name:'Authorize with Cloudflare',exact:true}).isDisabled());
+  assert(!requests.some(r=>r.path==='/api/connections/cloudflare/zones'||r.path.includes('/github/backups')||r.path.includes('/github/installations')));
+  const session=(await context.cookies()).find(cookie=>cookie.name==='__Host-whumpo_session');assert(session);const currentScope=await modules.identity.admitWorkspace(db,await modules.identity.resolveIdentity(db,{version:1,client:'web',kind:'session',token:session.value}));
+  assert.equal((await site.readSpecification(currentScope,c.user,c.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',c.project)).n,0);assert.equal(starts(),2);assert.equal(modelCalls,selectionCalls+7);
+  await page.setViewportSize({width:390,height:844});
+  await consent().getByRole('heading',{name:'Connect Cloudflare',exact:true}).evaluate(e=>{window.scrollTo(0,0);const scroll=e.closest('.chat-scroll');scroll.scrollTop+=e.getBoundingClientRect().top-scroll.getBoundingClientRect().top-24;});
+
+  await page.waitForFunction(id=>{const card=document.querySelector('[data-interaction-id="'+id+'"]'),h=card?.querySelector('h2')?.getBoundingClientRect(),frame=document.querySelector('.chat-scroll')?.getBoundingClientRect();return h&&frame&&h.top>=Math.max(0,frame.top)&&h.bottom<=frame.bottom;},latest.id);
+  await page.screenshot({path:'/tmp/whumpo-task-consent-return-390.png'});
+
+ }
  if(process.argv.includes('--media-only')){
   phase='same-task private photo handoff and exact interrupted-upload recovery';
   const resume={kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id};
@@ -283,6 +329,9 @@ try{
  if(process.argv.includes('--intake-only')){
   await newProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='New-project browser passed: actual Worker/current local D1/built UI; natural intake, clarification before creation, same-task resumption, correction with separate private review, lost creation/review replies and reload without redispatch or duplicate projects. Ten scripted main calls; 360/390/1280px captures. No external inference, publication or physical-device acceptance.';
+ }else if(process.argv.includes('--consent-only')){
+  await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
+  resultSummary='Task-consent browser passed: current Worker/local D1/built UI, same-task controls, signed virtual passkey, exact synthetic OAuth start/cancel/Chat return, status outage/access loss/reload without inference or redispatch. Seven scripted main calls; 360/390/1280px captures. No real provider consent, provider resource reads or publication.';
  }else if(process.argv.includes('--media-only')){
   await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='Task-media browser passed: actual Worker/current D1/private R2/built UI; task-linked uploader and private held metadata, lost accepted response/read outage/reload without repeat PUT, server-confirmed closure of an unreserved dismissed handoff, new upload and unchanged website. Eleven scripted main calls; 360/390/1280px captures. No external inference, scanner or publication.';
@@ -411,7 +460,7 @@ try{
  await intakeCard(revisedBrief).getByRole('button',{name:'Save and continue',exact:true}).click();await intakeCard(revisedBrief).getByText('Your answers are saved. The AI is unavailable; continue this task later or stop its follow-up.',{exact:true}).waitFor();assert.equal((await store.readInteraction(a.scope,a.user,brief.envelope.id)).submission.answers.purpose,'Help neighbors plan a shared garden.');assert.equal((await store.readInteraction(a.scope,a.user,revisedBrief.envelope.id)).submission.answers.purpose,'Coordinate planting days for our shared garden.');assert.equal(continuations(),beforeIntakeContinuations+1);
  phase='native project selection and cache eviction';const beforeSelectionContinuations=continuations(),choice=await issue(a,null,'project-select@1');await page.reload();const select=intakeField(choice,'project');await select.waitFor();await page.waitForFunction(id=>!document.getElementById(id).disabled,'form-'+choice.envelope.id+'-project');assert.equal(await select.evaluate(e=>e.tagName),'SELECT');assert.equal(await select.inputValue(),'');assert.deepEqual(await select.locator('option').allTextContents(),['Choose a project','Garden']);
  await select.selectOption(a.project);resourcesUnavailable=true;await intakeCard(choice).getByRole('button',{name:'Check projects',exact:true}).click();await intakeCard(choice).getByText('Projects could not be checked.',{exact:true}).waitFor();assert.equal(await select.locator('option').filter({hasText:'Garden'}).count(),0);assert(await select.isDisabled());assert(await intakeCard(choice).getByRole('button',{name:'Save and continue',exact:true}).isDisabled());
- resourcesUnavailable=false,loseContinuation=false,photoStatusUnavailable=false,losePhotoUpload=false,stopPhotoUpload=false;await intakeCard(choice).getByRole('button',{name:'Check projects',exact:true}).click();await page.waitForFunction(id=>!document.getElementById(id).disabled,'form-'+choice.envelope.id+'-project');assert.equal(await select.inputValue(),a.project);
+ resourcesUnavailable=false,loseContinuation=false,loseConnectionStart=false,connectionStatusUnavailable=false,photoStatusUnavailable=false,losePhotoUpload=false,stopPhotoUpload=false;await intakeCard(choice).getByRole('button',{name:'Check projects',exact:true}).click();await page.waitForFunction(id=>!document.getElementById(id).disabled,'form-'+choice.envelope.id+'-project');assert.equal(await select.inputValue(),a.project);
  await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',a.resourcesGrant);await intakeCard(choice).getByRole('button',{name:'Check projects',exact:true}).click();await intakeCard(choice).getByText('Feature eligibility or project ownership changed.',{exact:false}).waitFor();assert.equal(await select.locator('option').filter({hasText:'Garden'}).count(),0);
  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.editing','read','private-test-acceptance','synthetic resource recovery',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",crypto.randomUUID(),a.user);await intakeCard(choice).getByRole('button',{name:'Check projects',exact:true}).click();await page.waitForFunction(id=>!document.getElementById(id).disabled,'form-'+choice.envelope.id+'-project');
  await select.selectOption(a.project);await intakeCard(choice).getByRole('button',{name:'Save draft',exact:true}).click();await intakeCard(choice).getByText('Draft saved.',{exact:true}).waitFor();await page.reload();await select.waitFor();assert.equal(await select.inputValue(),a.project);
