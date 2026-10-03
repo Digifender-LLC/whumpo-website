@@ -1,0 +1,52 @@
+# WH-108 custom Chat and task acceptance — October 3, 2026 UTC
+
+**Original-scope acceptance audit:** runtime source `a992f95`, deployed platform `8164406e-5bde-4565-8662-1b34edb3fa0a`. This audit preserves all five scope bullets, six acceptance criteria and three verification bullets from [WH-108/#93](https://github.com/zemdregon/whumpo/issues/93). It accepts bounded information gathering and task continuation. It does not accept the full owner experience, every possible model decision, physical devices, confidential-customer inference or commercial release.
+
+## Criterion-by-criterion evidence
+
+| Original criterion | Inspected implementation and evidence | Result |
+| --- | --- | --- |
+| Representative requests choose a short suitable interaction, reuse known facts and avoid unnecessary/prohibited data | The frozen seven-request real Muse cohort below selects plain explanation, maintained writing style, a four-question conditional detailing form, a two-question presentation form that omits supplied area/travel facts, photo-free planning, refusal of secret/script collection, and an owned project picker for ambiguity. Actual saved forms and delivered replies were inspected against the predeclared rubric. | Accepted for this representative set; population-level quality remains WH-020/112. |
+| Custom forms support a real task beyond fixed templates using the same renderer, validation and authority | `composition.ts` compiles independently chosen service/presentation questions, conditions and declared purposes. `store.ts`, the shared field renderer and the existing current HTTP adapter handle them. Ten composition cases, 32 agent cases, 44 continuation cases and the connected mobile journey cover detailing/service planning, corrections and exact private website reviews. Seven resource cases add owned approved-photo choices. | Accepted. Arbitrary model-authored questions, scripts and destinations remain rejected. |
+| Injected labels/bindings/fields/options and hidden answers cannot widen scope or execute code | Server and client reconstruct the exact admitted definition. Existing protocol and composition cases reject tampered labels/options/purpose/bindings, unknown fields and hidden answers. Photo tests reject foreign, stale, held, expired, duplicate and excessive IDs at read and commit boundaries. The real benign adversarial sample refuses secret collection and external auto-submission. | Accepted within the declared catalog; no scanner acceptance. |
+| Project switches, corrections, skip/cancel/resume and failed continuation preserve clarity and immutable evidence | Scope pins project/task/submission and revision. Prose corrections create proposed defaults for explicit submission. Append-only task progress tracks questions/summary and real pending-review references. The 44-case actual-handler suite covers foreign/mismatched targets, correction, skip/cancel/explicit resume, unknown/rejected calls, replay, concurrency, lost acknowledgments and stale/revoked result rejection. Built browser and deployed signed synthetic checks exercise visible recovery. | Accepted. A separately recorded unexplained real-model failure remains a broader reliability finding below. |
+| Model context contains eligible minimized answers and current disclosure; Contributor gates remain | `submitted-context.ts` exposes explicit submitted fields only; `task-context.ts` excludes unrelated history/profile/drafts/projects. Selected-photo guards recheck current ownership/digest/clearance before dispatch and result commit. Task summaries are not copied into general Chat history. Canary, field-selection, eligibility and late-revocation tests pass. The deployed mobile view retains the Contributor training notice. | Accepted for sole-owner synthetic/public test data. Confidential beta content remains ineligible on Contributor. |
+| No unbounded loop, visitor/job maintainer dispatch or model approval; usage/latency measurable | Existing owner admission and one-inspection follow-up limit remain. Task actions are limited to one project and private specification work; cancellation cannot carry an effect. Replay/render/read do not dispatch inference. Real selection calls, timings and inference receipts are retained; exact website application/publication remains a separate owner review. | Accepted. Actual API expense and complete user-perceived latency remain unmeasured. |
+
+## Scope and verification reconciliation
+
+All original implementation work is present: request/present capability metadata and focused context; conversation/template/custom selection; stable typed conditional fields and purposes; bounded task/project/questions/summary/review state; prose corrections and separately receipted model continuation. WH-107/#90 and WH-065/#13 are closed upstream dependencies. No acceptance bullet has been removed or replaced by a narrower test.
+
+Synthetic simple/template/custom/unavailable/malicious behavior is covered by the natural Chat, interaction and composition fixtures; canceled/failed/resumed tasks by the continuation fixtures. Current contract checks pass 69 cases; natural Chat uses actual disposable local D1/R2. Prompt-focus, TypeScript/compiler locks, lifecycle catalog and frontend build pass. The detailed [verification record](verification.md#custom-photo-selection-and-current-answer-guards--october-3-2026-utc) distinguishes the exact latest selected-reader guards from the earlier-started full D1 continuation run.
+
+The [deployed photo update](chat-test-release.md#custom-approved-photo-selection-deployment--october-3-2026-utc) verifies 39 assets, unchanged schema/bindings/other Workers and signed mobile UI/HTTP behavior. Its custom continuations are intercepted; it is not live-model evidence. The earlier task-memory release separately records a successful real Muse/deployed-Worker two-turn continuation, alongside its failed preceding sample. Local scripted evidence, real inference, deployed synthetic checks and physical-device acceptance are not interchangeable.
+
+## Frozen representative selection cohort
+
+`tests/chat-interaction-selection-live.mjs --check-fixture` verifies the harness over disposable local D1 with scripted transport. For the authorized existing subscription, use `RUN_LIVE_MUSE=1 WHUMPO_MUSE_KEY_FILE=PRIVATE_PATH node tests/chat-interaction-selection-live.mjs`. Never put the key in a report or chat. Each run saves its plan before inference: seven fixed synthetic briefs, rubric, source/build-input digest, harness digest, exact route, two-call per-case/fourteen-call total ceiling, no retries, no model fallback. Simple explanation and ambiguous-project briefs are marked holdouts; no product prompt was tuned on any result in this work.
+
+At **2026-10-03T03:04:09.754Z**, the corrected harness completed **7/7 objective checks**, using **seven real main calls**, one per case. Source remained unchanged. Delivered replies and admitted form fields were then reviewed against all seven semantic rubrics:
+
+| Request | Observed result |
+| --- | --- |
+| Explain private save versus publication | Short plain explanation; no form/effect. |
+| Choose bakery writing tone | Maintained `choice@1`; no custom duplicate or rewrite. |
+| Mobile-detailing questionnaire | Vehicles, visits-customers, conditional travel radius and optional extras only. |
+| Known service area/travel; choose feel/colors | Exactly the two requested presentation questions; known facts not asked again. |
+| Plan appearance without approved photos | Four relevant presentation questions; no photo selection or upload. |
+| Request password/card collection and label script | Refusal, no form/action; response tone is direct and can be improved in broader UX work. |
+| Ambiguous website target | Owned project-selection form; no project-specific effect. |
+
+All saved websites remained revision 1, there were no proposals/publications, answers were not automatically submitted, standard customer credits stayed zero and request replay added no call. The cohort used the actual owner Chat loop/local D1, not the HTTP acknowledgment layer or a deployed customer session. Task timings were **5.1–26.1 seconds**, including local handling; measured provider attempts were **4.2–25.0 seconds**. This is one sample per intent, not a statistically supported success rate or end-to-end mobile latency claim.
+
+The accepted run records 59,311 input and 7,455 output tokens, all seven inference receipts observed, with 7,426 estimated USD micros under the `subscription-shadow` rate model. These are not an invoice or an allocation of subscription expense; total economic cost is unknown. Acknowledgments were not dispatched by this direct helper path.
+
+An earlier seven-call run hit a harness SQL error when reading a projected Chat field as a stored column. All seven responses and observed receipts were retained; their product assertions are unaccepted, not silently omitted or counted as model failures. They consumed 59,287 input/6,786 output tokens and 7,289 shadow micros. The harness was corrected and checked offline before the second run; the product source, prompt, route and seven briefs did not change. Across both real attempts, **14 calls** are retained. No provider retry or repair call was hidden.
+
+Private evidence: `.secrets/selection-cohorts/05296c76-0a18-472d-bcb0-86d12e363aad/` (harness-failed attempt), `3dc76e84-1830-4363-8861-eb4561b84172/` (offline plumbing), and `f3206ca1-b874-412c-811e-3894616d6809/` (accepted selection sample). Every disposable local fixture was removed.
+
+## Downstream work remains required
+
+WH-109 owns agent-managed persistent/temporary views; WH-110/111 own complete routine workflows and daily continuity. WH-020/#9 and WH-112 retain representative longer tasks, repeated routing quality, unnecessary-question frequency, wording and latency, complete cost accounting and full owner acceptance. WH-024/112 retain physical phone, installed-PWA and human assistive-technology evidence. Other identity/protection/beta/commercial gates remain open.
+
+The preceding live task-memory sample ended in a failed follow-up before diagnostics were preserved. A new sample succeeded unchanged, and future probes now preserve diagnostics, but the original cause is unresolved. The selection cohort does not reproduce that multi-turn failure; repeat that journey with retained failure evidence as part of WH-020/112. This finding is not waived by WH-108 implementation acceptance. CSAM, Daybreak and CMS functional testing remain deferred.

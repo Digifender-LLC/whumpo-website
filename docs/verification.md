@@ -560,3 +560,11 @@ WH-108 adds the approved `gallery-photos` question to public website presentatio
 - Existing composition (10 SQLite scenarios), interaction agent (32 scenarios, 71 scripted main/48 acknowledgment calls), prompt-focus and lifecycle catalog pass. The catalog still has 173 tables, 39 current and seven planned classes; no schema change is needed.
 
 `tests/helpers/live-photo-selection.mjs` prepares an explicitly synthetic deployed probe with metadata-only resources, current client negotiation, draft reload, revocation and reselection. Its live result is recorded only after deployment; the continuation is deliberately intercepted, so that probe cannot establish model judgment. Original WH-108 representative selection and broader WH-112 quality remain open, including the earlier unresolved live follow-up failure. CSAM, Daybreak and CMS functional work remain deferred.
+
+
+The subsequent [scoped photo-selection deployment](chat-test-release.md#custom-approved-photo-selection-deployment--october-3-2026-utc) verifies source `a992f95`, platform `8164406e-5bde-4565-8662-1b34edb3fa0a`, all 39 assets and unchanged schema/bindings/other Workers. `tests/helpers/live-photo-selection.mjs` passed its signed 390px deployed UI/HTTP journey with synthetic metadata, explicit inference interception, zero image-byte reads and verified fixture removal. The final image was inspected. Both TypeScript/compiler checks and the frontend build passed before deployment. This does not expand the local model tests into live-model or physical-device acceptance.
+
+
+## WH-108 representative interaction acceptance — October 3, 2026 UTC
+
+`node tests/chat-interaction-selection-live.mjs --check-fixture` passed seven local-D1 harness cases with zero external inference. With explicit existing-subscription opt-in and private key-file path, the corrected frozen cohort then passed seven real Muse cases in seven calls. Saved forms and delivered replies were inspected against the predeclared semantic rubrics; the first seven-call attempt with a harness query error is retained separately and not counted as accepted. No product/prompt tuning occurred between attempts. Current contract (69 cases) and natural Chat local-D1/R2 checks also pass. The [original-scope audit](chat-composition-acceptance.md) maps every WH-108 criterion and preserves downstream reliability/device/cost gaps.
