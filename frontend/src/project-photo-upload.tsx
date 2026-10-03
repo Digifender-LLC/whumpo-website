@@ -1,5 +1,5 @@
 import {useEffect,useId,useRef,useState} from 'react';
-import {readPhotoUploadStatus,samePhotoUpload,type PhotoUpload} from '../../src/photo-upload-shape';
+import {readPhotoUploadStatus,samePhotoUpload,type PhotoUpload,type PhotoHandoff} from '../../src/photo-upload-shape';
 import {api,message} from './lib/api';
 import {prepareProjectPhoto} from './lib/prepare-project-photo';
 import {readPhotoRecovery,writePhotoRecovery,resolvePhotoRecovery} from './lib/photo-upload-recovery';
@@ -8,15 +8,19 @@ import {Input} from './components/ui/input';
 const changed='whumpo:photo-recovery-changed';
 
 /** Same explicit upload operation in Photos and Chat. Remount per account/project. */
-export function ProjectPhotoUpload({owner,project,disabled=false,onSaved}:{owner:string;project:string;disabled?:boolean;onSaved?:()=>void}){
+export function ProjectPhotoUpload({owner,project,disabled=false,onSaved,handoff=null}:{owner:string;project:string;disabled?:boolean;handoff?:PhotoHandoff|null;onSaved?:()=>void}){
  const label=useId(),form=useRef<HTMLFormElement>(null),active=useRef(true),working=useRef(false),prepared=useRef<{id:string;blob:Blob}|null>(null);
  const [pending,setPending]=useState<PhotoUpload|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(false);
  function load(){const saved=readPhotoRecovery(sessionStorage,owner,project);setPending(saved);if(prepared.current?.id!==saved?.id)prepared.current=null;return saved;}
  async function check(upload:PhotoUpload){
-  const data=readPhotoUploadStatus(await api(`/projects/${project}/files/${upload.id}`));if(!active.current)return;
+  const data=readPhotoUploadStatus(await api(`/projects/${project}/files/${upload.id}`,{headers:{'x-whumpo-photo-handoff':JSON.stringify(upload.handoff)}}));if(!active.current)return;
   if(!data)throw Error('The upload status needs the current Whumpo response.');
   if(data.photo&&!samePhotoUpload(upload,data.photo))throw Error('This upload ID refers to different photo details. Keep the original request for review.');
-  if(data.photo?.status==='ready'){
+  if(data.closedHandoff){
+   if(!upload.handoff||data.closedHandoff.interactionId!==upload.handoff.interactionId||data.closedHandoff.definitionDigest!==upload.handoff.definitionDigest)throw Error('The closed uploader does not match this request. Keep its recovery details for review.');
+   resolvePhotoRecovery(sessionStorage,owner,upload);prepared.current=null;setPending(null);setChecked(false);form.current?.reset();window.dispatchEvent(new Event(changed));
+   setNotice('The earlier uploader closed before this upload was reserved. Its request cannot start now. You can choose a photo in this uploader.');
+  }else if(data.photo?.status==='ready'){
    resolvePhotoRecovery(sessionStorage,owner,upload);prepared.current=null;setPending(null);setChecked(false);form.current?.reset();window.dispatchEvent(new Event(changed));
    setNotice(data.photo.safetyStatus==='approved'?'Photo saved privately and cleared for use. Ask Whumpo to add it to your website.':data.photo.safetyStatus==='blocked'?'Photo saved privately but unavailable for use.':'Photo saved privately. It is held for safety checks and cannot be displayed or used yet.');onSaved?.();
   }else{setChecked(true);setNotice(data.photo?'The upload started but is not confirmed. Retry the same photo to finish it.':'No saved upload was found yet. This does not prove an earlier request stopped. Retry uses the original upload ID.');}
@@ -40,7 +44,7 @@ export function ProjectPhotoUpload({owner,project,disabled=false,onSaved}:{owner
   if(!blob){
    const data=new FormData(element),file=data.get('photo');if(!(file instanceof File)||!file.size)throw Error(upload?'Choose the original photo to retry this upload.':'Choose a photo.');
    const next=await prepareProjectPhoto(file);if(!active.current)return;
-   const candidate:PhotoUpload={id:upload?.id??crypto.randomUUID(),projectId:project,name:upload?.name??String(data.get('name')).trim(),digest:next.digest,size:next.size,width:next.width,height:next.height};
+   const candidate:PhotoUpload={id:upload?.id??crypto.randomUUID(),projectId:project,name:upload?.name??String(data.get('name')).trim(),digest:next.digest,size:next.size,width:next.width,height:next.height,handoff:upload?upload.handoff:handoff};
    if(upload&&!samePhotoUpload(upload,candidate))throw Error('That file does not match the original prepared photo. Choose the original file; nothing has been sent.');
    upload=candidate;blob=next.blob;
   }
@@ -48,7 +52,7 @@ export function ProjectPhotoUpload({owner,project,disabled=false,onSaved}:{owner
   // Persist before dispatch. Storage failures block the send, not just recovery.
   writePhotoRecovery(sessionStorage,owner,upload);prepared.current={id:upload.id,blob};setPending(upload);setChecked(false);window.dispatchEvent(new Event(changed));
   setNotice('Saving your private photo…');
-  try{await api(`/projects/${project}/files/${upload.id}`,{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(upload.name)},body:blob});}
+  try{await api(`/projects/${project}/files/${upload.id}`,{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(upload.name),'x-whumpo-photo-handoff':JSON.stringify(upload.handoff)},body:blob});}
   catch(e){if(active.current)setNotice('Upload not confirmed. Check its saved status before retrying.');throw e;}
   if(active.current)await check(upload);
  }

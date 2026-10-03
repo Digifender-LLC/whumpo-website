@@ -22,7 +22,7 @@ try{
  const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts','src/site-host.ts']);
  const host=(await modules.module('src/site-host.ts')).default;let siteChecks=0;
  const worker=(await modules.module('src/index.ts')).default,store=await modules.module('src/chat-interactions/store.ts'),site=await modules.module('src/project-specification/store.ts');
- fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+ fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only','--media-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
  async function owner(){
   const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=crypto.randomUUID();
   await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -49,7 +49,7 @@ try{
  globalThis.fetch=async(url,init)=>{
   if(process.argv.includes('--publications-only')&&String(url)==='https://'+c.project+'.whumpo.site/'){siteChecks++;return host.fetch(new Request(url,init),{...env,DB:db},ctx);}
   if(String(url)==='https://opencode.ai/zen/go/v1/responses'&&JSON.parse(init.body).max_output_tokens===256)return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'{\"intent\":\"editing\"}'}]}],usage:{input_tokens:10,output_tokens:10}});
-  if(String(url)==='https://opencode.ai/zen/go/v1/responses'&&modelSteps.length){modelCalls++;const step=modelSteps.shift(),action=typeof step==='function'?await step(JSON.parse(init.body)):step;if(action instanceof Response)return action;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Task follow-up prepared.',action})}]}],usage:{input_tokens:100,output_tokens:100}});}
+  if(String(url)==='https://opencode.ai/zen/go/v1/responses'&&modelSteps.length){modelCalls++;const step=modelSteps.shift();let action;try{action=typeof step==='function'?await step(JSON.parse(init.body)):step;}catch(error){console.error('Scripted model observer failed:',String(error).slice(0,500));throw error;}if(action instanceof Response)return action;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Task follow-up prepared.',action})}]}],usage:{input_tokens:100,output_tokens:100}});}
   network++;throw Error('Unexpected external request');
  };
  const root=resolve(dir+'/web');let origin;
@@ -106,6 +106,47 @@ try{
  await page.getByRole('textbox',{name:'Message Whumpo'}).fill('Continue that selected-project task. Is the review still ready?');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+5);await page.reload();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor();assert.equal(modelCalls,selectionCalls+5);
  for(const width of [360,390]){await page.setViewportSize({width,height:844});await captureSelectedChatProject(page,{interactionId:selectionRow.id,projectName:'Garden',path:'/tmp/whumpo-selected-resume-'+width+'.png'});assert.equal(modelCalls,selectionCalls+5);}
 
+
+ if(process.argv.includes('--media-only')){
+  phase='same-task private photo handoff and exact interrupted-upload recovery';
+  const resume={kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id};
+  const send=async text=>{await page.getByRole('textbox',{name:'Message Whumpo'}).fill(text);await page.getByRole('button',{name:'Send message',exact:true}).click();};
+  async function showUploader(){
+   const previous=await page.getByRole('heading',{name:'Add a project photo',exact:true}).count();
+   modelSteps.push(resume,{kind:'interaction',operation:'requestPhotoUpload',projectId:c.project});await send('Show a private photo uploader for that same task.');
+   await page.getByRole('heading',{name:'Add a project photo',exact:true}).nth(previous).waitFor({timeout:60000});
+   const latest=await row("SELECT i.id,i.origin_turn_id FROM chat_interactions i JOIN chat_turns t ON t.id=i.origin_turn_id WHERE i.user_id=? AND json_extract(i.envelope_json,'$.definition.cards[0].id')='photo-upload' ORDER BY t.revision DESC LIMIT 1",c.user);
+   assert.equal((await row('SELECT task_id FROM chat_task_progress WHERE turn_id=?',latest.origin_turn_id)).task_id,selectedForm.envelope.scope.taskId);
+   return {row:latest,card:()=>page.locator('[data-interaction-id="'+latest.id+'"]'),upload:()=>page.locator('[data-interaction-id="'+latest.id+'"] [data-photo-upload]')};
+  }
+  const puts=()=>requests.filter(r=>r.method==='PUT'&&r.path.includes('/files/')).length;
+  const photo=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=32;canvas.height=24;canvas.getContext('2d').fillRect(0,0,32,24);return canvas.toDataURL('image/png').split(',')[1];});
+  const file={name:'garden.png',mimeType:'image/png',buffer:Buffer.from(photo,'base64')};
+  const first=await showUploader(),before=puts();
+  for(const width of [360,390,1280]){
+   await page.setViewportSize({width,height:844});await first.upload().getByLabel('Photo name',{exact:true}).evaluate(e=>e.scrollIntoView({block:'center',behavior:'instant'}));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   for(const input of await first.upload().locator('input').all())assert((await input.boundingBox()).height>=44);
+   await page.screenshot({path:'/tmp/whumpo-task-media-upload-'+width+'.png'});
+  }
+  await first.upload().getByLabel('Photo name',{exact:true}).fill('Private garden');await first.upload().getByLabel('Choose a photo',{exact:true}).setInputFiles(file);
+  losePhotoUpload=true;photoStatusUnavailable=true;await first.upload().getByRole('button',{name:'Save private photo'}).click();await first.upload().getByText('Upload not confirmed.',{exact:false}).waitFor();
+  const original=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('whumpo.photo-upload-recovery')).uploads[0]);assert.equal(original.handoff.interactionId,first.row.id);assert.equal(puts(),before+1);
+  await page.reload();await first.upload().getByRole('alert').waitFor();assert.equal(puts(),before+1);
+  photoStatusUnavailable=false;await first.upload().getByRole('button',{name:'Check upload status',exact:true}).click();await first.upload().getByText('Photo saved privately. It is held',{exact:false}).waitFor();assert.equal(puts(),before+1);
+  assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.photo-upload-recovery')),null);assert(!requests.some(r=>r.path.startsWith('/api/files/')));
+  const statusText='Your task photo is saved privately and held for safety checks. It has not changed your website.';
+  modelSteps.push(resume,body=>{assert.match(JSON.stringify(body),/photoResults/);assert.match(JSON.stringify(body),/Private garden/);assert(!JSON.stringify(body).includes('photos/'+c.project+'/')); return taskReply(statusText,{state:'active',summary:'Private photo upload is held; website unchanged.',openQuestions:[]});});await send('Did that same task photo finish uploading?');await page.getByText(statusText,{exact:true}).waitFor({timeout:60000});
+  for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});await page.getByText(statusText,{exact:true}).evaluate(e=>e.scrollIntoView({block:'center',behavior:'instant'}));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-media-result-'+width+'.png'});}
+  phase='dismissed unreserved request is closed on the server before browser recovery clears';
+  stopPhotoUpload=true;await first.upload().getByLabel('Photo name',{exact:true}).fill('Unsent garden');await first.upload().getByLabel('Choose a photo',{exact:true}).setInputFiles(file);await first.upload().getByRole('button',{name:'Save private photo'}).click();await first.upload().getByText('Upload not confirmed.',{exact:false}).waitFor();
+  const unsent=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('whumpo.photo-upload-recovery')).uploads[0]);assert.equal(await row('SELECT id FROM project_files WHERE id=?',unsent.id),null);
+  await first.card().getByRole('button',{name:'Dismiss uploader',exact:true}).click();await first.card().getByRole('button',{name:'Dismiss this uploader',exact:true}).click();await first.card().getByRole('button',{name:'Dismiss this uploader',exact:true}).waitFor({state:'detached'});
+  assert(await page.evaluate(()=>!!sessionStorage.getItem('whumpo.photo-upload-recovery')));stopPhotoUpload=false;
+  const calls=modelCalls,second=await showUploader();await second.upload().getByText('The earlier uploader closed before this upload was reserved.',{exact:false}).waitFor();assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.photo-upload-recovery')),null);assert.equal(modelCalls,calls+2);
+  await second.upload().getByLabel('Photo name',{exact:true}).fill('Another garden');await second.upload().getByLabel('Choose a photo',{exact:true}).setInputFiles(file);await second.upload().getByRole('button',{name:'Save private photo'}).click();await second.upload().getByText('Photo saved privately. It is held',{exact:false}).waitFor();
+  assert.equal((await row('SELECT count(*) n FROM project_files WHERE project_id=?',c.project)).n,2);assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',c.project)).n,0);
+  const finalCalls=modelCalls,finalPuts=puts();await page.reload();await second.upload().getByLabel('Photo name',{exact:true}).waitFor();assert.equal(modelCalls,finalCalls);assert.equal(puts(),finalPuts);assert.equal(finalCalls,selectionCalls+11);
+ }
  if(process.argv.includes('--observations-only')){
   phase='same-task status and traffic view uses shared reads and refresh without inference';
   for(const feature of ['core.editing','core.insights'])await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,'read','private-test-acceptance','synthetic task view browser',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",crypto.randomUUID(),c.user,c.project,feature);
@@ -242,6 +283,9 @@ try{
  if(process.argv.includes('--intake-only')){
   await newProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='New-project browser passed: actual Worker/current local D1/built UI; natural intake, clarification before creation, same-task resumption, correction with separate private review, lost creation/review replies and reload without redispatch or duplicate projects. Ten scripted main calls; 360/390/1280px captures. No external inference, publication or physical-device acceptance.';
+ }else if(process.argv.includes('--media-only')){
+  await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
+  resultSummary='Task-media browser passed: actual Worker/current D1/private R2/built UI; task-linked uploader and private held metadata, lost accepted response/read outage/reload without repeat PUT, server-confirmed closure of an unreserved dismissed handoff, new upload and unchanged website. Eleven scripted main calls; 360/390/1280px captures. No external inference, scanner or publication.';
  }else if(process.argv.includes('--observations-only')){
   await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='Task-observation browser passed: actual Worker/current D1/built UI; selected task status and traffic, read refresh/outage/access loss/reload without inference, unchanged private website. Seven scripted main calls; 360/390/1280px captures. No publication, external inference or physical-device acceptance.';
@@ -468,7 +512,7 @@ try{
  await uploader().getByLabel('Photo name',{exact:true}).fill('Private garden');await uploader().getByLabel('Choose a photo',{exact:true}).setInputFiles(file);
  phase='storage failure prevents upload';await page.evaluate(()=>{Storage.prototype.setItem=function(){throw Error('Synthetic blocked storage');};});await uploader().getByRole('button',{name:'Save private photo'}).click();await uploader().getByRole('alert').waitFor();assert.equal(puts(),beforePuts);
  await page.reload();await uploader().getByLabel('Photo name',{exact:true}).fill('Private garden');await uploader().getByLabel('Choose a photo',{exact:true}).setInputFiles(file);
- phase='lost accepted upload retains exact identity through collapse and reload';losePhotoUpload=true;photoStatusUnavailable=true;await uploader().getByRole('button',{name:'Save private photo'}).click();await uploader().getByText('Upload not confirmed.',{exact:false}).waitFor();const retained=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('whumpo.photo-upload-recovery')));assert.equal(retained.uploads.length,1);assert.equal(Object.keys(retained.uploads[0]).sort().join(','),'digest,height,id,name,projectId,size,width');assert.equal(puts(),beforePuts+1);
+ phase='lost accepted upload retains exact identity through collapse and reload';losePhotoUpload=true;photoStatusUnavailable=true;await uploader().getByRole('button',{name:'Save private photo'}).click();await uploader().getByText('Upload not confirmed.',{exact:false}).waitFor();const retained=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('whumpo.photo-upload-recovery')));assert.equal(retained.uploads.length,1);assert.equal(Object.keys(retained.uploads[0]).sort().join(','),'digest,handoff,height,id,name,projectId,size,width');assert.equal(puts(),beforePuts+1);
  await uploadCard().getByRole('button',{name:'Collapse uploader'}).click();await page.reload();await uploadCard().getByRole('button',{name:'Resume uploader'}).click();await uploader().getByRole('alert').waitFor();assert.equal(puts(),beforePuts+1);assert(await uploader().getByRole('button',{name:'Retry same upload'}).isDisabled());
  photoStatusUnavailable=false;await uploader().getByRole('button',{name:'Check upload status'}).click();await uploader().getByText('Photo saved privately. It is held',{exact:false}).waitFor();assert.equal(puts(),beforePuts+1);assert.equal((await row('SELECT count(*) n FROM project_files WHERE project_id=?',u.project)).n,1);assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.photo-upload-recovery')),null);assert(!requests.some(r=>r.path.startsWith('/api/files/')));
  phase='missing upload readback never generates a replacement request';stopPhotoUpload=true;await uploader().getByLabel('Photo name',{exact:true}).fill('Second garden');await uploader().getByLabel('Choose a photo',{exact:true}).setInputFiles(file);await uploader().getByRole('button',{name:'Save private photo'}).click();await uploader().getByText('Upload not confirmed.',{exact:false}).waitFor();const second=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('whumpo.photo-upload-recovery')).uploads[0]);

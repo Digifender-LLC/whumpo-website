@@ -38,7 +38,7 @@ try{
   const a=await owner(),b=await owner(),activity=id();
   for(const [o,summary,bytes,requests] of [[a,'Planted a garden',1048576,4],[b,'FOREIGN_CANARY',500000,99]]){
    await run('INSERT INTO activity_events VALUES(?,?,?,?,?,?)',o===a?activity:id(),o.user,o.project,'fixture',summary,now());
-   await run("INSERT INTO project_files VALUES(?,?,?,?,?, ?,1,1,'ready',?)",id(),o.project,'Metadata only',id(),'a'.repeat(64),bytes,now());
+   await run("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) VALUES(?,?,?,?,?, ?,1,1,'ready',?)",id(),o.project,'Metadata only',id(),'a'.repeat(64),bytes,now());
    await run("INSERT INTO site_traffic_daily(project_id,day,requests) VALUES(?,date('now'),?)",o.project,requests);
   }
   const log=await read(a,'activity');assert.equal(log.status,'ready','activity reader');assert(log.data.items.some(x=>x.id===activity&&x.summary==='Planted a garden'));

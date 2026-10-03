@@ -14,7 +14,7 @@ async function account(){const id=crypto.randomUUID();await accountAuthority(id)
 async function chat(user,content,id=crypto.randomUUID(),revision){const state=await readChat(scope(user),user);return {id,result:await sendChat(scope(user),user,{id,content,revision:revision??state.state.revision})};}
 async function project(user,name){return createFixtureProject(scope(user),user,name,'A neighborhood website','clay');}
 async function attach(user,project,photos){return {id:await changeFixtureWebsite(scope(user),user,project,[{type:'pages.setPhotos',pageId:'home',photos}]),result:{status:200}};}
-async function photo(user,project,name){const id=crypto.randomUUID();await uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(name)},body:jpeg}),ownedEnv(user),user,project,id);return id;}
+async function photo(user,project,name){const id=crypto.randomUUID();await uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':encodeURIComponent(name)},body:jpeg}),ownedEnv(user),user,project,id);return id;}
 const url=id=>'https://'+id+'.whumpo.site';
 const get=(path,method='GET')=>host.fetch(new Request('https://'+path.split('/')[2]+'.whumpo.site/'+path.split('/').slice(3).join('/'),{method}),env);
 async function publish(user,version){const review=await chat(user,'/publish '+version);assert.ok((await readChat(scope(user),user)).turns.at(-1).assistant_text.includes('attached photos'));await chat(user,'/confirm '+review.id);}

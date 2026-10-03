@@ -11,7 +11,7 @@ execFileSync('python3',['-c',"from PIL import Image; import sys; im=Image.new('R
 const jpeg=new Uint8Array(await readFile(dir+'/fixture.jpg'));
 const fixture=await databaseFixture({d1:true,r2:true}),db=fixture.db,env=fixture.env;
 async function account(){const authority=await workspaceFixture(db,m),id=authority.account,project=crypto.randomUUID();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Photos','Synthetic test','draft',?,?)").bind(project,id,new Date().toISOString(),new Date().toISOString()).run();return {...authority,id,project,env:{...env,DB:await authority.scope()}};}
-function request(bytes=jpeg,name='Garden photo'){return new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(name)},body:bytes});}
+function request(bytes=jpeg,name='Garden photo'){return new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':encodeURIComponent(name)},body:bytes});}
 try{
  const owner=await account(),other=await account(),id=crypto.randomUUID();
  const marker=Buffer.from('private GPS EXIF sentinel'),len=marker.length+2;const metadata=Buffer.concat([jpeg.subarray(0,2),Buffer.from([255,225,len>>8,len&255]),marker,jpeg.subarray(2)]);

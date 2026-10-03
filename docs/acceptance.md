@@ -56,6 +56,8 @@ Internal safety evidence/correction storage and an operator preview/apply tool a
 
 **WH-109 source only, October 3 UTC:** the [workspace view contract and evidence](workspace-views.md) now records atomic scoped layout operations/undo plus shared project-status reads/display across Chat and saved pages. Registered page components recheck inclusion, ownership and layout revision; browser checks cover 360/390px, unavailable/denied states and account-switch cache isolation. The current source schema has 175 tables and requires a coordinated empty test-database/client cutover; these changes are not deployed. Temporary views, requested review bindings and the complete WH-109 lifecycle audit remain open.
 
+**WH-110C task-linked photos, current source/local acceptance:** [photo handoffs and outcomes](chat-routine-journeys.md#task-linked-private-photo-handoff--october-3-utc) connect the original Chat task to its private uploader, exact retry context and observed held-file status. SQLite/D1, actual mobile browser/private R2 and two real Muse conversations pass. The 176-table/802-object schema and current client protocol require a coordinated empty test cutover; this photo increment is not part of the deployed status/traffic release above. Consent/full recovery and original-scope acceptance remain open. No scanner work or publication was performed.
+
 ## Current delivery priorities
 
 1. Continue the [execution roadmap](roadmap/README.md): the [authority audit and A1–A3 remediation](tenant-authority-audit.md) are complete to their defined scope; continue production-inference privacy/quality evidence, device/assistive-technology acceptance and incident/recovery operations. Implementation milestones do not close those acceptance gates.

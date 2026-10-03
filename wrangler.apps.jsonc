@@ -18,8 +18,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "whumpo-control-publication-test",
-      "database_id": "851d4479-8f66-4572-bf60-a7e8991f65ff"
+      "database_name": "whumpo-control-chat-media-test",
+      "database_id": "d811d64e-74b2-4d73-999d-a384d6e809f1"
     }
   ],
   "services": [

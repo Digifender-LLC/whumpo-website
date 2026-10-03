@@ -60,7 +60,7 @@ try{
   else await db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,'2099-01-01','2026-10-02','revoking')").bind(record,owner.account,cipher).run();
   records.push({provider,purpose,record});
  }
- const file=id();await db.prepare("INSERT INTO project_files VALUES(?,?,?,?,?,?,1,1,'pending','2026-10-02')").bind(file,project,'Synthetic object',objectKey,hash(objectBytes),objectBytes.length).run();
+ const file=id();await db.prepare("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) VALUES(?,?,?,?,?,?,1,1,'pending','2026-10-02')").bind(file,project,'Synthetic object',objectKey,hash(objectBytes),objectBytes.length).run();
  let manifest=await capture();
  assert.ok(!JSON.stringify(manifest).includes(canary));assert.ok(!JSON.stringify(manifest).includes(objectKey));assert.ok(!JSON.stringify(manifest).includes(JSON.parse(keyring).keys[0].secret));
  await held(options(manifest),'independent-evidence');permit(manifest);
