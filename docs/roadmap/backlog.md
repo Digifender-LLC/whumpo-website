@@ -3724,6 +3724,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/chat-workspace-continuity.md](../../docs/chat-workspace-continuity.md)
 - [frontend/src/lib/chat-location.ts](../../frontend/src/lib/chat-location.ts)
 - [tests/chat-location.mjs](../../tests/chat-location.mjs)
+- [frontend/src/account-help.tsx](../../frontend/src/account-help.tsx)
+- [tests/helpers/account-help-journey.mjs](../../tests/helpers/account-help-journey.mjs)
+- [tests/workspace-identity-browser.mjs](../../tests/workspace-identity-browser.mjs)
 
 ### Execution coordination
 
