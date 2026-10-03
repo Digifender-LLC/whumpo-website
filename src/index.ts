@@ -1,3 +1,4 @@
+import {siteSafetyInventory,siteSafetyReviews,readSiteSafetyReview,prepareSiteSafetyReview,confirmSiteSafetyReview} from './site-safety';
 import {connectionStartInput,connectionReturnPath,readConnectionHandoff} from './chat-interactions/connection-handoff';
 import {isConnectionProvider} from './connection-handoff-shape';
 import {readSavedViewComponent} from './workspace-view-bindings';
@@ -156,6 +157,20 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='PUT'||method==='DELETE')return json(await updateProfilePhoto(env.DB,user.id,request));
   }
   if(method==='GET'&&pathname==='/api/workspace/dashboard')return json(await dashboardData(env.DB,user.id));
+  if(pathname.startsWith('/api/workspace/site-safety')){
+    const params=new URL(request.url).searchParams;
+    if(method==='GET'&&(pathname==='/api/workspace/site-safety'||pathname==='/api/workspace/site-safety/reviews')){
+      const keys=pathname.endsWith('/reviews')?['project','after']:['after'];
+      if([...params.keys()].some(key=>!keys.includes(key)||params.getAll(key).length!==1))return error(400,'Use the current website safety link.');
+      return json(pathname.endsWith('/reviews')?await siteSafetyReviews(env.DB,user.id,params.get('project')??'',params.get('after')):await siteSafetyInventory(env.DB,user.id,params.get('after')));
+    }
+    if(params.size)return error(400,'Use the exact website safety action.');
+    if(method==='POST'&&pathname==='/api/workspace/site-safety/reviews')return json(await prepareSiteSafetyReview(env.DB,user.id,await body(request)));
+    const review=pathname.match(/^\/api\/workspace\/site-safety\/reviews\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})(\/confirm)?$/);
+    if(review&&method==='GET'&&!review[2])return json({version:1,review:await readSiteSafetyReview(env.DB,user.id,review[1])});
+    if(review&&method==='POST'&&review[2])return json(await confirmSiteSafetyReview(env.DB,user.id,review[1],await body(request)));
+    return error(404,'Website safety action not found.');
+  }
   if(pathname==='/api/workspace/views/v1/component'&&method==='POST')return json(await readSavedViewComponent(env.DB,user.id,await body(request)));
   if(pathname==='/api/workspace/views/v1/layout'&&method==='GET')return json(await readLayout(env.DB,user.id));
   if(pathname==='/api/workspace/views/v1/history'&&method==='GET')return json(await readLayoutHistory(env.DB,user.id));

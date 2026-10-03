@@ -535,7 +535,7 @@
           "public-artifact"
         ],
         "readers": [
-          "Owner private previews/diffs/exports; public host only exact admitted publications"
+          "Owner private previews/diffs/exports and direct website-safety review/results; public host only exact admitted publications"
         ],
         "processors": [
           "Compiler/rendering, exact review/publication and selected owner edits"
