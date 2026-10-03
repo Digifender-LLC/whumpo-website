@@ -3671,7 +3671,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/95. Planning owner: Unassigned
 
 ## WH-111 — Make Chat the daily workspace with durable continuity and direct recovery
 
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: M.
 
 Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
 
@@ -3721,10 +3721,13 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/lib/workspace-navigation.ts](../../frontend/src/lib/workspace-navigation.ts)
 - [tests/chat-delivery.mjs](../../tests/chat-delivery.mjs)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/chat-workspace-continuity.md](../../docs/chat-workspace-continuity.md)
+- [frontend/src/lib/chat-location.ts](../../frontend/src/lib/chat-location.ts)
+- [tests/chat-location.mjs](../../tests/chat-location.mjs)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/100. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 

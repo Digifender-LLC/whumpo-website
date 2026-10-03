@@ -5485,7 +5485,7 @@
       "title": "Make Chat the daily workspace with durable continuity and direct recovery",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "ready",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -5524,9 +5524,12 @@
         "frontend/src/lib/chat-delivery.ts",
         "frontend/src/lib/workspace-navigation.ts",
         "tests/chat-delivery.mjs",
-        "docs/chat-interactions.md"
+        "docs/chat-interactions.md",
+        "docs/chat-workspace-continuity.md",
+        "frontend/src/lib/chat-location.ts",
+        "tests/chat-location.mjs"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/100",
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created."

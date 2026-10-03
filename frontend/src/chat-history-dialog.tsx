@@ -1,9 +1,8 @@
-import {useEffect,useRef,useState,type RefObject} from 'react';
+import {useRef,useState,type RefObject} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {readInteractionIndex,type InteractionCursor} from '../../src/chat-interactions/history-shape';
 import {ChatReply} from './chat-reply';
 import {ChatRequest} from './chat-request';
-import {ChatInteraction} from './chat-interaction';
 import {ChatInteractionHistory,continuationLabel} from './chat-interaction-history';
 import {APIError,api,message} from './lib/api';
 import {Input} from './components/ui/input';
@@ -12,7 +11,7 @@ import {Dialog,DialogContent,DialogDescription,DialogHeader,DialogTitle,DialogTr
 import {Tabs,TabsContent,TabsList,TabsTrigger} from './components/ui/tabs';
 
 type History={turns:{id:string;revision:number;user_text:string;assistant_text:string;created_at:string;status:string;mode:string;interaction?:unknown}[];nextBefore:number|null};
-type Props={before:number;owner:string;chatRevision:number;busy:boolean;onAnswerInChat:()=>void;onResumeVisible:(id:string)=>(()=>void)|null};
+type Props={before:number;owner:string;onOpenForm:(id:string)=>void};
 export function ChatHistoryDialog(props:Props){
  const [open,setOpen]=useState(false);
  const afterClose=useRef<(()=>void)|null>(null);
@@ -24,16 +23,13 @@ export function ChatHistoryDialog(props:Props){
   </DialogContent>
  </Dialog>;
 }
-function HistoryContent({before,owner,chatRevision,busy,onAnswerInChat,onResumeVisible,onClose,heading}:Props&{onClose:(resume?:()=>void)=>void;heading:RefObject<HTMLHeadingElement|null>}){
- const [mode,setMode]=useState('messages'),[selected,setSelected]=useState<string|null>(null),[positions,setPositions]=useState<number[]>([before]),[draft,setDraft]=useState(''),[search,setSearch]=useState('');
+function HistoryContent({before,owner,onOpenForm,onClose,heading}:Props&{onClose:(resume?:()=>void)=>void;heading:RefObject<HTMLHeadingElement|null>}){
+ const [mode,setMode]=useState('messages'),[positions,setPositions]=useState<number[]>([before]),[draft,setDraft]=useState(''),[search,setSearch]=useState('');
  const [formPositions,setFormPositions]=useState<(InteractionCursor|null)[]>([null]);
- const initial=useRef(true);
- useEffect(()=>{if(initial.current){initial.current=false;return;}heading.current?.focus();},[selected]);
- function openForm(id:string){const resume=onResumeVisible(id);if(resume){onClose(resume);return;}setSelected(id);}
- const answerInChat=()=>onClose(onAnswerInChat);
+ function openForm(id:string){onClose(()=>onOpenForm(id));}
  return <>
-  <DialogHeader className="pr-10 text-left"><DialogTitle ref={heading} tabIndex={-1}>{selected?'Continue your saved form':'Past messages & forms'}</DialogTitle><DialogDescription className="[.phone-keyboard_&]:sr-only">{selected?'Read the current form before continuing. Saving information does not approve changes to your sites.':'Find past messages or unfinished forms. Opening either sends nothing to the agent.'}</DialogDescription></DialogHeader>
-  {selected?<><Button variant="ghost" className="self-start min-h-11" onClick={()=>setSelected(null)}>Back to {mode==='forms'?'saved forms':'messages'}</Button><div className="min-h-0 overflow-y-auto overscroll-contain pr-1" aria-label="Current saved form"><ChatInteraction key={selected} id={selected} owner={owner} chatRevision={chatRevision} busy={busy} onAnswerInChat={answerInChat}/></div></>:<Tabs value={mode} onValueChange={setMode} className="min-h-0 flex flex-col gap-3">
+  <DialogHeader className="pr-10 text-left"><DialogTitle ref={heading} tabIndex={-1}>Past messages & forms</DialogTitle><DialogDescription className="[.phone-keyboard_&]:sr-only">Find past messages or unfinished forms. Saved forms reopen in Chat; opening one sends nothing to the agent.</DialogDescription></DialogHeader>
+  <Tabs value={mode} onValueChange={setMode} className="min-h-0 flex flex-col gap-3">
    <TabsList tabIndex={-1} className="grid grid-cols-2 h-auto shrink-0" aria-label="Find past work"><TabsTrigger value="messages" tabIndex={mode==='messages'?0:-1} className="min-h-11">Messages</TabsTrigger><TabsTrigger value="forms" tabIndex={mode==='forms'?0:-1} className="min-h-11">Saved forms</TabsTrigger></TabsList>
    <TabsContent value="messages" className="min-h-0 flex flex-col gap-3 mt-0">
     <form className="flex flex-wrap gap-2" onSubmit={event=>{event.preventDefault();setSearch(draft.trim());setPositions([before]);}}>
@@ -45,7 +41,7 @@ function HistoryContent({before,owner,chatRevision,busy,onAnswerInChat,onResumeV
     <Messages key={positions.at(-1)+':'+search} owner={owner} cursor={positions.at(-1)!} search={search} onOpen={openForm} canGoNewer={positions.length>1} onOlder={n=>setPositions(p=>[...p,n])} onNewer={()=>setPositions(p=>p.slice(0,-1))}/>
    </TabsContent>
    <TabsContent value="forms" className="min-h-0 flex flex-col gap-3 mt-0"><p className="text-sm text-muted-foreground">Unfinished forms and preview requests, including those outside your recent Chat messages. Unsubmitted drafts expire after seven days of inactivity.</p><SavedForms key={JSON.stringify(formPositions.at(-1))} owner={owner} cursor={formPositions.at(-1)!} onOpen={openForm} canGoNewer={formPositions.length>1} onOlder={next=>setFormPositions(p=>[...p,next])} onNewer={()=>setFormPositions(p=>p.slice(0,-1))}/></TabsContent>
-  </Tabs>}
+  </Tabs>
  </>;
 }
 function Messages({owner,cursor,search,onOpen,canGoNewer,onOlder,onNewer}:{owner:string;cursor:number;search:string;onOpen:(id:string)=>void;canGoNewer:boolean;onOlder:(n:number)=>void;onNewer:()=>void}){
