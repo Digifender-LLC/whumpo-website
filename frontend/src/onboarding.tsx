@@ -26,7 +26,7 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
  const [draft,setDraft]=useState(initial),[name,setName]=useState(profile.name),[bio,setBio]=useState(profile.about_me),[share,setShare]=useState(!!profile.share_context),[busy,setBusy]=useState(false),[photoBusy,setPhotoBusy]=useState(false),[error,setError]=useState(''),[returnToReview,setReturnToReview]=useState(false);
  const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),mounted=useRef(false),lock=useRef(false),errorPanel=useRef<HTMLDivElement>(null);
  const prompt=draft.prompt,index=welcomePrompts.indexOf(prompt),chapter=['profile','project','review'].indexOf(welcomeStage(prompt)),waiting=busy||photoBusy;
- useEffect(()=>{if(mounted.current){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'center',behavior:'instant'});}mounted.current=true;},[prompt]);
+ useEffect(()=>{if(mounted.current||document.activeElement===document.body){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'center',behavior:'instant'});}mounted.current=true;},[prompt]);
  useEffect(()=>{if(error){const panel=errorPanel.current;if(panel&&(document.activeElement===document.body||panel.closest('form')?.contains(document.activeElement)))panel.focus();}},[error]);
  async function persist(nextPrompt:WelcomePrompt){
   const input={revision:draft.revision,stage:welcomeStage(nextPrompt),prompt:nextPrompt,project_name:draft.project_name,idea:draft.idea,audience:draft.audience,preferred_theme:draft.preferred_theme};
