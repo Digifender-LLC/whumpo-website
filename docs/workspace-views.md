@@ -135,3 +135,9 @@ The browser uses the actual mobile Your pages sheet, navigates Chat → page →
 Two initial fixture problems were corrected before the full run passed: `ENVIRONMENT=local` intentionally disables inference, so this loopback harness proxies to the canonical test-origin handler; and mobile pages must open through the Your pages sheet. Product guards/navigation were unchanged. The fixture defaults to scripted responses. Real Muse requires explicit `RUN_LIVE_MUSE=1` plus a private key-file path, with a 28-response ceiling and a per-run report of exact synthetic replies/actions, errors and cleanup. A scripted pass is not real-model evidence.
 
 The layout regression also now exercises actual project deletion as well as ownership transfer: a stale page can be removed, and undo cannot resurrect its lost project authority. All twelve SQLite domain cases pass. Coordinated deployment and the parent acceptance audit remain open.
+
+### Real-model attempt and response-limit correction
+
+The first Muse run on source `c3c96d4` passed temporary creation and correction, then stopped at saving the view because the main provider response reached the 2,048-token limit. Two of eight steps passed; no partial page was committed. Seven provider requests were observed, including acknowledgments. Private evidence `.secrets/workspace-lifecycle-muse-20261003/report.json` retains the failed run. This is a known failed attempt, not a passing lifecycle result; it does not explain away the earlier unrelated multi-turn failure under WH-020.
+
+Main Chat's allowance is now 4,096 tokens per bounded call, with both calls reserved and no added retry or alternate model. See [the accounting change](standard-ai-accounting.md#current-muse-response-allowance--october-3-2026-utc). The lifecycle harness now retains provider status, incomplete reason and usage even when no final response JSON is available. A new run is required to verify the correction; the original report is preserved.
