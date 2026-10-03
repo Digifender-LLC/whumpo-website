@@ -733,9 +733,36 @@ CREATE TABLE inference_calls (
 CREATE TABLE workspace_preferences (
  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
- layout_json TEXT NOT NULL CHECK(json_valid(layout_json) AND length(CAST(layout_json AS BLOB)) <= 12000),
+ layout_json TEXT NOT NULL CHECK(json_valid(layout_json) AND length(CAST(layout_json AS BLOB))<=12000 AND COALESCE(json_extract(layout_json,'$.version')=1,0)),
  updated_at TEXT NOT NULL
 );
+CREATE TABLE workspace_layout_receipts (
+ request_id TEXT NOT NULL,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ request_json TEXT NOT NULL CHECK(json_valid(request_json) AND length(CAST(request_json AS BLOB))<=14000),
+ from_revision INTEGER NOT NULL CHECK(from_revision>=0),
+ to_revision INTEGER NOT NULL CHECK(to_revision=from_revision+1),
+ previous_json TEXT NOT NULL CHECK(json_valid(previous_json) AND length(CAST(previous_json AS BLOB))<=12000 AND COALESCE(json_extract(previous_json,'$.version')=1,0)),
+ layout_json TEXT NOT NULL CHECK(json_valid(layout_json) AND length(CAST(layout_json AS BLOB))<=12000 AND COALESCE(json_extract(layout_json,'$.version')=1,0)),
+ -- Retained provenance: Chat cleanup must not erase current layout history.
+ origin_turn_id TEXT CHECK(origin_turn_id IS NULL OR origin_turn_id=request_id),
+ created_at TEXT NOT NULL,
+ PRIMARY KEY(user_id,request_id), UNIQUE(user_id,to_revision), UNIQUE(origin_turn_id)
+);
+CREATE TRIGGER workspace_layout_receipt_immutable BEFORE UPDATE ON workspace_layout_receipts
+BEGIN SELECT RAISE(ABORT,'workspace_layout_immutable'); END;
+CREATE TRIGGER workspace_layout_receipt_current BEFORE INSERT ON workspace_layout_receipts
+WHEN NOT EXISTS(SELECT 1 FROM workspace_preferences p WHERE p.user_id=NEW.user_id AND p.revision=NEW.from_revision AND p.layout_json=NEW.previous_json)
+ OR (NEW.origin_turn_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM chat_turns c WHERE c.id=NEW.origin_turn_id AND c.user_id=NEW.user_id AND c.mode='ai' AND c.status='pending' AND c.input_tokens IS NULL))
+BEGIN SELECT RAISE(ABORT,'workspace_layout_changed'); END;
+CREATE TRIGGER workspace_layout_current_update BEFORE UPDATE ON workspace_preferences
+WHEN NEW.user_id!=OLD.user_id OR NEW.revision!=OLD.revision+1 OR NOT EXISTS(
+ SELECT 1 FROM workspace_layout_receipts r WHERE r.user_id=NEW.user_id AND r.from_revision=OLD.revision AND r.to_revision=NEW.revision AND r.previous_json=OLD.layout_json AND r.layout_json=NEW.layout_json)
+BEGIN SELECT RAISE(ABORT,'workspace_layout_changed'); END;
+CREATE TABLE workspace_layout_checks(denied INTEGER NOT NULL);
+CREATE TRIGGER workspace_layout_refuse BEFORE INSERT ON workspace_layout_checks
+BEGIN SELECT RAISE(ABORT,'workspace_layout_changed'); END;
 
 CREATE TABLE capacity_preferences (
  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -2445,10 +2472,6 @@ CREATE TRIGGER inference_finished AFTER UPDATE ON inference_calls WHEN NEW.statu
 END;
 
 CREATE TRIGGER inference_delete_guard BEFORE DELETE ON inference_calls WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'inference_immutable'); END;
-
-CREATE TRIGGER workspace_preferences_revision BEFORE UPDATE ON workspace_preferences
-WHEN NEW.user_id != OLD.user_id OR NEW.revision != OLD.revision+1
-BEGIN SELECT RAISE(ABORT,'workspace_revision'); END;
 
 CREATE TRIGGER capacity_preferences_revision BEFORE UPDATE ON capacity_preferences
 WHEN NEW.user_id != OLD.user_id OR NEW.revision != OLD.revision+1

@@ -358,11 +358,12 @@
         "welcome_onboarding",
         "welcome_first_drafts",
         "workspace_preferences",
-        "workspace_state"
+        "workspace_state",
+        "workspace_layout_receipts"
       ],
       "scope": "owner",
-      "purpose": "Profile/name/bio/photo, welcome progress, saved workspace tabs and preferences.",
-      "currentRetention": "Account-linked storage; profile photo bytes are in D1 and replacement clears the current safety receipt. No age-based profile/chat-memory expiry.",
+      "purpose": "Profile/name/bio/photo, welcome progress, saved workspace tabs and preferences. Current versioned view definitions and immutable layout change receipts.",
+      "currentRetention": "Account-linked storage; profile photo bytes are in D1 and replacement clears the current safety receipt. No age-based profile/chat-memory expiry. Layout before/after definitions, request metadata and turn provenance remain for the account lifetime, independently of Chat cleanup and page removal; no seven-day draft expiry applies.",
       "proposedRetention": "Retain while active or until explicit replacement/removal; ordinary closure purge includes agent-context copies. Pending/blocked images follow restricted safety review, never ordinary export.",
       "deletionAuthority": "Owner profile/workspace edits; exact account closure plus safety-case coordination for held images.",
       "exportPolicy": "Allowlist profile, preferences and workflow configuration. Include uploaded photo only with valid current checks; omit auth and internal safety references.",
@@ -370,7 +371,10 @@
         "src/profile.ts",
         "src/onboarding.ts",
         "docs/workspace-agent.md",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "src/workspace-layout.ts",
+        "src/workspace-view-contract.ts",
+        "docs/workspace-views.md"
       ],
       "storageStatus": "current",
       "protection": {
@@ -383,7 +387,8 @@
           "Current owner profile/layout/onboarding handlers; held photo reads remain denied"
         ],
         "processors": [
-          "Selected name/bio only after share_context opt-in; JPEG preparation and current photo gates; normal display/layout handlers"
+          "Selected name/bio only after share_context opt-in; JPEG preparation and current photo gates; normal display/layout handlers",
+          "Owner layout labels/project references and recent operation metadata may enter task context; arbitrary definition extensions are rejected."
         ],
         "remainingExposure": [
           "Name, bio, base64 photo and welcome brief are readable. Profile opt-in does not authorize unrelated third-party secrets."
@@ -1909,10 +1914,11 @@
     {
       "id": "chat-interaction-assertion",
       "tables": [
-        "chat_interaction_checks"
+        "chat_interaction_checks",
+        "workspace_layout_checks"
       ],
       "scope": "platform",
-      "purpose": "Always-empty SQL assertion table used to atomically reject stale Chat interaction state, feature inclusion and revision checks.",
+      "purpose": "Always-empty SQL assertion tables used to atomically reject stale Chat interaction or workspace layout state, feature inclusion, project ownership and revision checks.",
       "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
       "proposedRetention": "Remain empty in every deployment and restore.",
       "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
@@ -1921,7 +1927,9 @@
         "schema/platform.sql",
         "src/chat-interactions/store.ts",
         "src/chat-interactions/continuation.ts",
-        "docs/chat-interactions.md"
+        "docs/chat-interactions.md",
+        "src/workspace-layout.ts",
+        "docs/workspace-views.md"
       ],
       "storageStatus": "current",
       "protection": {

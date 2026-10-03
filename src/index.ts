@@ -1,3 +1,5 @@
+import {readLayout,readLayoutHistory,readLayoutReceipt,mutateLayout} from './workspace-layout';
+import {WorkspaceViewError} from './workspace-view-contract';
 import {handleInteractionRequest} from './chat-interactions/http';
 import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
@@ -33,7 +35,7 @@ import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage} from './app
 import {readProfile,updateProfile,profilePhoto,updateProfilePhoto} from './profile';
 import {readAppAccess,cancelAppInvitation} from './app-access';
 import {createAppInvitation,revokeAppVisitor} from './app-auth';
-import {dashboardData,readLayout,saveLayout,readCapacity,saveCapacity} from './workspace-dashboard';
+import {dashboardData,readCapacity,saveCapacity} from './workspace-dashboard';
 import { readAcknowledgment } from './acknowledgment';
 import {readApplication,readApplicationReview,prepareApplication,confirmApplication} from './app-activation';
 import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm} from './backend-forms';
@@ -150,10 +152,10 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='PUT'||method==='DELETE')return json(await updateProfilePhoto(env.DB,user.id,request));
   }
   if(method==='GET'&&pathname==='/api/workspace/dashboard')return json(await dashboardData(env.DB,user.id));
-  if(pathname==='/api/workspace/layout'){
-    if(method==='GET')return json(await readLayout(env.DB,user.id));
-    if(method==='PUT'){const data=await body(request);return json(await saveLayout(env.DB,user.id,data?.revision,data?.layout));}
-  }
+  if(pathname==='/api/workspace/views/v1/layout'&&method==='GET')return json(await readLayout(env.DB,user.id));
+  if(pathname==='/api/workspace/views/v1/history'&&method==='GET')return json(await readLayoutHistory(env.DB,user.id));
+  if(pathname==='/api/workspace/views/v1/mutate'&&method==='POST')return json(await mutateLayout(env.DB,user.id,await body(request)));
+  if(pathname==='/api/workspace/views/v1/receipt'&&method==='POST'){const data=await body(request);if(!data||Object.keys(data).sort().join(',')!=='requestId,version'||data.version!==1)throw new WorkspaceViewError(400,'invalid_request','Use the current request receipt.');return json(await readLayoutReceipt(env.DB,user.id,data.requestId));}
   if(pathname==='/api/workspace/capacity'){
     if(method==='GET')return json(await readCapacity(env.DB,user.id));
     if(method==='PUT')return json(await saveCapacity(env.DB,user.id,await body(request)));
@@ -523,6 +525,7 @@ export default {
       return env.ASSETS.fetch(request);
     } catch (cause) {
       if(String(cause).includes('connection_write_key_changed'))return comparisonErrorResponse(request,error(503,new ConnectionVaultError('write-key').message));
+      if(cause instanceof WorkspaceViewError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if(cause instanceof IdentityError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if (cause instanceof FeatureInclusionError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, category: "unexpected" }));

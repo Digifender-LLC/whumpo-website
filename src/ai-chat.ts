@@ -208,6 +208,11 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='The project changed while I was preparing the custom draft. No draft was saved. Ask me to inspect it and prepare a fresh plan.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
     }
+    if(String(cause).includes('workspace_layout_changed')){
+      await closeStandardAIAttempt(db,userId,id);
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='Your workspace or access changed while I was preparing the page. No layout change was saved. Ask me to read the current workspace before trying again.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      return {status:200};
+    }
     if(String(cause).includes('chat_interaction_changed')){
       if(task){
         const receipt=await db.prepare('SELECT state FROM standard_ai_requests WHERE id=? AND user_id=?').bind(id,userId).first<{state:string}>();

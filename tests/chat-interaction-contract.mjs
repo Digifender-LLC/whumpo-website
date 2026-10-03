@@ -229,9 +229,9 @@ try {
     assert.equal(real.chatControl({type:'interaction.answers@1',answers}),undefined);
   });
   await test('existing saved view stays in its bounded layout and shortcut registry',async()=>{
-    const layout={widgets:['projects','usage','activity'],tabs:[{id:'tab-detailing',label:'Detailing',projectId:id(4),widgets:['traffic','activity'],shortcuts:['project','versions']}]};
+    const layout={version:1,dashboard:{version:1,projectId:null,widgets:['projects','usage','activity'],shortcuts:[]},tabs:[{id:'tab-detailing',label:'Detailing',view:{version:1,projectId:id(4),widgets:['traffic','activity'],shortcuts:['project','versions']}}]};
     assert.deepEqual(real.parseLayout(layout),layout);
-    assert.throws(()=>real.parseLayout({...layout,tabs:[{...layout.tabs[0],shortcuts:['publish']}] }));
+    assert.throws(()=>real.parseLayout({...layout,tabs:[{...layout.tabs[0],view:{...layout.tabs[0].view,shortcuts:['publish']}}] }));
     assert.throws(()=>real.parseLayout({...layout,tabs:[{...layout.tabs[0],url:'https://example.invalid'}]}));
   });
 }finally{globalThis.fetch=fetch;}

@@ -1,3 +1,4 @@
+import {parseLayout} from '../../src/workspace-view-contract';
 import {SpecificationReviewDetails} from './specification-review-details';
 import {ChatInteraction} from './chat-interaction';
 import {GitHubGrantReviewCard} from './github-grant-review';
@@ -60,7 +61,7 @@ function WorkspaceProfile(){
 function WorkspaceSession({account}:{account:Profile}){
  const profile={data:account},scope=account.accountId;
  const location=useRouterState({select:s=>s.location}),view=location.pathname.split('/')[2]||'chat',navigate=useNavigate();
- const dashboard=useQuery({queryKey:['dashboard',scope],queryFn:()=>api<Dashboard>('/workspace/dashboard')});
+ const dashboard=useQuery({queryKey:['dashboard',scope],queryFn:async()=>{const value=await api<Dashboard>('/workspace/dashboard');return {...value,layout:parseLayout(value.layout)};}});
  const chat=useQuery({queryKey:['chat',scope],queryFn:()=>api<Chat>('/chat'),refetchInterval:q=>q.state.data?.turns.some(t=>t.status==='pending')?2500:false});
  const {draft,setDraft,pending,setPending,restored,storageFailed}=useChatRecovery(account.accountId);
  const [notice,setNotice]=useState(''),[ack,setAck]=useState(''),[pendingText,setPendingText]=useState(restored?.content??''),[deliveryError,setDeliveryError]=useState(restored?'An interrupted request was recovered from this tab. We’ll check your saved conversation before you retry.':'');

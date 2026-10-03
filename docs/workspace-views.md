@@ -1,17 +1,17 @@
 # Agent-managed workspace views — WH-109 implementation contract
 
-**October 3, 2026 UTC. Planned extension, not delivered behavior.** WH-107's renderer and [WH-108's custom/task acceptance](chat-composition-acceptance.md) are available foundations. [WH-109](roadmap/backlog.md#wh-109--compose-and-maintain-dashboards-and-custom-views-through-the-agent) retains its full original outcome: the agent manages temporary and saved supporting views using trusted components shared with Chat.
+**October 3, 2026 UTC. Atomic layout domain implemented and locally verified; shared rendering and full WH-109 acceptance remain open.** WH-107's renderer and [WH-108's custom/task acceptance](chat-composition-acceptance.md) are available foundations. [WH-109](roadmap/backlog.md#wh-109--compose-and-maintain-dashboards-and-custom-views-through-the-agent) retains its full original outcome: the agent manages temporary and saved supporting views using trusted components shared with Chat.
 
-## Source-grounded starting point
+## Starting point before the atomic layout packet
 
 `workspace-dashboard.ts` already stores one per-owner revisioned layout, seven fixed widget kinds, up to eight named project-scoped tabs and a bounded shortcut catalog. `workspace-pages.tsx` renders those widgets with static account/security/recovery navigation outside layout data. Existing `project.status@1` Chat cards and Dashboard already share `readProjectStatuses`, but their presentation/admission wrappers differ. Traffic, activity, storage and billing readers exist; performance remains explicitly unavailable.
 
-Two gaps must be fixed before adding more layout actions:
+The following gaps existed at source `2844eaf`. The atomic domain packet below resolves them in current source; the deployed platform still uses the preceding contract:
 
-1. `workspaceAction(save)` currently calls `saveLayout` immediately while preparing the model response. Its database effect precedes the final Chat transaction. The next implementation must prepare guarded statements and commit the layout revision, operation receipt and Chat result atomically. A failed final Chat save must not leave an unreceipted layout change.
+1. `workspaceAction(save)` called `saveLayout` immediately while preparing the model response. Its database effect precedes the final Chat transaction. The replacement needed to prepare guarded statements and commit the layout revision, operation receipt and Chat result atomically. A failed final Chat save must not leave an unreceipted layout change.
 2. A full replacement layout with a compare-and-swap revision is insufficient for reliable page correction/undo. Scoped operations must preserve unrelated pages/cards on the server and record the exact previous/current definition. Rendering a saved configuration never grants access to its named project or review.
 
-These are implementation gaps, not claims that existing private-test layouts have corrupted data.
+These were source-ordering gaps, not evidence that private-test layouts had corrupted data.
 
 ## One current contract
 
@@ -44,3 +44,25 @@ Deliver and verify the complete parent in connected packets:
 3. Natural-language create/update/rename/remove/undo, preserving unrelated layouts; current-contract cutover and connected Chat → page → Chat acceptance. Real model and physical-device evidence remain separately labeled.
 
 CMS functional testing, CSAM and Daybreak stay deferred. Reuse existing Cloudflare services; no new provider, paid feature or model route is required by this work.
+
+## Atomic layout domain — source/local acceptance, October 3, 2026 UTC
+
+`src/workspace-view-contract.ts` defines one closed version-1 layout with a Dashboard view and up to eight named pages. Each view has exact project scope, registered widget names and optional approved shortcuts. Existing maintained widget identifiers now have version/binding identifiers; sharing their renderer and per-binding read/admission remains the next packet. The identifiers alone do not claim those adapters are delivered.
+
+`src/workspace-layout.ts` implements read, setDashboard, createPage, updatePage, renamePage, removePage and undo. Mutations preserve unrelated pages, use exact request identities and compare expected revisions. Undo applies only to the latest committed receipt; it creates a new revision and rechecks current definitions, feature eligibility and project ownership. It cannot overwrite an intervening edit or restore access to a lost project. Removing a stale page remains possible without reclaiming that project's authority.
+
+Preparation performs no layout writes. The committing batch rechecks identity, feature access, project ownership, the exact previous layout and the pending Chat turn. Preferences, immutable before/after receipts and the final Chat answer save together. A lost acknowledgment reads the existing result; it does not redispatch the change. A late layout/feature conflict leaves a truthful failed Chat answer and no proposed page. Historical receipts can still be read after feature loss; new mutations cannot use that readback as permission.
+
+The current API is `/api/workspace/views/v1/`: GET `layout` and `history`, POST `mutate` and `receipt`. The previous API/whole-layout operation is removed. Current frontend consumers validate the versioned layout; no old-layout reader exists. Agent reads include five recent receipt summaries to fit the existing bounded lookup; owner history returns the latest twenty. Model input uses an explicit field projection, and the model cannot supply the Chat request ID.
+
+The schema has **175 current tables**, including `workspace_layout_receipts` and an always-empty atomic assertion table. History is account-linked and retained independently of page removal/Chat cleanup; provenance records the original turn without cascading its deletion. The lifecycle catalog maps both tables. This does not finish account export/closure or independent restore suppression.
+
+Verified evidence:
+
+- `tests/workspace-layout.mjs`: 12 cases covering scoped changes/undo, invalid/current-only input, isolation, concurrency, exact replay/lost acknowledgment, preflight and late revocation, no writes during Chat preparation, failed final transaction, closed turns, retained history, eight-page bounds and bounded lookup size.
+- `tests/workspace-dashboard-http.mjs`: seven cases using actual Worker handlers and scripted model responses. Current identity/CSRF/input checks, zero-inference refresh/readback, atomic Chat result, exact replay, rejected model request IDs/old saves, lost final acknowledgment, late revision/feature failure and read-then-undo pass on SQLite and local D1. Each run makes eight scripted main and seven acknowledgment calls, with no external inference.
+- Existing dashboard/capacity, 69-case Chat contract, processing-boundary, welcome/onboarding and agent-inspection checks pass. Current schema initialization/drift checks pass on SQLite and local D1; lifecycle inventory reports 175 tables across 39 current classes.
+- Type/compiler checks, frontend build and roadmap validation/alignment/render checks pass.
+- The built-client `tools/workspace-shortcuts-browser.mjs` fixture passed at 390px against the actual Worker and disposable D1/R2. The current-version page rendered correctly; Project status and Saved versions produced exactly two typed actions, all completed, with zero inference/publication. Page and resulting Chat screenshots were inspected, both with 390px document/viewport width. Two initial automation waits incorrectly assumed `/workspace`; the current route is `/workspace/chat?signup=false`. The committed results were inspected without repeating either action, and fixture finalization/cleanup passed. This is synthetic desktop Chromium phone-width evidence, not a physical-phone or passkey-ceremony acceptance claim. Private evidence: `.secrets/workspace-shortcuts-browser.json`; inspected screenshots `/tmp/whumpo-layout-current-390.png` and `/tmp/whumpo-layout-shortcut-chat-390.png`.
+
+**Not deployed.** This incompatible schema/client requires a coordinated empty test-database cutover. Shared Chat/page components, temporary views, binding-specific denied/unavailable displays, full natural-language lifecycle acceptance and the WH-109 parent remain open. No scanner/CMS functional test, real model call, provider authorization or new paid service was exercised for this packet.
