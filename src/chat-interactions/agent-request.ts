@@ -6,6 +6,7 @@ import {canonicalJSON} from '../project-specification/v2/json';
 type Request={kind:'interaction';operation:'requestContent';projectId:string;contentIds:string[]};
 type Read={kind:'interaction';operation:'read';interactionId:string};
 type Intake={kind:'interaction';operation:'requestProjectBrief'}|{kind:'interaction';operation:'requestProjectSelection'}|{kind:'interaction';operation:'requestWritingStyle'};
+type ResumeTask={kind:'interaction';operation:'resumeTask';taskId:string;projectId:string;submissionId:string};
 type SubmittedAnswers={kind:'interaction';operation:'readSubmittedAnswers';interactionId:string;taskId:string;projectId:string|null;submissionId:string;fieldIds:string[]};
 type RequestInformation={kind:'interaction';operation:'requestInformation';projectId:string;purpose:InformationPurpose;fields:QuestionRequest[]};
 type ReplaceInformation={kind:'interaction';operation:'replaceInformation';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;fields:QuestionRequest[]};
@@ -13,7 +14,7 @@ type Replace={kind:'interaction';operation:'replaceContent';previousInteractionI
 type ReplaceIntake={kind:'interaction';operation:'replaceProjectIntake';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number};
 type PhotoIntake={kind:'interaction';operation:'requestPhotoUpload';projectId:string};
 type ProposeAnswers={kind:'interaction';operation:'proposeAnswers';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;changes:Answers};
-export type InteractionAction=PhotoIntake|Request|Read|Replace|Intake|SubmittedAnswers|ReplaceIntake|ProposeAnswers|RequestInformation|ReplaceInformation;
+export type InteractionAction=ResumeTask|PhotoIntake|Request|Read|Replace|Intake|SubmittedAnswers|ReplaceIntake|ProposeAnswers|RequestInformation|ReplaceInformation;
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 function answerChanges(value:unknown):boolean{
  try{
@@ -29,6 +30,7 @@ export function interactionActionRequest(value:unknown):value is InteractionActi
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const a=value as Record<string,unknown>;if(a.kind!=='interaction')return false;
  if(a.operation==='requestProjectBrief'||a.operation==='requestProjectSelection'||a.operation==='requestWritingStyle')return Object.keys(a).sort().join(',')==='kind,operation';
+ if(a.operation==='resumeTask')return Object.keys(a).sort().join(',')==='kind,operation,projectId,submissionId,taskId'&&uuid(a.taskId)&&uuid(a.projectId)&&uuid(a.submissionId);
  if(a.operation==='requestPhotoUpload')return Object.keys(a).sort().join(',')==='kind,operation,projectId'&&uuid(a.projectId);
  if(a.operation==='readSubmittedAnswers')return Object.keys(a).sort().join(',')==='fieldIds,interactionId,kind,operation,projectId,submissionId,taskId'&&uuid(a.interactionId)&&uuid(a.taskId)&&(a.projectId===null||uuid(a.projectId))&&uuid(a.submissionId)&&Array.isArray(a.fieldIds)&&a.fieldIds.length>0&&a.fieldIds.length<=12&&new Set(a.fieldIds).size===a.fieldIds.length&&a.fieldIds.every(id=>typeof id==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(id));
  if(a.operation==='requestInformation'){

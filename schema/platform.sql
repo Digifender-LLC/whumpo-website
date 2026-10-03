@@ -3893,7 +3893,6 @@ CREATE TABLE chat_interaction_tasks (
  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
  origin_turn_id TEXT NOT NULL UNIQUE REFERENCES chat_turns(id) ON DELETE CASCADE,
  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
- summary TEXT NOT NULL DEFAULT '' CHECK(length(summary)<=1000),
  FOREIGN KEY(conversation_id,user_id) REFERENCES chat_conversations(id,user_id) ON DELETE CASCADE,
  UNIQUE(id,user_id,conversation_id)
 );
@@ -4066,3 +4065,42 @@ WHEN EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions 
  WHERE s.id=NEW.id AND s.user_id=NEW.user_id AND c.state='pending' AND r.state='reserved'
   AND NEW.mode='ai' AND NEW.status='pending' AND NEW.action_json IS NULL AND NEW.ai_context_allowed=0)
 BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+
+-- Bounded same-task memory, committed with its owner Chat result. It never
+-- enters general history or grants publication, execution or spending authority.
+CREATE TABLE chat_task_progress (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ task_id TEXT NOT NULL REFERENCES chat_interaction_tasks(id) ON DELETE CASCADE,
+ task_revision INTEGER NOT NULL CHECK(task_revision>=0),
+ submission_id TEXT NOT NULL REFERENCES chat_interaction_submissions(id) ON DELETE CASCADE,
+ previous_turn_id TEXT UNIQUE REFERENCES chat_task_progress(turn_id) ON DELETE CASCADE,
+ state TEXT NOT NULL CHECK(state IN ('active','finished','canceled')),
+ summary TEXT NOT NULL CHECK(length(summary)<=1000),
+ questions_json TEXT NOT NULL CHECK(json_valid(questions_json) AND json_type(questions_json)='array' AND json_array_length(questions_json)<=3 AND length(questions_json)<=6000)
+);
+CREATE UNIQUE INDEX chat_task_progress_root ON chat_task_progress(submission_id) WHERE previous_turn_id IS NULL;
+CREATE INDEX chat_task_progress_owner ON chat_task_progress(user_id,submission_id);
+CREATE TRIGGER chat_task_progress_admitted BEFORE INSERT ON chat_task_progress
+WHEN NOT EXISTS(
+ SELECT 1 FROM chat_interaction_tasks k JOIN chat_interactions i ON i.task_id=k.id AND i.user_id=k.user_id
+ JOIN chat_interaction_submissions s ON s.interaction_id=i.id AND s.user_id=i.user_id
+ JOIN chat_interaction_continuations c ON c.id=s.id
+ JOIN chat_turns t ON t.id=NEW.turn_id AND t.user_id=NEW.user_id
+ JOIN standard_ai_requests r ON r.id=t.id AND r.user_id=t.user_id
+ WHERE k.id=NEW.task_id AND k.user_id=NEW.user_id AND k.revision=NEW.task_revision AND s.id=NEW.submission_id
+  AND i.state='submitted' AND i.removed_at IS NULL AND i.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  AND json_extract(i.envelope_json,'$.definition.continuationBinding')='agent.task-continue@1'
+  AND NOT EXISTS(SELECT 1 FROM chat_interactions child WHERE child.previous_interaction_id=i.id)
+  AND t.status='pending' AND t.mode='ai' AND t.action_json IS NULL AND t.ai_context_allowed=0 AND r.state IN ('dispatched','uncertain')
+  AND ((NEW.previous_turn_id IS NULL AND NEW.turn_id=s.id AND c.state='pending') OR
+   (c.state='succeeded' AND EXISTS(SELECT 1 FROM chat_task_progress p JOIN chat_turns prior ON prior.id=p.turn_id
+    WHERE p.turn_id=NEW.previous_turn_id AND p.user_id=NEW.user_id AND p.task_id=NEW.task_id AND p.submission_id=NEW.submission_id
+     AND prior.status='completed' AND prior.revision<t.revision)))
+) OR EXISTS(SELECT 1 FROM json_each(NEW.questions_json) q WHERE json_type(q.value)!='object'
+ OR json_type(q.value,'$.id') IS NOT 'text' OR length(json_extract(q.value,'$.id')) NOT BETWEEN 1 AND 40
+ OR json_type(q.value,'$.question') IS NOT 'text' OR length(json_extract(q.value,'$.question')) NOT BETWEEN 1 AND 300)
+ OR (NEW.state!='active' AND json_array_length(NEW.questions_json)!=0)
+BEGIN SELECT RAISE(ABORT,'chat_interaction_changed'); END;
+CREATE TRIGGER chat_task_progress_immutable BEFORE UPDATE ON chat_task_progress
+BEGIN SELECT RAISE(ABORT,'chat_task_progress_immutable'); END;
