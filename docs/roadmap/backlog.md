@@ -3611,7 +3611,7 @@ Customers finish supported daily project work in Chat, with forms, results and e
 ### Verification
 
 - Run pnpm check and selected existing onboarding, natural-chat, customer-site-journey, workspace-read and recovery suites matching each child
-- Use quality-managed connected browser fixtures with real local handlers and synthetic inference; inspect desktop/mobile results
+- Use maintained Playwright connected browser fixtures with real local Worker handlers/current D1 and synthetic inference; inspect desktop/mobile results
 - Document every allowed external handoff and separately blocked provider/media/customer acceptance; do not run deferred CMS checks
 
 ### Dependencies and blockers
@@ -3632,14 +3632,16 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/customer-site-journey.mjs](../../tests/customer-site-journey.mjs)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/chat-routine-journeys.md](../../docs/chat-routine-journeys.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/95. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
+- 2026-10-03 UTC: source baseline cbcdf2a and live upstream WH-107/#90 and WH-109/#94 closure inspected. Current root claims #95 on codex/identity-admission. Source-grounded full journey contract in docs/chat-routine-journeys.md; separate contract #96, intake/selection #97, remaining routine adapters #98 and original-scope acceptance #99. Existing intake forms save information without continuation; first implementation connects selected website tasks to the existing bounded continuation/receipts with fresh account/project fences. Additional-project and other parent branches remain required. Maintained direct Playwright is available; quality-manager runner is not. No parent criterion removed or marked complete.
 
 ## WH-111 — Make Chat the daily workspace with durable continuity and direct recovery
 
