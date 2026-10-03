@@ -55,9 +55,15 @@ The original separate restricted-recovery Orca evidence above remains unchanged;
 
 WH-111 still follows WH-024; this increment does not close the parent or change that dependency. All environments remain testing-only. CSAM implementation, Daybreak and CMS functional testing remain deferred.
 
+## Deployment
+
+The connected-journey fixes in source **`980ae5f`** are deployed to testing platform **`4a147e32-7185-4309-b794-eeb7c4140b43`**. Independent readback at **2026-10-03T17:28:42.997Z** verifies all **40 public assets** byte for byte, unchanged runtime/apps/sites Workers, unchanged platform database/service/secret-binding names, the same **177 tables/806 objects**, and unchanged CMS registration metadata. Anonymous 360/390/1280px landing/bypass checks and signup/sign-in/recovery heading focus pass; health is 200 and anonymous profile/Chat reads are 401.
+
+Authenticated welcome, Chat, exact retry/save and Dashboard behavior has the current local Worker/D1, virtual-WebAuthn, keyboard and actual Orca evidence above, plus matching deployed asset bytes. No remote enrollment, model call, consent, checkout or publication was performed. Private readback: `.secrets/usability-connected-release-verified.json`. Source is pushed to origin; PR #79 stays open and draft. WH-024 remains open and the roadmap count stays **25/122**.
+
 ## Earlier entry/recovery deployment
 
-Source `4b853fb` is deployed to the testing platform as **`a0467ecf-f106-46f8-8e6d-0bd827f1d3be`**. Independent readback at **2026-10-03T16:43:42.678Z** verifies:
+Source `4b853fb` was deployed to the testing platform as **`a0467ecf-f106-46f8-8e6d-0bd827f1d3be`**. Independent readback at **2026-10-03T16:43:42.678Z** verifies:
 
 - All **40 public asset files** match the committed source build byte for byte. The deployment-only `_headers` file is excluded from public asset enumeration; the first verification attempt incorrectly requested it and is retained privately as a verifier failure.
 - Runtime `112fd92c-2a0c-47d4-8fb4-1199a295e511`, apps `900d9770-c4bd-4187-9416-89643f418dcd` and sites `579befb0-3481-4cba-ae12-2d86c36a6618` are unchanged. Platform database/service/secret-binding names, current 177-table/806-object schema and CMS registration metadata exactly match the pre-deployment observation. No database reset or migration.
