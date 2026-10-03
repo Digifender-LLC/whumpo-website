@@ -1,3 +1,4 @@
+import type {TaskConnectionRequest} from './connection-results';
 import {workspaceViewDefinition} from './view-definition';
 import type {WorkspaceView} from '../workspace-view-contract';
 import {purposes,informationDefinition,type InformationPurpose,type QuestionRequest} from './composition';
@@ -19,7 +20,7 @@ type ProposeAnswers={kind:'interaction';operation:'proposeAnswers';previousInter
 type WorkspaceViewRequest={kind:'interaction';operation:'showView';view:WorkspaceView};
 type ReplaceView={kind:'interaction';operation:'replaceView';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;view:WorkspaceView};
 type ConnectionIntake={kind:'interaction';operation:'requestConnection';projectId:string|null;provider:'github'|'cloudflare'};
-export type InteractionAction=ConnectionIntake|ReplaceView|WorkspaceViewRequest|ResumeTask|PhotoIntake|Request|Read|Replace|Intake|SubmittedAnswers|ReplaceIntake|ProposeAnswers|RequestInformation|ReplaceInformation;
+export type InteractionAction=TaskConnectionRequest|ConnectionIntake|ReplaceView|WorkspaceViewRequest|ResumeTask|PhotoIntake|Request|Read|Replace|Intake|SubmittedAnswers|ReplaceIntake|ProposeAnswers|RequestInformation|ReplaceInformation;
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 function answerChanges(value:unknown):boolean{
  try{
@@ -38,6 +39,7 @@ export function interactionActionRequest(value:unknown):value is InteractionActi
  if(a.operation==='showView'){if(Object.keys(a).sort().join(',')!=='kind,operation,view')return false;try{workspaceViewDefinition(a.view);return true;}catch{return false;}}
  if(a.operation==='requestProjectBrief'||a.operation==='requestProjectSelection'||a.operation==='requestWritingStyle')return Object.keys(a).sort().join(',')==='kind,operation';
  if(a.operation==='resumeTask')return Object.keys(a).sort().join(',')==='kind,operation,projectId,submissionId,taskId'&&uuid(a.taskId)&&uuid(a.projectId)&&uuid(a.submissionId);
+ if(a.operation==='connectionStatus')return Object.keys(a).sort().join(',')==='kind,operation,projectId,providers,submissionId,taskId'&&uuid(a.taskId)&&uuid(a.submissionId)&&uuid(a.projectId)&&Array.isArray(a.providers)&&a.providers.length>0&&a.providers.length<=2&&new Set(a.providers).size===a.providers.length&&a.providers.every(p=>p==='github'||p==='cloudflare');
  if(a.operation==='requestConnection')return Object.keys(a).sort().join(',')==='kind,operation,projectId,provider'&&(a.projectId===null||uuid(a.projectId))&&(a.provider==='github'||a.provider==='cloudflare');
  if(a.operation==='requestPhotoUpload')return Object.keys(a).sort().join(',')==='kind,operation,projectId'&&uuid(a.projectId);
  if(a.operation==='readSubmittedAnswers')return Object.keys(a).sort().join(',')==='fieldIds,interactionId,kind,operation,projectId,submissionId,taskId'&&uuid(a.interactionId)&&uuid(a.taskId)&&(a.projectId===null||uuid(a.projectId))&&uuid(a.submissionId)&&Array.isArray(a.fieldIds)&&a.fieldIds.length>0&&a.fieldIds.length<=12&&new Set(a.fieldIds).size===a.fieldIds.length&&a.fieldIds.every(id=>typeof id==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(id));

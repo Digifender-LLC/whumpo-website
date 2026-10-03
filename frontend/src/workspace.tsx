@@ -101,7 +101,7 @@ function WorkspaceSession({account}:{account:Profile}){
   if(!chat.data||mutation.isPending){if(action)throw Error('Wait for the current message to finish.');return;}
   if(pending.current){setNotice('Resolve the previous message with Retry before sending another.');await open('chat');if(action)throw Error('Resolve the previous message with Retry first.');return;}
   const request={id:crypto.randomUUID(),revision:chat.data.state.revision,content,...(action?{action}:{})};setPending(request);setPendingText(content);
-  setDeliveryError('');if(!stayOnPage){await open('chat');chatScroll.latest();if(!action)composer.current?.focus();}
+  setDeliveryError('');if(!stayOnPage){if(view!=='chat')await open('chat');chatScroll.latest();if(!action)composer.current?.focus();}
   const result=await mutation.mutateAsync(request).catch(()=>undefined);
   // Uncertain delivery uses the same shared retry control and request ID as Chat.
   if(!result&&stayOnPage&&pending.current)await open('chat');

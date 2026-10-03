@@ -144,7 +144,7 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
  if(data.action===null)return {reply:data.reply,statements:[] as D1PreparedStatement[]};
  if(!data.action||typeof data.action!=='object'||Array.isArray(data.action))throw new ProposalError();
  const action=data.action as Record<string,unknown>;
- if(action.kind==='interaction')return interactionAgentAction(db,userId,turnId,action);
+ if(action.kind==='interaction')return interactionAgentAction(db,userId,turnId,action,dnsOptions);
  if(action.kind==='githubAccess'){try{return await githubGrantAction(db,userId,turnId,action,dnsOptions);}catch(error){if(error instanceof ConnectionError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}
  if(action.kind==='serviceClients'){try{return await (['reviewActivation','activationReview','activations'].includes(String(action.operation))?serviceClientActivationAction:serviceClientAction)(db,userId,turnId,action);}catch(error){if(error instanceof BackendError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}
  if(action.kind==='specification'){try{return await specificationAction(db,userId,turnId,action);}catch(error){if(error instanceof BackendError)return {reply:error.message,statements:[] as D1PreparedStatement[]};throw error;}}
