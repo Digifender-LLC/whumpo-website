@@ -6,7 +6,7 @@ Error.stackTraceLimit=0;
 const modules=await currentFixtureModules(['src/index.ts','src/site-agent.ts','src/ai-chat.ts','src/agent-inspection.ts','src/chat-interactions/store.ts','src/chat-interactions/agent.ts','src/chat-interactions/protocol.ts','src/project-specification/store.ts','src/chat-interactions/task-context.ts','src/chat-interactions/model-continuation.ts']);
 const worker=(await modules.module('src/index.ts')).default,agent=await modules.module('src/site-agent.ts'),ai=await modules.module('src/ai-chat.ts'),inspection=await modules.module('src/agent-inspection.ts');
 const store=await modules.module('src/chat-interactions/store.ts'),forms=await modules.module('src/chat-interactions/agent.ts'),protocol=await modules.module('src/chat-interactions/protocol.ts'),site=await modules.module('src/project-specification/store.ts');
-const fixture=await databaseFixture({allowedArguments:['--intake-only']}),{db}=fixture,id=()=>crypto.randomUUID();
+const fixture=await databaseFixture({allowedArguments:['--intake-only','--reviews-only']}),{db}=fixture,id=()=>crypto.randomUUID();
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const config={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-only',protocol:'responses'};
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},AI_BASE_URL:config.baseURL,AI_MODEL:config.model,AI_PROTOCOL:config.protocol,AI_API_KEY:config.apiKey};
@@ -21,7 +21,7 @@ globalThis.fetch=async(url,init)=>{
 };
 const http=(o,path,data,database=db)=>worker.fetch(new Request('https://whumpo.com'+path,{method:data?'POST':'GET',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+o.authority.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),{...env,DB:database},{waitUntil(p){background.push(p);}});
 async function json(o,path,data,database){const r=await http(o,path,data,database);assert.equal(r.status,200,await r.clone().text());return r.json();}
-async function test(name,fn){if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
+async function test(name,fn){if(process.argv.includes('--reviews-only')&&!name.startsWith('task-review '))return;if(process.argv.includes('--intake-only')&&!name.startsWith('new-project '))return;try{await fn();assert.equal(queue.length,0);cases++;}catch(e){console.error(name,String(e));throw e;}}
 async function owner(withWebsite=true){
  const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=id();
  await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -176,7 +176,7 @@ try{
   const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,'Adjust the service area','Review the correction.',datetime('now'),'ai','completed' FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
   const next=await store.replaceInformation(o.scope,o.user,{originTurnId:turn,previousInteractionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:form.answerRevision,fields});
   const request={version:1,requestId:id(),interactionId:next.envelope.id,definitionDigest:next.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers:{area:'Corrected public area'}};await store.mutateInteraction(o.scope,o.user,request);
-  const prepared=await taskContext.prepareInformationTask(o.scope,o.user,request.requestId);assert.equal(prepared.data.taskId,form.envelope.scope.taskId);assert.equal(prepared.data.pendingReviews.length,1);assert.equal(prepared.data.pendingReviews[0].reviewId,form.submission.id);assert.deepEqual(prepared.data.skippedFieldIds,['mobile']);assert.deepEqual(prepared.data.openQuestions,[]);assert.equal(prepared.data.submittedAnswers.length,1);assert.equal(prepared.data.submittedAnswers[0].answer,'Corrected public area');
+  const prepared=await taskContext.prepareInformationTask(o.scope,o.user,request.requestId);assert.equal(prepared.data.taskId,form.envelope.scope.taskId);assert.equal(prepared.data.websiteResults.items.length,1);assert.equal(prepared.data.websiteResults.items[0].reviewId,form.submission.id);assert.deepEqual(prepared.data.skippedFieldIds,['mobile']);assert.deepEqual(prepared.data.openQuestions,[]);assert.equal(prepared.data.submittedAnswers.length,1);assert.equal(prepared.data.submittedAnswers[0].answer,'Corrected public area');
  });
  const taskReply=(reply,action=null,taskState={state:'active',summary:'',openQuestions:[]})=>Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply,action,taskState})}]}],usage:{input_tokens:100,output_tokens:200}});
  const resume=f=>({kind:'interaction',operation:'resumeTask',taskId:f.envelope.scope.taskId,projectId:f.projectId??f.envelope.scope.projectId,submissionId:f.submission.id});
@@ -191,7 +191,7 @@ try{
    return taskReply('Spring it is. Anything else?',null,{state:'active',summary:'SPRING_DECISION_CANARY: Spring only; supplied area stays unchanged.',openQuestions:[]});
   }]);assert.equal(answer.calls,2);assert.equal(answer.turn.status,'completed');assert.equal((await progress(form)).turn_id,answer.input.id);assert.equal((await row('SELECT ai_context_allowed FROM chat_turns WHERE id=?',answer.input.id)).ai_context_allowed,0);
   const again=await chat(o,'Finish the same task with that seasonal choice.',[resume(form),body=>{const text=JSON.stringify(body);assert.match(text,/SPRING_DECISION_CANARY/);assert.doesNotMatch(text,/TASK_QUESTION_CANARY/);return taskReply('Your private review is ready.',change(o),{state:'finished',summary:'Spring choice and supplied area are planned; the website change still needs review.',openQuestions:[]});}]);assert.equal(again.calls,2);assert.equal(again.turn.status,'completed');assert.equal((await progress(form)).state,'finished');assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);
-  const prepared=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true);assert(prepared.data.pendingReviews.some(r=>r.reviewId===again.input.id));assert.deepEqual(prepared.data.openQuestions,[]);
+  const prepared=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true);assert(prepared.data.websiteResults.items.some(r=>r.reviewId===again.input.id));assert.deepEqual(prepared.data.openQuestions,[]);
   const before=mainCalls;await json(o,'/api/chat',again.input);assert.equal(mainCalls,before);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,form.submission.answers);
  });
  await test('unrelated conversation does not automatically copy task memory or answers',async()=>{
@@ -248,8 +248,8 @@ try{
   assert.equal(result.calls,2);assert.equal(result.data.continuation.state,'succeeded');assert.equal((await row('SELECT project_id FROM project_spec_proposals WHERE id=?',form.submission.id)).project_id,o.project);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',o.project)).n,0);
   const before=mainCalls;await json(o,'/api/chat/interactions/v1/continue',result.input);await json(o,'/api/chat/interactions/v1/reconcile',{version:1,submissionId:form.submission.id});assert.deepEqual(await json(o,'/api/chat/interactions/v1/mutate',mutation),receipt);assert.equal(mainCalls,before);
   const refs=await taskContext.taskReferences(o.scope,o.user);assert.equal(refs[0].projectId,o.project);assert.equal(refs[0].purpose,'project.selection@1');assert.equal(refs[0].hasPendingReview,true);
-  const prepared=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true);assert.equal(prepared.data.pendingReviews[0].reviewId,form.submission.id);
-  const continued=await chat(o,'Is that prepared seasonal-care change still waiting for approval? Do not change anything.',[body=>{assert.match(JSON.stringify(body),/hasPendingReview/);assert.doesNotMatch(JSON.stringify(body),/proposalDigest/);return resume({...form,projectId:o.project});},body=>{assert(JSON.stringify(body).includes(form.submission.id));assert.match(JSON.stringify(body),/pendingReviews/);assert.doesNotMatch(JSON.stringify(body),/UNSELECTED_PROJECT_CANARY|UNSELECTED_PURPOSE_CANARY/);return taskReply('Your existing review is ready.',null,{state:'finished',summary:'Seasonal work remains in the exact pending review.',openQuestions:[]});}]);assert.equal(continued.turn.status,'completed');
+  const prepared=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true);assert.equal(prepared.data.websiteResults.items[0].reviewId,form.submission.id);
+  const continued=await chat(o,'Is that prepared seasonal-care change still waiting for approval? Do not change anything.',[body=>{assert.match(JSON.stringify(body),/hasPendingReview/);assert.doesNotMatch(JSON.stringify(body),/proposalDigest/);return resume({...form,projectId:o.project});},body=>{assert(JSON.stringify(body).includes(form.submission.id));assert.match(JSON.stringify(body),/websiteResults/);assert.doesNotMatch(JSON.stringify(body),/UNSELECTED_PROJECT_CANARY|UNSELECTED_PURPOSE_CANARY/);return taskReply('Your existing review is ready.',null,{state:'finished',summary:'Seasonal work remains in the exact pending review.',openQuestions:[]});}]);assert.equal(continued.turn.status,'completed');
  });
  await test('pending-review hints exclude other tasks owners expired and applied reviews',async()=>{
   const o=await owner(),foreign=await owner(),{form}=await savedSelection(o),foreignForm=(await savedSelection(foreign)).form;
@@ -262,10 +262,10 @@ try{
   // Advance only SQL reads' ISO clock past the ten-minute review expiry. The
   // current schema/rows stay untouched; the seven-day task remains available.
   const laterDb={prepare:q=>db.prepare(q.replaceAll("strftime('%Y-%m-%dT%H:%M:%fZ','now')","strftime('%Y-%m-%dT%H:%M:%fZ','now','+11 minutes')")),batch:s=>db.batch(s)},later=await o.authority.scope(laterDb);
-  const expiredRefs=await taskContext.taskReferences(later,o.user);assert.equal(expiredRefs.length,2);assert(expiredRefs.every(r=>!r.hasPendingReview));assert.deepEqual((await taskContext.prepareInformationTask(later,o.user,form.submission.id,true)).data.pendingReviews,[]);
+  const expiredRefs=await taskContext.taskReferences(later,o.user);assert.equal(expiredRefs.length,2);assert(expiredRefs.every(r=>!r.hasPendingReview));assert.deepEqual((await taskContext.prepareInformationTask(later,o.user,form.submission.id,true)).data.websiteResults.items.map(r=>r.state),['expired']);
   const q=await site.readSpecificationProposal(o.scope,o.user,form.submission.id);
   await json(o,'/api/chat/actions',{id:id(),revision:await revision(o),action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}});
-  assert((await taskContext.taskReferences(o.scope,o.user)).every(r=>!r.hasPendingReview));assert.deepEqual((await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true)).data.pendingReviews,[]);assert.equal((await taskContext.taskReferences(foreign.scope,foreign.user))[0].hasPendingReview,true);
+  assert((await taskContext.taskReferences(o.scope,o.user)).every(r=>!r.hasPendingReview));assert.deepEqual((await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true)).data.websiteResults.items.map(r=>r.state),['saved']);assert.equal((await taskContext.taskReferences(foreign.scope,foreign.user))[0].hasPendingReview,true);
  });
  for(const lost of ['account','project','transfer','delete'])await test('selected project refuses '+lost+' authority loss before model dispatch',async()=>{
   const o=await owner(),other=await owner(),{form}=await savedSelection(o),before=mainCalls;
@@ -287,7 +287,7 @@ try{
   const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,'Choose my other project instead','Review the corrected selection.',datetime('now'),'ai','completed' FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
   const corrected=await store.replaceProjectIntake(o.scope,o.user,{originTurnId:turn,previousInteractionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:form.answerRevision});
   const submission=id();await store.mutateInteraction(o.scope,o.user,{version:1,requestId:submission,interactionId:corrected.envelope.id,definitionDigest:corrected.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers:{project:second}});
-  const current=await taskContext.prepareInformationTask(o.scope,o.user,submission);assert.equal(current.form.projectId,second);assert.equal(current.data.taskId,form.envelope.scope.taskId);assert.deepEqual(current.data.pendingReviews,[]);assert.equal((await row('SELECT project_id FROM project_spec_proposals WHERE id=?',form.submission.id)).project_id,o.project);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,{project:o.project});assert.deepEqual(await taskContext.taskReferences(o.scope,o.user),[]);
+  const current=await taskContext.prepareInformationTask(o.scope,o.user,submission);assert.equal(current.form.projectId,second);assert.equal(current.data.taskId,form.envelope.scope.taskId);assert.deepEqual(current.data.websiteResults.items,[]);assert.equal((await row('SELECT project_id FROM project_spec_proposals WHERE id=?',form.submission.id)).project_id,o.project);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,{project:o.project});assert.deepEqual(await taskContext.taskReferences(o.scope,o.user),[]);
  });
  await test('ordinary submitted-selection inspection retains ownership guards through the model result',async()=>{
   const o=await owner(),other=await owner(),{form}=await savedSelection(o),e=form.envelope;
@@ -368,6 +368,56 @@ try{
   assert.deepEqual(Object.keys(warning).sort(),['elapsedMs','event','operation','reason','task']);assert.doesNotMatch(warnings.at(-1),/PRIVATE_MODEL_DIAGNOSTIC_CANARY|Neighborhood Garden|seasonal planting|synthetic-only|UNTRUSTED_MODEL_PROSE/);
   const calls=mainCalls;await json(o,'/api/chat/interactions/v1/continue',r.input);assert.equal(mainCalls,calls);assert.equal(warnings.length,before+1);
   await run('DELETE FROM users WHERE id=?',o.user);
+ });
+ // Routine review/result cases own new isolated accounts; keep the fixture cap bounded.
+ await run('DELETE FROM users');
+ const confirm=async(o,reviewId)=>{const q=await site.readSpecificationProposal(o.scope,o.user,reviewId);return json(o,'/api/chat/actions',{id:id(),revision:await revision(o),action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}});};
+ const confirmAdmitted=async(o,reviewId)=>{
+  // Simulate completion of an already admitted user confirmation during inference.
+  // A new HTTP confirmation is normally serialized behind the pending Chat turn.
+  const q=await site.readSpecificationProposal(o.scope,o.user,reviewId),turn=id(),next=await revision(o)+1;
+  const action={type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision};
+  const prepared=await site.applySpecificationCommand(o.scope,o.user,turn,`/confirm-specification ${q.id} ${q.proposal_digest} ${q.expected_revision}`);
+  await o.scope.batch([o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status,action_json) VALUES(?,?,?,'Confirm exact private review',?,datetime('now'),'guided','completed',?)").bind(turn,o.user,next,prepared.reply,JSON.stringify(action)),...prepared.statements,o.scope.prepare('UPDATE workspace_state SET revision=? WHERE user_id=?').bind(next,o.user)]);
+ };
+ const reopen=f=>({kind:'specification',operation:'review',reviewId:f.submission.id});
+ await test('task-review reopens the exact task review and retains a private-save outcome after candidate cleanup',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);await follow(o,form,[read(o),change(o)]);
+  const again=await chat(o,'Show me that task’s prepared change again so I can review it.',[resume({...form,projectId:o.project}),body=>{const text=JSON.stringify(body);assert.match(text,/websiteResults/);assert(text.includes(form.submission.id));return taskReply('Open that exact review.',reopen(form));}]);
+  assert.equal(again.turn.status,'completed');assert.equal(again.turn.specification_review.id,form.submission.id);assert.equal((await progress(form)).turn_id,again.input.id);assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE user_id=?',o.user)).n,1);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);
+  const calls=mainCalls;await json(o,'/api/chat',again.input);assert.equal(mainCalls,calls);
+  await confirm(o,form.submission.id);const receipt=await row('SELECT id,version_id,revision FROM project_spec_applies WHERE proposal_id=?',form.submission.id);
+  // Disposal is normal proposal cleanup; immutable saved versions/receipts survive.
+  await run('DELETE FROM project_spec_proposals WHERE id=?',form.submission.id);
+  const data=(await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true)).data;
+  assert.deepEqual(data.websiteResults.items,[{reviewId:form.submission.id,state:'saved',receiptId:receipt.id,versionId:receipt.version_id,revision:2,savedAt:(await row('SELECT created_at FROM project_spec_applies WHERE id=?',receipt.id)).created_at}]);assert.equal((await taskContext.taskReferences(o.scope,o.user))[0].hasPendingReview,false);
+  const status=await chat(o,'Did I save the change in that same task?', [resume({...form,projectId:o.project}),body=>{assert(JSON.stringify(body).includes(receipt.id));return taskReply('Your exact private save completed at revision 2. Publication is separate.');}]);assert.equal(status.turn.status,'completed');assert.equal(status.turn.specification_review,undefined);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=? AND version_id IS NOT NULL',o.project)).n,0);
+ });
+ for(const wrong of ['same-project-other-task','other-project','foreign-owner'])await test('task-review refuses '+wrong+' even when the requested review exists',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);await follow(o,form,[read(o),change(o)]);
+  const other=wrong==='same-project-other-task'?o:await owner();if(wrong==='other-project')await run('UPDATE projects SET owner_user_id=? WHERE id=?',o.user,other.project);
+  const otherScope=wrong==='other-project'?{...o,project:other.project}:other;
+  if(wrong==='other-project')await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing','prepare','private-test-acceptance','synthetic other target',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,other.project);
+  const wrongForm=(await savedSelection(otherScope)).form;await follow(otherScope,wrongForm,[read(otherScope),change(otherScope)]);
+  const r=await chat(o,'Reopen the first task’s review.',[resume({...form,projectId:o.project}),taskReply('UNTRUSTED_WRONG_REVIEW',reopen(wrongForm))]);assert.equal(r.turn.status,'failed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_WRONG_REVIEW/);assert.equal(r.turn.specification_review,undefined);assert.equal(await row('SELECT * FROM project_spec_chat_links WHERE turn_id=?',r.input.id),null);assert.equal((await progress(form)).turn_id,form.submission.id);
+ });
+ for(const changeDuring of ['save','delete'])await test('task-review late '+changeDuring+' returns an honest unavailable review without a new effect',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);await follow(o,form,[read(o),change(o)]);
+  const r=await chat(o,'Show the prepared change again.',[resume({...form,projectId:o.project}),async()=>{if(changeDuring==='save')await confirmAdmitted(o,form.submission.id);else await run('DELETE FROM project_spec_proposals WHERE id=?',form.submission.id);return taskReply('UNTRUSTED_READY_REVIEW',reopen(form));}]);assert.equal(r.turn.status,'completed');assert.doesNotMatch(r.turn.assistant_text,/UNTRUSTED_READY_REVIEW/);assert.match(r.turn.assistant_text,/changed or expired|not found/);assert.equal(r.turn.specification_review,undefined);assert.equal(await row('SELECT * FROM project_spec_chat_links WHERE turn_id=?',r.input.id),null);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,changeDuring==='save'?2:1);
+ });
+ await test('task-review cannot turn a known pending review into model approval',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);await follow(o,form,[read(o),change(o)]);const q=await site.readSpecificationProposal(o.scope,o.user,form.submission.id);
+  const r=await chat(o,'Show me that change.',[resume({...form,projectId:o.project}),taskReply('UNTRUSTED_APPROVAL',{kind:'specification',operation:'apply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision})]);assert.equal(r.turn.status,'failed');assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);assert.equal(await row('SELECT id FROM project_spec_applies WHERE proposal_id=?',q.id),null);
+ });
+ await test('task-review a different saved change invalidates the old pending proposal',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);await follow(o,form,[read(o),change(o)]);
+  const other=(await savedSelection(o)).form;await follow(o,other,[read(o),change(o)]);await confirm(o,other.submission.id);
+  const task=await taskContext.prepareInformationTask(o.scope,o.user,form.submission.id,true);assert.deepEqual(task.data.websiteResults.items,[{reviewId:form.submission.id,state:'changed'}]);assert.equal(taskContext.informationTaskProposalFailure(JSON.stringify({reply:'changed',action:reopen(form)}),task),'task_target');assert(!JSON.stringify(task.data.websiteResults).includes(other.submission.id));
+ });
+ await test('task-review expired candidates are explicit and cannot be reopened',async()=>{
+  const o=await owner(),{form}=await savedSelection(o);await follow(o,form,[read(o),change(o)]);
+  const laterDb={prepare:q=>db.prepare(q.replaceAll("strftime('%Y-%m-%dT%H:%M:%fZ','now')","strftime('%Y-%m-%dT%H:%M:%fZ','now','+11 minutes')")),batch:s=>db.batch(s)},later=await o.authority.scope(laterDb);
+  const task=await taskContext.prepareInformationTask(later,o.user,form.submission.id,true);assert.deepEqual(task.data.websiteResults.items,[{reviewId:form.submission.id,state:'expired'}]);assert.equal(taskContext.informationTaskProposalFailure(JSON.stringify({reply:'expired',action:reopen(form)}),task),'task_target');
  });
  console.log(`Chat model continuation: ${cases} actual-handler scenarios passed; ${mainCalls} scripted main calls, ${ackCalls} ack calls. No external model, publication or payment.`);
 }finally{globalThis.fetch=originalFetch;await Promise.allSettled(background);console.warn=originalWarn;await fixture.close();}

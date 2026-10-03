@@ -8,6 +8,7 @@ import {createRequire} from 'node:module';
 import {build as viteBuild} from 'vite';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {authenticator} from './helpers/webauthn-authenticator.mjs';
 import {inspectChatViewport,captureSelectedChatProject} from './helpers/chat-viewport.mjs';
 import {hearOrca} from './helpers/orca-output.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
@@ -20,7 +21,7 @@ try{
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
  const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts']);
  const worker=(await modules.module('src/index.ts')).default,store=await modules.module('src/chat-interactions/store.ts'),site=await modules.module('src/project-specification/store.ts');
- fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+ fixture=await databaseFixture({r2:true,allowedArguments:['--selection-only','--intake-only','--reviews-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
  async function owner(){
   const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=crypto.randomUUID();
   await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -62,9 +63,12 @@ try{
    if(receiptsUnavailable&&url.pathname.endsWith('/interactions/v1/receipt')){res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'Synthetic lost read'}));return;}
    // Test-mode admission requires its canonical origin. The loopback fixture
    // proxies only this synthetic browser's requests; runtime origin guards stay intact.
-   const target=env.ENVIRONMENT==='test'?new URL(url.pathname+url.search,'https://whumpo.com'):url;
-   const requestHeaders=env.ENVIRONMENT==='test'?{...req.headers,host:'whumpo.com',...(req.headers.origin?{origin:'https://whumpo.com'}:{})}:req.headers;
-   const response=await worker.fetch(new Request(target,{method:req.method,headers:requestHeaders,...(['GET','HEAD'].includes(req.method)?{}:{body})}),env,ctx);
+   // Browser passkeys are genuinely bound to this loopback origin. Only the
+   // model-enabled fixture requests need the canonical test-origin proxy.
+   const identity=url.pathname.startsWith('/api/auth/identity/v1/'),canonical=env.ENVIRONMENT==='test'&&!identity;
+   const target=canonical?new URL(url.pathname+url.search,'https://whumpo.com'):url;
+   const requestHeaders=canonical?{...req.headers,host:'whumpo.com',...(req.headers.origin?{origin:'https://whumpo.com'}:{})}:req.headers;
+   const response=await worker.fetch(new Request(target,{method:req.method,headers:requestHeaders,...(['GET','HEAD'].includes(req.method)?{}:{body})}),identity?{...env,ENVIRONMENT:'local'}:env,ctx);
    if(response.status===500)errors.push('Unexpected HTTP 500: '+url.pathname);
    if(loseContinuation&&url.pathname.endsWith('/interactions/v1/continue')&&response.status===200){loseContinuation=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
    if(losePhotoUpload&&req.method==='PUT'&&url.pathname.includes('/files/')&&response.status===200){losePhotoUpload=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
@@ -99,6 +103,33 @@ try{
  modelSteps.push({kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id},body=>{assert.match(JSON.stringify(body),/seasonal planting/);assert.match(JSON.stringify(body),new RegExp(selectedForm.submission.id));return taskReply('Your seasonal planting review is still ready. Nothing has been saved or published.',{state:'finished',summary:'Existing seasonal planting review awaits owner approval.',openQuestions:[]});});
  await page.getByRole('textbox',{name:'Message Whumpo'}).fill('Continue that selected-project task. Is the review still ready?');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+5);await page.reload();await page.getByText('Your seasonal planting review is still ready. Nothing has been saved or published.',{exact:true}).waitFor();assert.equal(modelCalls,selectionCalls+5);
  for(const width of [360,390]){await page.setViewportSize({width,height:844});await captureSelectedChatProject(page,{interactionId:selectionRow.id,projectName:'Garden',path:'/tmp/whumpo-selected-resume-'+width+'.png'});assert.equal(modelCalls,selectionCalls+5);}
+ if(process.argv.includes('--reviews-only')){
+  const key=authenticator(origin),cdp=await context.newCDPSession(page);
+  await run("INSERT INTO identity_credentials VALUES(?,?,?,0,'Browser test passkey','active',NULL,unixepoch(),NULL)",key.id,c.user,key.publicKey);
+  await cdp.send('WebAuthn.enable');
+  const {authenticatorId}=await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
+  await cdp.send('WebAuthn.addCredential',{authenticatorId,credential:key.virtualCredential('localhost',c.user)});
+  const send=async text=>{await page.getByRole('textbox',{name:'Message Whumpo'}).fill(text);await page.getByRole('button',{name:'Send message',exact:true}).click();};
+  const resume={kind:'interaction',operation:'resumeTask',taskId:selectedForm.envelope.scope.taskId,projectId:c.project,submissionId:selectedForm.submission.id};
+  modelSteps.push(resume,{kind:'specification',operation:'review',reviewId:selectedForm.submission.id});
+  await send('Show that same task’s prepared change again so I can review and save it.');
+  const save=page.getByRole('button',{name:'Save reviewed private version',exact:true});
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].filter(b=>b.textContent?.trim()==='Save reviewed private version').length===2);
+  const lastTurn=await row('SELECT id FROM chat_turns WHERE user_id=? ORDER BY revision DESC LIMIT 1',c.user);
+  assert.equal((await row('SELECT proposal_id FROM project_spec_chat_links WHERE turn_id=?',lastTurn.id)).proposal_id,selectedForm.submission.id);assert.equal(modelCalls,selectionCalls+7);assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE user_id=?',c.user)).n,1);
+  await save.last().click();await page.getByText('Saved private website revision 2.',{exact:false}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+7);
+  assert.equal((await row("SELECT count(*) n FROM identity_ceremony_receipts WHERE account_id=? AND kind='reauth'",c.user)).n,1);
+  const token=(await context.cookies()).find(cookie=>cookie.name==='__Host-whumpo_session').value;
+  c.scope=await modules.identity.admitWorkspace(db,await modules.identity.resolveIdentity(db,{version:1,client:'web',kind:'session',token}));
+  assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,2);
+  await run('DELETE FROM project_spec_proposals WHERE id=?',selectedForm.submission.id);
+  modelSteps.push(resume,body=>{assert.match(JSON.stringify(body),/websiteResults/);assert.match(JSON.stringify(body),/savedAt/);return taskReply('Your task’s private save completed at revision 2. It has not been published.',{state:'finished',summary:'The exact private save receipt confirms revision 2.',openQuestions:[]});});
+  await send('Did I save that task’s change?');await page.getByText('Your task’s private save completed at revision 2. It has not been published.',{exact:true}).waitFor({timeout:60000});assert.equal(modelCalls,selectionCalls+9);
+  await page.reload();await page.getByText('Your task’s private save completed at revision 2. It has not been published.',{exact:true}).waitFor();assert.equal(modelCalls,selectionCalls+9);assert.equal(await page.getByRole('button',{name:'Save reviewed private version',exact:true}).count(),0);
+  assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=? AND version_id IS NOT NULL',c.project)).n,0);
+  for(const width of [360,390]){await page.setViewportSize({width,height:844});await page.getByText('Your task’s private save completed at revision 2. It has not been published.',{exact:true}).evaluate(e=>e.scrollIntoView({block:'center'}));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/whumpo-task-save-result-'+width+'.png'});}
+ }
+
  await page.setViewportSize({width:390,height:844});env.ENVIRONMENT='local';
  }
  async function newProjectJourney(){
@@ -149,9 +180,9 @@ try{
  if(process.argv.includes('--intake-only')){
   await newProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='New-project browser passed: actual Worker/current local D1/built UI; natural intake, clarification before creation, same-task resumption, correction with separate private review, lost creation/review replies and reload without redispatch or duplicate projects. Ten scripted main calls; 360/390/1280px captures. No external inference, publication or physical-device acceptance.';
- }else if(process.argv.includes('--selection-only')){
+ }else if(process.argv.includes('--selection-only')||process.argv.includes('--reviews-only')){
   await selectedProjectJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
-  resultSummary=('Selected-project browser passed: actual Worker/current local D1/built UI; natural request, explicit picker, private review, lost-result recovery, reload without redispatch and task resumption. Five scripted main calls; settled 360/390/1280px captures. No external inference, publication or physical-device acceptance.');
+  resultSummary=(process.argv.includes('--reviews-only')?'Task-review browser passed: actual Worker/current D1/built UI; exact same-task review reopening, trusted user private save, receipt after proposal disposal, status/resumption and reload without inference. Nine scripted calls; phone captures; no publication or external model.':'Selected-project browser passed: actual Worker/current local D1/built UI; natural request, explicit picker, private review, lost-result recovery, reload without redispatch and task resumption. Five scripted main calls; settled 360/390/1280px captures. No external inference, publication or physical-device acceptance.');
  }else{
  phase='current form and keyboard validation';await page.goto(origin+'/_fixture/start');await field().waitFor();assert.equal(await field().inputValue(),'A greener neighborhood');
  await hearOrca('required field name and provenance',()=>field().focus(),[/Headline/i,/required/i,/Starting value: saved website text/i],true);
@@ -386,7 +417,7 @@ try{
  assert.equal(network,0);assert.deepEqual(errors,[]);
  resultSummary=(`Chat form browser passed (${process.argv.includes('--d1')?'local D1':'SQLite'}): real current HTTP/built workspace, 360/390px layouts, keyboard error focus, collapse/navigation/reload, draft and submission response loss, concurrent edit refusal, linked correction, visibly suggested prose answers with local edit/reload/explicit draft save and no automatic effect, private compiler preview/exact HTTP save, current history and paged resume beyond 100 turns, private query eviction, dialog heading/Tab containment/close-return, simulated phone keyboard resize and scroll, magnification/large text/reduced motion, inline cancellation/result focus and no late-reply focus stealing, dialog dismissal/local recovery, late discard, native project intake/selection with linked corrections, blank text and cleared selections retained across lost responses/reloads/revisions, immutable earlier submissions, response-loss recovery and no automatic continuation, maintained writing-style radio choices with grouped names, required/error focus, keyboard selection, clearing/correction, mobile touch rows and lost-response recovery, expandable scoped status cards and exact website comparisons with keyboard open, refresh, outage/denial clearing, 360/390px layouts, private cache eviction and no approval on rendering, composed project service form with typed conditional error focus, hidden-draft reload and hidden-answer exclusion through actual HTTP submission, shared Chat photo uploader with actual local R2, pre-dispatch storage-failure refusal, accepted-response loss/reload/readback without resend, exact same-file retry, wrong-file refusal, dismissal retention, metadata-only recovery, held-image non-display and account clearing, account switch and sign-out fencing. Twenty-two scripted model calls including new-project intake, clarification, stable project creation, corrections and lost-creation recovery, plus selected-project issuance, save-and-continue, lost-result readback, same-task resumption and 360/390/1280px rendering; approved-photo selection, conditional resource reads, selection caps, saved-draft reload, revoked-choice refusal and same-task metadata-only continuation; custom task continuation and two natural-language resumptions, question reload, bounded saved memory and no reload redispatch; no external inference/provider calls or publication; synthetic identity, no physical-device/screen-reader ceremony acceptance.`);
  }
-}catch(error){console.error('Phase:',phase);if(page)await page.screenshot({path:'/tmp/whumpo-chat-form-failure.png',fullPage:true}).catch(()=>{});throw error;}
+}catch(error){console.error('Phase:',phase);console.error(JSON.stringify({errors,requests:requests.slice(-12)}));if(page)await page.screenshot({path:'/tmp/whumpo-chat-form-failure.png',fullPage:true}).catch(()=>{});throw error;}
 finally{releaseHeld?.();await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await Promise.allSettled([...activeRequests]);await Promise.allSettled(background);globalThis.fetch=originalFetch;await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}
 
 assert.deepEqual(errors,[]);console.log(resultSummary);
