@@ -4,6 +4,7 @@ import {InteractionError,validateAnswers} from './protocol';
 import {isInformationDefinition} from './composition';
 import {readInteraction,InteractionStoreError,interactionGuard} from './store';
 import {latestTaskProgress,taskProgressGuard} from './task-progress';
+import {readSelectedPhotos,selectedPhotoGuards,photoContext} from './selected-photos';
 import type {AgentContext} from '../site-agent';
 
 export const taskContinuationContent='Continue this website task using my submitted answers.';
@@ -33,19 +34,20 @@ export async function prepareInformationTask(db:D1Database,user:string,submissio
    AND NOT EXISTS(SELECT 1 FROM project_spec_applies a WHERE a.proposal_id=q.id)
   ORDER BY q.expires_at DESC,q.id DESC LIMIT 3`).bind(e.scope.taskId,user).all<{reviewId:string;expectedRevision:number;proposalDigest:string;expiresAt:string}>();
  const answers=validateAnswers(e.definition,form.submission.answers);
+ const photos=await readSelectedPhotos(db,user,form.projectId,e.definition,answers);
  // A submission explicitly supplies these questions for this task. No private
  // draft/default, other project, profile, provider connection or history is copied.
  const data={taskId:e.scope.taskId,taskRevision:task.revision,projectId:form.projectId,interactionId:e.id,submissionId,purpose:e.definition.purpose,request:task.user_text.slice(0,2000),
   submittedAnswers:e.definition.fields.filter(f=>Object.hasOwn(answers,f.id)).map(f=>({fieldId:f.id,questionId:f.questionId!,question:f.label,answer:answers[f.id]})),
   skippedFieldIds:e.definition.fields.filter(f=>!Object.hasOwn(answers,f.id)).map(f=>f.id),openQuestions:progress?.openQuestions??[],summary:progress?.summary??'',taskState:progress?.state??'active',pendingReviews};
- const context:AgentContext={projectIndex:[project],projects:[project],photos:[],latest:null};
- return {form,progress,taskRevision:task.revision,context,data};
+ const context:AgentContext={projectIndex:[project],projects:[project],photos:photoContext(photos),latest:null};
+ return {form,progress,taskRevision:task.revision,context,data,photos};
 }
 export type InformationTask=Awaited<ReturnType<typeof prepareInformationTask>>;
 /** Guards belong in the same transaction as both admission and prepared effects. */
 export function informationTaskGuards(db:D1Database,user:string,task:InformationTask,state:'not-started'|'pending'|'succeeded',turnId=task.form.submission.id){
  const f=task.form,e=f.envelope,gate=featurePredicate(db,{userId:user,projectId:f.projectId,featureId:'core.editing',operation:'prepare'});
- return [interactionGuard(db,gate.sql,gate.params),taskProgressGuard(db,user,task),interactionGuard(db,`EXISTS(
+ return [interactionGuard(db,gate.sql,gate.params),...selectedPhotoGuards(db,user,task.photos),taskProgressGuard(db,user,task),interactionGuard(db,`EXISTS(
   SELECT 1 FROM chat_interactions i JOIN chat_interaction_tasks t ON t.id=i.task_id AND t.user_id=i.user_id
   JOIN chat_interaction_submissions s ON s.interaction_id=i.id AND s.user_id=i.user_id JOIN chat_interaction_continuations c ON c.id=s.id
   WHERE i.id=? AND i.user_id=? AND i.project_id=? AND i.task_id=? AND i.definition_digest=? AND i.answer_revision=? AND t.revision=?

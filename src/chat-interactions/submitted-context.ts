@@ -1,10 +1,11 @@
 import {assertWorkspace} from '../workspace-identity/admission';
-import {assertFeature} from '../feature-admission';
+import {assertFeature,featurePredicate} from '../feature-admission';
 import {copyJSON} from '../project-specification/v2/json';
 import {isProjectIntakeTemplate,projectIntakeTemplates} from './maintained';
 import {isInformationDefinition} from './composition';
 import {InteractionError,validateAnswers} from './protocol';
-import {readInteraction,InteractionStoreError} from './store';
+import {readInteraction,InteractionStoreError,interactionGuard} from './store';
+import {readSelectedPhotos,selectedPhotoGuards,photoContext} from './selected-photos';
 
 /** Bounded locators only. Values require an explicit submitted-answer inspection. */
 export async function submittedReferences(db:D1Database,user:string){
@@ -37,6 +38,7 @@ export async function readSubmittedAnswers(db:D1Database,user:string,turnId:stri
  await assertFeature(db,gate);
  const a=validateAnswers(e.definition,s.answers);
  if(request.fieldIds.some(id=>!e.definition.fields.some(f=>f.id===id)||!Object.hasOwn(a,id)))throw new InteractionError('FIELD_UNAVAILABLE');
+ const photos=await readSelectedPhotos(db,user,e.scope.projectId,e.definition,Object.fromEntries(request.fieldIds.map(id=>[id,a[id]])));
  const selected=e.definition.template==='project-select@1'?await db.prepare('SELECT id,name FROM projects WHERE id=? AND owner_user_id=?').bind(a.project,user).first<{id:string;name:string}>():null;
  if(e.definition.template==='project-select@1'&&!selected)throw new InteractionStoreError(404,'not_found');
  const final=await readInteraction(db,user,e.id);
@@ -44,6 +46,13 @@ export async function readSubmittedAnswers(db:D1Database,user:string,turnId:stri
  if(selected&&!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=? AND name=?').bind(selected.id,user,selected.name).first())throw new InteractionStoreError(404,'not_found');
  await assertFeature(db,gate);
  if(!await db.prepare("SELECT id FROM chat_turns WHERE id=? AND user_id=? AND mode='ai' AND status='pending'").bind(turnId,user).first())throw new InteractionStoreError(409,'interaction_changed');
- return {interactionId:e.id,taskId:e.scope.taskId,projectId:e.scope.projectId,submissionId:s.id,template:e.definition.template,...(e.definition.purpose?{purpose:e.definition.purpose}:{}),
-  ...(selected?{selectedProject:{id:selected.id,name:selected.name}}:{answers:Object.fromEntries(request.fieldIds.map(id=>[id,a[id]]))})};
+ const feature=featurePredicate(db,gate);
+ const guards=[interactionGuard(db,feature.sql,feature.params),...selectedPhotoGuards(db,user,photos),interactionGuard(db,`EXISTS(
+  SELECT 1 FROM chat_interactions i JOIN chat_interaction_submissions s ON s.interaction_id=i.id AND s.user_id=i.user_id
+  WHERE i.id=? AND i.user_id=? AND i.definition_digest=? AND i.answer_revision=? AND i.state='submitted' AND i.removed_at IS NULL
+   AND s.id=? AND s.answers_digest=? AND NOT EXISTS(SELECT 1 FROM chat_interactions child WHERE child.previous_interaction_id=i.id))
+  AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND mode='ai' AND status='pending')`,[e.id,user,e.definitionDigest,f.answerRevision,s.id,s.answersDigest,turnId,user])];
+ await db.batch(guards);
+ return {guards,data:{interactionId:e.id,taskId:e.scope.taskId,projectId:e.scope.projectId,submissionId:s.id,template:e.definition.template,...(e.definition.purpose?{purpose:e.definition.purpose}:{}),
+  ...(selected?{selectedProject:{id:selected.id,name:selected.name}}:{answers:Object.fromEntries(request.fieldIds.map(id=>[id,a[id]])),...(photos.length?{selectedPhotos:photoContext(photos)}:{})})}};
 }

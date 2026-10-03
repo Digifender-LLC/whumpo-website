@@ -38,10 +38,10 @@ async function chat(o,content,steps,database){queue=steps;const input={id:id(),r
 const taskContext=await modules.module('src/chat-interactions/task-context.ts'),continuation=await modules.module('src/chat-interactions/model-continuation.ts');
 const client={versions:[1],fieldTypes:['text','long-text','boolean'],bindings:['answer.value@1','interaction.answers@1','agent.task-continue@1']};
 const fields=[{id:'area',questionId:'service-area',required:true},{id:'mobile',questionId:'visits-customers',required:false}];
-async function saved(o){
+async function saved(o,questions=fields,answers={area:'SUBMITTED_PUBLIC_SERVICE_AREA'},purpose='site.services@1'){
  const turn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,'Plan my landscaping service area','Tell me where you work.',datetime('now'),'ai','completed' FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
- const form=await store.issueInformation(o.scope,o.user,{originTurnId:turn,projectId:o.project,purpose:'site.services@1',fields});
- const mutation={version:1,requestId:id(),interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers:{area:'SUBMITTED_PUBLIC_SERVICE_AREA'}};
+ const form=await store.issueInformation(o.scope,o.user,{originTurnId:turn,projectId:o.project,purpose,fields:questions});
+ const mutation={version:1,requestId:id(),interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:0,operation:'submit',answers};
  const receipt=await json(o,'/api/chat/interactions/v1/mutate',mutation);
  return {form:await store.readInteraction(o.scope,o.user,form.envelope.id),mutation,receipt};
 }
@@ -50,7 +50,38 @@ const read=o=>({kind:'specification',operation:'read',projectId:o.project});
 const change=o=>({kind:'specification',operation:'change',projectId:o.project,expectedRevision:1,operations:[{type:'content.replace',contentId:'section-1-text',text:'SUBMITTED_PUBLIC_SERVICE_AREA'}]});
 const state=async f=>(await row('SELECT * FROM chat_interaction_continuations WHERE id=?',f.submission.id));
 async function noEffect(o,f){assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE id=?',f.submission.id)).n,0);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);}
+async function selectedPhoto(o,name='Selected garden'){
+ const f=id();await run("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) VALUES(?,?,?,?,?,1024,640,480,'ready',datetime('now'))",f,o.project,name,'PRIVATE_PHOTO_KEY/'+f,'a'.repeat(64));
+ await run("UPDATE project_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic-task-photo',expires_at=? WHERE file_id=?",new Date(Date.now()+3600000).toISOString(),f);return f;
+}
+const photoFields=[{id:'photos',questionId:'gallery-photos',required:true}];
 try{
+ await test('selected approved photos reach only their task context and prepare a private photo review',async()=>{
+  const o=await owner(),photo=await selectedPhoto(o),other=await selectedPhoto(o,'UNSELECTED_PHOTO_CANARY'),{form}=await saved(o,photoFields,{photos:[photo]},'site.presentation@1');
+  const action={kind:'specification',operation:'change',projectId:o.project,expectedRevision:1,operations:[{type:'pages.setPhotos',pageId:'home',photos:[{id:photo,alt:'A garden described by its owner.'}]}]};
+  const result=await follow(o,form,[body=>{const text=JSON.stringify(body);assert.match(text,/Selected garden/);assert.doesNotMatch(text,/PRIVATE_PHOTO_KEY|UNSELECTED_PHOTO_CANARY/);assert(!text.includes(other));return read(o);},action]);
+  assert.equal(result.data.continuation.state,'succeeded');assert.equal(result.calls,2);assert.equal((await site.readSpecificationProposal(o.scope,o.user,form.submission.id)).project_id,o.project);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',o.project)).n,0);
+  await run('DELETE FROM users WHERE id=?',o.user);
+ });
+ await test('clearance loss before the inspection commit prevents the second task dispatch',async()=>{
+  const o=await owner(),photo=await selectedPhoto(o),{form}=await saved(o,photoFields,{photos:[photo]},'site.presentation@1');let changed=false;
+  const racing=interceptDatabase(db,/^INSERT INTO agent_inspections/,async()=>{changed=true;await run("UPDATE project_photo_safety SET state='blocked' WHERE file_id=?",photo);});
+  const result=await follow(o,form,[read(o)],racing);assert(changed);assert.equal(result.calls,1);assert.equal(result.data.continuation.state,'failed');await noEffect(o,form);assert.deepEqual((await store.readInteraction(o.scope,o.user,form.envelope.id)).submission.answers,{photos:[photo]});
+  await run('DELETE FROM users WHERE id=?',o.user);
+ });
+ await test('clearance loss during task inference fences the final effect and task memory',async()=>{
+  const o=await owner(),photo=await selectedPhoto(o),{form}=await saved(o,photoFields,{photos:[photo]},'site.presentation@1');
+  const result=await follow(o,form,[read(o),async()=>{await run("UPDATE project_photo_safety SET state='blocked' WHERE file_id=?",photo);return change(o);}]);
+  assert.equal(result.data.continuation.state,'failed');assert.equal(result.calls,2);await noEffect(o,form);assert.equal((await row('SELECT count(*) n FROM chat_task_progress WHERE submission_id=?',form.submission.id)).n,0);
+  await run('DELETE FROM users WHERE id=?',o.user);
+ });
+ await test('selected-answer photo lookup retains its guards through ordinary Chat inference',async()=>{
+  const o=await owner(),photo=await selectedPhoto(o),{form}=await saved(o,photoFields,{photos:[photo]},'site.presentation@1'),e=form.envelope;
+  const action={kind:'interaction',operation:'readSubmittedAnswers',interactionId:e.id,taskId:e.scope.taskId,projectId:o.project,submissionId:form.submission.id,fieldIds:['photos']};
+  const result=await chat(o,'Read the photos I selected for the website.',[action,async body=>{assert.match(JSON.stringify(body),/selectedPhotos/);assert.doesNotMatch(JSON.stringify(body),/PRIVATE_PHOTO_KEY/);await run("UPDATE project_photo_safety SET state='blocked' WHERE file_id=?",photo);return null;}]);
+  assert.equal(result.calls,2);assert.equal(result.turn.status,'failed');assert.doesNotMatch(result.turn.assistant_text,/UNTRUSTED_MODEL_PROSE/);assert.equal((await site.readSpecification(o.scope,o.user,o.project)).revision,1);
+  await run('DELETE FROM users WHERE id=?',o.user);
+ });
  await test('submit/read/reload/replay never dispatch; configured unavailability keeps start explicit',async()=>{
   const o=await owner(),before=mainCalls,{form,receipt,mutation}=await saved(o);assert.equal(form.submission.continuation.state,'not-started');
   await json(o,'/api/chat/interactions/v1/read',{version:1,interactionId:form.envelope.id,client});await json(o,'/api/chat/interactions/v1/mutate',mutation);assert.deepEqual(await json(o,'/api/chat/interactions/v1/receipt',{version:1,requestId:mutation.requestId}),receipt);

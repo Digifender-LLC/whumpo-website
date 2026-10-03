@@ -106,7 +106,8 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   }
   if (inserted[taskClaim.length+1].meta.changes !== 1) return noReservation();
   let routingResult:import('./ai').Completion|undefined,taskFollowupDispatched=false;
-  const modelTransport:typeof fetch=async(input,init)=>{if(task)await db.batch(informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id));if(task&&!formSubmissionId)taskFollowupDispatched=true;return transport(input,init);};
+  let inspectionGuards:D1PreparedStatement[]=[];
+  const modelTransport:typeof fetch=async(input,init)=>{if(inspectionGuards.length)await db.batch(inspectionGuards);if(task)await db.batch(informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id));if(task&&!formSubmissionId)taskFollowupDispatched=true;return transport(input,init);};
   const started = Date.now();
   try {
     if(task){
@@ -156,11 +157,12 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(canFollow&&inspectionRequest(firstRaw)){
       if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id,'app'))throw new ProposalError();
       const lookup=await prepareSiteAction(db,userId,id,firstRaw,task?.context??context,dnsOptions);
+      inspectionGuards=lookup.inspectionGuards??[];
       const inspection='inspection' in lookup&&typeof lookup.inspection==='string'?lookup.inspection:lookup.reply;
       const next=inspectionMessages(messages,inspection);
       if(next&&new TextEncoder().encode(JSON.stringify(next)).length+512<=followupInputBound){
         // Persist the lookup before dispatch; lost acknowledgments never retry it.
-        await db.batch([...(task?informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id):[]),db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,inspection,result.inputTokens,result.outputTokens)]);
+        await db.batch([...inspectionGuards,...(task?informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id):[]),db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,inspection,result.inputTokens,result.outputTokens)]);
         const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`tellumo-${userId}`},next,modelTransport);
         if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
         result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
@@ -181,6 +183,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     // This also refuses a project removed while the provider was responding.
     const firstDraftClaim=firstProject&&!firstApp&&proposal.statements.length?[db.prepare('INSERT INTO welcome_first_drafts(turn_id,project_id,user_id) VALUES(?,?,?)').bind(id,firstProject.id,userId)]:[];
     await db.batch([
+      ...inspectionGuards,
       ...(task?informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id):[]),
       ...firstDraftClaim,
       ...proposal.statements,

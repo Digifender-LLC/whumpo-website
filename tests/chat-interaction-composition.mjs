@@ -49,7 +49,7 @@ try{
   await store.mutateInteraction(o.scope,o.user,mutation(form,'save-draft',{area:'DRAFT_ONLY',mobile:true,radius:10}));assert.deepEqual(await context.submittedReferences(o.scope,o.user),[]);
   let current=await store.readInteraction(o.scope,o.user,form.envelope.id);await store.mutateInteraction(o.scope,o.user,mutation(current,'submit',{area:'PUBLIC_AREA',mobile:true,radius:25,sizes:['car']}));current=await store.readInteraction(o.scope,o.user,form.envelope.id);
   const refs=await context.submittedReferences(o.scope,o.user);assert.equal(refs[0].purpose,'site.services@1');assert.equal(refs[0].projectId,o.project);assert.doesNotMatch(JSON.stringify(refs),/PUBLIC_AREA|DRAFT_ONLY/);
-  const turn=await origin(o,true),request=selected(current,['area']),data=await context.readSubmittedAnswers(o.scope,o.user,turn,request);assert.deepEqual(data.answers,{area:'PUBLIC_AREA'});assert.equal(data.projectId,o.project);
+  const turn=await origin(o,true),request=selected(current,['area']),{data}=await context.readSubmittedAnswers(o.scope,o.user,turn,request);assert.deepEqual(data.answers,{area:'PUBLIC_AREA'});assert.equal(data.projectId,o.project);
   for(const bad of [{...request,projectId:null},{...request,taskId:id()},{...request,submissionId:id()},{...request,fieldIds:['unknown']},{...request,fieldIds:[]},{...request,fieldIds:['area','area']},{...request,answers:{area:'forged'}}])await assert.rejects(()=>context.readSubmittedAnswers(o.scope,o.user,turn,bad));
   await assert.rejects(()=>context.readSubmittedAnswers(o.scope,o.user,id(),request));
  });

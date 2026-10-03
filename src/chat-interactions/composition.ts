@@ -13,6 +13,7 @@ export type QuestionRequest={id:string;questionId:string;required:boolean;when?:
 const services=['site.services@1'] as const,presentation=['site.presentation@1'] as const,both=['site.services@1','site.presentation@1'] as const;
 const common={binding:'answer.value@1' as const,required:false};
 const questions:Record<string,{purposes:readonly InformationPurpose[];field:Field}>={
+ 'gallery-photos':{purposes:presentation,field:{...common,id:'gallery-photos',type:'resource',label:'Which photos should we plan with?',help:'Choose up to four approved photos already in this project. This shares their names and dimensions with Whumpo, not image contents. It does not publish them.',constraints:{collection:'photos',multiple:true,maxItems:4}}},
  'services':{purposes:services,field:{...common,id:'services',type:'long-text',label:'What services do you offer?',help:'Describe the work visitors can ask you to do. Leave out private customer details.',constraints:{maxLength:1000}}},
  'service-area':{purposes:services,field:{...common,id:'service-area',type:'text',label:'Where do you offer your services?',help:'Cities, neighborhoods or a general service area are enough. Do not give a private home address.',constraints:{maxLength:200}}},
  'visits-customers':{purposes:services,field:{...common,id:'visits-customers',type:'boolean',label:'Do you travel to your customers?',help:'This helps describe where people can use your services.',constraints:{}}},

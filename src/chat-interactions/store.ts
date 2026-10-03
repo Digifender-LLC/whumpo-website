@@ -10,6 +10,7 @@ import {isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,pr
 import {informationDefinition,informationQuestions,isInformationDefinition,type InformationPurpose,type QuestionRequest} from './composition';
 import {readOwnedResourceOptions} from './resource-options';
 import {readResourcePage,resourceCursor,type ResourceCursor} from './resource-shape';
+import {photoField,readSelectedPhotos,selectedPhotoGuards} from './selected-photos';
 
 export class InteractionStoreError extends Error {
  constructor(readonly status:number,readonly code:string){super(code==='not_found'?'Chat form not found.':code==='draft_removed'?'This unsubmitted form was discarded or reached its draft retention limit. Ask for a new form.':code==='request_conflict'?'This request ID already describes another answer.':'This Chat form changed. Read its current state before continuing.');}
@@ -176,7 +177,12 @@ async function prepareInformationCorrection(db:D1Database,user:string,input:Info
   if(Object.hasOwn(defaults,f.id))f.default=defaults[f.id];
  }
  if(proposal)definition=proposedDefinition(definition,proposal.changes);
- return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId},definition,issueHash,{request,previous},[]);
+ const photos:Awaited<ReturnType<typeof readSelectedPhotos>>=[];
+ for(const f of definition.fields.filter(photoField))if(f.default){
+  try{photos.push(...await readSelectedPhotos(db,user,projectId,definition,{[f.id]:f.default.value}));}
+  catch(error){if(!(error instanceof InteractionError)||error.code!=='RESOURCE_UNAVAILABLE'||proposal&&Object.hasOwn(proposal.changes,f.id))throw error;delete f.default;}
+ }
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId},definition,issueHash,{request,previous},selectedPhotoGuards(db,user,photos));
 }
 
 /** Resource names are transient scoped reads, never embedded in the definition.
@@ -186,17 +192,21 @@ export async function listInteractionResources(db:D1Database,user:string,input:u
  const request=copyJSON(input,4096) as {version:number;interactionId:string;definitionDigest:string;fieldId:string;limit:number;before:ResourceCursor|null};
  if(!request||typeof request!=='object'||Array.isArray(request)||Object.keys(request).sort().join(',')!=='before,definitionDigest,fieldId,interactionId,limit,version')throw new InteractionError('SHAPE');
  if(request.version!==1)throw new InteractionError('VERSION');
- if(!identifier(request.interactionId)||request.fieldId!=='project'||!Number.isSafeInteger(request.limit)||request.limit<1||request.limit>20)throw new InteractionError('SHAPE');
+ if(!identifier(request.interactionId)||typeof request.fieldId!=='string'||!Number.isSafeInteger(request.limit)||request.limit<1||request.limit>20)throw new InteractionError('SHAPE');
  const before=request.before;
  if(before!==null&&!resourceCursor(before))throw new InteractionError('SHAPE');
  const current=await readInteraction(db,user,request.interactionId);
  if(request.definitionDigest!==current.envelope.definitionDigest)throw new InteractionError('DIGEST');
- if(current.envelope.definition.template!=='project-select@1')throw new InteractionStoreError(409,'adapter_unavailable');
+ const definition=current.envelope.definition,field=definition.fields.find(f=>f.id===request.fieldId);
+ const projectChoice=definition.template==='project-select@1'&&field?.id==='project';
+ const photoChoice=isInformationDefinition(definition)&&!!field&&photoField(field)&&!!current.envelope.scope.projectId;
+ if(!projectChoice&&!photoChoice)throw new InteractionStoreError(409,'adapter_unavailable');
  if(!['open','submitted'].includes(current.state)||current.replacementInteractionId)throw changed();
- const page=await readOwnedResourceOptions(db,user,'projects',null,before,request.limit);
+ const collection=photoChoice?'photos':'projects';
+ const page=await readOwnedResourceOptions(db,user,collection,photoChoice?current.envelope.scope.projectId:null,before,request.limit);
  const final=await readInteraction(db,user,request.interactionId);
  if(final.state!==current.state||final.answerRevision!==current.answerRevision||final.replacementInteractionId!==current.replacementInteractionId)throw changed();
- const result=readResourcePage({version:1,interactionId:current.envelope.id,definitionDigest:current.envelope.definitionDigest,fieldId:request.fieldId,collection:'projects',...page});
+ const result=readResourcePage({version:1,interactionId:current.envelope.id,definitionDigest:current.envelope.definitionDigest,fieldId:request.fieldId,collection,...page});
  if(!result)throw new InteractionStoreError(503,'resource_unavailable');
  return result;
 }
@@ -349,6 +359,7 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  // Each admitted adapter must enforce its complete current question policy.
  if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!(isPhotoIntakeDefinition(envelope.definition)&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
  const resourceGuards:D1PreparedStatement[]=[];
+ if(request.operation!=='cancel')resourceGuards.push(...selectedPhotoGuards(db,user,await readSelectedPhotos(db,user,saved.project_id,envelope.definition,request.answers)));
  if(request.operation!=='cancel'&&envelope.definition.template==='project-select@1'&&Object.hasOwn(request.answers,'project')){
   const selected=request.answers.project as string;
   const owned=await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(selected,user).first<{id:string}>();
