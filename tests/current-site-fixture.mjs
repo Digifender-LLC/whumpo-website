@@ -28,6 +28,8 @@ export async function currentSiteFixtureHandlers(){
   export * as moduleAccess from './src/shared-modules/access';
   export * as moduleAccessRoles from './src/shared-modules/access-roles';
   export * as moduleAccessExport from './src/shared-modules/access-export';
+  export * as moduleRecordsExport from './src/shared-modules/records-export';
+  export * as moduleFilesExport from './src/shared-modules/files-export';
   export * as accessSetup from './src/shared-modules/access-setup';
   export {readAppAccess} from './src/app-access';
   export * as appResource from './src/app-resource';

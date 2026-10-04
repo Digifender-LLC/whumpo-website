@@ -13,14 +13,15 @@ import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} 
  * that this request's record write actually happened (create, revision compare-and-swap or removal). Submitted values
  * are returned only to principals whose decision allows those fields, and never appear in errors or receipts. */
 type Schema=RecordsConfig['schemas'][number];
-type RecordRow={id:string;schema_id:string;fields_revision:number;submitter_kind:'public'|'visitor'|'staff';visitor_id:string|null;values_json:string;revision:number;created_at:number;updated_at:number};
+type RecordRow={id:string;schema_id:string;form_id:string;fields_revision:number;submitter_kind:'public'|'visitor'|'staff';visitor_id:string|null;values_json:string;revision:number;created_at:number;updated_at:number;expires_at:number};
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 const localId=(v:unknown):v is string=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v);
 const invalid=()=>new ModuleError('invalid_request');
 const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>plain(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const iso=(seconds:number)=>new Date(seconds*1000).toISOString();
 const control=/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
-const recordColumns='r.id,r.schema_id,r.fields_revision,r.submitter_kind,r.visitor_id,r.values_json,r.revision,r.created_at,r.updated_at';
+const recordColumns='r.id,r.schema_id,r.form_id,r.fields_revision,r.submitter_kind,r.visitor_id,r.values_json,r.revision,r.created_at,r.updated_at,r.expires_at';
+export type {RecordRow};
 
 function config(context:ModuleContext):RecordsConfig{
  if(context.resource.instance.kind!=='records')throw new ModuleError('not_found');
@@ -28,7 +29,7 @@ function config(context:ModuleContext):RecordsConfig{
 }
 /** One submitted or changed value, checked against the field's current shape (the bounded backend-form field contract:
  * text up to 300 characters, finite numbers, booleans, fixed choice values). Never echoed. */
-function fieldValue(field:RecordField,value:unknown){
+export function fieldValue(field:RecordField,value:unknown){
  if(field.type==='text'){if(typeof value!=='string'||value.length>300||control.test(value)||!field.optional&&!value.trim())throw invalid();return value;}
  if(field.type==='number'){if(typeof value!=='number'||!Number.isFinite(value))throw invalid();return value;}
  if(field.type==='boolean'){if(typeof value!=='boolean')throw invalid();return value;}
@@ -54,7 +55,7 @@ function project(values:Record<string,unknown>,fields:string[]){
 const visitorOf=(p:ModulePrincipal)=>p.kind==='visitor'?p:null;
 /** Current retention: a record is readable and kept only while inside both the window stored at submission and the
  * instance's current `retentionDays` (shortening applies at once; lengthening never revives or extends a record). */
-const live=(retentionDays:number)=>({sql:'r.expires_at>unixepoch() AND r.created_at>unixepoch()-?',params:[retentionDays*86400]});
+export const live=(retentionDays:number)=>({sql:'r.expires_at>unixepoch() AND r.created_at>unixepoch()-?',params:[retentionDays*86400]});
 async function readRecord(db:D1Database,context:ModuleContext,schemaId:string,entryId:string){
  const visitor=visitorOf(context.principal),own=context.decision.scope==='own',window=live(config(context).retentionDays);
  if(own&&!visitor)throw new ModuleError('forbidden');
@@ -121,7 +122,7 @@ function decode(value:unknown):Cursor|null{
 }
 /** Opaque cursor bound to the project resource, view, principal, configRevision and access revision: after any of them
  * changes (reconfiguration, role change, revocation) the cursor is stale and the client reloads from the start. */
-async function page(db:D1Database,where:{sql:string;params:unknown[]},binding:{key:string;configRevision:number;accessRevision:number},limit:number,after:unknown){
+export async function page(db:D1Database,where:{sql:string;params:unknown[]},binding:{key:string;configRevision:number;accessRevision:number},limit:number,after:unknown){
  const cursor=decode(after);
  if(cursor&&(cursor.k!==binding.key||cursor.c!==binding.configRevision||cursor.a!==binding.accessRevision))throw new ModuleError('stale_configuration');
  const {results}=await db.prepare(`SELECT ${recordColumns} FROM module_records r WHERE ${where.sql}${cursor?' AND (r.created_at<? OR r.created_at=? AND r.id<?)':''} ORDER BY r.created_at DESC,r.id DESC LIMIT ?`)

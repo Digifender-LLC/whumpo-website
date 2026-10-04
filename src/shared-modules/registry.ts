@@ -8,6 +8,7 @@ import {ModuleError,type ModulePrincipal} from './policy';
 import type {ModuleInstanceFacts} from './shape';
 import {collectionsExportHook} from './collections';
 import {accessRolesExportHook} from './access-export';
+import {filesExportHook,recordsExportHook} from './export-hooks';
 
 /** WH-125 instance registry and scoped resolver. Deterministic: no inference, provider or network access.
  * The trusted module catalog, the saved specification and the registry rows are the only inputs. */
@@ -27,8 +28,10 @@ export const pin=(kind:ModuleKind,part:'module'|'schema',digest:string):ModulePi
  * WH-129: the content kind's `directories` data set is eligible project data exported by `collectionsExportHook`
  * (the existing `whumpo-directory` v1 serializer). WH-126: the access kind's `project-roles` data set is exported by
  * `accessRolesExportHook`; its `visitor-identity` data set is visitor-subject data exported only with the visitor's own
- * separate approval (their account export). Records and files serializers remain open (WH-127/128). */
-const exportHooks:{[K in ModuleKind]:string|null}={content:collectionsExportHook,records:null,files:null,access:accessRolesExportHook};
+ * separate approval (their account export). WH-127/128: the records kind's `module-records` and the files kind's
+ * `module-files` data sets are visitor-subject data exported by `recordsExportHook` and `filesExportHook` under WH-077's
+ * separate approval (owner-run serializers, optionally limited to one visitor's own records or uploads). */
+const exportHooks:{[K in ModuleKind]:string|null}={content:collectionsExportHook,records:recordsExportHook,files:filesExportHook,access:accessRolesExportHook};
 export function moduleDescriptor(projectId:string,resourceId:string,instance:ModuleInstance,dependencies:{resourceId:string;module:ModulePin}[]){
  const subjects:Record<string,'project'|'visitor'>={directories:'project','module-records':'visitor','module-files':'visitor','visitor-identity':'visitor','project-roles':'project'};
  const exportHook=exportHooks[instance.kind];

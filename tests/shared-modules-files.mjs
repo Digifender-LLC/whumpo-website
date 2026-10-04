@@ -7,6 +7,7 @@ import {currentSiteFixtureHandlers,createFixtureProject,configureFixtureModules}
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
+import {validateDescriptor} from '../tools/prototypes/workload-placement.mjs';
 Error.stackTraceLimit=0;
 // WH-128 files and galleries module. Actual handlers (visitor gateway POST /modules/upload and /modules, the workspace
 // owner route, the module engine, files handlers, commit triggers, the existing photo safety receipt/approval view, photo
@@ -176,6 +177,45 @@ try{
   assert.deepEqual((await gateway(a,galleryOf(fresh,'mine'),other)).body.result.items,[]);
  });
 
+ await check('files export serializer: owner-only, approved exact-digest bytes only, visitor-scoped slice, validated import shape',async()=>{
+  const {exportFiles,validateFilesExport}=m.moduleFilesExport,fails=async(promise,code)=>{await assert.rejects(promise,e=>{assert.equal(e?.code,code,String(e?.stack??e));return true;});};
+  const fresh=await instance(a,'media'),descriptor=validateDescriptor(JSON.parse(fresh.descriptor_json));
+  assert.equal(descriptor.lifecycle.exportHook,'files-export-v1');assert.deepEqual(descriptor.ownership.data.map(x=>[x.classId,x.subject,x.export]),[['module-files','visitor','separate-approval']]);
+  const approvedMine=(await rows("SELECT mf.file_id FROM module_files mf JOIN project_files f ON f.id=mf.file_id JOIN approved_project_photos s ON s.id=f.id AND s.digest=f.digest WHERE mf.instance_id=? AND mf.collection_id='mine' ORDER BY mf.created_at DESC,mf.file_id DESC",fresh.id)).map(r=>r.file_id);
+  const heldMine=(await row("SELECT count(*) n FROM module_files mf JOIN project_files f ON f.id=mf.file_id WHERE mf.instance_id=? AND mf.collection_id='mine' AND NOT EXISTS(SELECT 1 FROM approved_project_photos s WHERE s.id=f.id AND s.digest=f.digest)",fresh.id)).n;
+  assert.ok(approvedMine.length>=1&&heldMine>=1,'The collection holds approved and blocked files');
+  const exported=await exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'mine'});
+  assert.equal(exported.format,'whumpo-module-files');assert.deepEqual(exported.files.map(f=>f.fileId),approvedMine);assert.equal(exported.withheld,heldMine);assert.equal(exported.next,null);
+  for(const f of exported.files){
+   const saved=await row('SELECT digest,size FROM project_files WHERE id=?',f.fileId),bytes=Buffer.from(f.bytes,'base64');
+   assert.equal(f.sha256,saved.digest);assert.equal(bytes.length,saved.size);assert.equal(await hex(bytes),saved.digest);assert.equal(f.uploadedBy,'visitor');
+  }
+  const text=JSON.stringify(exported);assert.ok(!text.includes('photos/'),'No object key');assert.ok(!text.includes('synthetic-clearance')&&!text.includes('synthetic-block'),'No scanner reference');assert.ok(!/Visitor upload/.test(text),'No file name');
+  const valid=await validateFilesExport(JSON.parse(text));assert.equal(valid.files.length,exported.files.length);
+  // The visitor-subject slice holds only that visitor's own approved uploads; the other visitor's blocked file is withheld.
+  const mine=await exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'mine',visitorId:plain.visitorId});
+  assert.ok(mine.files.length>=1&&mine.files.every(f=>f.visitorId===plain.visitorId));
+  const theirs=await exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'mine',visitorId:other.visitorId});assert.deepEqual(theirs.files,[]);assert.equal(theirs.withheld,1);
+  const tampers=[x=>{x.files[0].bytes=Buffer.from(jpegB).toString('base64');},x=>{x.files[0].size+=1;},x=>{x.files[0].uploadedBy='owner';},x=>{x.files[0].mediaType='image/png';},
+   x=>{x.files[0].bytes=Buffer.from('<svg/>').toString('base64');},x=>{x.extra=1;},x=>{x.schemaVersion=2;},x=>{x.files.push({...x.files[0]});},x=>{x.withheld=-1;},x=>{x.filesSha256='0'.repeat(64);}];
+  for(const tamper of tampers){const copy=JSON.parse(text);tamper(copy);await fails(validateFilesExport(copy),'invalid_request');}
+  const scoped=JSON.parse(JSON.stringify(mine));scoped.subject.visitorId=other.visitorId;await fails(validateFilesExport(scoped),'invalid_request');
+  // A stored object that no longer matches its approved digest fails the export instead of being skipped or served.
+  await fails(exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'intake'}),'unavailable');
+  // Foreign owners, other kinds, stale revisions, unknown collections, foreign visitors, bad cursors and a raw database are refused.
+  const members=await instance(a,'members');
+  await fails(exportFiles(b.scope,FILES,b.user,a.project,fresh.id,fresh.config_revision,{collectionId:'mine'}),'not_found');
+  await fails(exportFiles(a.scope,FILES,a.user,a.project,members.id,members.config_revision,{collectionId:'mine'}),'not_found');
+  await fails(exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision+1,{collectionId:'mine'}),'stale_configuration');
+  await fails(exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'missing'}),'not_found');
+  await fails(exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'mine',visitorId:bv.visitorId}),'not_found');
+  await fails(exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'mine',after:'not a cursor'}),'invalid_request');
+  await fails(exportFiles(db,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'mine'}),'proof_required');
+  await run("UPDATE module_instances SET descriptor_json=json_set(descriptor_json,'$.lifecycle.exportHook',NULL) WHERE id=?",fresh.id);
+  await fails(exportFiles(a.scope,FILES,a.user,a.project,fresh.id,fresh.config_revision,{collectionId:'mine'}),'unavailable');
+  await run('UPDATE module_instances SET descriptor_json=? WHERE id=?',fresh.descriptor_json,fresh.id);
+ });
+
  await check('module uploads stay out of the owner photo library, Chat and model context',async()=>{
   const ids=(await rows('SELECT file_id FROM module_files WHERE project_id=?',a.project)).map(r=>r.file_id);assert.ok(ids.length>=3);
   const listed=await m.listPhotos(a.scope,a.user,a.project);assert.ok(!listed.files.some(f=>ids.includes(f.id)));
@@ -230,6 +270,6 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
+ process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

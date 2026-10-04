@@ -5,6 +5,7 @@ import {currentSiteFixtureHandlers,createFixtureProject,configureFixtureModules}
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
+import {validateDescriptor} from '../tools/prototypes/workload-placement.mjs';
 Error.stackTraceLimit=0;
 // WH-127 records and forms module. Actual handlers (visitor gateway POST /modules, the workspace-origin owner routes,
 // the module engine, records handlers, commit triggers, retention expiry, Chat role reviews and activation reviews) run
@@ -334,6 +335,41 @@ try{
   assert.equal((await m.readViewBinding(a.scope,a.user,'records-summary',a.project)).status,'ready');
  });
 
+ await check('records export serializer: owner-only, current revision, visitor-scoped slice, validated import shape',async()=>{
+  const {exportRecords,validateRecordsExport}=m.moduleRecordsExport,fails=async(promise,code)=>{await assert.rejects(promise,e=>{assert.equal(e?.code,code,String(e?.stack??e));return true;});};
+  const current=await instance(a,'requests'),descriptor=validateDescriptor(JSON.parse(current.descriptor_json));
+  assert.equal(descriptor.lifecycle.exportHook,'records-export-v1');assert.deepEqual(descriptor.ownership.data.map(x=>[x.classId,x.subject,x.export]),[['module-records','visitor','separate-approval']]);
+  // Owner export needs identity and ownership only: the previous group revoked every feature grant.
+  const exported=await exportRecords(a.scope,a.user,a.project,current.id,current.config_revision,{recordId:'request'});
+  assert.equal(exported.format,'whumpo-module-records');assert.equal(exported.instance.resourceId,current.id);assert.equal(exported.instance.retentionDays,30);assert.equal(exported.subject,null);
+  const live=await rows('SELECT id,values_json,visitor_id,submitter_kind FROM module_records WHERE instance_id=? AND expires_at>unixepoch() AND created_at>unixepoch()-30*86400 ORDER BY created_at DESC,id DESC',current.id);
+  assert.ok(live.length>5&&live.length<=200);assert.equal(exported.next,null);
+  assert.deepEqual(exported.records.map(r=>r.entryId),live.map(r=>r.id));
+  for(const r of exported.records){const saved=live.find(x=>x.id===r.entryId);assert.deepEqual(r.values,JSON.parse(saved.values_json));assert.equal(r.visitorId,saved.visitor_id);assert.equal(r.submittedBy,saved.submitter_kind);}
+  assert.deepEqual(exported.schema.fields.map(f=>f.key),JSON.parse(current.config_json).schemas[0].fields.map(f=>f.key));
+  const valid=await validateRecordsExport(JSON.parse(JSON.stringify(exported)));assert.equal(valid.records.length,exported.records.length);
+  // The visitor-subject slice holds only that visitor's own submissions.
+  const mine=await exportRecords(a.scope,a.user,a.project,current.id,current.config_revision,{recordId:'request',visitorId:v1.visitorId});
+  assert.deepEqual(mine.subject,{visitorId:v1.visitorId});assert.deepEqual(mine.records.map(r=>r.entryId),live.filter(r=>r.visitor_id===v1.visitorId).map(r=>r.id));assert.ok(mine.records.length>0);
+  await validateRecordsExport(JSON.parse(JSON.stringify(mine)));
+  const tampers=[x=>{x.records[0].values.urgent='yes';},x=>{x.records[0].values.extra=1;},x=>{x.schemaVersion=2;},x=>{x.extra=1;},x=>{x.records.push({...x.records[0]});},
+   x=>{x.records[0].visitorId=null;},x=>{x.records[0].values.topic='other';},x=>{delete x.records[0].values.name;},x=>{x.schema.fields[0].type='email';},x=>{x.instance.retentionDays=60;},x=>{x.recordsSha256='0'.repeat(64);}];
+  for(const tamper of tampers){const copy=JSON.parse(JSON.stringify(exported));tamper(copy);await fails(validateRecordsExport(copy),'invalid_request');}
+  const scoped=JSON.parse(JSON.stringify(mine));scoped.subject.visitorId=v2.visitorId;await fails(validateRecordsExport(scoped),'invalid_request');
+  // Foreign owners, other kinds, stale revisions, unknown schemas, foreign visitors, bad cursors and a raw database are refused.
+  await fails(exportRecords(b.scope,b.user,a.project,current.id,current.config_revision,{recordId:'request'}),'not_found');
+  await fails(exportRecords(a.scope,a.user,a.project,(await instance(a,'members')).id,(await instance(a,'members')).config_revision,{recordId:'request'}),'not_found');
+  await fails(exportRecords(a.scope,a.user,a.project,current.id,current.config_revision+1,{recordId:'request'}),'stale_configuration');
+  await fails(exportRecords(a.scope,a.user,a.project,current.id,current.config_revision,{recordId:'missing'}),'not_found');
+  await fails(exportRecords(a.scope,a.user,a.project,current.id,current.config_revision,{recordId:'request',visitorId:bv.visitorId}),'not_found');
+  await fails(exportRecords(a.scope,a.user,a.project,current.id,current.config_revision,{recordId:'request',after:'not a cursor'}),'invalid_request');
+  await fails(exportRecords(db,a.user,a.project,current.id,current.config_revision,{recordId:'request'}),'proof_required');
+  // A descriptor that does not name the hook is refused (the hook table is the only authority).
+  await run("UPDATE module_instances SET descriptor_json=json_set(descriptor_json,'$.lifecycle.exportHook',NULL) WHERE id=?",current.id);
+  await fails(exportRecords(a.scope,a.user,a.project,current.id,current.config_revision,{recordId:'request'}),'unavailable');
+  await run('UPDATE module_instances SET descriptor_json=? WHERE id=?',current.descriptor_json,current.id);
+ });
+
  await check('visitor values stay out of Chat, receipts, events and logs; closure counts and cascades',async()=>{
   for(const t of ['chat_turns','module_request_receipts','module_record_events','module_activation_reviews','activity_events']){const dump=JSON.stringify(await rows('SELECT * FROM '+t));for(const x of markers)assert.ok(!dump.includes(x),t);}
   const chat=JSON.stringify(await m.readChat(a.scope,a.user));for(const x of markers)assert.ok(!chat.includes(x));
@@ -357,7 +393,7 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
+ process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, the owner records export serializer with its visitor-scoped slice and tamper-checked import validation, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
 
