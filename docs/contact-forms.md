@@ -43,7 +43,7 @@ Messages become inaccessible at 30 days. Daily 03:17 UTC maintenance removes exp
 
 ## Owner notification delivery (WH-036)
 
-October 4, 2026. **Implemented in source with local synthetic-transport tests only. Not activated: no `send_email` binding, provider variable or cron trigger is configured, no sending domain is onboarded, nothing is deployed, no email can be sent and no live canary has run.** The private inbox above remains the source of truth: a notice is only a signal, never a copy. Visitor submission, Turnstile, per-client limits (WH-075), operator containment (WH-050) and safe rendering are unchanged. The public form's confirmation now says the message content was not emailed to anyone, which is true whether or not owner notices are active.
+October 4, 2026. **Implemented in source with local synthetic-transport tests. Configured, not yet deployed:** on owner instruction (Workers Paid plan confirmed by the owner on October 4, 2026), `whumpo.com` was onboarded to Email Sending through the Cloudflare API on 2026-10-04 17:32 UTC (`POST /zones/{zone}/email/sending/subdomains`, return path `cf-bounce.whumpo.com`, DKIM selector `cf-bounce`, drop suppressed recipients off). Cloudflare created locked `cf-bounce` MX/SPF/DKIM records; the existing `_dmarc` record (`p=reject`) and the Email Routing records were left unchanged. The `send_email` binding, both provider variables and the `* * * * *` cron are in `wrangler.jsonc` on draft PR #160, so delivery activates only when that PR is released through the owner-run empty-database cutover. No email has been sent and no live canary has run. The private inbox above remains the source of truth: a notice is only a signal, never a copy. Visitor submission, Turnstile, per-client limits (WH-075), operator containment (WH-050) and safe rendering are unchanged. The public form's confirmation now says the message content was not emailed to anyone, which is true whether or not owner notices are active.
 
 ### Owner decisions (issue [#146](https://github.com/zemdregon/whumpo/issues/146), recorded October 4, 2026)
 
@@ -98,8 +98,8 @@ Source: `src/contact-notifications.ts` (outbox, runner, reviews), `src/contact-e
 Activation is a deploy and a recurring charge, so it needs explicit owner action. Activation by an agent PR alone is not allowed: merging a binding, var or cron to `main` deploys it.
 
 1. Confirm the Workers Paid plan and Email Sending beta access, and re-verify pricing and limits on the pages above.
-2. Onboard `whumpo.com` in **Compute → Email Service → Email Sending → Onboard Domain**. Review the exact records first (Whumpo DNS change). Keep **Drop suppressed recipients** off.
-3. In `wrangler.jsonc` (whumpo-platform only), add the binding, the two vars and the cron:
+2. Onboard `whumpo.com` in **Compute → Email Service → Email Sending → Onboard Domain**. Review the exact records first (Whumpo DNS change). Keep **Drop suppressed recipients** off. *Done 2026-10-04 via the API (see status above).*
+3. In `wrangler.jsonc` (whumpo-platform only), add the binding, the two vars and the cron (*done on PR #160; takes effect when that PR is released*):
    ```jsonc
    "send_email": [{ "name": "CONTACT_EMAIL", "allowed_sender_addresses": ["notify@whumpo.com"] }],
    "vars": { "CONTACT_NOTIFICATION_PROVIDER": "cloudflare-email", "CONTACT_NOTIFICATION_REVIEW": "issue-146-2026-10-04" },
