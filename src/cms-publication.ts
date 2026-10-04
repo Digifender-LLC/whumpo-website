@@ -6,6 +6,7 @@ import {cmsConnection} from './cms-status';
 import {callCMS} from './cms-bridge';
 import {CMSProjectError} from './cms-projects';
 import {hashToken} from './security';
+import {requireApprovedCMSMedia} from './cms-media-safety';
 import {previewHeaders} from './components';
 type Review={media_manifest:string;id:string;draft_request_id:string;user_id:string;project_id:string;collection:string;item_id:string;revision:string;snapshot:string;preview_html:string;public_html:string;digest:string;status:string;withdrawn:number;replaces_publication_id:string|null;expires_at:string};
 export const cmsPublicURL=(r:Pick<Review,'project_id'|'collection'|'item_id'>)=>`https://${r.project_id}.whumpo.site/cms/${r.collection}/${r.item_id}`;
@@ -20,6 +21,8 @@ export async function prepareCMSPublication(db:D1Database,user:string,project:st
  if(snap.item.status==='draft'&&base)throw new CMSProjectError(409,'Native CMS and public article state need reconciliation before publication.');
  if(new TextEncoder().encode(JSON.stringify(snap)).length>16384)throw new CMSProjectError(409,'This article exceeds the current publication snapshot limit');
  const images=await captureCMSArticleImages(db,user,project,snap.item.data?.content,env),manifest=images.map(({bytes,...metadata})=>metadata);
+ // Publication reviews may only freeze currently cleared exact media; held media keep the draft private.
+ await requireApprovedCMSMedia(db,user,project,manifest);
  const resolveImage=(image:{asset:{_ref:string}})=>{const found=manifest.find(m=>m.mediaId===image.asset._ref);if(!found)throw new CMSProjectError(409,'Article image could not be captured');return {src:`/cms/media/${id}/${found.digest}.jpg`,width:found.width,height:found.height};};
  const privateHTML=renderCMSDraft(snap,false,resolveImage),publicHTML=renderCMSDraft(snap,true,resolveImage),digest=await hashToken(publicHTML);
  try{await db.prepare('INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,replaces_publication_id,media_manifest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,draft,user,project,snap.collection,snap.item.id,snap.revision,JSON.stringify(snap),privateHTML,publicHTML,digest,base?.id??null,JSON.stringify(manifest)).run();}catch{}
@@ -30,6 +33,7 @@ async function recoverImages(db:D1Database,user:string,row:Review,env:Record<str
  const files=env.FILES as R2Bucket|undefined;if(!files)throw new CMSProjectError(503,'Article image storage is unavailable');
  try{await freezeCMSPublicationMedia(db,files,user,row.id,captured??[]);}
  catch(error){
+  if(error instanceof CMSProjectError&&error.status===423)throw error;
   if(!(error instanceof CMSProjectError)||error.status!==409||captured)throw new CMSProjectError(503,'Publication images need recovery. Ask to recover saved publication review '+row.id);
   const images=await captureCMSArticleImages(db,user,row.project_id,JSON.parse(row.snapshot).item.data.content,env);
   await freezeCMSPublicationMedia(db,files,user,row.id,images);

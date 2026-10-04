@@ -728,6 +728,7 @@
       "tables": [
         "profile_photo_safety",
         "project_photo_safety",
+        "cms_media_safety",
         "photo_scan_tickets",
         "content_screening_decisions"
       ],
@@ -740,6 +741,7 @@
       "references": [
         "docs/content-safety.md",
         "src/photo-scan-results.ts",
+        "src/cms-media-safety.ts",
         "src/content-screening.ts",
         "docs/data-protection.md"
       ],
