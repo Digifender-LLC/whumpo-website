@@ -1,10 +1,10 @@
 import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
-import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
+import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
-import {createFixtureProject} from './current-site-fixture.mjs';
+import {createFixtureProject,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 const b=await build({stdin:{resolveDir:process.cwd(),contents:"export * from './src/feature-admission';export * from './src/workspace-identity/admission';export * from './src/workspace-identity/authority';export * from './src/feature-preview-grants';export * from './src/github-connection';export * from './src/cloudflare-connection';export * from './src/cloudflare-dns';export * from './src/github-backups';export * from './src/connection-vault';export * from './src/connection-recovery';export * from './src/security';export * from './src/backup-chat';export * from './src/dns-chat';export {default as worker} from './src/index';"},bundle:true,format:'esm',platform:'node',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID(),now=()=>new Date().toISOString(),seconds=()=>Math.floor(Date.now()/1000),later=()=>new Date(Date.now()+3600000).toISOString();
@@ -32,7 +32,7 @@ try{
   assert.match(await m.dnsChatCommand(await scoped(u),u,id(),'/dns-zones',{config:cf,transport:deny})(),/requires Business/);
   const session=identities.get(u).token;
   const env={DB:db,ENVIRONMENT:'local',GITHUB_CLIENT_ID:gh.clientId,GITHUB_CLIENT_SECRET:gh.clientSecret,GITHUB_APP_ID:String(gh.appId),GITHUB_APP_SLUG:gh.slug,CONNECTION_ENCRYPTION_KEYRING:gh.key,CLOUDFLARE_CLIENT_ID:cf.clientId,CLOUDFLARE_CLIENT_SECRET:cf.clientSecret,API_LIMITER:{limit:async()=>({success:true})}};
-  for(const provider of ['github','cloudflare']){const r=await m.worker.fetch(new Request('https://whumpo.com/api/connections/'+provider+'/start',{method:'POST',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+session}}),env);assert.equal(r.status,403);assert.match((await r.json()).error,/requires Business/);}
+  for(const provider of ['github','cloudflare']){const r=await m.worker.fetch(new Request('https://whumpo.com/api/connections/'+provider+'/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{origin:'https://whumpo.com','content-type':'application/json',cookie:'__Host-whumpo_session='+session}}),env);assert.equal(r.status,403);assert.match((await r.json()).error,/requires Business/);}
   await m.disconnectGitHub(await scoped(u),u,gh,async()=>new Response(null,{status:204}));await m.disconnectCloudflare(await scoped(u),u,cf,async()=>new Response(null,{status:200}));
  }
  for(const plan of ['business','business-pro']){const u=await owner(plan);assert.ok((await m.startGitHub(await scoped(u),u,gh)).url);assert.ok((await m.startCloudflare(await scoped(u),u,cf)).url);}
@@ -64,7 +64,7 @@ try{
  const recovery=await m.cloudflareAccess(await scoped(d.u),d.u,cf,deny,{recoveryId:review.id});await rejected(recovery.send('/zones/'+zone+'/dns_records','POST',{}));await rejected(recovery.send('/zones/'+'b'.repeat(32)));await rejected(m.cloudflareAccess(await scoped(d.u),d.u,cf,deny,{recoveryId:id()}));
  await rejected(m.reviewTXT(await scoped(d.u),d.u,id(),d.claim,zone,cf,deny));
  // Real source backup review and uncertain dispatch, then exact read-only recovery after grant loss.
- const u=await owner();await credentials(u);const site=await createFixtureProject(db,u,'Fixture','A harmless site');
+ const u=await owner();await credentials(u);const site=await createFixtureProject(await (await workspaceSession(db,await currentSiteFixtureHandlers(),identities.get(u))).scope(),u,'Fixture','A harmless site');
  const grants=[];for(const op of ['prepare','confirm','dispatch'])grants.push(await grant(u,'github',op,site.project));
  let commits=0;const ghProvider=async(url,init)=>{if(url.endsWith('/repos/test/backup'))return Response.json({id:17,owner:{login:'test'},name:'backup',private:true,default_branch:'main',permissions:{push:true}});if(url.includes('/git/ref/heads/'))return Response.json({object:{sha:'a'.repeat(40)}});assert.equal(url,'https://api.github.com/graphql');const body=JSON.parse(init.body);if(body.query.startsWith('mutation')){commits++;throw Error('Lost acknowledgement');}return Response.json({data:{repository:{p0:null,p1:null,p2:null,p3:null}}});};
  const backup=await m.reviewBackup(await scoped(u),undefined,u,{id:id(),versionId:site.version,owner:'test',repo:'backup',repoId:17},gh,ghProvider);
