@@ -57,6 +57,8 @@ export function validRecordsSummaryFacts(d:unknown):d is RecordsSummaryFacts{
  * the owner's `files.putBytes` can name them), and per owner collection (`upload` lists `owner`) of each registered files
  * instance its state, revisions and the owner-filed photo ids with their safety state. Never a staff or visitor upload. */
 export type OwnerFileCollections={
+ /** Which step of the standard photo collection setup (`filesModuleReview`) comes next; ids and states only. */
+ setup:{state:'website-required'|'not-configured'|'saved'|'registered'|'unavailable';instanceId:string|null};
  pages:{id:string;path:string}[];
  candidates:{fileId:string;sha256:string}[];
  collections:{instanceId:string;resourceId:string;configRevision:number;state:'inactive'|'active'|'suspended'|'migrating';collectionId:string;files:{fileId:string;safety:'pending'|'approved'|'blocked'}[]}[];

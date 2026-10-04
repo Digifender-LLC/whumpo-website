@@ -3,6 +3,7 @@ import {approvedPhotoSQL,photoSafetySQL} from '../photo-safety';
 import {assertWorkspace} from '../workspace-identity/admission';
 import {ModuleError} from './policy';
 import {currentSpecification,instanceOf,registeredInstances} from './registry';
+import {readFilesSetup} from './files-setup';
 import type {OwnerFileCollections} from './shape';
 
 /** WH-128 published galleries. A typed owner Chat control (`galleryPageReview`), never a model action and never
@@ -65,5 +66,5 @@ export async function readOwnerFileCollections(db:D1Database,user:string,project
    collections.push({instanceId:row.local_id,resourceId:row.id,configRevision:row.config_revision,state:row.state as OwnerFileCollections['collections'][number]['state'],collectionId:c.id,files:results});
   }
  }
- return {pages,candidates,collections};
+ return {setup:await readFilesSetup(db,user,project),pages,candidates,collections};
 }

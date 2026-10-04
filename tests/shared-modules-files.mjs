@@ -339,6 +339,70 @@ try{
   const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['module-files','Add to collection','Prepare gallery page'])assert.ok(!prompt.includes(word),word);
  });
 
+ await check('owner photo collection setup: the typed control prepares the exact standard website review; saving and activation stay separate',async()=>{
+  const built=await build({entryPoints:['frontend/src/lib/photo-collections.ts'],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+  const ui=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+  const panel=async(o,project=o.project)=>{const r=await m.worker.fetch(new Request('https://whumpo.com/api'+ui.ownerCollectionsPath(project),{headers:{cookie:`__Host-whumpo_session=${o.token}`,origin:'https://whumpo.com'}}),{...(fixture.env??{}),...env},{waitUntil(){}});return {status:r.status,body:await r.json()};};
+  const e=await owner(),f=await owner(),setup=ui.filesSetupAction(e.project);
+  assert.deepEqual(setup,{type:'filesModuleReview',projectId:e.project});assert.ok(m.chatControl(setup));
+  let facts=(await panel(e)).body;assert.deepEqual(facts.setup,{state:'not-configured',instanceId:null});assert.equal(ui.filesActivationAction(e.project,facts),null);
+  // The control carries the project id only; the server chooses the instance. Extra keys or a bad id are not a control.
+  for(const action of [{...setup,instanceId:'photos'},{...setup,config:{collections:[]}},{type:'filesModuleReview',projectId:'not-a-project'},{type:'filesModuleReview'}])assert.ok(!m.chatControl(action));
+  assert.equal((await control(f,setup)).status,404,'A foreign owner cannot prepare setup');
+  assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE project_id=?',e.project)).n,0);
+  const prepared=await control(e,setup);assert.equal(prepared.status,200,prepared.error);
+  const q=await row('SELECT * FROM project_spec_proposals WHERE id=?',prepared.id),spec=JSON.parse(q.spec_json),standard=spec.instances.at(-1);
+  assert.equal(q.operation,'change');assert.deepEqual(JSON.parse(q.envelope_json).requiredReviews,['schema'],'No permissions class: no staff or visitor audience');
+  assert.deepEqual({id:standard.id,kind:standard.kind,dependencies:standard.dependencies,config:standard.config},{id:'photos',kind:'files',dependencies:[],config:{collections:[collection('library','owner',['owner'],null)]}});
+  assert.deepEqual({module:standard.module,schema:standard.schema},pins('files'),'Current catalog pin');
+  assert.deepEqual(JSON.parse(q.diff_json).map(r=>[r.label,r.before]),[['Module photos',null]]);
+  const turn=(await m.readChat(e.scope,e.user)).turns.find(t=>t.id===prepared.id);assert.deepEqual(turn.specification_review,{id:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision});
+  assert.equal((await rows('SELECT id FROM module_instances WHERE project_id=?',e.project)).length,0,'Preparing registers nothing');
+  assert.equal((await panel(e)).body.setup.state,'not-configured','Preparing saves nothing');
+  // Defense in depth: a proposal bound to a filesModuleReview turn must be exactly the head plus the standard instance.
+  const synthetic=async project=>{const t=id(),r=await revision(e)+1;await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,'Synthetic setup turn','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),?)",t,e.user,r,JSON.stringify({type:'filesModuleReview',projectId:project}));await run('UPDATE workspace_state SET revision=? WHERE user_id=?',r,e.user);return t;};
+  const copy=(turnId,specJSON)=>run('INSERT INTO project_spec_proposals SELECT ?,user_id,project_id,operation,expected_revision,draft_revision,base_version_id,target_version_id,base_digest,request_hash,proposal_digest,spec_digest,manifest_digest,policy_version,expires_at,?,lock_json,manifest_json,config_json,html,html_digest,diff_json,envelope_json FROM project_spec_proposals WHERE id=?',turnId,specJSON,q.id);
+  const withCollection=c=>({...spec,instances:[...spec.instances.slice(0,-1),{...standard,config:{collections:[c]}}]}),lib=standard.config.collections[0];
+  for(const tampered of [withCollection({...lib,upload:['owner','staff']}),withCollection({...lib,upload:['visitor']}),withCollection({...lib,read:'staff'}),withCollection({...lib,gallery:{audience:'staff'}}),
+   withCollection({...lib,maxBytes:2097152}),withCollection({...lib,id:'other'}),withCollection({...lib,extra:true}),{...spec,instances:[...spec.instances.slice(0,-1),{...standard,config:{collections:[lib,{...lib,id:'second'}]}}]},
+   {...spec,instances:[...spec.instances.slice(0,-1),{...standard,id:'media'}]},{...spec,instances:[...spec.instances.slice(0,-1),{...standard,dependencies:['members']}]},{...spec,instances:[...spec.instances.slice(0,-1),{...standard,note:'x'}]},
+   {...spec,name:'Renamed'},{...spec,instances:spec.instances.slice(0,-1)}])
+   await assert.rejects(copy(await synthetic(e.project),JSON.stringify(tampered)),/specification_changed/);
+  await assert.rejects(copy(await synthetic(f.project),q.spec_json),/specification_changed/,'A setup turn for another project admits nothing');
+  await copy(await synthetic(e.project),q.spec_json);
+  // Saving is the existing recent-sign-in specificationApply; the instance is saved, not registered or active.
+  const saved=await control(e,{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision});assert.equal(saved.status,200,saved.error);
+  facts=(await panel(e)).body;assert.deepEqual(facts.setup,{state:'saved',instanceId:'photos'});assert.deepEqual(facts.collections,[]);
+  assert.deepEqual(ui.filesActivationAction(e.project,facts),{type:'moduleActivationReview',projectId:e.project,instanceId:'photos',action:'activate'});
+  const again=await control(e,setup);assert.equal(again.status,400);assert.match(again.error,/already has a photo collection/);
+  await activation(e,'photos');
+  facts=(await panel(e)).body;assert.deepEqual(facts.setup,{state:'registered',instanceId:'photos'});assert.equal(ui.filesActivationAction(e.project,facts),null);
+  assert.deepEqual(facts.collections.map(x=>[x.instanceId,x.collectionId,x.state,x.files.length]),[['photos','library','active',0]]);
+  assert.match((await control(e,setup)).error,/already has a photo collection/);
+  // The set-up collection files existing owner photos; staff and visitors have no upload or read path into it.
+  const photo=id();assert.equal((await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':'Setup'},body:jpegA}),{...env,DB:e.scope},e.user,e.project,photo)).status,'ready');
+  const photos=await instance(e,'photos'),digest=(await row('SELECT digest FROM project_files WHERE id=?',photo)).digest;
+  assert.equal((await ownerCall(e,envelope(photos,'files.putBytes',{target:{collectionId:'library'},input:{fileId:photo,sha256:digest}}))).status,200);
+  assert.equal((await upload(e,await put(photos,'library'),null)).body.code,'forbidden');
+  // Disabling keeps the saved setup and offers activation again.
+  await activation(e,'photos','disable');facts=(await panel(e)).body;assert.deepEqual(ui.filesActivationAction(e.project,facts),{type:'moduleActivationReview',projectId:e.project,instanceId:'photos',action:'activate'});
+  // An existing owner collection, a taken id, a taken collection id and a project without a website are refused with reasons.
+  const g=await owner();await configureFixtureModules(g.scope,g.user,g.project,[{id:'photos',kind:'content',...pins('content'),dependencies:[],config:{collections:[{id:'directory',type:'directory-listing@1'}]}}]);
+  const taken=await control(g,ui.filesSetupAction(g.project));assert.equal(taken.status,400);assert.match(taken.error,/already uses the “photos” id/);
+  const k=await owner();await configureFixtureModules(k.scope,k.user,k.project,[accessInstance,{...filesInstance,config:{collections:[collection('library','owner',['staff'],null)]}}]);
+  const named=await control(k,ui.filesSetupAction(k.project));assert.equal(named.status,400);assert.match(named.error,/already uses the “library” id/);
+  const existing=await control(a,ui.filesSetupAction(a.project));assert.equal(existing.status,400);assert.match(existing.error,/already has a photo collection/);
+  assert.equal((await panel(a)).body.setup.state,'registered');
+  const h=await workspaceFixture(db,m),hScope=await h.scope(),hProject=id();
+  await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'No site','','draft',strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))",hProject,h.account);
+  assert.deepEqual((await panel({token:h.token},hProject)).body.setup,{state:'website-required',instanceId:null});
+  const none=await m.sendChatControl(hScope,h.account,{id:id(),revision:(await m.readChat(hScope,h.account)).state.revision,action:{type:'filesModuleReview',projectId:hProject}});assert.equal(none.status,404);assert.match(none.error,/private website first/);
+  // The panel wires the setup control; the site agent is never told about module operations or this control.
+  const controls=await readFile('frontend/src/photo-collections.tsx','utf8'),host=await readFile('frontend/src/workspace-controls.tsx','utf8');
+  assert.ok(controls.includes('filesSetupAction(')&&controls.includes('filesActivationAction(')&&host.includes('PhotoCollectionSetup'));
+  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['modules.put','filesModuleReview','review-photo-collection-setup','Set up photo collection'])assert.ok(!prompt.includes(word),word);
+ });
+
  await check('module uploads stay out of the owner photo library, Chat and model context',async()=>{
   const ids=(await rows("SELECT file_id FROM module_files WHERE project_id=? AND uploader_kind!='owner'",a.project)).map(r=>r.file_id);assert.ok(ids.length>=3);
   const listed=await m.listPhotos(a.scope,a.user,a.project);assert.ok(!listed.files.some(f=>ids.includes(f.id)));
@@ -397,6 +461,6 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the owner Photos panel client over the real routes (panel facts, Add to collection with request-id replay, Prepare gallery page, disabled-instance refusal, no staff/visitor uploads listed), the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
+ process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the typed filesModuleReview setup control (exact standard owner-only instance through the existing review, tampered proposals refused inside the commit, separate save and activation, existing collection, taken ids, no website and foreign owner refused), the owner Photos panel client over the real routes (panel facts, Add to collection with request-id replay, Prepare gallery page, disabled-instance refusal, no staff/visitor uploads listed), the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

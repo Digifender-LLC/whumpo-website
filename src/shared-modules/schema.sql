@@ -559,6 +559,37 @@ CREATE TRIGGER module_file_not_published BEFORE INSERT ON version_photos
 WHEN EXISTS(SELECT 1 FROM module_files WHERE file_id=NEW.file_id AND uploader_kind!='owner')
 BEGIN SELECT RAISE(ABORT,'version_photo_owner'); END;
 
+-- WH-128 owner photo collection setup. A proposal prepared by the typed filesModuleReview control is exactly the current
+-- head plus one appended standard files instance (id photos, module-files, no dependencies, one collection library with
+-- owner read, owner-only upload, the 1 MiB photo bound, JPEG only and no gallery, and no other keys) in a project whose
+-- head and registry have no instance using the id photos and no files instance with an owner collection or a library
+-- collection; nothing else in the specification may change.
+CREATE TRIGGER project_spec_files_setup_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='filesModuleReview') BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+  WHERE h.project_id=NEW.project_id AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+  AND json_array_length(NEW.spec_json,'$.instances')=json_array_length(v.spec_json,'$.instances')+1
+  AND json(json_remove(NEW.spec_json,'$.instances[#-1]'))=json(v.spec_json)
+  AND NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.instances') e WHERE json_extract(e.value,'$.id')='photos'
+   OR json_extract(e.value,'$.kind')='files' AND EXISTS(SELECT 1 FROM json_each(e.value,'$.config.collections') c WHERE json_extract(c.value,'$.id')='library'
+    OR EXISTS(SELECT 1 FROM json_each(c.value,'$.upload') u WHERE u.value='owner')))
+  AND NOT EXISTS(SELECT 1 FROM module_instances i WHERE i.project_id=NEW.project_id AND (i.local_id='photos'
+   OR i.kind='files' AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.collections') c WHERE EXISTS(SELECT 1 FROM json_each(c.value,'$.upload') u WHERE u.value='owner'))))
+  AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1]'))=6
+  AND json_extract(NEW.spec_json,'$.instances[#-1].id')='photos' AND json_extract(NEW.spec_json,'$.instances[#-1].kind')='files'
+  AND json_extract(NEW.spec_json,'$.instances[#-1].module.name')='module-files' AND json_extract(NEW.spec_json,'$.instances[#-1].schema.name')='files-data'
+  AND json_array_length(NEW.spec_json,'$.instances[#-1].dependencies')=0
+  AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1].config'))=1 AND json_array_length(NEW.spec_json,'$.instances[#-1].config.collections')=1
+  AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1].config.collections[0]'))=6
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].id')='library' AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].read')='owner'
+  AND json_array_length(NEW.spec_json,'$.instances[#-1].config.collections[0].upload')=1 AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].upload[0]')='owner'
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].maxBytes')=1048576
+  AND json_array_length(NEW.spec_json,'$.instances[#-1].config.collections[0].mediaTypes')=1 AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].mediaTypes[0]')='image/jpeg'
+  AND json_type(NEW.spec_json,'$.instances[#-1].config.collections[0].gallery')='null'
+ );
+END;
+
 -- WH-128 published gallery. A proposal prepared by the typed galleryPageReview control is exactly the current head with
 -- only the named page's photos (and its photo component) replaced by one to four photos that the owner filed into the
 -- named collection of this project's registered files instance and that currently have an exact-digest approval.

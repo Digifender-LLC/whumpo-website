@@ -23,6 +23,15 @@ export const galleryReady=(c:OwnerCollection,pages:OwnerFileCollections['pages']
 export function fileIntoCollectionBody(c:OwnerCollection,candidate:CollectionCandidate,requestId:string){
  return {api:'whumpo-modules',version:1,operation:'files.putBytes',resourceId:c.resourceId,configRevision:c.configRevision,requestId,target:{collectionId:c.collectionId},input:{fileId:candidate.fileId,sha256:candidate.sha256}};
 }
+/** WH-128 standard photo collection setup: the typed `filesModuleReview` control (project id only; the server chooses
+ * the fixed owner-only instance), then the separate `moduleActivationReview` once the saved instance is not active. */
+export const filesSetupAction=(projectId:string):ChatControl=>({type:'filesModuleReview',projectId});
+export function filesActivationAction(projectId:string,d:OwnerFileCollections|undefined):ChatControl|null{
+ const s=d?.setup;if(!s?.instanceId)return null;
+ const registered=d!.collections.filter(c=>c.instanceId===s.instanceId);
+ if(s.state==='saved'||s.state==='registered'&&registered.length>0&&registered.every(c=>c.state==='inactive'))return {type:'moduleActivationReview',projectId,instanceId:s.instanceId,action:'activate'};
+ return null;
+}
 export function galleryReviewAction(projectId:string,c:Pick<OwnerCollection,'instanceId'|'collectionId'>,pageId:string):ChatControl{
  return {type:'galleryPageReview',projectId,instanceId:c.instanceId,collectionId:c.collectionId,pageId};
 }

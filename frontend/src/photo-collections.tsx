@@ -2,7 +2,7 @@ import {useRef,useState} from 'react';
 import type {OwnerFileCollections} from '../../src/shared-modules/shape';
 import {Button} from './components/ui/button';
 import {api,message} from './lib/api';
-import {candidateOf,collectionFiler,collectionKey,collectionLabel,collectionOf,fileableCollections,galleryReady,galleryReviewAction} from './lib/photo-collections';
+import {candidateOf,collectionFiler,collectionKey,collectionLabel,collectionOf,fileableCollections,filesActivationAction,filesSetupAction,galleryReady,galleryReviewAction} from './lib/photo-collections';
 import {useWorkspace} from './workspace';
 
 const states={inactive:'Disabled',active:'Active',suspended:'Suspended',migrating:'Migrating'} as const;
@@ -24,6 +24,26 @@ export function PhotoCollectionControl({project,fileId,data,onFiled}:{project:st
   {options.length>1&&<label className="flex flex-col gap-1 text-xs font-medium">Collection<select value={collectionKey(selected)} onChange={e=>setChoice(e.target.value)} className="h-11 px-3 border rounded-md bg-card">{options.map(c=><option key={collectionKey(c)} value={collectionKey(c)}>{collectionLabel(c)}</option>)}</select></label>}
   <Button type="button" variant="secondary" size="sm" className="min-h-11" disabled={busy} onClick={()=>void add()}>{options.length>1?'Add to collection':`Add to ${selected.collectionId}`}</Button>
   {error&&<p role="alert" className="w-full text-xs">{error}</p>}
+ </div>;
+}
+
+/** WH-128 standard photo collection setup. Buttons only prepare an exact review in Chat: `filesModuleReview` (the fixed
+ * owner-only files instance through the existing website review, saved after a recent sign-in) and then
+ * `moduleActivationReview` (the separate activation review). States and ids only. */
+export function PhotoCollectionSetup({project,data}:{project:string;data:OwnerFileCollections|undefined}){
+ const {runAction,commandBusy}=useWorkspace(),[error,setError]=useState(''),lock=useRef(false);
+ async function run(action:Parameters<typeof runAction>[0]){
+  if(lock.current)return;lock.current=true;setError('');
+  try{await runAction(action);}catch(e){setError(message(e));}finally{lock.current=false;}
+ }
+ const setup=data?.setup,activate=filesActivationAction(project,data);
+ if(!setup||setup.state==='registered'&&!activate)return null;
+ return <div className="space-y-3 rounded-md bg-secondary/50 p-4 text-sm">
+  {setup.state==='website-required'&&<p>Photo collections are saved in this project’s website configuration. Ask Whumpo to draft the project’s private website first.</p>}
+  {setup.state==='unavailable'&&<p>The saved website configuration could not be read.</p>}
+  {setup.state==='not-configured'&&<><p>Set up a private photo collection that only you can add to. Chat shows the exact website configuration change to save (no staff or visitor uploads, nothing published); activating it is a separate review.</p><Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void run(filesSetupAction(project))}>Set up photo collection</Button></>}
+  {activate&&<><p>The photo collection is saved but not active. Review activating it in Chat.</p><Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void run(activate)}>Review activating photo collection</Button></>}
+  {error&&<p role="alert">{error}</p>}
  </div>;
 }
 
