@@ -17,7 +17,7 @@ React 19, Vite 8, TypeScript, Tailwind 4, shadcn/ui components with Radix primit
 
 Chat is the default first sidebar tab. Dashboard and custom workflow pages have their own full-width views. Settings and the profile photo sit at the sidebar bottom; account email is inside Profile. No Tools menu or Add Workspace control. Empty custom pages invite the user to ask the agent to create one.
 
-The brand uses Deep Sky, Sky Blue, Cloud White, mint and sunshine accents, rounded Nunito display text, Inter body text and the supplied cloud-elephant direction. Fonts and illustration are hosted with the application.
+The brand uses Deep Sky, Sky Blue, Cloud White, mint and sunshine accents, Poppins display text, Inter body text and the supplied cloud-elephant direction. Fonts and illustration are hosted with the application.
 
 The 700 ms acknowledgment delay and minimum 1,000 ms visible interval reuse the tested presentation helper: a main answer ready at 730 ms displays at 1,700 ms when the acknowledgment appeared at 700 ms. Errors are not held.
 

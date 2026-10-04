@@ -7,7 +7,7 @@ export function AppPageReviewCard({review}:{review:AppPageReviewPresentation}){
  const {form,state}=review,applied=state==='applied';
  const status={ready:'Waiting for your approval',applied:'Page change recorded',expired:'Review expired',changed:'A new review is needed'}[state];
  return <section aria-label="Visitor page review" className="rounded-2xl border bg-card p-4 sm:p-5 space-y-4">
-  <div className="flex items-start gap-3"><Globe className="size-5 text-primary shrink-0 mt-1"/><div className="min-w-0"><p className="text-xs text-muted-foreground">{status}</p><h3 className="font-bold text-lg mt-1 break-words">{applied?(form?'Visitor page publication approved':'Taking the visitor page offline was approved'):form?'Review your visitor page':'Take your visitor page offline'}</h3><p className="text-sm mt-1 break-words">{review.projectName}</p></div></div>
+  <div className="flex items-start gap-3"><Globe className="size-5 text-link shrink-0 mt-1"/><div className="min-w-0"><p className="text-xs text-muted-foreground">{status}</p><h3 className="font-bold text-lg mt-1 break-words">{applied?(form?'Visitor page publication approved':'Taking the visitor page offline was approved'):form?'Review your visitor page':'Take your visitor page offline'}</h3><p className="text-sm mt-1 break-words">{review.projectName}</p></div></div>
   {form?<>
    <div className="rounded-xl border bg-background p-4 space-y-4" aria-label="Proposed form preview">
     <p className="text-xs font-semibold text-muted-foreground">FORM PREVIEW · NOT INTERACTIVE</p>
