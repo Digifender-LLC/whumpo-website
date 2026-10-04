@@ -22,7 +22,8 @@ try{
  const version=await changeFixtureWebsite(scope,user,site.project,[{type:'pages.setPhotos',pageId:'home',photos:[{id:photo,alt:'Garden'}]}]);
  const api=(path,method='GET',data)=>m.worker.fetch(new Request('https://whumpo.com/api'+path,{method,headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+actor.token,...(data?{'content-type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})}),{...env,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})}},{waitUntil:()=>{}});
  const ownerHTML=await (await api('/site-versions/'+version+'/preview')).text();
- const issued=await (await api(`/projects/${site.project}/guest-previews`,'POST',{id:crypto.randomUUID(),versionId:version,expiresInHours:2,feedback:false})).json();
+ const request={id:crypto.randomUUID(),versionId:version,expiresInHours:2,feedback:false},prepared=await (await api(`/projects/${site.project}/guest-previews/prepare`,'POST',request)).json();
+ const issued=await (await api(`/projects/${site.project}/guest-previews`,'POST',{...request,confirmation:prepared.confirmation})).json();
  assert.match(issued.token,/^[A-Za-z0-9_-]{43}$/);
  const view=()=>m.host.fetch(new Request('https://preview.whumpo.site/view',{method:'POST',headers:{origin:'https://preview.whumpo.site','content-type':'application/x-www-form-urlencoded'},body:'token='+issued.token}),env);
  const response=await view(),html=await response.text();
