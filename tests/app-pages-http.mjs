@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile,writeFile} from 'node:fs/promises';
 import {authenticator} from './app-authenticator.mjs';
-const origin=process.env.TOWNHELLO_APP_TEST_URL??'http://localhost:8787';
+const origin=process.env.WHUMPO_APP_TEST_URL??'http://localhost:8787';
 assert.equal(origin,'http://localhost:8787','Use the isolated local app host and synthetic fixtures');
 const fixture=JSON.parse(await readFile('.secrets/app-page-fixture.json','utf8')),base=origin+'/apps/'+fixture.project;
 let requestNumber=0;

@@ -1,6 +1,6 @@
 # Whumpo
 
-Whumpo is an invitation-only AI website and application platform in private testing at **https://whumpo.com**. The signed-in workspace is `/workspace/`; customer sites use project subdomains of **whumpo.site**. Source: private **zemdregon/whumpo** repository. Historical `tellumo-*` service names remain internal infrastructure identifiers.
+Whumpo is an invitation-only AI website and application platform in private testing at **https://whumpo.com**. The signed-in workspace is `/workspace/`; customer sites use project subdomains of **whumpo.site**. Source: private **zemdregon/whumpo** repository. Historical `whumpo-*` service names remain internal infrastructure identifiers.
 
 **MVP is not complete.** Start with the [dated capability matrix](docs/capability-matrix.md), [current readiness assessment](docs/acceptance.md) and [delivery contract](docs/mvp.md). Detailed feature documents distinguish implemented code, configured services and verified customer journeys; an implemented integration is not automatically available to customers.
 

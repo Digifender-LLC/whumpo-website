@@ -293,7 +293,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if(method==='GET'&&historyRoute)return json(await backendStateHistory(env.DB,user.id,historyRoute[1]));
   const snapshotRoute=pathname.match(/^\/api\/backend-state-snapshots\/([0-9a-f-]{36})\/(export|restore)$/);
   if(snapshotRoute){
-    if(method==='GET'&&snapshotRoute[2]==='export')return json(await exportBackendState(env.DB,user.id,snapshotRoute[1]),200,{'content-disposition':'attachment; filename="townhello-backend-state-'+snapshotRoute[1]+'.json"'});
+    if(method==='GET'&&snapshotRoute[2]==='export')return json(await exportBackendState(env.DB,user.id,snapshotRoute[1]),200,{'content-disposition':'attachment; filename="whumpo-backend-state-'+snapshotRoute[1]+'.json"'});
     if(method==='POST'&&snapshotRoute[2]==='restore'){
       const data=await body(request);if(typeof data?.id!=='string'||(data.side!=='before'&&data.side!=='after'))return error(400,'Provide a review ID and before or after snapshot side');
       return json(await restoreBackendState(env.DB,user.id,data.id,snapshotRoute[1],data.side));

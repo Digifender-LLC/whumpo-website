@@ -2425,7 +2425,7 @@ CREATE TRIGGER cms_setup_review_guard BEFORE INSERT ON cms_setup_reviews WHEN NE
 
 CREATE TRIGGER cms_instances_insert BEFORE INSERT ON cms_instances WHEN
  NEW.state<>'queued' OR NEW.database_id IS NOT NULL OR NEW.session_namespace_id IS NOT NULL OR NEW.deployed_version_id IS NOT NULL OR
- NEW.worker_name<>'townhello-cms-'||replace(NEW.project_id,'-','') OR NEW.database_name<>NEW.worker_name OR NEW.bucket_name<>NEW.worker_name||'-media' OR
+ NEW.worker_name<>'whumpo-cms-'||replace(NEW.project_id,'-','') OR NEW.database_name<>NEW.worker_name OR NEW.bucket_name<>NEW.worker_name||'-media' OR
  NOT EXISTS(SELECT 1 FROM cms_setup_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=NEW.review_id AND r.project_id=NEW.project_id AND r.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND r.status='approved') OR
  (SELECT count(*) FROM cms_instances)>=5 OR (SELECT count(*) FROM cms_instances WHERE user_id=NEW.user_id)>=2
  BEGIN SELECT RAISE(ABORT,'cms_instance_unavailable'); END;
@@ -2438,7 +2438,7 @@ CREATE TRIGGER cms_setup_confirm_guard BEFORE UPDATE OF status ON cms_setup_revi
  BEGIN SELECT RAISE(ABORT,'cms_setup_review_stale'); END;
 
 CREATE TRIGGER cms_setup_enqueue AFTER UPDATE OF status ON cms_setup_reviews WHEN NEW.status='approved' BEGIN
- INSERT INTO cms_instances(project_id,user_id,review_id,worker_name,database_name,bucket_name) VALUES(NEW.project_id,NEW.user_id,NEW.id,'townhello-cms-'||replace(NEW.project_id,'-',''),'townhello-cms-'||replace(NEW.project_id,'-',''),'townhello-cms-'||replace(NEW.project_id,'-','')||'-media');
+ INSERT INTO cms_instances(project_id,user_id,review_id,worker_name,database_name,bucket_name) VALUES(NEW.project_id,NEW.user_id,NEW.id,'whumpo-cms-'||replace(NEW.project_id,'-',''),'whumpo-cms-'||replace(NEW.project_id,'-',''),'whumpo-cms-'||replace(NEW.project_id,'-','')||'-media');
 END;
 
 CREATE TRIGGER cms_instance_identity BEFORE UPDATE ON cms_instances WHEN NEW.project_id<>OLD.project_id OR NEW.user_id<>OLD.user_id OR NEW.review_id<>OLD.review_id OR NEW.worker_name<>OLD.worker_name OR NEW.database_name<>OLD.database_name OR NEW.bucket_name<>OLD.bucket_name OR NEW.created_at<>OLD.created_at OR (OLD.database_id IS NOT NULL AND NEW.database_id IS NOT OLD.database_id) OR (OLD.session_namespace_id IS NOT NULL AND NEW.session_namespace_id IS NOT OLD.session_namespace_id)
@@ -2836,7 +2836,7 @@ BEGIN
  SELECT RAISE(ABORT,'cloudflare_dns_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(
  SELECT 1 FROM domain_claims d JOIN projects p ON p.id=d.project_id JOIN cloudflare_token_vault t ON t.user_id=p.owner_user_id
  WHERE d.id=NEW.claim_id AND d.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND d.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND t.id=NEW.token_id AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND (
- (NEW.record_type='TXT' AND '_tellumo.'||d.hostname=NEW.record_name AND 'tellumo-verification='||d.token=NEW.content)
+ (NEW.record_type='TXT' AND '_whumpo.'||d.hostname=NEW.record_name AND 'whumpo-verification='||d.token=NEW.content)
  OR (NEW.record_type='CNAME' AND d.hostname=NEW.record_name AND d.token=NEW.proof_token AND NEW.content='hosting.whumpo.site' AND NEW.record_name!=NEW.zone_name AND EXISTS(
  SELECT 1 FROM domain_connections c WHERE c.id=NEW.connection_id AND c.user_id=NEW.user_id AND c.claim_id=d.id AND c.project_id=d.project_id AND c.hostname=d.hostname AND c.target=NEW.content AND c.zone_id='8d46ee4e394514402479acf16579f7b5' AND c.state IN ('provisioning','active') AND c.provider_id IS NOT NULL))));
 END;

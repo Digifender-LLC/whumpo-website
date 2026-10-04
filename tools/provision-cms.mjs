@@ -24,7 +24,7 @@ async function main(){
  const row=await db.prepare('SELECT * FROM cms_instances WHERE project_id=?').bind(project).first();
  const template=JSON.parse(await readFile(join(snapshot.artifact,'server/wrangler.json'),'utf8')),master=await cmsMasterKey(db),{deriveCMSSecret}=await module('src/cms-bridge.ts'),origin='https://'+row.worker_name+'.whumpo.site',secret=await deriveCMSSecret(master,project,row.user_id,origin);
  const config=instanceConfig(template,snapshot.artifact,row,base.account_id),configPath=join(snapshot.dir,'worker.json'),secretPath=join(snapshot.dir,'worker-secrets.json');
- await writeFile(configPath,JSON.stringify(config,null,2));await writeFile(secretPath,JSON.stringify({TOWNHELLO_CMS_BRIDGE_KEY:secret}),{mode:0o600});
+ await writeFile(configPath,JSON.stringify(config,null,2));await writeFile(secretPath,JSON.stringify({WHUMPO_CMS_BRIDGE_KEY:secret}),{mode:0o600});
  let probe;
  try{
   const {deployCMS,connectCMS}=await module('src/cms-deploy.ts');

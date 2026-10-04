@@ -12,7 +12,7 @@ const encoder=new TextEncoder();
 const hex=(bytes:ArrayBuffer)=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 async function digest(value:string){return hex(await crypto.subtle.digest('SHA-256',encoder.encode(value)));}
 export function cmsBridgeConfig(env:Record<string,unknown>):CMSBridgeConfig{
- const projectId=env.TOWNHELLO_CMS_PROJECT_ID,ownerId=env.TOWNHELLO_CMS_OWNER_ID,secret=env.TOWNHELLO_CMS_BRIDGE_KEY,origin=env.TOWNHELLO_CMS_ORIGIN;
+ const projectId=env.WHUMPO_CMS_PROJECT_ID,ownerId=env.WHUMPO_CMS_OWNER_ID,secret=env.WHUMPO_CMS_BRIDGE_KEY,origin=env.WHUMPO_CMS_ORIGIN;
  if(typeof projectId!=='string'||!uuid.test(projectId)||typeof ownerId!=='string'||!uuid.test(ownerId)||typeof secret!=='string'||secret.length<43||typeof origin!=='string')throw new CMSBridgeError(503,'CMS ownership is not configured');
  let url:URL;try{url=new URL(origin);}catch{throw new CMSBridgeError(503,'CMS origin is not configured');}
  if(url.protocol!=='https:'||url.origin!==origin)throw new CMSBridgeError(503,'CMS origin is not configured');
@@ -26,16 +26,16 @@ async function boundedBody(request:Request){
  const all=new Uint8Array(length);let offset=0;for(const part of parts){all.set(part,offset);offset+=part.length;}
  try{return new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(all);}catch{throw new CMSBridgeError(400,'Invalid CMS request encoding');}
 }
-function canonical(config:CMSBridgeConfig,method:string,path:string,id:string,expires:number,bodyHash:string){return JSON.stringify(['townhello-cms-v1',config.projectId,config.ownerId,config.origin,method,path,id,expires,bodyHash]);}
+function canonical(config:CMSBridgeConfig,method:string,path:string,id:string,expires:number,bodyHash:string){return JSON.stringify(['whumpo-cms-v1',config.projectId,config.ownerId,config.origin,method,path,id,expires,bodyHash]);}
 export async function signCMSRequest(config:CMSBridgeConfig,path:string,id:string,body?:unknown,now=Date.now(),verb?:'PUT'){
  if(!uuid.test(id)||!path.startsWith('/_emdash/api/')||(/[?#%\\]/.test(path)&&!cmsMediaListPath.test(path)))throw new CMSBridgeError(400,'Invalid CMS request');
  const method=verb??(body===undefined?'GET':'POST'),serialized=body===undefined?'':JSON.stringify(body),expires=Math.floor(now/1000)+60;
  if(encoder.encode(serialized).length>4352)throw new CMSBridgeError(413,'CMS request exceeds its bound');
  const signature=hex(await crypto.subtle.sign('HMAC',await key(config),encoder.encode(canonical(config,method,path,id,expires,await digest(serialized)))));
- return new Request(config.origin+path,{method,headers:{'content-type':'application/json','x-townhello-cms-id':id,'x-townhello-cms-expires':String(expires),'x-townhello-cms-signature':signature},...(body===undefined?{}:{body:serialized})});
+ return new Request(config.origin+path,{method,headers:{'content-type':'application/json','x-whumpo-cms-id':id,'x-whumpo-cms-expires':String(expires),'x-whumpo-cms-signature':signature},...(body===undefined?{}:{body:serialized})});
 }
 export async function verifyCMSRequest(request:Request,config:CMSBridgeConfig,now=Date.now()){
- const url=new URL(request.url),id=request.headers.get('x-townhello-cms-id')??'',expiration=request.headers.get('x-townhello-cms-expires')??'',signature=request.headers.get('x-townhello-cms-signature')??'';
+ const url=new URL(request.url),id=request.headers.get('x-whumpo-cms-id')??'',expiration=request.headers.get('x-whumpo-cms-expires')??'',signature=request.headers.get('x-whumpo-cms-signature')??'';
  const expires=Number(expiration),seconds=Math.floor(now/1000);
  if(url.origin!==config.origin||(!!url.search&&!cmsMediaListPath.test(url.pathname+url.search))||url.hash||url.username||url.password||!uuid.test(id)||!/^\d{10}$/.test(expiration)||expires<=seconds||expires>seconds+60||!/^[0-9a-f]{64}$/.test(signature)||!['GET','POST','PUT'].includes(request.method)||request.headers.has('cookie')||request.headers.has('authorization'))throw new CMSBridgeError(403,'CMS request not authorized');
  const body=await boundedBody(request.clone()),bodyHash=await digest(body),payload=canonical(config,request.method,url.pathname+url.search,id,expires,bodyHash);
@@ -61,7 +61,7 @@ export function cmsRequestAllowed(method:string,path:string,body:string){
 export async function deriveCMSSecret(master:string,projectId:string,ownerId:string,origin:string){
  if(master.length<43||!uuid.test(projectId)||!uuid.test(ownerId))throw new CMSBridgeError(503,'CMS signing configuration unavailable');
  const key=await crypto.subtle.importKey('raw',encoder.encode(master),{name:'HMAC',hash:'SHA-256'},false,['sign']);
- return hex(await crypto.subtle.sign('HMAC',key,encoder.encode(JSON.stringify(['townhello-cms-key-v1',projectId,ownerId,origin]))));
+ return hex(await crypto.subtle.sign('HMAC',key,encoder.encode(JSON.stringify(['whumpo-cms-key-v1',projectId,ownerId,origin]))));
 }
 export async function callCMS(service:Fetcher,config:CMSBridgeConfig,path:string,id:string,body?:unknown,verb?:'PUT'){
  return callSignedCMS(service,await signCMSRequest(config,path,id,body,Date.now(),verb));
@@ -87,7 +87,7 @@ export async function verifyCMSInitialization(service:Fetcher,config:CMSBridgeCo
  const setup=await callCMS(service,config,'/_emdash/api/setup/status',crypto.randomUUID());
  if(setup?.needsSetup!==false)throw new CMSBridgeError(409,'CMS setup is incomplete');
  const owner=await callCMS(service,config,'/_emdash/api/auth/me',crypto.randomUUID());
- if(owner?.email!==config.ownerId+'@owners.townhello.invalid'||owner?.role!==50)throw new CMSBridgeError(409,'CMS owner could not be verified');
+ if(owner?.email!==config.ownerId+'@owners.whumpo.invalid'||owner?.role!==50)throw new CMSBridgeError(409,'CMS owner could not be verified');
  const schema=await callCMS(service,config,'/_emdash/api/schema/collections',crypto.randomUUID());
  const collections=schema?.items;if(!Array.isArray(collections)||!collections.some(c=>c.slug==='posts')||!collections.some(c=>c.slug==='pages'))throw new CMSBridgeError(409,'CMS core collections are missing');
  return {ownerVerified:true,collections:collections.filter(c=>typeof c.slug==='string').map(c=>c.slug).slice(0,25)};

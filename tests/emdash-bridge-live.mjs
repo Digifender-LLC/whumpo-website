@@ -15,11 +15,11 @@ assert.deepEqual((await capability.json()).data,{contract:'whumpo-cms-capabiliti
 assert.equal((await fetch(base+'/_emdash/api/setup/status')).status,403);
 assert.equal((await call('/_emdash/api/setup/status',undefined,id(),{...config,ownerId:id()})).status,403);
 const before=await call('/_emdash/api/setup/status');assert.equal(before.status,200);const initial=await before.json();assert.equal(initial.data.needsSetup,true,JSON.stringify(initial));
-const requestId=id(),body={title:'TownHello CMS bridge fixture',tagline:'Private isolated CMS',includeContent:false};
+const requestId=id(),body={title:'Whumpo CMS bridge fixture',tagline:'Private isolated CMS',includeContent:false};
 const setup=await call('/_emdash/api/setup',body,requestId);const setupData=await setup.json();assert.equal(setup.status,200,JSON.stringify(setupData));assert.equal(setupData.data.setupComplete,true);assert.equal(setupData.data.seedComplete,true);
 assert.deepEqual(await (await call('/_emdash/api/setup',body,requestId)).json(),setupData);
 assert.equal((await call('/_emdash/api/setup',{...body,title:'Forged replay'},requestId)).status,409);
-const me=await call('/_emdash/api/auth/me');const owner=await me.json();assert.equal(me.status,200,JSON.stringify(owner));assert.equal(owner.data.email,config.ownerId+'@owners.townhello.invalid');assert.equal(owner.data.role,50);
+const me=await call('/_emdash/api/auth/me');const owner=await me.json();assert.equal(me.status,200,JSON.stringify(owner));assert.equal(owner.data.email,config.ownerId+'@owners.whumpo.invalid');assert.equal(owner.data.role,50);
 const collections=await call('/_emdash/api/schema/collections');assert.equal(collections.status,200);const schema=await collections.json();assert.ok(JSON.stringify(schema).includes('posts'));
 const media=await call('/_emdash/api/media?page=1&limit=20');assert.equal(media.status,200);const mediaData=await media.json();assert.deepEqual(mediaData.data.items,[]);assert.equal(mediaData.data.totalCount,0);
 const after=await (await call('/_emdash/api/setup/status')).json();assert.equal(after.data.needsSetup,false);

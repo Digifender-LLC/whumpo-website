@@ -33,7 +33,7 @@ export async function directoryHistory(db:D1Database,user:string,project:string)
 }
 export async function exportDirectory(db:D1Database,user:string,project:string,review:string){
  const r=await directorySnapshot(db,user,project,review);
- return {format:'tellumo-directory',schemaVersion:1,project:{id:project,name:r.name},snapshot:{id:r.id,appliedAt:r.applied_at,kind:r.kind,restoredFrom:r.source_review_id,listingsSha256:r.digest},listings:r.listings};
+ return {format:'whumpo-directory',schemaVersion:1,project:{id:project,name:r.name},snapshot:{id:r.id,appliedAt:r.applied_at,kind:r.kind,restoredFrom:r.source_review_id,listingsSha256:r.digest},listings:r.listings};
 }
 export async function directoryAction(db:D1Database,user:string,turn:string,action:Record<string,unknown>){
  const op=action.operation,project=action.projectId;

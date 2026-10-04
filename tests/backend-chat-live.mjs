@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-assert.equal(process.env.TOWNHELLO_LIVE_AI,'1','Explicitly enable the live provider test');
+assert.equal(process.env.WHUMPO_LIVE_AI,'1','Explicitly enable the live provider test');
 import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';

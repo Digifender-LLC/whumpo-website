@@ -35,7 +35,7 @@ try{
  }
  const files=await copyTree(join(root,'source'),join(root,'target'));assert.equal(files.length,1);assert.equal((await fileInventory(join(root,'target'))).length,1);
  assert.equal(await readFile(join(root,'target/normal.ts'),'utf8'),'export const answer=42;');
- const config={name:'tellumo-platform',workers_dev:false,preview_urls:false,vars:{ENVIRONMENT:'test',AI_API_KEY:canary}};
+ const config={name:'whumpo-platform',workers_dev:false,preview_urls:false,vars:{ENVIRONMENT:'test',AI_API_KEY:canary}};
  reject(()=>archivedConfig('platform',config,'index.js',[]));
  let touched=0;
  await assert.rejects(()=>prepareRelease(root,{configs:{runtime:config},observe:()=>{touched++;throw Error();}},{}),/Private material/);assert.equal(touched,0);

@@ -1,15 +1,15 @@
 -- Native EmDash 1.0.1 only. Never apply to the platform control database.
-CREATE TABLE IF NOT EXISTS _townhello_initial_taxonomies (
- id TEXT PRIMARY KEY REFERENCES _townhello_requests(id),
- draft_request_id TEXT NOT NULL UNIQUE REFERENCES _townhello_draft_identities(request_id),
+CREATE TABLE IF NOT EXISTS _whumpo_initial_taxonomies (
+ id TEXT PRIMARY KEY REFERENCES _whumpo_requests(id),
+ draft_request_id TEXT NOT NULL UNIQUE REFERENCES _whumpo_draft_identities(request_id),
  item_id TEXT NOT NULL UNIQUE,
  body TEXT NOT NULL CHECK(json_valid(body) AND length(CAST(body AS BLOB))<=4096),
  created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 )
 -- statement
-CREATE TRIGGER IF NOT EXISTS _townhello_initial_taxonomy_guard_v1 BEFORE INSERT ON _townhello_initial_taxonomies BEGIN
+CREATE TRIGGER IF NOT EXISTS _whumpo_initial_taxonomy_guard_v1 BEFORE INSERT ON _whumpo_initial_taxonomies BEGIN
  SELECT CASE WHEN NOT EXISTS(
-  SELECT 1 FROM _townhello_draft_identities i JOIN _townhello_requests r ON r.id=i.request_id JOIN ec_posts p ON p.id=NEW.item_id
+  SELECT 1 FROM _whumpo_draft_identities i JOIN _whumpo_requests r ON r.id=i.request_id JOIN ec_posts p ON p.id=NEW.item_id
   WHERE i.request_id=NEW.draft_request_id AND i.collection='posts' AND p.slug=i.slug
   AND r.status BETWEEN 200 AND 299 AND json_extract(r.response,'$.success')=1 AND json_extract(r.response,'$.data.item.id')=p.id
   AND p.status='draft' AND p.version=1 AND p.locale='en' AND p.translation_group=p.id
@@ -31,10 +31,10 @@ CREATE TRIGGER IF NOT EXISTS _townhello_initial_taxonomy_guard_v1 BEFORE INSERT 
  ) THEN RAISE(ABORT,'reviewed_terms_changed') END;
 END
 -- statement
-CREATE TRIGGER IF NOT EXISTS _townhello_initial_taxonomy_apply_v1 AFTER INSERT ON _townhello_initial_taxonomies BEGIN
+CREATE TRIGGER IF NOT EXISTS _whumpo_initial_taxonomy_apply_v1 AFTER INSERT ON _whumpo_initial_taxonomies BEGIN
  INSERT INTO content_taxonomies(collection,entry_id,taxonomy_id)
  SELECT 'posts',NEW.item_id,json_extract(value,'$.id') FROM json_each(NEW.body,'$.terms');
  UPDATE ec_posts SET version=version+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=NEW.item_id;
 END
 -- statement
-CREATE TRIGGER IF NOT EXISTS _townhello_initial_taxonomy_immutable_v1 BEFORE UPDATE ON _townhello_initial_taxonomies BEGIN SELECT RAISE(ABORT,'initial_taxonomy_receipt_immutable'); END
+CREATE TRIGGER IF NOT EXISTS _whumpo_initial_taxonomy_immutable_v1 BEFORE UPDATE ON _whumpo_initial_taxonomies BEGIN SELECT RAISE(ABORT,'initial_taxonomy_receipt_immutable'); END

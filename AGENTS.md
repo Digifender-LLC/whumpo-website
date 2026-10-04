@@ -5,7 +5,7 @@
 Whumpo is a private test-stage, Cloudflare-hosted AI website and application platform. `README.md` is the entry point; feature contracts and deployment evidence live under `docs/`. Read the relevant feature document before changing its behavior. `docs/cloudflare-capability-roadmap.md` maps Cloudflare products to Whumpo opportunities and current status.
 
 - TypeScript Workers are in `src/`; workspace UI is React in `frontend/`; controlled visitor app assets are in `public-app/`; the public website host is `src/site-host.ts`.
-- `tellumo-platform`, `tellumo-sites`, `tellumo-apps`, and `tellumo-runtime` are separate Worker services configured by the root `wrangler*.jsonc` files. Keep auth/secrets and customer content boundaries between them.
+- `whumpo-platform`, `whumpo-sites`, `whumpo-apps`, and `whumpo-runtime` are separate Worker services configured by the root `wrangler*.jsonc` files. Keep auth/secrets and customer content boundaries between them.
 - D1 uses the complete current schema assembled by `tools/current-schema.mjs`. Update the canonical schema inputs and initialize disposable local fixtures or a distinct empty test database for coordinated cutovers. Do not replay numbered migrations or overlay an obsolete database. Preserve tenant ownership, immutable review/version, idempotency, quota and atomicity invariants documented in the relevant docs.
 - R2 `FILES` is private. Serve objects only through authenticated/approved paths; do not make buckets public.
 - Customer-written/generated backend source runs through the bounded QuickJS runtime. Do not execute model-produced source in the control Worker or relax publication/activation review gates.

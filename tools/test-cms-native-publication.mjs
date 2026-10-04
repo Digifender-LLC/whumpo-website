@@ -23,10 +23,10 @@ try{
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Native publication fixture','','draft',?,?)").bind(project,user,now,now).run();
  const setup=await api.prepareCMS(owned,user,id(),project,'Studio stories','Private local acceptance');await api.confirmCMS(owned,user,setup.id);
  const resources=new Map();await api.allocateCMSResources(db,project,{accountId:account,find:async(k,n)=>resources.get(k+n)??null,create:async(k,n)=>resources.set(k+n,k==='database'?id():k==='session'?id().replaceAll('-',''):n)});
- const origin='https://townhello-cms-'+project.replaceAll('-','')+'.whumpo.site',identity={projectId:project,ownerId:user,origin,secret:await api.deriveCMSSecret(master,project,user,origin)};
+ const origin='https://whumpo-cms-'+project.replaceAll('-','')+'.whumpo.site',identity={projectId:project,ownerId:user,origin,secret:await api.deriveCMSSecret(master,project,user,origin)};
  const source=resolve('integrations/emdash/dist/server/wrangler.json'),config=JSON.parse(await readFile(source,'utf8'));
  config.main=resolve(dirname(source),config.main);config.assets.directory=resolve(dirname(source),config.assets.directory);delete config.triggers;
- config.vars={TOWNHELLO_CMS_PROJECT_ID:project,TOWNHELLO_CMS_OWNER_ID:user,TOWNHELLO_CMS_BRIDGE_KEY:identity.secret,TOWNHELLO_CMS_ORIGIN:origin,EMDASH_SITE_URL:origin};
+ config.vars={WHUMPO_CMS_PROJECT_ID:project,WHUMPO_CMS_OWNER_ID:user,WHUMPO_CMS_BRIDGE_KEY:identity.secret,WHUMPO_CMS_ORIGIN:origin,EMDASH_SITE_URL:origin};
  await writeFile(join(dir,'cms.json'),JSON.stringify(config));
  await writeFile(join(dir,'probe.mjs'),`export default {fetch(request,env){const u=new URL(request.url);return env.CMS.fetch(new Request(${JSON.stringify(origin)}+u.pathname+u.search,request));}};`);
  await writeFile(join(dir,'probe.json'),JSON.stringify({name:'whumpo-publication-probe',main:'probe.mjs',compatibility_date:'2026-09-29',workers_dev:false,preview_urls:false,services:[{binding:'CMS',service:config.name}]}));

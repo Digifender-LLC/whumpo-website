@@ -29,7 +29,7 @@ export async function prepareAppDeletion(db:D1Database,token:string,project:stri
 function deletionProof(token:string,project:string,id:string,revision:number){
  if(!/^[0-9a-f]{64}$/.test(token))throw new BackendError(401,'Application sign-in required');
  if(!uuid.test(project)||!uuid.test(id)||!Number.isSafeInteger(revision)||revision<0)throw new BackendError(400,'Provide the deletion request and reviewed revision');
- return hashToken(JSON.stringify(['townhello-app-deletion',token,project,id,revision]));
+ return hashToken(JSON.stringify(['whumpo-app-deletion',token,project,id,revision]));
 }
 // Absence is unconfirmed, not evidence that an in-flight deletion cannot commit.
 // No authentication refresh, cleanup, writes or first dispatch occurs here.
@@ -69,14 +69,14 @@ export async function exportAppAccount(db:D1Database,token:string,project:string
   try{
    if(finished)return;
    const current=await appIdentity(db,token,project);if(current.visitor_id!==actor.visitor_id)throw new BackendError(401,'Application account changed');
-   if(!started){started=true;controller.enqueue(encoder.encode(JSON.stringify({format:'townhello-visitor-export-v1',exportedAt:new Date().toISOString(),projectId:project,account:{id:account.id,createdAt:account.created_at},document:{revision:account.revision,value:JSON.parse(account.state_json)},historyNote:'History is read in batches and may include activity completed during export. This is not a restore snapshot.'}).slice(0,-1)+',"operations":['));return;}
+   if(!started){started=true;controller.enqueue(encoder.encode(JSON.stringify({format:'whumpo-visitor-export-v1',exportedAt:new Date().toISOString(),projectId:project,account:{id:account.id,createdAt:account.created_at},document:{revision:account.revision,value:JSON.parse(account.state_json)},historyNote:'History is read in batches and may include activity completed during export. This is not a restore snapshot.'}).slice(0,-1)+',"operations":['));return;}
    const {results}=await db.prepare('SELECT id,version_id,base_revision,program_revision,state,result_json,next_json,day FROM app_runs WHERE visitor_id=? AND project_id=? AND id>? ORDER BY id LIMIT 50').bind(actor.visitor_id,project,cursor).all<{id:string;version_id:string;base_revision:number;program_revision:number;state:string;result_json:string|null;next_json:string|null;day:string}>();
    if(!results.length){finished=true;controller.enqueue(encoder.encode(']}'));controller.close();return;}
    const output=results.map(row=>({id:row.id,versionId:row.version_id,baseRevision:row.base_revision,programRevision:row.program_revision,status:row.state,day:row.day,result:row.result_json?JSON.parse(row.result_json):null,savedState:row.next_json?JSON.parse(row.next_json):null}));
    controller.enqueue(encoder.encode((hasRows?',':'')+output.map(value=>JSON.stringify(value)).join(',')));hasRows=true;cursor=results[results.length-1].id;
   }catch(error){finished=true;controller.error(error);}
  },cancel(){finished=true;}});
- return new Response(stream,{headers:{'content-type':'application/json; charset=utf-8','content-disposition':`attachment; filename="townhello-app-${project.slice(0,8)}.json"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer','cross-origin-resource-policy':'same-origin'}});
+ return new Response(stream,{headers:{'content-type':'application/json; charset=utf-8','content-disposition':`attachment; filename="whumpo-app-${project.slice(0,8)}.json"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer','cross-origin-resource-policy':'same-origin'}});
 }
 
 export async function cleanupAppLifecycle(db:D1Database){

@@ -27,7 +27,7 @@ export async function startAcknowledgment(db:D1Database,user:string,turn:string,
   try{
     await inferenceReservation(db,user,turn,period,config,policyInputBound(messages),256,'ack').run();
     if(!await dispatchInference(db,user,id))return;
-    const result=await complete({...config,maxOutputTokens:256,timeoutMs:5000,sessionId:`townhello-ack-${user}`},messages,transport);
+    const result=await complete({...config,maxOutputTokens:256,timeoutMs:5000,sessionId:`whumpo-ack-${user}`},messages,transport);
     await observeInference(db,user,id,result,parseAcknowledgment(result.text));
   }catch{
     // Missing receipt means admission failed before dispatch. Unknown provider usage keeps its hold.

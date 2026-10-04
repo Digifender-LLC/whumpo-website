@@ -8,7 +8,7 @@ It consumes, and does not replace: [WH-064/066 specification and compiler](proje
 
 Expose four maintained module kinds — **content collections, records (including forms and record views), files (including galleries) and access (project visitor/staff users and roles)** — as narrow, typed, tenant-scoped APIs over the current shared D1, private R2 `FILES` and the existing visitor Worker. Existing contact, directory, photo and visitor-data services become instances or adapters of these modules ([mapping](#existing-services-and-the-module-each-becomes)); WH-067 adds no second authentication system, storage engine or generic CRUD/SQL layer. Notifications and rules stay in WH-068/069; presentation stays in WH-070.
 
-- Module organization is independent of deployment count. All four kinds can run inside the current platform (`tellumo-platform`) and visitor (`tellumo-apps`) Workers. A module is a contract plus maintained handler code, never a per-project script or database.
+- Module organization is independent of deployment count. All four kinds can run inside the current platform (`whumpo-platform`) and visitor (`whumpo-apps`) Workers. A module is a contract plus maintained handler code, never a per-project script or database.
 - Every module operation is deterministic. No module handler imports or invokes owner-maintenance inference, its context, credentials or funding. Standard actions must pass with maintenance inference unavailable.
 - Configuration is not activation. The approved specification describes desired configuration; a separate exact owner activation review makes a module instance serve visitors, as with [service clients](project-service-clients.md).
 

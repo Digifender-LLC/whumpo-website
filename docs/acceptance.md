@@ -137,7 +137,7 @@ Latest fair-use review foundation (September 30): migration 0091 and the account
 
 Current domain/frontend configuration: see [Whumpo migration](whumpo-migration.md). Older entries below are historical release evidence and do not describe the current hostname.
 
-Release `21227d1` is active on `tellumo-apps` (`9511d3eb-a750-45cf-b9d1-c7ddaf151843`) and `tellumo-platform` (`d9f619ab-6f88-4856-b9c0-93eaaeba57e4`). Migration 0057 is applied remotely. The controlled host uses `apps.digifender.com`; no customer page is published automatically. A remote read confirmed zero rows in `app_live_pages` after deployment.
+Release `21227d1` is active on `whumpo-apps` (`9511d3eb-a750-45cf-b9d1-c7ddaf151843`) and `whumpo-platform` (`d9f619ab-6f88-4856-b9c0-93eaaeba57e4`). Migration 0057 is applied remotely. The controlled host uses `apps.digifender.com`; no customer page is published automatically. A remote read confirmed zero rows in `app_live_pages` after deployment.
 
 Implemented owner-reviewed page publication/withdrawal, a fixed passkey-first visitor UI, exact form/page checks, scoped private data/receipt routes, session revocation on page changes and public-session admission pinned to the page review. Public recovery now has the visitor save a derived replacement code before committing; exact retries and recovery after acknowledgment loss were verified.
 
@@ -151,7 +151,7 @@ The platform uploaded successfully, but Wrangler rotated its ambient OAuth token
 
 # Owner visitor access controls — September 29, 2026
 
-Release `147da57` deployed to `tellumo-platform`, version `e2bda454-676e-447c-af86-f223fefbcb61`. Migration 0056 is now applied remotely. Owner access metadata, invitation creation/cancellation and visitor revocation are available from Dashboard → Visitor access and the `/visitor-access` chat shortcut. The visitor gateway remains unmounted; no public visitor enrollment/data endpoint was enabled.
+Release `147da57` deployed to `whumpo-platform`, version `e2bda454-676e-447c-af86-f223fefbcb61`. Migration 0056 is now applied remotely. Owner access metadata, invitation creation/cancellation and visitor revocation are available from Dashboard → Visitor access and the `/visitor-access` chat shortcut. The visitor gateway remains unmounted; no public visitor enrollment/data endpoint was enabled.
 
 Passed `test:app-auth`, `test:site-agent`, type checking, build and diff checks. The auth suite includes platform HTTP handler tests with real local D1: anonymous/foreign-owner denial, fresh-session requirement, CSRF, metadata fields, cancellation after enrollment challenge issuance, revocation while disabled, and credential-free guided chat. Browser inspection on synthetic local fixtures verified separate full-width navigation, Chat shortcut, confirmation dismissal, and a 390px layout without horizontal overflow. Saved local preview: `.secrets/verification/visitor-access.png`. Tests do not claim real-device visitor passkey or actual hosted application-page acceptance.
 
@@ -224,7 +224,7 @@ Owned applied snapshots can be listed in chat, exported as private before/after 
 
 ## EmDash ownership bridge milestone
 
-The deployed private CMS now requires signed owner/project-bound requests and refuses access while unassigned. Actual local EmDash integration proves empty-content setup, pinned owner administration, collection-schema reads and setup closure; the D1 gateway suite covers signature isolation and non-repeating writes. TownHello's project provisioning/consent and chat tools are not yet connected to this bridge. CMS content CRUD, media, reviewed publication, WordPress import and backup/restore remain explicit MVP gates. The private preview was not claimed by a test identity in production.
+The deployed private CMS now requires signed owner/project-bound requests and refuses access while unassigned. Actual local EmDash integration proves empty-content setup, pinned owner administration, collection-schema reads and setup closure; the D1 gateway suite covers signature isolation and non-repeating writes. Whumpo's project provisioning/consent and chat tools are not yet connected to this bridge. CMS content CRUD, media, reviewed publication, WordPress import and backup/restore remain explicit MVP gates. The private preview was not claimed by a test identity in production.
 
 ## CMS setup request milestone
 
@@ -240,7 +240,7 @@ The operator pipeline now freezes each approved project's compiled EmDash artifa
 
 Local D1/provider tests cover lost upload acknowledgments without repeat upload, source/key/version mismatches, owner/schema failures, receipt replay and tenant isolation. The actual local EmDash app passes native initialization verification. Production has no approved customer CMS queue entries, so full live tenant provisioning remains unverified. Tenant scheduling, content tools, publication reviews, media, WordPress import and CMS backup/restore remain open MVP gates. This milestone supersedes the earlier storage-only implementation status; it does not declare the CMS or overall MVP complete.
 
-Deployment evidence: migration 0038 applied remotely; platform version `13de6d8c-6c00-486f-8387-c9817362335e` verified through the provider API. The TownHello landing page and health endpoint returned 200; the unauthenticated CMS status endpoint returned 401. No customer CMS instance was created by this release.
+Deployment evidence: migration 0038 applied remotely; platform version `13de6d8c-6c00-486f-8387-c9817362335e` verified through the provider API. The Whumpo landing page and health endpoint returned 200; the unauthenticated CMS status endpoint returned 401. No customer CMS instance was created by this release.
 
 ## Native CMS draft milestone
 
@@ -256,7 +256,7 @@ Deployment evidence: migration 0040 applied remotely; platform version `731b09f4
 
 ## CMS browser preview milestone
 
-Owners can open a private preview from chat for a saved native draft. It renders current native content and revision using the TownHello article theme. Native rendering, escaped text, unsupported-content rejection, owner isolation, chat button metadata and restrictive response headers are covered by tests; local browser layout was inspected. The preview is current-state reading, not a frozen approval or public launch. Rich media, custom CMS themes and reviewed publication remain open.
+Owners can open a private preview from chat for a saved native draft. It renders current native content and revision using the Whumpo article theme. Native rendering, escaped text, unsupported-content rejection, owner isolation, chat button metadata and restrictive response headers are covered by tests; local browser layout was inspected. The preview is current-state reading, not a frozen approval or public launch. Rich media, custom CMS themes and reviewed publication remain open.
 
 Deployment evidence: migration 0041 applied remotely; platform version `759c77c7-d9e9-4b5e-b30d-d0eab50ed1a4` verified. Live homepage/health returned 200 and the anonymous preview endpoint returned 401. The CMS Worker profile itself was unchanged by this milestone. Live customer previews remain unverified until an approved customer instance is provisioned.
 

@@ -23,7 +23,7 @@ export async function cmsInventory(db){
 }
 export function cmsServices(cms){
  return cms.filter(c=>['verified','connected'].includes(c.deployment_state)).map(c=>{
-  if(c.worker_name!=='townhello-cms-'+c.project_id.replaceAll('-',''))throw Error('Invalid CMS registration');
+  if(c.worker_name!=='whumpo-cms-'+c.project_id.replaceAll('-',''))throw Error('Invalid CMS registration');
   return {binding:'CMS_'+c.project_id.replaceAll('-',''),service:c.worker_name};
  });
 }

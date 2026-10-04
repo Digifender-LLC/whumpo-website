@@ -101,14 +101,14 @@ Six opt-in AI/deployment harnesses now require current schema/authority. The sha
 
 ### Read-only cutover resource inventory
 
-A fresh Cloudflare read at 2026-10-02T03:18:33.186Z confirms the existing control database still contains one test account and one project. The inspected GitHub/Cloudflare vault, staging, OAuth-state, connection/backup, domain-claim/connection, Stripe customer/subscription/order/paid-invoice, CMS-instance, photo and pending file-cleanup tables are empty. A complete metadata listing of the bound `tellumo-files` bucket returns zero objects. No file bodies, account messages or secret values were read.
+A fresh Cloudflare read at 2026-10-02T03:18:33.186Z confirms the existing control database still contains one test account and one project. The inspected GitHub/Cloudflare vault, staging, OAuth-state, connection/backup, domain-claim/connection, Stripe customer/subscription/order/paid-invoice, CMS-instance, photo and pending file-cleanup tables are empty. A complete metadata listing of the bound `whumpo-files` bucket returns zero objects. No file bodies, account messages or secret values were read.
 
 The four active Workers still use the existing control database where applicable. Version IDs observed:
 
-- `tellumo-platform`: `cea0fa86-7770-4255-a9f7-551ea462ecf7`
-- `tellumo-sites`: `dfdd629f-5265-48d0-a7ef-c2a383fa6b3a`
-- `tellumo-apps`: `575a9c63-5bad-45ee-8625-0faefa0e6fbf`
-- `tellumo-runtime`: `8dc4d06e-378f-46f3-b015-f1315bc2ee07`
+- `whumpo-platform`: `cea0fa86-7770-4255-a9f7-551ea462ecf7`
+- `whumpo-sites`: `dfdd629f-5265-48d0-a7ef-c2a383fa6b3a`
+- `whumpo-apps`: `575a9c63-5bad-45ee-8625-0faefa0e6fbf`
+- `whumpo-runtime`: `8dc4d06e-378f-46f3-b015-f1315bc2ee07`
 
 The platform version was reconciled to the already-deployed Stripe sandbox pricing overlay at `18e9e88`, imported unchanged as `0c8fa8c`. All six source/configuration files match that release and live `/stripe-pricing.json` matches the committed configuration. The overlay changes public pricing presentation and its CSP, not identity, database or entitlement authority. Platform-wide inference, OAuth, encryption, Stripe and Turnstile secrets remain registered; `PASSWORD_PEPPER` is still present and is a retirement item only after current identity is deployed and verified. Existing unrelated account resources, including the separate CMS preview, are outside this reset scope. Empty platform registries do not prove every external account obligation is absent. No resource, secret, database or Worker was changed. Private metadata evidence is `.secrets/identity-cutover-inventory.json` (ignored by Git).
 
@@ -147,7 +147,7 @@ Independent verification at 03:54:21 UTC matched all 39 public build assets, exa
 
 A disposable account with two locally generated independent ES256 keys obtained actual signed sessions from the deployed login route. Profile editing, exact welcome completion, first project, Chat admission, logout, second-key login and direct session revocation passed. The fixture and all its account/project/session rows were removed; inference calls stayed zero. This seeds a synthetic completed identity: it does not test human signup/Turnstile, actual passkey providers or full live recovery. The mobile 390px Chromium entry passed no-overflow/no-password-field/manifest/page-error checks; its screenshot was inspected.
 
-After the release journal completed, `PASSWORD_PEPPER` was deleted. This changed platform version from release candidate `8c05475e-d50b-46bf-b9ec-43e488c055e9` to the final version above while preserving the script etag, remaining bindings and secrets. The obsolete `tellumo-control` database was deleted at 03:56:08 UTC after confirming no active Worker still bound it. Subsequent current-schema, Worker, health and anonymous identity readback passed. The existing daily `17 3 * * *` and hourly `47 * * * *` schedules are retained. The old archive remains historical evidence; its deleted baseline database and candidate platform version are not current deployment targets.
+After the release journal completed, `PASSWORD_PEPPER` was deleted. This changed platform version from release candidate `8c05475e-d50b-46bf-b9ec-43e488c055e9` to the final version above while preserving the script etag, remaining bindings and secrets. The obsolete `whumpo-control-chat-connections-test` database was deleted at 03:56:08 UTC after confirming no active Worker still bound it. Subsequent current-schema, Worker, health and anonymous identity readback passed. The existing daily `17 3 * * *` and hourly `47 * * * *` schedules are retained. The old archive remains historical evidence; its deleted baseline database and candidate platform version are not current deployment targets.
 
 A fresh seven-day, single-use owner invitation was saved privately using the configured current `DB` binding. The operator can open the locally reported invitation file and start new enrollment. No secret or invitation appears in this documentation. Existing Stripe sandbox, inference and OAuth registrations remain configured; no real charge, model call, customer publication, CMS functional test or scanner activation occurred. CSAM and Daybreak remain deferred.
 

@@ -9,7 +9,7 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 const canonical=value=>JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a<b?-1:a>b?1:0)):v);
 // Node HTTPS preserves stored encoded bytes; fetch would transparently decompress gzip objects.
 export function rawCloudflareObject(account,bucket,key,credentials){
- if(!/^[0-9a-f]{32}$/.test(account)||!/^townhello-cms-[0-9a-f]{32}-media$/.test(bucket)||typeof key!=='string'||!key||Buffer.byteLength(key)>1024||key.split('/').some(p=>p==='.'||p==='..'))throw Error('Invalid media object identity');
+ if(!/^[0-9a-f]{32}$/.test(account)||!/^whumpo-cms-[0-9a-f]{32}-media$/.test(bucket)||typeof key!=='string'||!key||Buffer.byteLength(key)>1024||key.split('/').some(p=>p==='.'||p==='..'))throw Error('Invalid media object identity');
  const path='/client/v4/accounts/'+account+'/r2/buckets/'+bucket+'/objects/'+key.split('/').map(encodeURIComponent).join('/');
  return new Promise((resolve,reject)=>{
   const req=request({hostname:'api.cloudflare.com',path,method:'GET',headers:{authorization:'Bearer '+credentials.token,'accept-encoding':'identity'}},res=>{
@@ -20,7 +20,7 @@ export function rawCloudflareObject(account,bucket,key,credentials){
  });
 }
 export function cmsMediaProvider(account,bucket,{credentials,transport=fetch,getObject=rawCloudflareObject}={}){
- if(!/^[0-9a-f]{32}$/.test(account)||!/^townhello-cms-[0-9a-f]{32}-media$/.test(bucket))throw Error('Invalid CMS media source');
+ if(!/^[0-9a-f]{32}$/.test(account)||!/^whumpo-cms-[0-9a-f]{32}-media$/.test(bucket))throw Error('Invalid CMS media source');
  credentials=cloudflareCredentials(credentials);const api=cloudflareClient(account,transport,credentials);
  return {list:cursor=>api('/r2/buckets/'+bucket+'/objects?'+new URLSearchParams({per_page:'100',...(cursor?{cursor}:{})})),get:key=>getObject(account,bucket,key,credentials)};
 }
@@ -57,11 +57,11 @@ export async function captureCMSMedia(provider,directory,limits){
   total+=size;files.push({key:object.key,file,size,sha256:digest.digest('hex'),metadata:object});
  }
  const after=await mediaInventory(provider,limits);if(canonical(after)!==canonical(inventory))throw Error('Media inventory changed during capture');
- return {format:'townhello-cms-media-v1',objects:files,bytes:total,inventoryDigest:sha(canonical(inventory))};
+ return {format:'whumpo-cms-media-v1',objects:files,bytes:total,inventoryDigest:sha(canonical(inventory))};
 }
 
 export async function verifyCapturedCMSMedia(directory,media){
- if(media?.format!=='townhello-cms-media-v1'||!Array.isArray(media.objects)||media.objects.length>1000)throw Error('Invalid media snapshot');
+ if(media?.format!=='whumpo-cms-media-v1'||!Array.isArray(media.objects)||media.objects.length>1000)throw Error('Invalid media snapshot');
  const directoryStat=await lstat(directory);if(!directoryStat.isDirectory()||directoryStat.isSymbolicLink())throw Error('Invalid media snapshot directory');
  let total=0;const keys=new Set();
  for(const object of media.objects){

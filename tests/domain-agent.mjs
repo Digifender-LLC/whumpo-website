@@ -10,8 +10,8 @@ let calls=0,dnsCalls=0,mode='match';const realFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{
  const host=new URL(url instanceof Request?url.url:url).hostname;if(['127.0.0.1','localhost','[::1]'].includes(host))return realFetch(url,options);assert.equal(host,'cloudflare-dns.com','Only the fixed synthetic resolver may be called');
  dnsCalls++;assert.equal(options.redirect,'manual');if(mode==='fail')return new Response('unavailable',{status:503});
- const name=new URL(url).searchParams.get('name'),row=await db.prepare('SELECT token FROM domain_claims WHERE hostname=?').bind(name.slice(9)).first();
- return Response.json({Status:0,Answer:[{name:name+'.',type:16,data:JSON.stringify(mode==='match'?'tellumo-verification='+row.token:'wrong')}]});
+ const name=new URL(url).searchParams.get('name'),row=await db.prepare('SELECT token FROM domain_claims WHERE hostname=?').bind(name.slice(8)).first();
+ return Response.json({Status:0,Answer:[{name:name+'.',type:16,data:JSON.stringify(mode==='match'?'whumpo-verification='+row.token:'wrong')}]});
 };
 const provider=action=>async()=>{calls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'I connected your domain and bought it.',action})}]}],usage:{input_tokens:100,output_tokens:200}});};
 async function send(user,action,database=scope(user.id)){const state=await readChat(scope(user.id),user.id),id=crypto.randomUUID();await sendAIChat(database,user.id,id,state.state.revision,'Help with my domain',cfg,provider(action));return {id,revision:state.state.revision,turn:(await readChat(scope(user.id),user.id)).turns.at(-1)};}

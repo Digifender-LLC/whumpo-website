@@ -8,7 +8,7 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const {module,identity}=await currentFixtureModules(["src/ai-chat.ts", "src/chat.ts", "src/cms-projects.ts"]);
 const {prepareCMS,confirmCMS,readCMSReview,listCMS,cmsAction}=await module('src/cms-projects.ts'),{sendChat,readChat}=await module('src/chat.ts');
 const {sendAIChat}=await module('src/ai-chat.ts');
-const dir=await mkdtemp('/tmp/townhello-cms-projects-');
+const dir=await mkdtemp('/tmp/whumpo-cms-projects-');
 const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID();
 const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}
@@ -24,7 +24,7 @@ try{
  const competing=await prepareCMS(scope(a.user),a.user,id(),a.project,'Alternative','');const race=await Promise.allSettled([confirmCMS(scope(a.user),a.user,r),confirmCMS(scope(a.user),a.user,competing.id)]);assert.equal(race.filter(v=>v.status==='fulfilled').length,1);
  const winner=race.find(v=>v.status==='fulfilled').value.id;await Promise.all(Array.from({length:5},()=>confirmCMS(scope(a.user),a.user,winner)));
  const instances=await listCMS(scope(a.user),a.user);assert.equal(instances.length,1);assert.equal(instances[0].state,'queued');assert.equal((await listCMS(scope(b.user),b.user)).length,0);
- const registry=await db.prepare('SELECT * FROM cms_instances WHERE project_id=?').bind(a.project).first();assert.equal(registry.worker_name,'townhello-cms-'+a.project.replaceAll('-',''));assert.equal(registry.database_id,null);
+ const registry=await db.prepare('SELECT * FROM cms_instances WHERE project_id=?').bind(a.project).first();assert.equal(registry.worker_name,'whumpo-cms-'+a.project.replaceAll('-',''));assert.equal(registry.database_id,null);
  await assert.rejects(db.prepare("UPDATE cms_instances SET state='ready' WHERE project_id=?").bind(a.project).run(),/cms_readiness_not_verified/);
  await assert.rejects(db.prepare('UPDATE cms_instances SET user_id=? WHERE project_id=?').bind(b.user,a.project).run(),/immutable/);
  await assert.rejects(cmsAction(scope(a.user),a.user,id(),{kind:'cms',operation:'confirm',reviewId:winner}),e=>e.status===400);

@@ -62,7 +62,7 @@ export async function backendStateHistory(db:D1Database,user:string,project:stri
 export async function exportBackendState(db:D1Database,user:string,snapshot:string){
  const row=await readBackendReview(db,user,snapshot);
  if(row.status!=='applied')throw new BackendError(409,'Only applied data snapshots can be exported or restored');
- return {format:'townhello-backend-state',schemaVersion:1,projectId:row.project_id,snapshot:{id:row.id,revision:row.base_revision+1,backendVersionId:row.version_id,restoredFrom:row.restore_review_id,restoredSide:row.restore_side},before:{revision:row.base_revision,sha256:await hashToken(row.before_json),data:JSON.parse(row.before_json)},after:{revision:row.base_revision+1,sha256:await hashToken(row.after_json!),data:JSON.parse(row.after_json!)}};
+ return {format:'whumpo-backend-state',schemaVersion:1,projectId:row.project_id,snapshot:{id:row.id,revision:row.base_revision+1,backendVersionId:row.version_id,restoredFrom:row.restore_review_id,restoredSide:row.restore_side},before:{revision:row.base_revision,sha256:await hashToken(row.before_json),data:JSON.parse(row.before_json)},after:{revision:row.base_revision+1,sha256:await hashToken(row.after_json!),data:JSON.parse(row.after_json!)}};
 }
 export async function restoreBackendState(db:D1Database,user:string,id:string,snapshot:string,side:'before'|'after'='after'){
  if(!uuid.test(id)||!uuid.test(snapshot)||!['before','after'].includes(side))throw new BackendError(400,'Choose an applied snapshot and before or after state');
