@@ -2736,7 +2736,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/135. Planning owner: Unassigne
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-04 UTC: owner contact decision (issue #135) implemented in source with local verification only; not deployed, not accepted, no schema change. Customer contact starts through the Whumpo agent; the support page form remains the path when Chat is unavailable. hello@whumpo.com is fixed public source copy (lockoutContact in src/support-shape.ts) shown only as a lockout path on /workspace/support and in the signed-out passkey/recovery help; it does not bypass passkey/kit recovery. The SUPPORT_CONTACT Worker variable is removed from src/support.ts, src/secrets.d.ts and tools/secret-custody.mjs; SUPPORT_HOURS remains unset (no published hours). The 72-hour internal flag and the Chat-unavailable support link are unchanged. Local checks: node tests/support-access.mjs (9 cases) and node tests/usage-review-requests.mjs passed; pnpm check, node tools/verify.mjs fast, node tools/verify.mjs protection and pnpm build passed. tests/helpers/support-journey.mjs was updated for the lockout copy but the Playwright browser journey (pnpm test:support-browser) was not run: Playwright is not installed in this environment. Agent-led intake/readback for general help requests is not built (Chat handles usage reviews only).
 
 ## WH-036 — Add reliable contact delivery and verified sender operations
 

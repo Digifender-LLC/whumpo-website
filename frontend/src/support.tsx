@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Link,useRouterState} from '@tanstack/react-router';
 import {useQuery} from '@tanstack/react-query';
 import {ArrowLeft,LifeBuoy} from 'lucide-react';
-import {deliveryLabel,parseSupportReference,type SupportKind,type SupportOverview,type SupportRequest} from '../../src/support-shape';
+import {deliveryLabel,lockoutContact,parseSupportReference,type SupportKind,type SupportOverview,type SupportRequest} from '../../src/support-shape';
 import {api,send,message,queryClient} from './lib/api';
 import {identityGeneration} from './lib/identity-invalidation';
 import {Brand} from './components/brand';
@@ -55,7 +55,8 @@ export function SupportPage(){
   {data&&<>
    <section aria-labelledby="support-hours" className="rounded-lg border bg-card p-5 space-y-2"><h2 id="support-hours" className="text-xl font-bold">Hours and contact</h2>
     {data.config.hours?<p>Support hours: {data.config.hours}</p>:<p>Support hours have not been set by the platform owner. Do not assume anyone is available at a particular time.</p>}
-    {data.config.contact?<p>Other contact: {data.config.contact}</p>:<p>No other contact address is configured. Use the request form below.</p>}
+    <p>Start with your Whumpo agent in Chat. When Chat is unavailable, use the request form below; responses appear on this page.</p>
+    <p>Locked out of your account? Email <a className="underline" href={'mailto:'+lockoutContact}>{lockoutContact}</a>. That address is only for sign-in lockouts; email does not replace your passkeys or recovery kit. Never send your recovery key.</p>
     <p className="text-sm text-muted-foreground">{data.config.notifications.enabled?'An external notification may tell you a response exists. Its content stays here.':'External notifications are not configured. Check this page for a response.'}</p></section>
    <section aria-labelledby="support-status" className="space-y-4"><h2 id="support-status" className="text-xl font-bold">Status and error help</h2>
     {statusCard&&<div role="status" className="rounded-lg border bg-card p-5 space-y-2"><h3 className="font-bold">{statusCard.title}</h3><p>{statusCard.meaning}</p><p className="text-sm text-muted-foreground">{statusCard.next}</p></div>}

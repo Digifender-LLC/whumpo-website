@@ -16,7 +16,6 @@ interface Env {
   STRIPE_TEST_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   // Owner-supplied, non-secret support values. Unset means not configured; never invent defaults.
-  SUPPORT_CONTACT?: string;
   SUPPORT_HOURS?: string;
   SUPPORT_NOTIFICATION_PROVIDER?: string;
   SUPPORT_NOTIFICATION_REVIEW?: string;

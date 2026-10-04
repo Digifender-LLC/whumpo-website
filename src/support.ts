@@ -1,7 +1,7 @@
 import {BillingError} from './billing';
 import {listUsageReviewRequests,markReadStatement,type UsageReviewRequest} from './usage-review-requests';
 import {parseSupportReference,operationReference,supportStatusLinks,type SupportConfigView,type SupportKind,type SupportOperation,type SupportOverview,type SupportRequest,type SupportDeliveryState} from './support-shape';
-export type SupportEnv={SUPPORT_CONTACT?:string;SUPPORT_HOURS?:string;SUPPORT_NOTIFICATION_PROVIDER?:string;SUPPORT_NOTIFICATION_REVIEW?:string};
+export type SupportEnv={SUPPORT_HOURS?:string;SUPPORT_NOTIFICATION_PROVIDER?:string;SUPPORT_NOTIFICATION_REVIEW?:string};
 /** Notification senders implemented in this repository. None is selected or implemented yet. */
 export const implementedNotificationProviders:readonly string[]=[];
 export type NotificationSettings={provider:string;review:string};
@@ -11,9 +11,9 @@ const cleaned=(value:unknown,max:number)=>typeof value==='string'&&value.trim()&
 export function supportConfig(env:SupportEnv,implemented:readonly string[]=implementedNotificationProviders){
  const provider=cleaned(env.SUPPORT_NOTIFICATION_PROVIDER,60),review=cleaned(env.SUPPORT_NOTIFICATION_REVIEW,200);
  const settings:NotificationSettings|null=provider&&review&&implemented.includes(provider)?{provider,review}:null;
- return {hours:cleaned(env.SUPPORT_HOURS,300),contact:cleaned(env.SUPPORT_CONTACT,300),settings};
+ return {hours:cleaned(env.SUPPORT_HOURS,300),settings};
 }
-export const supportConfigView=(config:ReturnType<typeof supportConfig>):SupportConfigView=>({hours:config.hours,contact:config.contact,notifications:{enabled:config.settings!==null}});
+export const supportConfigView=(config:ReturnType<typeof supportConfig>):SupportConfigView=>({hours:config.hours,notifications:{enabled:config.settings!==null}});
 const columns="r.id,r.kind,r.reference,r.statement,r.created_at,r.state,r.public_response,r.answered_at,r.customer_read_at,d.state AS delivery_state";
 type Row=UsageReviewRequest&{delivery_state:Exclude<SupportDeliveryState,'none'>|null};
 export function supportRequest(row:Row):SupportRequest{

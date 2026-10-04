@@ -5,7 +5,10 @@ export type SupportRequest={id:string;kind:SupportKind;reference:string|null;sta
  /** Saved in Whumpo, external provider acceptance, and customer read are three separate facts. */
  response:{saved:boolean};delivery:{state:SupportDeliveryState};read:{state:'unread'|'read'|'not_applicable';at:string|null}};
 export type SupportOperation={id:string;family:'chat'|'standard_ai'|'hosting'|'backup'|'dns';label:string;state:string;since:string;ageMinutes:number|null;needsAttention:boolean;reference:string;next:string};
-export type SupportConfigView={hours:string|null;contact:string|null;notifications:{enabled:boolean}};
+export type SupportConfigView={hours:string|null;notifications:{enabled:boolean}};
+/** Owner decision (WH-035, 2026-10-04): customer contact starts with the customer's Whumpo agent, which also
+ * carries responses back. This public address is only for people locked out of their account; it is not a general channel. */
+export const lockoutContact='hello@whumpo.com';
 export type SupportOverview={version:1;config:SupportConfigView;requests:SupportRequest[];operations:SupportOperation[];statusLinks:SupportStatusLink[]};
 export type SupportStatusLink={code:StatusCode;title:string;meaning:string;next:string;href:string};
 export const statusCodes=['onboarding_required','chat_unavailable','usage_limit'] as const;
