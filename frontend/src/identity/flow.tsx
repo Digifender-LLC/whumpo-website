@@ -91,6 +91,17 @@ function SecurityContent({control:c}:{control:Control}){return <div className="m
 function IndependentSecurity(){const c=useIdentity();return <SecurityContent control={c}/>;}
 /** The admitted workspace account for fixed identity-only pages; null elsewhere. */
 export function useWorkspaceAccount(){const c=useContext(IdentityContext);return c?.state?.purpose==='workspace'?c.state.accountId:null;}
+/** The single workspace sign-out: the shared identity controller clears device
+ * recovery, private queries and views when its readback confirms the change. */
+export function useSignOut(){
+ const c=useContext(IdentityContext),[error,setError]=useState('');
+ if(!c)throw Error('Sign-out needs the current identity workspace.');
+ return {busy:c.busy,error,signOut:()=>c.run(async()=>{
+  setError('');
+  try{await identityRequest('logout');}catch(cause){setError(cause instanceof Error?cause.message:'Sign-out could not be confirmed. Check saved progress.');throw cause;}
+  await c.reload();
+ },true)};
+}
 export function IdentitySecurity(){const c=useContext(IdentityContext);return c?<SecurityContent control={c}/>:<IndependentSecurity/>;}
 type VerificationWidget={render:(element:HTMLElement,options:Record<string,unknown>)=>string;remove:(id:string)=>void;getResponse:(id:string)=>string;reset:(id:string)=>void};
 const verificationWindow=window as unknown as {turnstile?:VerificationWidget;whumpoIdentityVerificationReady?:()=>void};
