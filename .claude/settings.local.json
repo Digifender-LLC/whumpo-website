@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node node_modules/wrangler/bin/wrangler.js:*)",
+      "Bash(pnpm run deploy:*)",
+      "Bash(pnpm invite)"
+    ]
+  }
+}
