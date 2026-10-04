@@ -25,7 +25,7 @@ export function CMSUploadPanel({project}:{project:string}){
   const upload=current.current;if(!upload?.blob||lock.current)return;lock.current=true;setBusy(true);setError('');setNotice('');protect('saving','media-upload');
   try{
    await api(`/cms/${project}/media/uploads/${upload.id}`,{method:'PUT',headers:{'content-type':'image/jpeg','x-photo-name':encodeURIComponent(upload.name)},body:upload.blob});
-   if(alive.current){set(null);setNotice('Image saved privately. It has not been published or sent to the agent.');}
+   if(alive.current){set(null);setNotice('Image saved privately. It stays held for a safety review before it can be previewed or published, and it has not been sent to the agent.');}
    await Promise.all([queryClient.invalidateQueries({queryKey:['cms-uploads',project]}),queryClient.invalidateQueries({queryKey:['cms-media',project]})]);
   }catch(e){if(alive.current)setError(message(e));void uploads.refetch();}
   finally{lock.current=false;if(alive.current){setBusy(false);protect(current.current?'uncertain':'clean','media-upload');}}

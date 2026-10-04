@@ -642,7 +642,7 @@
         "src/cms-publication-media.ts",
         "src/cms-media-preview.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/137",
       "owner": null,
       "evidence": []
     },
