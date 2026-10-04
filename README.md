@@ -63,6 +63,7 @@ For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.js
 
 - [Private maintenance diagnostics](docs/maintenance.md) — scheduled run status and read-only backlog inspection
 - [Incident, spend and provider-outage runbooks](docs/incident-runbooks.md) and [desk-check record](docs/incident-tabletop.md) — documented only: existing controls, gaps and drafts; no live drill or alerting
+- [Capacity, abuse and tenant-fairness measurement](docs/capacity-and-fairness.md) — local-only synthetic-client harness results and fairness gaps (WH-050 first slice); not Cloudflare production limits
 - [Workload placement contract](docs/workload-placement.md) — logical resources, scoped adapters and lifecycle/export requirements; broader hosting remains conditional
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
 - [Shared module contract](docs/shared-modules.md) — planned WH-067 content, records/forms, files and access module APIs, authorization model and delivery slices
