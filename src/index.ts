@@ -70,6 +70,7 @@ import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
 import {abuseReportPage,abuseReportPath} from './abuse-report-page';
+import {policyConsentPath,policyConsentRoute} from './policy-consent';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
 import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
 import {contactDelivery} from './contact-email';
@@ -173,6 +174,8 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     const data=method==='POST'?await body(request):undefined;
     return json(await supportRoute(env.DB,user.id,method,pathname,new URL(request.url).search,data,supportConfig(env)));
   }
+  // WH-016 current policy consent: identity-only, like support (no Chat, AI or onboarding dependency).
+  if(pathname===policyConsentPath)return policyConsentRoute(env.DB,user.id,method,method==='POST'?await body(request):undefined);
   if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before opening your workspace.',code:'onboarding_required',support:supportLink('onboarding_required')},409);
   if(pathname==='/api/onboarding'){
     if(method==='GET')return json(await readOnboarding(env.DB,user.id));

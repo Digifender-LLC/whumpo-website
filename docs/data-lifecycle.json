@@ -91,6 +91,88 @@
       }
     },
     {
+      "id": "policy-adoptions",
+      "tables": [
+        "policy_adoptions"
+      ],
+      "scope": "platform",
+      "purpose": "Versioned adoption of the Terms of Service, Acceptable Use Policy and Privacy Policy as one version identified by the SHA-256 of the exact adopted documents (WH-016). The latest adoption is current; none is seeded until owner/counsel adoption.",
+      "currentRetention": "Append-only with no update or delete path; adoption times strictly increase.",
+      "proposedRetention": "Keep for the life of the service as the record of which documents applied when.",
+      "deletionAuthority": "None; a new version is a new adoption.",
+      "exportPolicy": "Public document metadata; the owner's policies route returns the current version and digest.",
+      "references": [
+        "src/policy-consent.ts",
+        "schema/platform.sql",
+        "docs/content-safety.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Owner policy consent route and publication/activation gates (current version only)"
+        ],
+        "processors": [
+          "Schema gates on site/backend publication, application activation and CMS approval/publication"
+        ],
+        "remainingExposure": [
+          "None beyond public document identity."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "policy-consent",
+      "tables": [
+        "policy_consents"
+      ],
+      "scope": "owner",
+      "purpose": "Each owner's acceptance of an exact adopted policy version and documents digest at server time, separate from the signup US-customer declaration. Gates publication and activation once a version is adopted (WH-016).",
+      "currentRetention": "Immutable; cascades with the account. A newer adoption makes earlier consents insufficient without deleting them.",
+      "proposedRetention": "Keep adoptions for the life of the service. Consent retention after account closure (for example a minimal restricted receipt) requires an owner/counsel decision.",
+      "deletionAuthority": "No ordinary deletion of adoptions or consents while the account exists; account closure cascades consents.",
+      "exportPolicy": "Not yet included in the customer account export (pending the WH-018 export allowlist update). Never in model context or ordinary logs.",
+      "references": [
+        "src/policy-consent.ts",
+        "schema/platform.sql",
+        "docs/content-safety.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "The owner's own policy consent route and the publication/activation gates; no customer or model reader of other accounts' consents"
+        ],
+        "processors": [
+          "Schema gates on site/backend publication, application activation and CMS approval/publication"
+        ],
+        "remainingExposure": [
+          "Consent timestamps are readable account metadata; operator access must be restricted."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "owner-identity-progress",
       "tables": [
         "identity_accounts",
@@ -853,6 +935,48 @@
         ],
         "remainingExposure": [
           "Case metadata identifies a subject account; preserved payloads and evidence objects may hold sensitive or illegal material and are readable by Cloudflare-managed storage and Worker code. Only a read-only restricted review page exists (no write UI), and no counsel-approved transfer procedure exists."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "abuse-reports",
+      "tables": [
+        "abuse_reports"
+      ],
+      "scope": "platform",
+      "purpose": "Public abuse reports about published Whumpo sites and applications (WH-016): the server-resolved project, its owner at intake, surface, host kind, reported path (no query), category, an optional reporter description of at most 1,000 characters, request digest and the single audited triage decision (case opened, case linked or not actionable). No reporter address, IP, contact detail or upload is stored.",
+      "currentRetention": "Independent of the customer account lifecycle: no foreign key to users or projects and no delete path (a trigger refuses deletion). Bounded at 10,000 retained reports, 1,000 awaiting triage and 50 awaiting triage per project; intake fails closed beyond those caps.",
+      "proposedRetention": "Requires an owner/counsel schedule (for example a fixed term after triage for reports not linked to a case, and the linked case's retention for the rest). Nothing is purged automatically until then.",
+      "deletionAuthority": "No ordinary deletion. Owner, customer, model and agents cannot read, change or remove reports; triage is one authenticated case-reviewer decision.",
+      "exportPolicy": "Excluded from the customer account export (including the reported owner's), ordinary logs, GitHub and model context. Reports are read only through the authenticated restricted operator surface; the reporter receives a receipt identifier only.",
+      "references": [
+        "src/abuse-reports.ts",
+        "src/abuse-report-page.ts",
+        "src/safety-cases.ts",
+        "docs/content-safety.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Authenticated restricted operator surface (fresh passkey session plus case_reviewer for full reads, case_reviewer/case_auditor for the metadata queue); reports about the operator's own account are hidden; every attempt audited"
+        ],
+        "processors": [
+          "Public intake handler (Origin, bounded body, rate limiter, per-connection allowance, Turnstile) writes once; schema triggers enforce target, caps and the single triage transition"
+        ],
+        "remainingExposure": [
+          "Reporter descriptions are untrusted free text that may name people or describe sensitive material; they are readable by Cloudflare-managed storage and Worker code. No retention schedule or reporter follow-up channel exists yet."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",

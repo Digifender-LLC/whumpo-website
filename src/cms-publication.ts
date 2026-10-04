@@ -1,5 +1,6 @@
 import {captureCMSArticleImages,type CMSArticleImage} from './cms-article-images';
 import {requireArtifactsAvailable,artifactHeldMessage,importedContentMessage} from './artifact-admission';
+import {requirePolicyConsent} from './policy-consent';
 import {freezeCMSPublicationMedia,inlineCMSPublicationImages} from './cms-publication-media';
 import {readCMSDraft} from './cms-content';
 import {renderCMSDraft} from './cms-preview';
@@ -18,6 +19,7 @@ export async function prepareCMSPublication(db:D1Database,user:string,project:st
  if(old){const row=await readCMSPublication(db,user,id);if(row.project_id!==project||row.draft_request_id!==draft)throw new CMSProjectError(409,'Review ID already used');await requireCMSPublicationAvailable(db,row.id);await recoverImages(db,user,row,env);return row;}
  // WH-014: an article drafted from a WordPress import needs mandatory import checks that do not exist yet.
  if(await db.prepare('SELECT 1 FROM cms_import_reviews WHERE id=? AND project_id=?').bind(draft,project).first())throw new CMSProjectError(423,importedContentMessage);
+ await requirePolicyConsent(db,user,(s,m)=>new CMSProjectError(s,m));
  const snap=await readCMSDraft(db,user,project,draft,env);if(typeof snap.revision!=='string'||!snap.revision)throw new CMSProjectError(409,'CMS revision unavailable');
  const base=await db.prepare("SELECT id FROM cms_publication_reviews WHERE project_id=? AND collection=? AND item_id=? AND status='published' AND withdrawn=0").bind(project,snap.collection,snap.item.id).first<{id:string}>();
  if(snap.item.status==='published'&&(!base||!snap.item.draftRevisionId||!snap.item.liveData))throw new CMSProjectError(409,'Read and stage changes to the current live article before preparing its replacement.');
@@ -54,6 +56,8 @@ export async function confirmCMSPublication(db:D1Database,user:string,id:string,
  await requireCMSPublicationAvailable(db,id);
  await recoverImages(db,user,row,env);
  const {service,config}=await cmsConnection(db,user,row.project_id,env);
+ // WH-016: approval precedes the native publish, so the consent gate (TS here, SQL on approved/published) runs first.
+ if(row.status==='pending')await requirePolicyConsent(db,user,(s,m)=>new CMSProjectError(s,m));
  if(row.status==='pending'){
   const current=await readCMSDraft(db,user,row.project_id,row.draft_request_id,env);
   if(current.item.status!==(row.replaces_publication_id?'published':'draft')||current.revision!==row.revision||JSON.stringify(current.item.data)!==JSON.stringify(JSON.parse(row.snapshot).item.data))throw new CMSProjectError(409,'CMS draft changed. Read it and prepare a new publication review.');

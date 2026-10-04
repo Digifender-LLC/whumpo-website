@@ -47,5 +47,6 @@ export function AccountSecurityPage(){
   <Button variant="quiet" asChild className="min-h-11"><Link to="/workspace" search={{signup:false}}><ArrowLeft className="size-4"/>Back to Whumpo</Link></Button>
   <div ref={content}><IdentitySecurity/></div>
   <section aria-labelledby="account-data-link" className="space-y-2 border-t pt-6"><h2 id="account-data-link" className="text-lg font-semibold">Account data and closure</h2><p className="text-sm text-muted-foreground">Download a private copy of your data or close your account. Each step asks for a recent passkey check.</p><Button asChild variant="secondary" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'account'}} search={{}}>Export or close account</Link></Button></section>
+  <section aria-labelledby="policies-link" className="space-y-2 border-t pt-6"><h2 id="policies-link" className="text-lg font-semibold">Policies</h2><p className="text-sm text-muted-foreground">Review and accept the current Terms of Service, Acceptable Use Policy and Privacy Policy before publishing.</p><Button asChild variant="secondary" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'policies'}} search={{}}>Review policies</Link></Button></section>
  </div></main>;
 }

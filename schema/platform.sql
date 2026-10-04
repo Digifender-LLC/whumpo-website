@@ -5335,3 +5335,59 @@ END;
 CREATE TRIGGER artifact_cms_publication_apply_held BEFORE UPDATE OF status ON cms_publication_reviews
 WHEN NEW.status IN ('approved','published') AND NEW.status<>OLD.status AND EXISTS(SELECT 1 FROM cms_held_publications WHERE id=NEW.id)
 BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+
+-- WH-016 versioned policy adoption and owner consent (src/policy-consent.ts). The Terms of Service, Acceptable Use Policy
+-- and Privacy Policy are adopted together as one version, identified by the SHA-256 of the exact adopted documents.
+-- Adoption is an owner/counsel decision: this schema seeds no adopted version, so until one is adopted no consent can be
+-- recorded and the gates below are inert. Once a version is adopted, the latest adoption is current; consent to an
+-- earlier version does not satisfy it (re-consent on every version change, no grandfathering). Consent is separate from
+-- the signup US-customer declaration (customer_eligibility).
+CREATE TABLE policy_adoptions (
+ version TEXT PRIMARY KEY CHECK(length(version) BETWEEN 1 AND 64 AND version NOT GLOB '*[^a-z0-9.-]*'),
+ documents_sha256 TEXT NOT NULL UNIQUE CHECK(length(documents_sha256)=64 AND documents_sha256 NOT GLOB '*[^0-9a-f]*'),
+ adopted_at INTEGER NOT NULL UNIQUE CHECK(adopted_at>=0),
+ adoption_ref TEXT NOT NULL CHECK(length(adoption_ref) BETWEEN 1 AND 128 AND adoption_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')
+);
+CREATE TRIGGER policy_adoptions_admit BEFORE INSERT ON policy_adoptions
+WHEN NEW.adopted_at<=COALESCE((SELECT max(adopted_at) FROM policy_adoptions),-1) OR NEW.adopted_at>unixepoch()
+BEGIN SELECT RAISE(ABORT,'policy_adoption_order'); END;
+CREATE TRIGGER policy_adoptions_immutable BEFORE UPDATE ON policy_adoptions BEGIN SELECT RAISE(ABORT,'policy_adoption_immutable'); END;
+CREATE TRIGGER policy_adoptions_retained BEFORE DELETE ON policy_adoptions BEGIN SELECT RAISE(ABORT,'policy_adoption_immutable'); END;
+CREATE VIEW policy_current AS SELECT version,documents_sha256,adopted_at FROM policy_adoptions ORDER BY adopted_at DESC LIMIT 1;
+
+CREATE TABLE policy_consents (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ policy_version TEXT NOT NULL REFERENCES policy_adoptions(version),
+ documents_sha256 TEXT NOT NULL CHECK(length(documents_sha256)=64 AND documents_sha256 NOT GLOB '*[^0-9a-f]*'),
+ accepted_at INTEGER NOT NULL CHECK(accepted_at>=0),
+ PRIMARY KEY(user_id,policy_version)
+);
+-- Only the current version, its exact documents digest and server time can be accepted.
+CREATE TRIGGER policy_consents_admit BEFORE INSERT ON policy_consents
+WHEN NOT EXISTS(SELECT 1 FROM policy_current WHERE version=NEW.policy_version AND documents_sha256=NEW.documents_sha256) OR NEW.accepted_at<>unixepoch()
+BEGIN SELECT RAISE(ABORT,'policy_version_stale'); END;
+CREATE TRIGGER policy_consents_immutable BEFORE UPDATE ON policy_consents BEGIN SELECT RAISE(ABORT,'policy_consent_immutable'); END;
+-- Accounts that have not accepted the current adopted version (empty while no version is adopted).
+CREATE VIEW policy_consent_missing AS
+ SELECT u.id AS user_id FROM users u JOIN policy_current c
+ WHERE NOT EXISTS(SELECT 1 FROM policy_consents k WHERE k.user_id=u.id AND k.policy_version=c.version);
+
+-- Publication and activation gates at each final write. Withdrawal (unpublish, disable) always stays available.
+CREATE TRIGGER policy_site_publication_insert BEFORE INSERT ON publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM projects p JOIN policy_consent_missing m ON m.user_id=p.owner_user_id WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_site_publication_update BEFORE UPDATE OF version_id ON publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM projects p JOIN policy_consent_missing m ON m.user_id=p.owner_user_id WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_backend_publication BEFORE UPDATE OF version_id ON backend_publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM projects p JOIN policy_consent_missing m ON m.user_id=p.owner_user_id WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_backend_publication_insert BEFORE INSERT ON backend_publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM projects p JOIN policy_consent_missing m ON m.user_id=p.owner_user_id WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_app_activation BEFORE UPDATE ON app_spaces
+WHEN NEW.enabled=1 AND (NEW.version_id IS NOT OLD.version_id OR OLD.enabled=0) AND EXISTS(SELECT 1 FROM policy_consent_missing WHERE user_id=NEW.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_cms_publication BEFORE UPDATE OF status ON cms_publication_reviews
+WHEN NEW.status IN ('approved','published') AND NEW.status<>OLD.status AND EXISTS(SELECT 1 FROM policy_consent_missing WHERE user_id=NEW.user_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;

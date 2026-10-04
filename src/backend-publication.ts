@@ -1,5 +1,6 @@
 import {projectRuntime} from './runtime-lane';
 import {requireBackendVersionAvailable,heldRefusal,artifactHeldMessage} from './artifact-admission';
+import {requirePolicyConsent,policyConsentRefusal,policyConsentMessage} from './policy-consent';
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {BackendError,listBackends,callBackend} from './backend-versions';
 import {hashToken} from './security';
@@ -25,7 +26,7 @@ export async function prepareBackendPublication(db:D1Database,user:string,projec
  const previous=await db.prepare('SELECT id FROM backend_publication_reviews WHERE id=?').bind(id).first();
  if(!previous){
   // WH-014: unpublish stays available; publishing held code is refused here and by the review insert trigger.
-  if(operation==='publish')await requireBackendVersionAvailable(db,version);
+  if(operation==='publish'){await requireBackendVersionAvailable(db,version);await requirePolicyConsent(db,user,(s,m)=>new BackendError(s,m));}
   await db.prepare('INSERT OR IGNORE INTO backend_publications(project_id) VALUES(?)').bind(project).run();
   const current=await readBackendPublication(db,user,project);
   try{await db.prepare('INSERT INTO backend_publication_reviews(id,user_id,project_id,operation,version_id,run_id,base_revision) VALUES(?,?,?,?,?,?,?)').bind(id,user,project,operation,version,run,expectedRevision??current.revision).run();}catch{/* Read an exact committed review after an uncertain acknowledgment. */}
@@ -37,10 +38,11 @@ export async function prepareBackendPublication(db:D1Database,user:string,projec
 // Only the authenticated human confirmation route/command may call this.
 export async function confirmBackendPublication(db:D1Database,user:string,id:string){
  const row=await readBackendPublicationReview(db,user,id);if(row.status==='applied')return row;
- if(row.operation==='publish')await requireBackendVersionAvailable(db,row.version_id);
+ if(row.operation==='publish'){await requireBackendVersionAvailable(db,row.version_id);await requirePolicyConsent(db,user,(s,m)=>new BackendError(s,m));}
  try{await db.prepare("UPDATE backend_publication_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'").bind(id,user).run();}catch(error){
   const saved=await readBackendPublicationReview(db,user,id);if(saved.status==='applied')return saved;
   if(heldRefusal(error))throw new BackendError(423,artifactHeldMessage);
+  if(policyConsentRefusal(error))throw new BackendError(403,policyConsentMessage);
   throw new BackendError(409,'Publication review expired or the endpoint changed; prepare a new review');
  }
  return readBackendPublicationReview(db,user,id);
