@@ -23,7 +23,7 @@ export function ChatResourceOptions({field,id,description,invalid,locked,ready,i
    </label>;})}
   </fieldset>
   {ready&&missing.length>0&&<p role="status" className="text-sm">{missing.length} saved {missing.length===1?'selection is':'selections are'} not in this list. Load more or clear the selection.</p>}
-  {selected.length>0&&!locked&&<Button type="button" variant="ghost" className="min-h-11" onClick={clear}>Clear selection</Button>}
+  {selected.length>0&&!locked&&<Button type="button" variant="quiet" className="min-h-11" onClick={clear}>Clear selection</Button>}
  </div>;
 }
 
@@ -46,6 +46,6 @@ export function ChatResourcePicker({field,owner,interactionId,digest,id,descript
   {ready&&!items.length&&<p className="text-sm text-muted-foreground">{plural==='photos'?'No eligible photos are available in this project. Photos awaiting checks cannot be selected.':'You have no projects to choose from. Ask Whumpo to help you start one.'}</p>}
   {ready&&missing&&plural==='projects'&&!field.constraints.multiple&&<p className="text-sm text-muted-foreground">{query.hasNextPage?'Load more projects to find your saved choice.':'Your saved choice is unavailable. Choose a current project to continue.'}</p>}
   {(query.error||duplicates)&&<p role="alert" className="text-sm">{duplicates?'This list changed. Check it again.':message(query.error)}</p>}
-  <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Check {plural}</Button>{query.hasNextPage&&<Button type="button" variant="outline" className="min-h-11" disabled={query.isFetching||!!query.error||duplicates} onClick={()=>void query.fetchNextPage()}>Load more {plural}</Button>}</div>
+  <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Check {plural}</Button>{query.hasNextPage&&<Button type="button" variant="secondary" className="min-h-11" disabled={query.isFetching||!!query.error||duplicates} onClick={()=>void query.fetchNextPage()}>Load more {plural}</Button>}</div>
  </div>;
 }

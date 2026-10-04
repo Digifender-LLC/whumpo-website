@@ -16,5 +16,5 @@ export function MeasurementConsentSettings({profile,notify}:{profile:Profile;not
   try{queryClient.setQueryData(['session'],await send<Profile>('/profile',{revision:profile.revision,measurement_consent:value},'PATCH'));notify(value?'Content-free measurements are on.':'Measurements are off and recorded milestones were deleted.');}
   catch(e){notify(message(e));}finally{setBusy(false);}
  }
- return <div className="space-y-4"><p className="text-sm text-muted-foreground">{explanation}</p><p className="text-sm" role="status">{enabled?'On: content-free milestones are recorded.':'Off: nothing is recorded.'}</p><Button variant="outline" disabled={busy} aria-pressed={enabled} onClick={()=>void change(!enabled)}>{enabled?'Turn off and delete measurements':'Turn on content-free measurements'}</Button></div>;
+ return <div className="space-y-4"><p className="text-sm text-muted-foreground">{explanation}</p><p className="text-sm" role="status">{enabled?'On: content-free milestones are recorded.':'Off: nothing is recorded.'}</p><Button variant="secondary" disabled={busy} aria-pressed={enabled} onClick={()=>void change(!enabled)}>{enabled?'Turn off and delete measurements':'Turn on content-free measurements'}</Button></div>;
 }
