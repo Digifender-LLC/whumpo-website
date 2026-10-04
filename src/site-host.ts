@@ -1,6 +1,6 @@
 import {approvedPhotoSQL,photoBytesMatch} from './photo-safety';
 import {publicCMSPublicationImage} from './cms-publication-media';
-import {recordTraffic} from './site-traffic';
+import {measureTraffic,trafficClass} from './site-traffic';
 import {customerProject,visitorProject,projectOrigin,guestPreviewHost} from './hosts';
 import {guestPreviewRequest} from './guest-previews/guest';
 import {activeBackendForm} from './backend-forms';
@@ -73,11 +73,11 @@ export default {
   if(request.method==='GET'&&response.status===200&&response.headers.get('content-type')?.startsWith('text/html')){
    const url=new URL(request.url);
    if(!visitorProject(url.hostname)&&url.hostname!==guestPreviewHost&&!url.pathname.startsWith('/guest-preview')){
-    const count=async()=>{
+    const kind=trafficClass(request),count=async()=>{
      let project=customerProject(url.hostname);
      if(!project&&['localhost','127.0.0.1'].includes(url.hostname))project=url.pathname.match(/^\/s\/([0-9a-f-]{36})(?:\/|$)/)?.[1]??null;
      if(!project){const mapping=await env.DB.prepare("SELECT project_id FROM domain_connections WHERE hostname=? AND state='active' AND serve_until>? AND provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();project=mapping?.project_id??null;}
-     if(project)await recordTraffic(env.DB,project);
+     if(project)await measureTraffic(env.DB,project,kind);
     };
     const task=count().catch(()=>{console.warn('site.traffic.unavailable')});
     if(ctx)ctx.waitUntil(task);else await task;

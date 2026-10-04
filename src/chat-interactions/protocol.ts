@@ -31,6 +31,8 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'workspace.reviews@1': {mode:'read',feature:viewComponents.reviews.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
   // Feature family only: management reads stay ungated (viewComponents feature null) so revoke/delete outlive inclusion; issuance re-checks it.
   'project.guest-previews@1': {mode:'read',feature:'creator.guest-feedback',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
+  // Identity and ownership only (viewComponents feature null): the saved health report never needs insight inclusion.
+  'project.site-health@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });

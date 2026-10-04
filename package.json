@@ -30,7 +30,7 @@
     "test:runtime-ai": "node tests/runtime-ai.mjs",
     "test:directory-history": "node tests/directory-history.mjs",
     "test:directories": "node tests/directories.mjs",
-    "test:site-health": "node tests/site-health.mjs",
+    "test:site-health": "node tests/site-health.mjs && node tests/site-diagnostics.mjs",
     "test:app-page-design": "node tests/app-page-design.mjs",
     "test:application-build": "node tests/application-build.mjs",
     "test:customer-app-journey": "node tests/customer-app-journey.mjs",
