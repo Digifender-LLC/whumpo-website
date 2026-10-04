@@ -1843,7 +1843,7 @@
         "src/contacts.ts",
         "docs/cloudflare-capability-roadmap.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/146",
       "owner": null,
       "evidence": []
     },

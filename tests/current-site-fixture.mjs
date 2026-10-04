@@ -54,6 +54,7 @@ export {cleanPhoto} from './src/photo-format';
   export {publicationCommand} from './src/publications';
   export {versionRemovalCommand} from './src/version-removal';
   export * as contacts from './src/contacts';
+  export * as contactNotifications from './src/contact-notifications';
   export * as directory from './src/directory';
   export {contactPage} from './src/contact-page';
   export {welcomeDraftProject} from './src/first-draft';
