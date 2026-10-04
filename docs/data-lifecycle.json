@@ -776,7 +776,7 @@
       ],
       "scope": "owner",
       "purpose": "Reviewed incident provenance and immutable corrections used for risk sampling.",
-      "currentRetention": "No age purge; ordinary scoring decay does not delete evidence. Account cascade currently removes rows. No independent legal-hold store.",
+      "currentRetention": "No age purge; ordinary scoring decay does not delete evidence. Account cascade removes rows unless an active WH-015 preservation hold blocks the account deletion.",
       "proposedRetention": "Routine closed-case metadata: proposed 90 days after resolution, subject to counsel/privacy review. Statutory/legal cases: case-specific basis, scope, deadline and extension; no blanket permanent retention.",
       "deletionAuthority": "Named restricted case operator with required legal review and audited release; owner/agent cannot independently destroy held evidence.",
       "exportPolicy": "Separate lawful access/appeal process; general account bundle excludes raw evidence, reviewer references and operational risk internals.",
@@ -799,6 +799,91 @@
         ],
         "remainingExposure": [
           "Incident metadata is sensitive; separate restricted evidence/preservation operations remain incomplete."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "restricted-safety-cases",
+      "tables": [
+        "safety_cases",
+        "safety_case_findings",
+        "safety_case_evidence",
+        "safety_preservation_holds"
+      ],
+      "scope": "mixed",
+      "purpose": "Restricted case references, append-only uncertain/confirmed/corrected findings, links to reviewed risk evidence and account-scope preservation holds. Opaque identifiers only; no raw content.",
+      "currentRetention": "Independent of the customer account lifecycle: no foreign key to users and no delete path. An unreleased hold blocks account/project deletion, project owner change, contact deletion and contact expiry for that account. No case age purge.",
+      "proposedRetention": "Case-specific basis, scope, review deadline and audited release decided by named humans with qualified counsel; routine closed-case metadata retention still requires an owner/counsel schedule. No blanket permanent retention.",
+      "deletionAuthority": "No ordinary deletion. Only a future reviewed case-retention procedure may purge closed, released cases; owner, customer, model and agents cannot remove or release held evidence.",
+      "exportPolicy": "Excluded from the customer account export and model context. Lawful disclosure/export is a separate reviewed operation (not implemented).",
+      "references": [
+        "src/safety-cases.ts",
+        "docs/content-safety.md",
+        "docs/account-closure.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Trusted restricted operator integration with case_reviewer/preservation_approver/case_auditor roles; every attempt audited"
+        ],
+        "processors": [
+          "Deletion triggers and contact expiry read active hold existence only"
+        ],
+        "remainingExposure": [
+          "Case metadata identifies a subject account and is sensitive; operator authentication and restricted evidence object storage are not implemented."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "safety-case-access",
+      "tables": [
+        "safety_case_roles",
+        "safety_case_audit"
+      ],
+      "scope": "platform",
+      "purpose": "Named human operator role grants/revocations and the append-only audit of every case access attempt and decision.",
+      "currentRetention": "Append-only; no delete path. Bounded at 1,000 role rows and 100,000 audit rows, after which operations fail closed.",
+      "proposedRetention": "Retain at least as long as the related cases; schedule requires owner/counsel review.",
+      "deletionAuthority": "No ordinary deletion; revocation is one-way and audited.",
+      "exportPolicy": "Operator audit only; never in customer exports, ordinary logs or model context.",
+      "references": [
+        "src/safety-cases.ts",
+        "docs/content-safety.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Trusted operator tooling; audit reads require case_auditor"
+        ],
+        "processors": [
+          "None beyond role checks inside case operations"
+        ],
+        "remainingExposure": [
+          "Operator references are declarations until authenticated operator identity exists."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",

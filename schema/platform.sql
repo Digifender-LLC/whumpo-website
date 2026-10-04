@@ -4209,3 +4209,156 @@ CREATE TRIGGER chat_task_created_project_retained BEFORE DELETE ON chat_task_pro
 WHEN OLD.created_project_id IS NOT NULL AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
  AND EXISTS(SELECT 1 FROM chat_interaction_tasks WHERE id=OLD.task_id)
 BEGIN SELECT RAISE(ABORT,'chat_task_project_receipt_retained'); END;
+
+-- WH-015 restricted safety cases and preservation holds (contract/current-schema slice).
+-- Case records deliberately have no foreign key to users: ordinary account cascades cannot remove them.
+-- References are opaque identifiers only; raw content, allegations, imagery, names and credentials never belong here.
+-- Actor references name a human operator (`human:<id>`); models, agents and jobs cannot hold a case role.
+CREATE TABLE safety_case_roles (
+ id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 128 AND id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ operator_ref TEXT NOT NULL CHECK(operator_ref GLOB 'human:?*' AND length(operator_ref)<=128 AND operator_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ role TEXT NOT NULL CHECK(role IN ('case_reviewer','preservation_approver','case_auditor')),
+ granted_by TEXT NOT NULL CHECK(granted_by GLOB 'human:?*' AND length(granted_by)<=128 AND granted_by NOT GLOB '*[^A-Za-z0-9_.:-]*' AND granted_by<>operator_ref),
+ granted_at INTEGER NOT NULL CHECK(granted_at>=0),
+ revoked_at INTEGER CHECK(revoked_at IS NULL OR revoked_at>=granted_at),
+ revoked_by TEXT CHECK(revoked_by IS NULL OR (revoked_by GLOB 'human:?*' AND length(revoked_by)<=128 AND revoked_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ revoke_ref TEXT CHECK(revoke_ref IS NULL OR (length(revoke_ref) BETWEEN 1 AND 128 AND revoke_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ CHECK((revoked_at IS NULL)=(revoked_by IS NULL) AND (revoked_by IS NULL)=(revoke_ref IS NULL))
+);
+CREATE UNIQUE INDEX safety_case_roles_active ON safety_case_roles(operator_ref,role) WHERE revoked_at IS NULL;
+
+CREATE TABLE safety_cases (
+ id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 128 AND id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ subject_user_id TEXT NOT NULL CHECK(length(subject_user_id) BETWEEN 1 AND 128),
+ intake_ref TEXT NOT NULL CHECK(length(intake_ref) BETWEEN 1 AND 128 AND intake_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ opened_by TEXT NOT NULL CHECK(opened_by GLOB 'human:?*' AND length(opened_by)<=128 AND opened_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ opened_at INTEGER NOT NULL CHECK(opened_at>=0),
+ closed_at INTEGER CHECK(closed_at IS NULL OR closed_at>=opened_at),
+ closed_by TEXT CHECK(closed_by IS NULL OR (closed_by GLOB 'human:?*' AND length(closed_by)<=128 AND closed_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ close_ref TEXT CHECK(close_ref IS NULL OR (length(close_ref) BETWEEN 1 AND 128 AND close_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ CHECK((closed_at IS NULL)=(closed_by IS NULL) AND (closed_by IS NULL)=(close_ref IS NULL))
+);
+CREATE INDEX safety_cases_subject ON safety_cases(subject_user_id);
+
+-- Findings are append-only. Every case starts as an uncertain flag; only a named human reviewer's
+-- explicit decision records a confirmed policy finding, and later decisions correct rather than overwrite.
+CREATE TABLE safety_case_findings (
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ seq INTEGER NOT NULL CHECK(seq BETWEEN 1 AND 1000),
+ finding TEXT NOT NULL CHECK(finding IN ('uncertain_flag','confirmed_policy_finding','not_confirmed')),
+ reviewer_ref TEXT NOT NULL CHECK(reviewer_ref GLOB 'human:?*' AND length(reviewer_ref)<=128 AND reviewer_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decision_ref TEXT NOT NULL CHECK(length(decision_ref) BETWEEN 1 AND 128 AND decision_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ recorded_at INTEGER NOT NULL CHECK(recorded_at>=0),
+ PRIMARY KEY(case_id,seq),
+ UNIQUE(case_id,decision_ref)
+);
+
+CREATE TABLE safety_case_evidence (
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ evidence_id TEXT NOT NULL CHECK(length(evidence_id) BETWEEN 1 AND 128),
+ linked_by TEXT NOT NULL CHECK(linked_by GLOB 'human:?*' AND length(linked_by)<=128 AND linked_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ linked_at INTEGER NOT NULL CHECK(linked_at>=0),
+ PRIMARY KEY(case_id,evidence_id)
+);
+
+-- A hold stays in force until an explicit audited release. review_due_at bounds each approval term
+-- (at most 366 days); an overdue hold is reported for review and never lapses silently.
+CREATE TABLE safety_preservation_holds (
+ id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 128 AND id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ subject_user_id TEXT NOT NULL CHECK(length(subject_user_id) BETWEEN 1 AND 128),
+ scope TEXT NOT NULL CHECK(scope='account'),
+ legal_basis_ref TEXT NOT NULL CHECK(length(legal_basis_ref) BETWEEN 1 AND 128 AND legal_basis_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ approved_by TEXT NOT NULL CHECK(approved_by GLOB 'human:?*' AND length(approved_by)<=128 AND approved_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ placed_at INTEGER NOT NULL CHECK(placed_at>=0),
+ review_due_at INTEGER NOT NULL CHECK(review_due_at>placed_at AND review_due_at<=placed_at+31622400),
+ released_at INTEGER CHECK(released_at IS NULL OR released_at>=placed_at),
+ released_by TEXT CHECK(released_by IS NULL OR (released_by GLOB 'human:?*' AND length(released_by)<=128 AND released_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ release_ref TEXT CHECK(release_ref IS NULL OR (length(release_ref) BETWEEN 1 AND 128 AND release_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ CHECK((released_at IS NULL)=(released_by IS NULL) AND (released_by IS NULL)=(release_ref IS NULL))
+);
+CREATE INDEX safety_preservation_holds_active ON safety_preservation_holds(subject_user_id) WHERE released_at IS NULL;
+
+-- Every case access attempt and decision, allowed or not. No inputs beyond validated opaque identifiers.
+CREATE TABLE safety_case_audit (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT,
+ at INTEGER NOT NULL CHECK(at>=0),
+ actor_ref TEXT CHECK(actor_ref IS NULL OR (actor_ref GLOB 'human:?*' AND length(actor_ref)<=128 AND actor_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ action TEXT NOT NULL CHECK(action IN ('grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds')),
+ case_id TEXT CHECK(case_id IS NULL OR (length(case_id) BETWEEN 1 AND 128 AND case_id NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ target_ref TEXT CHECK(target_ref IS NULL OR (length(target_ref) BETWEEN 1 AND 128 AND target_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
+ reason TEXT NOT NULL CHECK(reason IN ('ok','missing_role','invalid_input','conflict','not_found','active_hold','case_closed','capacity','unavailable'))
+);
+
+CREATE TRIGGER safety_case_roles_capacity BEFORE INSERT ON safety_case_roles WHEN (SELECT count(*) FROM safety_case_roles)>=1000
+BEGIN SELECT RAISE(ABORT,'safety_case_capacity'); END;
+CREATE TRIGGER safety_case_roles_update BEFORE UPDATE ON safety_case_roles
+WHEN OLD.revoked_at IS NOT NULL OR NEW.revoked_at IS NULL OR NEW.id IS NOT OLD.id OR NEW.operator_ref IS NOT OLD.operator_ref OR NEW.role IS NOT OLD.role
+ OR NEW.granted_by IS NOT OLD.granted_by OR NEW.granted_at IS NOT OLD.granted_at
+BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_case_roles_retained BEFORE DELETE ON safety_case_roles BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+CREATE TRIGGER safety_cases_admit BEFORE INSERT ON safety_cases BEGIN
+ SELECT RAISE(ABORT,'safety_case_subject_missing') WHERE NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.subject_user_id);
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_cases)>=10000;
+END;
+CREATE TRIGGER safety_cases_update BEFORE UPDATE ON safety_cases
+WHEN OLD.closed_at IS NOT NULL OR NEW.closed_at IS NULL OR NEW.id IS NOT OLD.id OR NEW.subject_user_id IS NOT OLD.subject_user_id
+ OR NEW.intake_ref IS NOT OLD.intake_ref OR NEW.opened_by IS NOT OLD.opened_by OR NEW.opened_at IS NOT OLD.opened_at
+BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_cases_close_held BEFORE UPDATE ON safety_cases
+WHEN EXISTS(SELECT 1 FROM safety_preservation_holds WHERE case_id=OLD.id AND released_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'safety_hold_active'); END;
+CREATE TRIGGER safety_cases_retained BEFORE DELETE ON safety_cases BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+CREATE TRIGGER safety_case_findings_admit BEFORE INSERT ON safety_case_findings BEGIN
+ SELECT RAISE(ABORT,'safety_case_closed') WHERE EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NOT NULL);
+ SELECT RAISE(ABORT,'safety_case_finding_order') WHERE NEW.seq<>COALESCE((SELECT max(seq) FROM safety_case_findings WHERE case_id=NEW.case_id),0)+1
+  OR (NEW.seq=1 AND NEW.finding<>'uncertain_flag')
+  OR (NEW.seq>1 AND NEW.finding=(SELECT finding FROM safety_case_findings WHERE case_id=NEW.case_id AND seq=NEW.seq-1));
+END;
+CREATE TRIGGER safety_case_findings_immutable BEFORE UPDATE ON safety_case_findings BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_case_findings_retained BEFORE DELETE ON safety_case_findings BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+CREATE TRIGGER safety_case_evidence_admit BEFORE INSERT ON safety_case_evidence BEGIN
+ SELECT RAISE(ABORT,'safety_case_closed') WHERE EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NOT NULL);
+ SELECT RAISE(ABORT,'safety_case_evidence_missing') WHERE NOT EXISTS(SELECT 1 FROM content_risk_evidence e JOIN safety_cases c ON c.subject_user_id=e.user_id WHERE c.id=NEW.case_id AND e.id=NEW.evidence_id);
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_case_evidence WHERE case_id=NEW.case_id)>=1000;
+END;
+CREATE TRIGGER safety_case_evidence_immutable BEFORE UPDATE ON safety_case_evidence BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_case_evidence_retained BEFORE DELETE ON safety_case_evidence BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+CREATE TRIGGER safety_preservation_holds_admit BEFORE INSERT ON safety_preservation_holds BEGIN
+ SELECT RAISE(ABORT,'safety_case_closed') WHERE EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NOT NULL);
+ SELECT RAISE(ABORT,'safety_hold_subject') WHERE NOT EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND subject_user_id=NEW.subject_user_id)
+  OR NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.subject_user_id) OR NEW.released_at IS NOT NULL;
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_preservation_holds)>=10000;
+END;
+CREATE TRIGGER safety_preservation_holds_update BEFORE UPDATE ON safety_preservation_holds
+WHEN OLD.released_at IS NOT NULL OR NEW.released_at IS NULL OR NEW.id IS NOT OLD.id OR NEW.case_id IS NOT OLD.case_id
+ OR NEW.subject_user_id IS NOT OLD.subject_user_id OR NEW.scope IS NOT OLD.scope OR NEW.legal_basis_ref IS NOT OLD.legal_basis_ref
+ OR NEW.approved_by IS NOT OLD.approved_by OR NEW.placed_at IS NOT OLD.placed_at OR NEW.review_due_at IS NOT OLD.review_due_at
+BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_preservation_holds_retained BEFORE DELETE ON safety_preservation_holds BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+CREATE TRIGGER safety_case_audit_capacity BEFORE INSERT ON safety_case_audit WHEN (SELECT count(*) FROM safety_case_audit)>=100000
+BEGIN SELECT RAISE(ABORT,'safety_case_capacity'); END;
+CREATE TRIGGER safety_case_audit_immutable BEFORE UPDATE ON safety_case_audit BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_case_audit_retained BEFORE DELETE ON safety_case_audit BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+-- Ordinary deletion paths. An active account hold blocks the account cascade (and with it the risk
+-- evidence, projects, files and every other cascaded record), project deletion or ownership change,
+-- and contact-submission deletion. Customer-facing callers report a generic failure without the reason.
+CREATE TRIGGER safety_hold_account_retained BEFORE DELETE ON users
+WHEN EXISTS(SELECT 1 FROM safety_preservation_holds WHERE subject_user_id=OLD.id AND released_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_project_retained BEFORE DELETE ON projects
+WHEN EXISTS(SELECT 1 FROM safety_preservation_holds WHERE subject_user_id=OLD.owner_user_id AND released_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_project_owner BEFORE UPDATE OF owner_user_id ON projects
+WHEN NEW.owner_user_id IS NOT OLD.owner_user_id AND EXISTS(SELECT 1 FROM safety_preservation_holds WHERE subject_user_id=OLD.owner_user_id AND released_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_contact_retained BEFORE DELETE ON contact_submissions
+WHEN EXISTS(SELECT 1 FROM projects p JOIN safety_preservation_holds h ON h.subject_user_id=p.owner_user_id WHERE p.id=OLD.project_id AND h.released_at IS NULL)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;

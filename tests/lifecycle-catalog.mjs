@@ -7,8 +7,8 @@ await validateLifecycleReferences(catalog);
 const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,177);assert.equal(report.classCount,39);assert.equal(schemaFiles.length,3);
- assert.equal(report.plannedClassCount,7);assert.equal(report.protectionClasses.length,46);
+ assert.equal(report.tableCount,183);assert.equal(report.classCount,41);assert.equal(schemaFiles.length,3);
+ assert.equal(report.plannedClassCount,7);assert.equal(report.protectionClasses.length,48);
  assert.equal(report.protectionStatus,'decision-not-runtime-enforcement');
  for(const group of report.protectionClasses){assert.equal(group.profile.endToEndEncrypted,false);assert.equal(group.profile.customerUnlockRequired,false);}
  const connections=report.protectionClasses.find(g=>g.id==='connections');
@@ -19,7 +19,7 @@ try{
  assert.equal(report.protectionClasses.find(g=>g.id==='guest-feedback').profile.applicationEncoding,'not-admitted');
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
 
- assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['file_cleanup','identity_challenges']);
+ assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['file_cleanup','identity_challenges','safety_case_evidence','safety_case_findings','safety_cases','safety_preservation_holds']);
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='domain_connections'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='gateway_spend_attempts'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='chat_review_receipts'&&t.onDelete==='NO ACTION'));
@@ -70,5 +70,5 @@ try{
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
- console.log(`Lifecycle catalog passed: 177 tables, 39 current/7 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
+ console.log(`Lifecycle catalog passed: 183 tables, 41 current/7 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
 }finally{db.close();}
