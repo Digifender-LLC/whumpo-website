@@ -7,8 +7,8 @@ await validateLifecycleReferences(catalog);
 const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,212);assert.equal(report.classCount,49);assert.equal(schemaFiles.length,6);
- assert.equal(report.plannedClassCount,8);assert.equal(report.protectionClasses.length,57);
+ assert.equal(report.tableCount,214);assert.equal(report.classCount,50);assert.equal(schemaFiles.length,6);
+ assert.equal(report.plannedClassCount,7);assert.equal(report.protectionClasses.length,57);
  assert.equal(report.protectionStatus,'decision-not-runtime-enforcement');
  for(const group of report.protectionClasses){assert.equal(group.profile.endToEndEncrypted,false);assert.equal(group.profile.customerUnlockRequired,false);}
  const connections=report.protectionClasses.find(g=>g.id==='connections');
@@ -18,7 +18,7 @@ try{
  assert.ok(report.protectionClasses.find(g=>g.id==='project-media').protection.storage.includes('private-r2'));
  assert.equal(report.protectionClasses.find(g=>g.id==='guest-feedback').profile.applicationEncoding,'readable-records');assert.equal(report.protectionClasses.find(g=>g.id==='brand-kits').profile.applicationEncoding,'not-admitted');
  // WH-124 registers the WH-067 module classes before any table: no runtime storage is admitted until their slice.
- for(const [id,packet] of [['module-records','WH-127'],['module-files','WH-128']]){
+ for(const [id,packet] of [['module-files','WH-128']]){
   const group=report.protectionClasses.find(g=>g.id===id);assert.equal(group.storageStatus,'planned');assert.deepEqual(group.implementationPackets,[packet]);assert.deepEqual(group.protection.storage,['not-admitted']);
   assert.ok(!report.tables.some(t=>t.class===id));
  }
@@ -28,7 +28,10 @@ try{
  // WH-126 admits the access revision, staff grants and owner role reviews as project-roles.
  const roles=report.protectionClasses.find(g=>g.id==='project-roles');assert.equal(roles.storageStatus,'current');assert.deepEqual(roles.protection.storage,['control-d1']);
  assert.deepEqual(report.tables.filter(t=>t.class==='project-roles').map(t=>t.name),['module_access_role_applies','module_access_role_links','module_access_role_reviews','module_access_roles','module_access_states']);
- assert.match(report.protectionClasses.find(g=>g.id==='module-records').protection.readers.join(' '),/never enter owner Chat, model context or Chat history/);
+ // WH-127 admits record values and content-free change events as module-records.
+ const recordsClass=report.protectionClasses.find(g=>g.id==='module-records');assert.equal(recordsClass.storageStatus,'current');assert.deepEqual(recordsClass.protection.storage,['control-d1']);
+ assert.deepEqual(report.tables.filter(t=>t.class==='module-records').map(t=>t.name),['module_record_events','module_records']);
+ assert.match(recordsClass.protection.readers.join(' '),/never enter owner Chat, model context or Chat history/);
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
 
  assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['file_cleanup','identity_challenges','operator_containments','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_preservation_holds','safety_preserved_records']);
@@ -82,5 +85,5 @@ try{
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
- console.log(`Lifecycle catalog passed: 212 tables, 49 current/8 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
+ console.log(`Lifecycle catalog passed: 214 tables, 50 current/7 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
 }finally{db.close();}

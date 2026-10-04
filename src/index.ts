@@ -68,6 +68,9 @@ import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
+import {handleModuleRequest} from './shared-modules/api';
+import {ModuleError} from './shared-modules/policy';
+import {readOwnerRecords,cleanupModuleRecords} from './shared-modules/records';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
@@ -381,6 +384,17 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
       return backendRoute[2]?json(await testBackend(env.DB,await projectRuntime(env.BACKEND_RUNTIME,backendRoute[1]),user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
     }
   }
+  // Shared module owner operations (whumpo-modules v1) on the workspace origin: the owner principal is the admitted
+  // workspace identity and project ownership; a visitor cookie never authenticates here (docs/shared-modules.md).
+  const moduleMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/modules$/);
+  if(method==='POST'&&moduleMatch)return json(await handleModuleRequest(env.DB,{kind:'owner',userId:user.id,projectId:moduleMatch[1]},await body(request)));
+  // WH-127 owner records list (dashboard only; never Chat or model input).
+  const ownerRecords=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{0,39})$/);
+  if(method==='GET'&&ownerRecords){
+    const params=new URL(request.url).searchParams;
+    if([...params.keys()].some(key=>key!=='after'||params.getAll(key).length!==1))return error(400,'Use the current records link.');
+    return json(await readOwnerRecords(env.DB,user.id,ownerRecords[1],ownerRecords[2],ownerRecords[3],params.get('after')));
+  }
   const inboxMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/inbox$/);
   if(method==='GET'&&inboxMatch)return json(await contactInbox(env.DB,user.id,inboxMatch[1]));
   const messageMatch=pathname.match(/^\/api\/contact-messages\/([0-9a-f-]{36})$/);
@@ -608,7 +622,8 @@ export default {
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
       {name:'applications',run:async()=>{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}},
-      {name:'contacts',run:()=>cleanupContacts(env.DB)},
+      // Form-submission expiry: the contact inbox and WH-127 module records (both skip safety-held projects).
+      {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);}},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
@@ -627,6 +642,7 @@ export default {
       if(String(cause).includes('connection_write_key_changed'))return comparisonErrorResponse(request,error(503,new ConnectionVaultError('write-key').message));
       if(cause instanceof WorkspaceViewError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if(cause instanceof IdentityError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
+      if(cause instanceof ModuleError)return comparisonErrorResponse(request,json(cause.body(),cause.status));
       if (cause instanceof FeatureInclusionError || cause instanceof GuestPreviewError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, category: "unexpected" }));
       return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));

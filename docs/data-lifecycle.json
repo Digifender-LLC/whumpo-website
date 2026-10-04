@@ -2617,48 +2617,48 @@
     },
     {
       "id": "module-records",
-      "tables": [],
+      "tables": [
+        "module_records",
+        "module_record_events"
+      ],
       "scope": "visitor",
-      "purpose": "WH-067 records module values: public/visitor/staff form submissions and staff-updated fields for owner-configured record schemas (schema 3 `records` instances). The fixed contact inbox keeps the `contacts` class until WH-127 wraps it.",
-      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation. Specification schema 3 can describe this configuration; nothing stores or serves it yet.",
+      "purpose": "WH-127 records module values: visitor and staff form submissions and owner/staff-updated fields for owner-configured record schemas (schema 3 `records` instances), plus content-free change events (form.accepted/record.updated/record.removed) for the WH-069 handoff. Anonymous public intake and the fixed contact inbox adapter are not delivered; the contact inbox keeps the `contacts` class.",
+      "currentRetention": "Each record keeps the instance's `retentionDays` (30, 90 or 365) from submission, stored as its expiry; reads and the daily expiry pass (the `contacts` maintenance job) also apply the instance's current window, so shortening applies at once and lengthening never extends an existing record. Expiry runs in bounded batches and skips projects inside an active safety preservation hold. Owner removal deletes one record (refused while held). Visitor erasure, instance removal, project and account deletion cascade. Change events carry no values and remain while the instance exists.",
       "proposedRetention": "Owner decision of October 4, 2026 (recorded on #107): each records instance sets `retentionDays`, default 90 days, owner-selectable 30, 90 or 365 days, maximum 365 days, counted from submission. General records never inherit the 30-day contact window silently. Shortening applies at the next expiry pass; lengthening requires the specification permissions review. Account or project closure deletes ordinary records; active safety holds and restricted preservation override deletion until released.",
-      "deletionAuthority": "Owner exact record removal, instance disable and expiry; verified visitor privacy requests limited to their own records. Safety holds and restricted preservation are checked first; closure never transfers records to another account.",
-      "exportPolicy": "Separate-approval visitor-subject export from the owner dashboard only; never default profile export, agent/model context, Chat history or the public site source ZIP.",
+      "deletionAuthority": "Owner record removal through the module API (records.remove, any activation state; refused inside a safety hold) and retention expiry; the visitor's own reviewed erasure and owner visitor erasure cascade their submissions; project/account deletion cascades. Staff and visitors cannot remove records. Safety holds are checked first; closure never transfers records to another account.",
+      "exportPolicy": "Owner dashboard records list (workspace origin) and module reads limited by field audience and record scope. Separate-approval visitor-subject export serializer not yet delivered (WH-077); never default profile export, agent/model context, Chat history, receipts, events or the public site source ZIP.",
       "references": [
+        "src/shared-modules/schema.sql",
+        "src/shared-modules/records.ts",
         "docs/shared-modules.md",
         "src/project-specification/v3/modules.ts",
         "docs/data-protection.md",
-        "docs/roadmap/backlog.json",
-        "docs/inference-privacy.md",
         "docs/contact-forms.md"
       ],
-      "storageStatus": "planned",
+      "storageStatus": "current",
       "protection": {
-        "profile": "planned-adapter",
+        "profile": "managed-readable",
         "storage": [
-          "not-admitted"
+          "control-d1"
         ],
         "readers": [
-          "Owner dashboard records panel through scoped module handlers; current staff only for staff-readable fields; a visitor only their own submitter-readable fields. Visitor-submitted values never enter owner Chat, model context or Chat history."
+          "Project owner through the dashboard records list and owner module reads (every field); current staff only staff- and submitter-readable fields through records.get and staff views; a visitor only their own submitter-readable fields. Visitor-submitted values never enter owner Chat, model context or Chat history."
         ],
         "processors": [
-          "Deterministic module validation and admission (Turnstile, Origin/body bounds, atomic caps for public forms) and WH-052 form.accepted events; zero maintainer inference."
+          "Deterministic module validation, field projection, record scope, revision compare-and-swap and capacity triggers inside committing statements; content-free form.accepted events; zero maintainer inference, model context or provider access."
         ],
         "remainingExposure": [
-          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+          "Submitted values are readable private visitor data to privileged operators; text submissions are not screened (recorded safety gap S12/S13)."
         ],
-        "decision": "planned-adapter",
-        "rationale": "Registered by WH-124 before any table so the WH-067 module slices cannot create unclassified visitor data or a second authority.",
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers, as for the contact inbox; blanket encryption would not remove the authorized processing access every handler needs.",
         "requirements": [
           "DP-02",
           "DP-03",
           "DP-04",
           "DP-05"
         ]
-      },
-      "implementationPackets": [
-        "WH-127"
-      ]
+      }
     },
     {
       "id": "module-files",

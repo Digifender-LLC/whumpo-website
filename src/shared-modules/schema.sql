@@ -380,3 +380,77 @@ END;
 CREATE TRIGGER module_access_visitor_deleted AFTER DELETE ON app_visitors BEGIN
  UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,unixepoch()) WHERE project_id=OLD.project_id;
 END;
+
+-- WH-127 records and forms module (docs/shared-modules.md#records-and-forms-module-wh-127--october-4-2026-utc).
+-- One row per accepted submission of a records instance's form (lifecycle class module-records). Values are
+-- visitor-subject data readable only through the module handlers' field projections and the owner dashboard; they
+-- never enter Chat, model context, receipts, events or logs. Writes happen only in the module engine's batch beside its
+-- request receipt; the triggers below repeat the instance, form, schema, retention, revision and capacity decisions.
+CREATE TABLE module_records (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ schema_id TEXT NOT NULL CHECK(length(schema_id) BETWEEN 1 AND 40 AND schema_id NOT GLOB '*[^a-z0-9-]*'),
+ form_id TEXT NOT NULL CHECK(length(form_id) BETWEEN 1 AND 40 AND form_id NOT GLOB '*[^a-z0-9-]*'),
+ fields_revision INTEGER NOT NULL CHECK(fields_revision>=1),
+ submitter_kind TEXT NOT NULL CHECK(submitter_kind IN ('visitor','staff')),
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
+ values_json TEXT NOT NULL CHECK(json_valid(values_json) AND json_type(values_json)='object' AND length(CAST(values_json AS BLOB))<=8192),
+ revision INTEGER NOT NULL CHECK(revision>=1),
+ created_request_id TEXT NOT NULL CHECK(length(created_request_id)=36),
+ last_request_id TEXT NOT NULL CHECK(length(last_request_id)=36),
+ created_at INTEGER NOT NULL CHECK(created_at>0),
+ updated_at INTEGER NOT NULL CHECK(updated_at>=created_at),
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+31536000)
+) STRICT;
+CREATE INDEX module_records_list ON module_records(instance_id,schema_id,created_at DESC,id DESC);
+CREATE INDEX module_records_visitor ON module_records(visitor_id,instance_id,created_at);
+CREATE INDEX module_records_project ON module_records(project_id,expires_at);
+
+-- Content-free change events, one per committed records write (primary key = the module request). They are the WH-069
+-- `form.accepted` handoff and prove inside the batch that this request's write happened: a created record at revision
+-- 1, the record at the new revision written by this request, or a removed record. No submitted value is stored here.
+CREATE TABLE module_record_events (
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ request_id TEXT NOT NULL CHECK(length(request_id)=36),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ entry_id TEXT NOT NULL CHECK(length(entry_id)=36),
+ event TEXT NOT NULL CHECK(event IN ('form.accepted','record.updated','record.removed')),
+ revision INTEGER NOT NULL CHECK(revision>=1),
+ created_at INTEGER NOT NULL CHECK(created_at>0),
+ PRIMARY KEY(instance_id,request_id)
+) STRICT;
+CREATE INDEX module_record_events_project ON module_record_events(project_id,created_at);
+CREATE INDEX module_record_events_entry ON module_record_events(entry_id);
+
+CREATE TRIGGER module_record_admit BEFORE INSERT ON module_records BEGIN
+ SELECT RAISE(ABORT,'module_request_unavailable') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id AND a.state='active'
+  WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.kind='records'
+  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')=NEW.form_id AND json_extract(f.value,'$.recordId')=NEW.schema_id AND json_extract(f.value,'$.uploadCollectionId') IS NULL)
+  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.schemas') s WHERE json_extract(s.value,'$.id')=NEW.schema_id AND json_extract(s.value,'$.fieldsRevision')=NEW.fields_revision)
+  AND NEW.expires_at=NEW.created_at+86400*json_extract(i.config_json,'$.retentionDays'));
+ SELECT RAISE(ABORT,'module_request_stale') WHERE NEW.revision!=1 OR NEW.last_request_id!=NEW.created_request_id OR NEW.updated_at!=NEW.created_at OR abs(NEW.created_at-unixepoch())>60;
+ SELECT RAISE(ABORT,'module_request_forbidden') WHERE NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=0);
+ SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_records WHERE instance_id=NEW.instance_id)>=10000
+  OR (SELECT count(*) FROM module_records WHERE project_id=NEW.project_id)>=20000
+  OR (SELECT count(*) FROM module_records WHERE visitor_id=NEW.visitor_id AND instance_id=NEW.instance_id AND created_at>unixepoch()-3600)>=20;
+END;
+-- Identity, submitter, schema and retention never change; every change advances the revision by one under a new request,
+-- and an expired record cannot be changed.
+CREATE TRIGGER module_record_update BEFORE UPDATE ON module_records
+WHEN NEW.id IS NOT OLD.id OR NEW.instance_id IS NOT OLD.instance_id OR NEW.project_id IS NOT OLD.project_id OR NEW.schema_id IS NOT OLD.schema_id OR NEW.form_id IS NOT OLD.form_id
+ OR NEW.fields_revision IS NOT OLD.fields_revision OR NEW.submitter_kind IS NOT OLD.submitter_kind OR NEW.visitor_id IS NOT OLD.visitor_id OR NEW.created_request_id IS NOT OLD.created_request_id
+ OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at OR NEW.revision!=OLD.revision+1 OR NEW.last_request_id=OLD.last_request_id OR NEW.updated_at<OLD.updated_at
+ OR OLD.expires_at<=unixepoch()
+BEGIN SELECT RAISE(ABORT,'module_request_stale'); END;
+-- Ordinary removal and expiry never delete inside an active safety preservation hold (WH-132 inventory: blocked).
+CREATE TRIGGER safety_hold_module_record_retained BEFORE DELETE ON module_records
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER module_record_event_admit BEFORE INSERT ON module_record_events BEGIN
+ SELECT RAISE(ABORT,'module_request_stale') WHERE abs(NEW.created_at-unixepoch())>60 OR CASE NEW.event
+  WHEN 'form.accepted' THEN NOT EXISTS(SELECT 1 FROM module_records WHERE id=NEW.entry_id AND instance_id=NEW.instance_id AND project_id=NEW.project_id AND revision=1 AND created_request_id=NEW.request_id AND NEW.revision=1)
+  WHEN 'record.updated' THEN NOT EXISTS(SELECT 1 FROM module_records WHERE id=NEW.entry_id AND instance_id=NEW.instance_id AND project_id=NEW.project_id AND revision=NEW.revision AND last_request_id=NEW.request_id)
+  ELSE EXISTS(SELECT 1 FROM module_records WHERE id=NEW.entry_id) END;
+END;
+CREATE TRIGGER module_record_event_immutable BEFORE UPDATE ON module_record_events BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;

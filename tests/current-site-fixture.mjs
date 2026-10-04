@@ -27,6 +27,7 @@ export async function currentSiteFixtureHandlers(){
   export * as moduleActivation from './src/shared-modules/activation';
   export * as moduleAccess from './src/shared-modules/access';
   export * as moduleAccessRoles from './src/shared-modules/access-roles';
+  export * as sharedModuleRecords from './src/shared-modules/records';
   export * as modulePolicy from './src/shared-modules/policy';
   export {moduleCatalog} from './src/project-specification/catalog';
   export {validateSpecification} from './src/project-specification/v3/schema';

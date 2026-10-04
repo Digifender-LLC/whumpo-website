@@ -3,6 +3,7 @@ import {workspacePredicate} from '../workspace-identity/admission';
 import {ModuleError,decideModule,moduleOperations,moduleRequest,type ModuleDecision,type ModuleOperation,type ModulePrincipal,type ModuleRequest} from './policy';
 import {resolveResource,type ResolvedResource} from './registry';
 import {accessHandlers,visitorPredicate} from './access';
+import {recordsHandlers} from './records';
 
 /** WH-125 shared module request engine (whumpo-modules v1). Every call validates the current envelope,
  * resolves exactly one scoped resource from the server-derived principal, evaluates the policy table and,
@@ -14,10 +15,10 @@ export type ModuleReadHandler=(db:D1Database,context:ModuleContext)=>Promise<Rec
 /** Writes return statements to commit atomically and a bounded result that must not echo submitted values. */
 export type ModuleWriteHandler=(db:D1Database,context:ModuleContext)=>Promise<{statements:D1PreparedStatement[];result:Record<string,unknown>}>;
 export type ModuleHandlers=Partial<{[K in ModuleOperation]:(typeof moduleOperations)[K]['write'] extends true?ModuleWriteHandler:ModuleReadHandler}>;
-/** Delivered operation handlers. WH-125 delivered the engine; WH-126 registers `access.me` and `access.list`, and
- * WH-127–129 register their kind's handlers here. An operation without a handler is `unavailable`, never a generated
- * or fallback implementation. */
-export const moduleHandlers:ModuleHandlers=Object.freeze({...accessHandlers});
+/** Delivered operation handlers. WH-125 delivered the engine; WH-126 registers `access.me` and `access.list`; WH-127
+ * registers the records handlers (forms.submit, records.get/view/update/remove); WH-128–129 register theirs here. An
+ * operation without a handler is `unavailable`, never a generated or fallback implementation. */
+export const moduleHandlers:ModuleHandlers=Object.freeze({...accessHandlers,...recordsHandlers});
 
 const denied=(d:Extract<ModuleDecision,{decision:'deny'}>)=>new ModuleError(d.reason==='not_found'?'not_found':'forbidden');
 const principalKey=(p:ModulePrincipal)=>p.kind==='owner'?['owner',p.userId,p.projectId]:p.kind==='visitor'?['visitor',p.visitorId,p.projectId]:['public',p.projectId];
@@ -74,6 +75,7 @@ export async function handleModuleRequest(db:D1Database,principal:ModulePrincipa
   if(text.includes('module_request_unavailable'))throw new ModuleError('unavailable');
   if(text.includes('module_request_stale'))throw new ModuleError('stale_configuration');
   if(text.includes('module_request_limited'))throw new ModuleError('limited');
+  if(text.includes('safety_preservation_hold'))throw new ModuleError('unavailable');
   // A concurrent identical request may have won; otherwise the outcome is unknown: read back, never resend.
   const again=await readback().catch(e=>{if(e instanceof ModuleError)throw e;return null;});
   if(again)return again;
