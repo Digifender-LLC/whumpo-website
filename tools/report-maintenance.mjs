@@ -3,9 +3,24 @@ import {pathToFileURL} from 'node:url';
 import {maintenanceJobs} from '../src/maintenance.ts';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 
-import {backlogInventory,operationInventory} from './maintenance-inventory.mjs';
+import {backlogInventory,operationInventory,platformCounterInventory,counterThresholds} from './maintenance-inventory.mjs';
 
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
+/** WH-050 F8: each shared platform counter against its ceiling, flagged at 50% (warn) and 80% (act). Pull-based; no alert is delivered. */
+export async function counterReport(db,now=Date.now()){
+ if(!integer(now))throw Error('Invalid observation time');
+ const counters=await Promise.all(Object.entries(platformCounterInventory).map(async([counter,{sql,ceiling,window,enforcedBy,note}])=>{
+  try{
+   const row=await db.prepare(sql.replaceAll('?1','?')).bind(...Array(sql.split('?1').length-1).fill(new Date(now).toISOString())).first();
+   if(!row||!integer(row.used))throw Error('Invalid counter');
+   const ratio=row.used/ceiling;
+   return {counter,state:ratio>=1?'exhausted':ratio>=counterThresholds.act?'act':ratio>=counterThresholds.warn?'warn':'normal',used:row.used,ceiling,percent:Math.floor(ratio*1000)/10,window,enforcedBy,...(note?{note}:{})};
+  }catch{return {counter,state:'unavailable',ceiling,window,enforcedBy};}
+ }));
+ return {observedAt:new Date(now).toISOString(),thresholds:{warnPercent:counterThresholds.warn*100,actPercent:counterThresholds.act*100},counters,
+  attention:counters.some(c=>['act','exhausted','unavailable'].includes(c.state)),
+  scope:'Operator-only read of platform totals; no project, account or visitor identifiers. Nothing is delivered: run on the owner-set cadence (runbook G1). Ceilings are local schema limits, not Cloudflare limits or spend.'};
+}
 export async function maintenanceReport(db,now=Date.now()){
  if(!integer(now))throw Error('Invalid observation time');
  const jobs=await Promise.all(Object.entries(maintenanceJobs).map(async([job,interval])=>{
@@ -36,15 +51,17 @@ export async function maintenanceReport(db,now=Date.now()){
    return {kind,state:'available',limit:100,items:results.map(r=>({id:r.id,state:r.state,observedAt:r.observed_at})),timeBasis:time,recoveryGuide:guide};
   }catch{return {kind,state:'unavailable'};}
  }));
- return {observedAt:new Date(now).toISOString(),jobs,backlogs,operations,attention:jobs.some(j=>!['completed','skipped','running'].includes(j.state))||backlogs.some(q=>['attention','unavailable'].includes(q.state))||operations.some(o=>o.state==='unavailable'),scope:'Operator-only read; completion is a scheduler pass, not proof every item succeeded. No repairs, billing changes or provider dispatch.'};
+ const capacity=await counterReport(db,now);
+ return {observedAt:new Date(now).toISOString(),jobs,backlogs,operations,counters:capacity.counters,attention:jobs.some(j=>!['completed','skipped','running'].includes(j.state))||backlogs.some(q=>['attention','unavailable'].includes(q.state))||operations.some(o=>o.state==='unavailable')||capacity.attention,scope:'Operator-only read; completion is a scheduler pass, not proof every item succeeded. No repairs, billing changes or provider dispatch.'};
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
-  if(process.argv.length!==2)throw Error('Unexpected arguments');
+  const counters=process.argv[2]==='--counters';
+  if(process.argv.length!==2&&!(counters&&process.argv.length===3))throw Error('Unexpected arguments');
   const config=JSON.parse(await readFile('wrangler.jsonc','utf8'));
   const credentials=process.env.CLOUDFLARE_API_TOKEN?{type:'api_token',token:process.env.CLOUDFLARE_API_TOKEN}:undefined;
   const api=cloudflareClient(config.account_id,fetch,credentials),db=remoteD1(api,config.d1_databases.find(b=>b.binding==='DB').database_id);
-  const report=await maintenanceReport(db);console.log(JSON.stringify(report,null,2));if(report.attention)process.exitCode=2;
+  const report=counters?await counterReport(db):await maintenanceReport(db);console.log(JSON.stringify(report,null,2));if(report.attention)process.exitCode=2;
  }catch{console.error('Maintenance report unavailable. Check operator authorization, configuration and the current schema. No settings changed.');process.exitCode=1;}
 }

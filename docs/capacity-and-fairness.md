@@ -177,11 +177,79 @@ Standard owner AI is untouched: none of these counters meter AI, and no quota up
 
 Latency and busy counts vary between runs (single run, timing dependent, one event loop, serialized local D1). The B latency degradation is unchanged in kind: site HTML and photo volume from many IPs is still admitted (F2), and local contention dominates.
 
-**Status of findings after this slice (local only):** F5 **resolved locally** for single-source lockout (distributed callers can still spend a project allowance: 5 sources for backend, 2 for contact's hourly cap). F1 **resolved locally** for the tested shape (two or more heavy accounts can no longer deny a light account), with a guarantee only while light accounts fit the reserve (about five accounts at their full share). F3 **resolved locally** (one tenant or client no longer exhausts every tenant's photos; many tenants together still reach the unchanged platform ceiling). F4 **partly resolved**: refusals are no longer charged and one project cannot hold the whole gate per isolate; the gateway still neither queues nor retries, a lone tenant now gets at most one concurrent execution per isolate, and multi-isolate behavior is unmeasured. F2, F6, F7, F8 **open**.
+**Status of findings after this slice (local only):** F5 **resolved locally** for single-source lockout (distributed callers can still spend a project allowance: 5 sources for backend, 2 for contact's hourly cap). F1 **resolved locally** for the tested shape (two or more heavy accounts can no longer deny a light account), with a guarantee only while light accounts fit the reserve (about five accounts at their full share). F3 **resolved locally** (one tenant or client no longer exhausts every tenant's photos; many tenants together still reach the unchanged platform ceiling). F4 **partly resolved**: refusals are no longer charged and one project cannot hold the whole gate per isolate; the gateway still neither queues nor retries, a lone tenant now gets at most one concurrent execution per isolate, and multi-isolate behavior is unmeasured. F2, F6 **open**; F7 and F8 were addressed locally the same day by the [operator containment and counter report slice](#wh-050-f7f8-operator-containment-and-counter-thresholds--october-4-2026-utc).
 
 Owner decisions this slice raises: the per-client limits (20/10/400 per day) can refuse legitimate visitors behind one shared address (offices, carrier NAT); the 10% fair share and 50% reserve thresholds; the 10,000/month per-project photo budget; whether to add a sites rate-limit binding (F2); whether a single tenant losing its second concurrent runtime slot is acceptable or a short wait/queue should replace `busy`.
 
-## Findings: fairness and abuse gaps (WH-050 record; status after WH-075 above)
+## WH-050 F7/F8 operator containment and counter thresholds — October 4, 2026 UTC
+
+Second WH-050 slice (with WH-007 gaps G1, G3 and G11) on branch `claude/wh-050-containment`, uncommitted at recording time. **Implemented locally only:** current schema and operator tools with local SQLite/D1 tests. Nothing was deployed or run against the `test` environment, no binding, plan or paid service changed, and no alert delivery was installed. Not configured, not rehearsed against the deployed database and not owner-accepted.
+
+### F7: operator containment (implemented locally)
+
+`node tools/operator-containment.mjs --input PRIVATE.json [--apply DIGEST]` uses the existing operator Cloudflare/D1 authorization, like [`tools/respond-usage-review.mjs`](../tools/respond-usage-review.mjs). Every write is previewed first and applied only with the preview's exact SHA-256 digest; a mismatched or changed request writes nothing. Logic: [`tools/operator-containment-input.mjs`](../tools/operator-containment-input.mjs) (never bundled into a Worker).
+
+| Action | Input (private JSON file) | Effect |
+| --- | --- | --- |
+| `status` | `{"action":"status","subject":{"kind":"account"\|"project","id":UUID}}` | Read-only: containment history (active, expired, lifted) and each project's current usage against its effective allowance. Counts only. |
+| `contain` | `{"action":"contain","id":UUID,"subject":{...},"scopes":{"backend":"freeze","photo":500},"expiresAt":ISO,"operator":"human:REF","reason":"..."}` | For each named scope, `"freeze"` (account or project) or a temporary per-project allowance (project only). `expiresAt` must be in the future and at most 30 days away. The `id` makes the action idempotent: an exact replay returns the saved rows; a different request with the same ID is refused. |
+| `lift` | `{"action":"lift","id":UUID,"operator":"human:REF","reason":"..."}` | Ends the action early (once). Normal allowances apply immediately; usage already counted stays counted. |
+
+Scopes and allowances (per project; a raise never changes the account caps, fair share, per-client sub-limits or platform ceilings):
+
+| Scope | Normal | Temporary allowance range | Enforced in |
+| --- | --- | --- | --- |
+| `backend` public backend calls | 100/UTC day | 0–500 | `backend_public_usage_insert` |
+| `transition` visitor transitions | 100/UTC day | 0–500 | `app_run_admit` |
+| `contact` contact submissions | 20/rolling hour (retained cap 100 unchanged) | 0–100 | `contact_submission_guard` |
+| `photo` public photo reads (site and CMS images) | 10,000/UTC month | 0–50,000 | `storage_project_usage_insert` |
+
+How it holds:
+
+- **Admission in SQL.** New table `operator_containments` and view `operator_contained_projects` ([`schema/platform.sql`](../schema/platform.sql)). The four existing admission triggers read the effective allowance: any active freeze for the project or its owning account makes it 0; otherwise the most recent active allowance for that project and scope; otherwise the normal value. Writing the counters directly is refused the same way, so no request path can bypass it. The counter `CHECK` ceilings were widened only to the raise maxima (backend 500, project photo reads 50,000).
+- **No customer disclosure.** Customers receive the existing generic responses: backend 429 `allowance_or_publication_unavailable`, visitor transition 409 "Application changed or execution allowance reached", contact 429 "This inbox is temporarily full", photo 503 "This site's monthly photo allowance has been reached". A frozen project is indistinguishable from an exhausted one; no containment, operator reference or reason appears in any response.
+- **Audit and reversibility.** Each row is the audit record: action ID, scope, subject, effect, operator reference (`[A-Za-z0-9_.:@-]`, up to 128), private reason (up to 500), request digest, creation and expiry, plus a single lift with its own operator, reason and digest. Triggers refuse any other update and every delete; rows are bounded at 10,000 (then new containment fails closed). Rows have no foreign key, so account or project closure is neither blocked nor erases them ([lifecycle class `operator-containment`](data-lifecycle.json)). Retention beyond that is an **owner decision**.
+- **Nothing is deleted or changed for the customer.** Containment inserts and lifts operator rows only. Stored messages, visitor documents, sessions, sites, versions, files and WH-132 safety holds are untouched, so held data is never at risk.
+- **Standard owner AI untouched.** None of the four scopes meters AI, Chat, owner test runs (`backend_runs`), workspace sessions or site HTML; the test confirms a contained owner can still run an owner backend test.
+
+Containment controls that are still **missing** (documented, not built), because no existing primitive does them safely:
+
+| Control | Why not included | What is needed |
+| --- | --- | --- |
+| Workspace session revocation | The only primitive is the identity authority epoch, advanced by owner credential/recovery ceremonies (C11). An out-of-band operator epoch change would interact with in-flight kit offers, recovery attempts and two-key rules that were reviewed only for owner-driven changes. | A reviewed operator revocation ceremony in the identity contract (WH-015/016/063). |
+| Site takedown (site HTML) | Site HTML has no admission counter; unpublishing changes the owner's reviewed publication revision and would need owner review to restore. | A serving gate in [`src/site-host.ts`](../src/site-host.ts) plus an owner-approved customer notice (WH-016/017). |
+| Application disable / visitor session revocation | The existing disable path is owner-reviewed and deletes visitor sessions. The `transition` freeze already stops visitor writes and guest execution; visitor pages and reads still load. | A reviewed operator disable that keeps visitor data (WH-016). |
+| Contact suspension | **Covered by the `contact` freeze**: new submissions are refused per project or account with the generic "inbox full" response; stored messages stay private and keep their normal expiry. The contact form page itself still renders. | Nothing further for intake; hiding the form needs the site serving gate above. |
+
+### F8: shared counter thresholds (implemented locally, pull-based)
+
+`node tools/report-maintenance.mjs --counters` (or the full `node tools/report-maintenance.mjs`, which now includes a `counters` section) reads each shared platform counter against the ceiling its trigger enforces and flags `warn` at 50% and `act` at 80% (`exhausted` at 100%; `unavailable` if a query fails). Exit 2 means attention (`act`, `exhausted` or `unavailable`). The inventory is fixed, reviewed SQL in [`tools/maintenance-inventory.mjs`](../tools/maintenance-inventory.mjs) (`platformCounterInventory`), and `tests/maintenance-inventory.mjs` checks each ceiling against the current schema SQL so a changed trigger cannot silently drift. Output holds totals only: no project, account or visitor identifiers (use `operator-containment` `status` for one subject).
+
+| Counter | Ceiling | Window |
+| --- | ---: | --- |
+| Public backend calls (fair share starts at 50%) | 1,000 | UTC day |
+| Visitor transitions (fair share starts at 50%) | 1,000 | UTC day |
+| Contact receipts (fair share starts at 50%) | 1,000 | retained |
+| R2 reads (public photo fair share starts at 50%) | 100,000 | UTC month |
+| R2 writes | 10,000 | UTC month |
+| Visitor runs / visitor sessions / visitors | 10,000 / 5,000 / 1,000 | retained |
+| Owner backend test runs | 1,000 per day, 5,000 retained | UTC day / retained |
+| Project photo files plus cleanup queue | 500 | retained |
+| Operator containment rows | 10,000 | retained |
+
+**Alert delivery stays owner-gated.** Nothing pushes, pages or emails: the report is read on a cadence the owner sets (runbook G1). Installing any delivery (Cloudflare notifications, a paging or email provider, a scheduled Worker that sends messages) is a separate owner decision with its own price and entitlement review.
+
+### G11 slice: synthetic health probe (implemented locally)
+
+`node tools/probe-health.mjs https://ORIGIN [--timeout-ms N]` sends one unauthenticated `GET /api/health` (the only health endpoint; platform Worker in [`src/index.ts`](../src/index.ts)), follows no redirects, reads at most 4 KiB, and exits 2 unless it gets 200 `{"status":"ok"}`. The target must be a bare `https` origin (`http` only on loopback). `tests/probe-health.mjs` runs it against a loopback stub only. A pass proves platform Worker liveness, not D1, R2, AI, Turnstile, customer sites or provider health. It is not scheduled and was not run against any deployed URL.
+
+### Tests (local)
+
+`node tests/operator-containment.mjs` (SQLite) and `node tests/operator-containment.mjs --d1` (actual local D1) cover input validation, preview/apply digest mismatch, idempotent replay and ID reuse, project and account freezes at all four admission paths, lowered, raised and superseding allowances, identical generic customer responses, direct counter writes refused, immutable audit, lift, expiry, cross-project isolation and unchanged customer tables. Also `node tests/maintenance-inventory.mjs` (counter thresholds) and `node tests/probe-health.mjs`.
+
+Owner decisions this slice raises: containment record retention (no cleanup exists); the raise maxima above; whether the `contact` allowance should govern the hourly rate (current) or the retained cap; the report cadence while a cohort is active; any alert delivery provider; and the scope of the missing site, application and session controls.
+
+## Findings: fairness and abuse gaps (WH-050 record; status after WH-075 and the F7/F8 slice above)
 
 | ID | Finding | Evidence | Severity |
 | --- | --- | --- | --- |
@@ -191,14 +259,14 @@ Owner decisions this slice raises: the per-client limits (20/10/400 per day) can
 | F4 | **The runtime concurrency gate is global and not tenant-aware.** At 4+ simultaneous calls 25% or more are refused regardless of caller; in B victims saw 3.3% `busy` and a failed visitor transition. Refused and failed attempts still spend the project allowance; the gateway neither queues nor retries. Behavior of the real service binding across multiple Cloudflare isolates is unmeasured. | concurrency table, S, B | Medium |
 | F5 | **Allowances are keyed by the target, not the caller.** Anonymous callers can spend a tenant's 100 backend calls/day, fill its 20-per-hour contact cap (and, over time, its 100 retained receipts) or its visitor-page allowance, locking out legitimate users. Per-IP limits do not help against distributed callers. | B noisy table, P | Medium |
 | F6 | **Per-IP limiter coverage and semantics are narrow and local-only.** Limits cover contact, visitor routes and platform `/api`; the real binding is per Cloudflare location and eventually consistent, which this harness does not model. | P; [Workers rate limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) | Medium |
-| F7 | **Recovery from exhaustion is time-based only.** No operator can raise, reset or freeze one tenant's allowance or isolate one abusive tenant (runbook gaps G1 and G3). Rollover not tested. | C; [incident runbooks](incident-runbooks.md#3-gap-register-controls-this-runbook-needs-that-do-not-exist) | Medium |
-| F8 | **No alert exists for any of the shared counters.** No notification fires at 50% or 80% of any platform budget (G1). | none installed | Medium |
+| F7 | **Recovery from exhaustion is time-based only.** No operator can raise, reset or freeze one tenant's allowance or isolate one abusive tenant (runbook gaps G1 and G3). Rollover not tested. **Implemented locally (F7 slice):** operator freeze or temporary allowance per account/project, enforced in the admission triggers; site takedown, app disable and session revocation remain missing. Not configured or accepted. | C; [incident runbooks](incident-runbooks.md#3-gap-register-controls-this-runbook-needs-that-do-not-exist) | Medium |
+| F8 | **No alert exists for any of the shared counters.** No notification fires at 50% or 80% of any platform budget (G1). **Implemented locally (pull-based):** `report-maintenance.mjs --counters` flags 50%/80%; alert delivery remains owner-gated and not installed. | none installed | Medium |
 
-Candidate remedies (each needs its own reviewed task; none implemented here): per-account sub-caps sized to the enrolled cohort, per-tenant photo read accounting before the platform counter is charged, an edge rate rule or cache policy for the public site host (a [WAF rate limiting](https://developers.cloudflare.com/waf/rate-limiting-rules/) rule is paid-plan dependent and **requires entitlement and price verification**), a per-project fairness token or queue ahead of the runtime gate, and an operator per-tenant freeze (WH-015/016).
+Candidate remedies (each needs its own reviewed task; none implemented here): per-account sub-caps sized to the enrolled cohort, per-tenant photo read accounting before the platform counter is charged, an edge rate rule or cache policy for the public site host (a [WAF rate limiting](https://developers.cloudflare.com/waf/rate-limiting-rules/) rule is paid-plan dependent and **requires entitlement and price verification**), a per-project fairness token or queue ahead of the runtime gate, and an operator per-tenant freeze (WH-015/016; the public-allowance part is now implemented locally, see the F7 slice).
 
 ## Proposed account-level alerts and cohort limits (proposal, owner decision required)
 
-Nothing below is installed or enforced. Alert delivery does not exist (G1), so these are **pull-based checks** to add to the existing private reports (`tools/report-*.mjs`) and read on a stated cadence while a cohort is active.
+Nothing below is enforced and no alert is delivered (G1). The platform counter rows are now **pull-based checks** in `node tools/report-maintenance.mjs --counters` (50%/80% flags, local implementation only); the account-share and 429/503 rows are still manual. Read them on a stated cadence while a cohort is active.
 
 | Signal (source) | Warn at | Act at | Intended response |
 | --- | --- | --- | --- |
