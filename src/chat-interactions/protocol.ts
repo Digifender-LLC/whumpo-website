@@ -39,6 +39,9 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   // WH-126 staff roster. Identity and ownership only (viewComponents feature null) so reading and removing roles outlive
   // plan loss; granting re-checks core.editing in its own review. Opaque visitor ids and dates; no credentials or values.
   'access.roles@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
+  // WH-127 records counts. Identity and ownership only (viewComponents feature null): owner reads of collected data stay
+  // reachable after plan loss. Counts, ids and states only; visitor-submitted values stay in the owner records panel.
+  'records.summary@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });

@@ -1,7 +1,8 @@
 import {canonicalJSON,jsonDigest,plain} from '../project-specification/v2/json';
 import type {RecordField,RecordsConfig} from '../project-specification/v3/modules';
 import {ModuleError,type ModulePrincipal} from './policy';
-import {instanceOf,type RegistryRow} from './registry';
+import {instanceOf,registeredInstances,type RegistryRow} from './registry';
+import type {RecordsSummaryFacts} from './shape';
 import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} from './api';
 
 /** WH-127 records and forms module (docs/shared-modules.md#records-and-forms-module-wh-127--october-4-2026-utc).
@@ -206,4 +207,27 @@ export async function cleanupModuleRecords(db:D1Database){
  await db.prepare(`DELETE FROM module_records WHERE id IN (SELECT r.id FROM module_records r JOIN module_instances i ON i.id=r.instance_id
   WHERE (r.expires_at<=unixepoch() OR r.created_at<=unixepoch()-86400*json_extract(i.config_json,'$.retentionDays'))
   AND r.project_id NOT IN (SELECT project_id FROM safety_held_projects) LIMIT 500)`).run();
+}
+
+/** `records.summary@1`: per registered records instance of one owned project, its state and revisions, and per schema the
+ * count of currently retained records by submitter kind; forms and views by id, audience and scope. Identity and ownership
+ * only, so an owner keeps this after disable or plan loss. Counts, ids and states only: never a field label, field value,
+ * visitor id or entry id, so it is safe for the Chat temporary view and the model's view facts (owner decision, October 4,
+ * 2026: visitor-submitted values stay dashboard-only). */
+export async function readRecordsSummary(db:D1Database,user:string,project:string):Promise<RecordsSummaryFacts>{
+ if(!uuid(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
+ const items:RecordsSummaryFacts['items']=[];
+ for(const row of (await registeredInstances(db,project)).filter(r=>r.kind==='records').slice(0,8)){
+  if(row.state===null)continue;
+  const instance=await instanceOf(row);if(instance.kind!=='records')continue;
+  const c=instance.config,window=live(c.retentionDays);
+  const {results}=await db.prepare(`SELECT r.schema_id,r.submitter_kind,count(*) n FROM module_records r WHERE r.instance_id=? AND r.project_id=? AND ${window.sql} GROUP BY r.schema_id,r.submitter_kind`)
+   .bind(row.id,project,...window.params).all<{schema_id:string;submitter_kind:'public'|'visitor'|'staff';n:number}>();
+  const n=(schema:string,kind:string)=>results.find(x=>x.schema_id===schema&&x.submitter_kind===kind)?.n??0;
+  items.push({localId:row.local_id,resourceId:row.id,state:row.state as RecordsSummaryFacts['items'][number]['state'],configRevision:row.config_revision,retentionDays:c.retentionDays as 30|90|365,
+   schemas:c.schemas.map(s=>({recordId:s.id,fieldsRevision:s.fieldsRevision,fields:s.fields.length,records:{public:n(s.id,'public'),visitor:n(s.id,'visitor'),staff:n(s.id,'staff')}})),
+   forms:c.forms.map(f=>({formId:f.id,recordId:f.recordId,submit:f.submit,attachments:f.uploadCollectionId!==null})),
+   views:c.views.map(v=>({viewId:v.id,recordId:v.recordId,audience:v.audience,scope:v.scope}))});
+ }
+ return {items};
 }

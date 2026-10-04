@@ -318,10 +318,30 @@ try{
   await assert.rejects(()=>run("INSERT INTO module_records VALUES(?,?,?,'request','request-form',1,'visitor',?,'{}',1,?,?,unixepoch(),unixepoch(),unixepoch()+86400)",id(),theirs.id,a.project,v1.visitorId,id(),id()),/module_request_unavailable/);
  });
 
+ await check('records.summary@1 and the owner records panel routes: counts only, owner only',async()=>{
+  const view=await m.readViewBinding(a.scope,a.user,'records-summary',a.project);assert.equal(view.status,'ready',JSON.stringify(view));assert.equal(view.binding,'records.summary@1');
+  const item=view.data.items.find(i=>i.localId==='requests');assert.equal(item.resourceId,records.id);assert.equal(item.state,'active');assert.equal(item.configRevision,records.config_revision);assert.equal(item.retentionDays,30);
+  const counts=Object.fromEntries((await rows("SELECT submitter_kind k,count(*) n FROM module_records WHERE instance_id=? AND expires_at>unixepoch() GROUP BY submitter_kind",records.id)).map(r=>[r.k,r.n]));
+  assert.deepEqual(item.schemas[0].records,{public:counts.public??0,visitor:counts.visitor??0,staff:counts.staff??0});assert.ok(counts.public>0&&counts.visitor>0&&counts.staff>0);
+  assert.deepEqual(item.forms.map(f=>[f.formId,f.submit]),[['request-form','visitor'],['staff-form','staff'],['public-form','public']]);assert.deepEqual(item.views.map(v=>v.viewId),['mine','desk']);
+  // No value, label, entry id or visitor id in the binding (it may appear in a Chat temporary view and model view facts).
+  const text=JSON.stringify(view);for(const x of markers)assert.ok(!text.includes(x));
+  for(const leak of [v1.visitorId,first,'Name','Topic'])assert.ok(!text.includes(leak),leak);
+  assert.equal((await m.readViewBinding(a.scope,a.user,'records-summary',b.project)).status,'unavailable');
+  assert.equal((await m.readViewBinding(b.scope,b.user,'records-summary',a.project)).status,'unavailable');
+  // The owner panel reads the same counts and then values from the list route; foreign owners and visitor cookies get nothing.
+  const panel=await workspace(a,`/api/projects/${a.project}/module-records`);assert.equal(panel.status,200);assert.deepEqual(panel.body,view.data);
+  assert.equal((await workspace(b,`/api/projects/${a.project}/module-records`)).status,404);
+  assert.equal((await workspace(a,`/api/projects/${a.project}/module-records`,{cookie:v1.cookie})).status,401);
+  // Disabled instances stay readable for the owner; the summary still never needs a paid feature grant.
+  await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=?',a.user);
+  assert.equal((await m.readViewBinding(a.scope,a.user,'records-summary',a.project)).status,'ready');
+ });
+
  await check('visitor values stay out of Chat, receipts, events and logs; closure counts and cascades',async()=>{
   for(const t of ['chat_turns','module_request_receipts','module_record_events','module_activation_reviews','activity_events']){const dump=JSON.stringify(await rows('SELECT * FROM '+t));for(const x of markers)assert.ok(!dump.includes(x),t);}
   const chat=JSON.stringify(await m.readChat(a.scope,a.user));for(const x of markers)assert.ok(!chat.includes(x));
-  const view=JSON.stringify(await m.readViewBinding(a.scope,a.user,'modules',a.project));for(const x of markers)assert.ok(!view.includes(x));
+  for(const kind of ['modules','records-summary']){const view=JSON.stringify(await m.readViewBinding(a.scope,a.user,kind,a.project));for(const x of markers)assert.ok(!view.includes(x));}
   for(const x of markers)assert.ok(!logs.join('\n').includes(x));
   const inventory=await accountClosureInventory(db,a.user);assert.equal(inventory.counts.moduleRecords,await count(a));assert.ok(inventory.counts.moduleRecords>20);
   await run('DELETE FROM module_instances WHERE project_id=?',b.project);
@@ -341,7 +361,7 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
+ process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
 

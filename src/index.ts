@@ -70,7 +70,7 @@ import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
 import {handleModuleRequest} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
-import {readOwnerRecords,cleanupModuleRecords} from './shared-modules/records';
+import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
@@ -388,6 +388,9 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   // workspace identity and project ownership; a visitor cookie never authenticates here (docs/shared-modules.md).
   const moduleMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/modules$/);
   if(method==='POST'&&moduleMatch)return json(await handleModuleRequest(env.DB,{kind:'owner',userId:user.id,projectId:moduleMatch[1]},await body(request)));
+  // WH-127 owner records panel: counts per records instance (the records.summary@1 facts), then the list below.
+  const recordsSummary=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records$/);
+  if(method==='GET'&&recordsSummary)return json(await readRecordsSummary(env.DB,user.id,recordsSummary[1]));
   // WH-127 owner records list (dashboard only; never Chat or model input).
   const ownerRecords=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{0,39})$/);
   if(method==='GET'&&ownerRecords){

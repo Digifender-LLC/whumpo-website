@@ -18,7 +18,10 @@ export const viewComponents={
  modules:{version:1,binding:'module.instances@1',feature:null},
  // WH-126: staff roster per registered access instance (opaque visitor ids, dates, staff state). Identity and ownership
  // only, so owners can read and remove roles after plan loss; granting re-checks core.editing. No credentials or values.
- 'access-roles':{version:1,binding:'access.roles@1',feature:null}
+ 'access-roles':{version:1,binding:'access.roles@1',feature:null},
+ // WH-127: records counts per registered records instance (states, revisions, counts by submitter kind). Identity and
+ // ownership only, so owners keep collected-data status after plan loss. Never field labels, values or visitor ids.
+ 'records-summary':{version:1,binding:'records.summary@1',feature:null}
 } as const;
 export type WidgetKind=keyof typeof viewComponents;
 export const widgetKinds=Object.keys(viewComponents) as WidgetKind[];

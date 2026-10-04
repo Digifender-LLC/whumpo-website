@@ -32,3 +32,22 @@ export function validAccessRoleFacts(d:unknown):d is AccessRoleFacts{
   &&new Set(i.visitors.map(v=>(v as {visitorId:string}).visitorId)).size===i.visitors.length)
   &&new Set(d.items.map(i=>(i as {localId:string}).localId)).size===d.items.length;
 }
+
+/** WH-127 `records.summary@1` view facts: per registered records instance, its state, revisions and retention, and per
+ * schema the count of retained records by submitter kind; forms and views by id, audience and scope. Never a field
+ * label, field value, visitor id or entry id (visitor-submitted values stay dashboard-only). */
+export type RecordsSummaryFacts={items:{localId:string;resourceId:string;state:'inactive'|'active'|'suspended'|'migrating';configRevision:number;retentionDays:30|90|365;
+ schemas:{recordId:string;fieldsRevision:number;fields:number;records:{public:number;visitor:number;staff:number}}[];
+ forms:{formId:string;recordId:string;submit:'public'|'visitor'|'staff';attachments:boolean}[];
+ views:{viewId:string;recordId:string;audience:'staff'|'visitor';scope:'all'|'own'}[]}[]};
+const localName=(v:unknown)=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v);
+const tally=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0&&Number(v)<=20000;
+export function validRecordsSummaryFacts(d:unknown):d is RecordsSummaryFacts{
+ return exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=8&&d.items.every(i=>exact(i,['localId','resourceId','state','configRevision','retentionDays','schemas','forms','views'])
+  &&localName(i.localId)&&uuid(i.resourceId)&&['inactive','active','suspended','migrating'].includes(String(i.state))&&positive(i.configRevision)&&[30,90,365].includes(Number(i.retentionDays))
+  &&Array.isArray(i.schemas)&&i.schemas.length>=1&&i.schemas.length<=4&&i.schemas.every(s=>exact(s,['recordId','fieldsRevision','fields','records'])&&localName(s.recordId)&&positive(s.fieldsRevision)
+   &&Number.isSafeInteger(s.fields)&&Number(s.fields)>=1&&Number(s.fields)<=8&&exact(s.records,['public','visitor','staff'])&&tally((s.records as Record<string,unknown>).public)&&tally((s.records as Record<string,unknown>).visitor)&&tally((s.records as Record<string,unknown>).staff))
+  &&Array.isArray(i.forms)&&i.forms.length<=4&&i.forms.every(f=>exact(f,['formId','recordId','submit','attachments'])&&localName(f.formId)&&localName(f.recordId)&&['public','visitor','staff'].includes(String(f.submit))&&typeof f.attachments==='boolean')
+  &&Array.isArray(i.views)&&i.views.length<=8&&i.views.every(v=>exact(v,['viewId','recordId','audience','scope'])&&localName(v.viewId)&&localName(v.recordId)&&['staff','visitor'].includes(String(v.audience))&&['all','own'].includes(String(v.scope))))
+  &&new Set(d.items.map(i=>(i as {localId:string}).localId)).size===d.items.length;
+}

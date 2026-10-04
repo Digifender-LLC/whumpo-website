@@ -9,6 +9,7 @@ import {readGuestPreviewFacts} from './guest-previews/bindings';
 import {readSiteDiagnostics} from './site-diagnostics';
 import {readModuleInstances} from './shared-modules/registry';
 import {readAccessRoles} from './shared-modules/access';
+import {readRecordsSummary} from './shared-modules/records';
 import {object,exact,uuid,viewComponents,WorkspaceViewError,type WidgetKind} from './workspace-view-contract';
 import {readViewComponentData,viewBinding,type ViewComponentData} from './workspace-view-data';
 
@@ -37,6 +38,7 @@ export async function readViewBinding(db:D1Database,user:string,kind:WidgetKind,
   else if(kind==='site-health')data=await readSiteDiagnostics(db,user,projectId);
   else if(kind==='modules'){if(projectId===null)status='unavailable';else data=await readModuleInstances(db,user,projectId);}
   else if(kind==='access-roles'){if(projectId===null)status='unavailable';else data=await readAccessRoles(db,user,projectId);}
+  else if(kind==='records-summary'){if(projectId===null)status='unavailable';else data=await readRecordsSummary(db,user,projectId);}
   else status='unavailable';
  }catch(error){status=error instanceof FeatureInclusionError?'denied':'unavailable';}
  // Discard already-read facts after late access changes; never return stale data
