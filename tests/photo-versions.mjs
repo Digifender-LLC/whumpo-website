@@ -9,7 +9,7 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true,r2:true}),db=store.db,env=store.env,scopes=new Map(),scope=user=>scopes.get(user),ownedEnv=user=>({...env,DB:scope(user)});
 async function accountAuthority(user){const authority=await workspaceFixture(db,m,user);scopes.set(user,await authority.scope());}
 const {uploadPhoto,readPhoto,listPhotos,sendChat,readChat,getBilling,ownedPreview,ownedExport,reserveStorage,host}=m;
-const dir=await mkdtemp('/tmp/tellumo-photo-versions-');execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1])",dir+'/photo.jpg']);const jpeg=new Uint8Array(await readFile(dir+'/photo.jpg'));
+const dir=await mkdtemp('/tmp/whumpo-photo-versions-');execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1])",dir+'/photo.jpg']);const jpeg=new Uint8Array(await readFile(dir+'/photo.jpg'));
 async function account(){const id=crypto.randomUUID();await accountAuthority(id);return id;}
 async function chat(user,content,id=crypto.randomUUID(),revision){const state=await readChat(scope(user),user);return {id,result:await sendChat(scope(user),user,{id,content,revision:revision??state.state.revision})};}
 async function project(user,name){return createFixtureProject(scope(user),user,name,'A neighborhood website','clay');}

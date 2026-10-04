@@ -6,8 +6,8 @@ Draft updated October 1, 2026. Effective date: pending adoption. This inventory 
 
 Digifender LLC uses cookies and limited browser session storage to operate Whumpo, secure sign-in and recover interrupted visitor-app actions. Some internal names retain earlier product names; they are Whumpo storage identifiers.
 
-- **tellumo_session:** a first-party owner session cookie on the Whumpo workspace host, lasting up to seven days. It keeps you signed in. Signing out clears that browser cookie; revoking a session also ends its server-side authority.
-- **tellumo_challenge:** a first-party passkey challenge cookie scoped to /api/auth, lasting up to five minutes. It associates a sign-in or registration attempt with the browser that started it.
+- **__Host-whumpo_session:** a first-party owner session cookie on the Whumpo workspace host, lasting up to seven days. It keeps you signed in. Signing out clears that browser cookie; revoking a session also ends its server-side authority.
+- **__Secure-whumpo_identity_challenge:** a first-party passkey challenge cookie scoped to /api/auth/identity/, lasting up to five minutes. It associates a sign-in or registration attempt with the browser that started it.
 - **\__Host-whumpo-app-session-PROJECT_ID** and **\__Host-whumpo-app-challenge-PROJECT_ID:** the separate hosted application uses a project identifier in these names. Sessions last up to 24 hours and passkey challenges up to five minutes. These cookies authenticate access to that customer's application, separately from your owner workspace account.
 - **townhello-request:** browser session-storage entries, with an application path suffix, remember an outstanding visitor-app request identifier so an interrupted reply does not cause an unintended repeated action.
 - **townhello-deletion:** browser session-storage entries, with an application path suffix, remember a visitor-app deletion review identifier and revision during the recovery flow. Session storage normally lasts for the tab session, may survive a browser's session restoration, and can be cleared through browser controls.

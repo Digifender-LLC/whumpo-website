@@ -1,4 +1,4 @@
-# Reusing Jarvis in TellUmo
+# Reusing Jarvis in Whumpo
 
 Inspected September 29, 2026 with the repository owner's permission. Reference runtime: `zemdregon/jarvis-orchestrator` commit `aeb9c6eb947cb062d7c5c70ced78d4da34e7f3b7`. The reference checkout is separate from this repository; no Jarvis credential or runtime configuration was copied.
 
@@ -12,15 +12,15 @@ Inspected September 29, 2026 with the repository owner's permission. Reference r
 - Reject an answer that echoes the provider credential before persistence or display.
 - Bound answer bytes and expose fixed diagnostic categories instead of upstream errors or envelopes.
 
-The port supports both Chat Completions and Responses. It permits omitted model/role metadata for compatible gateways; Jarvis requires those fields. It uses TellUmo's selected Muse model rather than Jarvis's LongCat profile. Jarvis's Go-specific transport and temporary free-model authorization settings are not copied.
+The port supports both Chat Completions and Responses. It permits omitted model/role metadata for compatible gateways; Jarvis requires those fields. It uses Whumpo's selected Muse model rather than Jarvis's LongCat profile. Jarvis's Go-specific transport and temporary free-model authorization settings are not copied.
 
 `tests/ai.mjs` exercises model mismatch, unexpected tools, credential echo, invalid role and timeout diagnostics in addition to both provider protocols. Provider failure logs contain only the operation UUID, a fixed kind/reason and elapsed milliseconds.
 
 ## Recovery design reused
 
-Jarvis's `DURABLE-GENERATION.md` and `internal/codingjob` distinguish recorded intent, accepted result and uncertain outcome. TellUmo follows the same boundary using D1: reserve usage, persist the pending turn, atomically claim dispatch, then call the provider once. Persist answer and token usage before settlement. Readback can settle a retained result without inference. Unknown outcomes retain their hold; neither browser replay nor reconciliation sends another provider request.
+Jarvis's `DURABLE-GENERATION.md` and `internal/codingjob` distinguish recorded intent, accepted result and uncertain outcome. Whumpo follows the same boundary using D1: reserve usage, persist the pending turn, atomically claim dispatch, then call the provider once. Persist answer and token usage before settlement. Readback can settle a retained result without inference. Unknown outcomes retain their hold; neither browser replay nor reconciliation sends another provider request.
 
-This is adaptation of the state machine, not a transplant of the Go/Postgres scheduler. TellUmo does not yet have Jarvis's worker leases, full immutable artifact receipts, contained execution or code publication recovery.
+This is adaptation of the state machine, not a transplant of the Go/Postgres scheduler. Whumpo does not yet have Jarvis's worker leases, full immutable artifact receipts, contained execution or code publication recovery.
 
 ## Next useful ports for site building
 
