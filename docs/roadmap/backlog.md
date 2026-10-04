@@ -7103,7 +7103,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-04 UTC: contract and offline reference only, no implementation. Merged PR #108 (2fbfd6c) added docs/shared-modules.md (marked planned: module kinds/pins, instance envelope v1, kind configurations, configRevision, none/additive-optional/migration-required hook classes on the WH-071 descriptor; whumpo-modules request envelope v1, closed operation set, derived principals, policy table, revocation and visitor/workspace host boundaries; contact/directory/photos/visitor identity mapping with gaps; WH-090/122 admission, WH-105 binding and WH-066 catalog registration points; dated library/managed-service evaluation), tools/prototypes/shared-modules.mjs (imports only node:crypto and the offline WH-071 prototype) and tests/shared-modules-contract.mjs, and decomposed WH-067 into WH-123–130. Re-run at ff3d410: node tests/shared-modules-contract.mjs passed 75 offline checks with synthetic identifiers; this proves frozen examples only, not runtime authorization, persistence, safety or acceptance. Both open owner decisions (records retention, visitor values in Chat) were decided by the owner on #107 and are recorded in the contract. WH-067 depends on every child WH-123–130 and no child reaches WH-070/072/077/080/104. No table, route, binding, provider, Cloudflare resource or deployment is added by WH-123; WH-124 (#157) separately implemented schema 3 in source. Live GitHub issue state was not re-read from this session.
 
 ## WH-124 — Cut over to specification schema 3 with module pins and data classes
 
