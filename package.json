@@ -159,6 +159,8 @@
     "test:connection-readiness": "node tests/connection-readiness.mjs",
     "test:chat-history": "node tests/chat-history.mjs",
     "test:chat-saved-turn": "node tests/chat-saved-turn.mjs",
+    "test:saved-work": "node tests/saved-work.mjs && node tests/saved-work-client.mjs",
+    "test:saved-work-browser": "node tests/workspace-identity-browser.mjs --saved-work",
     "test:provider-return": "node tests/provider-return.mjs",
     "setup:github": "node tools/configure-github-app.mjs",
     "test:connection-history-ui": "node tests/connection-history-ui.mjs",

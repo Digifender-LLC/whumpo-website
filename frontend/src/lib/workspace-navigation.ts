@@ -16,3 +16,11 @@ export function providerReturn(search:string):{view:'chat'|'connections'|'billin
  }
  if(params.has('checkout'))return {view:'billing',notice:params.get('checkout')==='canceled'?'Checkout was canceled. Check your latest balance here.':'Checking your latest balance…'};
 }
+/** One strict project locator, accepted only when the current owned-project
+ * read lists it. `stale` marks a link the current account cannot use. */
+export function selectedProject(search:string,projects:readonly {id:string}[]|undefined):{project:string;stale:boolean}{
+ const values=new URLSearchParams(search).getAll('project');if(!values.length)return {project:'',stale:false};
+ const value=values.length===1&&chatLocationId(values[0])?values[0]:null;
+ if(!projects)return {project:'',stale:!value};
+ return value&&projects.some(project=>project.id===value)?{project:value,stale:false}:{project:'',stale:true};
+}

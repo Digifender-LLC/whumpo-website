@@ -44,6 +44,10 @@ function persist(store:StoragePort,value:Saved){
  const raw=JSON.stringify(value);if(raw.length>2_000_000||new TextEncoder().encode(raw).length>2_000_000||Object.keys(value.forms).length>100)throw Error('Form recovery is full');store.setItem(interactionRecoveryKey,raw);
 }
 export function readFormRecovery(store:StoragePort,owner:string,id:string,now=Date.now()){return readAll(store,owner,now).forms[id]??null;}
+/** Saved-work summary: form IDs and the exact unresolved request only, never draft answers. */
+export function listFormRecovery(store:StoragePort,owner:string,now=Date.now()){
+ return Object.entries(readAll(store,owner,now).forms).filter(([,r])=>r.pending||r.answers!==null).map(([interactionId,r])=>({interactionId,draft:r.answers!==null,pending:r.pending}));
+}
 export function prepareInteractionRecovery(store:StoragePort,owner:string){readAll(store,owner,Date.now());}
 export function writeFormRecovery(store:StoragePort,owner:string,id:string,value:FormRecovery|null,now=Date.now()){
  if(!uuid(id))throw Error('Invalid form');const saved=readAll(store,owner,now);

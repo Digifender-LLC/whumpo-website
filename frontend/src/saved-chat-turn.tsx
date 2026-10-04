@@ -1,15 +1,15 @@
 import type {ReactNode} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {api,APIError,message,type Turn} from './lib/api';
+import {readSavedTurn} from './lib/saved-work';
 import {Button} from './components/ui/button';
 
 /** A saved location only supplies an ID. Always read its current server
  * projection; cached controls disappear while refreshing or after failure. */
 export function SavedChatTurn({owner,id,children}:{owner:string;id:string;children:(turn:Turn)=>ReactNode}){
  const saved=useQuery({queryKey:['saved-chat-turn',owner,id],queryFn:async({signal})=>{
-  const result=await api<{version:number;turn:Turn}>('/chat/turns/'+id,{signal});
-  const turn=result?.turn;
-  if(result?.version!==1||!turn||turn.id!==id||!Number.isSafeInteger(turn.revision)||turn.revision<1||typeof turn.user_text!=='string'||typeof turn.assistant_text!=='string'||!['pending','completed','failed'].includes(turn.status))throw new APIError('Refresh Whumpo to read this saved message.',409,'client_update_required');
+  const turn=readSavedTurn(await api<unknown>('/chat/turns/'+id,{signal}),id);
+  if(!turn)throw new APIError('Refresh Whumpo to read this saved message.',409,'client_update_required');
   return turn;
  },staleTime:0,gcTime:0,refetchOnWindowFocus:true,refetchInterval:q=>q.state.data?.status==='pending'?2500:false});
  return <section data-saved-turn-id={id} tabIndex={-1} aria-label="Reopened message" className="rounded-2xl border p-4 sm:p-6 mb-8">
