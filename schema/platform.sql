@@ -4759,7 +4759,8 @@ CREATE VIEW safety_held_files AS
   OR EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND h.scope='object' AND h.file_id=f.id);
 
 -- Restricted in-place preservation of small D1 payloads that a customer may overwrite or clear without
--- any visible difference (profile photo replacement, Chat draft discard/expiry). Written only by triggers
+-- any visible difference (profile photo replacement, Chat draft discard/expiry, app visitor document overwrites and
+-- cleared app recovery-point copies). Written only by triggers
 -- while a covering hold is active, never read by customer, Chat or model paths, and removed when the
 -- last covering hold is released (ordinary deletion resumes).
 CREATE TABLE safety_preserved_records (
@@ -4767,7 +4768,7 @@ CREATE TABLE safety_preserved_records (
  hold_id TEXT NOT NULL REFERENCES safety_preservation_holds(id),
  subject_user_id TEXT NOT NULL CHECK(length(subject_user_id) BETWEEN 1 AND 128),
  project_id TEXT CHECK(project_id IS NULL OR length(project_id) BETWEEN 1 AND 128),
- source TEXT NOT NULL CHECK(source IN ('profile_photo','chat_interaction_draft')),
+ source TEXT NOT NULL CHECK(source IN ('profile_photo','chat_interaction_draft','app_document','app_recovery_document')),
  source_id TEXT NOT NULL CHECK(length(source_id) BETWEEN 1 AND 128),
  payload_json TEXT NOT NULL CHECK(json_valid(payload_json) AND length(CAST(payload_json AS BLOB))<=65536),
  preserved_at INTEGER NOT NULL CHECK(preserved_at>=0)
@@ -4899,7 +4900,7 @@ CREATE TRIGGER safety_case_audit_retained BEFORE DELETE ON safety_case_audit BEG
 
 CREATE TRIGGER safety_preserved_records_admit BEFORE INSERT ON safety_preserved_records BEGIN
  SELECT RAISE(ABORT,'safety_hold_subject') WHERE NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE id=NEW.hold_id AND released_at IS NULL);
- SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_preserved_records)>=10000;
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_preserved_records)>=50000;
 END;
 CREATE TRIGGER safety_preserved_records_update BEFORE UPDATE ON safety_preserved_records
 WHEN NEW.seq IS NOT OLD.seq OR NEW.subject_user_id IS NOT OLD.subject_user_id OR NEW.project_id IS NOT OLD.project_id OR NEW.source IS NOT OLD.source
@@ -4999,6 +5000,28 @@ BEGIN
   'safety',json((SELECT json_object('digest',digest,'photoRevision',photo_revision,'policyVersion',policy_version,'state',state,'csamCheck',csam_check,'sexualCheck',sexual_check,'createdAt',created_at)
    FROM profile_photo_safety WHERE user_id=OLD.user_id))),unixepoch()
  FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.user_id ORDER BY placed_at,id LIMIT 1;
+END;
+-- App visitor documents (owner decision, October 4, 2026): every overwrite inside a held project (visitor transition,
+-- recovery restore or migration apply) keeps the previous revision, and a recovery-point copy cleared by point removal
+-- or visitor revocation is kept. The customer action still succeeds; past capacity it fails closed.
+CREATE TRIGGER safety_hold_app_document BEFORE UPDATE OF state_json ON app_documents
+WHEN NEW.state_json IS NOT OLD.state_json
+ AND EXISTS(SELECT 1 FROM app_visitors v JOIN safety_held_projects h ON h.project_id=v.project_id WHERE v.id=OLD.visitor_id)
+BEGIN
+ INSERT INTO safety_preserved_records(hold_id,subject_user_id,project_id,source,source_id,payload_json,preserved_at)
+ SELECT h.id,p.owner_user_id,p.id,'app_document',OLD.visitor_id,json_object('visitor',OLD.visitor_id,'revision',OLD.revision,'state',json(OLD.state_json)),unixepoch()
+ FROM app_visitors v JOIN projects p ON p.id=v.project_id JOIN safety_preservation_holds h ON h.released_at IS NULL
+  AND ((h.scope='account' AND h.subject_user_id=p.owner_user_id) OR (h.scope='project' AND h.project_id=p.id))
+ WHERE v.id=OLD.visitor_id ORDER BY h.placed_at,h.id LIMIT 1;
+END;
+CREATE TRIGGER safety_hold_app_recovery_document BEFORE DELETE ON app_recovery_documents
+WHEN EXISTS(SELECT 1 FROM app_recovery_points r JOIN safety_held_projects h ON h.project_id=r.project_id WHERE r.id=OLD.point_id)
+BEGIN
+ INSERT INTO safety_preserved_records(hold_id,subject_user_id,project_id,source,source_id,payload_json,preserved_at)
+ SELECT h.id,p.owner_user_id,p.id,'app_recovery_document',OLD.point_id,json_object('point',OLD.point_id,'visitor',OLD.visitor_id,'revision',OLD.revision,'state',json(OLD.state_json)),unixepoch()
+ FROM app_recovery_points r JOIN projects p ON p.id=r.project_id JOIN safety_preservation_holds h ON h.released_at IS NULL
+  AND ((h.scope='account' AND h.subject_user_id=p.owner_user_id) OR (h.scope='project' AND h.project_id=p.id))
+ WHERE r.id=OLD.point_id ORDER BY h.placed_at,h.id LIMIT 1;
 END;
 CREATE TRIGGER safety_hold_chat_draft AFTER UPDATE OF envelope_json ON chat_interactions
 WHEN OLD.envelope_json IS NOT NULL AND NEW.envelope_json IS NULL

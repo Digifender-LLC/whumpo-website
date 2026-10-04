@@ -63,6 +63,11 @@ try{
  const backend=crypto.randomUUID();await run("INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,'x',?,'2026-10-04')",backend,p2,'b'.repeat(64));
  await run('INSERT INTO app_spaces(project_id,owner_user_id,version_id) VALUES(?,?,?)',p2,subject,backend);
  const visitor=crypto.randomUUID();await run('INSERT INTO app_visitors(id,project_id,revoked) VALUES(?,?,1)',visitor,p2);
+ // Live visitors whose documents are overwritten and copied into recovery points (p2 project-held, p1 only object-held).
+ const backend1=crypto.randomUUID();await run("INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,'x',?,'2026-10-04')",backend1,p1,'c'.repeat(64));
+ await run('INSERT INTO app_spaces(project_id,owner_user_id,version_id) VALUES(?,?,?)',p1,subject,backend1);
+ const [live,live2,live1]=[crypto.randomUUID(),crypto.randomUUID(),crypto.randomUUID()];
+ for(const [v,p] of [[live,p2],[live2,p2],[live1,p1]])await run('INSERT INTO app_visitors(id,project_id,revoked) VALUES(?,?,0)',v,p);
  for(const [id,p,expires] of [['contact-1',p1,'2026-01-01T00:00:00.000Z'],['contact-2',p2,'2026-01-01T00:00:00.000Z'],['contact-o',pOther,'2026-01-01T00:00:00.000Z']])
   await run("INSERT INTO contact_submissions(id,project_id,settings_revision,request_hash,name,email,message,created_at,expires_at) VALUES(?,?,1,'h',?,?,?,'2026-01-01T00:00:00.000Z',?)",id,p,MARK,'v@example.invalid',MARK,expires);
  for(const p of [p1,p2,pOther])await run("INSERT INTO site_traffic_daily(project_id,day,requests) VALUES(?,date('now','-60 days'),3)",p);
@@ -127,6 +132,24 @@ try{
  // R2: the object-held photo's project is not project-held, so the pre-hold queued object is cleaned once no hold covers it.
  await run("UPDATE file_cleanup SET created_at='2026-01-01T00:00:00.000Z'");
  await m.cleanupPhotos({DB:db,FILES});assert.equal(await exists(f1b.key),false);assert.equal(await exists(fo.key),false);checks++;
+ // App documents (owner decision, October 4, 2026): overwrites and cleared recovery-point copies inside a held project are
+ // preserved invisibly; the write still succeeds. p1 is only object-held, so its documents are not captured.
+ const write=(v,state)=>run('UPDATE app_documents SET state_json=?,revision=revision+1 WHERE visitor_id=?',JSON.stringify(state),v);
+ await write(live,{note:MARK+'-first'});await write(live,{note:MARK+'-second'});await write(live1,{note:MARK+'-p1'});
+ await run('UPDATE app_documents SET state_json=state_json,revision=revision+1 WHERE visitor_id=?',live); // unchanged state: nothing to keep
+ const kept=await all("SELECT hold_id,project_id,source_id,payload_json FROM safety_preserved_records WHERE source='app_document' ORDER BY seq");
+ assert.deepEqual(kept.map(k=>[k.hold_id,k.project_id,k.source_id]),[['h-project',p2,live],['h-project',p2,live]]);
+ assert.deepEqual(kept.map(k=>JSON.parse(k.payload_json)),[{visitor:live,revision:0,state:{}},{visitor:live,revision:1,state:{note:MARK+'-first'}}]);checks++;
+ assert.equal(JSON.parse((await row('SELECT state_json FROM app_documents WHERE visitor_id=?',live)).state_json).note,MARK+'-second');checks++; // customer write succeeded
+ const pointA=crypto.randomUUID(),pointB=crypto.randomUUID();
+ for(const point of [pointA,pointB])await run('INSERT INTO app_recovery_points(id,user_id,project_id,version_id) VALUES(?,?,?,?)',point,subject,p2,backend);
+ assert.equal(await count('app_recovery_documents','point_id IN (?,?)',pointA,pointB),4);
+ await run('UPDATE app_recovery_points SET removed=1 WHERE id=?',pointA);                 // recovery-point removal
+ await run('UPDATE app_visitors SET revoked=1 WHERE id=?',live2);                         // visitor revocation clears its copies
+ const copies=await all("SELECT hold_id,source_id,payload_json FROM safety_preserved_records WHERE source='app_recovery_document' ORDER BY seq");
+ assert.deepEqual(copies.map(k=>{const v=JSON.parse(k.payload_json);return [k.hold_id,k.source_id,v.point,v.visitor];}).sort(),[['h-project',pointA,pointA,live],['h-project',pointA,pointA,live2],['h-project',pointB,pointB,live2]].sort());
+ assert.equal(JSON.parse(copies.find(k=>JSON.parse(k.payload_json).visitor===live).payload_json).state.note,MARK+'-second');checks++;
+ assert.equal(await count('app_recovery_documents','point_id IN (?,?)',pointA,pointB),1);checks++; // removal and revocation still succeeded
  // Profile photo removal and avatar change preserve the prior payload invisibly while an account hold is active.
  // A photo the customer removes just before the account hold is placed.
  const late=await photo(p1,true);await run('DELETE FROM project_files WHERE id=?',late.id);
@@ -183,6 +206,15 @@ try{
  for(const q of ["UPDATE safety_disclosures SET state='approved' WHERE id='d-1'","DELETE FROM safety_disclosures","DELETE FROM safety_disclosure_items","UPDATE safety_evidence_objects SET sha256='0'","DELETE FROM safety_evidence_objects"])
   {await assert.rejects(()=>run(q),q);checks++;}
 
+ // ---- Preserved-record capacity is 50,000 and fails closed beyond it (the overwrite is refused, never silently unkept).
+ const admitSql=(await row("SELECT sql FROM sqlite_master WHERE name='safety_preserved_records_admit'")).sql;await run('DROP TRIGGER safety_preserved_records_admit');
+ const fill=50000-1-await count('safety_preserved_records');
+ await run(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO safety_preserved_records(hold_id,subject_user_id,project_id,source,source_id,payload_json,preserved_at) SELECT 'h-account',?,?,'app_document','fill','{}',0 FROM n`,fill,subject,p2);
+ await run(admitSql);
+ await write(live,{note:'at-49999'});assert.equal(await count('safety_preserved_records'),50000);checks++;
+ await assert.rejects(()=>write(live,{note:'beyond'}),/safety_case_capacity/);checks++;
+ assert.equal(JSON.parse((await row('SELECT state_json FROM app_documents WHERE visitor_id=?',live)).state_json).note,'at-49999');checks++;
+
  // ---- Restore suppression: neither the current source nor a candidate can be admitted while a hold is active.
  await assert.rejects(()=>captureRestoreRecordSnapshot(db),/could not be observed/);checks++;
 
@@ -192,7 +224,13 @@ try{
  await m.cleanupPhotos({DB:db,FILES});assert.equal(await exists(late.key),false);assert.equal(await count('file_cleanup','object_key=?',late.key),0);checks++;
  await m.cleanupContacts(db);await m.cleanupTraffic(db);assert.equal(await count('contact_submissions'),0);assert.equal(await count('site_traffic_daily'),0);assert.equal(await count('site_traffic_quality'),0);checks++;
  await run('DELETE FROM app_visitors WHERE id=?',visitor);await assert.rejects(()=>run('DELETE FROM site_versions WHERE id=?',v2),/version_removal_unreviewed/);await run('DELETE FROM project_files WHERE id=?',f1.id);
- await run('DELETE FROM app_spaces WHERE project_id=?',p2); // seeded fixture row; closure removes app spaces before the account
+ // Seeded app fixture rows; closure removes app spaces before the account. Recovery points are never deleted by the
+ // product, so the fixture lifts that guard for one statement and restores the exact schema afterwards.
+ for(const v of [live,live2,live1])await run('DELETE FROM app_visitors WHERE id=?',v);
+ const pointGuard=(await row("SELECT sql FROM sqlite_master WHERE name='app_recovery_delete_guard'")).sql;await run('DROP TRIGGER app_recovery_delete_guard');
+ await run('DELETE FROM app_recovery_points WHERE project_id=?',p2);await run(pointGuard);
+ await run('DELETE FROM app_spaces WHERE project_id=?',p1);
+ await run('DELETE FROM app_spaces WHERE project_id=?',p2);
  await run('DELETE FROM users WHERE id=?',subject);assert.equal(await count('projects','owner_user_id=?',subject),0);checks++;
  assert.equal(await exists(restricted),true);assert.equal(await count('safety_evidence_objects'),3);checks++;
  const snapshot=await captureRestoreRecordSnapshot(db);assert.ok(snapshot.records.length>0);checks++; // admitted again after release
@@ -223,5 +261,5 @@ try{
  const everything=JSON.stringify([await all('SELECT * FROM safety_case_audit'),await all('SELECT * FROM safety_cases'),await all('SELECT * FROM safety_preservation_holds'),await all('SELECT * FROM safety_evidence_objects'),await all('SELECT * FROM safety_disclosures'),audit,manifest]);
  assert.doesNotMatch(everything,new RegExp(MARK+'|example\\.invalid|raw'));checks++;
  assert.equal(network,0);
- console.log(`Safety case operations passed (${d1?'local D1 + local R2':'SQLite + in-memory R2'}): ${checks} checks. Authenticated fresh-passkey HTTP surface (declared/stale/revoked/foreign-origin refused), project/object/account holds over photo, version, visitor, project, owner, account, contact, traffic and R2 cleanup paths, invisible preservation of profile photos, restricted evidence capture/resume/disposal, two-person manifest-only disclosure, restore suppression, conflict-of-interest non-disclosure, release and the ${inventory.sites}-site deletion inventory. Synthetic placeholders only; nothing transmitted.`);
+ console.log(`Safety case operations passed (${d1?'local D1 + local R2':'SQLite + in-memory R2'}): ${checks} checks. Authenticated fresh-passkey HTTP surface (declared/stale/revoked/foreign-origin refused), project/object/account holds over photo, version, visitor, project, owner, account, contact, traffic and R2 cleanup paths, invisible preservation of profile photos, app document overwrites and cleared recovery-point copies, 50,000 preserved-record capacity failing closed, restricted evidence capture/resume/disposal, two-person manifest-only disclosure, restore suppression, conflict-of-interest non-disclosure, release and the ${inventory.sites}-site deletion inventory. Synthetic placeholders only; nothing transmitted.`);
 }finally{globalThis.fetch=originalFetch;await fixture.close();}

@@ -252,7 +252,7 @@ October 4, 2026 UTC. The WH-015 contract/current-schema slice is [WH-131](roadma
 
 ### Cases, findings and audit
 
-Cases have no foreign key to `users`, so an ordinary account cascade cannot remove them. Every case opens as `uncertain_flag`. Linking ledger evidence never changes the finding. Only an explicit reviewer decision with a decision reference records `confirmed_policy_finding`, and a later `not_confirmed` decision appends a correction. The findings history is append-only. A case closes only after every hold is released, every disclosure is closed and every evidence capture has finished. Every attempt, read or write, is written to `safety_case_audit` in the same transaction as the outcome it states. Capacity limits fail closed: 10,000 cases, holds, preserved records or evidence objects; 1,000 roles; 1,000 evidence objects or links per case; 100 disclosures per case; and 100,000 audit rows.
+Cases have no foreign key to `users`, so an ordinary account cascade cannot remove them. Every case opens as `uncertain_flag`. Linking ledger evidence never changes the finding. Only an explicit reviewer decision with a decision reference records `confirmed_policy_finding`, and a later `not_confirmed` decision appends a correction. The findings history is append-only. A case closes only after every hold is released, every disclosure is closed and every evidence capture has finished. Every attempt, read or write, is written to `safety_case_audit` in the same transaction as the outcome it states. Capacity limits fail closed: 10,000 cases, holds or evidence objects; 50,000 preserved records (raised from 10,000 by owner decision, October 4, 2026; beyond it the preserving write is refused rather than left unkept); 1,000 roles; 1,000 evidence objects or links per case; 100 disclosures per case; and 100,000 audit rows.
 
 ### Holds and their scope
 
@@ -262,25 +262,25 @@ A hold needs a preservation approver, an opaque `legal_basis_ref` and a review t
 - `project`: one project owned by the subject.
 - `object`: one project photo. The hold also pins its project against deletion and owner transfer.
 
-Every per-object deletion and expiry path is listed in `tools/safety-hold-inventory.mjs`. That script scans the source for `DELETE FROM`, R2 deletes and cascades and fails on any path that is unclassified or stale. At October 4, 2026 it lists **78 deletion sites**:
+Every per-object deletion and expiry path is listed in `tools/safety-hold-inventory.mjs`. That script scans the source for `DELETE FROM`, R2 deletes and cascades and fails on any path that is unclassified or stale. At the October 4, 2026 app-document slice it lists **85 deletion sites**:
 
 | Decision | Sites |
 |---|---|
-| Blocked by a hold trigger | 10 |
-| Skipped by expiry | 3 |
-| Preserved | 1 |
+| Blocked by a hold trigger | 11 |
+| Skipped by expiry or cleanup | 5 |
+| Preserved | 2 |
 | Hold mechanism itself | 2 |
-| Explicitly excluded, with rationale | 62 |
+| Explicitly excluded, with rationale | 65 |
 
 It also lists **10 other paths**, such as overwrites, cascades, restore, Time Travel and external copies. In summary:
 
 - **Blocked** (`RAISE(ABORT,'safety_preservation_hold')`): account deletion and its cascade; project deletion; project owner change; photo removal (`project_files`); site version removal; app visitor deletion and owner visitor erasure; contact deletion; guest-preview feedback and links; and the R2 cleanup queue row.
 - **Skipped by expiry:** contact expiry, traffic rollup expiry, and R2 photo cleanup. A photo removed shortly before an account or project hold stays queued and stored, because queue rows now carry the project and owner. The orphan sweep only lists `photos/` and treats queued keys as retained.
-- **Preserved without visible difference:** profile-photo replacement or removal, and Chat draft discard or inactive expiry. The trigger copies the previous payload into restricted `safety_preserved_records`. Copies follow a covering hold and are deleted when no hold covers them.
+- **Preserved without visible difference:** profile-photo replacement or removal; Chat draft discard or inactive expiry; and, inside an account or project hold (owner decision, October 4, 2026), every app visitor document overwrite (visitor transition, recovery restore or migration apply: `safety_hold_app_document` keeps the previous revision) and every app recovery-point copy cleared by point removal or visitor revocation (`safety_hold_app_recovery_document`). The trigger copies the previous payload into restricted `safety_preserved_records`. Copies follow a covering hold and are deleted when no hold covers them. An object hold does not capture app documents.
 - **Restore:** restore admission refuses (`preservation-hold`) while a hold, an open disclosure or an unfinished capture exists, and inventory evidence must include every stored evidence object with its exact size and digest.
-- **Explicitly excluded, with rationale in the inventory:** authentication, session, queue and idempotency rows; content-free operational records; app document overwrite and recovery points (an owner question); D1 Time Travel and external copies (CMS, GitHub), which are outside this database's control; and browser-only drafts.
+- **Explicitly excluded, with rationale in the inventory:** authentication, session, queue and idempotency rows; content-free operational records; transient migration outputs; unapplied review proposals; D1 Time Travel and external copies (CMS, GitHub), which are outside this database's control and are handled by the [outside-hold-control procedure](#copies-outside-hold-control--required-procedure-before-activation); and browser-only drafts.
 
-**Customer behaviour.** A hold is never disclosed. A blocked action fails with the existing generic error for that action. Expired rows that are retained stay outside the customer's read window. Preserved overwrites look exactly like ordinary success.
+**Customer behaviour.** A hold is never disclosed. A blocked action fails with the existing generic error for that action. Expired rows that are retained stay outside the customer's read window. Preserved overwrites look exactly like ordinary success. **Visitors cannot delete their own app data while it is held** (owner decision, October 4, 2026, confirming current behaviour): visitor self-deletion inside a held project returns the existing "could not be confirmed" error.
 
 ### Restricted evidence objects
 
@@ -296,12 +296,30 @@ Disclosure is a separate two-person operation:
 
 **Whumpo transmits nothing.** There is no export endpoint, provider, email or download of evidence bytes. The actual transfer procedure is an owner and counsel question. Manifests contain identifiers and digests only.
 
+### Copies outside hold control — required procedure before activation
+
+Owner decision, October 4, 2026 (issue #132). Holds act only on Whumpo's control database and private R2. The copies below are outside that control, so **this written procedure must be accepted by the owner (and reviewed by counsel under WH-133) before any case operation is activated**: no first `role_administrator` bootstrap, case opening or hold placement on a live database until then. It is a procedure document only; nothing here is automated, and none of it has been rehearsed.
+
+**D1 Time Travel.** [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) keeps automatic point-in-time history of the control database (up to 30 days on Workers Paid and seven on Free per the October 2, 2026 reading in [data protection](data-protection.md); **re-verify the current window before activation**). Whumpo neither extends nor pins that history, and it ages out on the provider's schedule.
+
+1. When a hold is placed, the preservation approver records in the case (as an opaque `legal_basis_ref`/decision reference, never content) that Time Travel history is not a preservation mechanism. The hold itself keeps current rows in place, and trigger-preserved payloads cover overwrites from that moment on.
+2. If material that existed *before* the hold is needed and is only recoverable from history, the owner decides, within the remaining window, whether to recover it. Recovery means restoring a bookmark into a **separate, newly created, private D1 database**, never restoring over the control database. Then capture only the needed rows as restricted evidence through the reviewed capture path, record digests in the case, and delete the separate database. Any such step is an owner-run Cloudflare action under the operator credential, recorded in the case audit by reference. Agents never run it (`--remote` and deploy commands remain owner-only).
+3. A whole-control-database restore stays refused while a hold, open disclosure or unfinished capture exists (restore admission `preservation-hold`). After release, any restore must reconcile deletions as the [app data](app-data.md) and [incident runbooks](incident-runbooks.md) procedures already require.
+
+**Customer-owned external copies: native CMS resources and GitHub backups.** Resources in the customer's own Cloudflare account (native CMS) and repositories in the customer's own GitHub account (backups) are under the customer's control, not Whumpo's. A hold cannot stop the customer from changing or deleting them, and Whumpo must not use the customer's OAuth grant to read, copy or freeze them for a case.
+
+1. The case records which external resources exist, by opaque reference only. The source is Whumpo's own records (for example `github_backups` rows or CMS registrations): resource identifiers, never contents.
+2. Whumpo does not access the external resource with the customer's credentials for preservation or disclosure. Any preservation of external copies goes through lawful process directed to the provider or account holder, decided by the owner with counsel and recorded in the case by reference.
+3. Whumpo's own copy of the same content (saved versions, backend versions, photos and app documents in the control database and private R2) is what the hold preserves. Capture from that copy, not from the external one.
+4. CMS functional testing remains owner-deferred; this procedure does not authorize it.
+
+**Activation checklist (all required):** owner acceptance of this section; counsel review (WH-133); the current Time Travel window re-verified and written into this section with its date; named operators bootstrapped only afterwards; and a dry run on a disposable database showing a separate-database bookmark restore and capture, with no restore over the control database.
+
 ### Not implemented
 
 - A review UI.
-- A case-retention schedule.
-- Capture of app documents and recovery points.
-- Preservation of D1 Time Travel or external copies.
+- A case-retention schedule in code. **Owner decision (October 4, 2026), pending counsel:** cases and evidence are retained for a default of one year, then an operator reviews them at expiry; nothing purges automatically. No retention timer, expiry report or purge exists yet.
+- Preservation of D1 Time Travel or external copies. Only the written procedure above exists, and it is required before activation.
 - The counsel-approved transfer procedure.
 - Any scanner, hash matching, provider or NCMEC reporting work, which remains owner-deferred.
 

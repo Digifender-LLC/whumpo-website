@@ -809,7 +809,9 @@
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/132",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-04 UTC: owner decisions on issue #132, parts (a), (b) and (d), implemented in source with local verification only; not deployed, not configured, no operator bootstrapped. Changes the composed schema (schema/platform.sql), so it needs the owner-run empty-D1 schema cutover held on PR #160. (a) safety_preserved_records capacity raised from 10,000 to 50,000 and still fails closed: at capacity the preserving app-document write is refused. (b) New triggers safety_hold_app_document (previous revision kept on every app_documents state overwrite: visitor transition, recovery restore or migration apply) and safety_hold_app_recovery_document (app_recovery_documents cleared by recovery-point removal or visitor revocation are kept) inside an account or project hold. Customer writes still succeed. Object holds do not capture app documents. tools/safety-hold-inventory.mjs reclassifies both paths as preserved and also classifies two module review-expiry deletes from WH-125/126 (module_activation_reviews, module_access_role_reviews) that left the inventory failing on this branch; it now lists 85 sites with none unclassified. (d) docs/content-safety.md adds the outside-hold-control procedure for D1 Time Travel and customer-owned CMS/GitHub copies, required before case operations are activated. Recorded owner decisions: default case/evidence retention is one year with operator review at expiry, pending counsel (not implemented in code); visitors may not delete their own data while held (current behaviour, unchanged). Local checks: node tests/safety-case-operations.mjs passed 106 checks on SQLite and with --d1 on local D1 + local R2. Also passed: node tests/safety-cases.mjs (+ --d1), tests/chat-interaction-storage.mjs, tests/app-recovery.mjs, tests/lifecycle-catalog.mjs, pnpm check, node tools/verify.mjs fast and protection, pnpm build."
+      ]
     },
     {
       "id": "WH-133",
