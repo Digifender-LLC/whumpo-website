@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 140 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 144 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -3202,7 +3202,7 @@ A Creator shares one immutable private preview for accountless comments and can 
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-122, WH-105, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-122, WH-105, WH-116, WH-150, WH-151, WH-152, WH-153. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -3219,11 +3219,12 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/121. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-04 UTC: decomposed into WH-150 (link authority, isolated delivery, bounded feedback, owner API and lifecycle; implemented in source with local tests), WH-151 (shared Chat/view adapters), WH-152 (browser acceptance) and WH-153 (release and live acceptance). The parent stays open until all four pass.
 
 ## WH-093 — Extend maintained records into the Business lead pipeline
 
@@ -4012,6 +4013,208 @@ Issue: https://github.com/zemdregon/whumpo/issues/49. Planning owner: Unassigned
 
 - 2026-10-01 local/source: installable workspace manifest, elephant 192/512px icons, Settings install/manual guidance and public-only offline worker implemented. Type/build, PWA cache/routing/version checks, build/release snapshot and lazy-loading checks pass. Disposable Chromium with actual local platform/D1 reports zero manifest/installability errors and verifies mobile layout, install dismissal, offline/reconnect and worker updates preserving an unsent draft. Deployment evidence follows in docs/dashboard-pwa.md and issue #49; physical-phone OS install remains unverified.
 - 2026-10-01T16:55:49.916Z test acceptance: corrected release e6edca89-4021-494c-a4b0-0875531e3132, source aa8b2c38b4c69e1a4dba76fb01b0fe0bea544778, deployed and reconciled. Twenty selected assets match archive bytes; live Chromium reports zero manifest/installability errors, active worker, four public cached files and successful offline/reconnect to sign-in. Health 200, anonymous session 401/no-store. No new migration/service/paid activation. Physical-phone OS installation remains unverified. See docs/dashboard-pwa.md and issue #49.
+
+## WH-150 — Bind guest preview links to exact saved versions with bounded accountless feedback
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner with current inclusion issues an expiring, revocable, hash-stored link to one immutable saved version; guests view only that isolated preview on a separate host and may leave bounded plain-text comments the owner can read, resolve and delete.
+
+### Scope
+
+- Current schema for guest_preview_links/guest_preview_feedback with immutability, capacity, rate and preservation-hold guards
+- Owner HTTP handlers under current workspace identity; issuance composes creator.guest-feedback inclusion; list/revoke/resolve/delete stay outside the paid gate
+- Anonymous sites-Worker guest page, status, sandboxed view and feedback on preview.whumpo.site with the token only in the URL fragment and POST bodies
+- Lifecycle class, closure inventory counts, daily retention job and feature contract document
+
+### Acceptance criteria
+
+- [ ] Forged, replayed, expired, revoked, removed, held and no-longer-included links stop reads and comments, including an in-flight view
+- [ ] Guests see only the exact bound version through the shared isolated preview rendering; no other version, asset alias, draft, project or account data
+- [ ] Raw tokens are never stored, listed, exported or logged; comment markup and instructions stay inert and never reach Chat or a model
+- [ ] Owner identity loss and foreign owners are refused; rate, size and capacity limits hold on SQLite and local D1
+
+### Verification
+
+- node tests/guest-previews.mjs and node tests/guest-previews.mjs --d1
+- node tests/guest-preview-photos.mjs (local D1/R2, synthetic clearance)
+- Lifecycle catalog, closure inventory, maintenance and related preview/specification/publication suites
+
+### Dependencies and blockers
+
+Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-122, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/guest-previews.md](../../docs/guest-previews.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 UTC: implemented in source on branch claude/wh-092-preview-links with local SQLite, local D1 and local D1/R2 fixtures; not deployed. See docs/guest-previews.md.
+
+## WH-151 — Register guest preview owner operations with shared Chat and view adapters
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Owners list, issue, revoke, resolve and delete guest preview links and comments from the shared Chat/view surface using the WH-150 domain handlers, with exact confirmation before a link is issued.
+
+### Scope
+
+- Register read/action bindings for the existing WH-150 handlers; no second authority or storage
+- Issuance shows the exact version, expiry and comment setting and requires explicit owner confirmation; a model may only prepare it
+- Comments are shown to the owner as inert text and enter model context only by an explicit owner request with a reviewed privacy route
+- Keep the direct revoke control reachable without inference
+
+### Acceptance criteria
+
+- [ ] Chat and views enforce the same identity, ownership and inclusion as the HTTP handlers; hidden UI or forged identifiers cannot bypass them
+- [ ] The one-time token is shown only to the owner and never stored in Chat history, transcripts or model context
+- [ ] Revocation and deletion remain available after inclusion ends
+
+### Verification
+
+- Connected Chat/view fixtures over the actual handlers with forged identifiers and lost inclusion
+- Transcript/model-context checks that no token or unrequested comment text is present
+
+### Dependencies and blockers
+
+Planning dependencies: WH-150, WH-105, WH-107, WH-109, WH-110. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/guest-previews.md](../../docs/guest-previews.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-152 — Accept the accountless guest preview journey in real browsers
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A guest on mobile and keyboard-only desktop opens a link, views the preview, sends a comment and sees the link stop working after the owner revokes it from the shared owner surface.
+
+### Scope
+
+- Playwright journey at 390x844 and desktop with keyboard-only operation and screen-reader names for the guest page
+- Owner issue/revoke/resolve through the WH-151 surface with synthetic approved photo assets
+- Check headers, sandbox, no cookies, no horizontal overflow and focus order
+
+### Acceptance criteria
+
+- [ ] Accountless preview, comment and revoke journey passes on mobile and keyboard
+- [ ] No workspace cookie, token in a URL path/query or guest text in logs
+
+### Verification
+
+- Local browser fixtures over the platform and sites Workers with disposable D1/R2
+
+### Dependencies and blockers
+
+Planning dependencies: WH-150, WH-151. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/guest-previews.md](../../docs/guest-previews.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-153 — Release and live-accept guest previews on the test platform
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: release. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The guest preview host is verified to route to the sites Worker, the current schema and Workers are deployed in a reviewed test release, and a synthetic live journey passes before the catalogue marks the feature private-test.
+
+### Scope
+
+- Verify preview.whumpo.site resolves through the existing *.whumpo.site route without a customer DNS change; request explicit approval if a Whumpo-zone record is missing
+- Reviewed four-Worker release with the current schema cutover
+- Live synthetic issue/view/comment/revoke with cleanup; then set creator.guest-feedback implementation to private-test
+
+### Acceptance criteria
+
+- [ ] Live readback of host routing, headers and refusal paths with a disposable identity
+- [ ] Catalogue changes only after live acceptance; no paid service, purchase or customer DNS change
+
+### Verification
+
+- Release manifest readback and an opt-in live fixture with cleanup evidence
+
+### Dependencies and blockers
+
+Planning dependencies: WH-150, WH-152. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/guest-previews.md](../../docs/guest-previews.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
+- [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
 # F3 — Commercial MVP
 

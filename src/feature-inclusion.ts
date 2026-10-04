@@ -31,6 +31,20 @@ export async function requireFeatureScope(db:Database,scope:FeatureScope){
  if(!row)throw new FeatureInclusionError(404,'Feature scope is unavailable.');
 }
 
+/** Current invoice/preview-grant inclusion of an exact owned scope as one SQL predicate.
+ * It carries no actor identity: workspace effects compose it with the current principal
+ * (featurePredicate); an anonymous capability composes it with its own exact capability row. */
+export function inclusionPredicate(input:FeatureRequest){
+ const r=featureRequest(input),entries=Object.entries(launchFeaturesByPlan);
+ const plans=entries.filter(([,p])=>(p.featureIds as readonly string[]).includes(r.featureId)).map(([id])=>id);
+ const known=entries.filter(([id])=>id!=='explore').map(([id])=>id);
+ const current="starts_at<=unixepoch() AND ends_at>unixepoch()";
+ return {sql:`(EXISTS(SELECT 1 FROM users WHERE id=?) AND (? IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?))
+ AND NOT EXISTS(SELECT 1 FROM plan_entitlements WHERE user_id=? AND ${current} AND (plan_id NOT IN (${known.map(()=>'?')}) OR typeof(starts_at)!='integer' OR typeof(ends_at)!='integer' OR abs(starts_at)>9007199254740991 OR abs(ends_at)>9007199254740991))
+ AND (EXISTS(SELECT 1 FROM plan_entitlements WHERE user_id=? AND ${current} AND plan_id IN (${plans.map(()=>'?')}))
+ OR EXISTS(SELECT 1 FROM feature_preview_grants WHERE user_id=? AND project_id IS ? AND feature_id=? AND operation=? AND contract_version=1 AND purpose='private-test-acceptance' AND revoked_at IS NULL AND ${current})))`,
+ params:[r.userId,r.projectId,r.projectId,r.userId,r.userId,...known,r.userId,...plans,r.userId,r.projectId,r.featureId,r.operation]};
+}
 /** Inclusion only, never authentication, consent, readiness, review approval or permission to execute.
  * Domain adapters must re-read this at each effect boundary alongside those current guards. */
 export async function resolveFeatureInclusion(db:Database,input:FeatureRequest,date=new Date()){

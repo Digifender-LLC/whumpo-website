@@ -20,6 +20,10 @@ HTTP routes call these domain handlers. Chat's server-owned command/action adapt
 
 Provider calls recheck current credential and inclusion together in one database read after decrypting the token and immediately before transport. Read results are checked again after headers and the bounded body as applicable. An eligibility change during a provider call invalidates its result. Local database checks cannot make an external API request and a local revocation one distributed transaction: an already accepted remote effect may still need reconciliation. No uncertain write is automatically repeated.
 
+### Guest preview links (WH-092)
+
+[Guest preview](guest-previews.md) issuance uses `creator.guest-feedback` with operation `dispatch` at the exact owned project scope, composed into the link insert with the current principal. Each anonymous guest read or comment re-evaluates the same inclusion for the link owner's project with `inclusionPredicate`, the identity-free half of `featurePredicate`, in the same statement as the link's own revocation/expiry/version checks. A guest is never a principal. Owner listing, revocation, resolution and deletion need only current identity and ownership.
+
 ## Protected recovery and local access
 
 Local connection status, owned history, supported source downloads and disconnect remain outside the paid-feature gate. No plan transition takes down a published site. GitHub/DNS history and replay recheck project ownership; a previous owner does not inherit protected access after ownership changes.

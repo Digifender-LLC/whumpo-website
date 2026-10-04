@@ -4851,7 +4851,11 @@
         "WH-010",
         "WH-122",
         "WH-105",
-        "WH-116"
+        "WH-116",
+        "WH-150",
+        "WH-151",
+        "WH-152",
+        "WH-153"
       ],
       "blockers": [],
       "outcome": "A Creator shares one immutable private preview for accountless comments and can revoke access without granting workspace or release authority.",
@@ -4885,11 +4889,176 @@
         "docs/roadmap/alignment.md",
         "docs/plan-feature-contract.md"
       ],
+      "issue": "https://github.com/zemdregon/whumpo/issues/121",
+      "owner": null,
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
+        "2026-10-04 UTC: decomposed into WH-150 (link authority, isolated delivery, bounded feedback, owner API and lifecycle; implemented in source with local tests), WH-151 (shared Chat/view adapters), WH-152 (browser acceptance) and WH-153 (release and live acceptance). The parent stays open until all four pass."
+      ]
+    },
+    {
+      "id": "WH-150",
+      "title": "Bind guest preview links to exact saved versions with bounded accountless feedback",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "ready",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-089",
+        "WH-066",
+        "WH-004",
+        "WH-009",
+        "WH-010",
+        "WH-122",
+        "WH-116"
+      ],
+      "blockers": [],
+      "outcome": "An owner with current inclusion issues an expiring, revocable, hash-stored link to one immutable saved version; guests view only that isolated preview on a separate host and may leave bounded plain-text comments the owner can read, resolve and delete.",
+      "scope": [
+        "Current schema for guest_preview_links/guest_preview_feedback with immutability, capacity, rate and preservation-hold guards",
+        "Owner HTTP handlers under current workspace identity; issuance composes creator.guest-feedback inclusion; list/revoke/resolve/delete stay outside the paid gate",
+        "Anonymous sites-Worker guest page, status, sandboxed view and feedback on preview.whumpo.site with the token only in the URL fragment and POST bodies",
+        "Lifecycle class, closure inventory counts, daily retention job and feature contract document"
+      ],
+      "acceptance": [
+        "Forged, replayed, expired, revoked, removed, held and no-longer-included links stop reads and comments, including an in-flight view",
+        "Guests see only the exact bound version through the shared isolated preview rendering; no other version, asset alias, draft, project or account data",
+        "Raw tokens are never stored, listed, exported or logged; comment markup and instructions stay inert and never reach Chat or a model",
+        "Owner identity loss and foreign owners are refused; rate, size and capacity limits hold on SQLite and local D1"
+      ],
+      "verification": [
+        "node tests/guest-previews.mjs and node tests/guest-previews.mjs --d1",
+        "node tests/guest-preview-photos.mjs (local D1/R2, synthetic clearance)",
+        "Lifecycle catalog, closure inventory, maintenance and related preview/specification/publication suites"
+      ],
+      "references": [
+        "docs/guest-previews.md",
+        "docs/project-specification-storage.md",
+        "docs/data-lifecycle.md",
+        "docs/feature-inclusion.md"
+      ],
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+        "2026-10-04 UTC: implemented in source on branch claude/wh-092-preview-links with local SQLite, local D1 and local D1/R2 fixtures; not deployed. See docs/guest-previews.md."
       ]
+    },
+    {
+      "id": "WH-151",
+      "title": "Register guest preview owner operations with shared Chat and view adapters",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-150",
+        "WH-105",
+        "WH-107",
+        "WH-109",
+        "WH-110"
+      ],
+      "blockers": [],
+      "outcome": "Owners list, issue, revoke, resolve and delete guest preview links and comments from the shared Chat/view surface using the WH-150 domain handlers, with exact confirmation before a link is issued.",
+      "scope": [
+        "Register read/action bindings for the existing WH-150 handlers; no second authority or storage",
+        "Issuance shows the exact version, expiry and comment setting and requires explicit owner confirmation; a model may only prepare it",
+        "Comments are shown to the owner as inert text and enter model context only by an explicit owner request with a reviewed privacy route",
+        "Keep the direct revoke control reachable without inference"
+      ],
+      "acceptance": [
+        "Chat and views enforce the same identity, ownership and inclusion as the HTTP handlers; hidden UI or forged identifiers cannot bypass them",
+        "The one-time token is shown only to the owner and never stored in Chat history, transcripts or model context",
+        "Revocation and deletion remain available after inclusion ends"
+      ],
+      "verification": [
+        "Connected Chat/view fixtures over the actual handlers with forged identifiers and lost inclusion",
+        "Transcript/model-context checks that no token or unrequested comment text is present"
+      ],
+      "references": [
+        "docs/guest-previews.md",
+        "docs/project-specification-storage.md",
+        "docs/data-lifecycle.md",
+        "docs/feature-inclusion.md",
+        "docs/chat-interactions.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-152",
+      "title": "Accept the accountless guest preview journey in real browsers",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-150",
+        "WH-151"
+      ],
+      "blockers": [],
+      "outcome": "A guest on mobile and keyboard-only desktop opens a link, views the preview, sends a comment and sees the link stop working after the owner revokes it from the shared owner surface.",
+      "scope": [
+        "Playwright journey at 390x844 and desktop with keyboard-only operation and screen-reader names for the guest page",
+        "Owner issue/revoke/resolve through the WH-151 surface with synthetic approved photo assets",
+        "Check headers, sandbox, no cookies, no horizontal overflow and focus order"
+      ],
+      "acceptance": [
+        "Accountless preview, comment and revoke journey passes on mobile and keyboard",
+        "No workspace cookie, token in a URL path/query or guest text in logs"
+      ],
+      "verification": [
+        "Local browser fixtures over the platform and sites Workers with disposable D1/R2"
+      ],
+      "references": [
+        "docs/guest-previews.md",
+        "docs/project-specification-storage.md",
+        "docs/data-lifecycle.md",
+        "docs/feature-inclusion.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-153",
+      "title": "Release and live-accept guest previews on the test platform",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "release",
+      "size": "S",
+      "dependsOn": [
+        "WH-150",
+        "WH-152"
+      ],
+      "blockers": [],
+      "outcome": "The guest preview host is verified to route to the sites Worker, the current schema and Workers are deployed in a reviewed test release, and a synthetic live journey passes before the catalogue marks the feature private-test.",
+      "scope": [
+        "Verify preview.whumpo.site resolves through the existing *.whumpo.site route without a customer DNS change; request explicit approval if a Whumpo-zone record is missing",
+        "Reviewed four-Worker release with the current schema cutover",
+        "Live synthetic issue/view/comment/revoke with cleanup; then set creator.guest-feedback implementation to private-test"
+      ],
+      "acceptance": [
+        "Live readback of host routing, headers and refusal paths with a disposable identity",
+        "Catalogue changes only after live acceptance; no paid service, purchase or customer DNS change"
+      ],
+      "verification": [
+        "Release manifest readback and an opt-in live fixture with cleanup evidence"
+      ],
+      "references": [
+        "docs/guest-previews.md",
+        "docs/project-specification-storage.md",
+        "docs/data-lifecycle.md",
+        "docs/feature-inclusion.md",
+        "docs/releases.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
     },
     {
       "id": "WH-093",

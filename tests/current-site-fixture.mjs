@@ -19,6 +19,8 @@ export async function currentSiteFixtureHandlers(){
   export {reviewBackup,confirmBackup,listBackups,githubRepositories} from './src/github-backups';
   export * from './src/project-specification/compiler';
   export {ownedPreview} from './src/photo-versions';
+  export * as guestPreviews from './src/guest-previews/owner';
+  export * as guestPreviewPolicy from './src/guest-previews/policy';
   export {reserveStorage} from './src/storage-budget';
   export {ownedExport} from './src/exports';
   export {seal} from './src/connection-vault';
