@@ -4,23 +4,23 @@ import {readFile,writeFile,mkdir,access} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
-const lockPath=resolve(root,'compiler-locks/project-service-clients-v3.json');
+const lockPath=resolve(root,'compiler-locks/project-service-clients-v4.json');
 const generatedPath=resolve(root,'src/project-specification/service-clients/artifacts.generated.ts');
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const encode=value=>JSON.stringify(value,null,2)+'\n';
 export async function serviceClientCompilerArtifacts(){
- const bundle=await build({absWorkingDir:root,entryPoints:['src/project-specification/service-clients/v3/core.ts'],bundle:true,format:'esm',platform:'neutral',target:'es2022',write:false,metafile:true,legalComments:'none'});
+ const bundle=await build({absWorkingDir:root,entryPoints:['src/project-specification/service-clients/v4/core.ts'],bundle:true,format:'esm',platform:'neutral',target:'es2022',write:false,metafile:true,legalComments:'none'});
  if(Object.values(bundle.metafile.outputs).some(output=>output.imports.length))throw Error('Service client compiler must have no external runtime dependencies.');
  const paths=[...new Set([...Object.keys(bundle.metafile.inputs),'src/project-specification/service-clients/compiler.ts','src/backend-form-shape.ts'])].sort();
  if(paths.some(path=>!path.startsWith('src/')||path.includes('..')))throw Error('Unexpected compiler dependency.');
  const sources=[];for(const path of paths)sources.push({path,digest:digest(await readFile(resolve(root,path)))});
- const evidence={formatVersion:1,compiler:'project-service-clients@3',schemaVersion:1,esbuildVersion,target:'es2022',renderer:digest(bundle.outputFiles[0].contents),sources};
+ const evidence={formatVersion:1,compiler:'project-service-clients@4',schemaVersion:1,esbuildVersion,target:'es2022',renderer:digest(bundle.outputFiles[0].contents),sources};
  return {...evidence,compilerDigest:digest(encode(evidence))};
 }
-function generated(e){return '// Generated from compiler-locks/project-service-clients-v3.json. Never repin an existing identity.\nexport const serviceClientArtifacts = '+JSON.stringify({compiler:e.compilerDigest,renderer:e.renderer},null,2)+' as const;\n';}
+function generated(e){return '// Generated from compiler-locks/project-service-clients-v4.json. Never repin an existing identity.\nexport const serviceClientArtifacts = '+JSON.stringify({compiler:e.compilerDigest,renderer:e.renderer},null,2)+' as const;\n';}
 export async function checkServiceClientCompiler(){
  const actual=await serviceClientCompilerArtifacts(),saved=JSON.parse(await readFile(lockPath,'utf8'));
- if(encode(actual)!==encode(saved))throw Error('Pinned project-service-clients@3 compiler changed. Preserve the accepted identity and introduce a reviewed version.');
+ if(encode(actual)!==encode(saved))throw Error('Pinned project-service-clients@4 compiler changed. Preserve the accepted identity and introduce a reviewed version.');
  if(await readFile(generatedPath,'utf8')!==generated(saved))throw Error('Service client artifact constants are stale. Run --generate with unchanged source.');
  return actual;
 }
@@ -34,5 +34,5 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const actual=await serviceClientCompilerArtifacts(),saved=JSON.parse(await readFile(lockPath,'utf8'));
   if(encode(actual)!==encode(saved))throw Error('Cannot generate constants for changed compiler source.');await writeFile(generatedPath,generated(saved));
  }
- const checked=await checkServiceClientCompiler();console.log(`Service client compiler verified: project-service-clients@3, ${checked.sources.length} source inputs, ${checked.compilerDigest}`);
+ const checked=await checkServiceClientCompiler();console.log(`Service client compiler verified: project-service-clients@4, ${checked.sources.length} source inputs, ${checked.compilerDigest}`);
 }
