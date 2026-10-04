@@ -548,14 +548,16 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/incident-runbooks.md](../../docs/incident-runbooks.md)
+- [docs/incident-tabletop.md](../../docs/incident-tabletop.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/105. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-04: runbooks (docs/incident-runbooks.md) and a written desk-check (docs/incident-tabletop.md) added against source 1343111; documentation only, no live drill, deployed control, alert injection or external message. Offline suites for maintenance, standard AI recovery, secret custody, release manifest and identity recovery passed on Node 22.22.0 (repository requires 24). Open: live/facilitated exercise, alert delivery, per-tenant operator controls, stolen-kit takeover path, off-device key custody and counsel/restricted safety handling (gaps G1-G12). Acceptance not complete.
 
 ## WH-008 — Prove control, object and app disaster recovery in isolation
 

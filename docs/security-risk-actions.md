@@ -13,7 +13,7 @@ Use these labels consistently: **Fix** for a demonstrated boundary failure or a 
 1. **Resolved for current testing:** the owner explicitly states they are the sole tester. September 30 18:48 UTC aggregate readback found one account/project and zero currently published sites, active backends or CMS articles. This is a point-in-time inventory, not a guarantee about prior publication. Revisit before inviting real users or admitting customer content.
 2. What deletion promise applies: active data deletion, or full erasure including recoverable backups? Do not claim the latter until restore reconciliation and provider retention are addressed.
 3. Will testers submit confidential material to the current AI provider? If so, decide on a provider/data-use policy and notice before asking them to do so.
-4. Define the escalation path and budget for distributed abuse or unexpected Cloudflare/AI usage. Per-IP and per-project limits are not an account-wide spending cap.
+4. Define the escalation path and budget for distributed abuse or unexpected Cloudflare/AI usage. Per-IP and per-project limits are not an account-wide spending cap. The October 4 [incident runbooks](incident-runbooks.md) document the existing platform-wide controls and record the missing spend alert/cap as gap G2; they do not answer this decision.
 
 ## Fix or verify before wider use
 

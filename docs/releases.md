@@ -66,7 +66,7 @@ The shared deployment lease covers cooperating tools, not dashboard edits or dir
 | Outside schema/Worker/CMS change | Reconcile the other operation and prepare against the actual state. |
 | After all four Workers | Complete application acceptance and external-resource retirement separately. |
 
-Whole-platform database/object/key restoration remains its own roadmap gate. Historical source/build archives do not authorize restoring obsolete identity or billing authority.
+Whole-platform database/object/key restoration remains its own roadmap gate. During an incident, follow the [incident runbooks](incident-runbooks.md#11-failed-maintenance-or-release-sev2): no rollback command is part of this protocol. Historical source/build archives do not authorize restoring obsolete identity or billing authority.
 
 ## Verification for the current contract
 
