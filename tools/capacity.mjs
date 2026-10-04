@@ -52,7 +52,7 @@ globalThis.fetch=(input,init)=>{
 
 const {databaseFixture}=await import('../tests/helpers/current-database.mjs');
 const {workspaceFixture}=await import('../tests/helpers/workspace-identity.mjs');
-const {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite}=await import('../tests/current-site-fixture.mjs');
+const {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite,enableFixtureVisitorAccess}=await import('../tests/current-site-fixture.mjs');
 
 const day=()=>new Date().toISOString().slice(0,10);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -156,13 +156,15 @@ async function seedTenant(name,role,{abusiveSource=false}={}){
  const appVersion=id(),appTest=id(),appReview=id(),pageReview=id();
  await m.backend.saveBackend(t.scope,t.user,t.project,appVersion,'export default ({state,input})=>({state:{note:input.note,edits:(state.edits??0)+1},result:"Saved"})');
  const tested=await m.backend.testBackend(t.scope,seedRuntime,t.user,t.project,appVersion,appTest,{state:{},input:{note:'seed'}});if(!tested?.result?.ok)throw Error('App test failed');
+ // WH-126: the application consumes the project's visitor access module (real owner save and activation path).
+ await enableFixtureVisitorAccess(t.scope,t.user,t.project);
  await m.appActivation.prepareApplication(t.scope,t.user,t.project,appReview,'enable',appVersion,appTest);await m.appActivation.confirmApplication(t.scope,t.user,appReview);
  await api(t,'/projects/'+t.project+'/application-page',{id:pageReview,form:{title:'Capacity notebook',description:'Synthetic',buttonLabel:'Save',fields:[{key:'note',label:'Note',type:'text'}]}});
  await api(t,'/application-page-reviews/'+pageReview+'/confirm',{});
  t.pageId=pageReview;t.visitors=[];
  return t;
 }
-async function addVisitors(t,n){for(let i=0;i<n;i++){const who=id();await db.prepare('INSERT INTO app_visitors(id,project_id) VALUES(?,?)').bind(who,t.project).run();t.visitors.push({who,token:await m.appData.issueAppSession(db,who),revision:0});}}
+async function addVisitors(t,n){for(let i=0;i<n;i++){const who=id();await db.prepare("INSERT INTO app_visitors(id,project_id,access_id) SELECT ?,?,id FROM module_instances WHERE project_id=? AND kind='access'").bind(who,t.project,t.project).run();t.visitors.push({who,token:await m.appData.issueAppSession(db,who),revision:0});}}
 
 // ---------------------------------------------------------------- load generation
 const records=[];

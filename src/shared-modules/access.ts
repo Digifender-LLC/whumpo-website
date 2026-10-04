@@ -4,10 +4,10 @@ import {registeredInstances} from './registry';
 import type {ModuleHandlers,ModuleReadHandler} from './api';
 import type {AccessRoleFacts,AccessVisitorFacts} from './shape';
 
-/** WH-126 access module. Visitor principals are the project's existing visitor identities (passkeys, invitations,
- * recovery and sessions in app-auth.ts/app-data.ts); this module derives the server-side principal from the visitor
- * session cookie on the visitor origin, adds the `staff` role and the access revision, and serves `access.me`
- * (visitor) and `access.list` (owner). Deterministic only: no inference, provider or network access. A workspace
+/** WH-126 access module. It owns the project's visitor identities (app_visitors.access_id; passkeys, invitations,
+ * recovery and sessions in app-auth.ts/app-data.ts), at most one access instance per project. This module derives the
+ * server-side principal from the visitor session cookie on the visitor origin, adds the `staff` role and the access
+ * revision, and serves `access.me` (visitor) and `access.list` (owner). No visitor application is involved. Deterministic only: no inference, provider or network access. A workspace
  * cookie is never read here, and a staff role confers no workspace, Chat, publication, spending or identity authority. */
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 const now="strftime('%Y-%m-%dT%H:%M:%fZ','now')";
@@ -15,8 +15,8 @@ const declaresStaff=(config:string)=>{try{const roles=JSON.parse(config)?.roles;
 
 type PrincipalRow={visitor_id:string;access_id:string;config_json:string;access_revision:number;staff:number};
 /** The visitor principal for one module resource, or null for an anonymous (public) request. Requires the exact
- * project's current visitor session (unrevoked identity, unexpired session, enabled visitor application) and an access
- * instance governing the resource: the resource itself, or its declared same-project access dependency. Roles count
+ * project's current visitor session (unrevoked identity, unexpired session) of the access instance governing the
+ * resource (the resource itself, or its declared same-project access dependency), which owns that identity. Roles count
  * only when the access configuration declares `staff` and a current grant exists; the committing statement repeats
  * this through `visitorPredicate`. */
 export async function visitorPrincipal(db:D1Database,token:string,project:string,resourceId:string):Promise<ModulePrincipal|null>{
@@ -24,36 +24,38 @@ export async function visitorPrincipal(db:D1Database,token:string,project:string
  const sessionHash=await hashToken('whumpo-app-session:'+token);
  const row=await db.prepare(`SELECT v.id visitor_id,x.id access_id,x.config_json,st.revision access_revision,
   EXISTS(SELECT 1 FROM module_access_roles r WHERE r.instance_id=x.id AND r.visitor_id=v.id AND r.role='staff' AND r.state='granted') staff
-  FROM app_sessions s JOIN app_visitors v ON v.id=s.visitor_id JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
+  FROM app_sessions s JOIN app_visitors v ON v.id=s.visitor_id JOIN module_activations xa ON xa.instance_id=v.access_id JOIN module_activation_reviews ar ON ar.id=xa.review_id
+  JOIN projects p ON p.id=v.project_id AND p.owner_user_id=ar.user_id
   JOIN module_instances i ON i.id=? AND i.project_id=v.project_id
-  JOIN module_instances x ON x.project_id=i.project_id AND x.kind='access' AND (x.id=i.id OR x.id IN (SELECT value FROM json_each(i.dependencies_json)))
+  JOIN module_instances x ON x.id=v.access_id AND x.project_id=i.project_id AND x.kind='access' AND (x.id=i.id OR x.id IN (SELECT value FROM json_each(i.dependencies_json)))
   JOIN module_access_states st ON st.instance_id=x.id AND st.project_id=x.project_id
-  WHERE s.token_hash=? AND v.project_id=? AND v.revoked=0 AND a.enabled=1 AND s.expires_at>${now} ORDER BY x.local_id LIMIT 1`)
+  WHERE s.token_hash=? AND v.project_id=? AND v.revoked=0 AND s.expires_at>${now} LIMIT 1`)
   .bind(resourceId,sessionHash,project).first<PrincipalRow>();
  if(!row)return null;
  return {kind:'visitor',projectId:project,visitorId:row.visitor_id,sessionHash,accessInstanceId:row.access_id,roles:row.staff===1&&declaresStaff(row.config_json)?['staff']:[],accessRevision:row.access_revision};
 }
 
-/** Composed into every visitor commit and read fence: the same session and identity, the same active access instance
- * at the same access revision, and the same staff decision. Any revocation, erasure, sign-out, recovery, application
- * disable or role change after the decision makes it false. */
+/** Composed into every visitor commit and read fence: the same session and identity of the same active access
+ * instance at the same access revision, and the same staff decision. Any revocation, erasure, sign-out, recovery,
+ * access disable or role change after the decision makes it false. */
 export function visitorPredicate(p:Extract<ModulePrincipal,{kind:'visitor'}>){
- return {sql:`(EXISTS(SELECT 1 FROM app_sessions s JOIN app_visitors v ON v.id=s.visitor_id JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
-   WHERE s.token_hash=? AND v.id=? AND v.project_id=? AND v.revoked=0 AND a.enabled=1 AND s.expires_at>${now})
+ return {sql:`(EXISTS(SELECT 1 FROM app_sessions s JOIN app_visitors v ON v.id=s.visitor_id JOIN module_activations xa ON xa.instance_id=v.access_id
+   JOIN module_activation_reviews ar ON ar.id=xa.review_id JOIN projects p ON p.id=v.project_id AND p.owner_user_id=ar.user_id
+   WHERE s.token_hash=? AND v.id=? AND v.project_id=? AND v.access_id=? AND v.revoked=0 AND s.expires_at>${now})
   AND EXISTS(SELECT 1 FROM module_access_states st JOIN module_instances x ON x.id=st.instance_id JOIN module_activations ac ON ac.instance_id=x.id
    WHERE st.instance_id=? AND st.project_id=? AND st.revision=? AND x.kind='access' AND ac.state='active')
   AND ?=EXISTS(SELECT 1 FROM module_access_roles r JOIN module_instances x ON x.id=r.instance_id WHERE r.instance_id=? AND r.visitor_id=? AND r.role='staff' AND r.state='granted'
    AND EXISTS(SELECT 1 FROM json_each(x.config_json,'$.roles') WHERE value='staff')))`,
-  params:[p.sessionHash,p.visitorId,p.projectId,p.accessInstanceId,p.projectId,p.accessRevision,p.roles.length?1:0,p.accessInstanceId,p.visitorId] as unknown[]};
+  params:[p.sessionHash,p.visitorId,p.projectId,p.accessInstanceId,p.accessInstanceId,p.projectId,p.accessRevision,p.roles.length?1:0,p.accessInstanceId,p.visitorId] as unknown[]};
 }
 
 type RosterRow={visitor_id:string;created_at:string;revoked:number;state:string|null;granted_at:number|null;updated_at:number|null};
 const iso=(seconds:number|null)=>seconds===null?null:new Date(seconds*1000).toISOString();
-/** Owner roster for one access instance: opaque visitor ids, enrollment dates and staff state. Never credentials,
- * passkey material, recovery codes, sessions, documents or visitor-submitted values. */
+/** Owner roster for one access instance: its own visitors' opaque ids, enrollment dates and staff state. Never
+ * credentials, passkey material, recovery codes, sessions, documents or visitor-submitted values. */
 export async function accessRoster(db:D1Database,instanceId:string,projectId:string):Promise<AccessVisitorFacts[]>{
  const {results}=await db.prepare(`SELECT v.id visitor_id,v.created_at,v.revoked,r.state,r.granted_at,r.updated_at FROM app_visitors v
-  LEFT JOIN module_access_roles r ON r.visitor_id=v.id AND r.instance_id=? AND r.role='staff' WHERE v.project_id=? ORDER BY v.created_at DESC,v.id LIMIT 100`).bind(instanceId,projectId).all<RosterRow>();
+  LEFT JOIN module_access_roles r ON r.visitor_id=v.id AND r.instance_id=v.access_id AND r.role='staff' WHERE v.access_id=? AND v.project_id=? ORDER BY v.created_at DESC,v.id LIMIT 100`).bind(instanceId,projectId).all<RosterRow>();
  return results.map(r=>({visitorId:r.visitor_id,enrolledAt:new Date(r.created_at).toISOString(),revoked:r.revoked===1,staff:r.state==='granted',staffChangedAt:r.state?iso(r.updated_at):null}));
 }
 

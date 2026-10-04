@@ -22,6 +22,9 @@ export const deletionSites={
  'schema/platform.sql::app_documents':blocked('safety_hold_visitor_retained','Only reached through app_visitors deletion, which the hold refuses.'),
  'schema/platform.sql::app_runs':blocked('safety_hold_visitor_retained','Only reached through app_visitors deletion, which the hold refuses.'),
  'schema/platform.sql::app_auth_challenges':excluded(credential),
+ // WH-126: disabling the access instance signs its visitors out (module_activation_apply); credentials only, no evidence.
+ 'src/shared-modules/schema.sql::app_auth_challenges':excluded(credential),
+ 'src/shared-modules/schema.sql::app_sessions':excluded(credential),
  'schema/platform.sql::app_invitations':excluded(credential),
  'schema/platform.sql::app_passkeys':excluded(credential),
  'schema/platform.sql::app_recovery_codes':excluded(credential),

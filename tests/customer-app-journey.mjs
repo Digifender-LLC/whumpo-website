@@ -10,6 +10,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {authenticator} from './app-authenticator.mjs';
 import {taskListAppJourney} from './task-list-app-journey.mjs';
+import {enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 const id=()=>crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-app-journey-');let fixture,runtime;
 try{
  fixture=await databaseFixture({d1:true,r2:true});
@@ -17,7 +18,7 @@ try{
  const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
  runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
  const db=fixture.db;
- const b=await build({stdin:{contents:"export {sendChat as sendFixtureChat} from './src/chat';export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {applicationChatActions} from './src/app-chat-actions';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const b=await build({stdin:{contents:"export {sendChat as sendFixtureChat} from './src/chat';export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {applicationChatActions} from './src/app-chat-actions';export {readChat,sendChatControl} from './src/chat';export {createWebsite,prepareSpecification,readSpecificationProposal} from './src/project-specification/store';export {moduleCatalog} from './src/project-specification/catalog';export {jsonDigest} from './src/project-specification/v2/json';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
  const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
  const {sendFixtureChat,readAppStatus,describeAppStatus,backendAction,platform,host,hashToken,applicationChatActions}=m;
  let executions=0;
@@ -46,6 +47,12 @@ try{
  const origin='https://app-'+project+'.whumpo.site';
  const visit=(url,init)=>host.fetch(new Request(url,init),env);
  assert.equal((await visit(origin+'/')).status,404);
+ // WH-126: visitor identity belongs to the project's access module instance, saved and activated through the owner's
+ // exact specification and activation reviews before the application that consumes it.
+ const enableAccess=async(account,project)=>enableFixtureVisitorAccess(await account.scope(),account.user,project,{handlers:m});
+ assert.match((await chat('/app-status '+project)).turns.at(-1).assistant_text,/No application configured/);
+ await json(path+'/application-access/invitations',{},409);
+ await enableAccess(owner,project);
  const enabled=await chat('/enable-application '+version+' '+run),enable=enabled.turns.at(-1).id;assert.match(enabled.turns.at(-1).assistant_text,/Application.*review/i);
  assert.equal(enabled.turns.at(-1).application_confirmation_id,enable);assert.equal(enabled.turns.at(-1).application_operation,'enable');assert.equal(enabled.turns.at(-1).application_review.state,'ready');assert.equal(enabled.turns.at(-1).application_review.projectName,'Private notebook');assert.equal(enabled.turns.at(-1).application_review.testId,run);
  const reviewRead=await chat('/application-review '+enable);assert.equal(reviewRead.turns.at(-1).application_confirmation_id,enable);
@@ -79,7 +86,7 @@ try{
  assert.deepEqual((await first.request('/data')).data,{revision:1,state:{note:'Private visitor note',edits:1}});assert.deepEqual((await second.request('/data')).data,{revision:0,state:{}});assert.equal((await second.request('/receipts/'+op.id)).status,404);
  // Controlled retained-outcome fixtures exercise counts without exposing private result bodies.
  for(const [state,revision] of [['failed',1],['conflict',1],['running',1],['failed',0]]){
-  const receipt=id();await db.prepare(`INSERT INTO app_runs(id,visitor_id,project_id,version_id,session_hash,request_hash,base_revision,program_revision) SELECT ?,v.id,v.project_id,a.version_id,s.token_hash,?,d.revision,a.revision FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.project_id=? AND d.revision=? LIMIT 1`).bind(receipt,'a'.repeat(64),project,revision).run();
+  const receipt=id();await db.prepare(`INSERT INTO app_runs(id,visitor_id,project_id,version_id,session_hash,request_hash,base_revision,program_revision,page_review_id) SELECT ?,v.id,v.project_id,a.version_id,s.token_hash,?,d.revision,a.revision,(SELECT id FROM app_live_pages WHERE project_id=v.project_id) FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.project_id=? AND d.revision=? LIMIT 1`).bind(receipt,'a'.repeat(64),project,revision).run();
   if(state!=='running')await db.prepare('UPDATE app_runs SET state=?,result_json=? WHERE id=?').bind(state,JSON.stringify({error:'PRIVATE_OUTCOME_CANARY'}),receipt).run();
  }
  const aggregate=await readAppStatus(db,owner.user,project);assert.equal(aggregate.published,1);assert.equal(aggregate.visitors,2);assert.equal(aggregate.attempts,5);assert.equal(aggregate.complete,1);assert.equal(aggregate.failed,2);assert.equal(aggregate.conflict,1);assert.equal(aggregate.unresolved,1);
@@ -119,5 +126,5 @@ try{
  assert.equal(executions,2);assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
  await recordFixtureBenchmark(db,'application',{transportCalls:0,runtimeCalls:executions});
  console.log('Customer app journey passed: welcome, actual QuickJS test, separate program/page reviews, public host, signed passkeys, isolated visitors, exact transition replay, recovery/export/deletion, withdrawal and historical approval safety. No live deployment or AI call.');
- await taskListAppJourney({db,account,call,host,env,setupChat,executions:()=>executions});
+ await taskListAppJourney({db,account,call,host,env,setupChat,enableAccess,executions:()=>executions});
 }finally{await runtime?.dispose();await fixture?.close();await rm(dir,{recursive:true,force:true});}

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
@@ -13,9 +13,10 @@ try{
  for(const u of [user,other])await owner(u);
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Recovery','','draft',?,?)").bind(project,user,now(),now()).run();
  await backend.saveBackend(scope(user),user,project,version,'export default ({state,input})=>({state:input,result:"saved"})');await backend.testBackend(scope(user),service,user,project,version,run,{state:{},input:{}});
+ await enableFixtureVisitorAccess(scope(user),user,project);
  async function toggle(enabled){const review=id();await activation.prepareApplication(scope(user),user,project,review,enabled?'enable':'disable',enabled?version:null,enabled?run:null);await activation.confirmApplication(scope(user),user,review);}
  await toggle(true);
- async function visitor(){const v=id();await db.prepare('INSERT INTO app_visitors(id,project_id) VALUES(?,?)').bind(v,project).run();return {id:v,token:await data.issueAppSession(db,v)};}
+ async function visitor(){const v=id();await db.prepare("INSERT INTO app_visitors(id,project_id,access_id) SELECT ?,?,id FROM module_instances WHERE project_id=? AND kind='access'").bind(v,project,project).run();return {id:v,token:await data.issueAppSession(db,v)};}
  const a=await visitor(),b=await visitor();
  await data.transitionAppData(db,service,a.token,project,id(),0,{private:'original A'});await data.transitionAppData(db,service,b.token,project,id(),0,{private:'original B'});
  const point=id();await recovery.createRecoveryPoint(scope(user),user,project,point);
@@ -38,7 +39,8 @@ try{
  for(const [v,value] of [[a,'original A'],[b,'original B']]){const d=await db.prepare('SELECT * FROM app_documents WHERE visitor_id=?').bind(v.id).first();assert.equal(d.revision,3);assert.equal(JSON.parse(d.state_json).private,value);}
  assert.equal((await db.prepare('SELECT attempts FROM app_daily_usage WHERE project_id=?').bind(project).first()).attempts,4);
  assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(project).first()).enabled,0);
- assert.equal((await db.prepare('SELECT count(*) n FROM app_sessions').first()).n,0);
+ // WH-126: visitor sign-in belongs to the access instance and survives the restore; the disabled app refuses documents.
+ assert.equal((await db.prepare('SELECT count(*) n FROM app_sessions').first()).n,2);await assert.rejects(data.readAppData(db,a.token,project),e=>e.status===401);
  // Changing an active roster invalidates a review; revoked snapshots are removed.
  const stale=id();await recovery.prepareAppRestore(scope(user),user,project,point,stale);
  await db.prepare('UPDATE app_visitors SET revoked=1 WHERE id=?').bind(b.id).run();

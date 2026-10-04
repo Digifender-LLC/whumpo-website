@@ -80,11 +80,7 @@ async function owner(name,listing){
  const site=await createFixtureProject(scope,user,name+' '+id().slice(0,6),'Neighborhood repairs');
  for(const feature of ['core.editing','core.forms'])for(const operation of ['prepare','confirm'])
   await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,?,'private-test-acceptance','synthetic WH-130 fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),user,site.project,feature,operation);
- // Visitor identity is still owned by the enabled visitor application (WH-126 remaining scope), so each project needs one.
- const version=id(),test=id(),review=id();
- await saveBackend(scope,user,site.project,version,'export default ({state,input})=>({state:input,result:state})');
- await testBackend(scope,runtime,user,site.project,version,test,{state:{},input:{}});
- await appActivation.prepareApplication(scope,user,site.project,review,'enable',version,test);await appActivation.confirmApplication(scope,user,review);
+ // WH-126: visitor identity belongs to the access instance; no visitor application is needed.
  const o={...actor,scope,user,...site,host:'https://app-'+site.project+'.whumpo.site'};
  const saved=await configureFixtureModules(scope,user,site.project,[accessInstance,recordsInstance(),filesInstance,contentInstance]);
  await confirm(o,await chat(o,'/publish '+saved.version),'site');

@@ -1,7 +1,7 @@
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';import {createRequire} from 'node:module';
 import {mkdtemp,rm,readdir} from 'node:fs/promises';import {execFileSync} from 'node:child_process';
-import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
@@ -19,8 +19,9 @@ try{
  await backend.saveBackend(scope(user),user,project,v1,'export default ({state,input})=>({state:input,result:"saved"})');await backend.testBackend(scope(user),service,user,project,v1,run1,{state:{},input:{}});
  await backend.saveBackend(scope(user),user,project,v2,'export default ({state,input})=>({state:{...state,note:input.note},result:"saved"})');await backend.testBackend(scope(user),service,user,project,v2,run2,{state:{schema:2},input:{note:'synthetic'}},{expected:{state:{schema:2,note:'synthetic'},result:'saved'}});
  await backend.saveBackend(scope(user),user,project,transform,'export default ({state})=>({state:{schema:2,note:state.note}})');await backend.saveBackend(scope(user),user,project,badTransform,'export default ()=>"not a document"');
+ await enableFixtureVisitorAccess(scope(user),user,project);
  const enable=id();await activation.prepareApplication(scope(user),user,project,enable,'enable',v1,run1);await activation.confirmApplication(scope(user),user,enable);
- const visitors=[];for(let i=0;i<4;i++){const visitor=id();visitors.push(visitor);await db.prepare('INSERT INTO app_visitors(id,project_id) VALUES(?,?)').bind(visitor,project).run();await db.prepare('UPDATE app_documents SET revision=revision+1,state_json=? WHERE visitor_id=?').bind(JSON.stringify({note:'private-'+i}),visitor).run();}
+ const visitors=[];for(let i=0;i<4;i++){const visitor=id();visitors.push(visitor);await db.prepare("INSERT INTO app_visitors(id,project_id,access_id) SELECT ?,?,id FROM module_instances WHERE project_id=? AND kind='access'").bind(visitor,project,project).run();await db.prepare('UPDATE app_documents SET revision=revision+1,state_json=? WHERE visitor_id=?').bind(JSON.stringify({note:'private-'+i}),visitor).run();}
  const token=owners.get(user).token,staleToken=(await workspaceSession(db,m,owners.get(user),-700)).token;
  const env={DB:db,FILES:store.env.FILES,BACKEND_RUNTIME:service,ENVIRONMENT:'local',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
  const call=(body,cookie=token,origin='http://localhost')=>platform.fetch(new Request('http://localhost/api/chat'+(body?'/actions':''),{method:body?'POST':'GET',headers:{origin,cookie:'__Host-whumpo_session='+cookie,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,{waitUntil(){throw Error('No inference expected');}});
@@ -68,8 +69,9 @@ try{
  for(const [to,from]of [[old,v1],[target,v2],[converter,transform]]){const source=await db.prepare('SELECT source FROM backend_versions WHERE id=?').bind(from).first();await backend.saveBackend(scope(user),user,up,to,source.source);}
  await backend.testBackend(scope(user),service,user,up,old,oldTest,{state:{},input:{}});
  await backend.testBackend(scope(user),service,user,up,target,targetTest,{state:{schema:2},input:{note:'synthetic'}},{expected:{state:{schema:2,note:'synthetic'},result:'saved'}});
+ await enableFixtureVisitorAccess(scope(user),user,up);
  const opening=id();await activation.prepareApplication(scope(user),user,up,opening,'enable',old,oldTest);await activation.confirmApplication(scope(user),user,opening);
- const people=[id(),id()];for(const visitor of people){await db.prepare('INSERT INTO app_visitors(id,project_id) VALUES(?,?)').bind(visitor,up).run();await db.prepare('UPDATE app_documents SET revision=1,state_json=? WHERE visitor_id=?').bind(JSON.stringify({note:'upgrade-private-'+visitor}),visitor).run();}
+ const people=[id(),id()];for(const visitor of people){await db.prepare("INSERT INTO app_visitors(id,project_id,access_id) SELECT ?,?,id FROM module_instances WHERE project_id=? AND kind='access'").bind(visitor,up,up).run();await db.prepare('UPDATE app_documents SET revision=1,state_json=? WHERE visitor_id=?').bind(JSON.stringify({note:'upgrade-private-'+visitor}),visitor).run();}
  const closing=id();await activation.prepareApplication(scope(user),user,up,closing,'disable',null,null);await activation.confirmApplication(scope(user),user,closing);
  const upgrade=id();assert.match(await chat(`/review-app-upgrade ${up} ${target} ${converter} ${targetTest}`,upgrade),/Status: preparing/);
  assert.match((await backendAction(scope(user),user,id(),{kind:'backend',operation:'reviewAppUpgrade',projectId:up,versionId:target,transformId:converter,testId:targetTest})).reply,/Status: preparing/);
@@ -100,7 +102,7 @@ try{
  const reopen=id();await activation.prepareApplication(scope(user),user,up,reopen,'enable',target,targetTest);await activation.confirmApplication(scope(user),user,reopen);assert.equal((await db.prepare('SELECT enabled FROM app_spaces WHERE project_id=?').bind(up).first()).enabled,1);
  // Rollback preserves a current copy and atomically restores the matching old code/data.
  await assert.rejects(rollback.prepareProgramRollback(scope(user),user,up,upgrade,id()),e=>e.status===409);
- const newcomer=id();await db.prepare('INSERT INTO app_visitors(id,project_id) VALUES(?,?)').bind(newcomer,up).run();const pause=id();await activation.prepareApplication(scope(user),user,up,pause,'disable',null,null);await activation.confirmApplication(scope(user),user,pause);
+ const newcomer=id();await db.prepare("INSERT INTO app_visitors(id,project_id,access_id) SELECT ?,?,id FROM module_instances WHERE project_id=? AND kind='access'").bind(newcomer,up,up).run();const pause=id();await activation.prepareApplication(scope(user),user,up,pause,'disable',null,null);await activation.confirmApplication(scope(user),user,pause);
  const missing=id();await assert.rejects(rollback.prepareProgramRollback(scope(user),user,up,upgrade,missing),e=>e.status===409);assert.equal(await db.prepare('SELECT id FROM app_recovery_points WHERE id=?').bind(missing).first(),null,'Failed rollback admission leaves no before-copy');await db.prepare('DELETE FROM app_visitors WHERE id=?').bind(newcomer).run();
  const rollbackID=id();assert.match(await chat(`/review-app-rollback ${up} ${upgrade}`,rollbackID),/Status: ready/);assert.equal((await(await call()).json()).turns.find(t=>t.id===rollbackID).app_maintenance_review.kind,'rollback');const rollbackReview=await rollback.readProgramRollback(scope(user),user,rollbackID);assert.equal(rollbackReview.documents,2);assert.equal(rollbackReview.to.id,old);assert.ok(!JSON.stringify(rollbackReview).includes('upgrade-private-'));
  const wrongFamily={id:id(),user_text:`/app-restore-review ${up} ${rollbackID}`,status:'completed',assistant_text:describeAppRestore({id:rollbackID,projectId:up,pointId:upgrade,status:'pending',documents:2,expiresAt:rollbackReview.expiresAt,pointCreatedAt:rollbackReview.pointCreatedAt,versionId:old,projectName:rollbackReview.projectName})};await appRecoveryChatActions(scope(user),user,[wrongFamily]);assert.ok(!wrongFamily.app_restore_review,'Program rollback must never receive a document-only review card');

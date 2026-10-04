@@ -1230,8 +1230,8 @@
         "app_owner_erasures"
       ],
       "scope": "visitor",
-      "purpose": "Per-project visitor identity, invitation/session access and erasure replay receipts.",
-      "currentRetention": "Visitor deletion removes linked live/recovery data through explicit guards/triggers; expiring replay receipts are cleaned daily. NO ACTION references require coordinated cleanup.",
+      "purpose": "Per-project visitor identity owned by the project's single access module instance (WH-126 `access_id`; no visitor application required), invitation/session access bound to that instance's activation revision, and erasure replay receipts.",
+      "currentRetention": "Visitor deletion removes linked live/recovery data through explicit guards/triggers; expiring replay receipts are cleaned daily. Access-instance disable deletes its sessions and pending sign-ins; access-instance removal cascades its visitors and invitations. NO ACTION references require coordinated cleanup.",
       "proposedRetention": "Revoke access immediately on reviewed erasure/closure. Retain minimal durable suppression independently of account cascades through every allowed backup/restore window; short replay receipts alone are insufficient.",
       "deletionAuthority": "Fresh visitor self-service or exact owner per-visitor review; platform closure must reconcile all visitors in the project.",
       "exportPolicy": "Visitor's own identity/document/history via authenticated visitor flow; owner account bundles omit credentials, recovery material and default visitor datasets.",
@@ -2581,11 +2581,12 @@
       "currentRetention": "Access state and the current grant row (granted or revoked suppression) remain while the access instance and visitor exist; revocation keeps the row as `revoked` with the review and access revision that changed it. Unapplied role reviews expire after ten minutes and are pruned in bounded batches when a later review is prepared; a review with an applied receipt is retained while its project, account, visitor and instance exist. Visitor erasure, instance removal, project and account deletion cascade.",
       "proposedRetention": "Keep grants and receipts while the access instance and visitor exist; revoked suppressions and receipts are bounded audit metadata never reinstated by restore (restored rows create no authority). Decide a terminal-receipt schedule with the WH-077 export composition.",
       "deletionAuthority": "Owner exact grant/revoke reviews (revoke needs identity and ownership only and outlives plan loss and instance disable); owner visitor revocation and the visitor's own reviewed erasure suppress or delete grants; project/account deletion cascades. No staff self-service role change; models, Chat text, visitors and jobs cannot grant.",
-      "exportPolicy": "Owner staff list (access.roles@1) with opaque visitor ids, enrollment dates and staff state. Project export serializer not yet delivered (WH-077); never visitor credentials, passkey material, recovery codes, sessions or documents.",
+      "exportPolicy": "Owner staff list (access.roles@1) with opaque visitor ids, enrollment dates and staff state; the access descriptor export hook access-roles-export-v1 (whumpo-access-roles v1 with import validation, composed by WH-077) carries grants and revoked suppressions. Never visitor credentials, passkey material, recovery codes, sessions or documents.",
       "references": [
         "src/shared-modules/schema.sql",
         "src/shared-modules/access.ts",
         "src/shared-modules/access-roles.ts",
+        "src/shared-modules/access-export.ts",
         "docs/shared-modules.md",
         "docs/app-data.md",
         "docs/data-protection.md"

@@ -129,6 +129,8 @@ CREATE TRIGGER module_activation_review_admit BEFORE INSERT ON module_activation
   WHERE h.project_id=NEW.project_id AND h.version_id=NEW.source_version_id AND v.spec_digest=NEW.source_spec_digest);
  SELECT RAISE(ABORT,'module_activation_changed') WHERE NEW.expected_config_revision=0 AND EXISTS(SELECT 1 FROM module_instances WHERE id=NEW.resource_id OR (project_id=NEW.project_id AND local_id=NEW.local_id));
  SELECT RAISE(ABORT,'module_activation_changed') WHERE NEW.expected_config_revision>0 AND NOT EXISTS(SELECT 1 FROM module_instances WHERE id=NEW.resource_id AND project_id=NEW.project_id AND local_id=NEW.local_id AND kind=NEW.kind AND config_revision=NEW.expected_config_revision);
+ -- WH-126: a project has one visitor identity namespace (one project session cookie), so at most one access instance.
+ SELECT RAISE(ABORT,'module_activation_access_single') WHERE NEW.kind='access' AND NEW.expected_config_revision=0 AND EXISTS(SELECT 1 FROM module_instances WHERE project_id=NEW.project_id AND kind='access');
  SELECT RAISE(ABORT,'module_activation_capacity') WHERE (SELECT count(*) FROM module_activation_reviews WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM module_activation_reviews)>=50000;
 END;
 CREATE TRIGGER module_activation_review_immutable BEFORE UPDATE ON module_activation_reviews BEGIN SELECT RAISE(ABORT,'module_activation_immutable'); END;
@@ -160,6 +162,10 @@ CREATE TRIGGER module_activation_apply_admit BEFORE INSERT ON module_activation_
    WHERE i.id=d.value AND i.project_id=r.project_id AND a.state='active')))));
  SELECT RAISE(ABORT,'module_activation_held') WHERE EXISTS(SELECT 1 FROM module_activation_reviews r JOIN project_spec_held h ON h.version_id=r.source_version_id WHERE r.id=NEW.review_id AND r.action='activate');
 END;
+-- WH-126: one visitor identity namespace per project. The specification validator already allows one access instance;
+-- the registry repeats it so no second access instance can ever own visitors.
+CREATE TRIGGER module_instance_access_single BEFORE INSERT ON module_instances WHEN NEW.kind='access' AND EXISTS(SELECT 1 FROM module_instances WHERE project_id=NEW.project_id AND kind='access')
+BEGIN SELECT RAISE(ABORT,'module_activation_access_single'); END;
 CREATE TRIGGER module_activation_apply AFTER INSERT ON module_activation_applies BEGIN
  INSERT INTO module_instances(id,project_id,local_id,kind,module_digest,schema_digest,config_json,config_digest,descriptor_json,descriptor_digest,dependencies_json,config_revision,source_version_id,source_spec_digest,created_at,updated_at)
   SELECT resource_id,project_id,local_id,kind,module_digest,schema_digest,config_json,config_digest,descriptor_json,descriptor_digest,dependencies_json,next_config_revision,source_version_id,source_spec_digest,NEW.created_at,NEW.created_at
@@ -189,6 +195,10 @@ CREATE TRIGGER module_activation_apply AFTER INSERT ON module_activation_applies
   SELECT resource_id,project_id,1,NEW.created_at FROM module_activation_reviews WHERE id=NEW.review_id AND kind='access' AND expected_config_revision=0;
  UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,NEW.created_at)
   WHERE instance_id=(SELECT resource_id FROM module_activation_reviews WHERE id=NEW.review_id AND kind='access' AND expected_config_revision>0);
+ -- Visitor identity belongs to the access instance: disabling it signs every visitor out and cancels pending sign-ins.
+ -- Invitations bind the activation revision, so they stop working too (an expired revision never re-admits).
+ DELETE FROM app_sessions WHERE NEW.state='inactive' AND visitor_id IN(SELECT v.id FROM app_visitors v JOIN module_activation_reviews r ON r.resource_id=v.access_id WHERE r.id=NEW.review_id AND r.kind='access');
+ DELETE FROM app_auth_challenges WHERE NEW.state='inactive' AND access_id=(SELECT resource_id FROM module_activation_reviews WHERE id=NEW.review_id AND kind='access');
 END;
 CREATE TRIGGER module_activation_apply_immutable BEFORE UPDATE ON module_activation_applies BEGIN SELECT RAISE(ABORT,'module_activation_immutable'); END;
 -- Applied receipts keep their review: a review with a receipt is never pruned.
@@ -235,8 +245,9 @@ END;
 CREATE TRIGGER module_request_receipt_immutable BEFORE UPDATE ON module_request_receipts BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;
 
 -- WH-126 access module (docs/shared-modules.md#access-module-staff-roles-wh-126--october-4-2026-utc). Visitor
--- principals are the project's existing visitor identities (app_visitors, passkeys, invitations, recovery and
--- sessions); this slice adds the access revision, the `staff` role and exact owner role reviews. A role is project
+-- identities (app_visitors, passkeys, invitations, recovery and sessions in schema/platform.sql) are owned by the
+-- project's single access instance (app_visitors.access_id); this module adds the access revision, the `staff` role
+-- and exact owner role reviews. A role is project
 -- application policy on a visitor identity: it never creates a workspace session, Chat, publication, spending or
 -- identity-management authority, and WH-054 workspace members are never visitor or staff principals.
 CREATE TABLE module_access_states (
@@ -325,7 +336,7 @@ CREATE TRIGGER module_access_role_review_admit BEFORE INSERT ON module_access_ro
   WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='accessRoleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id
   AND json_extract(t.action_json,'$.instanceId')=NEW.local_id AND json_extract(t.action_json,'$.visitorId')=NEW.visitor_id AND json_extract(t.action_json,'$.action')=NEW.action);
  SELECT RAISE(ABORT,'module_access_changed') WHERE abs(NEW.created_at-unixepoch())>60;
- SELECT RAISE(ABORT,'module_access_changed') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_access_states s ON s.instance_id=i.id JOIN app_visitors v ON v.id=NEW.visitor_id AND v.project_id=i.project_id
+ SELECT RAISE(ABORT,'module_access_changed') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_access_states s ON s.instance_id=i.id JOIN app_visitors v ON v.id=NEW.visitor_id AND v.project_id=i.project_id AND v.access_id=i.id
   WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.local_id=NEW.local_id AND i.kind='access' AND i.config_revision=NEW.config_revision AND s.revision=NEW.expected_access_revision);
  SELECT RAISE(ABORT,'module_access_changed') WHERE NEW.action='revoke' AND NOT EXISTS(SELECT 1 FROM module_access_roles WHERE instance_id=NEW.instance_id AND visitor_id=NEW.visitor_id AND role=NEW.role AND state='granted');
  SELECT RAISE(ABORT,'module_access_capacity') WHERE (SELECT count(*) FROM module_access_role_reviews WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM module_access_role_reviews)>=50000;
@@ -351,7 +362,7 @@ CREATE TRIGGER module_access_role_apply_admit BEFORE INSERT ON module_access_rol
   NOT EXISTS(SELECT 1 FROM module_access_states s JOIN module_instances i ON i.id=s.instance_id WHERE s.instance_id=r.instance_id AND s.project_id=r.project_id AND s.revision=r.expected_access_revision AND i.config_revision=r.config_revision)
   OR (r.action='revoke' AND NOT EXISTS(SELECT 1 FROM module_access_roles WHERE instance_id=r.instance_id AND visitor_id=r.visitor_id AND role=r.role AND state='granted'))
   OR (r.action='grant' AND (EXISTS(SELECT 1 FROM module_access_roles WHERE instance_id=r.instance_id AND visitor_id=r.visitor_id AND role=r.role AND state='granted')
-   OR NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=r.visitor_id AND project_id=r.project_id AND revoked=0)
+   OR NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=r.visitor_id AND project_id=r.project_id AND access_id=r.instance_id AND revoked=0)
    OR NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id WHERE i.id=r.instance_id AND a.state='active'
     AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.roles') WHERE value=r.role))))));
 END;
@@ -372,15 +383,15 @@ WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 
  AND EXISTS(SELECT 1 FROM module_instances WHERE id=OLD.instance_id) AND EXISTS(SELECT 1 FROM module_access_role_applies WHERE review_id=OLD.id)
 BEGIN SELECT RAISE(ABORT,'module_access_receipt_retained'); END;
 
--- Revoking or erasing a visitor suppresses their grants and advances every access revision of the project, so
+-- Revoking or erasing a visitor suppresses their grants and advances their access instance's revision, so
 -- decisions and writes bound to the earlier principal fail at their next check or inside their commit.
 CREATE TRIGGER module_access_visitor_revoked AFTER UPDATE OF revoked ON app_visitors WHEN NEW.revoked=1 AND OLD.revoked=0 BEGIN
  UPDATE module_access_roles SET state='revoked',review_id=NULL,access_revision=coalesce((SELECT revision+1 FROM module_access_states WHERE instance_id=module_access_roles.instance_id),access_revision),updated_at=max(updated_at,unixepoch())
   WHERE visitor_id=NEW.id AND state='granted';
- UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,unixepoch()) WHERE project_id=NEW.project_id;
+ UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,unixepoch()) WHERE instance_id=NEW.access_id;
 END;
 CREATE TRIGGER module_access_visitor_deleted AFTER DELETE ON app_visitors BEGIN
- UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,unixepoch()) WHERE project_id=OLD.project_id;
+ UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,unixepoch()) WHERE instance_id=OLD.access_id;
 END;
 
 -- WH-127 records and forms module (docs/shared-modules.md#records-and-forms-module-wh-127--october-4-2026-utc).

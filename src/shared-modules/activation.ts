@@ -34,6 +34,8 @@ async function forbiddenWithoutInclusion(db:D1Database,user:string,project:strin
  catch(error){if(error instanceof FeatureInclusionError)throw new ModuleError('forbidden','Activating this module requires Starter or a higher plan, or an explicit scoped test grant. Owner reads, export and disable stay available.');throw error;}
 }
 
+/** WH-126: one visitor identity namespace (one project session cookie) per project, so at most one access instance. */
+const accessSingle=()=>new ModuleError('invalid_request','This project already has a visitor access module. A project has one visitor sign-in, so remove the extra access module from the website configuration.');
 /** `/review-module-activation PROJECT INSTANCE activate|disable` from the typed moduleActivationReview control. */
 export async function prepareModuleActivationCommand(db:D1Database,user:string,turn:string,command:string){
  if(!command.startsWith('/review-module-activation '))return;
@@ -58,6 +60,7 @@ export async function prepareModuleActivationCommand(db:D1Database,user:string,t
   const catalog=catalogState(instance.kind,instance.module.digest,instance.schema.digest);
   if(catalog==='withdrawn')throw new ModuleError('unavailable','This module version has been withdrawn. Existing owner reads, export and disable stay available.');
   if(catalog==='stale')throw new ModuleError('stale_module_version');
+  if(instance.kind==='access'&&!row&&rows.some(r=>r.kind==='access'))throw accessSingle();
   const feature=moduleFeature(instance.kind);await forbiddenWithoutInclusion(db,user,project,feature);
   const deps=instance.dependencies.map(id=>{
    const d=rows.find(r=>r.local_id===id);
@@ -159,6 +162,7 @@ export function moduleActivationFailure(cause:unknown){
  const text=String(cause);
  if(!/module_activation_/.test(text))return null;
  if(text.includes('module_activation_forbidden'))return new ModuleError('forbidden','Feature eligibility or project ownership changed. Owner reads, export and disable stay available.');
+ if(text.includes('module_activation_access_single'))return accessSingle();
  if(text.includes('module_activation_held'))return new ModuleError('unavailable','This website configuration is held for safety review.');
  if(text.includes('module_activation_capacity'))return new ModuleError('limited','Module review history has reached its test capacity.');
  return changed();

@@ -1,7 +1,7 @@
 // WH-075 first slice: per-client sub-limits, account fair share, per-project photo budget and busy-not-charged.
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {authenticator} from './app-authenticator.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
@@ -59,7 +59,7 @@ try{
  await assert.rejects(db.prepare("UPDATE backend_public_usage SET calls=calls-1,day='2000-01-01' WHERE project_id=?").bind(a.project).run(),/backend_public_counter/);
 
  // F4/F1 visitor transitions: busy is refunded once; fair share applies past half the platform pool.
- async function app(owner){const a=await project(owner),version=id(),test=id(),review=id();await saveBackend(scope(owner),owner,a.project,version,'export default ({state,input})=>({state:input,result:"saved"})');await testBackend(scope(owner),service,owner,a.project,version,test,{state:{},input:{}});await prepareApplication(scope(owner),owner,a.project,review,'enable',version,test);await confirmApplication(scope(owner),owner,review);return a;}
+ async function app(owner){const a=await project(owner),version=id(),test=id(),review=id();await saveBackend(scope(owner),owner,a.project,version,'export default ({state,input})=>({state:input,result:"saved"})');await testBackend(scope(owner),service,owner,a.project,version,test,{state:{},input:{}});await enableFixtureVisitorAccess(scope(owner),owner,a.project);await prepareApplication(scope(owner),owner,a.project,review,'enable',version,test);await confirmApplication(scope(owner),owner,review);return a;}
  async function visitor(a){const invite=await auth.createAppInvitation(scope(a.user),a.user,a.project),opt=await auth.appPasskeyOptions(db,a.project,'signup',false,invite.code),key=authenticator(),result=await auth.appPasskeyVerify(db,a.project,'signup',opt.challengeToken,key.registration(opt.options),false);return {session:result.session,revision:0};}
  const attempts=async a=>(await db.prepare('SELECT attempts FROM app_daily_usage WHERE project_id=? AND day=?').bind(a.project,today()).first())?.attempts??0;
  const heavyOwner=await user(),heavy=await app(heavyOwner),hv=await visitor(heavy);

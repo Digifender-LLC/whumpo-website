@@ -4,13 +4,16 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
 import {captureRestoreRecordSnapshot} from '../tools/restore-admission.mjs';
 import {checkHoldInventory} from '../tools/safety-hold-inventory.mjs';
+import {enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 // WH-132: authenticated operator surface, object/project holds over every ordinary deletion/expiry path, restricted
 // evidence storage, two-person disclosure records and restore suppression. Synthetic, benign placeholders only.
 const d1=process.argv.includes('--d1');
 const source=`export * as cases from './src/safety-cases.ts';export * as http from './src/safety-case-http.ts';export {cleanupPhotos} from './src/files.ts';
  export {cleanupTraffic,readTraffic} from './src/site-traffic.ts';export {cleanupContacts,deleteContact,contactInbox} from './src/contacts.ts';export {updateProfilePhoto,updateProfile} from './src/profile.ts';
  export {deleteGuestFeedback} from './src/guest-previews/owner.ts';export {newSessionToken,hashToken} from './src/security.ts';export {resolveIdentity,IdentityError} from './src/workspace-identity/authority.ts';
- export {admitWorkspace} from './src/workspace-identity/admission.ts';export {default as worker} from './src/index.ts';`;
+ export {admitWorkspace} from './src/workspace-identity/admission.ts';export {default as worker} from './src/index.ts';
+ export {readChat,sendChatControl} from './src/chat.ts';export {createWebsite,prepareSpecification,readSpecificationProposal} from './src/project-specification/store.ts';
+ export {moduleCatalog} from './src/project-specification/catalog.ts';export {jsonDigest} from './src/project-specification/v2/json.ts';`;
 const built=await build({stdin:{contents:source,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64')),{cases:c}=m;
 const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('Unexpected network');};
@@ -58,16 +61,19 @@ try{
   await run("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) VALUES(?,?,'Photo',?,?,?,1,1,'ready','2026-10-04T00:00:00.000Z')",id,project,key,await sha(bytes),bytes.length);
   return {id,key,bytes};};
  const f1=await photo(p1),f1b=await photo(p1),f2=await photo(p2),f2b=await photo(p2),fo=await photo(pOther);
+ // WH-126: visitors belong to each project's access instance, saved and activated through the real owner path.
+ const customerScope=await customer.scope();for(const p of [p1,p2])await enableFixtureVisitorAccess(customerScope,subject,p,{handlers:m});
  const version=async project=>{const id=crypto.randomUUID();await run("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at) VALUES(?,?,'c','{}','<p></p>','d','2026-10-04')",id,project);return id;};
  const v1=await version(p1),v2=await version(p2);
  const backend=crypto.randomUUID();await run("INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,'x',?,'2026-10-04')",backend,p2,'b'.repeat(64));
- await run('INSERT INTO app_spaces(project_id,owner_user_id,version_id) VALUES(?,?,?)',p2,subject,backend);
- const visitor=crypto.randomUUID();await run('INSERT INTO app_visitors(id,project_id,revoked) VALUES(?,?,1)',visitor,p2);
+ const space="INSERT INTO app_spaces(project_id,owner_user_id,version_id,access_id,resource_id) SELECT ?,?,?,id,? FROM module_instances WHERE project_id=? AND kind='access'";
+ await run(space,p2,subject,backend,crypto.randomUUID(),p2);
+ const visitor=crypto.randomUUID();await run("INSERT INTO app_visitors(id,project_id,access_id,revoked) SELECT ?,?,id,1 FROM module_instances WHERE project_id=? AND kind='access'",visitor,p2,p2);
  // Live visitors whose documents are overwritten and copied into recovery points (p2 project-held, p1 only object-held).
  const backend1=crypto.randomUUID();await run("INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,'x',?,'2026-10-04')",backend1,p1,'c'.repeat(64));
- await run('INSERT INTO app_spaces(project_id,owner_user_id,version_id) VALUES(?,?,?)',p1,subject,backend1);
+ await run(space,p1,subject,backend1,crypto.randomUUID(),p1);
  const [live,live2,live1]=[crypto.randomUUID(),crypto.randomUUID(),crypto.randomUUID()];
- for(const [v,p] of [[live,p2],[live2,p2],[live1,p1]])await run('INSERT INTO app_visitors(id,project_id,revoked) VALUES(?,?,0)',v,p);
+ for(const [v,p] of [[live,p2],[live2,p2],[live1,p1]])await run("INSERT INTO app_visitors(id,project_id,access_id,revoked) SELECT ?,?,id,0 FROM module_instances WHERE project_id=? AND kind='access'",v,p,p);
  for(const [id,p,expires] of [['contact-1',p1,'2026-01-01T00:00:00.000Z'],['contact-2',p2,'2026-01-01T00:00:00.000Z'],['contact-o',pOther,'2026-01-01T00:00:00.000Z']])
   await run("INSERT INTO contact_submissions(id,project_id,settings_revision,request_hash,name,email,message,created_at,expires_at) VALUES(?,?,1,'h',?,?,?,'2026-01-01T00:00:00.000Z',?)",id,p,MARK,'v@example.invalid',MARK,expires);
  for(const p of [p1,p2,pOther])await run("INSERT INTO site_traffic_daily(project_id,day,requests) VALUES(?,date('now','-60 days'),3)",p);

@@ -724,12 +724,20 @@ CREATE TABLE app_spaces (
  owner_user_id TEXT NOT NULL REFERENCES users(id),
  version_id TEXT NOT NULL REFERENCES backend_versions(id),
  enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
- revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0)
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ -- WH-126: the visitor application is an execution resource (WH-071 logical resource `resource_id`) that consumes the
+ -- project's access module instance. Visitor identity belongs to that access instance, never to the application.
+ access_id TEXT NOT NULL REFERENCES module_instances(id),
+ resource_id TEXT NOT NULL UNIQUE CHECK(length(resource_id)=36)
 , review_id TEXT, migration_id TEXT REFERENCES app_migration_approvals(id), rollback_id TEXT REFERENCES app_restore_reviews(id));
 
+-- WH-126 project visitor identity, owned by the project's access module instance (at most one per project, see
+-- src/shared-modules/schema.sql). Enrollment, passkeys, recovery and sessions need only that instance to be active;
+-- a visitor application, when one exists, consumes these identities for its per-visitor documents.
 CREATE TABLE app_visitors (
  id TEXT PRIMARY KEY,
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ access_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
  revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -738,7 +746,7 @@ CREATE TABLE app_sessions (
  token_hash TEXT PRIMARY KEY,
  visitor_id TEXT NOT NULL REFERENCES app_visitors(id),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
-, page_review_id TEXT REFERENCES app_page_reviews(id));
+);
 
 CREATE TABLE app_documents (
  visitor_id TEXT PRIMARY KEY REFERENCES app_visitors(id),
@@ -755,6 +763,9 @@ CREATE TABLE app_runs (
  request_hash TEXT NOT NULL,
  base_revision INTEGER NOT NULL,
  program_revision INTEGER NOT NULL,
+ -- The visitor page live when the change was admitted (NULL when none); the commit requires the same live page, so
+ -- withdrawing or replacing the page rejects in-flight changes (visitor sign-in itself belongs to the access instance).
+ page_review_id TEXT REFERENCES app_page_reviews(id),
  state TEXT NOT NULL DEFAULT 'running' CHECK(state IN ('running','complete','failed','conflict')),
  result_json TEXT CHECK(result_json IS NULL OR length(CAST(result_json AS BLOB))<=4608),
  next_json TEXT CHECK(next_json IS NULL OR json_valid(next_json) AND length(CAST(next_json AS BLOB))<=4096),
@@ -876,8 +887,9 @@ CREATE TABLE user_profiles (
 
 CREATE TABLE app_invitations (
  code_hash TEXT PRIMARY KEY CHECK(length(code_hash)=64),
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
- program_revision INTEGER NOT NULL CHECK(program_revision>=0),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ access_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ activation_revision INTEGER NOT NULL CHECK(activation_revision>=1),
  used_by TEXT REFERENCES app_visitors(id),
  revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
@@ -893,15 +905,16 @@ CREATE TABLE app_passkeys (
 
 CREATE TABLE app_auth_challenges (
  token_hash TEXT PRIMARY KEY CHECK(length(token_hash)=64),
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
- program_revision INTEGER NOT NULL CHECK(program_revision>=0),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ access_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ activation_revision INTEGER NOT NULL CHECK(activation_revision>=1),
  challenge TEXT NOT NULL CHECK(length(challenge) BETWEEN 16 AND 128),
  kind TEXT NOT NULL CHECK(kind IN ('signup','login','add')),
  visitor_id TEXT NOT NULL,
  invite_hash TEXT NOT NULL,
  session_hash TEXT NOT NULL,
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes'))
-, page_review_id TEXT REFERENCES app_page_reviews(id));
+);
 
 CREATE TABLE app_recovery_codes (
  visitor_id TEXT PRIMARY KEY REFERENCES app_visitors(id),
@@ -934,7 +947,7 @@ CREATE TABLE app_daily_usage (
 
 CREATE TABLE app_deletion_receipts (
  id TEXT PRIMARY KEY,
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  proof_hash TEXT NOT NULL CHECK(length(proof_hash)=64),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
 );
@@ -1193,7 +1206,7 @@ CREATE TABLE build_job_cleanups (
 CREATE TABLE app_owner_erasures (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ project_id TEXT NOT NULL REFERENCES projects(id),
  visitor_id TEXT NOT NULL,
  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days'))
@@ -1763,7 +1776,7 @@ CREATE TABLE github_revocation_claims (
 
 CREATE TABLE app_deletion_reviews (
  id TEXT PRIMARY KEY,
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
  session_hash TEXT NOT NULL UNIQUE REFERENCES app_sessions(token_hash) ON DELETE CASCADE,
  revision INTEGER NOT NULL CHECK(revision>=0),
@@ -1876,6 +1889,7 @@ CREATE INDEX operator_containments_subject ON operator_containments(subject_id) 
 CREATE INDEX backend_form_reviews_project ON backend_form_reviews(project_id);
 
 CREATE INDEX app_visitors_project ON app_visitors(project_id);
+CREATE INDEX app_visitors_access ON app_visitors(access_id);
 
 CREATE INDEX app_sessions_visitor ON app_sessions(visitor_id);
 
@@ -1892,6 +1906,8 @@ CREATE INDEX app_activation_project ON app_activation_reviews(project_id);
 CREATE INDEX inference_calls_owner_time ON inference_calls(user_id,created_at,role);
 
 CREATE INDEX app_invitation_project ON app_invitations(project_id);
+CREATE INDEX app_invitation_access ON app_invitations(access_id);
+CREATE INDEX app_challenge_access ON app_auth_challenges(access_id);
 
 CREATE INDEX app_passkeys_visitor ON app_passkeys(visitor_id);
 
@@ -2742,22 +2758,24 @@ CREATE TRIGGER health_form_snapshot BEFORE INSERT ON site_health_checks WHEN NEW
 CREATE TRIGGER health_form_immutable BEFORE UPDATE ON site_health_checks WHEN NEW.form_review_id IS NOT OLD.form_review_id
  BEGIN SELECT RAISE(ABORT,'health_form_immutable'); END;
 
-CREATE TRIGGER app_space_owner BEFORE INSERT ON app_spaces WHEN NOT EXISTS(SELECT 1 FROM projects p JOIN backend_versions v ON v.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.owner_user_id AND v.id=NEW.version_id)
+-- The application consumes the project's access instance; that dependency and the resource id never change.
+CREATE TRIGGER app_space_owner BEFORE INSERT ON app_spaces WHEN NOT EXISTS(SELECT 1 FROM projects p JOIN backend_versions v ON v.project_id=p.id JOIN module_instances i ON i.project_id=p.id AND i.kind='access' WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.owner_user_id AND v.id=NEW.version_id AND i.id=NEW.access_id)
  BEGIN SELECT RAISE(ABORT,'app_space_owner'); END;
 
-CREATE TRIGGER app_space_update BEFORE UPDATE ON app_spaces WHEN NEW.project_id<>OLD.project_id OR NEW.owner_user_id<>OLD.owner_user_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.version_id AND project_id=NEW.project_id)
+CREATE TRIGGER app_space_update BEFORE UPDATE ON app_spaces WHEN NEW.project_id<>OLD.project_id OR NEW.owner_user_id<>OLD.owner_user_id OR NEW.access_id<>OLD.access_id OR NEW.resource_id<>OLD.resource_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.version_id AND project_id=NEW.project_id)
  BEGIN SELECT RAISE(ABORT,'app_space_identity'); END;
 
+-- WH-126: enrollment needs the project's active access instance, not a visitor application.
 CREATE TRIGGER app_visitor_admit BEFORE INSERT ON app_visitors BEGIN
- SELECT RAISE(ABORT,'app_unavailable') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_unavailable') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations ac ON ac.instance_id=i.id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=i.project_id AND p.owner_user_id=ar.user_id WHERE i.id=NEW.access_id AND i.project_id=NEW.project_id AND i.kind='access' AND ac.state='active');
  SELECT RAISE(ABORT,'app_visitor_capacity') WHERE (SELECT count(*) FROM app_visitors WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_visitors)>=1000;
 END;
 
-CREATE TRIGGER app_visitor_identity BEFORE UPDATE ON app_visitors WHEN NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.created_at<>OLD.created_at OR OLD.revoked=1 AND NEW.revoked<>1
+CREATE TRIGGER app_visitor_identity BEFORE UPDATE ON app_visitors WHEN NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.access_id<>OLD.access_id OR NEW.created_at<>OLD.created_at OR OLD.revoked=1 AND NEW.revoked<>1
  BEGIN SELECT RAISE(ABORT,'app_visitor_identity'); END;
 
 CREATE TRIGGER app_session_admit BEFORE INSERT ON app_sessions BEGIN
- SELECT RAISE(ABORT,'app_session_identity') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_session_identity') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN module_activations ac ON ac.instance_id=v.access_id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=v.project_id AND p.owner_user_id=ar.user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND ac.state='active');
  SELECT RAISE(ABORT,'app_session_capacity') WHERE (SELECT count(*) FROM app_sessions WHERE visitor_id=NEW.visitor_id)>=5 OR (SELECT count(*) FROM app_sessions)>=5000;
 END;
 
@@ -2767,11 +2785,11 @@ CREATE TRIGGER app_document_revision BEFORE UPDATE ON app_documents WHEN NEW.vis
 
 CREATE TRIGGER app_visitor_document AFTER INSERT ON app_visitors BEGIN INSERT INTO app_documents(visitor_id) VALUES(NEW.id); END;
 
-CREATE TRIGGER app_run_immutable BEFORE UPDATE ON app_runs WHEN NEW.id<>OLD.id OR NEW.visitor_id<>OLD.visitor_id OR NEW.project_id<>OLD.project_id OR NEW.version_id<>OLD.version_id OR NEW.session_hash<>OLD.session_hash OR NEW.request_hash<>OLD.request_hash OR NEW.base_revision<>OLD.base_revision OR NEW.program_revision<>OLD.program_revision OR NEW.day<>OLD.day OR OLD.state<>'running' OR NEW.state='running'
+CREATE TRIGGER app_run_immutable BEFORE UPDATE ON app_runs WHEN NEW.id<>OLD.id OR NEW.visitor_id<>OLD.visitor_id OR NEW.project_id<>OLD.project_id OR NEW.version_id<>OLD.version_id OR NEW.session_hash<>OLD.session_hash OR NEW.request_hash<>OLD.request_hash OR NEW.base_revision<>OLD.base_revision OR NEW.program_revision<>OLD.program_revision OR NEW.page_review_id<>OLD.page_review_id OR NEW.day<>OLD.day OR OLD.state<>'running' OR NEW.state='running'
  BEGIN SELECT RAISE(ABORT,'app_run_immutable'); END;
 
 CREATE TRIGGER app_run_apply BEFORE UPDATE OF state ON app_runs WHEN NEW.state='complete' BEGIN
- SELECT RAISE(ABORT,'app_state_changed') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ SELECT RAISE(ABORT,'app_state_changed') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN module_activations ac ON ac.instance_id=v.access_id AND ac.state='active' JOIN app_spaces a ON a.project_id=v.project_id AND a.access_id=v.access_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE NEW.page_review_id IS (SELECT id FROM app_live_pages WHERE project_id=a.project_id) AND v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
  UPDATE app_documents SET state_json=NEW.next_json,revision=revision+1 WHERE visitor_id=NEW.visitor_id;
 END;
 
@@ -2790,10 +2808,13 @@ CREATE TRIGGER app_space_initial_review BEFORE INSERT ON app_spaces WHEN NEW.ena
 
 CREATE TRIGGER app_activation_apply BEFORE UPDATE OF status ON app_activation_reviews BEGIN
  SELECT RAISE(ABORT,'app_activation_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.revision=NEW.base_revision);
- SELECT RAISE(ABORT,'app_migration_required') WHERE NEW.enabled=1 AND EXISTS(SELECT 1 FROM app_spaces a JOIN app_visitors v ON v.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.version_id<>NEW.version_id);
+ -- A program has touched visitor documents only once the application was authorized (revision>0); before that the
+ -- access instance's visitors hold untouched empty documents, so choosing the first program needs no migration.
+ SELECT RAISE(ABORT,'app_migration_required') WHERE NEW.enabled=1 AND EXISTS(SELECT 1 FROM app_spaces a JOIN app_visitors v ON v.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.revision>0 AND a.version_id<>NEW.version_id);
  SELECT RAISE(ABORT,'app_disable_version') WHERE NEW.enabled=0 AND NOT EXISTS(SELECT 1 FROM app_spaces WHERE project_id=NEW.project_id AND version_id=NEW.version_id);
+ -- WH-126: the application serves only the identities of its active access instance.
+ SELECT RAISE(ABORT,'app_access_required') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM app_spaces a JOIN module_activations ac ON ac.instance_id=a.access_id WHERE a.project_id=NEW.project_id AND ac.state='active');
  UPDATE app_spaces SET enabled=NEW.enabled,version_id=NEW.version_id,revision=revision+1,review_id=NEW.id WHERE project_id=NEW.project_id;
- DELETE FROM app_sessions WHERE NEW.enabled=0 AND visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
 END;
 
 CREATE TRIGGER app_activation_delete_guard BEFORE DELETE ON app_activation_reviews WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) BEGIN SELECT RAISE(ABORT,'app_activation_immutable'); END;
@@ -2827,16 +2848,17 @@ CREATE TRIGGER user_profiles_revision BEFORE UPDATE ON user_profiles
 WHEN NEW.user_id!=OLD.user_id OR NEW.revision!=OLD.revision+1
 BEGIN SELECT RAISE(ABORT,'profile_revision'); END;
 
+-- Invitations and sign-in challenges bind the project's active access instance at its current activation revision.
 CREATE TRIGGER app_invitation_admit BEFORE INSERT ON app_invitations BEGIN
- SELECT RAISE(ABORT,'app_invitation_authority') WHERE NEW.used_by IS NOT NULL OR NEW.revoked<>0 OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1 AND a.revision=NEW.program_revision);
+ SELECT RAISE(ABORT,'app_invitation_authority') WHERE NEW.used_by IS NOT NULL OR NEW.revoked<>0 OR NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations ac ON ac.instance_id=i.id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=i.project_id AND p.owner_user_id=ar.user_id WHERE i.id=NEW.access_id AND i.project_id=NEW.project_id AND i.kind='access' AND ac.state='active' AND ac.revision=NEW.activation_revision);
  SELECT RAISE(ABORT,'app_invitation_capacity') WHERE (SELECT count(*) FROM app_invitations WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_invitations)>=1000;
 END;
 
-CREATE TRIGGER app_invitation_identity BEFORE UPDATE ON app_invitations WHEN NEW.code_hash<>OLD.code_hash OR NEW.project_id<>OLD.project_id OR NEW.program_revision<>OLD.program_revision OR NEW.expires_at<>OLD.expires_at OR OLD.revoked=1 AND NEW.revoked<>1 OR OLD.used_by IS NOT NULL AND NEW.used_by IS NOT OLD.used_by OR NEW.used_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.used_by AND project_id=NEW.project_id)
+CREATE TRIGGER app_invitation_identity BEFORE UPDATE ON app_invitations WHEN NEW.code_hash<>OLD.code_hash OR NEW.project_id<>OLD.project_id OR NEW.access_id<>OLD.access_id OR NEW.activation_revision<>OLD.activation_revision OR NEW.expires_at<>OLD.expires_at OR OLD.revoked=1 AND NEW.revoked<>1 OR OLD.used_by IS NOT NULL AND NEW.used_by IS NOT OLD.used_by OR NEW.used_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.used_by AND project_id=NEW.project_id AND access_id=NEW.access_id)
  BEGIN SELECT RAISE(ABORT,'app_invitation_identity'); END;
 
 CREATE TRIGGER app_passkey_admit BEFORE INSERT ON app_passkeys BEGIN
- SELECT RAISE(ABORT,'app_passkey_authority') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_passkey_authority') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN module_activations ac ON ac.instance_id=v.access_id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=v.project_id AND p.owner_user_id=ar.user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND ac.state='active');
  SELECT RAISE(ABORT,'app_passkey_capacity') WHERE (SELECT count(*) FROM app_passkeys WHERE visitor_id=NEW.visitor_id)>=5;
 END;
 
@@ -2844,7 +2866,7 @@ CREATE TRIGGER app_passkey_identity BEFORE UPDATE ON app_passkeys WHEN NEW.id<>O
  BEGIN SELECT RAISE(ABORT,'app_passkey_identity'); END;
 
 CREATE TRIGGER app_challenge_admit BEFORE INSERT ON app_auth_challenges BEGIN
- SELECT RAISE(ABORT,'app_challenge_authority') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1 AND a.revision=NEW.program_revision);
+ SELECT RAISE(ABORT,'app_challenge_authority') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations ac ON ac.instance_id=i.id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=i.project_id AND p.owner_user_id=ar.user_id WHERE i.id=NEW.access_id AND i.project_id=NEW.project_id AND i.kind='access' AND ac.state='active' AND ac.revision=NEW.activation_revision);
  SELECT RAISE(ABORT,'app_challenge_capacity') WHERE (SELECT count(*) FROM app_auth_challenges WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM app_auth_challenges)>=1000;
 END;
 
@@ -2871,9 +2893,9 @@ CREATE TRIGGER app_page_immutable BEFORE UPDATE ON app_page_reviews WHEN NEW.id<
 
 CREATE TRIGGER app_page_apply AFTER UPDATE OF status ON app_page_reviews BEGIN
  SELECT RAISE(ABORT,'app_page_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_page_settings s ON s.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.revision=NEW.program_revision AND s.revision=NEW.base_revision AND (NEW.config_json IS NULL OR a.enabled=1));
+ -- WH-126: visitor sign-in belongs to the access instance and survives page changes; in-flight document changes
+ -- bind the page they were sent through (app_runs.page_review_id), so they fail instead.
  UPDATE app_page_settings SET revision=revision+1,review_id=NEW.id WHERE project_id=NEW.project_id;
- DELETE FROM app_sessions WHERE visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
- DELETE FROM app_auth_challenges WHERE project_id=NEW.project_id;
 END;
 
 CREATE TRIGGER app_page_settings_initial BEFORE INSERT ON app_page_settings WHEN NEW.revision<>0 OR NEW.review_id IS NOT NULL
@@ -2882,14 +2904,8 @@ CREATE TRIGGER app_page_settings_initial BEFORE INSERT ON app_page_settings WHEN
 CREATE TRIGGER app_page_settings_guard BEFORE UPDATE ON app_page_settings WHEN NEW.project_id<>OLD.project_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM app_page_reviews r WHERE r.id=NEW.review_id AND r.project_id=NEW.project_id AND r.base_revision=OLD.revision AND r.status='applied')
  BEGIN SELECT RAISE(ABORT,'app_page_settings'); END;
 
-CREATE TRIGGER app_challenge_page BEFORE INSERT ON app_auth_challenges WHEN NEW.page_review_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_live_pages WHERE id=NEW.page_review_id AND project_id=NEW.project_id)
- BEGIN SELECT RAISE(ABORT,'app_page_changed'); END;
-
-CREATE TRIGGER app_session_page BEFORE INSERT ON app_sessions WHEN NEW.page_review_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_live_pages p JOIN app_visitors v ON v.project_id=p.project_id WHERE p.id=NEW.page_review_id AND v.id=NEW.visitor_id)
- BEGIN SELECT RAISE(ABORT,'app_page_changed'); END;
-
 CREATE TRIGGER app_run_admit BEFORE INSERT ON app_runs BEGIN
- SELECT RAISE(ABORT,'app_run_identity') WHERE NEW.state<>'running' OR NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ SELECT RAISE(ABORT,'app_run_identity') WHERE NEW.state<>'running' OR NOT EXISTS(SELECT 1 FROM app_visitors v JOIN module_activations ac ON ac.instance_id=v.access_id AND ac.state='active' JOIN app_spaces a ON a.project_id=v.project_id AND a.access_id=v.access_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE NEW.page_review_id IS (SELECT id FROM app_live_pages WHERE project_id=a.project_id) AND v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
  SELECT RAISE(ABORT,'app_run_quota') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR (SELECT count(*) FROM app_runs)>=10000 OR (SELECT count(*) FROM app_runs WHERE visitor_id=NEW.visitor_id AND day=NEW.day)>=20 OR coalesce((SELECT attempts FROM app_daily_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=coalesce((SELECT coalesce(allowance,0) FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='transition' ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1),100) OR coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=1000
  -- Fair share: once half the platform pool is used, only accounts under 100 transitions today are admitted.
  OR (coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=500 AND coalesce((SELECT sum(u.attempts) FROM app_daily_usage u JOIN projects p ON p.id=u.project_id WHERE u.day=NEW.day AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=100);
@@ -3243,7 +3259,9 @@ CREATE TRIGGER application_build_admit BEFORE INSERT ON application_builds BEGIN
   JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.status='pending'
   WHERE v.id=NEW.id AND p.id=NEW.project_id AND p.owner_user_id=NEW.user_id
  );
- SELECT RAISE(ABORT,'application_build_migration') WHERE EXISTS(SELECT 1 FROM app_visitors WHERE project_id=NEW.project_id);
+ -- Visitor documents become program-owned once an application was authorized; visitors enrolled only in the access
+ -- instance (WH-126) hold untouched empty documents and do not block a first application draft.
+ SELECT RAISE(ABORT,'application_build_migration') WHERE EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id WHERE v.project_id=NEW.project_id AND a.revision>0);
 END;
 
 CREATE TRIGGER application_build_immutable BEFORE UPDATE ON application_builds
@@ -3350,9 +3368,8 @@ CREATE TRIGGER welcome_first_app_guard BEFORE INSERT ON backend_versions
 
 CREATE TRIGGER app_owner_erasure_admit BEFORE INSERT ON app_owner_erasures BEGIN
  SELECT RAISE(ABORT,'visitor_erasure_authority') WHERE NOT EXISTS(
-  SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id
-  JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
-  WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=1 AND a.owner_user_id=NEW.user_id);
+  SELECT 1 FROM app_visitors v JOIN projects p ON p.id=v.project_id
+  WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=1 AND p.owner_user_id=NEW.user_id);
  SELECT RAISE(ABORT,'visitor_erasure_capacity') WHERE (SELECT count(*) FROM app_owner_erasures)>=1000;
 END;
 
@@ -3440,7 +3457,7 @@ CREATE TRIGGER app_migration_approval_delete BEFORE DELETE ON app_migration_appr
 CREATE TRIGGER app_migration_approval_apply AFTER INSERT ON app_migration_approvals BEGIN
  UPDATE app_documents SET revision=revision+1,state_json=(SELECT next_json FROM app_migration_documents WHERE migration_id=NEW.id AND visitor_id=app_documents.visitor_id) WHERE visitor_id IN(SELECT visitor_id FROM app_migration_documents WHERE migration_id=NEW.id);
  UPDATE app_spaces SET version_id=(SELECT to_version FROM app_migration_checks WHERE id=NEW.id),revision=revision+1,migration_id=NEW.id WHERE project_id=(SELECT project_id FROM app_migration_checks WHERE id=NEW.id);
- DELETE FROM app_sessions WHERE visitor_id IN(SELECT id FROM app_visitors WHERE project_id=(SELECT project_id FROM app_migration_checks WHERE id=NEW.id));
+ -- Visitor sign-in belongs to the access instance (WH-126); the disabled application and its revision change fence documents.
  UPDATE app_migration_approvals SET status='applied' WHERE id=NEW.id;
 END;
 
@@ -3462,7 +3479,6 @@ END;
 CREATE TRIGGER app_restore_apply AFTER UPDATE OF status ON app_restore_reviews BEGIN
  UPDATE app_documents SET revision=revision+1,state_json=(SELECT state_json FROM app_recovery_documents WHERE point_id=NEW.point_id AND visitor_id=app_documents.visitor_id) WHERE visitor_id IN(SELECT json_extract(value,'$.visitor') FROM json_each(NEW.roster_json));
  UPDATE app_spaces SET version_id=(SELECT version_id FROM app_recovery_points WHERE id=NEW.point_id),revision=revision+1,rollback_id=NEW.id WHERE project_id=NEW.project_id AND NEW.restore_program=1;
- DELETE FROM app_sessions WHERE NEW.restore_program=1 AND visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
 END;
 
 CREATE TRIGGER app_space_apply_review BEFORE UPDATE ON app_spaces WHEN NOT (

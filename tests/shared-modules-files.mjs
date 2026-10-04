@@ -49,10 +49,7 @@ async function owner(){
  const site=await createFixtureProject(scope,user,'Studio '+id().slice(0,6),'Photo studio');
  for(const feature of ['core.editing','core.forms'])for(const operation of ['prepare','confirm'])
   await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,?,'private-test-acceptance','synthetic WH-128 fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),user,site.project,feature,operation);
- const version=id(),test=id(),review=id();
- await saveBackend(scope,user,site.project,version,'export default ({state,input})=>({state:input,result:state})');
- await testBackend(scope,runtime,user,site.project,version,test,{state:{},input:{}});
- await appActivation.prepareApplication(scope,user,site.project,review,'enable',version,test);await appActivation.confirmApplication(scope,user,review);
+ // WH-126: visitor identity belongs to the access instance; no visitor application is needed.
  return {...actor,scope,user,...site,host:'https://app-'+site.project+'.whumpo.site'};
 }
 async function visitor(o){
@@ -97,7 +94,6 @@ const approve=fileId=>run("UPDATE project_photo_safety SET state='approved',csam
 
 try{
  const a=await owner(),b=await owner();
- const staff=await visitor(a),plain=await visitor(a),other=await visitor(a),bv=await visitor(b);
  await check('over-wide galleries are rejected before any configuration is saved',async()=>{
   const head=JSON.parse((await row('SELECT v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',a.project)).spec_json);
   const wide=[collection('x','owner',['staff'],{audience:'staff'}),collection('x','staff',['staff'],{audience:'visitor'})];
@@ -106,6 +102,7 @@ try{
  });
  await configureFixtureModules(a.scope,a.user,a.project,[accessInstance,filesInstance]);await activation(a,'members');await activation(a,'media');
  await configureFixtureModules(b.scope,b.user,b.project,[accessInstance,filesInstance]);await activation(b,'members');await activation(b,'media');
+ const staff=await visitor(a),plain=await visitor(a),other=await visitor(a),bv=await visitor(b);
  await setRole(a,staff.visitorId,'grant');
  const media=await instance(a,'media'),theirs=await instance(b,'media');
  let first;

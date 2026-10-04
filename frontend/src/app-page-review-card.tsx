@@ -21,7 +21,7 @@ export function AppPageReviewCard({review}:{review:AppPageReviewPresentation}){
    <div className="rounded-md bg-secondary/60 p-3 flex items-start gap-2"><LockKeyhole className="size-4 shrink-0 mt-1"/><p>Visitors need an invitation and a passkey to use the form. Their input and private saved data go to your approved app. Results appear as text.</p></div>
    <div><p className="text-xs text-muted-foreground mb-1">Visitor address after publication</p><p className="text-sm break-all">https://app-{review.projectId}.whumpo.site/</p></div>
   </>:<p>This takes the visitor page and its data API offline. Stored visitor data and activity history remain.</p>}
-  <p className="text-sm text-muted-foreground">This change signs out every visitor and cancels pending sign-ins. It does not change your separate website or stateless tools.</p>
+  <p className="text-sm text-muted-foreground">Unsaved changes sent through the previous page are rejected. Visitors stay signed in to your project’s visitor access. It does not change your separate website or stateless tools.</p>
   <p className="text-xs text-muted-foreground leading-relaxed">Signed-in visitors can export their data and delete their account. Automatic retention and whole-app recovery are still being built.</p>
   {state==='ready'&&<p className="text-xs text-muted-foreground">Review the details, then use the approval button below. This review expires {new Date(review.expiresAt).toLocaleString()}.</p>}
   {(state==='expired'||state==='changed')&&<p className="text-sm font-medium">Ask Whumpo for a fresh review. This saved review can no longer be approved.</p>}

@@ -37,11 +37,7 @@ async function owner(){
  const site=await createFixtureProject(scope,user,'Repair desk '+id().slice(0,6),'Neighborhood repairs');
  for(const feature of ['core.editing','core.forms'])for(const operation of ['prepare','confirm'])
   await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,?,'private-test-acceptance','synthetic WH-127 fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),user,site.project,feature,operation);
- // Visitor identity is still owned by the visitor application in this slice (WH-126 remaining scope).
- const version=id(),test=id(),review=id();
- await saveBackend(scope,user,site.project,version,'export default ({state,input})=>({state:input,result:state})');
- await testBackend(scope,runtime,user,site.project,version,test,{state:{},input:{}});
- await appActivation.prepareApplication(scope,user,site.project,review,'enable',version,test);await appActivation.confirmApplication(scope,user,review);
+ // WH-126: visitor identity belongs to the access instance; no visitor application is needed.
  return {...actor,scope,user,...site,host:'https://app-'+site.project+'.whumpo.site'};
 }
 async function visitor(o){
@@ -92,9 +88,9 @@ const count=o=>row('SELECT count(*) n FROM module_records WHERE project_id=?',o.
 
 try{
  const a=await owner(),b=await owner();
- const v1=await visitor(a),v2=await visitor(a),s1=await visitor(a),bv=await visitor(b);
  await configureFixtureModules(a.scope,a.user,a.project,[accessInstance,recordsInstance()]);await activation(a,'members');await activation(a,'requests');
  await configureFixtureModules(b.scope,b.user,b.project,[accessInstance,recordsInstance()]);await activation(b,'members');await activation(b,'requests');
+ const v1=await visitor(a),v2=await visitor(a),s1=await visitor(a),bv=await visitor(b);
  await setRole(a,s1.visitorId,'grant');
  let records=await instance(a,'requests');const theirs=await instance(b,'requests');
  let first;

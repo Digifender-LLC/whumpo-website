@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {authenticator} from './app-authenticator.mjs';
 // Invoked by the connected app harness with its actual platform, visitor host,
 // isolated QuickJS runtime and disposable database. No guest reply is stubbed.
-export async function taskListAppJourney({db,account,call,host,env,setupChat,executions}){
+export async function taskListAppJourney({db,account,call,host,env,setupChat,enableAccess,executions}){
  const id=()=>crypto.randomUUID(),owner=await account(),startExecutions=executions();
  async function json(path,body,status=200,method){const response=await call(owner,path,body,method);assert.equal(response.status,status,await response.clone().text());return response.json();}
  async function chat(content){return (await setupChat(owner,content)).turns.at(-1);}
@@ -13,6 +13,7 @@ export async function taskListAppJourney({db,account,call,host,env,setupChat,exe
  const provenance=await db.prepare('SELECT component_id,component_version FROM backend_component_instances WHERE version_id=?').bind(version).first();assert.deepEqual(provenance,{component_id:'private-task-list',component_version:1});
  const sample={input:{state:{},input:{action:'add',text:'Synthetic example'}},expected:{state:{nextId:2,items:[{id:1,text:'Synthetic example',done:false}]},result:{items:[{id:1,text:'Synthetic example',done:false}]}}};
  const checked=await chat('/check-backend '+version+' '+JSON.stringify(sample)),run=checked.id;assert.equal(executions(),startExecutions+1);
+ await enableAccess(owner,project);
  const program=await chat('/enable-application '+version+' '+run);assert.equal(program.application_confirmation_id,program.id);
  assert.equal((await host.fetch(new Request(origin+'/'),env)).status,404);
  await chat('/confirm-application '+program.id);assert.equal((await host.fetch(new Request(origin+'/'),env)).status,404);

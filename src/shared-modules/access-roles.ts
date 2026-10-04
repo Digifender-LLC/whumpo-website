@@ -22,7 +22,7 @@ const staffDeclared=(config:string)=>{try{const roles=JSON.parse(config)?.roles;
 
 function describe(r:Review){
  const expires=`Approval requires a recent sign-in. Review expires: ${new Date(r.expires_at*1000).toISOString()}`;
- if(r.action==='revoke')return `Review removing the staff role from visitor ${short(r.visitor_id)} in the “${r.local_id}” visitor access module\nIt takes effect at their next request and inside any change already in progress. They keep their visitor sign-in and private application data. Nothing else changes.\n${expires}`;
+ if(r.action==='revoke')return `Review removing the staff role from visitor ${short(r.visitor_id)} in the “${r.local_id}” visitor access module\nIt takes effect at their next request and inside any change already in progress. They keep their visitor sign-in and private data. Nothing else changes.\n${expires}`;
  return `Review granting the staff role to visitor ${short(r.visitor_id)} in the “${r.local_id}” visitor access module\nStaff can use only the staff views, staff-writable fields and staff file collections that your modules declare. Staff get no workspace sign-in, Chat, publishing, spending or account management, and you can remove the role at any time.\n${expires}`;
 }
 async function roleState(db:D1Database,instance:string,visitor:string){
@@ -40,7 +40,7 @@ export async function prepareAccessRoleCommand(db:D1Database,user:string,turn:st
  const row=(await registeredInstances(db,project)).find(r=>r.local_id===localId&&r.kind==='access');
  const state=row?await db.prepare('SELECT revision FROM module_access_states WHERE instance_id=?').bind(row.id).first<{revision:number}>():null;
  if(!row||!state||row.state===null)throw new ModuleError('not_found','This visitor access module has not been activated.');
- const target=await db.prepare('SELECT revoked FROM app_visitors WHERE id=? AND project_id=?').bind(visitor,project).first<{revoked:number}>();
+ const target=await db.prepare('SELECT revoked FROM app_visitors WHERE id=? AND project_id=? AND access_id=?').bind(visitor,project,row.id).first<{revoked:number}>();
  if(!target)throw new ModuleError('not_found','Visitor not found.');
  const current=await roleState(db,row.id,visitor);
  if(action==='grant'){

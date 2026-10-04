@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readdir,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
-import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
@@ -24,10 +24,14 @@ try{
   }
   return rawBackendAction(database,owner,turn,action,service);
  }
- const id=()=>crypto.randomUUID(),user=id(),foreign=id(),now=new Date().toISOString();let revision=0,calls=0;
+ const id=()=>crypto.randomUUID(),user=id(),foreign=id(),now=new Date().toISOString();let revision=100000,calls=0;
  for(const u of [user,foreign])await accountAuthority(u);
  const service={fetch:async(url,init)=>{calls++;assert.deepEqual(Object.keys(JSON.parse(init.body)),['version','source','input']);assert.equal(new Headers(init.headers).has('cookie'),false);return runtime.dispatchFetch(url,init);}};
- async function project(){const p=id();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Notebook','','draft',?,?)").bind(p,user,now,now).run();return p;}
+ // WH-126: an application consumes its project's visitor access module, saved and activated through the real owner
+ // path before any synthetic pending build turn exists (synthetic turns use revisions far above the owner's Chat).
+ async function plainProject(){const p=id();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Notebook','','draft',?,?)").bind(p,user,now,now).run();return p;}
+ const pool=[];for(let i=0;i<7;i++){const p=await plainProject();await enableFixtureVisitorAccess(scope(user),user,p);pool.push(p);}
+ async function project(){return pool.shift()??plainProject();}
  async function turn(){const t=id();await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Build a notebook','','2026-09-30T00:00:00.000Z','ai','pending')").bind(t,user,++revision).run();return t;}
  const action=p=>({kind:'backend',operation:'buildApplication',projectId:p,source:'export default ({state,input})=>({state:{note:input.note},result:"Saved"})',input:{state:{},input:{note:'Synthetic note'}},expected:{state:{note:'Synthetic note'},result:'Saved'}});
  const p=await project(),t=await turn(),a=action(p),built=await backendAction(scope(user),user,t,a,service);assert.match(built.reply,/Application review/);assert.match(built.reply,/Only you can apply/);assert.equal(calls,1);assert.deepEqual(built.statements,[]);
@@ -60,12 +64,12 @@ try{
  assert.match(await backendChatCommand(scope(user),user,id(),'/application-build '+concurrent)(),/Application review/);
  // Explicit owner approval remains necessary and historical reads cannot reapply it.
  await confirmApplication(scope(user),user,t);assert.match((await backendAction(scope(user),user,t,a,service)).reply,/Status: applied/);assert.equal(calls,3);
- await db.prepare('INSERT INTO app_visitors(id,project_id) VALUES(?,?)').bind(id(),p).run();const enrolled=await turn();await assert.rejects(backendAction(scope(user),user,enrolled,a,service),e=>e.status===409);assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(enrolled).first(),null);assert.equal(calls,3);
+ await db.prepare("INSERT INTO app_visitors(id,project_id,access_id) SELECT ?,?,id FROM module_instances WHERE project_id=? AND kind='access'").bind(id(),p,p).run();const enrolled=await turn();await assert.rejects(backendAction(scope(user),user,enrolled,a,service),e=>e.status===409);assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(enrolled).first(),null);assert.equal(calls,3);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
  // Complete Chat integration with a deterministic OpenAI-compatible response.
  {
   const chatUser=id(),chatProject=id(),chatTurn=id();await accountAuthority(chatUser);
-  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Notebook','Private notes','draft',?,?)").bind(chatProject,chatUser,now,now).run();
+  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Notebook','Private notes','draft',?,?)").bind(chatProject,chatUser,now,now).run();await enableFixtureVisitorAccess(scope(chatUser),chatUser,chatProject);
   const state=(await readChat(scope(chatUser),chatUser)).state,config={baseURL:'https://provider.example/v1',apiKey:'synthetic',model:'fixture'},before=calls;let modelCalls=0;
   const transport=async()=>{modelCalls++;const planId=await fixtureExtensionPlan(scope(chatUser),chatUser,chatProject,chatTurn,'custom.visitor-transition');return Response.json({choices:[{message:{content:JSON.stringify({reply:'Untrusted model assurance',action:{...action(chatProject),planId}})},finish_reason:'stop'}],usage:{prompt_tokens:1000,completion_tokens:200}});};
   const content='Build a private notebook app and test a synthetic note, then prepare my approval.';
@@ -76,7 +80,7 @@ try{
  }
  if(process.env.RUN_LIVE_MUSE==='1'){
   const liveUser=id(),liveTurn=id();let liveProject=id();await accountAuthority(liveUser);
-  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Private notebook','A private note per visitor','draft',?,?)").bind(liveProject,liveUser,now,now).run();
+  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Private notebook','A private note per visitor','draft',?,?)").bind(liveProject,liveUser,now,now).run();if(process.env.WELCOME_APP!=='1')await enableFixtureVisitorAccess(scope(liveUser),liveUser,liveProject);
   if(process.env.WELCOME_APP==='1'){
    await updateProfile(scope(liveUser),liveUser,{revision:0,name:'River',about_me:'Unshared lavender telescope',share_context:false});
    // Remove the setup fixture before welcome so it cannot bypass onboarding.

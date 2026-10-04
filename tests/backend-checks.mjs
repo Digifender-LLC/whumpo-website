@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
@@ -13,6 +13,7 @@ const service={fetch:async(url,init)=>{calls++;const payload=JSON.parse(init.bod
 try{
  await owner(user);const foreign=await owner();
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Checks','','draft',?,?)").bind(project,user,new Date().toISOString(),new Date().toISOString()).run();
+ await enableFixtureVisitorAccess(scope(user),user,project);
  await saveBackend(scope(user),user,project,version,'export default input=>input');
  const run=id(),input={state:{n:1},result:'saved'},expected={result:'saved',state:{n:1}};
  const passed=await testBackend(scope(user),service,user,project,version,run,input,{expected});assert.equal(passed.result.ok,true);assert.equal(passed.result.check.status,'passed');assert.equal(passed.result.check.expectedSHA256.length,64);assert.ok(!('expected' in passed.result.check));

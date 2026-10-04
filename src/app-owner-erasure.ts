@@ -3,8 +3,8 @@ const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 /** Owner-only sensitive control, never an agent tool. HTTP boundary requires recent sign-in. */
 export async function eraseRevokedVisitor(db:D1Database,user:string,project:string,visitor:string,input:Record<string,unknown>){
  if(!uuid.test(project)||!uuid.test(visitor)||typeof input.id!=='string'||!uuid.test(input.id)||input.confirmation!=='ERASE'||Object.keys(input).length!==2)throw new BackendError(400,'Choose the revoked visitor and type ERASE to confirm');
- const owner=await db.prepare('SELECT a.project_id FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=? AND a.owner_user_id=?').bind(project,user).first();
- if(!owner)throw new BackendError(404,'Application not found');
+ const owner=await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first();
+ if(!owner)throw new BackendError(404,'Project not found');
  const receipt=()=>db.prepare('SELECT id,user_id,project_id,visitor_id FROM app_owner_erasures WHERE id=?').bind(input.id).first<{id:string;user_id:string;project_id:string;visitor_id:string}>();
  const reply=(row:Awaited<ReturnType<typeof receipt>>)=>{
   if(!row)return null;

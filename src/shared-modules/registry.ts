@@ -7,6 +7,7 @@ import {featureRequest} from '../feature-inclusion';
 import {ModuleError,type ModulePrincipal} from './policy';
 import type {ModuleInstanceFacts} from './shape';
 import {collectionsExportHook} from './collections';
+import {accessRolesExportHook} from './access-export';
 
 /** WH-125 instance registry and scoped resolver. Deterministic: no inference, provider or network access.
  * The trusted module catalog, the saved specification and the registry rows are the only inputs. */
@@ -24,13 +25,15 @@ export const pin=(kind:ModuleKind,part:'module'|'schema',digest:string):ModulePi
 /** WH-071 descriptor v1 for one registered instance. Logical references only: no owner identifier, physical
  * locator or secret. A kind without a delivered export serializer keeps every data set `excluded` and no export hook.
  * WH-129: the content kind's `directories` data set is eligible project data exported by `collectionsExportHook`
- * (the existing `whumpo-directory` v1 serializer). Records, files and access serializers remain open (WH-127/128/126). */
-const exportHooks:{[K in ModuleKind]:string|null}={content:collectionsExportHook,records:null,files:null,access:null};
+ * (the existing `whumpo-directory` v1 serializer). WH-126: the access kind's `project-roles` data set is exported by
+ * `accessRolesExportHook`; its `visitor-identity` data set is visitor-subject data exported only with the visitor's own
+ * separate approval (their account export). Records and files serializers remain open (WH-127/128). */
+const exportHooks:{[K in ModuleKind]:string|null}={content:collectionsExportHook,records:null,files:null,access:accessRolesExportHook};
 export function moduleDescriptor(projectId:string,resourceId:string,instance:ModuleInstance,dependencies:{resourceId:string;module:ModulePin}[]){
  const subjects:Record<string,'project'|'visitor'>={directories:'project','module-records':'visitor','module-files':'visitor','visitor-identity':'visitor','project-roles':'project'};
  const exportHook=exportHooks[instance.kind];
  return {contractVersion:1,ref:{projectId,resourceId},kind:instance.kind,module:instance.module,schema:instance.schema,
-  ownership:{data:moduleKinds[instance.kind].lifecycleClasses.map(classId=>({id:classId,classId,subject:subjects[classId],export:exportHook?'eligible':'excluded'})),assets:[]},
+  ownership:{data:moduleKinds[instance.kind].lifecycleClasses.map(classId=>({id:classId,classId,subject:subjects[classId],export:!exportHook?'excluded':subjects[classId]==='visitor'?'separate-approval':'eligible'})),assets:[]},
   dependencies:dependencies.map(d=>({ref:{projectId,resourceId:d.resourceId},module:d.module})),
   lifecycle:{exportFormat:1,exportHook,deleteHook:'project-cascade',restoreHook:'unsupported',migrateHook:'migration-required',portability:'platform-only'}};
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {authenticator} from './app-authenticator.mjs';
-import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,enableFixtureVisitorAccess,setFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,scopes=new Map(),scope=user=>scopes.get(user);
@@ -12,8 +12,11 @@ async function app(){
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'App auth fixture','','draft',?,?)").bind(project,user,now(),now()).run();
  await saveBackend(scope(user),user,project,version,'export default ({state,input})=>({state:input,result:state})');
  await testBackend(scope(user),{fetch:()=>Response.json({ok:true,value:{state:{},result:{}}})},user,project,version,test,{state:{},input:{}});
+ // WH-126: visitor identity belongs to the project's access module instance; the application consumes it.
+ await enableFixtureVisitorAccess(scope(user),user,project);
  const a={...authority,user,project,version,test};await configure(a,'enable');return a;
 }
+const access=(a,action)=>setFixtureVisitorAccess(scope(a.user),a.user,a.project,action);
 async function configure(a,operation){const review=id();await prepareApplication(scope(a.user),a.user,a.project,review,operation,...(operation==='enable'?[a.version,a.test]:[null,null]));await confirmApplication(scope(a.user),a.user,review);}
 const begin=(a,kind='login',secret='')=>auth.appPasskeyOptions(db,a.project,kind,false,secret);
 const verify=(a,kind,options,response,database=db,session='')=>auth.appPasskeyVerify(database,a.project,kind,options.challengeToken,response,false,session);
@@ -63,9 +66,8 @@ try {
  await denied(verify(a,'signup',lostOptions,lostResponse,lossy));
  await denied(verify(a,'signup',lostOptions,lostResponse),400);
  opt=await begin(a);assert.ok((await verify(a,'login',opt,lostKey.assertion(opt.options))).session);
- // A configuration change invalidates even an otherwise valid signed assertion.
- opt=await begin(a);await configure(a,'enable');await denied(verify(a,'login',opt,key.assertion(opt.options,2)),409);
- const staleInvite=await auth.createAppInvitation(scope(a.user),a.user,a.project);opt=await begin(a,'signup',staleInvite.code);await configure(a,'enable');await denied(verify(a,'signup',opt,authenticator().registration(opt.options)),409);
+ // WH-126: re-authorizing the application no longer touches sign-in; identity belongs to the access instance.
+ opt=await begin(a);await configure(a,'enable');assert.equal((await verify(a,'login',opt,key.assertion(opt.options,2))).visitorId,registered.visitorId);
  // Recovery keeps the same private data and replaces every old credential/session.
  await data.transitionAppData(db,{fetch:()=>Response.json({ok:true,value:{state:{private:'saved'},result:true}})},signed.session,a.project,id(),0,{});
  await denied(auth.recoverAppVisitor(db,b.project,registered.recoveryCode),401);
@@ -94,10 +96,18 @@ try {
  // Expiration and disable/re-enable cannot replay old challenges or restore sessions.
  const exp=await begin(b);
  const expired=await db.prepare('DELETE FROM app_auth_challenges WHERE challenge=? RETURNING *').bind(exp.options.challenge).first();
- await db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,program_revision,challenge,kind,visitor_id,invite_hash,session_hash,expires_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(expired.token_hash,expired.project_id,expired.program_revision,expired.challenge,expired.kind,expired.visitor_id,expired.invite_hash,expired.session_hash,'2000-01-01T00:00:00.000Z').run();
+ await db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,access_id,activation_revision,challenge,kind,visitor_id,invite_hash,session_hash,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(expired.token_hash,expired.project_id,expired.access_id,expired.activation_revision,expired.challenge,expired.kind,expired.visitor_id,expired.invite_hash,expired.session_hash,'2000-01-01T00:00:00.000Z').run();
  await denied(verify(b,'login',exp,key.assertion(exp.options,3)),400);
- const disabled=await signup(b);opt=await begin(b);await configure(b,'disable');await denied(verify(b,'login',opt,disabled.key.assertion(opt.options)),404);await denied(data.readAppData(db,disabled.session,b.project),401);
- await configure(b,'enable');await denied(data.readAppData(db,disabled.session,b.project),401);
+ // Disabling the application keeps visitor sign-in (it belongs to the access instance) but stops document access.
+ const disabled=await signup(b);opt=await begin(b);await configure(b,'disable');assert.ok((await verify(b,'login',opt,disabled.key.assertion(opt.options))).session);await denied(data.readAppData(db,disabled.session,b.project),401);
+ await configure(b,'enable');assert.deepEqual(await data.readAppData(db,disabled.session,b.project),{revision:0,state:{}});
+ // Disabling the access instance signs every visitor out and cancels sign-ins; re-activation never revives a session,
+ // challenge or invitation from before (they bind the activation revision).
+ const beforeInvite=await auth.createAppInvitation(scope(b.user),b.user,b.project);opt=await begin(b);await access(b,'disable');
+ await denied(verify(b,'login',opt,disabled.key.assertion(opt.options,2)),400);await denied(data.readAppData(db,disabled.session,b.project),401);
+ await denied(begin(b),404);await denied(auth.createAppInvitation(scope(b.user),b.user,b.project),409);
+ await access(b,'activate');await denied(data.readAppData(db,disabled.session,b.project),401);await denied(begin(b,'signup',beforeInvite.code),403);
+ opt=await begin(b);assert.equal((await verify(b,'login',opt,disabled.key.assertion(opt.options,3))).visitorId,disabled.visitorId);
  // Counterless authenticators still use a database revision to serialize sign-ins.
  const zero=await signup(b),zeroOptions=await Promise.all([begin(b),begin(b)]);
  let arrived=0,release;const gate=new Promise(resolve=>release=resolve);
@@ -190,12 +200,13 @@ try {
  const rendered=await appHost.fetch(new Request(pageURL),{...env,ASSETS:assets});assert.equal(rendered.status,200);assert.match(rendered.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.ok(!rendered.headers.get('content-security-policy').includes('unsafe-inline'));
  assert.equal((await appHost.fetch(new Request('https://whumpo.com/apps/'+d.project+'/'),{...env,ASSETS:assets})).status,404);
  assert.equal((await appHost.fetch(new Request('https://whumpo.site/index.html'),{...env,ASSETS:assets})).status,404);
- // Hide the page after signature verification but before session issuance.
- const dInvite=await auth.createAppInvitation(scope(d.user),d.user,d.project),dOptions=await auth.appPasskeyOptions(db,d.project,'signup',false,dInvite.code,reviewOne),dKey=authenticator(),hide=id();
+ // WH-126: hiding the page during enrollment no longer cancels it; the identity belongs to the access instance, while
+ // the hidden page's application surface (host page, config and document routes) is unavailable.
+ const dInvite=await auth.createAppInvitation(scope(d.user),d.user,d.project),dOptions=await auth.appPasskeyOptions(db,d.project,'signup',false,dInvite.code),dKey=authenticator(),hide=id();
  await pages.prepareAppPage(scope(d.user),d.user,d.project,hide,null);
  const hideDuringCommit=new Proxy(db,{get(target,name){if(name==='batch')return async statements=>{await pages.confirmAppPage(scope(d.user),d.user,hide);return target.batch(statements);};const value=target[name];return typeof value==='function'?value.bind(target):value;}});
- await denied(auth.appPasskeyVerify(hideDuringCommit,d.project,'signup',dOptions.challengeToken,dKey.registration(dOptions.options),false,'',reviewOne));
- assert.equal((await db.prepare('SELECT count(*) n FROM app_visitors WHERE project_id=?').bind(d.project).first()).n,0);
+ assert.ok((await auth.appPasskeyVerify(hideDuringCommit,d.project,'signup',dOptions.challengeToken,dKey.registration(dOptions.options),false)).session);
+ assert.equal((await db.prepare('SELECT count(*) n FROM app_visitors WHERE project_id=?').bind(d.project).first()).n,1);
  assert.equal((await appHost.fetch(new Request(pageURL),{...env,ASSETS:assets})).status,404);
  await pages.confirmAppPage(scope(d.user),d.user,reviewOne);assert.equal(await pages.liveAppPage(db,d.project),null);
  const publishAgain=id();await pages.prepareAppPage(scope(d.user),d.user,d.project,publishAgain,form);await pages.confirmAppPage(scope(d.user),d.user,publishAgain);
@@ -203,14 +214,15 @@ try {
  const revokePage=id();await pages.prepareAppPage(scope(d.user),d.user,d.project,revokePage,null);
  const interrupted=await data.transitionAppData(db,{fetch:async()=>{await pages.confirmAppPage(scope(d.user),d.user,revokePage);return Response.json({ok:true,value:{state:{note:'must not commit'},result:'done'}});}},liveVisitor.session,d.project,transitionId,0,{note:'test'});
  assert.equal(interrupted.state,'conflict');assert.equal((await db.prepare('SELECT revision FROM app_documents WHERE visitor_id=?').bind(liveVisitor.visitorId).first()).revision,0);
- await denied(data.readAppData(db,liveVisitor.session,d.project),401);
+ // The withdrawn page rejected the in-flight change; the visitor's sign-in (access instance) is unchanged.
+ assert.deepEqual(await data.readAppData(db,liveVisitor.session,d.project),{revision:0,state:{}});
  // A lost recovery acknowledgment remains recoverable with the code saved first.
  const recoveryVisitor=await signup(a),nonce='7'.repeat(64),savedFirst=await replacementAppRecoveryCode(recoveryVisitor.recoveryCode,nonce);
- await denied(auth.recoverAppVisitor(lossy,a.project,recoveryVisitor.recoveryCode,null,nonce));
- const rescued=await auth.recoverAppVisitor(db,a.project,savedFirst,null,'8'.repeat(64));assert.equal(rescued.visitorId,recoveryVisitor.visitorId);
- await denied(auth.recoverAppVisitor(db,a.project,recoveryVisitor.recoveryCode,null,nonce),401);
- console.log('App visitor auth passed: real signed passkeys, origin/UV/project separation, single-use challenges/invites, concurrent enrollment, epoch guards, private data, recovery rotation, credential race, owner revocation, disabled-app denial and hashed secrets.');
+ await denied(auth.recoverAppVisitor(lossy,a.project,recoveryVisitor.recoveryCode,nonce));
+ const rescued=await auth.recoverAppVisitor(db,a.project,savedFirst,'8'.repeat(64));assert.equal(rescued.visitorId,recoveryVisitor.visitorId);
+ await denied(auth.recoverAppVisitor(db,a.project,recoveryVisitor.recoveryCode,nonce),401);
+ console.log('App visitor auth passed: real signed passkeys, origin/UV/project separation, single-use challenges/invites, concurrent enrollment, epoch guards, private data, recovery rotation, credential race, owner revocation, application disable keeping access sign-in, access-instance disable signing out without reviving old challenges/invitations/sessions, and hashed secrets.');
  console.log('App gateway passed: host isolation, HttpOnly secure project cookies, browser challenge binding, bounded JSON, origin/rate checks, no CORS, private state/receipts, idempotent retry, recovery and logout. Handler tests do not establish live deployment availability.');
  console.log('Owner access routes passed: authenticated metadata, foreign-owner/CSRF/recent-session denial, single-display invitations, cancellation during enrollment, irreversible revocation and disabled-app management.');
- console.log('Application pages passed: strict form schema, owner-only approval, competing reviews, AI confirmation denial, controlled host/CSP, hidden-page denial, stale sign-in rollback, historical replay and in-flight transition revocation.');
+ console.log('Application pages passed: strict form schema, owner-only approval, competing reviews, AI confirmation denial, controlled host/CSP, hidden-page denial, enrollment independent of the page, historical replay and in-flight transition rejection when the page changes.');
 } finally {await store.close();}

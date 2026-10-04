@@ -12,6 +12,7 @@ const project=await fixture.firstProject(cookie,'Counter application','A simple 
 const version=crypto.randomUUID(),run=crypto.randomUUID();const path='/api/projects/'+project;
 await fixture.seedBackend(project,version,'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:"Count saved"})',cookie);
 const tested=await post(path+'/backends/'+version+'/test',{id:run,input:{state:{},input:{add:2}}});assert.equal(tested.status,200);assert.deepEqual((await tested.json()).result,{ok:true,value:{state:{count:2},result:'Count saved'}});
+await fixture.seedVisitorAccess(cookie,project);
 const id=crypto.randomUUID(),review='/api/application-reviews/'+id;
 assert.equal((await fetch(base+path+'/application')).status,401);
 assert.equal((await post(path+'/application',{id,operation:'enable',versionId:version,runId:run},'https://evil.test')).status,403);
