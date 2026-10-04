@@ -1,0 +1,12 @@
+<!-- @dsCard group="Actions" height=80 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Button — preview</title></head>
+<body>
+<div id="root"></div>
+<script>
+  var W = window.Whumpo, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h("div",{className:"wh-row"},h(W.Button,{variant:"primary"},"Approve and continue"),h(W.Button,{icon:"globe"},"Connect domain"),h(W.Button,{variant:"quiet"},"Not now"),h(W.Button,{variant:"primary",size:"sm",icon:"spark"},"Build it"),h(W.Button,{disabled:true},"Disabled")));
+</script>
+</body>
+</html>
