@@ -1,42 +1,223 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "Example Detailing",
-  "design": {"theme": "ocean"},
+  "design": {
+    "theme": "ocean"
+  },
   "modules": [
-    {"id": "content", "version": 2},
-    {"id": "records", "version": 1},
-    {"id": "files", "version": 1},
-    {"id": "access", "version": 1},
-    {"id": "notifications", "version": 1},
-    {"id": "automation", "version": 1}
+    {
+      "id": "content",
+      "version": 2
+    },
+    {
+      "id": "notifications",
+      "version": 1
+    },
+    {
+      "id": "automation",
+      "version": 1
+    }
   ],
   "content": [
-    {"id": "headline", "text": "A fresh start for your car."},
-    {"id": "introduction", "text": "A synthetic mobile-detailing business for contract verification."},
-    {"id": "about-title", "text": "Care, wherever you park."},
-    {"id": "about-text", "text": "Explore our example service packages and request an appointment."},
-    {"id": "hours-title", "text": "Business hours"},
-    {"id": "hours", "text": "Monday to Friday, 9am to 5pm."},
-    {"id": "services-title", "text": "Our services"},
-    {"id": "services", "text": "Interior refresh. Exterior detail. Full vehicle care."}
+    {
+      "id": "headline",
+      "text": "A fresh start for your car."
+    },
+    {
+      "id": "introduction",
+      "text": "A synthetic mobile-detailing business for contract verification."
+    },
+    {
+      "id": "about-title",
+      "text": "Care, wherever you park."
+    },
+    {
+      "id": "about-text",
+      "text": "Explore our example service packages and request an appointment."
+    },
+    {
+      "id": "hours-title",
+      "text": "Business hours"
+    },
+    {
+      "id": "hours",
+      "text": "Monday to Friday, 9am to 5pm."
+    },
+    {
+      "id": "services-title",
+      "text": "Our services"
+    },
+    {
+      "id": "services",
+      "text": "Interior refresh. Exterior detail. Full vehicle care."
+    }
   ],
-  "pages": [{
-    "id": "home", "path": "/", "component": "site-page@1", "audience": "public", "photos": [],
-    "headline": "headline", "description": "introduction",
-    "aboutTitle": "about-title", "aboutText": "about-text",
-    "sections": [{"heading": "hours-title", "text": "hours"}, {"heading": "services-title", "text": "services"}]
-  }],
-  "records": [{
-    "id": "appointments", "schemaVersion": 1, "read": "staff", "write": "staff",
-    "fields": [
-      {"key": "name", "label": "Your name", "type": "text"},
-      {"key": "service", "label": "Service", "type": "choice", "options": [{"value": "inside", "label": "Interior refresh"}, {"value": "outside", "label": "Exterior detail"}]},
-      {"key": "details", "label": "Anything we should know?", "type": "text", "optional": true}
-    ]
-  }],
-  "forms": [{"id": "appointment-request", "recordId": "appointments", "title": "Request an appointment", "description": "Send a request; this does not reserve a timeslot.", "buttonLabel": "Send request", "submit": "visitor", "uploadCollectionId": "vehicle-photos"}],
-  "files": [{"id": "vehicle-photos", "read": "owner", "upload": "visitor", "maxBytes": 1048576, "mimeTypes": ["image/jpeg", "image/png"]}],
-  "access": {"roles": ["staff"]},
-  "integrations": [{"id": "team-email", "capability": "email.staff"}],
+  "pages": [
+    {
+      "id": "home",
+      "path": "/",
+      "component": "site-page@1",
+      "audience": "public",
+      "photos": [],
+      "headline": "headline",
+      "description": "introduction",
+      "aboutTitle": "about-title",
+      "aboutText": "about-text",
+      "sections": [
+        {
+          "heading": "hours-title",
+          "text": "hours"
+        },
+        {
+          "heading": "services-title",
+          "text": "services"
+        }
+      ]
+    }
+  ],
+  "instances": [
+    {
+      "id": "team",
+      "kind": "access",
+      "module": {
+        "name": "module-access",
+        "version": 1,
+        "digest": "aeb82b9532da01daa87c6ffe41e27f23f632df918be8288d915fa45f1e969df2"
+      },
+      "schema": {
+        "name": "access-data",
+        "version": 1,
+        "digest": "02a6604b0be2ad8414cfb3dfa3865e152f17b8829e6f41bf71ce01685eabd122"
+      },
+      "dependencies": [],
+      "config": {
+        "roles": [
+          "staff"
+        ],
+        "enrollment": "invitation"
+      }
+    },
+    {
+      "id": "vehicle-photos",
+      "kind": "files",
+      "module": {
+        "name": "module-files",
+        "version": 1,
+        "digest": "fdf8c7e14ae36468e514c3b2fc07bb31dfe43e3c730cb58e611a4c0139fba117"
+      },
+      "schema": {
+        "name": "files-data",
+        "version": 1,
+        "digest": "9fb9c402dfb8319789958afc9f089e5f103b3568e78e121201ded2e65528a9ad"
+      },
+      "dependencies": [
+        "team"
+      ],
+      "config": {
+        "collections": [
+          {
+            "id": "vehicle-photos",
+            "read": "owner",
+            "upload": [
+              "visitor"
+            ],
+            "maxBytes": 1048576,
+            "mediaTypes": [
+              "image/jpeg"
+            ],
+            "gallery": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "appointments",
+      "kind": "records",
+      "module": {
+        "name": "module-records",
+        "version": 1,
+        "digest": "07d587dafd4fb1748d28beeacb93905d8dd9c15a1b49ecc6bbcbfd2af72be791"
+      },
+      "schema": {
+        "name": "records-data",
+        "version": 1,
+        "digest": "a4ad8fdf727ac1fb3476badabb952c0c21e4806ce6a4d203428b64c1ff5f9cb9"
+      },
+      "dependencies": [
+        "team",
+        "vehicle-photos"
+      ],
+      "config": {
+        "retentionDays": 90,
+        "schemas": [
+          {
+            "id": "appointments",
+            "fieldsRevision": 1,
+            "staffWrite": [],
+            "fields": [
+              {
+                "key": "name",
+                "label": "Your name",
+                "type": "text",
+                "optional": false,
+                "read": "staff"
+              },
+              {
+                "key": "service",
+                "label": "Service",
+                "type": "choice",
+                "optional": false,
+                "read": "staff",
+                "options": [
+                  {
+                    "value": "inside",
+                    "label": "Interior refresh"
+                  },
+                  {
+                    "value": "outside",
+                    "label": "Exterior detail"
+                  }
+                ]
+              },
+              {
+                "key": "details",
+                "label": "Anything we should know?",
+                "type": "text",
+                "optional": true,
+                "read": "owner"
+              }
+            ]
+          }
+        ],
+        "forms": [
+          {
+            "id": "appointment-request",
+            "recordId": "appointments",
+            "submit": "visitor",
+            "uploadCollectionId": "vehicle-photos"
+          }
+        ],
+        "views": [
+          {
+            "id": "queue",
+            "recordId": "appointments",
+            "audience": "staff",
+            "scope": "all",
+            "fields": [
+              "name",
+              "service"
+            ],
+            "limit": 50
+          }
+        ]
+      }
+    }
+  ],
+  "integrations": [
+    {
+      "id": "team-email",
+      "capability": "email.staff"
+    }
+  ],
   "rules": []
 }

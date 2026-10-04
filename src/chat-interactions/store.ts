@@ -3,7 +3,7 @@ import {assertWorkspace} from '../workspace-identity/admission';
 import {featurePredicate,assertFeature} from '../feature-admission';
 import {canonicalJSON,jsonDigest,copyJSON} from '../project-specification/v2/json';
 import {readSpecification} from '../project-specification/store';
-import type {ProjectSpecification} from '../project-specification/v2/types';
+import type {ProjectSpecification} from '../project-specification/v3/types';
 import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers,validateDefinition,isFieldVisible} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';

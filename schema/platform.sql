@@ -4108,12 +4108,12 @@ WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 
 BEGIN SELECT RAISE(ABORT,'specification_receipt_retained'); END;
 
 CREATE TRIGGER project_spec_current_proposal BEFORE INSERT ON project_spec_proposals BEGIN
- SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 2 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 2;
- SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=NEW.project_id AND json_extract(v.spec_json,'$.schemaVersion')=2 AND h.draft_revision=NEW.draft_revision);
+ SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 3;
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=NEW.project_id AND json_extract(v.spec_json,'$.schemaVersion')=3 AND h.draft_revision=NEW.draft_revision);
 END;
 
 CREATE TRIGGER project_spec_version_admit BEFORE INSERT ON project_spec_versions BEGIN
- SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 2 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 2;
+ SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 3;
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
   SELECT 1 FROM project_spec_proposals q JOIN site_versions v ON v.id=NEW.version_id AND v.project_id=q.project_id
   JOIN projects p ON p.id=q.project_id AND p.owner_user_id=q.user_id
@@ -4141,7 +4141,7 @@ CREATE TRIGGER project_spec_creation_admit BEFORE INSERT ON project_spec_creatio
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=1
   AND NEW.id=NEW.version_id AND v.version_id=NEW.version_id AND s.source='ai'
   AND NOT EXISTS(SELECT 1 FROM project_spec_heads WHERE project_id=p.id)
-  AND json_extract(v.spec_json,'$.schemaVersion')=2 AND json_extract(v.lock_json,'$.compiler.version')=2
+  AND json_extract(v.spec_json,'$.schemaVersion')=3 AND json_extract(v.lock_json,'$.compiler.version')=3
  );
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=NEW.version_id);
 END;

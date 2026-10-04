@@ -86,7 +86,7 @@ Deployed to the test platform September 29, 2026: migration `0073_welcome_onboar
 
 ## Additional projects through Chat
 
-Current source creates additional projects through the agent's bounded `project` action. Project, first schema-2 website specification, rendered snapshot and creation receipt commit together. Further changes use exact specification reviews; publication remains separate. The retired idea/name/style Chat state machine, `/new`, `/skip`, `/build` and direct photo writers are removed. Guided welcome remains the first-project entry flow.
+Current source creates additional projects through the agent's bounded `project` action. Project, first schema-3 website specification, rendered snapshot and creation receipt commit together. Further changes use exact specification reviews; publication remains separate. The retired idea/name/style Chat state machine, `/new`, `/skip`, `/build` and direct photo writers are removed. Guided welcome remains the first-project entry flow.
 
 Private audience/style notes remain planning context and never enter source exports automatically. The current draft compiler requires an explicit supported theme and `photos` array. Saved versions must carry the current compiler identity; no old page importer or downgrade renderer is available.
 

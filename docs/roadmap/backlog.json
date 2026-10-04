@@ -6897,10 +6897,10 @@
         "docs/shared-modules.md",
         "docs/project-specification.md",
         "docs/project-specification-compiler.md",
-        "src/project-specification/v2/schema.ts",
+        "src/project-specification/v3/schema.ts",
         "docs/data-lifecycle.json"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/157",
       "owner": null,
       "evidence": []
     },

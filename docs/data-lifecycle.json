@@ -2517,6 +2517,141 @@
         "WH-069",
         "WH-074"
       ]
+    },
+    {
+      "id": "module-records",
+      "tables": [],
+      "scope": "visitor",
+      "purpose": "WH-067 records module values: public/visitor/staff form submissions and staff-updated fields for owner-configured record schemas (schema 3 `records` instances). The fixed contact inbox keeps the `contacts` class until WH-127 wraps it.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation. Specification schema 3 can describe this configuration; nothing stores or serves it yet.",
+      "proposedRetention": "Owner decision of October 4, 2026 (recorded on #107): each records instance sets `retentionDays`, default 90 days, owner-selectable 30, 90 or 365 days, maximum 365 days, counted from submission. General records never inherit the 30-day contact window silently. Shortening applies at the next expiry pass; lengthening requires the specification permissions review. Account or project closure deletes ordinary records; active safety holds and restricted preservation override deletion until released.",
+      "deletionAuthority": "Owner exact record removal, instance disable and expiry; verified visitor privacy requests limited to their own records. Safety holds and restricted preservation are checked first; closure never transfers records to another account.",
+      "exportPolicy": "Separate-approval visitor-subject export from the owner dashboard only; never default profile export, agent/model context, Chat history or the public site source ZIP.",
+      "references": [
+        "docs/shared-modules.md",
+        "src/project-specification/v3/modules.ts",
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md",
+        "docs/contact-forms.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Owner dashboard records panel through scoped module handlers; current staff only for staff-readable fields; a visitor only their own submitter-readable fields. Visitor-submitted values never enter owner Chat, model context or Chat history."
+        ],
+        "processors": [
+          "Deterministic module validation and admission (Turnstile, Origin/body bounds, atomic caps for public forms) and WH-052 form.accepted events; zero maintainer inference."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Registered by WH-124 before any table so the WH-067 module slices cannot create unclassified visitor data or a second authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-127"
+      ]
+    },
+    {
+      "id": "module-files",
+      "tables": [],
+      "scope": "mixed",
+      "purpose": "WH-067 files module uploads by owners, staff or visitors into configured collections and galleries, extending `project-media` handling (cleaned JPEG up to 1 MiB, private R2, pending safety receipt per upload).",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation. Specification schema 3 can describe this configuration; nothing stores or serves it yet.",
+      "proposedRetention": "Retain approved objects until owner reviewed removal, collection removal by reviewed migration or test reset, or account/project closure; uploads stay held until exact-digest safety approval and held objects follow safety preservation. Cleanup reuses the project-media queue once WH-128 registers storage.",
+      "deletionAuthority": "Owner exact removal review plus safety hold check; the cleanup worker performs only previously authorized object deletion. Visitors and staff have no delete or publish operation.",
+      "exportPolicy": "Approved JPEG bytes and safe metadata only, with separate approval for visitor-subject uploads; never R2 keys, held content or scanner references.",
+      "references": [
+        "docs/shared-modules.md",
+        "src/project-specification/v3/modules.ts",
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md",
+        "docs/photos.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Owner after current safety approval; current staff or the submitting visitor only as the collection read/gallery policy allows; bytes re-hashed on delivery. Object keys, names and prefixes never authorize."
+        ],
+        "processors": [
+          "Bounded JPEG cleaning, create-only private R2 writes and D1 reservations; scanner integration remains owner-deferred; zero maintainer inference."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Registered by WH-124 before any table so the WH-067 module slices cannot create unclassified visitor data or a second authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-128"
+      ]
+    },
+    {
+      "id": "project-roles",
+      "tables": [],
+      "scope": "mixed",
+      "purpose": "WH-067 access module role grants, revocations and owner role reviews binding the project `staff` role to project visitor identities. Distinct from WH-054 workspace memberships; a staff role grants no workspace session.",
+      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation. Specification schema 3 can describe this configuration; nothing stores or serves it yet.",
+      "proposedRetention": "Current grants retained while the access instance and visitor exist; revocation takes effect at the next decision. Revoked grant and review receipts are bounded audit metadata decided in WH-126 and are never reinstated by restore. Account or project closure deletes grants.",
+      "deletionAuthority": "Owner exact role grant/revoke review and instance disable; visitor erasure revokes their grants. No staff self-service role change.",
+      "exportPolicy": "Owner role list with opaque IDs and dates in the project export; no visitor credentials, passkey material or recovery codes.",
+      "references": [
+        "docs/shared-modules.md",
+        "src/project-specification/v3/modules.ts",
+        "docs/data-protection.md",
+        "docs/roadmap/backlog.json",
+        "docs/inference-privacy.md",
+        "docs/app-data.md"
+      ],
+      "storageStatus": "planned",
+      "protection": {
+        "profile": "planned-adapter",
+        "storage": [
+          "not-admitted"
+        ],
+        "readers": [
+          "Owner role panel and the access module policy check; a staff member sees only their own role through access.me."
+        ],
+        "processors": [
+          "Deterministic role review and revision checks inside committing statements; zero maintainer inference."
+        ],
+        "remainingExposure": [
+          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+        ],
+        "decision": "planned-adapter",
+        "rationale": "Registered by WH-124 before any table so the WH-067 module slices cannot create unclassified visitor data or a second authority.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      },
+      "implementationPackets": [
+        "WH-126"
+      ]
     }
   ],
   "protectionContract": "docs/data-protection.md",

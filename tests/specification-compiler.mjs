@@ -8,53 +8,126 @@ import {checkSpecificationCompiler} from '../tools/check-specification-compiler.
 Error.stackTraceLimit=0;
 
 const checked=await checkSpecificationCompiler();
-const bundle=await build({stdin:{contents:`export * from './src/project-specification/compiler';export * from './src/project-specification/v2/schema';export * from './src/project-specification/v2/json';export {siteConfig,renderSite,renderPhotoPage} from './src/components';export {backendFormConfig} from './src/backend-form-config';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false});
+const bundle=await build({stdin:{contents:`export * from './src/project-specification/compiler';export * from './src/project-specification/catalog';export * from './src/project-specification/v3/schema';export {moduleKinds,recordsRetention,classifyModuleChange} from './src/project-specification/v3/modules';export * from './src/project-specification/v2/json';export {siteConfig,renderSite,renderPhotoPage} from './src/components';export {backendFormConfig} from './src/backend-form-config';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].contents).toString('base64'));
 const detailing=JSON.parse(await readFile('tests/fixtures/project-specification/detailing.json','utf8'));
 const clone=value=>structuredClone(value),hash=text=>createHash('sha256').update(text).digest('hex');
 const lock=m.currentCompilerLock();
-const content={...clone(detailing),modules:[{id:'content',version:2}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};
+const content={...clone(detailing),modules:[{id:'content',version:2}],instances:[],integrations:[],rules:[]};
 const rejects=(fn,code)=>assert.throws(fn,error=>error instanceof m.SpecificationError&&error.code===code,code);
 const rejectsAsync=(fn,code)=>assert.rejects(fn,error=>error instanceof m.SpecificationError&&error.code===code,code);
+const instance=(spec,id)=>spec.instances.find(i=>i.id===id);
+const records=s=>instance(s,'appointments').config,files=s=>instance(s,'vehicle-photos').config.collections[0],access=s=>instance(s,'team').config;
 let networkCalls=0;
 let expectedManifestDigest;
 const fetch=globalThis.fetch;globalThis.fetch=async()=>{networkCalls++;throw Error('Compiler attempted network/inference.');};
 try{
  assert.deepEqual(m.validateSpecification(content),content);
+ assert.deepEqual(m.validateSpecification(detailing),detailing);
  const decoded=m.validateSpecification(detailing);decoded.content[0].text='Mutable return';assert.notEqual(detailing.content[0].text,decoded.content[0].text);
+ // The fixture carries the exact trusted pins; a compiler identity cutover must update it, never a fallback.
+ for(const i of detailing.instances){const entry=m.moduleCatalog.find(e=>e.kind===i.kind);assert.deepEqual(i.module,entry.module);assert.deepEqual(i.schema,entry.schema);}
+ assert.deepEqual(m.moduleCatalog.map(e=>[e.kind,e.module.name,e.schema.name,e.state]),Object.entries(m.moduleKinds).map(([kind,n])=>[kind,n.module,n.schema,'available']));
  const negatives=[
   ['UNKNOWN_FIELD',s=>{s.ownerId='synthetic-private-marker';}],
   ['UNKNOWN_FIELD',s=>{s.design.css='synthetic-private-marker';}],
   ['UNKNOWN_FIELD',s=>{s.integrations[0].apiKey='synthetic-private-marker';}],
   ['MISSING_FIELD',s=>{delete s.name;}],
   ['UNSUPPORTED_VERSION',s=>{s.schemaVersion=1;}],
+  // Schema 2 is retired: no reader, conversion or fallback, even with its old library sections.
+  ['UNSUPPORTED_VERSION',s=>{s.schemaVersion=2;}],
+  ['UNSUPPORTED_VERSION',s=>{s.schemaVersion=2;delete s.instances;Object.assign(s,{records:[],forms:[],files:[],access:{roles:[]}});}],
+  ['UNKNOWN_FIELD',s=>{s.records=[];}],
+  ['UNKNOWN_FIELD',s=>{s.access={roles:['staff']};}],
   ['UNSUPPORTED_VERSION',s=>{s.modules[0].version=1;}],
   ['UNKNOWN_MODULE',s=>{s.modules[0].id='downloaded-module';}],
+  ['UNKNOWN_MODULE',s=>{s.modules[1]={id:'records',version:1};}],
   ['UNSUPPORTED_VERSION',s=>{s.pages[0].component='site-page@2';}],
-  ['INCOMPATIBLE',s=>{s.modules=s.modules.filter(m=>m.id!=='access');}],
+  ['INCOMPATIBLE',s=>{s.modules=s.modules.filter(m=>m.id!=='notifications');}],
   ['DUPLICATE_ID',s=>{s.pages.push(clone(s.pages[0]));}],
   ['DUPLICATE_ID',s=>{s.content.push(clone(s.content[0]));}],
+  ['DUPLICATE_ID',s=>{s.instances.push(clone(s.instances[0]));}],
   ['INVALID_SHAPE',s=>{s.content.push(null);}],
   ['MISSING_REFERENCE',s=>{s.pages[0].headline='missing';}],
   ['INCOMPATIBLE',s=>{s.pages[0].path='/api';}],
   ['INCOMPATIBLE',s=>{s.pages[0].path='/../secret';}],
-  ['INCOMPATIBLE',s=>{s.records[0].fields.push({key:'constructor',label:'Reserved',type:'text'});}],
-  ['INCOMPATIBLE',s=>{s.records[0].fields.push(clone(s.records[0].fields[0]));}],
-  ['INCOMPATIBLE',s=>{s.records[0].read='owner';}],
-  ['INCOMPATIBLE',s=>{s.files[0].read='public';}],
-  ['INCOMPATIBLE',s=>{s.files[0].mimeTypes=['image/jpeg','image/jpeg'];}],
-  ['INVALID_NUMBER',s=>{s.files[0].maxBytes=5*1024*1024+1;}],
-  ['INCOMPATIBLE',s=>{s.forms[0].submit='public';}],
-  ['MISSING_REFERENCE',s=>{s.forms[0].recordId='missing';}],
-  ['INCOMPATIBLE',s=>{s.forms[0].uploadCollectionId='missing';}],
   ['INVALID_TEXT',s=>{s.content[0].text='x'.repeat(1001);}],
   ['INVALID_TEXT',s=>{s.content[0].text='bad\u0000text';}],
   ['INVALID_ID',s=>{s.content[0].id='prototype';}],
+  // Records configuration reuses the bounded form field validator.
+  ['INCOMPATIBLE',s=>{records(s).schemas[0].fields.push({key:'constructor',label:'Reserved',type:'text',optional:true,read:'owner'});}],
+  ['INCOMPATIBLE',s=>{records(s).schemas[0].fields.push(clone(records(s).schemas[0].fields[0]));}],
+  ['INCOMPATIBLE',s=>{records(s).schemas[0].fields[0].type='number';records(s).schemas[0].fields[0].optional=true;}],
+  ['UNSUPPORTED_FIELD',s=>{records(s).schemas[0].fields[0].type='sql';}],
+  ['UNKNOWN_FIELD',s=>{records(s).schemas[0].fields[0].options=[];}],
+  ['INVALID_LIST',s=>{records(s).schemas[0].fields=Array.from({length:9},(_,n)=>({key:'field'+n,label:'Field',type:'text',optional:true,read:'owner'}));}],
+  ['UNSUPPORTED_RETENTION',s=>{records(s).retentionDays=400;}],
+  ['UNSUPPORTED_RETENTION',s=>{records(s).retentionDays=7;}],
+  // Media: cleaned JPEG up to 1 MiB only.
+  ['UNSUPPORTED_MEDIA',s=>{files(s).mediaTypes=['image/jpeg','image/png'];}],
+  ['UNSUPPORTED_MEDIA',s=>{files(s).mediaTypes=['image/png'];}],
+  ['INVALID_NUMBER',s=>{files(s).maxBytes=1048577;}],
+  ['INVALID_NUMBER',s=>{files(s).maxBytes=5*1024*1024;}],
+  // Public read audiences are absent; public exposure happens only through publication reviews.
+  ['INVALID_AUDIENCE',s=>{files(s).read='public';}],
+  ['INVALID_AUDIENCE',s=>{files(s).upload=['public'];}],
+  ['INVALID_AUDIENCE',s=>{files(s).gallery={audience:'public'};}],
+  ['INVALID_AUDIENCE',s=>{records(s).schemas[0].fields[0].read='public';}],
+  ['INVALID_AUDIENCE',s=>{records(s).views[0].audience='public';}],
+  ['INVALID_AUDIENCE',s=>{records(s).forms[0].submit='anyone';}],
+  // Roles: staff only; workspace roles are not project roles.
+  ['UNSUPPORTED_ROLE',s=>{access(s).roles=['admin'];}],
+  ['UNSUPPORTED_ROLE',s=>{access(s).roles=['editor'];}],
+  ['INVALID_LIST',s=>{access(s).roles=['staff','staff'];}],
+  ['UNSUPPORTED_ENROLLMENT',s=>{access(s).enrollment='open';}],
+  // Over-wide projections.
+  ['FIELD_FORBIDDEN',s=>{records(s).views[0].fields.push('details');}],
+  ['FIELD_FORBIDDEN',s=>{records(s).views.push({id:'mine',recordId:'appointments',audience:'visitor',scope:'own',fields:['name'],limit:10});}],
+  ['INVALID_SCOPE',s=>{records(s).schemas[0].fields[0].read='submitter';records(s).views.push({id:'mine',recordId:'appointments',audience:'visitor',scope:'all',fields:['name'],limit:10});}],
+  ['INVALID_NUMBER',s=>{records(s).views[0].limit=51;}],
+  ['FIELD_FORBIDDEN',s=>{files(s).gallery={audience:'staff'};}],
+  ['INVALID_AUDIENCE',s=>{records(s).schemas[0].staffWrite=['details'];}],
+  ['MISSING_REFERENCE',s=>{records(s).schemas[0].staffWrite=['missing'];}],
+  // Missing access dependencies and references.
+  ['MISSING_DEPENDENCY',s=>{instance(s,'vehicle-photos').dependencies=[];}],
+  ['MISSING_DEPENDENCY',s=>{instance(s,'appointments').dependencies=['vehicle-photos'];}],
+  ['MISSING_DEPENDENCY',s=>{instance(s,'appointments').dependencies=['team'];}],
+  ['MISSING_DEPENDENCY',s=>{access(s).roles=[];}],
+  ['MISSING_DEPENDENCY',s=>{s.instances=s.instances.map(i=>i.kind==='access'?{...i,config:{...i.config,roles:[]}}:i);instance(s,'appointments').config.views=[];instance(s,'appointments').config.schemas[0].fields.forEach(f=>{f.read='submitter';});}],
+  ['MISSING_REFERENCE',s=>{instance(s,'appointments').dependencies=['team','missing'];}],
+  ['INCOMPATIBLE',s=>{instance(s,'vehicle-photos').dependencies=['team','appointments'];}],
+  ['INCOMPATIBLE',s=>{s.instances.push({...clone(instance(s,'team')),id:'second-team'});}],
+  ['MISSING_REFERENCE',s=>{records(s).forms[0].recordId='missing';}],
+  ['MISSING_REFERENCE',s=>{records(s).forms[0].uploadCollectionId='missing';}],
+  ['INCOMPATIBLE',s=>{records(s).forms[0].submit='public';}],
+  ['INCOMPATIBLE',s=>{records(s).forms[0].submit='staff';}],
+  ['MISSING_REFERENCE',s=>{s.rules.push({id:'tell',trigger:{type:'form.accepted',formId:'missing'},effect:{type:'notification.send',integrationId:'team-email',recipient:'staff',template:'submission-link@1'}});}],
+  ['INCOMPATIBLE',s=>{records(s).schemas[0].fields.forEach(f=>{f.read='owner';});records(s).views=[];s.rules.push({id:'tell',trigger:{type:'form.accepted',formId:'appointment-request'},effect:{type:'notification.send',integrationId:'team-email',recipient:'staff',template:'submission-link@1'}});}],
+  // Exact pins and closed instance envelopes.
+  ['MODULE_MISMATCH',s=>{instance(s,'appointments').module.name='module-files';}],
+  ['SCHEMA_MISMATCH',s=>{instance(s,'appointments').schema.name='files-data';}],
+  ['UNSUPPORTED_VERSION',s=>{instance(s,'appointments').module.version=2;}],
+  ['INVALID_NUMBER',s=>{instance(s,'appointments').module.version='latest';}],
+  ['INVALID_DIGEST',s=>{instance(s,'appointments').schema.digest='latest';}],
+  ['UNSUPPORTED_KIND',s=>{instance(s,'appointments').kind='custom-function';}],
+  ['UNKNOWN_FIELD',s=>{files(s).bucket='private-files';}],
+  ['UNKNOWN_FIELD',s=>{files(s).prefix='staff/';}],
+  ['UNKNOWN_FIELD',s=>{instance(s,'appointments').compatibility={readSchemas:[]};}],
+  ['UNSUPPORTED_COLLECTION',s=>{s.instances.push({id:'directory',kind:'content',module:clone(m.moduleCatalog.find(e=>e.kind==='content').module),schema:clone(m.moduleCatalog.find(e=>e.kind==='content').schema),dependencies:[],config:{collections:[{id:'directory',type:'booking@1'}]}});}],
  ];
  for(const [code,mutate] of negatives){
   const value=clone(detailing);mutate(value);rejects(()=>m.validateSpecification(value),code);
   assert.throws(()=>m.validateSpecification(value),error=>!error.message.includes('synthetic-private-marker'));
  }
+ // Staff upload and staff write are expressible configuration (not serving).
+ const staffWork=clone(detailing);
+ Object.assign(files(staffWork),{read:'staff',upload:['staff'],gallery:{audience:'staff'}});
+ records(staffWork).schemas[0].fields.push({key:'status',label:'Status',type:'choice',optional:false,read:'staff',options:[{value:'new',label:'New'},{value:'done',label:'Done'}]});
+ records(staffWork).schemas[0].staffWrite=['status'];records(staffWork).forms[0].submit='staff';records(staffWork).views[0].fields.push('status');
+ assert.deepEqual(m.validateSpecification(staffWork),staffWork);
+ const own=clone(detailing);records(own).schemas[0].fields[0].read='submitter';records(own).views.push({id:'mine',recordId:'appointments',audience:'visitor',scope:'own',fields:['name'],limit:10});m.validateSpecification(own);
+ const contactLike={...clone(content),instances:[{id:'messages',kind:'records',module:clone(instance(detailing,'appointments').module),schema:clone(instance(detailing,'appointments').schema),dependencies:[],config:{retentionDays:30,schemas:[{id:'message',fieldsRevision:1,staffWrite:[],fields:[{key:'message',label:'Message',type:'text',optional:false,read:'owner'}]}],forms:[{id:'contact',recordId:'message',submit:'public',uploadCollectionId:null}],views:[]}}]};
+ m.validateSpecification(contactLike); // Public intake to owner-only fields needs no access instance.
  const big=clone(content);big.content=Array.from({length:40},(_,n)=>({id:'copy-'+n,text:'x'.repeat(1000)}));rejects(()=>m.validateSpecification(big),'INPUT_TOO_LARGE');
  let deep={};for(let n=0;n<33;n++)deep={nested:deep};rejects(()=>m.validateSpecification(deep),'INPUT_TOO_DEEP');
  const cycle={};cycle.self=cycle;rejects(()=>m.canonicalJSON(cycle),'INPUT_TOO_DEEP');
@@ -66,27 +139,71 @@ try{
  rejects(()=>m.canonicalJSON('x'.repeat(32769)),'INPUT_TOO_LARGE');
 
  const rule={id:'tell-the-team',trigger:{type:'form.accepted',formId:'appointment-request'},effect:{type:'notification.send',integrationId:'team-email',recipient:'staff',template:'submission-link@1'}};
+ const put=mutate=>{const next=clone(detailing);mutate(next);return [{type:'modules.put',instance:instance(next,mutate.id??'appointments')}];};
+ const putFiles=mutate=>{const next=clone(detailing);mutate(next);return [{type:'modules.put',instance:instance(next,'vehicle-photos')}];};
+ const optional={key:'vehicle',label:'Your vehicle',type:'text',optional:true,read:'owner'};
  const operationBatches=[
   [{type:'content.replace',contentId:'hours',text:'Monday to Saturday, 8am to 6pm.'}],
   [{type:'design.setTheme',theme:'clay'}],
-  [{type:'records.addField',recordId:'appointments',field:{key:'vehicle',label:'Your vehicle',type:'text',optional:true}}],
-  [{type:'files.setPolicy',collectionId:'vehicle-photos',read:'staff',upload:'visitor'}],
+  [{type:'records.addField',instanceId:'appointments',schemaId:'appointments',field:optional}],
+  putFiles(s=>{files(s).read='staff';}),
   [{type:'pages.setAudience',pageId:'home',audience:'staff'}],
   [{type:'rules.put',rule}],
  ];
  for(const operations of operationBatches)assert.notDeepEqual(m.changeSpecification(detailing,operations).spec,detailing);
- assert.deepEqual(m.changeSpecification(detailing,operationBatches[2]).reviews,['schema']);
- assert.deepEqual(m.changeSpecification(detailing,operationBatches[3]).reviews,['permissions']);
+ const classify=operations=>{const r=m.changeSpecification(detailing,operations);return [r.reviews,r.migration];};
+ // Optional additions are additive-optional; fieldsRevision advances and stored records report the field as absent.
+ assert.deepEqual(classify(operationBatches[2]),[['schema'],'additive-optional']);
+ assert.equal(records(m.changeSpecification(detailing,operationBatches[2]).spec).schemas[0].fieldsRevision,2);
+ assert.deepEqual(classify([{type:'records.addField',instanceId:'appointments',schemaId:'appointments',field:{...optional,read:'staff'}}]),[['permissions','schema'],'additive-optional']);
+ assert.deepEqual(classify(put(s=>{records(s).schemas[0].fields.push(optional);records(s).schemas[0].fieldsRevision=2;})),[['schema'],'additive-optional']);
+ rejects(()=>m.changeSpecification(detailing,put(s=>{records(s).schemas[0].fields.push(optional);})),'INCOMPATIBLE');
+ // Permission widening classifies a permissions review; narrowing and labels need none.
+ assert.deepEqual(classify(operationBatches[3]),[['permissions'],'none']);
+ for(const widen of [
+  put(s=>{records(s).retentionDays=365;}),put(s=>{records(s).schemas[0].fields[2].read='staff';}),put(s=>{records(s).schemas[0].staffWrite=['name'];}),
+  put(s=>{records(s).views.push({id:'all',recordId:'appointments',audience:'staff',scope:'all',fields:['service'],limit:10});}),
+  put(s=>{records(s).forms.push({id:'walk-in',recordId:'appointments',submit:'public',uploadCollectionId:null});}),
+  putFiles(s=>{files(s).upload=['visitor','staff'];}),
+  [{type:'modules.put',instance:{...clone(instance(detailing,'vehicle-photos')),config:{collections:[files(detailing),{id:'staff-files',read:'staff',upload:['staff'],maxBytes:1048576,mediaTypes:['image/jpeg'],gallery:null}]}}}],
+ ])assert.ok(classify(widen)[0].includes('permissions'),JSON.stringify(widen));
+ assert.deepEqual(classify(put(s=>{records(s).retentionDays=30;})),[[],'none']);
+ assert.deepEqual(classify(put(s=>{records(s).views[0].fields=['name'];})),[[],'none']);
+ assert.deepEqual(classify(put(s=>{records(s).schemas[0].fields[0].label='Full name';})),[[],'none']);
+ assert.deepEqual(classify(put(s=>{records(s).schemas[0].fields[0].read='owner';records(s).views[0].fields=['service'];})),[[],'none']);
+ assert.deepEqual(classify([{type:'modules.put',instance:{id:'directory',kind:'content',module:clone(m.moduleCatalog.find(e=>e.kind==='content').module),schema:clone(m.moduleCatalog.find(e=>e.kind==='content').schema),dependencies:[],config:{collections:[{id:'directory',type:'directory-listing@1'}]}}}]),[['schema'],'none']);
+ // Required, removed, renamed and retyped fields, removed collections and pin changes need a reviewed migration hook.
+ for(const field of [{...optional,optional:false},{key:'vehicle',label:'Vehicle',type:'text',read:'owner'}])rejects(()=>m.changeSpecification(detailing,[{type:'records.addField',instanceId:'appointments',schemaId:'appointments',field}]),'MIGRATION_REQUIRED');
+ for(const migration of [
+  put(s=>{records(s).schemas[0].fields.push({...optional,optional:false});records(s).schemas[0].fieldsRevision=2;}),
+  put(s=>{records(s).schemas[0].fields.pop();}),
+  put(s=>{records(s).schemas[0].fields[2].key='notes';}),
+  put(s=>{Object.assign(records(s).schemas[0].fields[2],{type:'number',optional:false});}),
+  put(s=>{records(s).schemas[0].fields[2].optional=false;}),
+  put(s=>{records(s).schemas[0].fields[1].options[1].value='exterior';}),
+  put(s=>{records(s).schemas[0].id='bookings';records(s).forms[0].recordId='bookings';records(s).views[0].recordId='bookings';}),
+  put(s=>{instance(s,'appointments').module.digest='0'.repeat(64);}),
+  (()=>{const s=clone(detailing);files(s).id='car-photos';records(s).forms[0].uploadCollectionId='car-photos';return [{type:'modules.put',instance:instance(s,'vehicle-photos')},{type:'modules.put',instance:instance(s,'appointments')}];})(),
+ ])rejects(()=>m.changeSpecification(detailing,migration),'MIGRATION_REQUIRED');
+ rejects(()=>m.changeSpecification(detailing,[{type:'records.addField',instanceId:'appointments',schemaId:'appointments',field:{...optional,key:'name'}}]),'INCOMPATIBLE');
+ rejects(()=>m.changeSpecification(detailing,[{type:'records.addField',instanceId:'vehicle-photos',schemaId:'appointments',field:optional}]),'INCOMPATIBLE');
+ rejects(()=>m.changeSpecification(detailing,[{type:'records.addField',instanceId:'missing',schemaId:'appointments',field:optional}]),'MISSING_REFERENCE');
  assert.deepEqual(m.changeSpecification(detailing,operationBatches[5]).reviews,['integration','spending']);
+ assert.deepEqual(m.changeSpecification(detailing,operationBatches[4]).reviews,['permissions']);
  const unchanged=clone(detailing);
  rejects(()=>m.changeSpecification(detailing,[...operationBatches[0],{type:'database.execute',sql:'synthetic-private-marker'}]),'UNSUPPORTED_OPERATION');assert.deepEqual(detailing,unchanged);
- for(const field of [{key:'vehicle',label:'Vehicle',type:'text'},{key:'vehicle',label:'Vehicle',type:'number',optional:true}])rejects(()=>m.changeSpecification(detailing,[{type:'records.addField',recordId:'appointments',field}]),'MIGRATION_REQUIRED');
- rejects(()=>m.changeSpecification(detailing,[{type:'records.addField',recordId:'appointments',field:{key:'name',label:'Duplicate',type:'text',optional:true}}]),'INCOMPATIBLE');
- for(const type of ['records.removeField','records.renameField','json.patch','module.install','resources.provision','publish','billing.spend'])rejects(()=>m.changeSpecification(detailing,[{type}]),'UNSUPPORTED_OPERATION');
+ for(const type of ['records.removeField','records.renameField','files.setPolicy','modules.remove','json.patch','module.install','resources.provision','publish','billing.spend'])rejects(()=>m.changeSpecification(detailing,[{type}]),'UNSUPPORTED_OPERATION');
  for(const type of ['maintainer.chat','model.complete','shell.run','webhook.call']){const bad=clone(rule);bad.effect.type=type;rejects(()=>m.changeSpecification(detailing,[{type:'rules.put',rule:bad}]),'INCOMPATIBLE');}
  rejects(()=>m.changeSpecification(detailing,[]),'INVALID_LIST');
  rejects(()=>m.changeSpecification(detailing,Array(9).fill(operationBatches[0][0])),'INVALID_LIST');
  rejects(()=>m.changeSpecification(detailing,[{type:'design.setTheme',theme:'ocean'}]),'NO_CHANGE');
+ rejects(()=>m.changeSpecification(detailing,put(()=>{})),'NO_CHANGE');
+
+ // Retention is the owner decision of October 4, 2026 (#107); docs and lifecycle class must quote the one constant.
+ const days=m.recordsRetention.allowedDays,choices=`${days.slice(0,-1).join(', ')} or ${days.at(-1)} days`;
+ const recordsClass=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')).classes.find(c=>c.id==='module-records'),sharedDoc=await readFile('docs/shared-modules.md','utf8');
+ for(const text of [recordsClass.proposedRetention,sharedDoc])for(const phrase of [`default ${m.recordsRetention.defaultDays} days`,choices,`maximum ${m.recordsRetention.maxDays} days`])assert.ok(text.includes(phrase),phrase);
+ assert.ok(days.includes(m.recordsRetention.defaultDays)&&Math.max(...days)===m.recordsRetention.maxDays);
 
  const output=await m.compileProjectSpecification(content,lock);
  expectedManifestDigest=output.manifestDigest;
@@ -101,14 +218,21 @@ try{
  function reorder(value){if(Array.isArray(value))return value.map(reorder);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,reorder(v)]));return value;}
  assert.deepEqual(await m.compileProjectSpecification(reorder(content),reorder(lock)),output);
  const mutableLock=m.currentCompilerLock();mutableLock.modules.length=0;assert.deepEqual(m.currentCompilerLock(),lock);
- for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
+ for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
  const available=[lock.compiler,...lock.modules,...lock.components].map(a=>({...a,state:'available'}));
  m.assertCompilerAvailable(lock,available);
  for(let n=0;n<available.length;n++){const withdrawn=clone(available);withdrawn[n].state='withdrawn';rejects(()=>m.assertCompilerAvailable(lock,withdrawn),'COMPILER_UNAVAILABLE');}
  rejects(()=>m.assertCompilerAvailable(lock,[]),'COMPILER_UNAVAILABLE');
+ // Module configuration is admitted against exact trusted pins, then remains unserved until WH-125 activation.
  await rejectsAsync(()=>m.compileProjectSpecification(detailing,lock),'UNAVAILABLE_CAPABILITY');
- const staff={...clone(content),modules:[...content.modules,{id:'access',version:1}],access:{roles:['staff']}};staff.pages[0].audience='staff';await rejectsAsync(()=>m.compileProjectSpecification(staff,lock),'UNSUPPORTED_DELIVERY');
- const unused={...clone(content),modules:[...content.modules,{id:'records',version:1}]};await rejectsAsync(()=>m.compileProjectSpecification(unused,lock),'UNAVAILABLE_CAPABILITY');
+ const stale=clone(detailing);instance(stale,'appointments').module.digest='0'.repeat(64);await rejectsAsync(()=>m.compileProjectSpecification(stale,lock),'STALE_MODULE_VERSION');
+ const staleSchema=clone(detailing);instance(staleSchema,'team').schema.digest='f'.repeat(64);rejects(()=>m.assertModulesAvailable(staleSchema,m.moduleCatalog),'STALE_MODULE_VERSION');
+ assert.deepEqual(m.assertModulesAvailable(detailing,m.moduleCatalog),detailing);
+ for(const kind of ['records','files','access']){const withdrawn=m.moduleCatalog.map(e=>e.kind===kind?{...e,state:'withdrawn'}:e);rejects(()=>m.assertModulesAvailable(detailing,withdrawn),'MODULE_UNAVAILABLE');m.assertModulesAvailable(content,withdrawn);}
+ rejects(()=>m.assertModulesAvailable(detailing,[]),'MODULE_UNAVAILABLE');
+ const staff={...clone(content),instances:[clone(instance(detailing,'team'))]};staff.pages[0].audience='staff';await rejectsAsync(()=>m.compileProjectSpecification(staff,lock),'UNSUPPORTED_DELIVERY');
+ const unused={...clone(content),instances:[clone(instance(detailing,'team'))]};await rejectsAsync(()=>m.compileProjectSpecification(unused,lock),'UNAVAILABLE_CAPABILITY');
+ const retired={...clone(content),schemaVersion:2,records:[],forms:[],files:[],access:{roles:[]}};delete retired.instances;await rejectsAsync(()=>m.compileProjectSpecification(retired,lock),'UNSUPPORTED_VERSION');
 
  const four=clone(content);four.pages=Array.from({length:4},(_,n)=>({...clone(four.pages[0]),id:'page-'+n,path:n?'/page-'+n:'/'}));
  for(const theme of ['ocean','clay','forest']){
@@ -126,7 +250,7 @@ try{
  m.validateSpecification(dense);
  const denseOutput=await m.compileProjectSpecification(dense,lock);assert.ok(denseOutput.artifacts[0].bytes>30000&&denseOutput.artifacts[0].bytes<=32768);
  const change=await m.compileSpecificationChange(content,operationBatches[0],lock);assert.equal(change.baseDigest,output.specificationDigest);assert.notEqual(change.nextDigest,change.baseDigest);assert.deepEqual(change.requiredReviews,[]);assert.ok(change.compiled.artifacts[0].html.includes('Monday to Saturday'));assert.equal(change.diff[0].path,'/content');assert.deepEqual(content,unchangedContent());
- function unchangedContent(){return {...clone(detailing),modules:[{id:'content',version:2}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};}
+ function unchangedContent(){return {...clone(detailing),modules:[{id:'content',version:2}],instances:[],integrations:[],rules:[]};}
 
  const page=m.projectPage(content,'home'),created=await m.compileNewWebsite(page);
  assert.equal(created.artifacts[0].html,output.artifacts[0].html);
@@ -152,14 +276,14 @@ try{
  const missing=clone(content);delete missing.pages[0].photos;rejects(()=>m.validateSpecification(missing),'MISSING_FIELD');
  const {photos:omitted,...oldInput}=page;await assert.rejects(m.compileNewWebsite(oldInput));
  assert.equal(networkCalls,0);
- console.log('Compiler fixtures passed: current schema validation, detached edits and review classes, incompatible migrations rejected, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
+ console.log('Compiler fixtures passed: schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
 }finally{globalThis.fetch=fetch;}
 
 // A second checkout/process proves input-path independence and that the build gate
 // rejects source/constant drift without rewriting any working-tree file.
 const dir=await mkdtemp('/tmp/whumpo-compiler-lock-');
 try{
- const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v2.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
+ const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v3.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
  for(const path of paths){await mkdir(dirname(join(dir,path)),{recursive:true});await copyFile(path,join(dir,path));}
  await symlink(resolve('node_modules'),join(dir,'node_modules'),'dir');
  const run=args=>spawnSync(process.execPath,['tools/check-specification-compiler.mjs',...args],{cwd:dir,encoding:'utf8'});

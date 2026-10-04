@@ -4,7 +4,7 @@
 
 ## Customer flow
 
-**October 1 current test deployment:** new websites are created directly as schema-2 specifications with `project-content@2`. Old page import, `preview`/`edit` action aliases and the private `/new`/`build`/`photo` guided writers are removed. The current onboarding brief and explicitly requested additional-project creation remain supported.
+**October 1 current test deployment:** new websites are created directly as schema-2 specifications with `project-content@2`. Old page import, `preview`/`edit` action aliases and the private `/new`/`build`/`photo` guided writers are removed. The current onboarding brief and explicitly requested additional-project creation remain supported. **WH-124 source cutover (October 4, not deployed):** new websites are created as schema-3 specifications with `project-content@3` and empty `instances`; schema-2 rows are refused by SQL admission and test databases are reset at the coordinated empty-database cutover. The single-homepage adapter, `content@2` and page components are unchanged and refuse module instances.
 
 1. The agent calls `specification` operation `create` for an owned project with no website, using the current plain-text config and required photo array. The first page, specification, photo references and creation receipt commit together. Creating a new project and its first page uses that same transaction builder.
 2. A later natural-language change reads the saved specification/revision, then proposes `change`. Text, theme, name, ordered sections and approved photo references are supported. The owner opens the private preview and complete before/after comparison.

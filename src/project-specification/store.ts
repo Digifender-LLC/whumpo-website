@@ -5,7 +5,7 @@ import {contentRiskPolicyVersion} from '../content-risk';
 import {requireSpecificationAvailable} from '../specification-safety';
 import {compileProjectSpecification,compileSpecificationChange,currentCompilerLock,compileNewWebsite} from './compiler';
 import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from './v2/json';
-import {projectPage} from './v2/schema';
+import {projectPage} from './v3/schema';
 import {requireSpecificationPhotos,inlineSpecificationPhotos} from '../specification-photos';
 import {assertFeature} from '../feature-admission';
 import {readSpecificationReviewDisplay} from './review-display';
