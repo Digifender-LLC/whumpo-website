@@ -1,3 +1,4 @@
+import {ownerLibrarySQL} from './photo-safety';
 import {inspectTraffic} from './workspace-observations';
 import {FeatureInclusionError} from './feature-inclusion';
 import {serviceClientActivationAction} from './project-specification/service-clients/activation';
@@ -49,7 +50,7 @@ export async function siteContext(db:D1Database,userId:string):Promise<AgentCont
  const {results:projectIndex}=await db.prepare('SELECT id,name,details_revision,service_status AS status,site_live,backend_live,cms_articles FROM project_service_status WHERE owner_user_id=? ORDER BY updated_at DESC,id DESC LIMIT 20').bind(userId).all<AgentContext['projectIndex'][number]>();
  const {results:projects}=await db.prepare('SELECT id,name,purpose,details_revision,service_status AS status,site_live,backend_live,cms_articles,audience,style_notes,preferred_theme FROM project_service_status WHERE owner_user_id=? ORDER BY updated_at DESC,id DESC LIMIT 5').bind(userId).all<ProjectContext>();
  const latest=await db.prepare('SELECT v.id,v.project_id,v.component_id,v.config_json FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE p.owner_user_id=? AND NOT EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=v.id) ORDER BY v.created_at DESC,v.id DESC LIMIT 1').bind(userId).first<AgentContext['latest']>();
- const {results:photos}=await db.prepare("SELECT f.id,f.project_id,f.name,f.width,f.height FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND f.status='ready' ORDER BY f.created_at DESC LIMIT 20").bind(userId).all<AgentContext['photos'][number]>();
+ const {results:photos}=await db.prepare(`SELECT f.id,f.project_id,f.name,f.width,f.height FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND f.status='ready' AND ${ownerLibrarySQL} ORDER BY f.created_at DESC LIMIT 20`).bind(userId).all<AgentContext['photos'][number]>();
  const {results:domains}=await db.prepare('SELECT d.id,d.project_id,d.hostname,d.expires_at,d.verified_at FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE p.owner_user_id=? ORDER BY d.created_at DESC LIMIT 10').bind(userId).all<NonNullable<AgentContext['domains']>[number]>();
  const {results:backends}=await db.prepare('SELECT v.id,v.project_id,v.digest FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE p.owner_user_id=? ORDER BY v.created_at DESC,v.id DESC LIMIT 10').bind(userId).all<NonNullable<AgentContext['backends']>[number]>();
  const interactions=(await listInteractions(db,userId,{version:1,projectId:null,limit:5,before:null})).items;

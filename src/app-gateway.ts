@@ -12,7 +12,7 @@ import {publicClientKey,reservePublicClient,PublicClientLimitError} from './publ
 import {verifyTurnstile} from './turnstile';
 import type {AuthenticationResponseJSON,RegistrationResponseJSON} from '@simplewebauthn/server';
 
-type AppEnv = Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'|'TURNSTILE_SECRET'>;
+type AppEnv = Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'|'TURNSTILE_SECRET'> & {FILES?:R2Bucket};
 const uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const route=new RegExp(`^/apps/(${uuid})/(.+)$`);
 const headers={
@@ -38,6 +38,15 @@ async function body(request:Request):Promise<Record<string,unknown>>{
  const bytes=new Uint8Array(size);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}
  let value:unknown;try{value=JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(bytes));}catch{throw new BackendError(400,'Provide valid JSON');}
  if(value===null||typeof value!=='object'||Array.isArray(value))throw new BackendError(400,'Provide a JSON object');return value as Record<string,unknown>;
+}
+
+async function jpegBody(request:Request){
+ if(request.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='image/jpeg')throw new BackendError(415,'Use a prepared JPEG for this upload');
+ if(Number(request.headers.get('content-length')??0)>1048576)throw new BackendError(413,'Files must be at most 1 MiB');
+ const reader=request.body?.getReader();if(!reader)throw new BackendError(400,'Choose a file');
+ const parts:Uint8Array[]=[];let size=0;
+ while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576){await reader.cancel();throw new BackendError(413,'Files must be at most 1 MiB');}parts.push(value);}
+ const bytes=new Uint8Array(size);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}return bytes;
 }
 
 // Not mounted on the platform owner origin. A controlled visitor-host entry point
@@ -66,11 +75,35 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
   if(method==='GET'&&deletionStatus)return json(await readAppDeletion(env.DB,session,project,deletionStatus[1],Number(deletionStatus[2])));
   // WH-126 shared module requests (whumpo-modules v1), same-origin POST only. The principal is derived solely from this
   // project's visitor session cookie (never a workspace cookie); module serving checks the instance's own activation.
+  // WH-128 module uploads: one cleaned-JPEG body (at most 1 MiB, streamed with a hard bound) with the whumpo-modules v1
+  // envelope in the whumpo-module-request header (base64url JSON). Only files.putBytes is accepted here, and
+  // files.putBytes is accepted nowhere else; storage keys are chosen by the server.
+  if(path==='modules/upload'){
+   if(method!=='POST')return json({error:'Not found'},404);
+   try{
+    const header=request.headers.get('whumpo-module-request')??'';
+    if(!header||header.length>4096||!/^[A-Za-z0-9_-]+$/.test(header))throw new ModuleError('invalid_request');
+    let decoded:unknown;try{decoded=JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(Uint8Array.from(atob(header.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))));}catch{throw new ModuleError('invalid_request');}
+    const envelope=moduleRequest(decoded);
+    if(envelope.operation!=='files.putBytes')throw new ModuleError('invalid_request');
+    const upload=await jpegBody(request);
+    const principal=await visitorPrincipal(env.DB,session,project,envelope.resourceId)??{kind:'public' as const,projectId:project};
+    return json(await handleModuleRequest(env.DB,principal,envelope,undefined,{files:env.FILES,upload}));
+   }catch(cause){if(cause instanceof ModuleError)return json(cause.body(),cause.status);throw cause;}
+  }
   if(path==='modules'){
    if(method!=='POST')return json({error:'Not found'},404);
    try{
     const envelope=moduleRequest(await body(request));
+    if(envelope.operation==='files.putBytes')throw new ModuleError('invalid_request','Upload files through the module upload route.');
     const principal=await visitorPrincipal(env.DB,session,project,envelope.resourceId)??{kind:'public' as const,projectId:project};
+    if(envelope.operation==='files.read'){
+     // Approved, re-hashed JPEG bytes only; sandboxed, never cached and same-origin.
+     const read=await handleModuleRequest(env.DB,principal,envelope,undefined,{files:env.FILES});
+     const bytes=(read.result as {bytes?:unknown}).bytes;
+     if(!(bytes instanceof Uint8Array))throw new ModuleError('unavailable');
+     return new Response(bytes,{headers:{'content-type':'image/jpeg','content-length':String(bytes.length),'content-disposition':'inline; filename="file.jpg"','cache-control':'private, no-store','content-security-policy':"sandbox; default-src 'none'",'x-content-type-options':'nosniff','referrer-policy':'no-referrer','cross-origin-resource-policy':'same-origin','x-frame-options':'DENY'}});
+    }
     return json(await handleModuleRequest(env.DB,principal,envelope,undefined,{publicAdmission:async()=>{
      // WH-127 anonymous public form intake reuses the contact form's admission: deployed environments fail closed
      // without the Turnstile secret, one connection gets the contact allowance per project per UTC day (shared with the

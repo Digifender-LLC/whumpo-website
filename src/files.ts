@@ -2,7 +2,7 @@ import {FileError,cleanPhoto,maxPhotoBytes} from './photo-format';
 import {assertWorkspace} from './workspace-identity/admission';
 import type {PhotoUploadStatus,PhotoHandoff} from './photo-upload-shape';
 import {parsePhotoHandoff,admitPhotoHandoff,photoUploadGuards,closedPhotoHandoff} from './chat-interactions/photo-handoff';
-import {approvedPhotoSQL,photoSafetySQL,photoBytesMatch} from './photo-safety';
+import {approvedPhotoSQL,photoSafetySQL,photoBytesMatch,ownerLibrarySQL} from './photo-safety';
 import { reserveStorage, StorageLimitError } from './storage-budget';
 async function bodyBytes(request:Request){
  if(request.headers.get('content-type')?.split(';')[0]!=='image/jpeg')throw new FileError(415,'Prepared JPEG photos are required');
@@ -47,7 +47,7 @@ export async function uploadPhoto(request:Request,env:Pick<Env,'DB'|'FILES'>,use
 }
 export async function listPhotos(db:D1Database,userId:string,projectId:string){
  if(!(await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(projectId,userId).first()))throw new FileError(404,'Project not found');
- const {results}=await db.prepare(`SELECT f.id,f.name,f.size,f.width,f.height,f.status,f.created_at,${photoSafetySQL} AS safetyStatus,(SELECT COUNT(*) FROM version_photos WHERE file_id=f.id) AS saved_versions FROM project_files f WHERE f.project_id=? ORDER BY f.created_at DESC,f.id DESC LIMIT 50`).bind(projectId).all();return {files:results};
+ const {results}=await db.prepare(`SELECT f.id,f.name,f.size,f.width,f.height,f.status,f.created_at,${photoSafetySQL} AS safetyStatus,(SELECT COUNT(*) FROM version_photos WHERE file_id=f.id) AS saved_versions FROM project_files f WHERE f.project_id=? AND ${ownerLibrarySQL} ORDER BY f.created_at DESC,f.id DESC LIMIT 50`).bind(projectId).all();return {files:results};
 }
 /** Readback of an exact private upload, including unconfirmed reservations. Never reads R2. */
 export async function readPhotoUpload(db:D1Database,userId:string,projectId:string,id:string,handoff:PhotoHandoff|null=null):Promise<PhotoUploadStatus>{

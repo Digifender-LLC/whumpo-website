@@ -473,3 +473,49 @@ CREATE TRIGGER module_record_event_admit BEFORE INSERT ON module_record_events B
   ELSE EXISTS(SELECT 1 FROM module_records WHERE id=NEW.entry_id) END;
 END;
 CREATE TRIGGER module_record_event_immutable BEFORE UPDATE ON module_record_events BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;
+
+-- WH-128 files and galleries module (docs/shared-modules.md#files-and-galleries-module-wh-128--october-4-2026-utc).
+-- A module upload is an ordinary project photo row (project_files: cleaned JPEG up to 1 MiB, create-only private R2
+-- object under photos/, project/account/platform quotas, pending safety receipt written by project_photo_safety_insert,
+-- exact-digest approval view, safety holds and the cleanup queue) plus this 1:1 row naming its files instance,
+-- collection and uploader. Upload authority is the collection's role policy, repeated here and in the engine's receipt
+-- predicate; names, object keys and prefixes are never consulted. Module uploads are not part of the owner's Chat/model
+-- photo library (lifecycle class module-files). Written only beside the engine's request receipt.
+CREATE TABLE module_files (
+ file_id TEXT PRIMARY KEY REFERENCES project_files(id) ON DELETE CASCADE,
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ collection_id TEXT NOT NULL CHECK(length(collection_id) BETWEEN 1 AND 40 AND collection_id NOT GLOB '*[^a-z0-9-]*'),
+ uploader_kind TEXT NOT NULL CHECK(uploader_kind IN ('staff','visitor')),
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id),
+ request_id TEXT NOT NULL CHECK(length(request_id)=36),
+ created_at INTEGER NOT NULL CHECK(created_at>0),
+ UNIQUE(instance_id,request_id)
+) STRICT;
+CREATE INDEX module_files_collection ON module_files(instance_id,collection_id,created_at DESC,file_id DESC);
+CREATE INDEX module_files_visitor ON module_files(visitor_id,instance_id,created_at);
+CREATE INDEX module_files_project ON module_files(project_id);
+
+CREATE TRIGGER module_file_admit BEFORE INSERT ON module_files BEGIN
+ SELECT RAISE(ABORT,'module_request_unavailable') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id AND a.state='active'
+  WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.kind='files'
+  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.collections') c WHERE json_extract(c.value,'$.id')=NEW.collection_id
+   AND EXISTS(SELECT 1 FROM json_each(c.value,'$.upload') u WHERE u.value=NEW.uploader_kind)));
+ SELECT RAISE(ABORT,'module_request_stale') WHERE abs(NEW.created_at-unixepoch())>60 OR NOT EXISTS(SELECT 1 FROM project_files f
+  WHERE f.id=NEW.file_id AND f.project_id=NEW.project_id AND f.status='ready' AND f.handoff_json='null' AND f.object_key='photos/'||NEW.project_id||'/'||NEW.file_id||'.jpg');
+ SELECT RAISE(ABORT,'module_request_forbidden') WHERE NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=0)
+  OR NEW.uploader_kind='staff' AND NOT EXISTS(SELECT 1 FROM module_access_roles r JOIN module_instances i ON i.id=NEW.instance_id
+   WHERE r.visitor_id=NEW.visitor_id AND r.role='staff' AND r.state='granted' AND r.instance_id IN (SELECT value FROM json_each(i.dependencies_json)));
+ SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_files WHERE visitor_id=NEW.visitor_id AND instance_id=NEW.instance_id AND created_at>unixepoch()-3600)>=10;
+END;
+CREATE TRIGGER module_file_immutable BEFORE UPDATE ON module_files BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;
+-- A visitor's reviewed erasure (or owner erasure) removes their uploads with them: the photo rows go first, which
+-- queues their objects for cleanup and cascades this table; held files refuse the delete (safety_hold_file_retained).
+CREATE TRIGGER module_file_visitor_erased BEFORE DELETE ON app_visitors BEGIN
+ DELETE FROM project_files WHERE id IN (SELECT file_id FROM module_files WHERE visitor_id=OLD.id);
+END;
+-- Removing a files instance (only possible with its project today) removes its uploads as photo rows too, so they are
+-- never left behind as owner library photos; held files refuse the delete.
+CREATE TRIGGER module_file_instance_removed BEFORE DELETE ON module_instances WHEN OLD.kind='files' BEGIN
+ DELETE FROM project_files WHERE id IN (SELECT file_id FROM module_files WHERE instance_id=OLD.id);
+END;

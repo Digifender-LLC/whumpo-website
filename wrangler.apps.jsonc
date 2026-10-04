@@ -22,6 +22,12 @@
       "database_id": "418b20b6-bdba-4ff1-b265-da9da9ad5955"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "whumpo-files"
+    }
+  ],
   "services": [
     {
       "binding": "BACKEND_RUNTIME",

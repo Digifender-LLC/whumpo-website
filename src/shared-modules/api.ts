@@ -4,21 +4,26 @@ import {ModuleError,decideModule,moduleOperations,moduleRequest,type ModuleDecis
 import {resolveResource,type ResolvedResource} from './registry';
 import {accessHandlers,visitorPredicate} from './access';
 import {recordsHandlers} from './records';
+import {filesHandlers} from './files';
 
 /** WH-125 shared module request engine (whumpo-modules v1). Every call validates the current envelope,
  * resolves exactly one scoped resource from the server-derived principal, evaluates the policy table and,
  * for writes, commits the handler's statements together with an idempotent receipt whose trigger repeats the
  * instance, revision, pin and principal decision. Deterministic only: no owner-maintenance inference, model
  * context, credentials or funding is reachable from here (checked statically by tests/shared-modules-registry.mjs). */
-export type ModuleContext={request:ModuleRequest;resource:ResolvedResource;principal:ModulePrincipal;decision:Extract<ModuleDecision,{decision:'allow'}>};
+/** `host` carries what only the receiving Worker can supply: its private R2 binding and, on the visitor upload route,
+ * the request's bounded upload bytes (WH-128). Handlers never receive a bucket name, prefix or object key from callers. */
+export type ModuleHost={files:R2Bucket|null;upload:Uint8Array|null};
+export type ModuleContext={request:ModuleRequest;resource:ResolvedResource;principal:ModulePrincipal;decision:Extract<ModuleDecision,{decision:'allow'}>;host:ModuleHost};
 export type ModuleReadHandler=(db:D1Database,context:ModuleContext)=>Promise<Record<string,unknown>>;
 /** Writes return statements to commit atomically and a bounded result that must not echo submitted values. */
 export type ModuleWriteHandler=(db:D1Database,context:ModuleContext)=>Promise<{statements:D1PreparedStatement[];result:Record<string,unknown>}>;
 export type ModuleHandlers=Partial<{[K in ModuleOperation]:(typeof moduleOperations)[K]['write'] extends true?ModuleWriteHandler:ModuleReadHandler}>;
 /** Delivered operation handlers. WH-125 delivered the engine; WH-126 registers `access.me` and `access.list`; WH-127
- * registers the records handlers (forms.submit, records.get/view/update/remove); WH-128–129 register theirs here. An
+ * registers the records handlers (forms.submit, records.get/view/update/remove); WH-128 registers files.putBytes,
+ * files.gallery and files.read; WH-129 registers its handlers here. An
  * operation without a handler is `unavailable`, never a generated or fallback implementation. */
-export const moduleHandlers:ModuleHandlers=Object.freeze({...accessHandlers,...recordsHandlers});
+export const moduleHandlers:ModuleHandlers=Object.freeze({...accessHandlers,...recordsHandlers,...filesHandlers});
 
 const denied=(d:Extract<ModuleDecision,{decision:'deny'}>)=>new ModuleError(d.reason==='not_found'?'not_found':'forbidden');
 const principalKey=(p:ModulePrincipal)=>p.kind==='owner'?['owner',p.userId,p.projectId]:p.kind==='visitor'?['visitor',p.visitorId,p.projectId]:['public',p.projectId];
@@ -33,20 +38,20 @@ function principalPredicate(db:D1Database,p:ModulePrincipal){
 type Receipt={request_hash:string;result_json:string;created_at:number;config_revision:number};
 const response=(r:ModuleRequest,result:Record<string,unknown>,receipt:{createdAt:number;replayed:boolean}|null)=>({api:'whumpo-modules' as const,version:1 as const,operation:r.operation,resourceId:r.resourceId,configRevision:r.configRevision,requestId:r.requestId,receipt,result});
 
-async function authorize(db:D1Database,principal:ModulePrincipal,request:ModuleRequest){
+async function authorize(db:D1Database,principal:ModulePrincipal,request:ModuleRequest,host:ModuleHost={files:null,upload:null}){
  const resource=await resolveResource(db,principal,request.resourceId,request.configRevision);
  if(moduleOperations[request.operation].kind!==resource.kind)throw new ModuleError('not_found');
  const decision=decideModule(principal,resource.instance,request.operation,request.target);
  if(decision.decision==='deny')throw denied(decision);
- return {request,resource,principal,decision} satisfies ModuleContext;
+ return {request,resource,principal,decision,host} satisfies ModuleContext;
 }
 /** Anonymous (public) writes additionally pass the public intake admission of the receiving host (WH-127: the contact
  * form's Turnstile Siteverify and per-connection allowance, applied by the visitor gateway). Without it a public write is
  * `unavailable`; it runs after authorization and after an exact replay has been read back, before the handler. */
-export type ModuleRequestOptions={publicAdmission?:(context:ModuleContext)=>Promise<void>};
+export type ModuleRequestOptions={publicAdmission?:(context:ModuleContext)=>Promise<void>;files?:R2Bucket;upload?:Uint8Array};
 export async function handleModuleRequest(db:D1Database,principal:ModulePrincipal,input:unknown,handlers:ModuleHandlers=moduleHandlers,options:ModuleRequestOptions={}){
  const request=moduleRequest(input),op=moduleOperations[request.operation];
- const context=await authorize(db,principal,request);
+ const context=await authorize(db,principal,request,{files:options.files??null,upload:options.upload??null});
  const handler=handlers[request.operation];
  if(!op.write){
   if(!handler)throw new ModuleError('unavailable','This module operation is not delivered yet.');

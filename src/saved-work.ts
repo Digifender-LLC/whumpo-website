@@ -51,7 +51,7 @@ export const savedWorkSources:Record<SavedWorkKind,Source>={
  'github-access':{table:'github_grant_revocations',project:null,state:'r.state',expires:'r.expires_at',turn:receiptTurn('githubGrant')},
  'source-import':{table:'backend_imports',state:'r.state',phase:"'attention'"},
  // Shares the trusted digest/policy/expiry view. Readiness or a stale scan never reads as clearance.
- photo:{table:'project_files',owner:'p.owner_user_id',state:photoState,phase:`CASE (${photoState}) WHEN 'upload-unconfirmed' THEN 'uncertain' WHEN 'safety-approved' THEN 'finished' ELSE 'attention' END`,turn:'NULL',interaction:"json_extract(r.handoff_json,'$.interactionId')"},
+ photo:{table:'project_files',owner:'p.owner_user_id',where:'NOT EXISTS(SELECT 1 FROM module_files mf WHERE mf.file_id=r.id)',state:photoState,phase:`CASE (${photoState}) WHEN 'upload-unconfirmed' THEN 'uncertain' WHEN 'safety-approved' THEN 'finished' ELSE 'attention' END`,turn:'NULL',interaction:"json_extract(r.handoff_json,'$.interactionId')"},
  checkout:{table:'stripe_subscription_orders',project:null,state:'r.state',phase:"CASE r.state WHEN 'pending' THEN 'attention' WHEN 'expired' THEN 'expired' ELSE 'finished' END",turn:'NULL'},
  'usage-review':{table:'usage_review_requests',project:null,state:'r.state',phase:"CASE WHEN r.state='open' THEN 'working' ELSE 'finished' END"},
  'photo-removal':{table:'photo_removals',expires:'r.expires_at'},

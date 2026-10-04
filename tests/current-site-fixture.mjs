@@ -28,6 +28,8 @@ export async function currentSiteFixtureHandlers(){
   export * as moduleAccess from './src/shared-modules/access';
   export * as moduleAccessRoles from './src/shared-modules/access-roles';
   export * as sharedModuleRecords from './src/shared-modules/records';
+  export * as sharedModuleFiles from './src/shared-modules/files';
+  export {photoRemovalCommand} from './src/photo-removal';
   export * as modulePolicy from './src/shared-modules/policy';
   export {moduleCatalog} from './src/project-specification/catalog';
   export {validateSpecification} from './src/project-specification/v3/schema';

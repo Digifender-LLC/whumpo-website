@@ -7,8 +7,8 @@ await validateLifecycleReferences(catalog);
 const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,214);assert.equal(report.classCount,50);assert.equal(schemaFiles.length,6);
- assert.equal(report.plannedClassCount,7);assert.equal(report.protectionClasses.length,57);
+ assert.equal(report.tableCount,215);assert.equal(report.classCount,51);assert.equal(schemaFiles.length,6);
+ assert.equal(report.plannedClassCount,6);assert.equal(report.protectionClasses.length,57);
  assert.equal(report.protectionStatus,'decision-not-runtime-enforcement');
  for(const group of report.protectionClasses){assert.equal(group.profile.endToEndEncrypted,false);assert.equal(group.profile.customerUnlockRequired,false);}
  const connections=report.protectionClasses.find(g=>g.id==='connections');
@@ -17,11 +17,10 @@ try{
  assert.ok(report.protectionClasses.find(g=>g.id==='profile-workspace').protection.storage.includes('control-d1'));
  assert.ok(report.protectionClasses.find(g=>g.id==='project-media').protection.storage.includes('private-r2'));
  assert.equal(report.protectionClasses.find(g=>g.id==='guest-feedback').profile.applicationEncoding,'readable-records');assert.equal(report.protectionClasses.find(g=>g.id==='brand-kits').profile.applicationEncoding,'not-admitted');
- // WH-124 registers the WH-067 module classes before any table: no runtime storage is admitted until their slice.
- for(const [id,packet] of [['module-files','WH-128']]){
-  const group=report.protectionClasses.find(g=>g.id===id);assert.equal(group.storageStatus,'planned');assert.deepEqual(group.implementationPackets,[packet]);assert.deepEqual(group.protection.storage,['not-admitted']);
-  assert.ok(!report.tables.some(t=>t.class===id));
- }
+ // WH-128 admits module uploads (module_files beside project_files rows and private R2 objects) as module-files.
+ const filesClass=report.protectionClasses.find(g=>g.id==='module-files');assert.equal(filesClass.storageStatus,'current');assert.deepEqual(filesClass.protection.storage,['control-d1','private-r2']);
+ assert.deepEqual(report.tables.filter(t=>t.class==='module-files').map(t=>t.name),['module_files']);
+ assert.match(filesClass.protection.readers.join(' '),/never enter owner Chat, model context/);
  // WH-125 admits only the registry, activation and request-receipt tables; module data classes stay planned.
  assert.deepEqual(report.tables.filter(t=>t.class==='module-registry').map(t=>t.name),['module_activation_applies','module_activation_links','module_activation_reviews','module_activations','module_instances','module_request_receipts']);
  for(const t of report.tables.filter(t=>t.class==='module-registry'))assert.ok(t.ownerPath.includes('users'),t.name);
@@ -59,8 +58,8 @@ try{
   c=>c.classes[0].protection.remainingExposure=[],c=>c.classes[0].protection.rationale='',c=>c.classes[0].protection.storage=['unknown'],
   c=>c.classes[0].protection.requirements=['DP-99'],c=>c.classes[0].protection.requirements=[],
   c=>c.classes[0].storageStatus='deployed',c=>c.classes[0].protection.decision='planned-adapter',
-  c=>c.classes.at(-1).tables=['invented_storage'],c=>c.classes.at(-1).protection.storage=['control-d1'],
-  c=>c.classes.at(-1).implementationPackets=[],c=>c.classes.at(-1).protection.profile='managed-readable',
+  c=>c.classes.findLast(g=>g.storageStatus==='planned').tables=['invented_storage'],c=>c.classes.findLast(g=>g.storageStatus==='planned').protection.storage=['control-d1'],
+  c=>c.classes.findLast(g=>g.storageStatus==='planned').implementationPackets=[],c=>c.classes.findLast(g=>g.storageStatus==='planned').protection.profile='managed-readable',
   c=>c.classes[0].protection.profile='planned-adapter',c=>c.classes[0].protection.storage=['not-admitted'],
   c=>c.protectionProfiles[0].endToEndEncrypted=true,c=>c.protectionProfiles[0].customerUnlockRequired=true,
   c=>c.protectionProfiles[0].serverReadable=false,c=>delete c.protectionProfiles[0].recovery.missingKey,
@@ -76,7 +75,7 @@ try{
  const invalidReferences=[
   c=>c.protectionContract='../outside.md',c=>c.protectionProfiles[0].references=['docs/does-not-exist.md'],
   c=>c.protectionRequirements[0].references=['/tmp/outside.md'],
-  c=>c.classes.at(-1).implementationPackets=['WH-999'],c=>c.classes.at(-1).implementationPackets=['WH-052']
+  c=>c.classes.findLast(g=>g.storageStatus==='planned').implementationPackets=['WH-999'],c=>c.classes.findLast(g=>g.storageStatus==='planned').implementationPackets=['WH-052']
  ];
  for(const change of invalidReferences){const broken=structuredClone(catalog);change(broken);await assert.rejects(validateLifecycleReferences(broken));}
  // No data reads: synthetic private row changes cannot affect this report.
@@ -85,5 +84,5 @@ try{
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
- console.log(`Lifecycle catalog passed: 214 tables, 50 current/7 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
+ console.log(`Lifecycle catalog passed: 215 tables, 51 current/6 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
 }finally{db.close();}
