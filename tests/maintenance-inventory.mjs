@@ -1,7 +1,8 @@
 import {sqliteD1} from './sqlite-d1.mjs';
 import {initializeFixtureKeys,fixtureKeyring,fixtureCiphertext} from './helpers/connection-keyring.mjs';
 import assert from 'node:assert/strict';
-import {maintenanceReport} from '../tools/report-maintenance.mjs';
+import {maintenanceReport,counterReport} from '../tools/report-maintenance.mjs';
+import {platformCounterInventory} from '../tools/maintenance-inventory.mjs';
 const keyFixture=await sqliteD1(),sql=keyFixture.sql,id=()=>crypto.randomUUID();
 const db={prepare:q=>{const bound=p=>({first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({results:sql.prepare(q).all(...p)})});return {...bound([]),bind:(...p)=>bound(p)};}};
 try{
@@ -54,6 +55,22 @@ try{
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').count,1);
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').unknownAgeCount,0);
  assert.equal(report.operations.length,4);assert.ok(report.operations.every(o=>o.state==='available'));
+ // WH-050 F8: every shared counter's ceiling matches the trigger/table that enforces it; 50%/80% flags; read-only.
+ for(const [name,{enforcedBy,evidence}] of Object.entries(platformCounterInventory)){const source=sql.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(enforcedBy)?.sql??'';assert.ok(source.replace(/\s+/g,' ').includes(evidence),name);}
+ assert.equal(report.counters.length,12);assert.ok(report.counters.every(c=>c.state!=='unavailable'),JSON.stringify(report.counters));
+ assert.equal(report.counters.find(c=>c.counter==='contact_receipts').used,2);assert.equal(report.counters.find(c=>c.counter==='contact_receipts').state,'normal');
+ sql.exec('PRAGMA query_only=OFF');
+ const period=new Date(now).toISOString().slice(0,7);
+ sql.prepare('INSERT INTO storage_usage(period,read_ops,write_ops) VALUES(?,?,?)').run(period,50000,8000);
+ sql.prepare('INSERT INTO storage_usage(period,read_ops,write_ops) VALUES(?,?,?)').run('2000-01',100000,10000);
+ sql.exec('PRAGMA query_only=ON');
+ let counters=await counterReport(db,now);const state=name=>counters.counters.find(c=>c.counter===name);
+ assert.equal(state('r2_reads').state,'warn');assert.equal(state('r2_reads').percent,50);assert.equal(state('r2_writes').state,'act');assert.equal(state('r2_writes').percent,80);assert.equal(counters.attention,true,'80% needs attention');
+ assert.equal(state('public_backend_calls').state,'normal');assert.equal(state('public_backend_calls').used,0,'Only the observed UTC day/month is counted');
+ counters=await counterReport(db,Date.parse('2000-01-15T00:00:00.000Z'));assert.equal(state('r2_reads').state,'exhausted');assert.equal(state('r2_writes').state,'exhausted');
+ assert.equal((await maintenanceReport(db,now)).attention,true,'Counters at the act threshold surface in the maintenance report');
+ const broken=await counterReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);assert.ok(broken.counters.every(c=>c.state==='unavailable'));assert.equal(broken.attention,true);assert.ok(!JSON.stringify(broken).includes('PRIVATE_'));
+ assert.ok(!JSON.stringify(counters).includes(project)&&!JSON.stringify(counters).includes(owner));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 37 read-only queues, four receipt families, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 37 read-only queues, four receipt families, 12 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
 }finally{sql.close();}

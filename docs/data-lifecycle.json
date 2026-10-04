@@ -1862,6 +1862,48 @@
       }
     },
     {
+      "id": "operator-containment",
+      "tables": [
+        "operator_containments"
+      ],
+      "scope": "mixed",
+      "purpose": "Operator containment actions (WH-050 F7, runbook G3): a temporary freeze or per-project allowance for one account or project's public backend calls, visitor transitions, contact submissions and public photo reads, with the operator reference, private reason, request digest, expiry and any lift. The rows are the audit and are enforced only inside the public admission triggers.",
+      "currentRetention": "Append-only except a single lift; a delete trigger refuses removal. Every action expires within 30 days. No foreign key, so account/project closure neither is blocked by nor erases the record. Bounded at 10,000 rows, after which new containment fails closed (reported by the platform counter report).",
+      "proposedRetention": "Keep while related incident records are kept; a reviewed retention schedule (for example 1 year after expiry or lift) requires an owner decision before any cleanup is added.",
+      "deletionAuthority": "No ordinary deletion. A future reviewed operator retention procedure only; customers, owners, models and agents cannot remove or edit containment records.",
+      "exportPolicy": "Not exported and never shown to customers: customers see only the existing generic limit or busy responses. Operator references and reasons stay out of customer output, ordinary logs, GitHub and model context.",
+      "references": [
+        "tools/operator-containment-input.mjs",
+        "tools/operator-containment.mjs",
+        "docs/capacity-and-fairness.md",
+        "docs/incident-runbooks.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Operator containment CLI with the existing operator D1 authorization; admission triggers read only the active effect"
+        ],
+        "processors": [
+          "Deterministic public admission triggers (backend, visitor transition, contact, public photo)"
+        ],
+        "remainingExposure": [
+          "Free-text reasons are operator-written and could contain sensitive detail; operators must record identifiers and categories only, never customer content or credentials."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "product-measurement",
       "tables": [
         "funnel_events"

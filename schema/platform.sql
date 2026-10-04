@@ -651,7 +651,7 @@ CREATE TABLE backend_publication_reviews (
 CREATE TABLE backend_public_usage (
  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
  day TEXT NOT NULL,
- calls INTEGER NOT NULL CHECK(calls BETWEEN 0 AND 100),
+ calls INTEGER NOT NULL CHECK(calls BETWEEN 0 AND 500),
  publication_id TEXT NOT NULL REFERENCES backend_publication_reviews(id)
 );
 
@@ -670,8 +670,32 @@ CREATE TABLE public_client_usage (
 CREATE TABLE storage_project_usage (
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  period TEXT NOT NULL,
- read_ops INTEGER NOT NULL CHECK(read_ops BETWEEN 1 AND 10000),
+ read_ops INTEGER NOT NULL CHECK(read_ops BETWEEN 1 AND 50000),
  PRIMARY KEY(project_id,period)
+);
+
+-- Operator containment (WH-050 F7, runbook G3; tools/operator-containment.mjs). One row per action and public scope:
+-- a freeze (allowance NULL) or a temporary per-project allowance (project subjects only), enforced inside the public
+-- admission triggers. Rows are the audit: append-only except one lift, always expiring within 30 days, and they never
+-- delete or change customer data. No foreign key, so closure is neither blocked nor erases the record.
+CREATE TABLE operator_containments (
+ id TEXT NOT NULL CHECK(length(id)=36),
+ scope TEXT NOT NULL CHECK(scope IN ('backend','transition','contact','photo')),
+ subject_kind TEXT NOT NULL CHECK(subject_kind IN ('account','project')),
+ subject_id TEXT NOT NULL CHECK(length(subject_id)=36),
+ allowance INTEGER CHECK(allowance IS NULL OR (allowance>=0 AND allowance<=CASE scope WHEN 'backend' THEN 500 WHEN 'transition' THEN 500 WHEN 'contact' THEN 100 ELSE 50000 END)),
+ operator_ref TEXT NOT NULL CHECK(length(operator_ref) BETWEEN 1 AND 128 AND operator_ref NOT GLOB '*[^A-Za-z0-9_.:@-]*'),
+ reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
+ request_digest TEXT NOT NULL CHECK(length(request_digest)=64),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL,
+ lifted_at TEXT,
+ lift_operator_ref TEXT CHECK(lift_operator_ref IS NULL OR (length(lift_operator_ref) BETWEEN 1 AND 128 AND lift_operator_ref NOT GLOB '*[^A-Za-z0-9_.:@-]*')),
+ lift_reason TEXT CHECK(lift_reason IS NULL OR length(lift_reason) BETWEEN 1 AND 500),
+ lift_digest TEXT CHECK(lift_digest IS NULL OR length(lift_digest)=64),
+ PRIMARY KEY(id,scope),
+ CHECK(allowance IS NULL OR subject_kind='project'),
+ CHECK((lifted_at IS NULL)=(lift_operator_ref IS NULL) AND (lifted_at IS NULL)=(lift_reason IS NULL) AND (lifted_at IS NULL)=(lift_digest IS NULL))
 );
 
 CREATE TABLE backend_form_settings (
@@ -1758,6 +1782,7 @@ CREATE INDEX backend_publication_reviews_project ON backend_publication_reviews(
 CREATE INDEX backend_public_usage_day ON backend_public_usage(day);
 CREATE INDEX public_client_usage_day ON public_client_usage(day);
 CREATE INDEX storage_project_usage_period ON storage_project_usage(period);
+CREATE INDEX operator_containments_subject ON operator_containments(subject_id) WHERE lifted_at IS NULL;
 
 CREATE INDEX backend_form_reviews_project ON backend_form_reviews(project_id);
 
@@ -1982,6 +2007,14 @@ CREATE VIEW backend_live_forms AS
  FROM backend_form_settings f JOIN backend_form_reviews r ON r.id=f.review_id JOIN projects p ON p.id=f.project_id AND p.owner_user_id=r.user_id JOIN publications s ON s.project_id=f.project_id JOIN backend_publications b ON b.project_id=f.project_id
  WHERE r.status='applied' AND r.enabled=1 AND s.version_id IS NOT NULL AND s.revision=r.site_revision AND b.review_id=r.backend_publication_id AND b.version_id IS NOT NULL
  AND NOT EXISTS(SELECT 1 FROM service_client_activation_held WHERE id=r.id);
+
+-- Active operator containment per project and public scope (account subjects cover every project they own).
+CREATE VIEW operator_contained_projects AS
+ SELECT c.subject_id AS project_id,c.scope,c.allowance,c.created_at,c.id FROM operator_containments c
+ WHERE c.subject_kind='project' AND c.lifted_at IS NULL AND c.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+ UNION ALL
+ SELECT p.id AS project_id,c.scope,c.allowance,c.created_at,c.id FROM operator_containments c JOIN projects p ON p.owner_user_id=c.subject_id
+ WHERE c.subject_kind='account' AND c.lifted_at IS NULL AND c.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now');
 
 CREATE VIEW plan_entitlements AS SELECT user_id,plan_id,starts_at,ends_at FROM stripe_paid_invoices;
 
@@ -2242,7 +2275,8 @@ BEGIN
  SELECT RAISE(ABORT,'contact_capacity') WHERE (SELECT COUNT(*) FROM contact_receipts WHERE project_id=NEW.project_id)>=100 OR (SELECT COUNT(*) FROM contact_receipts)>=1000 OR
  -- Fair share: once 500 receipts are retained platform-wide, only accounts retaining fewer than 100 are admitted.
  ((SELECT COUNT(*) FROM contact_receipts)>=500 AND (SELECT COUNT(*) FROM contact_receipts r JOIN projects p ON p.id=r.project_id WHERE p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))>=100);
- SELECT RAISE(ABORT,'contact_rate') WHERE (SELECT COUNT(*) FROM contact_receipts WHERE project_id=NEW.project_id AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour'))>=20;
+ -- Hourly submissions: 20 unless an active operator containment freezes intake (0) or sets a temporary allowance.
+ SELECT RAISE(ABORT,'contact_rate') WHERE (SELECT COUNT(*) FROM contact_receipts WHERE project_id=NEW.project_id AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour'))>=coalesce((SELECT coalesce(allowance,0) FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='contact' ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1),20);
 END;
 
 CREATE TRIGGER contact_submission_immutable BEFORE UPDATE ON contact_submissions
@@ -2530,8 +2564,9 @@ END;
 
 CREATE TRIGGER backend_public_usage_insert BEFORE INSERT ON backend_public_usage BEGIN
  SELECT RAISE(ABORT,'backend_public_unavailable') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR NOT EXISTS(SELECT 1 FROM backend_publications b JOIN backend_publication_reviews r ON r.id=b.review_id AND r.status='applied' JOIN projects p ON p.id=b.project_id AND p.owner_user_id=r.user_id WHERE b.project_id=NEW.project_id AND b.review_id=NEW.publication_id AND b.version_id IS NOT NULL);
+ -- The project allowance is 100 unless an active operator containment freezes it (0) or sets a temporary allowance.
  SELECT RAISE(ABORT,'backend_public_quota') WHERE
- coalesce((SELECT calls FROM backend_public_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=100 OR
+ coalesce((SELECT calls FROM backend_public_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=coalesce((SELECT coalesce(allowance,0) FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='backend' ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1),100) OR
  coalesce((SELECT sum(u.calls) FROM backend_public_usage u JOIN projects p ON p.id=u.project_id WHERE u.day=NEW.day AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=500 OR
  coalesce((SELECT sum(calls) FROM backend_public_usage WHERE day=NEW.day),0)>=1000 OR
  -- Fair share: once half the platform pool is used, only accounts under 100 calls today are admitted.
@@ -2558,7 +2593,7 @@ END;
 CREATE TRIGGER storage_project_usage_insert BEFORE INSERT ON storage_project_usage BEGIN
  SELECT RAISE(ABORT,'storage_project_counter') WHERE NEW.period<>strftime('%Y-%m','now') OR NEW.read_ops<>1;
  SELECT RAISE(ABORT,'storage_project_quota') WHERE
- coalesce((SELECT read_ops FROM storage_project_usage WHERE project_id=NEW.project_id AND period=NEW.period),0)>=10000 OR
+ coalesce((SELECT read_ops FROM storage_project_usage WHERE project_id=NEW.project_id AND period=NEW.period),0)>=coalesce((SELECT coalesce(allowance,0) FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='photo' ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1),10000) OR
  -- Fair share: once half the platform read ceiling is used, only accounts under 10,000 reads this month are admitted.
  (coalesce((SELECT read_ops FROM storage_usage WHERE period=NEW.period),0)>=50000 AND
   coalesce((SELECT sum(u.read_ops) FROM storage_project_usage u JOIN projects p ON p.id=u.project_id WHERE u.period=NEW.period AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=10000);
@@ -2567,6 +2602,26 @@ END;
 CREATE TRIGGER storage_project_usage_update BEFORE UPDATE ON storage_project_usage BEGIN
  SELECT RAISE(ABORT,'storage_project_counter') WHERE NEW.project_id<>OLD.project_id OR NEW.period<>OLD.period OR NEW.read_ops<>OLD.read_ops+1;
 END;
+
+CREATE TRIGGER operator_containment_admit BEFORE INSERT ON operator_containments BEGIN
+ SELECT RAISE(ABORT,'operator_containment_invalid') WHERE NEW.lifted_at IS NOT NULL
+  OR NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440
+  OR NEW.expires_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.expires_at)
+  OR NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NEW.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days')
+  OR (NEW.subject_kind='account' AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.subject_id))
+  OR (NEW.subject_kind='project' AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.subject_id))
+  OR EXISTS(SELECT 1 FROM operator_containments WHERE id=NEW.id AND (subject_kind<>NEW.subject_kind OR subject_id<>NEW.subject_id OR request_digest<>NEW.request_digest OR expires_at<>NEW.expires_at));
+ SELECT RAISE(ABORT,'operator_containment_capacity') WHERE (SELECT count(*) FROM operator_containments)>=10000;
+END;
+
+-- Only a single lift: everything else is immutable, and nothing is ever deleted.
+CREATE TRIGGER operator_containment_lift BEFORE UPDATE ON operator_containments
+WHEN OLD.lifted_at IS NOT NULL OR NEW.lifted_at IS NULL OR NEW.id<>OLD.id OR NEW.scope<>OLD.scope OR NEW.subject_kind<>OLD.subject_kind OR NEW.subject_id<>OLD.subject_id
+ OR NEW.allowance IS NOT OLD.allowance OR NEW.operator_ref<>OLD.operator_ref OR NEW.reason<>OLD.reason OR NEW.request_digest<>OLD.request_digest
+ OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at OR NEW.lifted_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.lifted_at) OR abs(julianday(NEW.lifted_at)-julianday('now'))>1.0/1440
+BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
+
+CREATE TRIGGER operator_containment_retained BEFORE DELETE ON operator_containments BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
 
 CREATE TRIGGER backend_form_admit BEFORE INSERT ON backend_form_reviews BEGIN
  SELECT RAISE(ABORT,'backend_form_owner') WHERE NOT EXISTS(SELECT 1 FROM projects p JOIN backend_form_settings s ON s.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision);
@@ -2732,7 +2787,7 @@ CREATE TRIGGER app_session_page BEFORE INSERT ON app_sessions WHEN NEW.page_revi
 
 CREATE TRIGGER app_run_admit BEFORE INSERT ON app_runs BEGIN
  SELECT RAISE(ABORT,'app_run_identity') WHERE NEW.state<>'running' OR NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
- SELECT RAISE(ABORT,'app_run_quota') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR (SELECT count(*) FROM app_runs)>=10000 OR (SELECT count(*) FROM app_runs WHERE visitor_id=NEW.visitor_id AND day=NEW.day)>=20 OR coalesce((SELECT attempts FROM app_daily_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=100 OR coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=1000
+ SELECT RAISE(ABORT,'app_run_quota') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR (SELECT count(*) FROM app_runs)>=10000 OR (SELECT count(*) FROM app_runs WHERE visitor_id=NEW.visitor_id AND day=NEW.day)>=20 OR coalesce((SELECT attempts FROM app_daily_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=coalesce((SELECT coalesce(allowance,0) FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='transition' ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1),100) OR coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=1000
  -- Fair share: once half the platform pool is used, only accounts under 100 transitions today are admitted.
  OR (coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=500 AND coalesce((SELECT sum(u.attempts) FROM app_daily_usage u JOIN projects p ON p.id=u.project_id WHERE u.day=NEW.day AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=100);
 END;

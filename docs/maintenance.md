@@ -1,6 +1,6 @@
 # Private maintenance diagnostics
 
-WH-006, September 30, 2026. The platform records bounded per-job scheduler telemetry and provides `node tools/report-maintenance.mjs` for an authenticated operator. The CLI uses the existing Cloudflare/D1 operator credentials. There is no customer HTTP endpoint, model tool or public dashboard for this report.
+WH-006, September 30, 2026. The platform records bounded per-job scheduler telemetry and provides `node tools/report-maintenance.mjs` for an authenticated operator. The CLI uses the existing Cloudflare/D1 operator credentials. There is no customer HTTP endpoint, model tool or public dashboard for this report. Since the WH-050 F8 slice (October 4, 2026, implemented locally only) the report also lists each shared platform counter against its schema ceiling, flagged `warn` at 50% and `act` at 80% (attention, exit 2); `--counters` prints only that section. It is pull-based: no alert is delivered and delivery stays owner-gated ([capacity and fairness](capacity-and-fairness.md#f8-shared-counter-thresholds-implemented-locally-pull-based)).
 
 The [WH-052 background-job decision](background-jobs.md) retains this scheduler for current maintenance and specifies D1-owned receipts for future scan/closure work. Pass telemetry is not an item lease or resumable job journal. The new SQLite prototype is local only; no schedule or runtime behavior changes.
 
