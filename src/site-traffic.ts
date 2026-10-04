@@ -2,8 +2,9 @@
 export async function recordTraffic(db:D1Database,project:string,now=new Date()){
  await db.prepare('INSERT INTO site_traffic_daily(project_id,day,requests) SELECT id,?,1 FROM projects WHERE id=? ON CONFLICT(project_id,day) DO UPDATE SET requests=requests+1').bind(now.toISOString().slice(0,10),project).run();
 }
+/** Held projects keep older daily counts (WH-132); readers only ever show the 30-day window, so retention is not visible. */
 export async function cleanupTraffic(db:D1Database){
- return db.prepare("DELETE FROM site_traffic_daily WHERE day<date('now','-29 days')").run();
+ return db.prepare("DELETE FROM site_traffic_daily WHERE day<date('now','-29 days') AND project_id NOT IN (SELECT project_id FROM safety_held_projects)").run();
 }
 export async function readTraffic(db:D1Database,user:string,projectId:string|null=null){
  const [metadata,rows]=await Promise.all([
