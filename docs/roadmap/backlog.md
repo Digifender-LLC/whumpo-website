@@ -2234,7 +2234,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-04 UTC source slice on branch claude/wh-025-funnel-metrics (not deployed): opt-in content-free funnel_events (allowlisted event/dimension CHECK, receipt keys, UTC minute) derived by the hourly funnel maintenance job from existing receipts, plus handler-side rejected-answer and cancel recorders; consent off by default (welcome bio step and Settings), not retroactive, deleted on withdrawal, 180-day pruning without re-derivation, account cascade and closure-inventory count; lifecycle class product-measurement; read-only suppressed operator report with receipt comparison; docs/funnel-metrics.md with proposed-until-baseline targets and an unsent feedback draft. node tests/funnel-metrics.mjs passes on SQLite and --d1 with actual handlers. Owner consent basis, retention and suppression floor remain undecided; signup, client prompts, print actions and surface changes are not measured. No live data, report run or feedback request sent.
 
 ## WH-026 — Expand evaluated website layouts and precise editing
 

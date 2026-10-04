@@ -13,7 +13,7 @@ export function requireCurrentAccountIdentity(value:unknown):asserts value is {a
  if(!value||typeof value!=='object'||Array.isArray(value)||!('accountId'in value)||typeof value.accountId!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(value.accountId))throw new APIError('Whumpo needs its current account response. Refresh the app and try again.',409);
 }
 export const send=<T>(path:string,body:unknown={},method='POST')=>api<T>(path,{method,body:JSON.stringify(body)});
-export type Profile={accountId:string;revision:number;avatar_id:string;onboardingComplete:boolean;name:string;about_me:string;email:string;share_context:number;theme:string;hasPhoto:number;photoSafety?:'none'|'pending'|'approved'|'blocked'};
+export type Profile={accountId:string;revision:number;avatar_id:string;onboardingComplete:boolean;name:string;about_me:string;email:string;share_context:number;measurement_consent:number;theme:string;hasPhoto:number;photoSafety?:'none'|'pending'|'approved'|'blocked'};
 export type Project={id:string;name:string;status:string;purpose:string;cms_articles:number};
 export type Layout=import('../../../src/workspace-view-contract').WorkspaceLayout;
 export type Traffic={enabledAt:string|null;days:number;rows:{project_id:string;day:string;requests:number}[];metric:string};

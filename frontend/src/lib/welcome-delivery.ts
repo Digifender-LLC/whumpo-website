@@ -12,8 +12,8 @@ async function readAfterSave<T>(write:()=>Promise<T>,read:()=>Promise<T>,matches
   throw error;
  }
 }
-export function saveWelcomeProfile(previous:Pick<Profile,'accountId'|'revision'>,changes:{name:string}|{about_me:string;share_context:boolean},write:()=>Promise<Profile>,read:()=>Promise<Profile>){
- return readAfterSave(write,read,saved=>!!previous.accountId&&saved.accountId===previous.accountId&&saved.revision===previous.revision+1&&('name'in changes?saved.name===changes.name:saved.about_me===changes.about_me&&saved.share_context===Number(changes.share_context)));
+export function saveWelcomeProfile(previous:Pick<Profile,'accountId'|'revision'>,changes:{name:string}|{about_me:string;share_context:boolean;measurement_consent?:boolean},write:()=>Promise<Profile>,read:()=>Promise<Profile>){
+ return readAfterSave(write,read,saved=>!!previous.accountId&&saved.accountId===previous.accountId&&saved.revision===previous.revision+1&&('name'in changes?saved.name===changes.name:saved.about_me===changes.about_me&&saved.share_context===Number(changes.share_context)&&(changes.measurement_consent===undefined||saved.measurement_consent===Number(changes.measurement_consent))));
 }
 export function saveWelcomeProgress(input:WelcomeDraft,write:()=>Promise<Welcome>,read:()=>Promise<Welcome>){
  return readAfterSave(write,read,saved=>!saved.complete&&!!saved.state&&saved.state.revision===input.revision+1&&saved.state.stage===input.stage&&saved.state.prompt===input.prompt&&(['project_name','idea','audience'] as const).every(key=>saved.state![key]===input[key].trim())&&saved.state.preferred_theme===input.preferred_theme);

@@ -67,6 +67,7 @@ For a four-Worker release, run `pnpm build`, then `pnpm deploy prepare REVIEW.js
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
 - [Shared module contract](docs/shared-modules.md) — planned WH-067 content, records/forms, files and access module APIs, authorization model and delivery slices
 - [Capability catalog and planner](docs/capability-planner.md) — reuse existing configuration and helpers; record bounded missing behavior before generating source
+- [Content-free funnel measurements](docs/funnel-metrics.md) — WH-025 opt-in milestones, aggregate operator report and draft feedback request; source and local tests only, targets proposed until the first cohort baseline
 - [Data lifecycle proposal](docs/data-lifecycle.md), [protection contract](docs/data-protection.md) and [background-job decision](docs/background-jobs.md) — storage access, key recovery, retention/export/closure and durable operations
 - [Customer benchmarks and inference privacy](docs/customer-benchmarks.md) — synthetic outcome checks, cost evidence and real-model evaluation gates
 - [Content safety and US customer eligibility](docs/content-safety.md) — CSAM scanning is planned and owner-deferred; existing holds are not detection. Wider safety acceptance remains open

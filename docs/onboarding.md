@@ -6,6 +6,10 @@
 
 Implementation follows the [WH-113 entry/resumption contract](workspace-identity.md#signup-and-resumption): a minimal identity-state read precedes `/profile`, welcome and workspace data; a verified first passkey resumes pending signup without another invitation. The shared [enrollment completion](identity-kits.md) and [restricted recovery backend](identity-recovery.md) are now implemented and verified in isolated source. The [trusted browser/HTTP flow](identity-web.md) is also verified against the isolated schema. Password retirement still requires common platform admission, lifecycle integration and the coordinated current-only test reset; no old-account conversion path is planned.
 
+## Measurement choice — October 4, 2026 UTC
+
+The "About you" bio step now also offers an unchecked **Help improve Whumpo with content-free progress measurements** choice, saved with the bio in the same profile revision; Settings has the same control. It is off by default. When on, only receipt-derived milestones after that moment are counted (no answers, brief, email or passkey data), and turning it off deletes them. Passkey signup precedes this step and is not measured. See [funnel measurements](funnel-metrics.md). Source and local tests only; not deployed.
+
 ## Current customer flow — October 1, 2026 UTC
 
 The guided welcome asks for name, picture, optional bio and sharing choice, then the first project's idea, working name, optional audience and starting style. Review and completion create one private project before Chat/dashboard access. Customers then describe the first build in natural Chat; the starter card shows the saved brief and invites a request. It has no direct website/app build buttons. Public Chat accepts natural text only. The older first-build buttons and slash-command examples below are historical implementation evidence, superseded by [natural-language Chat](natural-language-chat.md). Internal adapters remain for bounded handlers and fixtures, not customer commands. Routine project-detail changes are requested through the agent or a customer-requested workflow.
