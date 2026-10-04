@@ -10,6 +10,7 @@ import {draftRetentionDue} from './retention';
 import {connectionIntakeDefinition,connectionIntakeProvider,isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
 import {informationDefinition,informationQuestions,isInformationDefinition,type InformationPurpose,type QuestionRequest} from './composition';
 import {readOwnedResourceOptions} from './resource-options';
+import {recordInteractionValidationFailure,recordInteractionCancel} from '../funnel-metrics/events';
 import {readResourcePage,resourceCursor,type ResourceCursor} from './resource-shape';
 import {photoField,readSelectedPhotos,selectedPhotoGuards} from './selected-photos';
 
@@ -390,7 +391,10 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  const raw=mutationHeader(input);
  const saved=await row(db,user,raw.interactionId),requestHash=await jsonDigest(raw,32768),existing=await db.prepare('SELECT request_hash FROM chat_interaction_requests WHERE user_id=? AND request_id=?').bind(user,raw.requestId).first<{request_hash:string}>();
  if(existing){if(existing.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,raw.requestId);}
- const envelope=await retainedEnvelope(saved),{request}=await validateMutation(raw,envelope);
+ const envelope=await retainedEnvelope(saved);
+ // WH-025: count a server-rejected answer by template family only, deduplicated by request ID.
+ const rejected=async(error:unknown)=>{if(error instanceof InteractionError&&error.fieldId)await recordInteractionValidationFailure(db,user,envelope.definition.template,raw.requestId);return error;};
+ const {request}=await validateMutation(raw,envelope).catch(async error=>{throw await rejected(error);});
  // Each admitted adapter must enforce its complete current question policy.
  if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!((isPhotoIntakeDefinition(envelope.definition)||connectionIntakeProvider(envelope.definition)||isWorkspaceViewDefinition(envelope.definition))&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
  const resourceGuards:D1PreparedStatement[]=[];
@@ -398,7 +402,7 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  if(request.operation!=='cancel'&&envelope.definition.template==='project-select@1'&&Object.hasOwn(request.answers,'project')){
   const selected=request.answers.project as string;
   const owned=await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(selected,user).first<{id:string}>();
-  validateAnswers(envelope.definition,request.answers,{partial:request.operation==='save-draft',owned:{projects:owned?[owned.id]:[]}});
+  try{validateAnswers(envelope.definition,request.answers,{partial:request.operation==='save-draft',owned:{projects:owned?[owned.id]:[]}});}catch(error){throw await rejected(error);}
   resourceGuards.push(interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)',[selected,user]));
  }
  if(request.operation!=='cancel')await assertFeature(db,feature(user,saved.project_id));
@@ -416,5 +420,6 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
   if(committed){if(committed.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,request.requestId);}
   if(String(error).includes('chat_interaction_changed'))throw changed();throw error;
  }
+ if(request.operation==='cancel')await recordInteractionCancel(db,user,saved.id,envelope.definition.template);
  return readInteractionReceipt(db,user,request.requestId);
 }

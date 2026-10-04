@@ -12,22 +12,26 @@ async function photoSafety(db:D1Database,user:string,digest:string|null){
 export async function readProfile(db:D1Database,user:string){
  const account=await db.prepare("SELECT email FROM users WHERE id=?").bind(user).first<{email:string}>();
  if(!account)throw new BillingError(404,'Account not found');
- const row=await db.prepare('SELECT revision,name,about_me,share_context,theme,avatar_id,photo IS NOT NULL AS hasPhoto,photo_digest FROM user_profiles WHERE user_id=?').bind(user).first<{revision:number;name:string;about_me:string;share_context:number;theme:string;avatar_id:string;hasPhoto:number;photo_digest:string|null}>();
+ const row=await db.prepare('SELECT revision,name,about_me,share_context,measurement_consent,theme,avatar_id,photo IS NOT NULL AS hasPhoto,photo_digest FROM user_profiles WHERE user_id=?').bind(user).first<{revision:number;name:string;about_me:string;share_context:number;measurement_consent:number;theme:string;avatar_id:string;hasPhoto:number;photo_digest:string|null}>();
  const safety=row?.hasPhoto?await photoSafety(db,user,row.photo_digest):'none';
- const {photo_digest:_digest,...profile}=row??{revision:0,name:'',about_me:'',share_context:0,theme:'system',avatar_id:'cloud',hasPhoto:0,photo_digest:null};
+ const {photo_digest:_digest,...profile}=row??{revision:0,name:'',about_me:'',share_context:0,measurement_consent:0,theme:'system',avatar_id:'cloud',hasPhoto:0,photo_digest:null};
  return {...profile,accountId:user,hasPhoto:safety==='approved'?1:0,photoSafety:safety,onboardingComplete:await onboardingComplete(db,user),email:account.email};
 }
 async function ensure(db:D1Database,user:string){await db.prepare('INSERT OR IGNORE INTO user_profiles(user_id) VALUES(?)').bind(user).run();}
 export async function updateProfile(db:D1Database,user:string,input:unknown){
  if(!input||typeof input!=='object'||Array.isArray(input))throw new BillingError(400,'Invalid profile');
  const v=input as Record<string,unknown>,keys=Object.keys(v).filter(k=>k!=='revision');
- if(!Number.isSafeInteger(v.revision)||Number(v.revision)<0||!keys.length||keys.some(k=>!['name','about_me','share_context','theme','avatar_id'].includes(k)))throw new BillingError(400,'Invalid profile fields');
+ if(!Number.isSafeInteger(v.revision)||Number(v.revision)<0||!keys.length||keys.some(k=>!['name','about_me','share_context','measurement_consent','theme','avatar_id'].includes(k)))throw new BillingError(400,'Invalid profile fields');
  for(const k of ['name','about_me'])if(k in v&&(typeof v[k]!=='string'||(v[k] as string).length>(k==='name'?80:1200)||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v[k] as string)))throw new BillingError(400,'Profile text is too long or contains unsupported characters');
- if('share_context'in v&&typeof v.share_context!=='boolean'||'theme'in v&&(typeof v.theme!=='string'||!['system','light','dark'].includes(v.theme)))throw new BillingError(400,'Invalid preference');
+ if(('share_context'in v&&typeof v.share_context!=='boolean')||('measurement_consent'in v&&typeof v.measurement_consent!=='boolean')||'theme'in v&&(typeof v.theme!=='string'||!['system','light','dark'].includes(v.theme)))throw new BillingError(400,'Invalid preference');
  if('avatar_id' in v&&(typeof v.avatar_id!=='string'||!['cloud','sun','moon','leaf','star','planet'].includes(v.avatar_id)))throw new BillingError(400,'Choose an available profile picture');
  await ensure(db,user);
- const args=keys.map(k=>k==='share_context'?(v[k]?1:0):v[k]);
- const r=await db.prepare(`UPDATE user_profiles SET ${keys.map(k=>k+'=?').join(',')}${'avatar_id'in v?',photo=NULL,photo_digest=NULL':''},revision=revision+1 WHERE user_id=? AND revision=? RETURNING revision`).bind(...args,user,v.revision).all();
+ const args=keys.map(k=>k==='share_context'||k==='measurement_consent'?(v[k]?1:0):v[k]);
+ // WH-025: consent time (whole seconds, matching identity receipts) bounds which receipts may be measured;
+ // withdrawal deletes measurements atomically.
+ const consent='measurement_consent'in v?`,measurement_consented_at=CASE WHEN ${v.measurement_consent?1:0}=1 THEN COALESCE(measurement_consented_at,strftime('%Y-%m-%dT%H:%M:%S.000Z','now')) ELSE NULL END`:'';
+ const update=db.prepare(`UPDATE user_profiles SET ${keys.map(k=>k+'=?').join(',')}${consent}${'avatar_id'in v?',photo=NULL,photo_digest=NULL':''},revision=revision+1 WHERE user_id=? AND revision=? RETURNING revision`).bind(...args,user,v.revision);
+ const [r]=v.measurement_consent===false?await db.batch([update,db.prepare('DELETE FROM funnel_events WHERE user_id=? AND EXISTS(SELECT 1 FROM user_profiles WHERE user_id=? AND measurement_consent=0)').bind(user,user)]):[await update.all()];
  if(r.results.length!==1)throw new BillingError(409,'Your profile changed elsewhere. Reload before saving.');
  return readProfile(db,user);
 }

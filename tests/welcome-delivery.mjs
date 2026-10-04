@@ -19,6 +19,9 @@ async function refuses(run,value,status=503){const error=failure(status);writes=
 for(const changed of [{...profile,accountId:'other'},{...profile,revision:4},{...profile,revision:6},{...profile,name:'Someone else'}])await refuses((write,read)=>saveWelcomeProfile(before,{name:'River'},write,read),changed);
 await refuses((write,read)=>saveWelcomeProfile({revision:4},{name:'River'},write,read),profile);
 await refuses((write,read)=>saveWelcomeProfile(before,{about_me:'Garden studio',share_context:false},write,read),{...profile,share_context:1});
+// WH-025 measurement choice is part of the exact bio-step readback when submitted.
+await recover((write,read)=>saveWelcomeProfile(before,{about_me:'Garden studio',share_context:false,measurement_consent:true},write,read),{...profile,measurement_consent:1});
+await refuses((write,read)=>saveWelcomeProfile(before,{about_me:'Garden studio',share_context:false,measurement_consent:true},write,read),{...profile,measurement_consent:0});
 for(const change of [{revision:7},{revision:9},{prompt:'review'},{project_name:'Other'},{idea:'Other'},{audience:'Other'},{preferred_theme:'clay'},{stage:'profile'}])await refuses((write,read)=>saveWelcomeProgress(input,write,read),{...saved,state:{...saved.state,...change}});
 await refuses((write,read)=>saveWelcomeProgress(input,write,read),{complete:true});await refuses(finishWelcome,{complete:false});
 for(const status of [400,401,403,404,422,429]){const error=failure(status);reads=0;await assert.rejects(finishWelcome(async()=>{throw error;},async()=>{reads++;return {complete:true};}),e=>e===error);assert.equal(reads,0,'Definitive rejection must not appear successful');}
