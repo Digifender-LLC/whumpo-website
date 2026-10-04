@@ -262,19 +262,19 @@ A hold needs a preservation approver, an opaque `legal_basis_ref` and a review t
 - `project`: one project owned by the subject.
 - `object`: one project photo. The hold also pins its project against deletion and owner transfer.
 
-Every per-object deletion and expiry path is listed in `tools/safety-hold-inventory.mjs`. That script scans the source for `DELETE FROM`, R2 deletes and cascades and fails on any path that is unclassified or stale. At the October 4, 2026 app-document slice it lists **85 deletion sites**:
+Every per-object deletion and expiry path is listed in `tools/safety-hold-inventory.mjs`. That script scans the source for `DELETE FROM`, R2 deletes and cascades and fails on any path that is unclassified or stale. At the October 4, 2026 WH-128 Remove from collection slice, `node tools/safety-hold-inventory.mjs` lists **94 deletion sites**:
 
 | Decision | Sites |
 |---|---|
-| Blocked by a hold trigger | 11 |
+| Blocked by a hold trigger | 14 |
 | Skipped by expiry or cleanup | 5 |
 | Preserved | 2 |
 | Hold mechanism itself | 2 |
-| Explicitly excluded, with rationale | 65 |
+| Explicitly excluded, with rationale | 71 |
 
 It also lists **10 other paths**, such as overwrites, cascades, restore, Time Travel and external copies. In summary:
 
-- **Blocked** (`RAISE(ABORT,'safety_preservation_hold')`): account deletion and its cascade; project deletion; project owner change; photo removal (`project_files`); site version removal; app visitor deletion and owner visitor erasure; contact deletion; guest-preview feedback and links; and the R2 cleanup queue row.
+- **Blocked** (`RAISE(ABORT,'safety_preservation_hold')`): account deletion and its cascade; project deletion; project owner change; photo removal (`project_files`, including WH-128 module uploads removed by visitor erasure or files-instance removal); site version removal; app visitor deletion and owner visitor erasure; contact deletion; contact notification address removal or replacement; guest-preview feedback and links; WH-127 module record removal; and the R2 cleanup queue row. Removing an owner photo from a WH-128 collection deletes only its membership row and is excluded: the photo stays covered.
 - **Skipped by expiry:** contact expiry, traffic rollup expiry, and R2 photo cleanup. A photo removed shortly before an account or project hold stays queued and stored, because queue rows now carry the project and owner. The orphan sweep only lists `photos/` and treats queued keys as retained.
 - **Preserved without visible difference:** profile-photo replacement or removal; Chat draft discard or inactive expiry; and, inside an account or project hold (owner decision, October 4, 2026), every app visitor document overwrite (visitor transition, recovery restore or migration apply: `safety_hold_app_document` keeps the previous revision) and every app recovery-point copy cleared by point removal or visitor revocation (`safety_hold_app_recovery_document`). The trigger copies the previous payload into restricted `safety_preserved_records`. Copies follow a covering hold and are deleted when no hold covers them. An object hold does not capture app documents.
 - **Restore:** restore admission refuses (`preservation-hold`) while a hold, an open disclosure or an unfinished capture exists, and inventory evidence must include every stored evidence object with its exact size and digest.
