@@ -14,7 +14,7 @@ const env={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true}
  CLOUDFLARE_CLIENT_ID:'fixture',CLOUDFLARE_CLIENT_SECRET:'synthetic',CONNECTION_ENCRYPTION_KEYRING:fixtureKeyring('a'.repeat(64))};
 const originalFetch=globalThis.fetch;let transports=0;
 globalThis.fetch=async()=>{transports++;throw Error('No provider or inference transport is allowed');};
-const call=(actor,path,method='GET')=>m.worker.fetch(new Request(base+'/api'+path,{method,headers:{origin:base,cookie:'__Host-whumpo_session='+actor.token}}),env);
+const call=(actor,path,method='GET')=>m.worker.fetch(new Request(base+'/api'+path,{method,...(method==='POST'&&/\/connections\/[a-z]+\/start$/.test(path)?{body:JSON.stringify({handoff:null})}:{}),headers:{origin:base,'content-type':'application/json',cookie:'__Host-whumpo_session='+actor.token}}),env);
 async function ok(response){assert.equal(response.status,200,await response.clone().text());return response;}
 try{
  await initializeFixtureKeys(db,env.CONNECTION_ENCRYPTION_KEYRING);
