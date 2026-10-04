@@ -42,6 +42,8 @@ export const deletionSites={
  'src/contacts.ts::contact_submissions':{decision:'blocked',mechanism:'safety_hold_contact_retained + cleanupContacts excludes safety_held_projects',note:'Owner deletion is refused; expiry skips held projects. The inbox already hides expired messages.'},
  'src/contacts.ts::contact_receipts':excluded(receipts),
  'src/shared-modules/api.ts::module_request_receipts':excluded(receipts),
+ // WH-128 owner "Remove from collection": deletes one owner-filed photo's collection membership row only.
+ 'src/shared-modules/files-gallery.ts::module_files':excluded('Owner collection membership row (ids only) for an owner photo; the photo row, its R2 object, its safety receipt and every saved version stay, so the content stays covered by the project_files hold (safety_hold_file_retained). Staff/visitor upload rows are never deleted here.'),
  'src/contacts.ts::contact_notification_outbox':{decision:'skips-held',mechanism:'cleanupContacts excludes safety_held_projects + safety_hold_contact_outbox_retained',note:'Content-free delivery metadata (no visitor name, email or message); expiry skips held projects and a direct delete is refused while held.'},
  'src/contacts.ts::contact_notification_send_ledger':excluded('WH-036 content-free daily provider-call counters enforcing the spending ceiling; no customer content.'),
  'schema/platform.sql::contact_notification_destinations':blocked('safety_hold_contact_destination_retained','A confirmed Chat review that replaces the address (contact_destination_review_apply) or an operator suppression reset that removes a suppressed address (contact_suppression_reset_apply) inside a held project is refused as a whole.'),

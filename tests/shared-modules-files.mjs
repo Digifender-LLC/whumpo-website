@@ -403,6 +403,64 @@ try{
   const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['modules.put','filesModuleReview','review-photo-collection-setup','Set up photo collection'])assert.ok(!prompt.includes(word),word);
  });
 
+ await check('Remove from collection: owner-only, idempotent, keeps the photo, refused while the website shows it',async()=>{
+  const built=await build({entryPoints:['frontend/src/lib/photo-collections.ts'],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+  const ui=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+  const r=await owner(),workspace=(o,path,init={})=>m.worker.fetch(new Request('https://whumpo.com/api'+path,{...init,headers:{cookie:`__Host-whumpo_session=${o.token}`,origin:'https://whumpo.com','content-type':'application/json'}}),{...(fixture.env??{}),...env},{waitUntil(){}});
+  const facts=async o=>(await (await workspace(o,ui.ownerCollectionsPath(o.project))).json());
+  let drop=false;const send=o=>async(path,init)=>{const res=await workspace(o,path,init),body=await res.json();if(drop){drop=false;throw Error('Connection lost');}if(!res.ok)throw Object.assign(Error(body.error??body.code),{code:body.code,status:res.status});return body;};
+  const raw=async(o,project,payload)=>{const res=await workspace(o,ui.removeFromCollectionPath(project),{method:'POST',body:JSON.stringify(payload)});return {status:res.status,body:await res.json()};};
+  await configureFixtureModules(r.scope,r.user,r.project,[accessInstance,filesInstance]);await activation(r,'members');await activation(r,'media');
+  const ownerPhoto=async name=>{const fileId=id(),u=await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':encodeURIComponent(name)},body:jpegA}),{...env,DB:r.scope},r.user,r.project,fileId);assert.equal(u.status,'ready');return fileId;};
+  const p1=await ownerPhoto('Keep one'),p2=await ownerPhoto('Keep two');
+  let state=await facts(r);const library=ui.fileableCollections(state)[0],file=ui.collectionFiler(send(r)),remove=ui.collectionRemover(send(r));
+  for(const p of [p1,p2])await file(r.project,library,ui.candidateOf(state,p));
+  state=await facts(r);assert.deepEqual(state.collections[0].files.map(f=>f.fileId).sort(),[p1,p2].sort());
+  const object=(await row('SELECT object_key FROM project_files WHERE id=?',p2)).object_key;
+  // The exact body: resource, collection and photo ids only.
+  assert.deepEqual(ui.removeFromCollectionBody(ui.collectionOf(state,p2),p2),{resourceId:library.resourceId,collectionId:'library',fileId:p2});
+  // A lost acknowledgement is retried safely: the second call answers removed:false and nothing else changes.
+  drop=true;await assert.rejects(remove(r.project,ui.collectionOf(state,p2),p2),/Connection lost/);
+  assert.deepEqual(await remove(r.project,library,p2),{fileId:p2,collectionId:'library',removed:false});
+  assert.equal(await row('SELECT 1 FROM module_files WHERE file_id=?',p2),null);
+  assert.ok(await row("SELECT 1 FROM project_files WHERE id=? AND status='ready'",p2),'The photo stays');
+  assert.equal((await row('SELECT state FROM project_photo_safety WHERE file_id=?',p2)).state,'pending','Its safety receipt stays');
+  assert.equal(await row('SELECT 1 FROM file_cleanup WHERE object_key=?',object),null,'Nothing is queued for deletion');
+  if(!d1)assert.ok(await FILES.get(object),'The object stays');
+  assert.ok((await m.listPhotos(r.scope,r.user,r.project)).files.some(f=>f.id===p2),'Still in the owner library');
+  state=await facts(r);assert.ok(ui.candidateOf(state,p2),'Unfiled again, so it can be filed again');assert.equal(ui.collectionOf(state,p2),undefined);
+  assert.equal((await file(r.project,library,ui.candidateOf(state,p2))).result.fileId,p2,'Re-filing after removal works');
+  // Refusals: a foreign owner, an unknown resource, a non-owner collection, a staff upload, malformed bodies.
+  assert.equal((await raw(a,r.project,{resourceId:library.resourceId,collectionId:'library',fileId:p2})).status,404);
+  assert.equal((await raw(r,r.project,{resourceId:id(),collectionId:'library',fileId:p2})).status,404);
+  assert.equal((await raw(r,r.project,{resourceId:library.resourceId,collectionId:'intake',fileId:p2})).status,403);
+  assert.equal((await raw(r,r.project,{resourceId:library.resourceId,collectionId:'library',fileId:id()})).status,404);
+  const staffUpload=(await row("SELECT file_id FROM module_files WHERE project_id=? AND uploader_kind!='owner' LIMIT 1",a.project)).file_id,aMedia=await instance(a,'media');
+  assert.equal((await raw(a,a.project,{resourceId:aMedia.id,collectionId:'library',fileId:staffUpload})).status,404,'Staff/visitor uploads are never removed here');
+  assert.ok(await row('SELECT 1 FROM module_files WHERE file_id=?',staffUpload));
+  for(const payload of [{resourceId:library.resourceId,collectionId:'library'},{resourceId:library.resourceId,collectionId:'library',fileId:p2,path:'photos/x'},{resourceId:library.resourceId,collectionId:'Library',fileId:p2}])
+   assert.equal((await raw(r,r.project,payload)).status,400);
+  assert.ok(await row('SELECT 1 FROM module_files WHERE file_id=?',p2));
+  // Conservative: a photo the saved website configuration shows stays in the collection until the page changes.
+  await approve(p1);
+  const prepared=await control(r,{type:'galleryPageReview',projectId:r.project,instanceId:'media',collectionId:'library',pageId:'home'});assert.equal(prepared.status,200,prepared.error);
+  const q=await row('SELECT * FROM project_spec_proposals WHERE id=?',prepared.id);
+  const saved=await control(r,{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision});assert.equal(saved.status,200,saved.error);
+  const refused=await raw(r,r.project,{resourceId:library.resourceId,collectionId:'library',fileId:p1});assert.equal(refused.status,409);assert.match(refused.body.error,/saved or published website/);
+  assert.ok(await row('SELECT 1 FROM module_files WHERE file_id=?',p1));
+  // Owner removal works in every activation state and inside a safety hold, because it deletes no content.
+  await activation(r,'media','disable');
+  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh128-remove',?,'intake-2','human:reviewer',unixepoch(),unixepoch()+31536000)",r.user);
+  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh128-remove','case-wh128-remove',?,'project',?,'basis-2','human:approver',unixepoch(),unixepoch()+86400)",r.user,r.project);
+  state=await facts(r);assert.equal(state.collections[0].state,'inactive');
+  assert.deepEqual(await ui.collectionRemover(send(r))(r.project,ui.collectionOf(state,p2),p2),{fileId:p2,collectionId:'library',removed:true});
+  assert.ok(await row('SELECT 1 FROM project_files WHERE id=?',p2));
+  await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-2' WHERE id='hold-wh128-remove'");
+  // The panel wires the remover; the site agent's prompt advertises none of it.
+  const controls=await readFile('frontend/src/photo-collections.tsx','utf8');assert.ok(controls.includes('collectionRemover(')&&controls.includes('Remove from collection'));
+  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['module-files/remove','Remove from collection'])assert.ok(!prompt.includes(word),word);
+ });
+
  await check('module uploads stay out of the owner photo library, Chat and model context',async()=>{
   const ids=(await rows("SELECT file_id FROM module_files WHERE project_id=? AND uploader_kind!='owner'",a.project)).map(r=>r.file_id);assert.ok(ids.length>=3);
   const listed=await m.listPhotos(a.scope,a.user,a.project);assert.ok(!listed.files.some(f=>ids.includes(f.id)));
@@ -461,6 +519,6 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the typed filesModuleReview setup control (exact standard owner-only instance through the existing review, tampered proposals refused inside the commit, separate save and activation, existing collection, taken ids, no website and foreign owner refused), the owner Photos panel client over the real routes (panel facts, Add to collection with request-id replay, Prepare gallery page, disabled-instance refusal, no staff/visitor uploads listed), the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
+ process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the typed filesModuleReview setup control (exact standard owner-only instance through the existing review, tampered proposals refused inside the commit, separate save and activation, existing collection, taken ids, no website and foreign owner refused), the owner Photos panel client over the real routes (panel facts, Add to collection with request-id replay, Prepare gallery page, disabled-instance refusal, no staff/visitor uploads listed), Remove from collection (owner only, idempotent after a lost acknowledgement, photo, object and receipt kept, re-filing, foreign/unknown/non-owner/staff-upload/malformed refusals, refused while the saved website shows the photo, allowed when disabled and inside a hold), the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

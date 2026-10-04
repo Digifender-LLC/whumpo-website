@@ -36,6 +36,14 @@ export function galleryReviewAction(projectId:string,c:Pick<OwnerCollection,'ins
  return {type:'galleryPageReview',projectId,instanceId:c.instanceId,collectionId:c.collectionId,pageId};
 }
 
+/** WH-128 "Remove from collection": the owner route removes one owner-filed photo's collection row only (the photo,
+ * its object and saved versions stay). Idempotent on the server, so a retry after a lost acknowledgement is safe. */
+export const removeFromCollectionPath=(project:string)=>`/projects/${project}/module-files/remove`;
+export const removeFromCollectionBody=(c:Pick<OwnerCollection,'resourceId'|'collectionId'>,fileId:string)=>({resourceId:c.resourceId,collectionId:c.collectionId,fileId});
+export function collectionRemover(send:Send){
+ return (project:string,c:Pick<OwnerCollection,'resourceId'|'collectionId'>,fileId:string)=>send(removeFromCollectionPath(project),{method:'POST',body:JSON.stringify(removeFromCollectionBody(c,fileId))});
+}
+
 /** Files photos into collections, reusing one request id per photo and collection until a result is confirmed, so a
  * lost acknowledgement replays the module receipt instead of filing twice. */
 export function collectionFiler(send:Send){

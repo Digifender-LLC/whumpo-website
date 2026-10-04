@@ -73,7 +73,7 @@ import {contactDelivery} from './contact-email';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
 import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
-import {readOwnerFileCollections} from './shared-modules/files-gallery';
+import {readOwnerFileCollections,removeOwnerFileFromCollection} from './shared-modules/files-gallery';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
@@ -395,6 +395,9 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   // "Prepare gallery page" controls (dashboard only; never Chat or model input).
   const ownerCollections=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-files$/);
   if(method==='GET'&&ownerCollections)return json(await readOwnerFileCollections(env.DB,user.id,ownerCollections[1]));
+  // WH-128 owner "Remove from collection": deletes one owner-filed photo's collection row only (the photo stays).
+  const collectionRemoval=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-files\/remove$/);
+  if(method==='POST'&&collectionRemoval)return json(await removeOwnerFileFromCollection(env.DB,user.id,collectionRemoval[1],await body(request)));
   // WH-127 owner records panel: counts per records instance (the records.summary@1 facts), then the list below.
   const recordsSummary=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records$/);
   if(method==='GET'&&recordsSummary)return json(await readRecordsSummary(env.DB,user.id,recordsSummary[1]));

@@ -2,18 +2,27 @@ import {useRef,useState} from 'react';
 import type {OwnerFileCollections} from '../../src/shared-modules/shape';
 import {Button} from './components/ui/button';
 import {api,message} from './lib/api';
-import {candidateOf,collectionFiler,collectionKey,collectionLabel,collectionOf,fileableCollections,filesActivationAction,filesSetupAction,galleryReady,galleryReviewAction} from './lib/photo-collections';
+import {candidateOf,collectionFiler,collectionRemover,collectionKey,collectionLabel,collectionOf,fileableCollections,filesActivationAction,filesSetupAction,galleryReady,galleryReviewAction} from './lib/photo-collections';
 import {useWorkspace} from './workspace';
 
 const states={inactive:'Disabled',active:'Active',suspended:'Suspended',migrating:'Migrating'} as const;
 
 /** WH-128 "Add to collection" on one Photos panel card: files an existing ready owner photo into an active owner
  * collection with the owner `files.putBytes` module request (id and exact digest; no bytes are sent again). Filing
- * changes no safety state, and the photo stays in the owner's library. */
+ * changes no safety state, and the photo stays in the owner's library. A filed photo offers "Remove from collection",
+ * which removes only its collection row (refused while the saved or published website shows the photo). */
 export function PhotoCollectionControl({project,fileId,data,onFiled}:{project:string;fileId:string;data:OwnerFileCollections|undefined;onFiled:()=>void}){
- const filer=useRef(collectionFiler((path,init)=>api(path,init))),[choice,setChoice]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const filer=useRef(collectionFiler((path,init)=>api(path,init))),remover=useRef(collectionRemover((path,init)=>api(path,init))),[choice,setChoice]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const filed=collectionOf(data,fileId),candidate=candidateOf(data,fileId),options=fileableCollections(data);
- if(filed)return <p className="text-xs text-muted-foreground">In collection {collectionLabel(filed)}.</p>;
+ async function remove(){
+  if(busy||!filed)return;setBusy(true);setError('');
+  try{await remover.current(project,filed,fileId);onFiled();}catch(e){setError(message(e));}finally{setBusy(false);}
+ }
+ if(filed)return <div className="flex flex-wrap items-center gap-2">
+  <p className="text-xs text-muted-foreground">In collection {collectionLabel(filed)}.</p>
+  <Button type="button" variant="quiet" size="sm" className="min-h-11" disabled={busy} onClick={()=>void remove()}>Remove from collection</Button>
+  {error&&<p role="alert" className="w-full text-xs">{error}</p>}
+ </div>;
  if(!candidate||!options.length)return null;
  const selected=options.find(c=>collectionKey(c)===choice)??options[0];
  async function add(){
