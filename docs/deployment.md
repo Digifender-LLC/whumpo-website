@@ -45,7 +45,7 @@ On September 28 2026, the user authorized digifender.com as the temporary test d
 | --- | --- | --- |
 | Worker | whumpo-platform | API and Static Assets |
 | Custom domain | digifender.com | HTTPS test platform |
-| D1 | whumpo-control-chat-connections-test | Identity, projects, activity, invitations |
+| D1 | whumpo-control | Identity, projects, activity, invitations |
 | Turnstile | Whumpo test platform | Free managed signup verification |
 | Private repository | Digifender-LLC/whumpo-website | Source history |
 
