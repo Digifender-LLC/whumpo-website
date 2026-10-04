@@ -20,6 +20,17 @@ export function ciCommit(env=process.env,git=args=>execFileSync('git',args,{enco
  return {commit,dirty,branch:env.WORKERS_CI_BRANCH??null};
 }
 
+// Workers Builds sets WRANGLER_CI_OVERRIDE_NAME (and WRANGLER_CI_MATCH_TAG) for the
+// linked Worker, and Wrangler then deploys EVERY config under that name. The
+// release deploys four named Workers and verifies each by name and tag, so the
+// override must not reach any child Wrangler process.
+export function scrubCIOverrides(env,linked='whumpo-platform'){
+ const name=env.WRANGLER_CI_OVERRIDE_NAME;
+ if(name!==undefined&&name!==linked)throw ciRefusal('the Workers Builds trigger is linked to '+name+', not '+linked+'.');
+ delete env.WRANGLER_CI_OVERRIDE_NAME;delete env.WRANGLER_CI_MATCH_TAG;
+ return env;
+}
+
 export function ciReview(snapshot,artifact,source){
  return {
   version:3,environment:'test',buildInputs:snapshot.inputs.sha256,
@@ -38,6 +49,7 @@ export function ciPreflight(driver,observed,artifact){
 
 export async function ciRelease(root,driver,{env=process.env,log=console.log,commit=ciCommit}={}){
  if(env.WORKERS_CI!=='1')throw Error('The ci release runs only in Cloudflare Workers Builds after a merge to main. Do not deploy by hand.');
+ scrubCIOverrides(process.env);
  const source=commit(env),snapshot=await verifyBuildSnapshot(root),artifact=await currentSchemaArtifact(root);
  ciPreflight(driver,await driver.observe(),artifact);
  const review=ciReview(snapshot,artifact,source);
