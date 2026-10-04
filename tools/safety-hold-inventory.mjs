@@ -43,6 +43,7 @@ export const deletionSites={
  'src/files.ts::R2':{decision:'skips-held',mechanism:'queue row deleted first (refused when held); orphan sweep lists only photos/ and retains every queued key',note:'Restricted evidence under restricted/safety-evidence/ is never listed or deleted by ordinary cleanup.'},
  'src/safety-cases.ts::R2':{decision:'hold-mechanism',mechanism:'disposeSafetyEvidence',note:'Audited restricted-evidence disposal by an authenticated preservation approver, only after case closure with no open disclosure.'},
  'src/site-traffic.ts::site_traffic_daily':{decision:'skips-held',mechanism:'cleanupTraffic excludes safety_held_projects',note:'Readers only show the 30-day window, so retained rows are not visible.'},
+ 'src/site-traffic.ts::site_traffic_quality':{decision:'skips-held',mechanism:'cleanupTraffic excludes safety_held_projects',note:'Content-free daily counters of excluded automated requests and missed measurements; readers only show the 30-day window.'},
  'src/app-lifecycle.ts::app_visitors':blocked('safety_hold_visitor_retained','Visitor self-deletion inside a held project returns the existing "could not be confirmed" error. Visitor deletion rights during a hold need counsel review (owner question).'),
  'src/app-lifecycle.ts::app_daily_usage':excluded(receipts),
  'src/app-lifecycle.ts::app_deletion_receipts':excluded(receipts),

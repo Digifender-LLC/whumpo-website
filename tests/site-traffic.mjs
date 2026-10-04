@@ -19,6 +19,10 @@ try{
  for(const [path,method] of [['','HEAD'],['','POST'],['missing','GET'],['assets/'+crypto.randomUUID()+'.jpg','GET'],['s/'+a.project,'GET']])await host.fetch(new Request(url(a.project)+path,{method}),{DB:db});
  assert.equal((await readTraffic(scope(user),user)).rows[0].requests,12);
  assert.deepEqual((await readTraffic(scope(other),other)).rows,[]);
+ // WH-037: known automation and platform checks are excluded from the page metric and counted separately; no agent is stored.
+ for(const agent of ['Googlebot/2.1','whumpo-site-check/1'])await host.fetch(new Request(url(a.project),{headers:{'user-agent':agent}}),{DB:db});
+ assert.equal((await readTraffic(scope(user),user)).rows[0].requests,12);assert.equal((await readTraffic(scope(user),user)).telemetry.projects.find(p=>p.projectId===a.project).excludedRequests,2);
+ assert.deepEqual((await readTraffic(scope(other),other)).telemetry.projects.map(p=>p.excludedRequests),[]);
  const ctxTasks=[];const ctx={waitUntil:p=>ctxTasks.push(p)};
  assert.equal((await host.fetch(new Request(url(a.project)+'?private=query'),{DB:db},ctx)).status,200);await Promise.all(ctxTasks);assert.equal(ctxTasks.length,1);
  assert.equal((await readTraffic(scope(user),user)).rows[0].requests,13);

@@ -179,3 +179,7 @@ WH-110 reuses `readViewBinding` for current project and traffic facts supplied t
 ## Guest preview component (WH-151)
 
 `guest-previews` is a project-scoped registered component (`project.guest-previews@1`) read through `readViewBinding` by Chat temporary views and saved pages alike. Its registry feature is null: it needs current identity and project ownership only, like the WH-150 list handler, so management stays available after `creator.guest-feedback` inclusion ends. It returns link state and counts, never comment text, tokens or hashes. See [guest previews](guest-previews.md#owner-chat-and-view-bindings--wh-151).
+
+## Website health component (WH-037)
+
+`site-health` is a registered component (`project.site-health@1`) read through `readViewBinding` by Chat temporary views and saved pages. Its registry feature is null: like the saved HTTP/Chat health report it needs current identity and ownership only, so a problem stays diagnosable after insight inclusion ends (the `traffic` component keeps `core.insights`). The `traffic` component's data now also carries aggregate `telemetry` (window, coverage start, per-project measurement state, excluded and missed counts). See [site health](site-health.md#owner-diagnostics-and-bindings--wh-037).
