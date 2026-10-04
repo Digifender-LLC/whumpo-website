@@ -18,7 +18,7 @@ A pending AI turn without its current standard receipt fails explicitly and requ
 
 ## Capacity and fair use
 
-Internal provider capacity and availability can interrupt testing, with a service-capacity response rather than a request to buy standard-AI credits. Unknown plans cannot silently receive an internal budget. Financial Monitor remains the default; cost/volume alone does not establish misuse. Safety policy is independent. Premium routing, actual provider cost attribution and broader fair-use notice/appeal workflows retain their roadmap gates.
+Internal provider capacity and availability can interrupt testing, with a service-capacity response rather than a request to buy standard-AI credits. Unknown plans cannot silently receive an internal budget. Financial Monitor remains the default; cost/volume alone does not establish misuse. Safety policy is independent. The [incident runbooks](incident-runbooks.md#2-controls-that-exist-today) describe stopping new inference by removing the platform AI secret without deleting receipts or uncertain holds. Premium routing, actual provider cost attribution and broader fair-use notice/appeal workflows retain their roadmap gates.
 
 ## Verification
 

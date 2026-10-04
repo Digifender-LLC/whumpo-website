@@ -89,6 +89,8 @@ export function IdentityGate({children,signup=false}:{children:ReactNode;signup?
 function IdentityWorkspace({children}:{children:ReactNode}){return children;}
 function SecurityContent({control:c}:{control:Control}){return <div className="max-w-xl space-y-6">{!c.loaded?<p role="status">Loading account security…</p>:c.state?<IdentityProgress key={identityViewKey(c.state)} control={c}/>:c.verified?<IdentityEntry control={c}/>:<p>Account access could not be checked.</p>}<Status control={c}/><Help/></div>}
 function IndependentSecurity(){const c=useIdentity();return <SecurityContent control={c}/>;}
+/** The admitted workspace account for fixed identity-only pages; null elsewhere. */
+export function useWorkspaceAccount(){const c=useContext(IdentityContext);return c?.state?.purpose==='workspace'?c.state.accountId:null;}
 export function IdentitySecurity(){const c=useContext(IdentityContext);return c?<SecurityContent control={c}/>:<IndependentSecurity/>;}
 type VerificationWidget={render:(element:HTMLElement,options:Record<string,unknown>)=>string;remove:(id:string)=>void;getResponse:(id:string)=>string;reset:(id:string)=>void};
 const verificationWindow=window as unknown as {turnstile?:VerificationWidget;whumpoIdentityVerificationReady?:()=>void};

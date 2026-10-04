@@ -350,11 +350,15 @@
         "docs/standard-ai-accounting.md",
         "docs/pricing-and-model-policy.md",
         "docs/roadmap/identity-and-data-protection.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/incident-runbooks.md",
+        "docs/incident-tabletop.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/105",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-04: runbooks (docs/incident-runbooks.md) and a written desk-check (docs/incident-tabletop.md) added against source 1343111; documentation only, no live drill, deployed control, alert injection or external message. Offline suites for maintenance, standard AI recovery, secret custody, release manifest and identity recovery passed on Node 22.22.0 (repository requires 24). Open: live/facilitated exercise, alert delivery, per-tenant operator controls, stolen-kit takeover path, off-device key custody and counsel/restricted safety handling (gaps G1-G12). Acceptance not complete."
+      ]
     },
     {
       "id": "WH-008",
