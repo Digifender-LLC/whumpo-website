@@ -18,7 +18,7 @@ Rules for using this document:
 | Incident owner | The platform owner (the sole operator and sole tester). | Declares severity, authorizes any control in Section 2, and is the only person who may authorize new spend or a new service (Section 4). |
 | Operator | The same person, using the local checkout, Wrangler login and private `.secrets/` files. | No second operator, deputy or on-call rotation is documented. This is gap G1. |
 | Scribe | The operator, writing the Section 5 record as they go. | |
-| Customer communicator | The owner. | No outbound notification channel exists ([WH-036](roadmap/backlog.md), [WH-035](roadmap/backlog.md)); the drafts in Section 14 are unsent templates. |
+| Customer communicator | The owner. | No outbound notification provider is selected ([WH-036](roadmap/backlog.md)); an in-app support page and saved responses exist ([Section 15](#15-support-hours-escalation-and-customer-communication)); the drafts in Section 14 are unsent templates. |
 | Legal/safety | Not established. | Required before a real cohort: restricted incident handling, NCMEC provider-reporting access and counsel ([content safety](content-safety.md)). Owner-deferred scanner work does not remove this. |
 
 ### Severity
@@ -364,3 +364,14 @@ Within [7 days], the owner records, in the private incident record and (sanitize
 | Account recovery vs encrypted-content recovery; preserve reconciliation keys; revoke compromised credentials without a two-key count | Sections 8.3, 9.1, 9.3 | Written; traced to the identity and key-lifecycle contracts |
 
 **Not done and not claimed:** a live provider-outage or alert injection, installation of alerting, a deployed rehearsal of any control, off-device key custody, restore proof, or counsel/NCMEC readiness. WH-007 remains open for those gates; see the [tabletop record](incident-tabletop.md#recovery-gaps-and-owners).
+
+## 15. Support hours, escalation and customer communication
+
+WH-035, October 4, 2026. Desk-written; not live-drilled. Customers reach support at `/workspace/support` even when Chat is down ([usage reviews and support](usage-review-requests.md#independent-support-access-wh-035)).
+
+- **Hours.** The platform has one owner-operator (G1). Hours are whatever the owner sets in `SUPPORT_HOURS`; unset means the page says none are set. **Owner question: what hours, if any, should be published?** Do not publish hours nobody will staff.
+- **Intake and triage.** Run `{"action":"queue","state":"open"}` with `tools/respond-usage-review.mjs` on the same cadence as C12 (the maintenance report lists `support_open`). Work oldest first. Treat a request that mentions credentials, suspected illegal content, takeover or spend as a SEV1/SEV2 candidate (Section 1) and move it out of the support channel; generic support does not detect or handle abuse and no restricted case workflow is configured here (G12, WH-016).
+- **Responding.** Write a deliberate customer-visible answer, preview, then apply. Saving the answer is not delivery and is not a read; check `{"action":"queue","state":"answered"}` for notification and read state. Never paste private notes, other customers' identifiers or provider detail.
+- **Escalation.** Same table as Section 1; the owner decides. No second operator exists.
+- **Incident communication.** There is no outbound channel (G5) unless the owner selects and reviews a notification provider; until then the only customer-visible channel is the saved response and the support page status links. Section 14 drafts remain unsent templates. Promise no response time, no uptime and no staffing outside the hours the owner actually sets.
+- **Contact address.** `SUPPORT_CONTACT` is owner-supplied. **Owner question: which address, if any, should be shown?** None is invented.

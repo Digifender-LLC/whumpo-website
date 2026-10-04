@@ -7,6 +7,8 @@
     "db:local": "node tools/database.mjs initialize",
     "types": "wrangler types",
     "check": "node tools/generate-cms-native-schema.mjs --check && node tools/check-specification-compiler.mjs --check && node tools/check-service-client-compiler.mjs --check && tsc --noEmit && tsc -p tsconfig.frontend.json --noEmit",
+    "test:usage-review-requests": "node tests/usage-review-requests.mjs && node tests/support-access.mjs",
+    "test:support-browser": "node tests/workspace-identity-browser.mjs --support",
     "test:specification-compiler": "node tests/specification-compiler.mjs",
     "test:specification-journey": "node tests/specification-journey.mjs",
     "test:specification-review": "node tests/specification-review-details.mjs && node tests/specification-review-display.mjs",
