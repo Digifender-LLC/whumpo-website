@@ -9,8 +9,11 @@ import {StatusBadge,type Status} from './components/whumpo/status-badge';
 import {TrafficCard} from './traffic-card';
 import {GuestPreviewsPanel} from './guest-previews-panel';
 import {SiteHealthCard} from './site-health-card';
+import {ModuleInstancesCard} from './module-instances-card';
+import {AccessRolesCard} from './access-roles-card';
+import {RecordsSummaryCard} from './records-panel';
 
-export const viewLabels:Record<WidgetKind,string>={projects:'Projects',usage:'AI assistance',storage:'File storage',activity:'Recent activity',traffic:'Page requests',cms:'Publishing desk',performance:'Processing performance',reviews:'Website reviews','guest-previews':'Guest preview links','site-health':'Website health'};
+export const viewLabels:Record<WidgetKind,string>={projects:'Projects',usage:'AI assistance',storage:'File storage',activity:'Recent activity',traffic:'Page requests',cms:'Publishing desk',performance:'Processing performance',reviews:'Website reviews','guest-previews':'Guest preview links','site-health':'Website health',modules:'Modules','access-roles':'Staff roles','records-summary':'Form records'};
 export function CheckedAt({value}:{value:string}){return <p className="text-xs text-muted-foreground">Checked <time dateTime={value}>{new Date(value).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</time>. Saved status; refresh to check again.</p>;}
 const projectStatus:Record<ProjectFacts['state'],Status>={draft:'idle',building:'working',live:'ready',error:'attention'};
 /** The same trusted project element appears in Chat and saved/temporary views. */
@@ -31,6 +34,9 @@ export function ViewComponentDisplay({value,owner,onChanged}:{value:unknown;owne
   {c.kind==='reviews'&&<div className="space-y-4"><p className="text-xs text-muted-foreground">Up to five recent website change reviews. Opening a comparison does not save or publish anything.</p>{c.data.items.map(item=><section key={item.review.id} className="space-y-2"><p className="text-sm font-medium break-words">{item.project.name}</p><p className="text-xs text-muted-foreground">{item.operation==='restore'?'Restore a saved website version':'Proposed website changes'}</p>{owner&&<SpecificationReviewDetails owner={owner} value={item.review}/>}</section>)}{!c.data.items.length&&!c.data.denied&&!c.data.unavailable&&<p className="text-sm">No current website change reviews.</p>}{c.data.denied>0&&<p role="status" className="text-sm">Some reviews are not available with your current access.</p>}{c.data.unavailable>0&&<p role="status" className="text-sm">Some saved reviews changed or could not be checked. Refresh, or ask Whumpo for a fresh review.</p>}<p className="text-xs text-muted-foreground">Approve changes only through their separate review in Chat.</p></div>}
   {c.kind==='guest-previews'&&(c.projectId&&owner&&onChanged?<GuestPreviewsPanel facts={c.data} projectId={c.projectId} onChanged={onChanged}/>:<p className="text-sm">{c.data.links.length} guest preview link(s). Open this page to manage them.</p>)}
   {c.kind==='site-health'&&<SiteHealthCard facts={c.data} projectId={c.projectId} onChanged={owner?onChanged:undefined}/>}
+  {c.kind==='modules'&&c.projectId&&<ModuleInstancesCard facts={c.data} projectId={c.projectId} owner={!!owner}/>}
+  {c.kind==='access-roles'&&c.projectId&&<AccessRolesCard facts={c.data} projectId={c.projectId} owner={!!owner}/>}
+  {c.kind==='records-summary'&&c.projectId&&<RecordsSummaryCard facts={c.data} projectId={c.projectId}/>}
   {c.kind==='cms'&&<div className="space-y-4">{c.data.items.map(p=><div key={p.projectId}><p className="font-semibold break-words">{p.name}</p><p className="text-sm text-muted-foreground">{p.publishedArticles} published articles</p></div>)}</div>}
   <CheckedAt value={c.asOf}/>
  </div>;

@@ -35,6 +35,20 @@ export async function exportDirectory(db:D1Database,user:string,project:string,r
  const r=await directorySnapshot(db,user,project,review);
  return {format:'whumpo-directory',schemaVersion:1,project:{id:project,name:r.name},snapshot:{id:r.id,appliedAt:r.applied_at,kind:r.kind,restoredFrom:r.source_review_id,listingsSha256:r.digest},listings:r.listings};
 }
+/** Import validation for the `whumpo-directory` v1 export above (WH-129 content-collections export hook): the exact
+ * wrapper, current listing bounds and the listing SHA-256. Validation only: nothing imports or restores a file. */
+export async function validateDirectoryExport(value:unknown){
+ const fail=():never=>{throw new DirectoryError(400,'This is not a current Whumpo directory export.');};
+ const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join()===[...keys].sort().join();
+ if(!exact(value,['format','schemaVersion','project','snapshot','listings'])||value.format!=='whumpo-directory'||value.schemaVersion!==1)return fail();
+ const {project,snapshot}=value;
+ if(!exact(project,['id','name'])||!exact(snapshot,['id','appliedAt','kind','restoredFrom','listingsSha256']))return fail();
+ if(typeof project.id!=='string'||!uuid.test(project.id)||typeof project.name!=='string'||typeof snapshot.id!=='string'||!uuid.test(snapshot.id)||typeof snapshot.appliedAt!=='string'||!['edit','publish'].includes(String(snapshot.kind))||snapshot.restoredFrom!==null&&(typeof snapshot.restoredFrom!=='string'||!uuid.test(snapshot.restoredFrom)))return fail();
+ let list:Listing[]=[];try{list=entries(JSON.stringify(value.listings));}catch{fail();}
+ const json=JSON.stringify(list);
+ if(json!==JSON.stringify(value.listings)||await hashToken(json)!==snapshot.listingsSha256)fail();
+ return {projectId:project.id,snapshotId:snapshot.id,listings:list};
+}
 export async function directoryAction(db:D1Database,user:string,turn:string,action:Record<string,unknown>){
  const op=action.operation,project=action.projectId;
  if(!['list','history','restore','export','add','edit','remove','publish','unpublish'].includes(String(op))||typeof project!=='string'||Object.keys(action).some(k=>!['operation','projectId','listingId','title','description','url','snapshotId'].includes(k)))throw new DirectoryError(400,'Unsupported directory operation.');

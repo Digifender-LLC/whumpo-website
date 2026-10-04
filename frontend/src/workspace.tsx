@@ -1,5 +1,6 @@
 import {SiteSafetyPage} from './site-safety';
 import {SupportPage} from './support';
+import {OperatorSafetyPage} from './operator-safety';
 import {SavedChatTurn} from './saved-chat-turn';
 import {SavedWorkPage} from './saved-work';
 import {savedTurnFallback} from './lib/saved-work';
@@ -50,7 +51,7 @@ export const useWorkspace=()=>useContext(Context);
 export function Workspace(){
  useMobileViewport();
  const location=useRouterState({select:s=>s.location});
- return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><AccountHelpProvider>{location.pathname==='/workspace/security'?<AccountSecurityPage/>:location.pathname==='/workspace/safety'?<SiteSafetyPage/>:location.pathname==='/workspace/saved-work'?<SavedWorkPage/>:location.pathname==='/workspace/support'?<SupportPage/>:<WorkspaceProfile/>}</AccountHelpProvider></IdentityGate>;
+ return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><AccountHelpProvider>{location.pathname==='/workspace/security'?<AccountSecurityPage/>:location.pathname==='/workspace/safety'?<SiteSafetyPage/>:location.pathname==='/workspace/saved-work'?<SavedWorkPage/>:location.pathname==='/workspace/support'?<SupportPage/>:location.pathname==='/workspace/operator-safety'?<OperatorSafetyPage/>:<WorkspaceProfile/>}</AccountHelpProvider></IdentityGate>;
 }
 function WorkspaceProfile(){
  const profile=useQuery({queryKey:['session'],queryFn:async()=>{

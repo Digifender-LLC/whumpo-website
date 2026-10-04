@@ -61,7 +61,7 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
  ]);}catch(error){
   const saved=await read();if(saved){match(saved);return readApplicationBuild(db,user,id);}
   if(String(error).includes('welcome_first_draft_changed'))throw error;
-  if(String(error).includes('build_job_capacity'))throw new BackendError(429,'Another build for this project or account is still using shared build capacity. Nothing was saved; try again when it finishes.');
+  if(String(error).includes('build_job_capacity'))throw new BackendError(429,'Shared build capacity for this project or account is not available right now. Nothing was saved; try again later.');
   throw new BackendError(409,'Application draft was not saved. Check project ownership, the draft allowance and whether existing visitors require a data migration.');
  }
  // Deterministic diagnostics precede any spend; a failure is reported for an optional owner-requested repair.
@@ -78,7 +78,13 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
   returned=run.state==='complete'&&result?.error!=='unavailable';
   const finished=await finishBuildJob(db,job.lease,passed?'succeeded':'failed',[...diagnostics,{check:'build',status:passed?'passed':run.state==='complete'?'failed':'unknown',...(result?.error?{code:result.error}:{})}]);
   await recordBuildCleanup(db,id,returned?'runtime-returned':'runtime-unconfirmed');
-  if(passed&&finished){await assertBuildOutput(db,user,action.projectId,id);return describeApplicationReview(await prepareApplication(db,user,action.projectId,id,'enable',id,id));}
+  if(passed&&finished){
+   await assertBuildOutput(db,user,action.projectId,id);
+   // WH-126: an application consumes the project's visitor access module (visitor identity); without one, no review.
+   if(!await db.prepare("SELECT 1 FROM module_instances WHERE project_id=? AND kind='access'").bind(action.projectId).first())
+    return `The private application draft ${id} passed its test and was saved. Visitors sign in through this project’s visitor access module, which has not been set up, so no application review was prepared. Nothing was activated or published.`;
+   return describeApplicationReview(await prepareApplication(db,user,action.projectId,id,'enable',id,id));
+  }
   return await readApplicationBuild(db,user,id);
  }catch{
   if(!returned){await finishBuildJob(db,job.lease,'failed',[...diagnostics,{check:'build',status:'unknown'}]);await recordBuildCleanup(db,id,'runtime-unconfirmed');}

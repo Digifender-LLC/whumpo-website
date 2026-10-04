@@ -676,14 +676,15 @@ CREATE TABLE storage_project_usage (
 
 -- Operator containment (WH-050 F7, runbook G3; tools/operator-containment.mjs). One row per action and public scope:
 -- a freeze (allowance NULL) or a temporary per-project allowance (project subjects only), enforced inside the public
--- admission triggers. Rows are the audit: append-only except one lift, always expiring within 30 days, and they never
+-- admission triggers. The `build` scope (WH-074) is freeze-only: it refuses new build jobs and cancels running or
+-- succeeded-but-unpublished ones in the frozen scope. Rows are the audit: append-only except one lift, always expiring within 30 days, and they never
 -- delete or change customer data. No foreign key, so closure is neither blocked nor erases the record.
 CREATE TABLE operator_containments (
  id TEXT NOT NULL CHECK(length(id)=36),
- scope TEXT NOT NULL CHECK(scope IN ('backend','transition','contact','photo')),
+ scope TEXT NOT NULL CHECK(scope IN ('backend','transition','contact','photo','build')),
  subject_kind TEXT NOT NULL CHECK(subject_kind IN ('account','project')),
  subject_id TEXT NOT NULL CHECK(length(subject_id)=36),
- allowance INTEGER CHECK(allowance IS NULL OR (allowance>=0 AND allowance<=CASE scope WHEN 'backend' THEN 500 WHEN 'transition' THEN 500 WHEN 'contact' THEN 100 ELSE 50000 END)),
+ allowance INTEGER CHECK(allowance IS NULL OR (scope<>'build' AND allowance>=0 AND allowance<=CASE scope WHEN 'backend' THEN 500 WHEN 'transition' THEN 500 WHEN 'contact' THEN 100 ELSE 50000 END)),
  operator_ref TEXT NOT NULL CHECK(length(operator_ref) BETWEEN 1 AND 128 AND operator_ref NOT GLOB '*[^A-Za-z0-9_.:@-]*'),
  reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
  request_digest TEXT NOT NULL CHECK(length(request_digest)=64),
@@ -723,12 +724,20 @@ CREATE TABLE app_spaces (
  owner_user_id TEXT NOT NULL REFERENCES users(id),
  version_id TEXT NOT NULL REFERENCES backend_versions(id),
  enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
- revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0)
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ -- WH-126: the visitor application is an execution resource (WH-071 logical resource `resource_id`) that consumes the
+ -- project's access module instance. Visitor identity belongs to that access instance, never to the application.
+ access_id TEXT NOT NULL REFERENCES module_instances(id),
+ resource_id TEXT NOT NULL UNIQUE CHECK(length(resource_id)=36)
 , review_id TEXT, migration_id TEXT REFERENCES app_migration_approvals(id), rollback_id TEXT REFERENCES app_restore_reviews(id));
 
+-- WH-126 project visitor identity, owned by the project's access module instance (at most one per project, see
+-- src/shared-modules/schema.sql). Enrollment, passkeys, recovery and sessions need only that instance to be active;
+-- a visitor application, when one exists, consumes these identities for its per-visitor documents.
 CREATE TABLE app_visitors (
  id TEXT PRIMARY KEY,
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ access_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
  revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -737,7 +746,7 @@ CREATE TABLE app_sessions (
  token_hash TEXT PRIMARY KEY,
  visitor_id TEXT NOT NULL REFERENCES app_visitors(id),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
-, page_review_id TEXT REFERENCES app_page_reviews(id));
+);
 
 CREATE TABLE app_documents (
  visitor_id TEXT PRIMARY KEY REFERENCES app_visitors(id),
@@ -754,6 +763,9 @@ CREATE TABLE app_runs (
  request_hash TEXT NOT NULL,
  base_revision INTEGER NOT NULL,
  program_revision INTEGER NOT NULL,
+ -- The visitor page live when the change was admitted (NULL when none); the commit requires the same live page, so
+ -- withdrawing or replacing the page rejects in-flight changes (visitor sign-in itself belongs to the access instance).
+ page_review_id TEXT REFERENCES app_page_reviews(id),
  state TEXT NOT NULL DEFAULT 'running' CHECK(state IN ('running','complete','failed','conflict')),
  result_json TEXT CHECK(result_json IS NULL OR length(CAST(result_json AS BLOB))<=4608),
  next_json TEXT CHECK(next_json IS NULL OR json_valid(next_json) AND length(CAST(next_json AS BLOB))<=4096),
@@ -875,8 +887,9 @@ CREATE TABLE user_profiles (
 
 CREATE TABLE app_invitations (
  code_hash TEXT PRIMARY KEY CHECK(length(code_hash)=64),
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
- program_revision INTEGER NOT NULL CHECK(program_revision>=0),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ access_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ activation_revision INTEGER NOT NULL CHECK(activation_revision>=1),
  used_by TEXT REFERENCES app_visitors(id),
  revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
@@ -892,15 +905,16 @@ CREATE TABLE app_passkeys (
 
 CREATE TABLE app_auth_challenges (
  token_hash TEXT PRIMARY KEY CHECK(length(token_hash)=64),
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
- program_revision INTEGER NOT NULL CHECK(program_revision>=0),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ access_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ activation_revision INTEGER NOT NULL CHECK(activation_revision>=1),
  challenge TEXT NOT NULL CHECK(length(challenge) BETWEEN 16 AND 128),
  kind TEXT NOT NULL CHECK(kind IN ('signup','login','add')),
  visitor_id TEXT NOT NULL,
  invite_hash TEXT NOT NULL,
  session_hash TEXT NOT NULL,
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes'))
-, page_review_id TEXT REFERENCES app_page_reviews(id));
+);
 
 CREATE TABLE app_recovery_codes (
  visitor_id TEXT PRIMARY KEY REFERENCES app_visitors(id),
@@ -933,7 +947,7 @@ CREATE TABLE app_daily_usage (
 
 CREATE TABLE app_deletion_receipts (
  id TEXT PRIMARY KEY,
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  proof_hash TEXT NOT NULL CHECK(length(proof_hash)=64),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))
 );
@@ -1192,7 +1206,7 @@ CREATE TABLE build_job_cleanups (
 CREATE TABLE app_owner_erasures (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ project_id TEXT NOT NULL REFERENCES projects(id),
  visitor_id TEXT NOT NULL,
  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days'))
@@ -1324,7 +1338,7 @@ CREATE TABLE usage_review_requests (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  kind TEXT NOT NULL DEFAULT 'usage_review' CHECK(kind IN ('usage_review','help')),
- source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support')),
+ source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support','chat_form')),
  reference TEXT CHECK(reference IS NULL OR length(reference) BETWEEN 1 AND 200),
  statement TEXT NOT NULL CHECK(length(statement) BETWEEN 1 AND 950),
  created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -1335,7 +1349,7 @@ CREATE TABLE usage_review_requests (
  customer_read_at TEXT,
  CHECK((state='open' AND public_response IS NULL AND answered_by IS NULL AND answered_at IS NULL AND customer_read_at IS NULL) OR
        (state='answered' AND public_response IS NOT NULL AND answered_by IS NOT NULL AND answered_at IS NOT NULL)),
- CHECK(source='support' OR (kind='usage_review' AND reference IS NULL))
+ CHECK(source='support' OR (source='chat' AND kind='usage_review' AND reference IS NULL) OR (source='chat_form' AND kind='help' AND reference IS NULL))
 );
 
 -- External notification of a saved response. A row exists only when an owner-selected,
@@ -1378,7 +1392,7 @@ CREATE TABLE contact_notification_destinations (
 CREATE TABLE contact_notification_suppressions (
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
- reason TEXT NOT NULL CHECK(reason IN ('bounce','complaint','unsubscribe')),
+ reason TEXT NOT NULL CHECK(reason IN ('bounce','complaint','unsubscribe','provider')),
  created_at TEXT NOT NULL,
  PRIMARY KEY(user_id,address)
 );
@@ -1400,9 +1414,44 @@ CREATE TABLE contact_notification_outbox (
  expires_at TEXT NOT NULL,
  accepted_at TEXT,
  provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
- last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained')),
+ last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling')),
  CHECK((kind='new_message')=(submission_id IS NOT NULL)),
  CHECK((state IN ('accepted','bounced','complained'))=(accepted_at IS NOT NULL))
+);
+
+-- WH-036 exact Chat review of the owner's notification address (owner decision, October 4, 2026). The review id is the
+-- preparing chat turn; confirmation by a later turn replaces the project's destination atomically (contact_destination_review_apply).
+CREATE TABLE contact_destination_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
+ expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE
+);
+
+-- WH-036 spending ceiling: provider calls per UTC day. A send is refused (contact_send_ceiling) when the 32 most recent
+-- UTC days would exceed the day's ceiling (it can only be lowered), so any billing cycle of up to 31 days stays within it.
+CREATE TABLE contact_notification_send_ledger (
+ day TEXT PRIMARY KEY CHECK(length(day)=10),
+ sends INTEGER NOT NULL DEFAULT 0 CHECK(sends>=0),
+ ceiling INTEGER NOT NULL CHECK(ceiling BETWEEN 0 AND 100000)
+);
+
+-- WH-036 operator-reviewed reset of one permanent suppression (owner decision, October 4, 2026). Inserted only by the
+-- local operator CLI (tools/contact-suppression-reset.mjs) after a digest-pinned preview; the audit row is immutable.
+CREATE TABLE contact_notification_suppression_resets (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
+ suppression_reason TEXT NOT NULL CHECK(suppression_reason IN ('bounce','complaint','unsubscribe','provider')),
+ suppressed_at TEXT NOT NULL,
+ operator_ref TEXT NOT NULL CHECK(length(operator_ref) BETWEEN 1 AND 128),
+ reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
+ request_digest TEXT NOT NULL CHECK(length(request_digest)=64),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(user_id,address,suppressed_at)
 );
 
 CREATE TABLE backend_imports (
@@ -1762,7 +1811,7 @@ CREATE TABLE github_revocation_claims (
 
 CREATE TABLE app_deletion_reviews (
  id TEXT PRIMARY KEY,
- project_id TEXT NOT NULL REFERENCES app_spaces(project_id),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
  session_hash TEXT NOT NULL UNIQUE REFERENCES app_sessions(token_hash) ON DELETE CASCADE,
  revision INTEGER NOT NULL CHECK(revision>=0),
@@ -1875,6 +1924,7 @@ CREATE INDEX operator_containments_subject ON operator_containments(subject_id) 
 CREATE INDEX backend_form_reviews_project ON backend_form_reviews(project_id);
 
 CREATE INDEX app_visitors_project ON app_visitors(project_id);
+CREATE INDEX app_visitors_access ON app_visitors(access_id);
 
 CREATE INDEX app_sessions_visitor ON app_sessions(visitor_id);
 
@@ -1891,6 +1941,8 @@ CREATE INDEX app_activation_project ON app_activation_reviews(project_id);
 CREATE INDEX inference_calls_owner_time ON inference_calls(user_id,created_at,role);
 
 CREATE INDEX app_invitation_project ON app_invitations(project_id);
+CREATE INDEX app_invitation_access ON app_invitations(access_id);
+CREATE INDEX app_challenge_access ON app_auth_challenges(access_id);
 
 CREATE INDEX app_passkeys_visitor ON app_passkeys(visitor_id);
 
@@ -1938,6 +1990,7 @@ CREATE INDEX contact_notification_outbox_destination ON contact_notification_out
 CREATE INDEX contact_notification_outbox_user ON contact_notification_outbox(user_id,kind,created_at);
 CREATE INDEX contact_notification_outbox_expiry ON contact_notification_outbox(expires_at);
 CREATE INDEX contact_notification_destinations_address ON contact_notification_destinations(user_id,address);
+CREATE INDEX contact_destination_reviews_owner ON contact_destination_reviews(user_id,project_id);
 
 CREATE INDEX usage_review_owner_time ON usage_review_requests(user_id,created_at,id);
 
@@ -2719,6 +2772,12 @@ BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
 
 CREATE TRIGGER operator_containment_retained BEFORE DELETE ON operator_containments BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
 
+-- WH-074 build freeze: cancel the frozen scope's running and succeeded-but-unpublished jobs in the same write, exactly as
+-- owner cancellation does. A test already sent is not recalled; cleanup is recorded by the deterministic reconciler.
+CREATE TRIGGER operator_containment_build_cancel AFTER INSERT ON operator_containments WHEN NEW.scope='build'
+BEGIN UPDATE build_jobs SET state='cancelled',finished_at=coalesce(finished_at,strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+ WHERE state IN ('running','succeeded') AND project_id IN (SELECT project_id FROM operator_contained_projects WHERE id=NEW.id AND scope='build'); END;
+
 CREATE TRIGGER backend_form_admit BEFORE INSERT ON backend_form_reviews BEGIN
  SELECT RAISE(ABORT,'backend_form_owner') WHERE NOT EXISTS(SELECT 1 FROM projects p JOIN backend_form_settings s ON s.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision);
  SELECT RAISE(ABORT,'backend_form_targets') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM publications s JOIN backend_publications b ON b.project_id=s.project_id JOIN backend_publication_reviews r ON r.id=b.review_id WHERE s.project_id=NEW.project_id AND s.version_id IS NOT NULL AND s.revision=NEW.site_revision AND b.review_id=NEW.backend_publication_id AND r.user_id=NEW.user_id AND r.status='applied');
@@ -2735,22 +2794,24 @@ CREATE TRIGGER health_form_snapshot BEFORE INSERT ON site_health_checks WHEN NEW
 CREATE TRIGGER health_form_immutable BEFORE UPDATE ON site_health_checks WHEN NEW.form_review_id IS NOT OLD.form_review_id
  BEGIN SELECT RAISE(ABORT,'health_form_immutable'); END;
 
-CREATE TRIGGER app_space_owner BEFORE INSERT ON app_spaces WHEN NOT EXISTS(SELECT 1 FROM projects p JOIN backend_versions v ON v.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.owner_user_id AND v.id=NEW.version_id)
+-- The application consumes the project's access instance; that dependency and the resource id never change.
+CREATE TRIGGER app_space_owner BEFORE INSERT ON app_spaces WHEN NOT EXISTS(SELECT 1 FROM projects p JOIN backend_versions v ON v.project_id=p.id JOIN module_instances i ON i.project_id=p.id AND i.kind='access' WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.owner_user_id AND v.id=NEW.version_id AND i.id=NEW.access_id)
  BEGIN SELECT RAISE(ABORT,'app_space_owner'); END;
 
-CREATE TRIGGER app_space_update BEFORE UPDATE ON app_spaces WHEN NEW.project_id<>OLD.project_id OR NEW.owner_user_id<>OLD.owner_user_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.version_id AND project_id=NEW.project_id)
+CREATE TRIGGER app_space_update BEFORE UPDATE ON app_spaces WHEN NEW.project_id<>OLD.project_id OR NEW.owner_user_id<>OLD.owner_user_id OR NEW.access_id<>OLD.access_id OR NEW.resource_id<>OLD.resource_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.version_id AND project_id=NEW.project_id)
  BEGIN SELECT RAISE(ABORT,'app_space_identity'); END;
 
+-- WH-126: enrollment needs the project's active access instance, not a visitor application.
 CREATE TRIGGER app_visitor_admit BEFORE INSERT ON app_visitors BEGIN
- SELECT RAISE(ABORT,'app_unavailable') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_unavailable') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations ac ON ac.instance_id=i.id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=i.project_id AND p.owner_user_id=ar.user_id WHERE i.id=NEW.access_id AND i.project_id=NEW.project_id AND i.kind='access' AND ac.state='active');
  SELECT RAISE(ABORT,'app_visitor_capacity') WHERE (SELECT count(*) FROM app_visitors WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_visitors)>=1000;
 END;
 
-CREATE TRIGGER app_visitor_identity BEFORE UPDATE ON app_visitors WHEN NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.created_at<>OLD.created_at OR OLD.revoked=1 AND NEW.revoked<>1
+CREATE TRIGGER app_visitor_identity BEFORE UPDATE ON app_visitors WHEN NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.access_id<>OLD.access_id OR NEW.created_at<>OLD.created_at OR OLD.revoked=1 AND NEW.revoked<>1
  BEGIN SELECT RAISE(ABORT,'app_visitor_identity'); END;
 
 CREATE TRIGGER app_session_admit BEFORE INSERT ON app_sessions BEGIN
- SELECT RAISE(ABORT,'app_session_identity') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_session_identity') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN module_activations ac ON ac.instance_id=v.access_id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=v.project_id AND p.owner_user_id=ar.user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND ac.state='active');
  SELECT RAISE(ABORT,'app_session_capacity') WHERE (SELECT count(*) FROM app_sessions WHERE visitor_id=NEW.visitor_id)>=5 OR (SELECT count(*) FROM app_sessions)>=5000;
 END;
 
@@ -2760,11 +2821,11 @@ CREATE TRIGGER app_document_revision BEFORE UPDATE ON app_documents WHEN NEW.vis
 
 CREATE TRIGGER app_visitor_document AFTER INSERT ON app_visitors BEGIN INSERT INTO app_documents(visitor_id) VALUES(NEW.id); END;
 
-CREATE TRIGGER app_run_immutable BEFORE UPDATE ON app_runs WHEN NEW.id<>OLD.id OR NEW.visitor_id<>OLD.visitor_id OR NEW.project_id<>OLD.project_id OR NEW.version_id<>OLD.version_id OR NEW.session_hash<>OLD.session_hash OR NEW.request_hash<>OLD.request_hash OR NEW.base_revision<>OLD.base_revision OR NEW.program_revision<>OLD.program_revision OR NEW.day<>OLD.day OR OLD.state<>'running' OR NEW.state='running'
+CREATE TRIGGER app_run_immutable BEFORE UPDATE ON app_runs WHEN NEW.id<>OLD.id OR NEW.visitor_id<>OLD.visitor_id OR NEW.project_id<>OLD.project_id OR NEW.version_id<>OLD.version_id OR NEW.session_hash<>OLD.session_hash OR NEW.request_hash<>OLD.request_hash OR NEW.base_revision<>OLD.base_revision OR NEW.program_revision<>OLD.program_revision OR NEW.page_review_id<>OLD.page_review_id OR NEW.day<>OLD.day OR OLD.state<>'running' OR NEW.state='running'
  BEGIN SELECT RAISE(ABORT,'app_run_immutable'); END;
 
 CREATE TRIGGER app_run_apply BEFORE UPDATE OF state ON app_runs WHEN NEW.state='complete' BEGIN
- SELECT RAISE(ABORT,'app_state_changed') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ SELECT RAISE(ABORT,'app_state_changed') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN module_activations ac ON ac.instance_id=v.access_id AND ac.state='active' JOIN app_spaces a ON a.project_id=v.project_id AND a.access_id=v.access_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE NEW.page_review_id IS (SELECT id FROM app_live_pages WHERE project_id=a.project_id) AND v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
  UPDATE app_documents SET state_json=NEW.next_json,revision=revision+1 WHERE visitor_id=NEW.visitor_id;
 END;
 
@@ -2783,10 +2844,13 @@ CREATE TRIGGER app_space_initial_review BEFORE INSERT ON app_spaces WHEN NEW.ena
 
 CREATE TRIGGER app_activation_apply BEFORE UPDATE OF status ON app_activation_reviews BEGIN
  SELECT RAISE(ABORT,'app_activation_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.revision=NEW.base_revision);
- SELECT RAISE(ABORT,'app_migration_required') WHERE NEW.enabled=1 AND EXISTS(SELECT 1 FROM app_spaces a JOIN app_visitors v ON v.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.version_id<>NEW.version_id);
+ -- A program has touched visitor documents only once the application was authorized (revision>0); before that the
+ -- access instance's visitors hold untouched empty documents, so choosing the first program needs no migration.
+ SELECT RAISE(ABORT,'app_migration_required') WHERE NEW.enabled=1 AND EXISTS(SELECT 1 FROM app_spaces a JOIN app_visitors v ON v.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.revision>0 AND a.version_id<>NEW.version_id);
  SELECT RAISE(ABORT,'app_disable_version') WHERE NEW.enabled=0 AND NOT EXISTS(SELECT 1 FROM app_spaces WHERE project_id=NEW.project_id AND version_id=NEW.version_id);
+ -- WH-126: the application serves only the identities of its active access instance.
+ SELECT RAISE(ABORT,'app_access_required') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM app_spaces a JOIN module_activations ac ON ac.instance_id=a.access_id WHERE a.project_id=NEW.project_id AND ac.state='active');
  UPDATE app_spaces SET enabled=NEW.enabled,version_id=NEW.version_id,revision=revision+1,review_id=NEW.id WHERE project_id=NEW.project_id;
- DELETE FROM app_sessions WHERE NEW.enabled=0 AND visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
 END;
 
 CREATE TRIGGER app_activation_delete_guard BEFORE DELETE ON app_activation_reviews WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) BEGIN SELECT RAISE(ABORT,'app_activation_immutable'); END;
@@ -2820,16 +2884,17 @@ CREATE TRIGGER user_profiles_revision BEFORE UPDATE ON user_profiles
 WHEN NEW.user_id!=OLD.user_id OR NEW.revision!=OLD.revision+1
 BEGIN SELECT RAISE(ABORT,'profile_revision'); END;
 
+-- Invitations and sign-in challenges bind the project's active access instance at its current activation revision.
 CREATE TRIGGER app_invitation_admit BEFORE INSERT ON app_invitations BEGIN
- SELECT RAISE(ABORT,'app_invitation_authority') WHERE NEW.used_by IS NOT NULL OR NEW.revoked<>0 OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1 AND a.revision=NEW.program_revision);
+ SELECT RAISE(ABORT,'app_invitation_authority') WHERE NEW.used_by IS NOT NULL OR NEW.revoked<>0 OR NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations ac ON ac.instance_id=i.id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=i.project_id AND p.owner_user_id=ar.user_id WHERE i.id=NEW.access_id AND i.project_id=NEW.project_id AND i.kind='access' AND ac.state='active' AND ac.revision=NEW.activation_revision);
  SELECT RAISE(ABORT,'app_invitation_capacity') WHERE (SELECT count(*) FROM app_invitations WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_invitations)>=1000;
 END;
 
-CREATE TRIGGER app_invitation_identity BEFORE UPDATE ON app_invitations WHEN NEW.code_hash<>OLD.code_hash OR NEW.project_id<>OLD.project_id OR NEW.program_revision<>OLD.program_revision OR NEW.expires_at<>OLD.expires_at OR OLD.revoked=1 AND NEW.revoked<>1 OR OLD.used_by IS NOT NULL AND NEW.used_by IS NOT OLD.used_by OR NEW.used_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.used_by AND project_id=NEW.project_id)
+CREATE TRIGGER app_invitation_identity BEFORE UPDATE ON app_invitations WHEN NEW.code_hash<>OLD.code_hash OR NEW.project_id<>OLD.project_id OR NEW.access_id<>OLD.access_id OR NEW.activation_revision<>OLD.activation_revision OR NEW.expires_at<>OLD.expires_at OR OLD.revoked=1 AND NEW.revoked<>1 OR OLD.used_by IS NOT NULL AND NEW.used_by IS NOT OLD.used_by OR NEW.used_by IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.used_by AND project_id=NEW.project_id AND access_id=NEW.access_id)
  BEGIN SELECT RAISE(ABORT,'app_invitation_identity'); END;
 
 CREATE TRIGGER app_passkey_admit BEFORE INSERT ON app_passkeys BEGIN
- SELECT RAISE(ABORT,'app_passkey_authority') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND a.enabled=1);
+ SELECT RAISE(ABORT,'app_passkey_authority') WHERE NOT EXISTS(SELECT 1 FROM app_visitors v JOIN module_activations ac ON ac.instance_id=v.access_id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=v.project_id AND p.owner_user_id=ar.user_id WHERE v.id=NEW.visitor_id AND v.revoked=0 AND ac.state='active');
  SELECT RAISE(ABORT,'app_passkey_capacity') WHERE (SELECT count(*) FROM app_passkeys WHERE visitor_id=NEW.visitor_id)>=5;
 END;
 
@@ -2837,7 +2902,7 @@ CREATE TRIGGER app_passkey_identity BEFORE UPDATE ON app_passkeys WHEN NEW.id<>O
  BEGIN SELECT RAISE(ABORT,'app_passkey_identity'); END;
 
 CREATE TRIGGER app_challenge_admit BEFORE INSERT ON app_auth_challenges BEGIN
- SELECT RAISE(ABORT,'app_challenge_authority') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=NEW.project_id AND a.enabled=1 AND a.revision=NEW.program_revision);
+ SELECT RAISE(ABORT,'app_challenge_authority') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations ac ON ac.instance_id=i.id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=i.project_id AND p.owner_user_id=ar.user_id WHERE i.id=NEW.access_id AND i.project_id=NEW.project_id AND i.kind='access' AND ac.state='active' AND ac.revision=NEW.activation_revision);
  SELECT RAISE(ABORT,'app_challenge_capacity') WHERE (SELECT count(*) FROM app_auth_challenges WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM app_auth_challenges)>=1000;
 END;
 
@@ -2864,9 +2929,9 @@ CREATE TRIGGER app_page_immutable BEFORE UPDATE ON app_page_reviews WHEN NEW.id<
 
 CREATE TRIGGER app_page_apply AFTER UPDATE OF status ON app_page_reviews BEGIN
  SELECT RAISE(ABORT,'app_page_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_page_settings s ON s.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.revision=NEW.program_revision AND s.revision=NEW.base_revision AND (NEW.config_json IS NULL OR a.enabled=1));
+ -- WH-126: visitor sign-in belongs to the access instance and survives page changes; in-flight document changes
+ -- bind the page they were sent through (app_runs.page_review_id), so they fail instead.
  UPDATE app_page_settings SET revision=revision+1,review_id=NEW.id WHERE project_id=NEW.project_id;
- DELETE FROM app_sessions WHERE visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
- DELETE FROM app_auth_challenges WHERE project_id=NEW.project_id;
 END;
 
 CREATE TRIGGER app_page_settings_initial BEFORE INSERT ON app_page_settings WHEN NEW.revision<>0 OR NEW.review_id IS NOT NULL
@@ -2875,14 +2940,8 @@ CREATE TRIGGER app_page_settings_initial BEFORE INSERT ON app_page_settings WHEN
 CREATE TRIGGER app_page_settings_guard BEFORE UPDATE ON app_page_settings WHEN NEW.project_id<>OLD.project_id OR NEW.revision<>OLD.revision+1 OR NOT EXISTS(SELECT 1 FROM app_page_reviews r WHERE r.id=NEW.review_id AND r.project_id=NEW.project_id AND r.base_revision=OLD.revision AND r.status='applied')
  BEGIN SELECT RAISE(ABORT,'app_page_settings'); END;
 
-CREATE TRIGGER app_challenge_page BEFORE INSERT ON app_auth_challenges WHEN NEW.page_review_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_live_pages WHERE id=NEW.page_review_id AND project_id=NEW.project_id)
- BEGIN SELECT RAISE(ABORT,'app_page_changed'); END;
-
-CREATE TRIGGER app_session_page BEFORE INSERT ON app_sessions WHEN NEW.page_review_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_live_pages p JOIN app_visitors v ON v.project_id=p.project_id WHERE p.id=NEW.page_review_id AND v.id=NEW.visitor_id)
- BEGIN SELECT RAISE(ABORT,'app_page_changed'); END;
-
 CREATE TRIGGER app_run_admit BEFORE INSERT ON app_runs BEGIN
- SELECT RAISE(ABORT,'app_run_identity') WHERE NEW.state<>'running' OR NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+ SELECT RAISE(ABORT,'app_run_identity') WHERE NEW.state<>'running' OR NOT EXISTS(SELECT 1 FROM app_visitors v JOIN module_activations ac ON ac.instance_id=v.access_id AND ac.state='active' JOIN app_spaces a ON a.project_id=v.project_id AND a.access_id=v.access_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE NEW.page_review_id IS (SELECT id FROM app_live_pages WHERE project_id=a.project_id) AND v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
  SELECT RAISE(ABORT,'app_run_quota') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR (SELECT count(*) FROM app_runs)>=10000 OR (SELECT count(*) FROM app_runs WHERE visitor_id=NEW.visitor_id AND day=NEW.day)>=20 OR coalesce((SELECT attempts FROM app_daily_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=coalesce((SELECT coalesce(allowance,0) FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='transition' ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1),100) OR coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=1000
  -- Fair share: once half the platform pool is used, only accounts under 100 transitions today are admitted.
  OR (coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=500 AND coalesce((SELECT sum(u.attempts) FROM app_daily_usage u JOIN projects p ON p.id=u.project_id WHERE u.day=NEW.day AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=100);
@@ -3236,7 +3295,9 @@ CREATE TRIGGER application_build_admit BEFORE INSERT ON application_builds BEGIN
   JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.status='pending'
   WHERE v.id=NEW.id AND p.id=NEW.project_id AND p.owner_user_id=NEW.user_id
  );
- SELECT RAISE(ABORT,'application_build_migration') WHERE EXISTS(SELECT 1 FROM app_visitors WHERE project_id=NEW.project_id);
+ -- Visitor documents become program-owned once an application was authorized; visitors enrolled only in the access
+ -- instance (WH-126) hold untouched empty documents and do not block a first application draft.
+ SELECT RAISE(ABORT,'application_build_migration') WHERE EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id WHERE v.project_id=NEW.project_id AND a.revision>0);
 END;
 
 CREATE TRIGGER application_build_immutable BEFORE UPDATE ON application_builds
@@ -3245,7 +3306,8 @@ CREATE TRIGGER application_build_immutable BEFORE UPDATE ON application_builds
 -- WH-074: a build job exists only for an owner's pending Chat request that already saved its build intent.
 -- Visitor, public, webhook and scheduled paths have no such turn and cannot create, wake or extend a job.
 -- Bounded shared pool: one active job per project, three per account and sixteen platform-wide, where a job stays
--- active until its cleanup is recorded as released.
+-- active until its cleanup is recorded as released. An active operator `build` freeze (WH-050) refuses admission with
+-- the same generic capacity error, so containment is never disclosed.
 CREATE TRIGGER build_job_admit BEFORE INSERT ON build_jobs BEGIN
  SELECT RAISE(ABORT,'build_job_owner') WHERE NOT EXISTS(
   SELECT 1 FROM application_builds b JOIN projects p ON p.id=b.project_id AND p.owner_user_id=b.user_id
@@ -3257,7 +3319,8 @@ CREATE TRIGGER build_job_admit BEFORE INSERT ON build_jobs BEGIN
   OR NOT EXISTS(SELECT 1 FROM backend_versions v WHERE v.id=NEW.id AND v.project_id=NEW.project_id AND NEW.artifact_key='private/'||v.project_id||'/'||v.id||'/'||v.digest);
  SELECT RAISE(ABORT,'build_job_capacity') WHERE (SELECT count(*) FROM build_jobs WHERE project_id=NEW.project_id AND (state='running' OR cleanup<>'released'))>=1
   OR (SELECT count(*) FROM build_jobs WHERE user_id=NEW.user_id AND (state='running' OR cleanup<>'released'))>=3
-  OR (SELECT count(*) FROM build_jobs WHERE state='running' OR cleanup<>'released')>=16;
+  OR (SELECT count(*) FROM build_jobs WHERE state='running' OR cleanup<>'released')>=16
+  OR EXISTS(SELECT 1 FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='build');
 END;
 
 -- Identity, lease, inputs and keys are immutable. Dispatch (the only spend) happens once, while running and unexpired.
@@ -3341,9 +3404,8 @@ CREATE TRIGGER welcome_first_app_guard BEFORE INSERT ON backend_versions
 
 CREATE TRIGGER app_owner_erasure_admit BEFORE INSERT ON app_owner_erasures BEGIN
  SELECT RAISE(ABORT,'visitor_erasure_authority') WHERE NOT EXISTS(
-  SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id
-  JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
-  WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=1 AND a.owner_user_id=NEW.user_id);
+  SELECT 1 FROM app_visitors v JOIN projects p ON p.id=v.project_id
+  WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=1 AND p.owner_user_id=NEW.user_id);
  SELECT RAISE(ABORT,'visitor_erasure_capacity') WHERE (SELECT count(*) FROM app_owner_erasures)>=1000;
 END;
 
@@ -3431,7 +3493,7 @@ CREATE TRIGGER app_migration_approval_delete BEFORE DELETE ON app_migration_appr
 CREATE TRIGGER app_migration_approval_apply AFTER INSERT ON app_migration_approvals BEGIN
  UPDATE app_documents SET revision=revision+1,state_json=(SELECT next_json FROM app_migration_documents WHERE migration_id=NEW.id AND visitor_id=app_documents.visitor_id) WHERE visitor_id IN(SELECT visitor_id FROM app_migration_documents WHERE migration_id=NEW.id);
  UPDATE app_spaces SET version_id=(SELECT to_version FROM app_migration_checks WHERE id=NEW.id),revision=revision+1,migration_id=NEW.id WHERE project_id=(SELECT project_id FROM app_migration_checks WHERE id=NEW.id);
- DELETE FROM app_sessions WHERE visitor_id IN(SELECT id FROM app_visitors WHERE project_id=(SELECT project_id FROM app_migration_checks WHERE id=NEW.id));
+ -- Visitor sign-in belongs to the access instance (WH-126); the disabled application and its revision change fence documents.
  UPDATE app_migration_approvals SET status='applied' WHERE id=NEW.id;
 END;
 
@@ -3453,7 +3515,6 @@ END;
 CREATE TRIGGER app_restore_apply AFTER UPDATE OF status ON app_restore_reviews BEGIN
  UPDATE app_documents SET revision=revision+1,state_json=(SELECT state_json FROM app_recovery_documents WHERE point_id=NEW.point_id AND visitor_id=app_documents.visitor_id) WHERE visitor_id IN(SELECT json_extract(value,'$.visitor') FROM json_each(NEW.roster_json));
  UPDATE app_spaces SET version_id=(SELECT version_id FROM app_recovery_points WHERE id=NEW.point_id),revision=revision+1,rollback_id=NEW.id WHERE project_id=NEW.project_id AND NEW.restore_program=1;
- DELETE FROM app_sessions WHERE NEW.restore_program=1 AND visitor_id IN(SELECT id FROM app_visitors WHERE project_id=NEW.project_id);
 END;
 
 CREATE TRIGGER app_space_apply_review BEFORE UPDATE ON app_spaces WHEN NOT (
@@ -3569,7 +3630,11 @@ BEGIN SELECT RAISE(ABORT,'private_chat_context'); END;
 CREATE TRIGGER usage_review_insert BEFORE INSERT ON usage_review_requests BEGIN
  SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.state!='open' OR NEW.customer_read_at IS NOT NULL OR NOT (
   (NEW.source='chat' AND EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0))
-  OR (NEW.source='support' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id)));
+  OR (NEW.source='support' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
+  -- WH-035 Chat help intake: only the owner's own explicit submission of the maintained support form, with its exact statement.
+  OR (NEW.source='chat_form' AND EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
+   WHERE s.id=NEW.id AND s.user_id=NEW.user_id AND i.project_id IS NULL AND i.state='submitted'
+    AND json_extract(i.envelope_json,'$.definition.template')='support-request@1' AND json_extract(s.answers_json,'$.statement')=NEW.statement)));
 END;
 
 CREATE TRIGGER usage_review_update BEFORE UPDATE ON usage_review_requests BEGIN
@@ -3602,8 +3667,44 @@ END;
 
 CREATE TRIGGER contact_suppression_immutable BEFORE UPDATE ON contact_notification_suppressions BEGIN SELECT RAISE(ABORT,'contact_suppression_final'); END;
 CREATE TRIGGER contact_suppression_delete BEFORE DELETE ON contact_notification_suppressions
-WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND NOT EXISTS(SELECT 1 FROM contact_notification_suppression_resets r WHERE r.user_id=OLD.user_id AND r.address=OLD.address AND r.suppressed_at=OLD.created_at)
 BEGIN SELECT RAISE(ABORT,'contact_suppression_final'); END;
+
+-- An operator reset must name the exact current suppression; it removes that suppression and the final-suppressed destination
+-- (refused inside a safety preservation hold by safety_hold_contact_destination_retained). The owner then sets and verifies again.
+CREATE TRIGGER contact_suppression_reset_insert BEFORE INSERT ON contact_notification_suppression_resets BEGIN
+ SELECT RAISE(ABORT,'contact_suppression_reset_stale') WHERE NOT EXISTS(SELECT 1 FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address AND created_at=NEW.suppressed_at AND reason=NEW.suppression_reason);
+END;
+CREATE TRIGGER contact_suppression_reset_immutable BEFORE UPDATE ON contact_notification_suppression_resets BEGIN SELECT RAISE(ABORT,'contact_suppression_reset_final'); END;
+CREATE TRIGGER contact_suppression_reset_apply AFTER INSERT ON contact_notification_suppression_resets BEGIN
+ DELETE FROM contact_notification_destinations WHERE user_id=NEW.user_id AND address=NEW.address AND state='suppressed';
+ DELETE FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address AND created_at=NEW.suppressed_at;
+END;
+
+CREATE TRIGGER contact_destination_review_insert BEFORE INSERT ON contact_destination_reviews BEGIN
+ SELECT RAISE(ABORT,'contact_destination_review_changed') WHERE NEW.status!='pending' OR NEW.confirmed_by IS NOT NULL OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
+END;
+CREATE TRIGGER contact_destination_review_identity BEFORE UPDATE ON contact_destination_reviews
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.address!=OLD.address OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied' OR NEW.confirmed_by IS NULL
+BEGIN SELECT RAISE(ABORT,'contact_destination_review_changed'); END;
+CREATE TRIGGER contact_destination_review_confirm BEFORE UPDATE ON contact_destination_reviews BEGIN
+ SELECT RAISE(ABORT,'contact_destination_review_changed') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id) OR NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'contact_destination_suppressed') WHERE EXISTS(SELECT 1 FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address) OR EXISTS(SELECT 1 FROM contact_notification_destinations WHERE project_id=NEW.project_id AND state='suppressed');
+END;
+-- The same address keeps its current state; a different address replaces the destination (its queued notices cascade) and starts unverified.
+CREATE TRIGGER contact_destination_review_apply AFTER UPDATE ON contact_destination_reviews BEGIN
+ DELETE FROM contact_notification_destinations WHERE project_id=NEW.project_id AND address!=NEW.address;
+ INSERT INTO contact_notification_destinations(id,user_id,project_id,address,created_at) SELECT NEW.id,NEW.user_id,NEW.project_id,NEW.address,strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE NOT EXISTS(SELECT 1 FROM contact_notification_destinations WHERE project_id=NEW.project_id);
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('contact-notify:'||NEW.id,NEW.user_id,NEW.project_id,'contact.notifications','Set the reviewed contact notification address (verification required)',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER contact_send_ledger_insert BEFORE INSERT ON contact_notification_send_ledger BEGIN
+ SELECT RAISE(ABORT,'contact_send_final') WHERE NEW.sends!=0;
+END;
+CREATE TRIGGER contact_send_ledger_update BEFORE UPDATE ON contact_notification_send_ledger BEGIN
+ SELECT RAISE(ABORT,'contact_send_final') WHERE NEW.day IS NOT OLD.day OR NEW.ceiling>OLD.ceiling OR NEW.sends<OLD.sends;
+ SELECT RAISE(ABORT,'contact_send_ceiling') WHERE NEW.sends>OLD.sends AND (SELECT coalesce(sum(sends),0) FROM contact_notification_send_ledger WHERE day>date(NEW.day,'-32 days') AND day<=NEW.day)-OLD.sends+NEW.sends>NEW.ceiling;
+END;
 
 -- Suppression is atomic with its effect: the destination becomes final-suppressed and unsent notices are cancelled.
 CREATE TRIGGER contact_suppression_apply AFTER INSERT ON contact_notification_suppressions BEGIN
@@ -3815,12 +3916,18 @@ CREATE TRIGGER specification_site_added AFTER INSERT ON site_versions BEGIN UPDA
 
 CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposals BEGIN
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
-  SELECT 1 FROM projects p JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.status='pending'
-   AND (t.mode='ai' OR (t.mode='guided' AND EXISTS(
+  SELECT 1 FROM projects p JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id
+   AND ((t.status='pending' AND (t.mode='ai' OR (t.mode='guided' AND EXISTS(
     SELECT 1 FROM chat_interaction_continuations c JOIN chat_interaction_submissions s ON s.id=c.id
     JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
     WHERE c.id=t.id AND c.state='pending' AND s.user_id=t.user_id AND i.project_id=NEW.project_id AND i.state='submitted'
-    AND json_extract(i.envelope_json,'$.definition.continuationBinding') IN ('site.content-prepare@1','agent.task-continue@1'))))
+    AND json_extract(i.envelope_json,'$.definition.continuationBinding') IN ('site.content-prepare@1','agent.task-continue@1')))))
+   -- WH-126 owner visitor access setup: the typed accessModuleReview control of this project prepares a change.
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='accessModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
+   -- WH-128 owner photo collection setup: the typed filesModuleReview control of this project prepares a change.
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='filesModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
+   -- WH-128 published gallery: the typed galleryPageReview control of this project prepares a change.
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='galleryPageReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id))
   LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=NEW.draft_revision
   AND coalesce(h.revision,0)=NEW.expected_revision AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
@@ -3834,6 +3941,24 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
 END;
 
 CREATE TRIGGER project_spec_proposal_immutable BEFORE UPDATE ON project_spec_proposals BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
+
+-- WH-126 owner visitor access setup. A proposal prepared by the typed accessModuleReview control is exactly the current
+-- head plus one appended standard access instance (id visitors, no dependencies, no staff role, invitation enrollment)
+-- in a project whose head has no access instance; nothing else in the specification may change.
+CREATE TRIGGER project_spec_access_setup_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='accessModuleReview') BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+  WHERE h.project_id=NEW.project_id AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+  AND json_array_length(NEW.spec_json,'$.instances')=json_array_length(v.spec_json,'$.instances')+1
+  AND json(json_remove(NEW.spec_json,'$.instances[#-1]'))=json(v.spec_json)
+  AND NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.instances') e WHERE json_extract(e.value,'$.kind')='access')
+  AND json_extract(NEW.spec_json,'$.instances[#-1].id')='visitors' AND json_extract(NEW.spec_json,'$.instances[#-1].kind')='access'
+  AND json_array_length(NEW.spec_json,'$.instances[#-1].dependencies')=0 AND json_array_length(NEW.spec_json,'$.instances[#-1].config.roles')=0
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.enrollment')='invitation'
+ );
+END;
+
 
 CREATE TRIGGER project_spec_version_immutable BEFORE UPDATE ON project_spec_versions BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
 
@@ -4108,12 +4233,12 @@ WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 
 BEGIN SELECT RAISE(ABORT,'specification_receipt_retained'); END;
 
 CREATE TRIGGER project_spec_current_proposal BEFORE INSERT ON project_spec_proposals BEGIN
- SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 3;
+ SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 5;
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=NEW.project_id AND json_extract(v.spec_json,'$.schemaVersion')=3 AND h.draft_revision=NEW.draft_revision);
 END;
 
 CREATE TRIGGER project_spec_version_admit BEFORE INSERT ON project_spec_versions BEGIN
- SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 3;
+ SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 5;
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
   SELECT 1 FROM project_spec_proposals q JOIN site_versions v ON v.id=NEW.version_id AND v.project_id=q.project_id
   JOIN projects p ON p.id=q.project_id AND p.owner_user_id=q.user_id
@@ -4141,7 +4266,7 @@ CREATE TRIGGER project_spec_creation_admit BEFORE INSERT ON project_spec_creatio
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=1
   AND NEW.id=NEW.version_id AND v.version_id=NEW.version_id AND s.source='ai'
   AND NOT EXISTS(SELECT 1 FROM project_spec_heads WHERE project_id=p.id)
-  AND json_extract(v.spec_json,'$.schemaVersion')=3 AND json_extract(v.lock_json,'$.compiler.version')=3
+  AND json_extract(v.spec_json,'$.schemaVersion')=3 AND json_extract(v.lock_json,'$.compiler.version')=5
  );
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=NEW.version_id);
 END;
@@ -4677,6 +4802,9 @@ CREATE TABLE safety_cases (
  closed_at INTEGER CHECK(closed_at IS NULL OR closed_at>=opened_at),
  closed_by TEXT CHECK(closed_by IS NULL OR (closed_by GLOB 'human:?*' AND length(closed_by)<=128 AND closed_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  close_ref TEXT CHECK(close_ref IS NULL OR (length(close_ref) BETWEEN 1 AND 128 AND close_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ -- WH-132 default retention (owner decision 2026-10-04, pending counsel): set at opening from the source constant
+ -- (safetyRetentionDays, one year); at expiry an operator reviews the case (safety_retention_decisions). Nothing lapses.
+ retention_due_at INTEGER NOT NULL CHECK(retention_due_at>opened_at),
  CHECK((closed_at IS NULL)=(closed_by IS NULL) AND (closed_by IS NULL)=(close_ref IS NULL)),
  CHECK(opened_by<>'human:'||subject_user_id)
 );
@@ -4733,7 +4861,8 @@ CREATE TABLE safety_case_audit (
  at INTEGER NOT NULL CHECK(at>=0),
  actor_ref TEXT CHECK(actor_ref IS NULL OR (actor_ref GLOB 'human:?*' AND length(actor_ref)<=128 AND actor_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
-  'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure')),
+  'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
+  'list_retention','preview_retention','decide_retention')),
  case_id TEXT CHECK(case_id IS NULL OR (length(case_id) BETWEEN 1 AND 128 AND case_id NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  target_ref TEXT CHECK(target_ref IS NULL OR (length(target_ref) BETWEEN 1 AND 128 AND target_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
@@ -4750,7 +4879,8 @@ CREATE VIEW safety_held_files AS
   OR EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND h.scope='object' AND h.file_id=f.id);
 
 -- Restricted in-place preservation of small D1 payloads that a customer may overwrite or clear without
--- any visible difference (profile photo replacement, Chat draft discard/expiry). Written only by triggers
+-- any visible difference (profile photo replacement, Chat draft discard/expiry, app visitor document overwrites and
+-- cleared app recovery-point copies). Written only by triggers
 -- while a covering hold is active, never read by customer, Chat or model paths, and removed when the
 -- last covering hold is released (ordinary deletion resumes).
 CREATE TABLE safety_preserved_records (
@@ -4758,7 +4888,7 @@ CREATE TABLE safety_preserved_records (
  hold_id TEXT NOT NULL REFERENCES safety_preservation_holds(id),
  subject_user_id TEXT NOT NULL CHECK(length(subject_user_id) BETWEEN 1 AND 128),
  project_id TEXT CHECK(project_id IS NULL OR length(project_id) BETWEEN 1 AND 128),
- source TEXT NOT NULL CHECK(source IN ('profile_photo','chat_interaction_draft')),
+ source TEXT NOT NULL CHECK(source IN ('profile_photo','chat_interaction_draft','app_document','app_recovery_document')),
  source_id TEXT NOT NULL CHECK(length(source_id) BETWEEN 1 AND 128),
  payload_json TEXT NOT NULL CHECK(json_valid(payload_json) AND length(CAST(payload_json AS BLOB))<=65536),
  preserved_at INTEGER NOT NULL CHECK(preserved_at>=0)
@@ -4781,6 +4911,8 @@ CREATE TABLE safety_evidence_objects (
  size INTEGER NOT NULL CHECK(size BETWEEN 1 AND 1048576),
  captured_by TEXT NOT NULL CHECK(captured_by GLOB 'human:?*' AND length(captured_by)<=128 AND captured_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
  captured_at INTEGER NOT NULL CHECK(captured_at>=0),
+ -- WH-132: each object's own default retention term (safetyRetentionDays from capture); the case's review covers it.
+ retention_due_at INTEGER NOT NULL CHECK(retention_due_at>captured_at),
  stored_at INTEGER CHECK(stored_at IS NULL OR stored_at>=captured_at),
  disposed_at INTEGER CHECK(disposed_at IS NULL OR (stored_at IS NOT NULL AND disposed_at>=stored_at)),
  disposed_by TEXT CHECK(disposed_by IS NULL OR (disposed_by GLOB 'human:?*' AND length(disposed_by)<=128 AND disposed_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
@@ -4818,6 +4950,35 @@ CREATE TABLE safety_disclosure_items (
  PRIMARY KEY(disclosure_id,evidence_object_id)
 );
 
+-- WH-132 retention review (owner decision 2026-10-04, pending counsel). Cases and their evidence objects have a
+-- default one-year term (retention_due_at). At expiry the case appears in the operator review queue as
+-- retention_review_due; nothing lapses or is deleted automatically. A preservation approver reviews an exact preview
+-- digest and either extends the term (1-366 days from the decision) or releases it. Release is final, needs a closed
+-- case with no active hold on the case or its subject, no open disclosure and no unfinished capture, and only then may
+-- evidence objects be disposed of (still a separate audited operation). Decisions are append-only.
+CREATE TABLE safety_retention_decisions (
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ seq INTEGER NOT NULL CHECK(seq BETWEEN 1 AND 1000),
+ decision TEXT NOT NULL CHECK(decision IN ('extend','release')),
+ reviewed_due_at INTEGER NOT NULL CHECK(reviewed_due_at>=0),
+ next_due_at INTEGER,
+ review_sha256 TEXT NOT NULL CHECK(length(review_sha256)=64 AND review_sha256 NOT GLOB '*[^0-9a-f]*'),
+ decision_ref TEXT NOT NULL CHECK(length(decision_ref) BETWEEN 1 AND 128 AND decision_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decided_by TEXT NOT NULL CHECK(decided_by GLOB 'human:?*' AND length(decided_by)<=128 AND decided_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decided_at INTEGER NOT NULL CHECK(decided_at>=reviewed_due_at),
+ PRIMARY KEY(case_id,seq),
+ UNIQUE(case_id,decision_ref),
+ CHECK((decision='extend' AND next_due_at IS NOT NULL AND next_due_at>decided_at AND next_due_at<=decided_at+31622400) OR (decision='release' AND next_due_at IS NULL))
+);
+-- The current retention due date of each case: the latest extension (or the case's own term) and never earlier than
+-- the term of any evidence object not yet disposed of.
+CREATE VIEW safety_case_retention AS
+ SELECT c.id AS case_id,c.subject_user_id,
+  max(COALESCE((SELECT d.next_due_at FROM safety_retention_decisions d WHERE d.case_id=c.id AND d.decision='extend' ORDER BY d.seq DESC LIMIT 1),c.retention_due_at),
+   COALESCE((SELECT max(o.retention_due_at) FROM safety_evidence_objects o WHERE o.case_id=c.id AND o.disposed_at IS NULL),0)) AS due_at,
+  EXISTS(SELECT 1 FROM safety_retention_decisions d WHERE d.case_id=c.id AND d.decision='release') AS released
+ FROM safety_cases c;
+
 CREATE TRIGGER safety_case_roles_capacity BEFORE INSERT ON safety_case_roles WHEN (SELECT count(*) FROM safety_case_roles)>=1000
 BEGIN SELECT RAISE(ABORT,'safety_case_capacity'); END;
 CREATE TRIGGER safety_case_roles_update BEFORE UPDATE ON safety_case_roles
@@ -4832,7 +4993,7 @@ CREATE TRIGGER safety_cases_admit BEFORE INSERT ON safety_cases BEGIN
 END;
 CREATE TRIGGER safety_cases_update BEFORE UPDATE ON safety_cases
 WHEN OLD.closed_at IS NOT NULL OR NEW.closed_at IS NULL OR NEW.id IS NOT OLD.id OR NEW.subject_user_id IS NOT OLD.subject_user_id
- OR NEW.intake_ref IS NOT OLD.intake_ref OR NEW.opened_by IS NOT OLD.opened_by OR NEW.opened_at IS NOT OLD.opened_at
+ OR NEW.intake_ref IS NOT OLD.intake_ref OR NEW.opened_by IS NOT OLD.opened_by OR NEW.opened_at IS NOT OLD.opened_at OR NEW.retention_due_at IS NOT OLD.retention_due_at
 BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_cases_close_held BEFORE UPDATE ON safety_cases
 WHEN EXISTS(SELECT 1 FROM safety_preservation_holds WHERE case_id=OLD.id AND released_at IS NULL)
@@ -4890,7 +5051,7 @@ CREATE TRIGGER safety_case_audit_retained BEFORE DELETE ON safety_case_audit BEG
 
 CREATE TRIGGER safety_preserved_records_admit BEFORE INSERT ON safety_preserved_records BEGIN
  SELECT RAISE(ABORT,'safety_hold_subject') WHERE NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE id=NEW.hold_id AND released_at IS NULL);
- SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_preserved_records)>=10000;
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_preserved_records)>=50000;
 END;
 CREATE TRIGGER safety_preserved_records_update BEFORE UPDATE ON safety_preserved_records
 WHEN NEW.seq IS NOT OLD.seq OR NEW.subject_user_id IS NOT OLD.subject_user_id OR NEW.project_id IS NOT OLD.project_id OR NEW.source IS NOT OLD.source
@@ -4913,9 +5074,13 @@ CREATE TRIGGER safety_evidence_objects_update BEFORE UPDATE ON safety_evidence_o
 WHEN NEW.id IS NOT OLD.id OR NEW.case_id IS NOT OLD.case_id OR NEW.hold_id IS NOT OLD.hold_id OR NEW.subject_user_id IS NOT OLD.subject_user_id
  OR NEW.source IS NOT OLD.source OR NEW.source_ref IS NOT OLD.source_ref OR NEW.storage_key IS NOT OLD.storage_key OR NEW.content_type IS NOT OLD.content_type
  OR NEW.sha256 IS NOT OLD.sha256 OR NEW.size IS NOT OLD.size OR NEW.captured_by IS NOT OLD.captured_by OR NEW.captured_at IS NOT OLD.captured_at
+ OR NEW.retention_due_at IS NOT OLD.retention_due_at
  OR OLD.disposed_at IS NOT NULL OR (OLD.stored_at IS NOT NULL AND NEW.stored_at IS NOT OLD.stored_at)
  OR (NEW.disposed_at IS NOT NULL AND (OLD.stored_at IS NULL
   OR NOT EXISTS(SELECT 1 FROM safety_cases WHERE id=OLD.case_id AND closed_at IS NOT NULL)
+  -- WH-132: disposal only after an operator released the case's retention, and never while any hold on the subject is active.
+  OR NOT EXISTS(SELECT 1 FROM safety_retention_decisions WHERE case_id=OLD.case_id AND decision='release')
+  OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND (case_id=OLD.case_id OR subject_user_id=OLD.subject_user_id))
   OR EXISTS(SELECT 1 FROM safety_disclosure_items i JOIN safety_disclosures d ON d.id=i.disclosure_id WHERE i.evidence_object_id=OLD.id AND d.state IN ('requested','approved'))))
 BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_evidence_objects_retained BEFORE DELETE ON safety_evidence_objects BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
@@ -4941,6 +5106,20 @@ WHEN NOT EXISTS(SELECT 1 FROM safety_disclosures d JOIN safety_evidence_objects 
 BEGIN SELECT RAISE(ABORT,'safety_case_evidence_missing'); END;
 CREATE TRIGGER safety_disclosure_items_immutable BEFORE UPDATE ON safety_disclosure_items BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_disclosure_items_retained BEFORE DELETE ON safety_disclosure_items BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_retention_decisions_admit BEFORE INSERT ON safety_retention_decisions BEGIN
+ SELECT RAISE(ABORT,'safety_case_immutable') WHERE NEW.seq<>COALESCE((SELECT max(seq) FROM safety_retention_decisions WHERE case_id=NEW.case_id),0)+1
+  OR EXISTS(SELECT 1 FROM safety_retention_decisions WHERE case_id=NEW.case_id AND decision='release');
+ SELECT RAISE(ABORT,'safety_retention_changed') WHERE NOT EXISTS(SELECT 1 FROM safety_case_retention r WHERE r.case_id=NEW.case_id AND r.released=0
+  AND r.due_at=NEW.reviewed_due_at AND r.due_at<=NEW.decided_at);
+ SELECT RAISE(ABORT,'safety_retention_case_open') WHERE NEW.decision='release' AND EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NULL);
+ SELECT RAISE(ABORT,'safety_hold_active') WHERE NEW.decision='release' AND (
+  EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND (h.case_id=NEW.case_id OR h.subject_user_id=(SELECT subject_user_id FROM safety_cases WHERE id=NEW.case_id)))
+  OR EXISTS(SELECT 1 FROM safety_disclosures WHERE case_id=NEW.case_id AND state IN ('requested','approved'))
+  OR EXISTS(SELECT 1 FROM safety_evidence_objects WHERE case_id=NEW.case_id AND stored_at IS NULL));
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_retention_decisions)>=100000;
+END;
+CREATE TRIGGER safety_retention_decisions_immutable BEFORE UPDATE ON safety_retention_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_retention_decisions_retained BEFORE DELETE ON safety_retention_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 
 -- Ordinary deletion paths for held scope. Account holds cover the account cascade and every project of the
 -- subject; project holds cover one project; object holds cover one project photo. Customer-facing callers
@@ -4990,6 +5169,28 @@ BEGIN
   'safety',json((SELECT json_object('digest',digest,'photoRevision',photo_revision,'policyVersion',policy_version,'state',state,'csamCheck',csam_check,'sexualCheck',sexual_check,'createdAt',created_at)
    FROM profile_photo_safety WHERE user_id=OLD.user_id))),unixepoch()
  FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.user_id ORDER BY placed_at,id LIMIT 1;
+END;
+-- App visitor documents (owner decision, October 4, 2026): every overwrite inside a held project (visitor transition,
+-- recovery restore or migration apply) keeps the previous revision, and a recovery-point copy cleared by point removal
+-- or visitor revocation is kept. The customer action still succeeds; past capacity it fails closed.
+CREATE TRIGGER safety_hold_app_document BEFORE UPDATE OF state_json ON app_documents
+WHEN NEW.state_json IS NOT OLD.state_json
+ AND EXISTS(SELECT 1 FROM app_visitors v JOIN safety_held_projects h ON h.project_id=v.project_id WHERE v.id=OLD.visitor_id)
+BEGIN
+ INSERT INTO safety_preserved_records(hold_id,subject_user_id,project_id,source,source_id,payload_json,preserved_at)
+ SELECT h.id,p.owner_user_id,p.id,'app_document',OLD.visitor_id,json_object('visitor',OLD.visitor_id,'revision',OLD.revision,'state',json(OLD.state_json)),unixepoch()
+ FROM app_visitors v JOIN projects p ON p.id=v.project_id JOIN safety_preservation_holds h ON h.released_at IS NULL
+  AND ((h.scope='account' AND h.subject_user_id=p.owner_user_id) OR (h.scope='project' AND h.project_id=p.id))
+ WHERE v.id=OLD.visitor_id ORDER BY h.placed_at,h.id LIMIT 1;
+END;
+CREATE TRIGGER safety_hold_app_recovery_document BEFORE DELETE ON app_recovery_documents
+WHEN EXISTS(SELECT 1 FROM app_recovery_points r JOIN safety_held_projects h ON h.project_id=r.project_id WHERE r.id=OLD.point_id)
+BEGIN
+ INSERT INTO safety_preserved_records(hold_id,subject_user_id,project_id,source,source_id,payload_json,preserved_at)
+ SELECT h.id,p.owner_user_id,p.id,'app_recovery_document',OLD.point_id,json_object('point',OLD.point_id,'visitor',OLD.visitor_id,'revision',OLD.revision,'state',json(OLD.state_json)),unixepoch()
+ FROM app_recovery_points r JOIN projects p ON p.id=r.project_id JOIN safety_preservation_holds h ON h.released_at IS NULL
+  AND ((h.scope='account' AND h.subject_user_id=p.owner_user_id) OR (h.scope='project' AND h.project_id=p.id))
+ WHERE r.id=OLD.point_id ORDER BY h.placed_at,h.id LIMIT 1;
 END;
 CREATE TRIGGER safety_hold_chat_draft AFTER UPDATE OF envelope_json ON chat_interactions
 WHEN OLD.envelope_json IS NOT NULL AND NEW.envelope_json IS NULL

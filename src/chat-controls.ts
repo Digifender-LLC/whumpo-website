@@ -16,6 +16,7 @@ export const confirmationControls = {
  backendForm:{verb:'confirm-backend-form',label:'Confirm the reviewed website form change'},
  directory:{verb:'confirm-directory',label:'Confirm the reviewed directory change'},
  contact:{verb:'confirm-contact',label:'Confirm the reviewed contact form change'},
+ contactNotification:{verb:'confirm-contact-notify',label:'Confirm the reviewed contact notification address'},
  version:{verb:'confirm-version-delete',label:'Delete the reviewed saved version'},
  photo:{verb:'confirm-photo-delete',label:'Delete the reviewed photo'},
 } as const;
@@ -25,6 +26,13 @@ export type ChatControl =
  | {type:'confirm';kind:keyof typeof confirmationControls;reviewId:string}
  | {type:'serviceClientApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
+ | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
+ | {type:'accessModuleReview';projectId:string}
+ | {type:'filesModuleReview';projectId:string}
+ | {type:'galleryPageReview';projectId:string;instanceId:string;collectionId:string;pageId:string}
+ | {type:'moduleActivationApply';reviewId:string;reviewDigest:string;expectedRevision:number}
+ | {type:'accessRoleReview';projectId:string;instanceId:string;visitorId:string;action:'grant'|'revoke'}
+ | {type:'accessRoleApply';reviewId:string;reviewDigest:string;expectedRevision:number}
  | {type:'appRestore';projectId:string;reviewId:string;confirmation:'RESTORE'}
  | {type:'appMaintenance';kind:'upgrade'|'rollback'|'cancel';reviewId:string;confirmation:'UPGRADE'|'ROLLBACK'|'CANCEL'}
  | {type:'reviewDetail';kind:'backend'|'test';targetId:string}
@@ -50,6 +58,39 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='specificationApply'&&exact(a,['type','reviewId','proposalDigest','expectedRevision'])&&id(a.reviewId)&&typeof a.proposalDigest==='string'&&/^[0-9a-f]{64}$/.test(a.proposalDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
   const action={type:'specificationApply' as const,reviewId:a.reviewId,proposalDigest:a.proposalDigest,expectedRevision:Number(a.expectedRevision)};
   return {action,command:`/confirm-specification ${action.reviewId} ${action.proposalDigest} ${action.expectedRevision}`,label:'Save the exact reviewed private website version.',recentAuth:true};
+ }
+ // WH-125: ids, local instance id and revision only; configuration and visitor values never enter a control.
+ if(a.type==='moduleActivationReview'&&exact(a,['type','projectId','instanceId','action'])&&Object.keys(a).length===4&&id(a.projectId)&&typeof a.instanceId==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(a.instanceId)&&(a.action==='activate'||a.action==='disable')){
+  const action={type:'moduleActivationReview' as const,projectId:a.projectId,instanceId:a.instanceId,action:a.action as 'activate'|'disable'};
+  return {action,command:`/review-module-activation ${action.projectId} ${action.instanceId} ${action.action}`,label:`Review ${action.action==='activate'?'activating':'disabling'} the “${action.instanceId}” module.`,recentAuth:false};
+ }
+ // WH-126 owner visitor access setup: the project id only. The server chooses the fixed standard access instance.
+ if(a.type==='accessModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
+  const action={type:'accessModuleReview' as const,projectId:a.projectId};
+  return {action,command:`/review-visitor-access-setup ${action.projectId}`,label:'Review setting up visitor access for this project.',recentAuth:false};
+ }
+ // WH-128 owner photo collection setup: the project id only. The server chooses the fixed standard files instance.
+ if(a.type==='filesModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
+  const action={type:'filesModuleReview' as const,projectId:a.projectId};
+  return {action,command:`/review-photo-collection-setup ${action.projectId}`,label:'Review setting up a photo collection for this project.',recentAuth:false};
+ }
+ // WH-128 published gallery: ids only. The server chooses the photos (approved owner-filed photos of the collection).
+ if(a.type==='galleryPageReview'&&exact(a,['type','projectId','instanceId','collectionId','pageId'])&&Object.keys(a).length===5&&id(a.projectId)&&[a.instanceId,a.collectionId,a.pageId].every(v=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v))){
+  const action={type:'galleryPageReview' as const,projectId:a.projectId,instanceId:a.instanceId as string,collectionId:a.collectionId as string,pageId:a.pageId as string};
+  return {action,command:`/review-collection-gallery ${action.projectId} ${action.instanceId} ${action.collectionId} ${action.pageId}`,label:`Review showing the “${action.collectionId}” collection on the “${action.pageId}” page.`,recentAuth:false};
+ }
+ if(a.type==='moduleActivationApply'&&exact(a,['type','reviewId','reviewDigest','expectedRevision'])&&Object.keys(a).length===4&&id(a.reviewId)&&typeof a.reviewDigest==='string'&&/^[0-9a-f]{64}$/.test(a.reviewDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
+  const action={type:'moduleActivationApply' as const,reviewId:a.reviewId,reviewDigest:a.reviewDigest,expectedRevision:Number(a.expectedRevision)};
+  return {action,command:`/confirm-module-activation ${action.reviewId} ${action.reviewDigest} ${action.expectedRevision}`,label:'Apply the exact reviewed module activation change.',recentAuth:true};
+ }
+ // WH-126: ids, the access instance id, an opaque visitor id and the access revision only.
+ if(a.type==='accessRoleReview'&&exact(a,['type','projectId','instanceId','visitorId','action'])&&Object.keys(a).length===5&&id(a.projectId)&&id(a.visitorId)&&typeof a.instanceId==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(a.instanceId)&&(a.action==='grant'||a.action==='revoke')){
+  const action={type:'accessRoleReview' as const,projectId:a.projectId,instanceId:a.instanceId,visitorId:a.visitorId,action:a.action as 'grant'|'revoke'};
+  return {action,command:`/review-access-role ${action.projectId} ${action.instanceId} ${action.visitorId} ${action.action}`,label:`Review ${action.action==='grant'?'granting':'removing'} the staff role for visitor ${action.visitorId.slice(0,8)}.`,recentAuth:false};
+ }
+ if(a.type==='accessRoleApply'&&exact(a,['type','reviewId','reviewDigest','expectedRevision'])&&Object.keys(a).length===4&&id(a.reviewId)&&typeof a.reviewDigest==='string'&&/^[0-9a-f]{64}$/.test(a.reviewDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=1){
+  const action={type:'accessRoleApply' as const,reviewId:a.reviewId,reviewDigest:a.reviewDigest,expectedRevision:Number(a.expectedRevision)};
+  return {action,command:`/confirm-access-role ${action.reviewId} ${action.reviewDigest} ${action.expectedRevision}`,label:'Apply the exact reviewed staff role change.',recentAuth:true};
  }
  if(a.type==='confirm'&&exact(a,['type','kind','reviewId'])&&typeof a.kind==='string'&&Object.hasOwn(confirmationControls,a.kind)&&id(a.reviewId)){
   const kind=a.kind as keyof typeof confirmationControls,c=confirmationControls[kind];

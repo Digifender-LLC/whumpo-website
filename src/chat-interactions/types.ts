@@ -15,9 +15,9 @@ export type Field=CommonField&(
 );
 export type Card={id:string;binding:string;display:string;limit:number;reviewId:string|null};
 import type {WorkspaceView} from '../workspace-view-contract';
-export type Definition={version:1;kind:'form'|'view';template:'content-change@1'|'project-brief@1'|'project-select@1'|'choice@1'|'custom@1'|'status@1';
+export type Definition={version:1;kind:'form'|'view';template:'content-change@1'|'project-brief@1'|'project-select@1'|'choice@1'|'custom@1'|'support-request@1'|'status@1';
  workspaceView?:WorkspaceView;purpose?:string;title:string;summary:string;presentation:'inline'|'panel'|'dialog';fields:Field[];cards:Card[];
- submitBinding:'interaction.answers@1'|null;continuationBinding:'site.content-prepare@1'|'agent.task-continue@1'|null};
+ submitBinding:'interaction.answers@1'|'support.request@1'|null;continuationBinding:'site.content-prepare@1'|'agent.task-continue@1'|null};
 export type InteractionScope={accountId:string;actorId:string;conversationId:string;projectId:string|null;taskId:string;originTurnId:string};
 export type UnsignedInteraction={version:1;id:string;scope:InteractionScope;createdAt:string;expiresAt:string;definition:Definition};
 export type IssuedInteraction=UnsignedInteraction&{definitionDigest:string};

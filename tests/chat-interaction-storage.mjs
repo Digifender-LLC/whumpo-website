@@ -409,7 +409,7 @@ try{
  await test('inactive-draft expiry under a preservation hold keeps a restricted copy and stays invisible to the owner',async()=>{
   const c=await owner(),{form}=await issue(c),held=await aged(c,form.envelope.definition),free=await owner(),{form:freeForm}=await issue(free),unheld=await aged(free,freeForm.envelope.definition);
   const caseId='case-'+id().slice(0,8),holdId='hold-'+id().slice(0,8);
-  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch())",caseId,c.user);
+  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,c.user);
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",holdId,caseId,c.user,c.project);
   const before=(await row('SELECT count(*) n FROM safety_preserved_records')).n;
   await retention.cleanupInteractionDrafts(db);

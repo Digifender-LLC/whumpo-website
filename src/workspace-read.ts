@@ -1,4 +1,4 @@
-import {photoSafetySQL} from './photo-safety';
+import {photoSafetySQL,ownerLibrarySQL} from './photo-safety';
 import {describeConnections} from './connection-chat';
 import type {DNSChatOptions} from './dns-chat';
 import {readStandardAIHistory,describeStandardAIHistory} from './standard-ai-history';
@@ -15,7 +15,7 @@ export type InspectionScope=typeof inspectionScopes[number];
 export async function inspectWorkspace(db:D1Database,userId:string,scope:InspectionScope,targetId?:string,options?:DNSChatOptions){
  if(scope==='connections')return describeConnections(db,userId,options);
  if(scope==='photos'){
-  const {results}=await db.prepare(`SELECT f.id,f.project_id,f.name,f.status,${photoSafetySQL} safetyStatus,f.width,f.height FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? ORDER BY f.created_at DESC,f.id DESC LIMIT 21`).bind(userId).all();
+  const {results}=await db.prepare(`SELECT f.id,f.project_id,f.name,f.status,${photoSafetySQL} safetyStatus,f.width,f.height FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=? AND ${ownerLibrarySQL} ORDER BY f.created_at DESC,f.id DESC LIMIT 21`).bind(userId).all();
   return JSON.stringify({type:'photo_metadata',files:results.slice(0,20),hasMore:results.length>20,notice:'Metadata only, not image pixels. Only approved files can be used. Open Photos for the full inventory.'});
  }
  if(scope==='traffic')return (await inspectTraffic(db,userId,targetId??null)).reply;

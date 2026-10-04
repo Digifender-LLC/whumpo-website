@@ -68,6 +68,12 @@ import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
+import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
+import {contactDelivery} from './contact-email';
+import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
+import {ModuleError} from './shared-modules/policy';
+import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
+import {readOwnerFileCollections,removeOwnerFileFromCollection} from './shared-modules/files-gallery';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
@@ -381,10 +387,42 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
       return backendRoute[2]?json(await testBackend(env.DB,await projectRuntime(env.BACKEND_RUNTIME,backendRoute[1]),user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
     }
   }
+  // Shared module owner operations (whumpo-modules v1) on the workspace origin: the owner principal is the admitted
+  // workspace identity and project ownership; a visitor cookie never authenticates here (docs/shared-modules.md).
+  const moduleMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/modules$/);
+  if(method==='POST'&&moduleMatch)return json(await handleModuleRequest(env.DB,{kind:'owner',userId:user.id,projectId:moduleMatch[1]},await body(request)));
+  // WH-128 owner Photos panel: owner collections, unfiled photos and pages for the "Add to collection" and
+  // "Prepare gallery page" controls (dashboard only; never Chat or model input).
+  const ownerCollections=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-files$/);
+  if(method==='GET'&&ownerCollections)return json(await readOwnerFileCollections(env.DB,user.id,ownerCollections[1]));
+  // WH-128 owner "Remove from collection": deletes one owner-filed photo's collection row only (the photo stays).
+  const collectionRemoval=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-files\/remove$/);
+  if(method==='POST'&&collectionRemoval)return json(await removeOwnerFileFromCollection(env.DB,user.id,collectionRemoval[1],await body(request)));
+  // WH-127 owner records panel: counts per records instance (the records.summary@1 facts), then the list below.
+  const recordsSummary=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records$/);
+  if(method==='GET'&&recordsSummary)return json(await readRecordsSummary(env.DB,user.id,recordsSummary[1]));
+  // WH-127 owner records list (dashboard only; never Chat or model input).
+  const ownerRecords=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{0,39})$/);
+  if(method==='GET'&&ownerRecords){
+    const params=new URL(request.url).searchParams;
+    if([...params.keys()].some(key=>key!=='after'||params.getAll(key).length!==1))return error(400,'Use the current records link.');
+    return json(await readOwnerRecords(env.DB,user.id,ownerRecords[1],ownerRecords[2],ownerRecords[3],params.get('after')));
+  }
   const inboxMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/inbox$/);
   if(method==='GET'&&inboxMatch)return json(await contactInbox(env.DB,user.id,inboxMatch[1]));
   const messageMatch=pathname.match(/^\/api\/contact-messages\/([0-9a-f-]{36})$/);
   if(method==='DELETE'&&messageMatch){await deleteContact(env.DB,user.id,messageMatch[1]);return json({ok:true});}
+  // WH-036 Dashboard control for the owner's notification address. Verification codes are sent only while delivery is activated.
+  const notifyMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/contact-notifications(?:\/(verification|confirm))?$/);
+  if(notifyMatch){
+    const [,projectId,step]=notifyMatch;
+    if(!step&&method==='GET')return json({...await contactNotificationStatus(env.DB,user.id,projectId),deliveryActive:!!contactDelivery(env)});
+    if(!step&&method==='PUT'){const data=await body(request);return json({destination:await proposeContactDestination(env.DB,user.id,projectId,data?.address)});}
+    if(!step&&method==='DELETE'){await removeContactDestination(env.DB,user.id,projectId);return json({ok:true});}
+    if(step==='verification'&&method==='POST')return json(await requestContactVerification(env.DB,contactDelivery(env)?.settings??null,user.id,projectId));
+    if(step==='confirm'&&method==='POST'){const data=await body(request);return json({destination:await confirmContactDestination(env.DB,user.id,projectId,data?.code)});}
+    return error(405,'Method not allowed');
+  }
   if(method==='GET'&&pathname==='/api/domain-hosting')return json({enabled:!!hostingConfig(env),connections:await hostingConnections(env.DB,user.id)});
   if(method==='POST'&&pathname==='/api/domain-hosting/review'){
     const data=await body(request);if(typeof data?.id!=='string'||typeof data.claimId!=='string')return error(400,'Choose a domain ownership claim.');
@@ -597,6 +635,9 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
 
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
+    // WH-036 every-minute contact notice drain. No cron trigger for it is configured; the owner adds "* * * * *" only when
+    // activating (docs/contact-forms.md), and even then nothing runs unless contactDelivery(env) finds the reviewed provider and binding.
+    if(_event.cron==='* * * * *'){const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
@@ -608,7 +649,9 @@ export default {
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
       {name:'applications',run:async()=>{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}},
-      {name:'contacts',run:()=>cleanupContacts(env.DB)},
+      // Form-submission expiry: the contact inbox and WH-127 module records (both skip safety-held projects), then content-free
+      // module request receipts past their 30-day replay window.
+      {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);}},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
@@ -627,6 +670,7 @@ export default {
       if(String(cause).includes('connection_write_key_changed'))return comparisonErrorResponse(request,error(503,new ConnectionVaultError('write-key').message));
       if(cause instanceof WorkspaceViewError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if(cause instanceof IdentityError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
+      if(cause instanceof ModuleError)return comparisonErrorResponse(request,json(cause.body(),cause.status));
       if (cause instanceof FeatureInclusionError || cause instanceof GuestPreviewError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, category: "unexpected" }));
       return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));

@@ -37,7 +37,8 @@ try{
   assert.deepEqual(overview.statusLinks.map(l=>l.code),['onboarding_required','chat_unavailable','usage_limit']);assert.ok(overview.statusLinks.every(l=>l.href.startsWith('/workspace/support?ref=status%3A')));
   // Every status link resolves to a structured reference the support route accepts.
   for(const link of overview.statusLinks)assert.equal(shape.parseSupportReference(decodeURIComponent(new URL(link.href,'https://whumpo.com').searchParams.get('ref'))).code,link.code);
-  assert.deepEqual(overview.config,{hours:null,contact:null,notifications:{enabled:false}},'No hours, address or provider is invented');
+  assert.deepEqual(overview.config,{hours:null,notifications:{enabled:false}},'No hours or provider is invented and no general contact address is configured');
+  assert.equal(shape.lockoutContact,'hello@whumpo.com','The owner-approved lockout address is fixed source copy');
   assert.equal((await row('SELECT count(*) n FROM chat_turns WHERE user_id=?',a.user)).n,1,'Support reads create no Chat turn');
  });
  await test('another account sees only its own operations',async()=>{
@@ -98,9 +99,9 @@ try{
   assert.equal(support.supportConfig({SUPPORT_NOTIFICATION_PROVIDER:'x',SUPPORT_NOTIFICATION_REVIEW:'r'}).settings,null,'No provider is implemented in the repository');
   assert.deepEqual(settings({SUPPORT_NOTIFICATION_PROVIDER:'fixture-provider',SUPPORT_NOTIFICATION_REVIEW:'review-1'}),{provider:'fixture-provider',review:'review-1'});
   let sent=0;const result=await delivery.runSupportDelivery(db,null,async()=>{sent++;return {accepted:true};});assert.deepEqual(result,{enabled:false,queued:0,delivered:0,retried:0,failed:0,cancelled:0});assert.equal(sent,0);assert.equal((await row('SELECT count(*) n FROM support_deliveries')).n,0);
-  // Operator-supplied hours/contact appear only when set, and as plain text.
-  const configured=await http(a,'/api/support/v1','GET',undefined,200,{config:{...env,SUPPORT_HOURS:'OWNER-SUPPLIED-HOURS',SUPPORT_CONTACT:'OWNER-SUPPLIED-CONTACT',SUPPORT_NOTIFICATION_PROVIDER:'fixture-provider',SUPPORT_NOTIFICATION_REVIEW:'r'}});
-  assert.deepEqual(configured.config,{hours:'OWNER-SUPPLIED-HOURS',contact:'OWNER-SUPPLIED-CONTACT',notifications:{enabled:false}},'Unimplemented provider keeps notifications off');
+  // Operator-supplied hours appear only when set, and as plain text.
+  const configured=await http(a,'/api/support/v1','GET',undefined,200,{config:{...env,SUPPORT_HOURS:'OWNER-SUPPLIED-HOURS',SUPPORT_NOTIFICATION_PROVIDER:'fixture-provider',SUPPORT_NOTIFICATION_REVIEW:'r'}});
+  assert.deepEqual(configured.config,{hours:'OWNER-SUPPLIED-HOURS',notifications:{enabled:false}},'Unimplemented provider keeps notifications off');
  });
  await test('delivery retries are bounded, content-free and distinct from saved and read',async()=>{
   const settings={provider:'fixture-provider',review:'review-1'},c=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",c.user);

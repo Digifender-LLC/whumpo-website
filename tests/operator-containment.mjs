@@ -2,7 +2,7 @@
 // Runs on disposable SQLite by default and on actual local D1 with --d1. No network, provider or deployed resource.
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {currentSiteFixtureHandlers,createFixtureWebsite} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureWebsite,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {authenticator} from './app-authenticator.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
@@ -18,7 +18,7 @@ const OPERATOR='human:PRIVATE-OPERATOR-CANARY',REASON='PRIVATE-REASON-CANARY abu
 async function user(){const u=id(),authority=await workspaceFixture(db,m,u);scopes.set(u,await authority.scope());await readChat(scopes.get(u),u);return u;}
 async function project(owner){const p=id();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Containment fixture','Testing','draft',?,?)").bind(p,owner,now(),now()).run();return {user:owner,project:p};}
 async function backendProject(owner){const a=await project(owner),v=id(),r=id(),rid=id();await saveBackend(scope(owner),owner,a.project,v,'export default x=>x');await testBackend(scope(owner),service,owner,a.project,v,r,1);await prepare(scope(owner),owner,a.project,rid,'publish',v,r);await confirm(scope(owner),owner,rid);return a;}
-async function appProject(owner){const a=await project(owner),version=id(),test=id(),review=id();await saveBackend(scope(owner),owner,a.project,version,'export default ({state,input})=>({state:input,result:"saved"})');await testBackend(scope(owner),service,owner,a.project,version,test,{state:{},input:{}});await prepareApplication(scope(owner),owner,a.project,review,'enable',version,test);await confirmApplication(scope(owner),owner,review);
+async function appProject(owner){const a=await project(owner),version=id(),test=id(),review=id();await saveBackend(scope(owner),owner,a.project,version,'export default ({state,input})=>({state:input,result:"saved"})');await testBackend(scope(owner),service,owner,a.project,version,test,{state:{},input:{}});await enableFixtureVisitorAccess(scope(owner),owner,a.project);await prepareApplication(scope(owner),owner,a.project,review,'enable',version,test);await confirmApplication(scope(owner),owner,review);
  const invite=await auth.createAppInvitation(scope(owner),owner,a.project),opt=await auth.appPasskeyOptions(db,a.project,'signup',false,invite.code),key=authenticator(),result=await auth.appPasskeyVerify(db,a.project,'signup',opt.challengeToken,key.registration(opt.options),false);
  a.visitor={session:result.session,revision:0};return a;}
 async function chat(owner,content){const state=await readChat(scope(owner),owner),input={id:id(),revision:state.state.revision,content};return {id:input.id,result:await sendChat(scope(owner),owner,input)};}

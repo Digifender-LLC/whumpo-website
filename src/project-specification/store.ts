@@ -3,9 +3,10 @@ import {previewHeaders,type SiteConfig,type PhotoConfig} from '../components';
 import {contentPolicyVersion} from '../content-policy';
 import {contentRiskPolicyVersion} from '../content-risk';
 import {requireSpecificationAvailable} from '../specification-safety';
-import {compileProjectSpecification,compileSpecificationChange,currentCompilerLock,compileNewWebsite} from './compiler';
+import {compileProjectSpecification,compileSpecificationChange,compileSpecificationRestore,currentCompilerLock,compileNewWebsite} from './compiler';
 import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from './v2/json';
 import {projectPage} from './v3/schema';
+import type {ProjectSpecification,SpecificationReview} from './v3/types';
 import {requireSpecificationPhotos,inlineSpecificationPhotos} from '../specification-photos';
 import {assertFeature} from '../feature-admission';
 import {readSpecificationReviewDisplay} from './review-display';
@@ -15,6 +16,13 @@ const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const digest=/^[0-9a-f]{64}$/;
 const changed=()=>new BackendError(409,'This website review changed or expired. Ask for a fresh review.');
+/** Saved instance ids with no registry row: never activated, so their configuration may be removed. Activation
+ * registers the row and it is never deleted while the project exists; the project_spec_versions trigger
+ * module_instance_spec_retained repeats this inside the commit. */
+async function removableInstances(db:D1Database,project:string,spec:ProjectSpecification){
+ const {results}=await db.prepare('SELECT local_id FROM module_instances WHERE project_id=?').bind(project).all<{local_id:string}>();
+ return spec.instances.map(i=>i.id).filter(local=>!results.some(r=>r.local_id===local));
+}
 function id(value:unknown):asserts value is string {if(typeof value!=='string'||!uuid.test(value))throw new BackendError(400,'Choose an owned project, version or review.');}
 function revision(value:unknown):asserts value is number {if(!Number.isSafeInteger(value)||Number(value)<0)throw new BackendError(400,'Read the current website revision before proposing a change.');}
 function safe(error:unknown):never {if(error instanceof BackendError)throw error;if(error instanceof SpecificationError||error instanceof Error&&error.message==='Rendered site too large')throw new BackendError(422,'This website configuration is not supported. Ask for a smaller compatible change.');throw error;}
@@ -45,13 +53,28 @@ function home(compiled:Awaited<ReturnType<typeof compileProjectSpecification>>){
  const {photos,...text}=projectPage(compiled.specification,compiled.artifacts[0].pageId);
  return {artifact:compiled.artifacts[0],config:photos.length?{...text,photos}:text,photos};
 }
-function fieldDiff(before:SiteConfig|PhotoConfig|null,after:SiteConfig|PhotoConfig){
- const fields=(c:SiteConfig|PhotoConfig|null)=>c?Object.fromEntries([['Site name',c.name],['Headline',c.headline],['Introduction',c.description],['Theme',c.theme],['About heading',c.aboutTitle],['About text',c.aboutText],['Photos','photos' in c?JSON.stringify(c.photos):'[]'],...c.sections.flatMap((s,i)=>[[`Section ${i+1} heading`,s.heading],[`Section ${i+1} text`,s.text]])]):{};
- const a=fields(before),b=fields(after);return [...new Set([...Object.keys(a),...Object.keys(b)])].filter(key=>a[key]!==b[key]).map(label=>({label,before:a[label]??null,after:b[label]??null}));
+// Each changed module instance is one exact comparison row: kind, pinned module, dependencies and full configuration.
+// Owner configuration only; visitor values never live in a specification.
+const moduleText=(i:ProjectSpecification['instances'][number]|undefined)=>i?canonicalJSON({kind:i.kind,module:`${i.module.name}@${i.module.version}`,dependencies:i.dependencies,config:i.config},16384):null;
+function fieldDiff(before:SiteConfig|PhotoConfig|null,after:SiteConfig|PhotoConfig,beforeSpec:ProjectSpecification|null,afterSpec:ProjectSpecification){
+ const fields=(c:SiteConfig|PhotoConfig|null,spec:ProjectSpecification|null)=>({...(c?Object.fromEntries([['Site name',c.name],['Headline',c.headline],['Introduction',c.description],['Theme',c.theme],['About heading',c.aboutTitle],['About text',c.aboutText],['Photos','photos' in c?JSON.stringify(c.photos):'[]'],...c.sections.flatMap((s,i)=>[[`Section ${i+1} heading`,s.heading],[`Section ${i+1} text`,s.text]])]):{}),
+  ...Object.fromEntries((spec?.instances??[]).map(i=>[`Module ${i.id}`,moduleText(i)]))}) as Record<string,string|null>;
+ const a=fields(before,beforeSpec),b=fields(after,afterSpec),rows=[...new Set([...Object.keys(a),...Object.keys(b)])].filter(key=>a[key]!==b[key]).map(label=>({label,before:a[label]??null,after:b[label]??null}));
+ // The saved comparison must stay within the review display bounds; a larger change is split, never truncated.
+ if(rows.length>20||rows.some(row=>[row.before,row.after].some(v=>v!==null&&v.length>16384)))throw new BackendError(422,'This website change is too large to review at once. Ask for a smaller change.');
+ return rows;
 }
-const description=(q:Pick<Proposal,'operation'|'expected_revision'|'expires_at'|'config_json'|'diff_json'>)=>{
- const name=(JSON.parse(q.config_json) as SiteConfig).name,fields=(JSON.parse(q.diff_json) as {label:string}[]).map(row=>row.label);
- return `Website changes for “${name}”\n${q.operation==='restore'?'Restore this saved website configuration':'Save these website changes'}?\n${fields.length?'Changed fields: '+fields.join(', '):'The website text and theme stay the same.'}\nReview the private preview and full comparison below. Approval creates a new private saved version at revision ${q.expected_revision+1}. Publishing requires its own review.\nThis does not change visitor data, permissions, connections or your live website.\nReview expires: ${q.expires_at}`;
+const reviewClasses:Record<SpecificationReview,string>={schema:'new saved record fields, schemas or collections',permissions:'wider visitor or staff access, or longer retention',integration:'a connection',spending:'possible spending'};
+function requiredReviews(value:unknown):SpecificationReview[]{
+ const known=Object.keys(reviewClasses).sort();
+ if(!Array.isArray(value)||value.some((v,n)=>typeof v!=='string'||!known.includes(v)||n>0&&value[n-1]>=v))throw changed();
+ return value as SpecificationReview[];
+}
+const description=(q:Pick<Proposal,'operation'|'expected_revision'|'expires_at'|'config_json'|'diff_json'|'envelope_json'>)=>{
+ const name=(JSON.parse(q.config_json) as SiteConfig).name,fields=(JSON.parse(q.diff_json) as {label:string}[]).map(row=>row.label),classes=requiredReviews(JSON.parse(q.envelope_json).requiredReviews);
+ const rows=JSON.parse(q.diff_json) as {label:string;after:string|null}[],removed=rows.filter(row=>row.label.startsWith('Module ')&&row.after===null).map(row=>row.label.slice(7));
+ const modules=(rows.some(row=>row.label.startsWith('Module ')&&row.after!==null)?'\nModule configuration is saved inactive. Each module needs its own activation review before anyone can use it.':'')+(removed.length?`\nRemoves the saved configuration of never-activated module${removed.length>1?'s':''} ${removed.join(', ')}. No visitor data exists for ${removed.length>1?'them':'it'}.`:'');
+ return `Website changes for “${name}”\n${q.operation==='restore'?'Restore this saved website configuration':'Save these website changes'}?\n${fields.length?'Changed fields: '+fields.join(', '):'The website text and theme stay the same.'}${classes.length?'\nThis review also covers: '+classes.map(c=>`${c} (${reviewClasses[c]})`).join('; ')+'.':''}\nReview the private preview and full comparison below. Approval creates a new private saved version at revision ${q.expected_revision+1}. Publishing requires its own review.${modules}\nThis does not change visitor data, permissions, connections or your live website.\nReview expires: ${q.expires_at}`;
 };
 function link(db:D1Database,user:string,turn:string,review:string,hash:string){return db.prepare('INSERT INTO project_spec_chat_links(turn_id,proposal_id,reply_digest) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,review,hash,turn,user);}
 
@@ -86,25 +109,29 @@ export async function prepareSpecification(db:D1Database,user:string,turn:string
   const prior=await db.prepare('SELECT * FROM project_spec_proposals WHERE id=? AND user_id=?').bind(turn,user).first<Proposal>();
   if(prior){if(prior.request_hash!==requestHash)throw new BackendError(409,'This request ID already describes another website change.');return {reply:description(prior),statements:[] as D1PreparedStatement[]};}
   if(current.revision!==request.expectedRevision)throw changed();
-  let compiled:Awaited<ReturnType<typeof compileProjectSpecification>>,target:string|null=null;
+  let compiled:Awaited<ReturnType<typeof compileProjectSpecification>>,target:string|null=null,reviews:SpecificationReview[];
+  if(!current.spec_json||!current.lock_json)throw new BackendError(409,'Create this website’s first draft before proposing changes.');
   if(operation==='restore'){
    id(request.versionId);target=request.versionId;const old=await site(db,user,current.project_id,target);
    const saved=await db.prepare('SELECT spec_json,lock_json,spec_digest,manifest_digest FROM project_spec_versions WHERE version_id=? AND project_id=?').bind(target,current.project_id).first<{spec_json:string;lock_json:string;spec_digest:string;manifest_digest:string}>();
    if(!saved)throw new BackendError(404,'Saved website configuration not found.');
-   compiled=await compileProjectSpecification(JSON.parse(saved.spec_json),JSON.parse(saved.lock_json));
+   // A saved version under another compiler identity is refused (COMPILER_LOCK_MISMATCH), never converted.
+   const base=JSON.parse(current.spec_json) as ProjectSpecification;
+   const restored=await compileSpecificationRestore(base,JSON.parse(saved.spec_json),JSON.parse(saved.lock_json),await removableInstances(db,current.project_id,base));
+   compiled=restored.compiled;reviews=restored.requiredReviews;
    if(compiled.specificationDigest!==saved.spec_digest||compiled.manifestDigest!==saved.manifest_digest||home(compiled).artifact.digest!==old.digest||home(compiled).artifact.html!==old.html)throw new BackendError(409,'The saved website failed its integrity check.');
   }else{
-   if(!current.spec_json||!current.lock_json)throw new BackendError(409,'Create this website’s first draft before proposing changes.');
    if(current.draft_revision!==current.head_draft_revision)throw new BackendError(409,'The website draft changed. Read its current specification before preparing a new review.');
-   compiled=(await compileSpecificationChange(JSON.parse(current.spec_json),request.operations,JSON.parse(current.lock_json))).compiled;
+   const base=JSON.parse(current.spec_json) as ProjectSpecification;
+   const change=await compileSpecificationChange(base,request.operations,JSON.parse(current.lock_json),await removableInstances(db,current.project_id,base));
+   compiled=change.compiled;reviews=change.requiredReviews;
   }
   const {artifact,config,photos}=home(compiled);
   await requireSpecificationPhotos(db,user,current.project_id,photos);
   await held(db,user,[compiled.specificationDigest,compiled.manifestDigest,artifact.digest]);
-  let before:SiteConfig|null=null;
-  if(current.spec_json){const priorCompiled=await compileProjectSpecification(JSON.parse(current.spec_json),JSON.parse(current.lock_json!));before=home(priorCompiled).config;}
-  const diff=fieldDiff(before,config),expiresAt=new Date(Date.now()+600000).toISOString();
-  const envelope={id:turn,projectId:current.project_id,operation,expectedRevision:current.revision,draftRevision:current.draft_revision,baseVersionId:current.version_id,targetVersionId:target,baseDigest:current.spec_digest,nextDigest:compiled.specificationDigest,manifestDigest:compiled.manifestDigest,diffDigest:await jsonDigest(diff,65536),requiredReviews:[],expiresAt,policyVersion:policy};
+  const priorCompiled=await compileProjectSpecification(JSON.parse(current.spec_json),JSON.parse(current.lock_json));
+  const diff=fieldDiff(home(priorCompiled).config,config,priorCompiled.specification,compiled.specification),expiresAt=new Date(Date.now()+600000).toISOString();
+  const envelope={id:turn,projectId:current.project_id,operation,expectedRevision:current.revision,draftRevision:current.draft_revision,baseVersionId:current.version_id,targetVersionId:target,baseDigest:current.spec_digest,nextDigest:compiled.specificationDigest,manifestDigest:compiled.manifestDigest,diffDigest:await jsonDigest(diff,65536),requiredReviews:reviews,expiresAt,policyVersion:policy};
   const row={id:turn,user_id:user,project_id:current.project_id,operation:operation as Proposal['operation'],expected_revision:current.revision,draft_revision:current.draft_revision,base_version_id:current.version_id,target_version_id:target,base_digest:current.spec_digest,request_hash:requestHash,proposal_digest:await jsonDigest(envelope),spec_digest:compiled.specificationDigest,manifest_digest:compiled.manifestDigest,policy_version:policy,expires_at:expiresAt,spec_json:canonicalJSON(compiled.specification),lock_json:canonicalJSON(compiled.manifest.lock),manifest_json:canonicalJSON(compiled.manifest),config_json:canonicalJSON(config),html:artifact.html,html_digest:artifact.digest,diff_json:canonicalJSON(diff,65536),envelope_json:canonicalJSON(envelope)} satisfies Proposal;
   const keys=Object.keys(row) as (keyof Proposal)[],reply=description(row);
   return {reply,statements:[
@@ -126,7 +153,7 @@ export async function readSpecificationProposal(db:D1Database,user:string,review
  try{
   const compiled=await compileProjectSpecification(JSON.parse(q.spec_json),JSON.parse(q.lock_json)),{artifact,config}=home(compiled);
   const envelope=JSON.parse(q.envelope_json);
-  if(await jsonDigest(envelope)!==q.proposal_digest||envelope.id!==q.id||envelope.projectId!==q.project_id||envelope.operation!==q.operation||envelope.expectedRevision!==q.expected_revision||envelope.draftRevision!==q.draft_revision||envelope.baseVersionId!==q.base_version_id||envelope.targetVersionId!==q.target_version_id||envelope.baseDigest!==q.base_digest||envelope.nextDigest!==q.spec_digest||envelope.manifestDigest!==q.manifest_digest||envelope.policyVersion!==q.policy_version||envelope.expiresAt!==q.expires_at||canonicalJSON(envelope.requiredReviews)!=='[]'||envelope.diffDigest!==await jsonDigest(JSON.parse(q.diff_json),65536)||compiled.specificationDigest!==q.spec_digest||compiled.manifestDigest!==q.manifest_digest||canonicalJSON(compiled.manifest)!==q.manifest_json||canonicalJSON(config)!==q.config_json||artifact.html!==q.html||artifact.digest!==q.html_digest)throw changed();
+  if(await jsonDigest(envelope)!==q.proposal_digest||envelope.id!==q.id||envelope.projectId!==q.project_id||envelope.operation!==q.operation||envelope.expectedRevision!==q.expected_revision||envelope.draftRevision!==q.draft_revision||envelope.baseVersionId!==q.base_version_id||envelope.targetVersionId!==q.target_version_id||envelope.baseDigest!==q.base_digest||envelope.nextDigest!==q.spec_digest||envelope.manifestDigest!==q.manifest_digest||envelope.policyVersion!==q.policy_version||envelope.expiresAt!==q.expires_at||canonicalJSON(requiredReviews(envelope.requiredReviews))!==canonicalJSON(envelope.requiredReviews)||envelope.diffDigest!==await jsonDigest(JSON.parse(q.diff_json),65536)||compiled.specificationDigest!==q.spec_digest||compiled.manifestDigest!==q.manifest_digest||canonicalJSON(compiled.manifest)!==q.manifest_json||canonicalJSON(config)!==q.config_json||artifact.html!==q.html||artifact.digest!==q.html_digest)throw changed();
  }catch(error){return safe(error);}
  await requireSpecificationPhotos(db,user,q.project_id,projectPage(JSON.parse(q.spec_json),'home').photos);
  await held(db,user,[q.spec_digest,q.manifest_digest,q.html_digest]);return q;

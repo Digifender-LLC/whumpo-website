@@ -10,6 +10,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {authenticator} from './app-authenticator.mjs';
 import {taskListAppJourney} from './task-list-app-journey.mjs';
+import {createFixtureWebsite,withFixtureEditingGrant} from './current-site-fixture.mjs';
 const id=()=>crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-app-journey-');let fixture,runtime;
 try{
  fixture=await databaseFixture({d1:true,r2:true});
@@ -17,7 +18,7 @@ try{
  const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
  runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
  const db=fixture.db;
- const b=await build({stdin:{contents:"export {sendChat as sendFixtureChat} from './src/chat';export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {applicationChatActions} from './src/app-chat-actions';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+ const b=await build({stdin:{contents:"export {sendChat as sendFixtureChat} from './src/chat';export {readAppStatus,describeAppStatus} from './src/app-status';export {backendAction} from './src/backend-chat';export {default as platform} from './src/index';export {default as host} from './src/app-host';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {applicationChatActions} from './src/app-chat-actions';export {readChat,sendChatControl} from './src/chat';export {createWebsite,prepareSpecification,readSpecificationProposal} from './src/project-specification/store';export {moduleCatalog} from './src/project-specification/catalog';export {jsonDigest} from './src/project-specification/v2/json';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
  const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
  const {sendFixtureChat,readAppStatus,describeAppStatus,backendAction,platform,host,hashToken,applicationChatActions}=m;
  let executions=0;
@@ -46,6 +47,44 @@ try{
  const origin='https://app-'+project+'.whumpo.site';
  const visit=(url,init)=>host.fetch(new Request(url,init),env);
  assert.equal((await visit(origin+'/')).status,404);
+ // WH-126: visitor identity belongs to the project's access module instance. The owner sets it up through the
+ // Visitors panel controls on the real typed endpoint: accessModuleReview prepares the exact website review of the
+ // fixed standard instance, specificationApply (recent sign-in) saves it, and moduleActivationReview/Apply activate it.
+ async function ownerAction(account,action,status=200){
+  const state=await (await call(account,'/chat')).json(),r=await call(account,'/chat/actions',{id:id(),revision:state.state.revision,action});
+  assert.equal(r.status,status,await r.clone().text());if(status!==200)return r.json();
+  return (await (await call(account,'/chat')).json()).turns.at(-1);
+ }
+ async function accessState(account,project){const r=await call(account,'/projects/'+project+'/application-access');assert.equal(r.status,200,await r.clone().text());return r.json();}
+ const enableAccess=async(account,project)=>{
+  if((await accessState(account,project)).accessSetup.state==='website-required'){
+   assert.match((await ownerAction(account,{type:'accessModuleReview',projectId:project},404)).error,/draft the project’s private website first/);
+   // Visitor access is saved in the website configuration. Drafting the first private website is the AI path; this
+   // suite runs no inference, so a synthetic AI first-draft turn stands in for it.
+   const p=await db.prepare('SELECT name,purpose FROM projects WHERE id=?').bind(project).first();
+   await createFixtureWebsite(await account.scope(),account.user,project,{name:p.name,headline:p.name,description:p.purpose,theme:'ocean',aboutTitle:'About us',aboutText:p.purpose,sections:[],photos:[]},m);
+  }
+  assert.deepEqual((await accessState(account,project)).accessSetup,{state:'not-configured',instanceId:null});
+  {const scope=await foreign.scope(),r=await m.sendChatControl(scope,foreign.user,{id:id(),revision:(await m.readChat(scope,foreign.user)).state.revision,action:{type:'accessModuleReview',projectId:project}});assert.equal(r.status,404,'A foreign owner cannot prepare visitor access setup');}
+  const setup=await ownerAction(account,{type:'accessModuleReview',projectId:project}),review=setup.specification_review;
+  assert.ok(review,'The setup turn carries the exact website review');assert.match(setup.assistant_text,/Changed fields: Module visitors/);assert.match(setup.assistant_text,/saved inactive/);assert.match(setup.assistant_text,/This review also covers: schema/);assert.ok(!/permissions \(/.test(setup.assistant_text),'No permissions review class: no staff role');
+  assert.equal(JSON.parse((await db.prepare('SELECT diff_json FROM project_spec_proposals WHERE id=?').bind(review.id).first()).diff_json).length,1);
+  assert.equal((await accessState(account,project)).accessSetup.state,'not-configured','Preparing the review saves nothing');
+  await ownerAction(account,{type:'specificationApply',reviewId:review.id,proposalDigest:'0'.repeat(64),expectedRevision:review.expectedRevision},409);
+  await ownerAction(account,{type:'specificationApply',reviewId:review.id,proposalDigest:review.proposalDigest,expectedRevision:review.expectedRevision});
+  const saved=await accessState(account,project);assert.deepEqual(saved.accessSetup,{state:'saved',instanceId:'visitors'});assert.equal(saved.visitorAccess,null);
+  assert.equal((await call(account,'/projects/'+project+'/application-access/invitations',{})).status,409);
+  assert.match((await ownerAction(account,{type:'accessModuleReview',projectId:project},400)).error,/already has a visitor access module/);
+  await withFixtureEditingGrant(await account.scope(),account.user,project,async()=>{
+   const activation=(await ownerAction(account,{type:'moduleActivationReview',projectId:project,instanceId:'visitors',action:'activate'})).module_activation_review;assert.equal(activation.action,'activate');
+   await ownerAction(account,{type:'moduleActivationApply',reviewId:activation.id,reviewDigest:activation.reviewDigest,expectedRevision:activation.expectedRevision});
+  });
+  const active=await accessState(account,project);assert.equal(active.visitorAccess.state,'active');assert.equal(active.accessSetup.state,'registered');
+  const row=await db.prepare("SELECT config_json FROM module_instances WHERE project_id=? AND kind='access'").bind(project).first();assert.deepEqual(JSON.parse(row.config_json),{enrollment:'invitation',roles:[]});
+ };
+ assert.match((await chat('/app-status '+project)).turns.at(-1).assistant_text,/No application configured/);
+ await json(path+'/application-access/invitations',{},409);
+ await enableAccess(owner,project);
  const enabled=await chat('/enable-application '+version+' '+run),enable=enabled.turns.at(-1).id;assert.match(enabled.turns.at(-1).assistant_text,/Application.*review/i);
  assert.equal(enabled.turns.at(-1).application_confirmation_id,enable);assert.equal(enabled.turns.at(-1).application_operation,'enable');assert.equal(enabled.turns.at(-1).application_review.state,'ready');assert.equal(enabled.turns.at(-1).application_review.projectName,'Private notebook');assert.equal(enabled.turns.at(-1).application_review.testId,run);
  const reviewRead=await chat('/application-review '+enable);assert.equal(reviewRead.turns.at(-1).application_confirmation_id,enable);
@@ -79,7 +118,7 @@ try{
  assert.deepEqual((await first.request('/data')).data,{revision:1,state:{note:'Private visitor note',edits:1}});assert.deepEqual((await second.request('/data')).data,{revision:0,state:{}});assert.equal((await second.request('/receipts/'+op.id)).status,404);
  // Controlled retained-outcome fixtures exercise counts without exposing private result bodies.
  for(const [state,revision] of [['failed',1],['conflict',1],['running',1],['failed',0]]){
-  const receipt=id();await db.prepare(`INSERT INTO app_runs(id,visitor_id,project_id,version_id,session_hash,request_hash,base_revision,program_revision) SELECT ?,v.id,v.project_id,a.version_id,s.token_hash,?,d.revision,a.revision FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.project_id=? AND d.revision=? LIMIT 1`).bind(receipt,'a'.repeat(64),project,revision).run();
+  const receipt=id();await db.prepare(`INSERT INTO app_runs(id,visitor_id,project_id,version_id,session_hash,request_hash,base_revision,program_revision,page_review_id) SELECT ?,v.id,v.project_id,a.version_id,s.token_hash,?,d.revision,a.revision,(SELECT id FROM app_live_pages WHERE project_id=v.project_id) FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.project_id=? AND d.revision=? LIMIT 1`).bind(receipt,'a'.repeat(64),project,revision).run();
   if(state!=='running')await db.prepare('UPDATE app_runs SET state=?,result_json=? WHERE id=?').bind(state,JSON.stringify({error:'PRIVATE_OUTCOME_CANARY'}),receipt).run();
  }
  const aggregate=await readAppStatus(db,owner.user,project);assert.equal(aggregate.published,1);assert.equal(aggregate.visitors,2);assert.equal(aggregate.attempts,5);assert.equal(aggregate.complete,1);assert.equal(aggregate.failed,2);assert.equal(aggregate.conflict,1);assert.equal(aggregate.unresolved,1);
@@ -119,5 +158,5 @@ try{
  assert.equal(executions,2);assert.equal((await db.prepare('SELECT COUNT(*) n FROM inference_calls').first()).n,0);
  await recordFixtureBenchmark(db,'application',{transportCalls:0,runtimeCalls:executions});
  console.log('Customer app journey passed: welcome, actual QuickJS test, separate program/page reviews, public host, signed passkeys, isolated visitors, exact transition replay, recovery/export/deletion, withdrawal and historical approval safety. No live deployment or AI call.');
- await taskListAppJourney({db,account,call,host,env,setupChat,executions:()=>executions});
+ await taskListAppJourney({db,account,call,host,env,setupChat,enableAccess,executions:()=>executions});
 }finally{await runtime?.dispose();await fixture?.close();await rm(dir,{recursive:true,force:true});}

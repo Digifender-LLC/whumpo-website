@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
-import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureProject,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {fixtureKeyring,initializeFixtureKeys,fixtureCiphertext} from './helpers/connection-keyring.mjs';
@@ -27,9 +27,10 @@ try{
  const backend=id(),check=id(),review=id();
  await m.backend.saveBackend(scope,owner.account,project,backend,'export default ({state})=>({state,result:null})');
  await m.backend.testBackend(scope,{fetch:async()=>Response.json({ok:true,value:{state:{},result:null}})},owner.account,project,backend,check,{state:{},input:{}});
+ await enableFixtureVisitorAccess(scope,owner.account,project);
  await m.appActivation.prepareApplication(scope,owner.account,project,review,'enable',backend,check);await m.appActivation.confirmApplication(scope,owner.account,review);
  const stateReview=id();await m.backendState.prepareBackendState(scope,{fetch:async()=>Response.json({ok:true,value:{state:{private:markers.state},result:null}})},owner.account,project,backend,stateReview,{});await m.backendState.confirmBackendState(scope,owner.account,stateReview);
- const visitor=id();await db.prepare('INSERT INTO app_visitors(id,project_id) VALUES(?,?)').bind(visitor,project).run();const visitorToken=await m.appData.issueAppSession(db,visitor);await m.appData.transitionAppData(db,{fetch:async()=>Response.json({ok:true,value:{state:{private:markers.visitor},result:null}})},visitorToken,project,id(),0,{});await assert.rejects(m.appData.readAppData(db,owner.token,project),{status:401});
+ const visitor=id();await db.prepare("INSERT INTO app_visitors(id,project_id,access_id) SELECT ?,?,id FROM module_instances WHERE project_id=? AND kind='access'").bind(visitor,project,project).run();const visitorToken=await m.appData.issueAppSession(db,visitor);await m.appData.transitionAppData(db,{fetch:async()=>Response.json({ok:true,value:{state:{private:markers.visitor},result:null}})},visitorToken,project,id(),0,{});await assert.rejects(m.appData.readAppData(db,owner.token,project),{status:401});
  const revision=(await m.readChat(scope,owner.account)).state.revision+1;
  await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,mode,status,created_at,ai_context_allowed) VALUES(?,?,?,?,'Private operator statement','guided','completed',?,0)").bind(id(),owner.account,revision,markers.history,now()).run();await db.prepare('UPDATE workspace_state SET revision=? WHERE user_id=?').bind(revision,owner.account).run();
  const forbidden=Object.values(markers).filter(x=>x!==markers.profile);

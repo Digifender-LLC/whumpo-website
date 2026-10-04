@@ -12,6 +12,10 @@ export const contentFieldLimit=8;
 export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'|'core.insights'|'creator.guest-feedback';source:string|null;handler:string|null;scope?:string;displays?:readonly string[]}>> = Object.freeze({
   'answer.value@1': {mode:'collect',feature:'core.editing',source:null,handler:null},
   'interaction.answers@1': {mode:'submit',feature:'core.editing',source:null,handler:null},
+  // WH-035: the owner's explicit submission of the maintained support form also saves one existing support request.
+  'support.request@1': {mode:'submit',feature:'core.editing',source:'src/chat-interactions/store.ts',handler:'mutateInteraction',scope:'account'},
+  // Identity and ownership only: the owner's own support requests and saved operator responses (src/support.ts).
+  'support.requests@1': {mode:'read',feature:'core.editing',source:'src/support.ts',handler:'listOwnedSupportRequests',scope:'account',displays:['support']},
   'owned.projects@1': {mode:'select',feature:'core.editing',source:'src/chat-interactions/resource-options.ts',handler:'readOwnedResourceOptions',scope:'account'},
   'owned.photos@1': {mode:'select',feature:'core.editing',source:'src/chat-interactions/resource-options.ts',handler:'readOwnedResourceOptions',scope:'project'},
   'site.content@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'readSpecification',scope:'project'},
@@ -33,6 +37,15 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'project.guest-previews@1': {mode:'read',feature:'creator.guest-feedback',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
   // Identity and ownership only (viewComponents feature null): the saved health report never needs insight inclusion.
   'project.site-health@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
+  // WH-125 module instance status. Feature family only: like guest previews, the view read is identity and ownership only
+  // (viewComponents feature null) so owner read/disable outlive plan loss; activation re-checks core.forms/core.editing itself.
+  'module.instances@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
+  // WH-126 staff roster. Identity and ownership only (viewComponents feature null) so reading and removing roles outlive
+  // plan loss; granting re-checks core.editing in its own review. Opaque visitor ids and dates; no credentials or values.
+  'access.roles@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
+  // WH-127 records counts. Identity and ownership only (viewComponents feature null): owner reads of collected data stay
+  // reachable after plan loss. Counts, ids and states only; visitor-submitted values stay in the owner records panel.
+  'records.summary@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });
@@ -140,13 +153,14 @@ export function validateDefinition(input:unknown):Definition {
   if(!own(d,'workspaceView'))check(!d.cards.some(c=>c.display==='workspace'),'TEMPLATE');
   if(d.kind==='view')check(d.template==='status@1'&&d.fields.length===0&&d.cards.length>0&&d.submitBinding===null&&d.continuationBinding===null,'TEMPLATE');
   else {
-    check(['content-change@1','project-brief@1','project-select@1','choice@1','custom@1'].includes(d.template)&&d.fields.length>0&&d.submitBinding==='interaction.answers@1','TEMPLATE');
+    check(['content-change@1','project-brief@1','project-select@1','choice@1','custom@1','support-request@1'].includes(d.template)&&d.fields.length>0&&d.submitBinding===(d.template==='support-request@1'?'support.request@1':'interaction.answers@1'),'TEMPLATE');
     check(d.continuationBinding===null||d.continuationBinding==='site.content-prepare@1'||['custom@1','project-select@1','project-brief@1'].includes(d.template)&&d.continuationBinding==='agent.task-continue@1','BINDING');
     if(d.template==='content-change@1')check(d.continuationBinding==='site.content-prepare@1','TEMPLATE');
     if(d.template==='project-brief@1'){
       check(d.continuationBinding==='agent.task-continue@1'&&d.fields.length===2&&d.fields[0].id==='name'&&d.fields[0].type==='text'&&d.fields[0].constraints.maxLength<=100&&d.fields[0].required&&d.fields[1].id==='purpose'&&d.fields[1].type==='long-text'&&d.fields[1].constraints.maxLength<=1000&&d.fields[1].required&&!d.fields.some(f=>f.source||f.when),'TEMPLATE');
     }
     if(d.template==='project-select@1')check(d.continuationBinding==='agent.task-continue@1'&&d.fields.length===1&&d.fields[0].id==='project'&&d.fields[0].type==='resource'&&d.fields[0].constraints.collection==='projects'&&!d.fields[0].constraints.multiple&&d.fields[0].required&&!d.fields[0].when,'TEMPLATE');
+    if(d.template==='support-request@1')check(d.continuationBinding===null&&d.fields.length===1&&d.fields[0].id==='statement'&&d.fields[0].type==='long-text'&&d.fields[0].constraints.maxLength===950&&d.fields[0].required&&!d.fields[0].when&&!d.fields[0].source&&d.cards.length===0,'TEMPLATE');
     if(d.template==='choice@1')check(d.continuationBinding===null&&d.fields.length===1&&['choice','multi-choice'].includes(d.fields[0].type)&&!d.fields[0].when,'TEMPLATE');
     if(d.continuationBinding==='site.content-prepare@1'){
       check(d.fields.length<=contentFieldLimit,'CONTENT_MAPPING');
@@ -190,7 +204,7 @@ export async function sealDefinition(input:unknown):Promise<IssuedInteraction>{
   if(e.definition.workspaceView)check(e.definition.workspaceView.projectId===e.scope.projectId,'PROJECT');
   const projectNeeded=e.definition.fields.some(f=>f.source||f.type==='attachment'||('collection' in f.constraints&&f.constraints.collection==='photos'))||e.definition.cards.some(c=>['project','review'].includes(bindings[c.binding].scope??''))||(e.definition.continuationBinding!==null&&!['project-select@1','project-brief@1'].includes(e.definition.template));
   check(!projectNeeded||e.scope.projectId!==null,'PROJECT');
-  if(['project-select@1','project-brief@1'].includes(e.definition.template))check(e.scope.projectId===null,'PROJECT');
+  if(['project-select@1','project-brief@1','support-request@1'].includes(e.definition.template))check(e.scope.projectId===null,'PROJECT');
   return {...e,definitionDigest:await hash(e)};
 }
 export async function verifyEnvelope(input:unknown):Promise<IssuedInteraction>{

@@ -1,6 +1,7 @@
 // WH-074 pooled build job envelope: two-tenant contamination/cache separation, output ownership, cancellation,
 // expiry, lease isolation, recorded cleanup failure, bounded capacity, owner session replay/concurrency, no visitor or
-// workflow wake path, and deterministic diagnostics before any optional model call. Uses the actual QuickJS runtime.
+// workflow wake path, deterministic diagnostics before any optional model call, and the WH-050 operator `build` freeze.
+// Uses the actual QuickJS runtime.
 import {fixtureExtensionPlan} from './helpers/composition.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
@@ -9,15 +10,23 @@ import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 import {dirname,resolve} from 'node:path';
-import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
+import {runContainment,containmentInput} from '../tools/operator-containment-input.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture(),db=store.db,sql=store.sql;
 const {buildJobs:J,backendChat:{backendAction:rawBackendAction,backendChatCommand},appActivation:{prepareApplication},sendAIChat,readChat,sendChat}=m;
 const owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user),id=()=>crypto.randomUUID(),sha=x=>createHash('sha256').update(x).digest('hex');
-async function account(user=id()){const authority=await workspaceFixture(db,m,user);owners.set(user,authority);scopes.set(user,await authority.scope());return user;}
-const stamp=new Date().toISOString();let revision=0;
-async function project(owner){const p=id();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Notebook','','draft',?,?)").bind(p,owner,stamp,stamp).run();return p;}
+// WH-126: an application consumes its project's visitor access module, saved and activated through the real owner
+// path. Those owner controls run before the account has any synthetic pending build turn, so `apps` projects are
+// prepared up front and handed out by project(); other projects (and draft envelopes) have no access module.
+const pools=new Map();
+async function account(user=id(),apps=0){const authority=await workspaceFixture(db,m,user);owners.set(user,authority);scopes.set(user,await authority.scope());
+ const pool=[];for(let i=0;i<apps;i++){const p=await plainProject(user);await enableFixtureVisitorAccess(scope(user),user,p);pool.push(p);}pools.set(user,pool);return user;}
+// Synthetic build turns use revisions far above the owners' own Chat revisions (fixture access controls, later Chat).
+const stamp=new Date().toISOString();let revision=100000;
+async function plainProject(owner){const p=id();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Notebook','','draft',?,?)").bind(p,owner,stamp,stamp).run();return p;}
+async function project(owner){return pools.get(owner)?.shift()??plainProject(owner);}
 async function turn(owner){const t=id();await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Build it','','2026-10-04T00:00:00.000Z','ai','pending')").bind(t,owner,++revision).run();return t;}
 async function build(owner,p,t,source,input,expected,service){
  const planId=await fixtureExtensionPlan(scope(owner),owner,p,t,'custom.visitor-transition');
@@ -34,7 +43,7 @@ function age(t,columns){
 }
 /** A saved owner build intent without dispatch, for direct envelope checks. */
 async function draft(owner,p=undefined){
- p??=await project(owner);const t=await turn(owner),source=note+'//'+t,digest=sha(source);
+ p??=await plainProject(owner);const t=await turn(owner),source=note+'//'+t,digest=sha(source);
  await db.prepare('INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,?,?,?)').bind(t,p,source,digest,stamp).run();
  await db.prepare('INSERT INTO application_builds(id,project_id,user_id,request_hash) VALUES(?,?,?,?)').bind(t,p,owner,'a'.repeat(64)).run();
  return {t,p,digest,admit:async()=>{const admitted=await J.admitBuildJob(db,{id:t,user:owner,project:p,inputDigest:'b'.repeat(64),sourceDigest:digest});await admitted.statement.run();return admitted.lease;}};
@@ -46,7 +55,7 @@ try{
  runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
  let calls=0,gate=null,onCall=null;
  const service={fetch:async(url,init)=>{calls++;await onCall?.();if(gate)await gate;return runtime.dispatchFetch(url,init);}};
- const [alice,bob]=[await account(),await account()];
+ const [alice,bob]=[await account(undefined,4),await account(undefined,2)];
 
  // 1. Two tenants: fresh runtime memory per job, shared toolchain key, private artifact keys even for identical bytes.
  const aP=await project(alice),aT=await turn(alice),bP=await project(bob),bT=await turn(bob);
@@ -106,7 +115,7 @@ try{
  assert.throws(()=>sql.prepare('INSERT INTO build_jobs(id,project_id,user_id,purpose,origin,lease_digest,input_digest,toolchain_key,artifact_key,expires_at) SELECT id,project_id,user_id,purpose,origin,lease_digest,input_digest,toolchain_key,artifact_key,expires_at FROM build_jobs WHERE id=?').run(one.t));
 
  // 6. Cleanup failure is recorded and keeps capacity held; the deterministic reconciler releases it only when knowable.
- const dave=await account(),fP=await project(dave),fT=await turn(dave),broken={fetch:async()=>{calls++;return new Response('unavailable',{status:500});}};
+ const dave=await account(undefined,1),fP=await project(dave),fT=await turn(dave),broken={fetch:async()=>{calls++;return new Response('unavailable',{status:500});}};
  assert.match(await build(dave,fP,fT,note,noteIn('f'),noteOut('f'),broken),/did not pass/);
  assert.deepEqual((await cleanups(fT)).map(c=>[c.outcome,c.reason]),[['failed','runtime-unconfirmed']]);assert.equal((await job(fT)).cleanup,'failed');
  const blocked=await turn(dave);await assert.rejects(build(dave,fP,blocked,note,noteIn('g'),noteOut('g'),service),e=>e.status===429);
@@ -117,7 +126,7 @@ try{
  assert.throws(()=>sql.prepare("UPDATE build_job_cleanups SET outcome='released' WHERE job_id=?").run(fT),/build_job_cleanup_immutable/);
 
  // 7. Owner session replay and concurrency: replay never re-dispatches; one active job per project.
- const erin=await account(),eP=await project(erin),eT=await turn(erin),before=calls;let release;gate=new Promise(r=>{release=r;});
+ const erin=await account(undefined,3),eP=await project(erin),eT=await turn(erin),before=calls;let release;gate=new Promise(r=>{release=r;});
  const first=build(erin,eP,eT,note,noteIn('e'),noteOut('e'),service);
  while(calls===before)await new Promise(r=>setTimeout(r,5));
  const busy=await turn(erin);await assert.rejects(build(erin,eP,busy,note,noteIn('e2'),noteOut('e2'),service),e=>e.status===429);
@@ -156,12 +165,12 @@ try{
  assert.ok(await active()<J.buildJobLimits.pool);
 
  // 10. Synthetic maintenance task: deterministic diagnostics precede and gate any optional model repair.
- const hana=await account(),hP=await project(hana),hT=await turn(hana),runtimeBefore=calls;
+ const hana=await account(undefined,2),hP=await project(hana),hT=await turn(hana),runtimeBefore=calls;
  const remote='import helper from "https://example.invalid/x.js";\nexport default ({state,input})=>({state:{note:helper(input.note)},result:"Saved"})';
  const diagnosed=await build(hana,hP,hT,remote,noteIn('h'),noteOut('h'),service);
  assert.match(diagnosed,/Deterministic checks failed before any test/);assert.match(diagnosed,/dependency failed \(remote_dependency\)/);assert.match(diagnosed,/No model repair was run/);
  assert.equal(calls,runtimeBefore,'No runtime spend for a deterministic failure');assert.deepEqual((await cleanups(hT)).map(c=>c.reason),['not-dispatched']);
- const missing=await turn(hana);assert.match(await build(hana,await project(hana),missing,'const handler=({state})=>({state,result:"x"})',{state:{},input:{}},{state:{},result:'x'},service),/type failed \(missing_default_export\)/);
+ const missingP=await project(hana),missing=await turn(hana);assert.match(await build(hana,missingP,missing,'const handler=({state})=>({state,result:"x"})',{state:{},input:{}},{state:{},result:'x'},service),/type failed \(missing_default_export\)/);
  assert.equal(calls,runtimeBefore);
  // Owner inspection is deterministic and calls no model.
  let modelCalls=0;assert.match(await backendChatCommand(scope(hana),hana,id(),'/application-build '+hT)(),/dependency failed/);assert.equal(modelCalls,0);
@@ -175,5 +184,38 @@ try{
  const repaired=(await readChat(scope(hana),hana)).turns.find(t=>t.id===repair);assert.equal(repaired?.application_confirmation_id,repair);
  await sendChat(scope(hana),hana,{id:id(),revision:(await readChat(scope(hana),hana)).state.revision,content:'/application-build '+hT});assert.equal(modelCalls,1,'Status reads never wake the model');
 
- console.log('Build jobs passed: two-tenant fresh runtime memory, shared toolchain vs private artifact keys, output ownership, cancellation before/during/after execution, lease isolation, single spend, expiry, recorded cleanup failure holding capacity, per-project/account/pool bounds, owner replay/concurrency/lost lease, no visitor/workflow/scheduled wake path, and deterministic diagnostics before an optional model repair.');
+ // 11. WH-050 operator `build` freeze: refuses new jobs and cancels running/unpublished ones in the frozen scope only.
+ const ivy=await account(undefined,1),jack=await account(undefined,1),hours=n=>new Date(Date.now()+n*3600000).toISOString(),freeze=(subject,extra={})=>({action:'contain',id:id(),subject,scopes:{build:'freeze'},expiresAt:hours(2),operator:'human:fixture',reason:'Synthetic build containment',...extra});
+ async function contain(request){const preview=await runContainment(db,request);assert.equal(preview.preview,true);return runContainment(db,request,preview.applyDigest);}
+ for(const bad of [{build:1},{build:0},{build:'stop'}])assert.throws(()=>containmentInput(JSON.stringify(freeze({kind:'project',id:id()},{scopes:bad}))),/Invalid operator containment request/,'Build is freeze-only; limits stay as built');
+ const running=await draft(ivy,await project(ivy)),runningLease=await running.admit(),sibling=await draft(ivy),siblingLease=await sibling.admit(),neighbour=await draft(jack),neighbourLease=await neighbour.admit();
+ const projectFreeze=freeze({kind:'project',id:running.p});await contain(projectFreeze);
+ assert.equal((await job(running.t)).state,'cancelled','A project freeze cancels its running job in the same write');assert.ok((await job(running.t)).finished_at);
+ assert.equal(await J.dispatchBuildJob(db,runningLease),false);assert.equal(await J.finishBuildJob(db,runningLease,'failed',[]),false);
+ assert.equal((await job(sibling.t)).state,'running','Another project of the same account is untouched');assert.equal((await job(neighbour.t)).state,'running','Another tenant is untouched');
+ await J.reconcileBuildJobs(db);assert.deepEqual((await cleanups(running.t)).map(c=>c.reason),['not-dispatched'],'Cleanup is recorded by the deterministic reconciler');
+ await assert.rejects((await draft(ivy,running.p)).admit(),/build_job_capacity/,'New jobs in the frozen project are refused with the generic capacity error');
+ const refusedTurn=await turn(ivy);await assert.rejects(build(ivy,running.p,refusedTurn,note,noteIn('z'),noteOut('z'),service),e=>e.status===429&&!/contain|operator|freeze/i.test(e.message),'The owner sees only the generic capacity response');
+ assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(refusedTurn).first(),null,'A refused build saves nothing');
+ assert.throws(()=>sql.prepare("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'build','project',?,3,'human:x','r',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'))").run(id(),running.p,'f'.repeat(64)),/CHECK/,'No build allowance can be stored');
+ // A job that already succeeded but is not yet published is cancelled too, so it can never prepare an approval review.
+ const kP=await project(jack),kT=await turn(jack),kPlan=await fixtureExtensionPlan(scope(jack),jack,kP,kT,'custom.visitor-transition');
+ await J.cancelBuildJob(scope(jack),jack,neighbour.t);
+ const freezing=await owners.get(jack).scope(interceptDatabase(db,/^INSERT INTO app_activation_reviews/,async()=>{await contain(freeze({kind:'project',id:kP}));}));
+ assert.match((await rawBackendAction(freezing,jack,kT,{kind:'backend',operation:'buildApplication',projectId:kP,source:note,input:noteIn('k'),expected:noteOut('k'),planId:kPlan},service)).reply,/could not be confirmed/);
+ assert.equal((await job(kT)).state,'cancelled');assert.equal(await db.prepare('SELECT id FROM app_activation_reviews WHERE run_id=?').bind(kT).first(),null);
+ await assert.rejects(prepareApplication(scope(jack),jack,kP,id(),'enable',kT,kT),e=>e.status===409,'A frozen job never publishes later');
+ // An account freeze covers every project the account owns; status reports active build usage without content.
+ await contain(freeze({kind:'account',id:ivy}));assert.equal((await job(sibling.t)).state,'cancelled');assert.equal(await J.dispatchBuildJob(db,siblingLease),false);
+ await assert.rejects((await draft(ivy)).admit(),/build_job_capacity/,'Any project of a frozen account is refused');
+ const status=await runContainment(db,{action:'status',subject:{kind:'account',id:ivy}});assert.ok(status.usage.projects.every(p=>p.build.contained&&p.build.allowance===0));
+ // Lifting restores admission; cancelled jobs stay cancelled. Published jobs are never changed by a freeze.
+ for(const c of status.containments.filter(c=>c.state==='active'))await contain({action:'lift',id:c.id,operator:'human:fixture',reason:'Synthetic lift'});
+ assert.equal((await job(running.t)).state,'cancelled');await J.reconcileBuildJobs(db);
+ assert.match(await build(ivy,running.p,await turn(ivy),note,noteIn('after'),noteOut('after'),service),/Application review/,'Admission resumes after the lift');
+ const published=(await db.prepare("SELECT count(*) n FROM build_jobs WHERE state='published'").first()).n;await contain(freeze({kind:'account',id:alice}));
+ assert.equal((await db.prepare("SELECT count(*) n FROM build_jobs WHERE state='published'").first()).n,published,'A freeze never alters a published job');
+ assert.equal(neighbourLease.job,neighbour.t);
+
+ console.log('Build jobs passed: two-tenant fresh runtime memory, shared toolchain vs private artifact keys, output ownership, cancellation before/during/after execution, lease isolation, single spend, expiry, recorded cleanup failure holding capacity, per-project/account/pool bounds, owner replay/concurrency/lost lease, no visitor/workflow/scheduled wake path, deterministic diagnostics before an optional model repair, and the operator build freeze (refuses new jobs, cancels running and unpublished jobs in scope, generic response, lift restores admission).');
 }finally{await runtime?.dispose();await store.close();await rm(dir,{recursive:true,force:true});}

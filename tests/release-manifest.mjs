@@ -36,8 +36,8 @@ const reset=()=>{live=baseline();counts=Object.fromEntries(['schema',...workerOr
 let review;
 const prepare=()=>prepareRelease(root,driver,review,{git:()=>({commit:'a'.repeat(40),dirty:false})});
 try{
- for(const dir of ['src','frontend','web','public-app','tools','dist','src/workspace-identity','src/funnel-metrics','src/guest-previews','node_modules/wrangler','compiler-locks','schema'])await mkdir(join(root,dir),{recursive:true});
- for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v3.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v4.json'])await writeFile(join(root,name),'fixture');
+ for(const dir of ['src','frontend','web','public-app','tools','dist','src/workspace-identity','src/funnel-metrics','src/guest-previews','src/shared-modules','node_modules/wrangler','compiler-locks','schema'])await mkdir(join(root,dir),{recursive:true});
+ for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v5.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v4.json'])await writeFile(join(root,name),'fixture');
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
  for(const name of ['tools/artifact-protection.mjs','tools/secret-custody.mjs'])await writeFile(join(root,name),'fixture');
  for(const role of workerOrder){
@@ -53,6 +53,7 @@ try{
  await writeFile(join(root,'src/workspace-identity/schema.sql'),'CREATE TABLE identity_sessions(id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id));');
  await writeFile(join(root,'src/funnel-metrics/schema.sql'),'CREATE TABLE funnel_events(user_id TEXT REFERENCES users(id));');
  await writeFile(join(root,'src/guest-previews/schema.sql'),'CREATE TABLE guest_preview_links(owner_user_id TEXT REFERENCES users(id));');
+ await writeFile(join(root,'src/shared-modules/schema.sql'),'CREATE TABLE module_instances(project_id TEXT REFERENCES projects(id));');
  artifact=await currentSchemaArtifact(root);
  await saveBuildSnapshot(root);await writeFile(join(root,'.secrets/private.key'),'DO_NOT_ARCHIVE');reset();
  review={version:3,environment:'test',buildInputs:(await readJSON(join(root,'.secrets/build-snapshot.json'))).inputs.sha256,review:'synthetic mixed-version review',mixedWorkersCompatible:true,schemaChange:'none',schemaSha256:artifact.sqlSha256};
@@ -67,11 +68,11 @@ try{
  assert.deepEqual(expectedServiceBindings([{binding:'TEST',service:'worker',entrypoint:'API'}]),[{binding:'TEST',service:'worker',environment:'production',entrypoint:'API'}]);
  assert.throws(()=>expectedServiceBindings([{binding:'TEST',service:'worker',props:{unexpected:true}}]),/archive support/);
  assert.ok(manifest.files.some(f=>f.path==='workers/runtime/runtime.wasm'));
- for(const name of ['project-content-v3.json','project-service-clients-v4.json'])assert.ok(manifest.files.some(f=>f.path==='source/compiler-locks/'+name),'Required compiler lock missing from archived source: '+name);
+ for(const name of ['project-content-v5.json','project-service-clients-v4.json'])assert.ok(manifest.files.some(f=>f.path==='source/compiler-locks/'+name),'Required compiler lock missing from archived source: '+name);
  assert.ok(!JSON.stringify(manifest).includes('DO_NOT_ARCHIVE'));
  assert.ok(!manifest.files.some(f=>f.path.includes('.secrets')||f.path.includes('node_modules')));
  assert.equal((await readJSON(join(first.directory,'payload/config/platform.json'))).assets.directory,'../assets/platform');
- for(const path of ['workers/runtime/index.js','workers/runtime/runtime.wasm','assets/platform/index.html','schema/current.sql','config/platform.json','source/pnpm-lock.yaml','source/compiler-locks/project-content-v3.json','source/compiler-locks/project-service-clients-v4.json']){
+ for(const path of ['workers/runtime/index.js','workers/runtime/runtime.wasm','assets/platform/index.html','schema/current.sql','config/platform.json','source/pnpm-lock.yaml','source/compiler-locks/project-content-v5.json','source/compiler-locks/project-service-clients-v4.json']){
   const file=join(first.directory,'payload',path),bytes=await readFile(file);await writeFile(file,'changed');await assert.rejects(()=>applyRelease(first.directory,driver),/mismatch/);assert.equal(mutations,0);await writeFile(file,bytes);
  }
  await writeFile(join(first.directory,'payload/unexpected'),'extra');await assert.rejects(()=>verifyRelease(first.directory));await rm(join(first.directory,'payload/unexpected'));

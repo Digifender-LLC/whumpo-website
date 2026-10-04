@@ -25,6 +25,21 @@ assertArtifactConfiguration({vars:Object.fromEntries(publicVariableNames.map(nam
 for(const path of ['src/.secrets/hidden.txt','src/.env','frontend/.env.test','public/.dev.vars','web/provider.key','dist/credentials.json','src/secrets.test.json','web/auth.json','tools/state.db','public/data.sqlite3','public/data.sqlite-shm','src/private.pem','src/.git/config','src/node_modules/private','../private','src/../private','/src/secret','src\\secret'])reject(()=>assertArtifactPath(path));
 for(const path of ['src/secrets.d.ts','tools/secret-custody.mjs','dist/assets/icon.png','public/.well-known/assetlinks.json'])assertArtifactPath(path);
 
+// Undeclared readers: a Worker source file that reads a secret from env but is not a declared reader fails closed;
+// type-only pass-through mentions are not reads. (Regression: whumpo-apps' app-gateway read TURNSTILE_SECRET undeclared.)
+assert.ok(secretCustody.find(s=>s.name==='TURNSTILE_SECRET').readers.includes('src/app-gateway.ts'));
+const copy=await mkdtemp('/tmp/whumpo-custody-readers-');
+try{
+ for(const path of ['docs/data-lifecycle.json','src/secrets.d.ts',...new Set(secretCustody.flatMap(s=>s.readers))]){await mkdir(join(copy,path,'..'),{recursive:true});await writeFile(join(copy,path),await readFile(path,'utf8'));}
+ await validateSecretCustody(copy);
+ await mkdir(join(copy,'src/extra'),{recursive:true});
+ await writeFile(join(copy,'src/extra/host.ts'),"type E=Pick<Env,'TURNSTILE_SECRET'>;export const pass=(env:E)=>env;");await validateSecretCustody(copy);
+ for(const read of ["env.TURNSTILE_SECRET","env['AI_API_KEY']","env[ `STRIPE_TEST_KEY` ]"]){
+  await writeFile(join(copy,'src/extra/reader.ts'),`export const leak=(env:any)=>${read};`);
+  await assert.rejects(()=>validateSecretCustody(copy),/does not match current source/);refused++;
+ }
+}finally{await rm(copy,{recursive:true,force:true});}
+
 const root=await mkdtemp('/tmp/whumpo-custody-');
 try{
  await mkdir(join(root,'source'));await writeFile(join(root,'source/normal.ts'),'export const answer=42;');
@@ -41,4 +56,4 @@ try{
  await assert.rejects(()=>prepareRelease(root,{configs:{runtime:config},observe:()=>{touched++;throw Error();}},{}),/Private material/);assert.equal(touched,0);
  await assert.rejects(()=>deployPlatform({verify:async()=>{touched++;throw Error();},config,api:()=>{touched++;throw Error();}}),/Private material/);assert.equal(touched,0);
 }finally{await rm(root,{recursive:true,force:true});}
-console.log(`Secret/artifact custody passed: nine declared secrets, current reader/class references, binding-name projection, ${refused} refusals, private file/config rejection before archive/deploy. No real keys, backup recovery or retirement approval.`);
+console.log(`Secret/artifact custody passed: nine declared secrets, current reader/class references, undeclared env readers refused, binding-name projection, ${refused} refusals, private file/config rejection before archive/deploy. No real keys, backup recovery or retirement approval.`);

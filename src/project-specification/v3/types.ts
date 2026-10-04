@@ -21,6 +21,7 @@ export type SpecificationOperation=
  |{type:'pages.setPhotos';pageId:string;photos:{id:string;alt:string}[]}
  |{type:'design.setTheme';theme:SiteConfig['theme']}
  |{type:'modules.put';instance:ModuleInstance}
+ |{type:'modules.remove';instanceId:string}
  |{type:'records.addField';instanceId:string;schemaId:string;field:Record<string,unknown>}
  |{type:'pages.setAudience';pageId:string;audience:'public'|'staff'}
  |{type:'rules.put';rule:SpecificationRule};

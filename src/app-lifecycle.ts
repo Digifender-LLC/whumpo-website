@@ -1,4 +1,4 @@
-import {appIdentity} from './app-data';
+import {visitorIdentity} from './app-data';
 import {BackendError} from './backend-versions';
 import {hashToken} from './security';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -6,7 +6,7 @@ const nowSQL="strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 // A review is issued before the destructive confirmation. It never follows an
 // ambient cookie to a different visitor or even a replacement session.
 export async function prepareAppDeletion(db:D1Database,token:string,project:string){
- const actor=await appIdentity(db,token,project);
+ const actor=await visitorIdentity(db,token,project);
  const doc=await db.prepare('SELECT revision,state_json FROM app_documents WHERE visitor_id=?').bind(actor.visitor_id).first<{revision:number;state_json:string}>();
  if(!doc)throw new BackendError(409,'Your information changed. Review your account again');
  const id=crypto.randomUUID();
@@ -14,10 +14,10 @@ export async function prepareAppDeletion(db:D1Database,token:string,project:stri
   db.prepare(`DELETE FROM app_deletion_reviews WHERE session_hash=? OR expires_at<=${nowSQL}`).bind(actor.token_hash),
   db.prepare(`INSERT INTO app_deletion_reviews(id,project_id,visitor_id,session_hash,revision)
    SELECT ?,v.project_id,v.id,s.token_hash,d.revision FROM app_visitors v
-   JOIN app_documents d ON d.visitor_id=v.id JOIN app_spaces a ON a.project_id=v.project_id
-   JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
+   JOIN app_documents d ON d.visitor_id=v.id JOIN module_activations ac ON ac.instance_id=v.access_id JOIN module_activation_reviews ar ON ar.id=ac.review_id
+   JOIN projects p ON p.id=v.project_id AND p.owner_user_id=ar.user_id
    JOIN app_sessions s ON s.visitor_id=v.id
-   WHERE v.id=? AND v.project_id=? AND v.revoked=0 AND a.enabled=1 AND d.revision=?
+   WHERE v.id=? AND v.project_id=? AND v.revoked=0 AND ac.state='active' AND d.revision=?
     AND s.token_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+23 hours','+50 minutes')`)
    .bind(id,actor.visitor_id,project,doc.revision,actor.token_hash)
  ]);
@@ -45,11 +45,11 @@ export async function deleteAppAccount(db:D1Database,token:string,project:string
  const receipt=()=>db.prepare(`SELECT id FROM app_deletion_receipts WHERE id=? AND project_id=? AND proof_hash=? AND expires_at>${nowSQL}`).bind(id,project,proof).first();
  if(await receipt())return {deleted:true,id};
  if(await db.prepare('SELECT id FROM app_deletion_receipts WHERE id=?').bind(id).first()){if(await receipt())return {deleted:true,id};throw new BackendError(409,'Deletion request ID already used. Review your account again');}
- let actor;try{actor=await appIdentity(db,token,project);}catch(error){if(await receipt())return {deleted:true,id};throw error;}
+ let actor;try{actor=await visitorIdentity(db,token,project);}catch(error){if(await receipt())return {deleted:true,id};throw error;}
  await db.prepare(`DELETE FROM app_deletion_receipts WHERE expires_at<=${nowSQL}`).run();
  try{
   const results=await db.batch([
-   db.prepare(`INSERT INTO app_deletion_receipts(id,project_id,proof_hash) SELECT ?,v.project_id,? FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_sessions s ON s.visitor_id=v.id JOIN app_deletion_reviews r ON r.visitor_id=v.id AND r.project_id=v.project_id AND r.session_hash=s.token_hash AND r.revision=d.revision WHERE r.id=? AND r.expires_at>${nowSQL} AND v.id=? AND v.project_id=? AND v.revoked=0 AND a.enabled=1 AND d.revision=? AND s.token_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+23 hours','+50 minutes')`).bind(id,proof,id,actor.visitor_id,project,revision,actor.token_hash),
+   db.prepare(`INSERT INTO app_deletion_receipts(id,project_id,proof_hash) SELECT ?,v.project_id,? FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id JOIN module_activations ac ON ac.instance_id=v.access_id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=v.project_id AND p.owner_user_id=ar.user_id JOIN app_sessions s ON s.visitor_id=v.id JOIN app_deletion_reviews r ON r.visitor_id=v.id AND r.project_id=v.project_id AND r.session_hash=s.token_hash AND r.revision=d.revision WHERE r.id=? AND r.expires_at>${nowSQL} AND v.id=? AND v.project_id=? AND v.revoked=0 AND ac.state='active' AND d.revision=? AND s.token_hash=? AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+23 hours','+50 minutes')`).bind(id,proof,id,actor.visitor_id,project,revision,actor.token_hash),
    db.prepare('DELETE FROM app_visitors WHERE id=? AND project_id=? AND EXISTS(SELECT 1 FROM app_deletion_receipts WHERE id=? AND project_id=? AND proof_hash=?)').bind(actor.visitor_id,project,id,project,proof)
   ]);
   if(results[0].meta.changes!==1)throw new BackendError(409,'Your account, information or deletion review changed. Sign in again and prepare a new review');
@@ -60,7 +60,7 @@ export async function deleteAppAccount(db:D1Database,token:string,project:string
 // Stream bounded batches; never assemble the complete retained history in a
 // Worker. Each batch rechecks the same authenticated visitor/project identity.
 export async function exportAppAccount(db:D1Database,token:string,project:string){
- const actor=await appIdentity(db,token,project);
+ const actor=await visitorIdentity(db,token,project);
  const account=await db.prepare('SELECT v.id,v.created_at,d.revision,d.state_json FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id WHERE v.id=?').bind(actor.visitor_id).first<{id:string;created_at:string;revision:number;state_json:string}>();
  if(!account)throw new BackendError(404,'Application account unavailable');
  let cursor='',started=false,hasRows=false,finished=false;
@@ -68,7 +68,7 @@ export async function exportAppAccount(db:D1Database,token:string,project:string
  const stream=new ReadableStream<Uint8Array>({async pull(controller){
   try{
    if(finished)return;
-   const current=await appIdentity(db,token,project);if(current.visitor_id!==actor.visitor_id)throw new BackendError(401,'Application account changed');
+   const current=await visitorIdentity(db,token,project);if(current.visitor_id!==actor.visitor_id)throw new BackendError(401,'Application account changed');
    if(!started){started=true;controller.enqueue(encoder.encode(JSON.stringify({format:'whumpo-visitor-export-v1',exportedAt:new Date().toISOString(),projectId:project,account:{id:account.id,createdAt:account.created_at},document:{revision:account.revision,value:JSON.parse(account.state_json)},historyNote:'History is read in batches and may include activity completed during export. This is not a restore snapshot.'}).slice(0,-1)+',"operations":['));return;}
    const {results}=await db.prepare('SELECT id,version_id,base_revision,program_revision,state,result_json,next_json,day FROM app_runs WHERE visitor_id=? AND project_id=? AND id>? ORDER BY id LIMIT 50').bind(actor.visitor_id,project,cursor).all<{id:string;version_id:string;base_revision:number;program_revision:number;state:string;result_json:string|null;next_json:string|null;day:string}>();
    if(!results.length){finished=true;controller.enqueue(encoder.encode(']}'));controller.close();return;}

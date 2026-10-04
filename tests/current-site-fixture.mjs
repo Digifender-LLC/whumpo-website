@@ -22,6 +22,25 @@ export async function currentSiteFixtureHandlers(){
   export * as guestPreviews from './src/guest-previews/owner';
   export * as guestPreviewPolicy from './src/guest-previews/policy';
   export * as guestPreviewBindings from './src/guest-previews/bindings';
+  export * as sharedModules from './src/shared-modules/api';
+  export * as moduleRegistry from './src/shared-modules/registry';
+  export * as moduleActivation from './src/shared-modules/activation';
+  export * as moduleAccess from './src/shared-modules/access';
+  export * as moduleAccessRoles from './src/shared-modules/access-roles';
+  export * as moduleAccessExport from './src/shared-modules/access-export';
+  export * as moduleRecordsExport from './src/shared-modules/records-export';
+  export * as moduleFilesExport from './src/shared-modules/files-export';
+  export * as accessSetup from './src/shared-modules/access-setup';
+  export {readAppAccess} from './src/app-access';
+  export * as appResource from './src/app-resource';
+  export * as sharedModuleRecords from './src/shared-modules/records';
+  export * as sharedModuleFiles from './src/shared-modules/files';
+  export * as sharedModuleCollections from './src/shared-modules/collections';
+  export {photoRemovalCommand} from './src/photo-removal';
+  export * as modulePolicy from './src/shared-modules/policy';
+  export {moduleCatalog} from './src/project-specification/catalog';
+  export {validateSpecification} from './src/project-specification/v3/schema';
+  export {jsonDigest} from './src/project-specification/v2/json';
   export {readViewBinding,readSavedViewComponent} from './src/workspace-view-bindings';
   export {readTemporaryViewComponent} from './src/chat-interactions/view-cards';
   export {prepareWorkspaceView,readInteraction} from './src/chat-interactions/store';
@@ -55,6 +74,7 @@ export {cleanPhoto} from './src/photo-format';
   export {versionRemovalCommand} from './src/version-removal';
   export * as contacts from './src/contacts';
   export * as contactNotifications from './src/contact-notifications';
+  export * as contactEmail from './src/contact-email';
   export * as directory from './src/directory';
   export {contactPage} from './src/contact-page';
   export {welcomeDraftProject} from './src/first-draft';
@@ -105,8 +125,11 @@ export {cleanPhoto} from './src/photo-format';
  `,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});module=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].contents).toString('base64'));}
  return module;
 }
-async function saveProposal(db,user,turn,prepared){
- const m=await currentSiteFixtureHandlers(),revision=(await m.readChat(db,user)).state.revision,now=new Date().toISOString();
+// `handlers` lets a fixture that bundles its own modules (helpers/current-modules.mjs) pass the same bundle's
+// readChat/sendChatControl/createWebsite/prepareSpecification/readSpecificationProposal/jsonDigest/moduleCatalog, because
+// admission capabilities are module-private to one bundle.
+async function saveProposal(db,user,turn,prepared,handlers){
+ const m=handlers??await currentSiteFixtureHandlers(),revision=(await m.readChat(db,user)).state.revision,now=new Date().toISOString();
  await db.batch([
   db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,mode,status,created_at) VALUES(?,?,?,'Synthetic current website fixture','','ai','pending',?)").bind(turn,user,revision+1,now),
   ...prepared.statements,
@@ -114,14 +137,36 @@ async function saveProposal(db,user,turn,prepared){
   db.prepare('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?').bind(user)
  ]);
 }
-export async function createFixtureWebsite(db,user,project,config){
- const m=await currentSiteFixtureHandlers(),turn=crypto.randomUUID(),prepared=await m.createWebsite(db,user,turn,project,config);await saveProposal(db,user,turn,prepared);return turn;
+export async function createFixtureWebsite(db,user,project,config,handlers){
+ const m=handlers??await currentSiteFixtureHandlers(),turn=crypto.randomUUID(),prepared=await m.createWebsite(db,user,turn,project,config);await saveProposal(db,user,turn,prepared,m);return turn;
 }
-export async function changeFixtureWebsite(db,user,project,operations){
- const m=await currentSiteFixtureHandlers(),turn=crypto.randomUUID(),head=await db.prepare('SELECT revision FROM project_spec_heads WHERE project_id=?').bind(project).first();assert.ok(head);
- await saveProposal(db,user,turn,await m.prepareSpecification(db,user,turn,{kind:'specification',operation:'change',projectId:project,expectedRevision:head.revision,operations}));
- const q=await m.readSpecificationProposal(db,user,turn),version=crypto.randomUUID(),revision=(await m.readChat(db,user)).state.revision;
- assert.equal((await m.sendChatControl(db,user,{id:version,revision,action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}})).status,200);return version;
+/** Prepares an exact private website review (change operations or `{versionId}` restore) as the AI turn's statements. */
+export async function proposeFixtureWebsite(db,user,project,change,handlers){
+ const m=handlers??await currentSiteFixtureHandlers(),turn=crypto.randomUUID(),head=await db.prepare('SELECT revision FROM project_spec_heads WHERE project_id=?').bind(project).first();assert.ok(head);
+ const request=Array.isArray(change)?{kind:'specification',operation:'change',projectId:project,expectedRevision:head.revision,operations:change}:{kind:'specification',operation:'restore',projectId:project,expectedRevision:head.revision,versionId:change.versionId};
+ await saveProposal(db,user,turn,await m.prepareSpecification(db,user,turn,request),m);
+ return m.readSpecificationProposal(db,user,turn);
+}
+/** Applies a prepared review with the recent-sign-in specificationApply control; returns the control response and new version id. */
+export async function applyFixtureWebsite(db,user,q,handlers){
+ const m=handlers??await currentSiteFixtureHandlers(),version=crypto.randomUUID(),revision=(await m.readChat(db,user)).state.revision;
+ return {version,...await m.sendChatControl(db,user,{id:version,revision,action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}})};
+}
+export async function changeFixtureWebsite(db,user,project,operations,handlers){
+ const applied=await applyFixtureWebsite(db,user,await proposeFixtureWebsite(db,user,project,operations,handlers),handlers);
+ assert.equal(applied.status,200,applied.error);return applied.version;
+}
+
+/** Saves module instances through the real owner path (WH-125/126 fixtures): one exact `modules.put` per new or
+ * changed instance, prepared as the AI turn's statements, then the recent-sign-in specificationApply control.
+ * Returns the saved version and its review row; an unchanged list saves nothing and returns null. */
+export async function configureFixtureModules(db,user,project,instances,handlers){
+ const m=handlers??await currentSiteFixtureHandlers(),head=await db.prepare('SELECT v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?').bind(project).first();assert.ok(head);
+ const saved=JSON.parse(head.spec_json).instances,operations=[];
+ for(const instance of instances){const prior=saved.find(i=>i.id===instance.id);if(!prior||await m.jsonDigest(prior)!==await m.jsonDigest(instance))operations.push({type:'modules.put',instance});}
+ if(!operations.length)return null;
+ const version=await changeFixtureWebsite(db,user,project,operations,m);
+ return {version,review:await db.prepare('SELECT q.* FROM project_spec_proposals q JOIN project_spec_versions v ON v.proposal_id=q.id WHERE v.version_id=?').bind(version).first()};
 }
 
 export async function createFixtureProject(db,user,name,purpose,theme='ocean'){
@@ -130,3 +175,60 @@ export async function createFixtureProject(db,user,name,purpose,theme='ocean'){
  const version=await createFixtureWebsite(db,user,project,{name,headline:name,description:purpose,theme,aboutTitle:'About us',aboutText:purpose,sections:[],photos:[]});
  return {project,version};
 }
+
+/** Some fixtures insert synthetic Chat turns directly without advancing workspace_state; keep the owner's Chat revision
+ * ahead of them so the real owner controls below never reuse a turn revision. Fixture-only. */
+async function syncFixtureChat(db,user){
+ await db.prepare('UPDATE workspace_state SET revision=max(revision,(SELECT coalesce(max(revision),0) FROM chat_turns WHERE user_id=?)) WHERE user_id=?').bind(user,user).run();
+}
+/** WH-126: project visitor identity belongs to the project's access module instance, which a visitor application
+ * consumes. Uses the real owner path end to end: the typed `accessModuleReview` owner control prepares the exact
+ * website review for the fixed standard access instance (`visitors`, no staff role, invitation enrollment), the
+ * recent-sign-in specificationApply control saves it (`setupFixtureVisitorAccess`), and the exact
+ * moduleActivationReview/Apply controls activate it (`setFixtureVisitorAccess`). Projects created without a website
+ * first get a minimal private website through a synthetic AI first-draft turn (website drafting is an AI path; the
+ * specification is where instances are configured). Returns the registry row. */
+export async function enableFixtureVisitorAccess(db,user,project,{handlers}={}){
+ const m=handlers??await currentSiteFixtureHandlers();await syncFixtureChat(db,user);
+ if(!await db.prepare('SELECT 1 FROM project_spec_heads WHERE project_id=?').bind(project).first()){
+  const p=await db.prepare('SELECT name,purpose FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first();assert.ok(p);
+  const text=p.purpose||p.name;
+  await createFixtureWebsite(db,user,project,{name:p.name,headline:p.name,description:text,theme:'ocean',aboutTitle:'About us',aboutText:text,sections:[],photos:[]},m);
+ }
+ await setupFixtureVisitorAccess(db,user,project,{handlers:m});
+ return setFixtureVisitorAccess(db,user,project,'activate',{handlers:m});
+}
+/** The owner visitor access setup control (`accessModuleReview`) followed by the recent-sign-in specificationApply
+ * control. Returns the saved version id and the exact review row. */
+export async function setupFixtureVisitorAccess(db,user,project,{handlers}={}){
+ const m=handlers??await currentSiteFixtureHandlers(),turn=crypto.randomUUID();await syncFixtureChat(db,user);
+ const r=await m.sendChatControl(db,user,{id:turn,revision:(await m.readChat(db,user)).state.revision,action:{type:'accessModuleReview',projectId:project}});assert.equal(r.status,200,r.error);
+ const review=await m.readSpecificationProposal(db,user,turn),applied=await applyFixtureWebsite(db,user,review,m);assert.equal(applied.status,200,applied.error);
+ return {version:applied.version,review};
+}
+/** Runs `fn` with a scoped synthetic core.editing preview grant (prepare and confirm) for this project, revoked right
+ * after, so serving never depends on it. Feature inclusion fixture only; it is not an owner action. */
+export async function withFixtureEditingGrant(db,user,project,fn){
+ const grants=[];
+ for(const operation of ['prepare','confirm']){
+  const grant=crypto.randomUUID();grants.push(grant);
+  await db.prepare("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing',?,'private-test-acceptance','synthetic WH-126 visitor access fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)").bind(grant,user,project,operation).run();
+ }
+ try{return await fn();}
+ finally{for(const grant of grants)await db.prepare('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=? AND revoked_at IS NULL').bind(grant).run();}
+}
+/** Activates or disables the project's access instance with the exact moduleActivationReview/Apply Chat controls.
+ * Activation needs current core.editing inclusion: a scoped synthetic preview grant covers this one review
+ * (`withFixtureEditingGrant`). Returns the registry row. */
+export async function setFixtureVisitorAccess(db,user,project,action,{id='visitors',handlers}={}){
+ const m=handlers??await currentSiteFixtureHandlers();await syncFixtureChat(db,user);
+ await withFixtureEditingGrant(db,user,project,async()=>{
+  const control=async action=>{const turn=crypto.randomUUID(),revision=(await m.readChat(db,user)).state.revision;const r=await m.sendChatControl(db,user,{id:turn,revision,action});assert.equal(r.status,200,r.error);return turn;};
+  const turn=await control({type:'moduleActivationReview',projectId:project,instanceId:id,action});
+  const review=await db.prepare('SELECT * FROM module_activation_reviews WHERE id=?').bind(turn).first();assert.ok(review);
+  await control({type:'moduleActivationApply',reviewId:review.id,reviewDigest:review.review_digest,expectedRevision:review.expected_activation_revision});
+ });
+ return db.prepare("SELECT i.*,a.state,a.revision activation_revision FROM module_instances i JOIN module_activations a ON a.instance_id=i.id WHERE i.project_id=? AND i.kind='access'").bind(project).first();
+}
+/** SQL for a synthetic visitor row in the project's access instance: bind (visitor, project, project). */
+export const fixtureVisitorSQL="INSERT INTO app_visitors(id,project_id,access_id) SELECT ?,?,id FROM module_instances WHERE project_id=? AND kind='access'";

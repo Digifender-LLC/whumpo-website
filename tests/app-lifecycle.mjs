@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {authenticator} from './app-authenticator.mjs';
-import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
@@ -8,7 +8,7 @@ async function owner(user=crypto.randomUUID()){const authority=await workspaceFi
 const {appLifecycle:life,appData:data,appAuth:auth,appPages:pages,hashToken}=m,{saveBackend,testBackend}=m.backend,{prepareApplication,confirmApplication}=m.appActivation,{applicationGateway}=m.appGateway;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 const service={fetch:async(_url,init)=>{const {input}=JSON.parse(init.body);return Response.json({ok:true,value:{state:input.input,result:'saved'}});}};
-async function app(){const user=id(),project=id(),version=id(),test=id(),review=id();await owner(user);await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Lifecycle','','draft',?,?)").bind(project,user,now(),now()).run();await saveBackend(scope(user),user,project,version,'export default ({state,input})=>({state:input,result:"saved"})');await testBackend(scope(user),service,user,project,version,test,{state:{},input:{}});await prepareApplication(scope(user),user,project,review,'enable',version,test);await confirmApplication(scope(user),user,review);return {user,project,version};}
+async function app(){const user=id(),project=id(),version=id(),test=id(),review=id();await owner(user);await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Lifecycle','','draft',?,?)").bind(project,user,now(),now()).run();await saveBackend(scope(user),user,project,version,'export default ({state,input})=>({state:input,result:"saved"})');await testBackend(scope(user),service,user,project,version,test,{state:{},input:{}});await enableFixtureVisitorAccess(scope(user),user,project);await prepareApplication(scope(user),user,project,review,'enable',version,test);await confirmApplication(scope(user),user,review);return {user,project,version};}
 async function signup(a){const invite=await auth.createAppInvitation(scope(a.user),a.user,a.project),opt=await auth.appPasskeyOptions(db,a.project,'signup',false,invite.code),key=authenticator(),result=await auth.appPasskeyVerify(db,a.project,'signup',opt.challengeToken,key.registration(opt.options),false);const actor=await data.appIdentity(db,result.session,a.project);return {...result,who:actor.visitor_id,key,invite};}
 const erase=async(a,v,revision,request,database=db)=>{const review=request??(await life.prepareAppDeletion(db,v.session,a.project)).id;return life.deleteAppAccount(database,v.session,a.project,review,revision,'DELETE');};
 async function erased(v){for(const table of ['app_deletion_reviews','app_sessions','app_passkeys','app_recovery_codes','app_auth_challenges','app_runs','app_documents'])assert.equal((await db.prepare(`SELECT count(*) n FROM ${table} WHERE visitor_id=?`).bind(v.who).first()).n,0,table);assert.equal(await db.prepare('SELECT id FROM app_visitors WHERE id=?').bind(v.who).first(),null);assert.equal(await db.prepare('SELECT code_hash FROM app_invitations WHERE used_by=?').bind(v.who).first(),null);}
@@ -34,8 +34,9 @@ try{
  assert.equal((await call('account/delete','POST',{id:request,revision:1,confirmation:'DELETE'},x.session,'https://evil.example')).status,403);
  assert.equal((await call('account/delete','POST',{id:request,revision:1,confirmation:'DELETE'})).status,200);
  assert.equal((await call('account/delete','POST',{id:request,revision:1,confirmation:'DELETE'},y.session)).status,409);
- // No page means no export endpoint; publishing enables only the current visitor's export.
- assert.equal((await call('export','GET',undefined,y.session)).status,404);
+ // WH-126: export is an identity operation of the access instance, so it needs no visitor page; it stays the
+ // current visitor's own export only.
+ assert.equal((await call('export','GET',undefined,y.session)).status,200);assert.equal((await call('export','GET',undefined,'f'.repeat(64))).status,401);
  const page=id();await pages.prepareAppPage(scope(a.user),a.user,a.project,page,{title:'Private notes',description:'',buttonLabel:'Save',fields:[{key:'note',label:'Note',type:'text'}]});await pages.confirmAppPage(scope(a.user),a.user,page);
  const fresh=await data.issueAppSession(db,y.who);assert.equal((await call('export','GET',undefined,fresh)).status,200);
  // Deletion cannot reset project admission: aggregate quota applies without retained runs.

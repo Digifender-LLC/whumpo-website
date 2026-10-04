@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
+import {enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 Error.stackTraceLimit=0;
-const modules=await currentFixtureModules(['src/index.ts','src/saved-work.ts','src/saved-work-shape.ts','src/project-specification/store.ts','src/project-specification/service-clients/store.ts','src/project-specification/service-clients/activation.ts','src/chat-interactions/store.ts','src/chat-interactions/protocol.ts','src/project-specification/v2/json.ts']);
+const modules=await currentFixtureModules(['src/index.ts','src/saved-work.ts','src/saved-work-shape.ts','src/project-specification/store.ts','src/project-specification/service-clients/store.ts','src/project-specification/service-clients/activation.ts','src/chat-interactions/store.ts','src/chat-interactions/protocol.ts','src/project-specification/v2/json.ts','src/chat.ts','src/project-specification/catalog.ts']);
 const worker=(await modules.module('src/index.ts')).default,saved=await modules.module('src/saved-work.ts'),shape=await modules.module('src/saved-work-shape.ts');
 const site=await modules.module('src/project-specification/store.ts'),services=await modules.module('src/project-specification/service-clients/store.ts'),activation=await modules.module('src/project-specification/service-clients/activation.ts');
+const chat=await modules.module('src/chat.ts'),catalog=await modules.module('src/project-specification/catalog.ts');
 const forms=await modules.module('src/chat-interactions/store.ts'),protocol=await modules.module('src/chat-interactions/protocol.ts'),codec=await modules.module('src/project-specification/v2/json.ts');
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID(),h='a'.repeat(64);let cases=0,network=0;
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{network++;throw Error('Unexpected provider or inference request');};
@@ -64,6 +66,8 @@ async function snapshot(){
 }
 try{
  const a=await owner(),b=await owner(),seeded={};
+ // WH-126: the seeded visitor application consumes the project's access module (real owner save and activation path).
+ await enableFixtureVisitorAccess(a.scope,a.user,a.project,{handlers:{readChat:chat.readChat,sendChatControl:chat.sendChatControl,createWebsite:site.createWebsite,prepareSpecification:site.prepareSpecification,readSpecificationProposal:site.readSpecificationProposal,jsonDigest:codec.jsonDigest,moduleCatalog:catalog.moduleCatalog}});
  const intake=(await forms.issueProjectIntake(a.scope,a.user,{originTurnId:await turn(a),template:'project-brief@1'})),definition=intake.envelope.definition;
  // Account-wide and project Chat forms, including expired admission after a saved submission.
  seeded.liveForm=intake.envelope.id;
@@ -81,7 +85,8 @@ try{
  seeded.publishExpired=id();await run(`INSERT INTO publication_actions(id,user_id,project_id,kind,version_id,expected_revision,expires_at) VALUES(?,?,?,'publish',?,0,${past})`,seeded.publishExpired,a.user,a.project,a.version);
  seeded.unpublish=id();await run(`INSERT INTO publication_actions(id,user_id,project_id,kind,version_id,expected_revision,expires_at) VALUES(?,?,?,'unpublish',NULL,1,${soon})`,seeded.unpublish,a.user,a.project);
  // Website change proposal and saved result, then service review/result/activation through current domain code.
- seeded.change=(await command(a,t=>site.prepareSpecification(a.scope,a.user,t,{kind:'specification',operation:'change',projectId:a.project,expectedRevision:1,operations:[{type:'content.replace',contentId:'headline',text:'Seasonal garden care'}]}),'Planting review')).id;
+ const headRevision=(await row('SELECT revision FROM project_spec_heads WHERE project_id=?',a.project)).revision;
+ seeded.change=(await command(a,t=>site.prepareSpecification(a.scope,a.user,t,{kind:'specification',operation:'change',projectId:a.project,expectedRevision:headRevision,operations:[{type:'content.replace',contentId:'headline',text:'Seasonal garden care'}]}),'Planting review')).id;
  const proposal=await site.readSpecificationProposal(a.scope,a.user,seeded.change);
  seeded.save=(await command(a,t=>site.applySpecificationCommand(a.scope,a.user,t,`/confirm-specification ${proposal.id} ${proposal.proposal_digest} ${proposal.expected_revision}`),'Apply saved review',{type:'specificationApply',reviewId:proposal.id,proposalDigest:proposal.proposal_digest,expectedRevision:proposal.expected_revision})).id;
  seeded.serviceChange=(await command(a,t=>services.prepareServiceClients(a.scope,a.user,t,{kind:'serviceClients',operation:'prepare',projectId:a.project,websiteVersionId:a.website.id,expectedRevision:0,configuration:{schemaVersion:1,contact:null,statelessForm:null}}))).id;
@@ -100,7 +105,7 @@ try{
  seeded.backendWithdraw=id();await run("INSERT INTO backend_publication_reviews(id,user_id,project_id,operation,version_id,base_revision) VALUES(?,?,?,'unpublish',?,0)",seeded.backendWithdraw,a.user,a.project,backend);
  await run('INSERT INTO backend_form_settings(project_id) VALUES(?)',a.project);
  seeded.websiteTool=id();await run('INSERT INTO backend_form_reviews(id,user_id,project_id,enabled,site_revision,base_revision) VALUES(?,?,?,0,1,0)',seeded.websiteTool,a.user,a.project);
- await run('INSERT INTO app_spaces(project_id,owner_user_id,version_id) VALUES(?,?,?)',a.project,a.user,backend);
+ await run("INSERT INTO app_spaces(project_id,owner_user_id,version_id,access_id,resource_id) SELECT ?,?,?,id,? FROM module_instances WHERE project_id=? AND kind='access'",a.project,a.user,backend,id(),a.project);
  seeded.appAuthority=id();await run('INSERT INTO app_activation_reviews(id,project_id,user_id,version_id,enabled,base_revision) VALUES(?,?,?,?,0,0)',seeded.appAuthority,a.project,a.user,backend);
  await run('INSERT INTO app_page_settings(project_id) VALUES(?)',a.project);
  seeded.appWithdraw=id();await run('INSERT INTO app_page_reviews(id,user_id,project_id,program_revision,base_revision,config_json) VALUES(?,?,?,0,0,NULL)',seeded.appWithdraw,a.user,a.project);

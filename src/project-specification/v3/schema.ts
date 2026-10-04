@@ -55,8 +55,10 @@ export function validateSpecification(input:unknown):ProjectSpecification {
   }
   return spec;
  }
-/** Applies operations to a detached candidate and classifies the net instance change against the saved base. */
-export function changeSpecification(before:unknown,input:unknown){
+/** Applies operations to a detached candidate and classifies the net instance change against the saved base.
+ * `removable` lists saved instance ids the caller verified from trusted storage were never activated (no registry
+ * row); only those may be removed. The default is none, so removal fails closed (MIGRATION_REQUIRED). */
+export function changeSpecification(before:unknown,input:unknown,removable:readonly string[]=[]){
   const operations=copyJSON(input) as SpecificationOperation[];
   list(operations,8,'operations');check(operations.length>0,'INVALID_LIST','operations');const base=validateSpecification(before),next=validateSpecification(base),reviews=new Set<SpecificationReview>();
   const found=<T extends {id:string}>(rows:T[],id:string,path:string):T=>{identity(id,path);const row=rows.find(x=>x.id===id);check(row,'MISSING_REFERENCE',path);return row;};
@@ -80,6 +82,9 @@ export function changeSpecification(before:unknown,input:unknown){
      shape(op,['type','instance']);check(plain(op.instance),'INVALID_SHAPE','instance');identity(op.instance.id,'instance.id');
      const at=next.instances.findIndex(i=>i.id===op.instance.id);if(at<0)next.instances.push(copy(op.instance));else next.instances[at]=copy(op.instance);break;
     }
+    // Removes one whole saved instance. Whether that is allowed is decided once against the base below; dependents
+    // must be removed in the same change or validation fails (MISSING_REFERENCE).
+    case 'modules.remove':{shape(op,['type','instanceId']);const instance=found(next.instances,op.instanceId,'instanceId');next.instances=next.instances.filter(i=>i!==instance);break;}
     case 'records.addField':{
      shape(op,['type','instanceId','schemaId','field']);check(plain(op.field),'INVALID_SHAPE','field');
      // Only optional additions are additive; a required field needs a reviewed migration hook (WH-076) or a test data reset.
@@ -96,14 +101,31 @@ export function changeSpecification(before:unknown,input:unknown){
    }
   }
   const spec=validateSpecification(next);check(!same(base,spec),'NO_CHANGE','operations');
-  let migration:SpecificationMigration='none';
-  for(const instance of spec.instances){
-   const prior=base.instances.find(i=>i.id===instance.id);if(prior&&same(prior,instance))continue;
-   const change=classifyModuleChange(prior,instance);
-   if(change.schema)reviews.add('schema');if(change.permissions)reviews.add('permissions');if(change.migration==='additive-optional')migration='additive-optional';
-  }
+  const {migration}=classifyInstances(base,spec,reviews,removable);
   return {spec,reviews:[...reviews].sort(),migration};
  }
+/** Net instance change against the saved base. Removing an instance that was ever activated is destructive
+ * (MIGRATION_REQUIRED until a reviewed export/migration exists); a never-activated instance holds no module data,
+ * so removing its saved configuration is hook `none`. Never a silent drop. */
+function classifyInstances(base:ProjectSpecification,spec:ProjectSpecification,reviews:Set<SpecificationReview>,removable:readonly string[]){
+ let migration:SpecificationMigration='none';
+ for(const prior of base.instances)check(spec.instances.some(i=>i.id===prior.id)||removable.includes(prior.id),'MIGRATION_REQUIRED','instances');
+ for(const instance of spec.instances){
+  const prior=base.instances.find(i=>i.id===instance.id);if(prior&&same(prior,instance))continue;
+  const change=classifyModuleChange(prior,instance);
+  if(change.schema)reviews.add('schema');if(change.permissions)reviews.add('permissions');if(change.migration==='additive-optional')migration='additive-optional';
+ }
+ return {migration};
+}
+/** Review classes for a whole-document forward transition (restore): the same instance hook table as edits,
+ * plus permissions for any changed page audience and integration/spending for any changed rule. */
+export function transitionReviews(before:unknown,after:unknown,removable:readonly string[]=[]){
+ const base=validateSpecification(before),next=validateSpecification(after),reviews=new Set<SpecificationReview>();
+ const {migration}=classifyInstances(base,next,reviews,removable);
+ if(next.pages.some(p=>p.audience!==(base.pages.find(b=>b.id===p.id)?.audience??'public')))reviews.add('permissions');
+ if(!same(base.rules,next.rules)){reviews.add('integration');reviews.add('spending');}
+ return {reviews:[...reviews].sort(),migration};
+}
 
 function pageConfiguration(spec:ProjectSpecification,page:SpecificationPage){
  const value=(id:string)=>spec.content.find(c=>c.id===id)!.text;

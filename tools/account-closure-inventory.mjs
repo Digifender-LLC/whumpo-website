@@ -68,6 +68,14 @@ const metrics={
  guestPreviewLinks:['guest_preview_links','owner_user_id'],
  activeGuestPreviewLinks:['guest_preview_links','owner_user_id','revoked_at IS NULL AND expires_at>unixepoch() AND version_id IS NOT NULL'],
  guestPreviewFeedback:['guest_preview_feedback','link_id IN (SELECT id FROM guest_preview_links WHERE owner_user_id IN (SELECT id FROM scope))'],
+ moduleInstances:['module_instances','project_id IN (SELECT id FROM owned_projects)'],
+ activeModuleInstances:['module_instances','project_id IN (SELECT id FROM owned_projects)',"EXISTS(SELECT 1 FROM module_activations a WHERE a.instance_id=module_instances.id AND a.state='active')"],
+ moduleActivationReceipts:['module_activation_applies','user_id'],
+ moduleRequestReceipts:['module_request_receipts','project_id IN (SELECT id FROM owned_projects)'],
+ staffRoles:['module_access_roles','project_id IN (SELECT id FROM owned_projects)',"state='granted'"],
+ accessRoleReceipts:['module_access_role_applies','user_id'],
+ moduleRecords:['module_records','project_id IN (SELECT id FROM owned_projects)'],
+ moduleFiles:['module_files','project_id IN (SELECT id FROM owned_projects)'],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

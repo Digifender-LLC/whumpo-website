@@ -1,4 +1,4 @@
-import {currentSiteFixtureHandlers,createFixtureWebsite} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureWebsite,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 // Disposable HTTP server, D1/R2 and actual QuickJS. Never seeds a shared/live environment.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -50,8 +50,10 @@ export async function backendHttpFixture(){
   function ownerFor(cookie){const owner=owners.get(cookie);assert.ok(owner,'Use a current fixture account');return owner;}
   async function seedChat(cookie,content){const owner=ownerFor(cookie),user=owner.account,scope=await owner.scope(),state=await readChat(scope,user),id=crypto.randomUUID();const result=await sendChat(scope,user,{id,revision:state.state.revision,content});assert.equal(result.status,200);return id;}
   async function seedWebsite(cookie,project){const owner=ownerFor(cookie);return createFixtureWebsite(await owner.scope(),owner.account,project,{name:'Neighborhood orders',headline:'Neighborhood orders',description:'A small order calculator',theme:'ocean',aboutTitle:'About',aboutText:'Synthetic orders',sections:[],photos:[]});}
+  /** WH-126: the project's visitor access module, saved and activated through the real owner path. */
+  async function seedVisitorAccess(cookie,project){const owner=ownerFor(cookie);return enableFixtureVisitorAccess(await owner.scope(),owner.account,project);}
   async function assertNoInference(){assert.equal((await db.prepare('SELECT count(*) n FROM inference_calls').first()).n,0);}
 
-  return {base,account,assertNoInference,seedBackend,firstProject,seedChat,seedWebsite,dispose};
+  return {base,account,assertNoInference,seedBackend,firstProject,seedChat,seedWebsite,seedVisitorAccess,dispose};
  }catch(error){await dispose();throw error;}
 }

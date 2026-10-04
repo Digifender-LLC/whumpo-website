@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Link,useRouterState} from '@tanstack/react-router';
 import {useQuery} from '@tanstack/react-query';
 import {ArrowLeft,LifeBuoy} from 'lucide-react';
-import {deliveryLabel,parseSupportReference,type SupportKind,type SupportOverview,type SupportRequest} from '../../src/support-shape';
+import {deliveryLabel,lockoutContact,parseSupportReference,type SupportKind,type SupportOverview,type SupportRequest} from '../../src/support-shape';
 import {api,send,message,queryClient} from './lib/api';
 import {identityGeneration} from './lib/identity-invalidation';
 import {Brand} from './components/brand';
@@ -12,10 +12,10 @@ import {AccountHelp} from './account-help';
 
 const wrap='min-h-11 h-auto whitespace-normal text-left',key=['support'];
 export function SupportLink({onNavigate}:{onNavigate?:()=>void}){return <Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}} onClick={onNavigate}><LifeBuoy className="size-4 shrink-0"/>Support</Link></Button>;}
-const when=(value:string)=>new Date(value).toLocaleString();
-const responseLabel=(r:SupportRequest)=>r.response.saved?'Response saved in Whumpo':'Waiting for an operator to read it';
-const readLabel=(r:SupportRequest)=>r.read.state==='read'?'You read the response '+when(r.read.at!):r.read.state==='unread'?'You have not opened the response yet':'No response to read yet';
-const kindLabel=(kind:SupportKind)=>kind==='help'?'Help request':'Usage review';
+export const when=(value:string)=>new Date(value).toLocaleString();
+export const responseLabel=(r:SupportRequest)=>r.response.saved?'Response saved in Whumpo':'Waiting for an operator to read it';
+export const readLabel=(r:SupportRequest)=>r.read.state==='read'?'You read the response '+when(r.read.at!):r.read.state==='unread'?'You have not opened the response yet':'No response to read yet';
+export const kindLabel=(kind:SupportKind)=>kind==='help'?'Help request':'Usage review';
 type Receipt={version:1;request:SupportRequest};
 
 /** Identity-only fixed page: it reads no profile, Chat, dashboard or AI state, so it works when those are unavailable. */
@@ -55,7 +55,8 @@ export function SupportPage(){
   {data&&<>
    <section aria-labelledby="support-hours" className="rounded-lg border bg-card p-5 space-y-2"><h2 id="support-hours" className="text-xl font-bold">Hours and contact</h2>
     {data.config.hours?<p>Support hours: {data.config.hours}</p>:<p>Support hours have not been set by the platform owner. Do not assume anyone is available at a particular time.</p>}
-    {data.config.contact?<p>Other contact: {data.config.contact}</p>:<p>No other contact address is configured. Use the request form below.</p>}
+    <p>Start with your Whumpo agent in Chat. When Chat is unavailable, use the request form below; responses appear on this page.</p>
+    <p>Locked out of your account? Email <a className="underline" href={'mailto:'+lockoutContact}>{lockoutContact}</a>. That address is only for sign-in lockouts; email does not replace your passkeys or recovery kit. Never send your recovery key.</p>
     <p className="text-sm text-muted-foreground">{data.config.notifications.enabled?'An external notification may tell you a response exists. Its content stays here.':'External notifications are not configured. Check this page for a response.'}</p></section>
    <section aria-labelledby="support-status" className="space-y-4"><h2 id="support-status" className="text-xl font-bold">Status and error help</h2>
     {statusCard&&<div role="status" className="rounded-lg border bg-card p-5 space-y-2"><h3 className="font-bold">{statusCard.title}</h3><p>{statusCard.meaning}</p><p className="text-sm text-muted-foreground">{statusCard.next}</p></div>}

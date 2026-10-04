@@ -6,16 +6,29 @@ import {readViewBinding} from '../workspace-view-bindings';
 import {InteractionError} from './protocol';
 import {InteractionStoreError,readInteraction} from './store';
 import {readProjectStatusCard,type ProjectStatusCard} from './card-shape';
+import {isSupportStatusDefinition} from './maintained';
+import {listOwnedSupportRequests} from '../support';
+import {readSupportRequestsCard,type SupportRequestsCard} from '../support-shape';
 
 /** Resolve one immutable maintained binding through the existing domain read.
  * No submitted/draft answers, arbitrary selectors, effects or model dispatch. */
-export async function readInteractionCard(db:D1Database,user:string,input:unknown):Promise<ProjectStatusCard>{
+export async function readInteractionCard(db:D1Database,user:string,input:unknown):Promise<ProjectStatusCard|SupportRequestsCard>{
  const r=copyJSON(input,4096) as {version:number;interactionId:string;definitionDigest:string;cardId:string};
  if(!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).sort().join(',')!=='cardId,definitionDigest,interactionId,version')throw new InteractionError('SHAPE');
  if(r.version!==1)throw new InteractionError('VERSION');
  const current=await readInteraction(db,user,r.interactionId),e=current.envelope;
  if(r.definitionDigest!==e.definitionDigest)throw new InteractionError('DIGEST');
  const card=e.definition.cards.find(c=>c.id===r.cardId);
+ if(isSupportStatusDefinition(e.definition)){
+  // WH-035: identity and ownership only, like the Support page. Reading never records a customer read.
+  if(e.scope.projectId!==null||current.state!=='open'||current.replacementInteractionId||card?.id!=='support-requests')throw new InteractionStoreError(409,'adapter_unavailable');
+  const requests=await listOwnedSupportRequests(db,user,card.limit);
+  const latest=await readInteraction(db,user,r.interactionId);
+  if(latest.envelope.definitionDigest!==e.definitionDigest||latest.answerRevision!==current.answerRevision||latest.state!=='open'||latest.replacementInteractionId)throw new InteractionStoreError(409,'interaction_changed');
+  const result=readSupportRequestsCard({version:1,interactionId:e.id,definitionDigest:e.definitionDigest,cardId:card.id,binding:'support.requests@1',source:'support_requests',asOf:latest.observedAt,status:'ready',data:{requests}});
+  if(!result)throw new InteractionStoreError(503,'card_unavailable');
+  return result;
+ }
  if(e.definition.template!=='content-change@1'||!e.scope.projectId||!['open','submitted'].includes(current.state)||current.replacementInteractionId||!card||card.id!=='project-status'||card.binding!=='project.status@1'||card.display!=='status'||card.limit!==1||card.reviewId!==null)throw new InteractionStoreError(409,'adapter_unavailable');
  const gate={userId:user,projectId:e.scope.projectId,featureId:viewComponents.projects.feature,operation:'read' as const};
  const shared=await readViewBinding(db,user,'projects',e.scope.projectId);

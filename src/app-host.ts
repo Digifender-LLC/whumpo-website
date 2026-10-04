@@ -1,7 +1,7 @@
 import {visitorProject,visitorOrigin} from './hosts';
 import {applicationGateway} from './app-gateway';
 import {liveAppPage} from './app-pages';
-type VisitorEnv=Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'|'ASSETS'>;
+type VisitorEnv=Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'|'ASSETS'|'TURNSTILE_SECRET'|'FILES'>;
 const policy="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'";
 function secure(response:Response){const headers=new Headers(response.headers);headers.set('content-security-policy',policy);headers.set('cache-control','private, no-store');headers.set('x-content-type-options','nosniff');headers.set('referrer-policy','no-referrer');headers.set('cross-origin-resource-policy','same-origin');headers.set('x-frame-options','DENY');headers.set('permissions-policy','camera=(), microphone=(), geolocation=()');return new Response(response.body,{status:response.status,headers});}
 export default {

@@ -38,6 +38,7 @@ function protectionMetadata(catalog){
  return {profiles,requirements};
 }
 const unlinkedOwnership={
+ contact_notification_send_ledger:'WH-036 platform-wide daily provider-call counters (no account, project or address) enforcing the owner spending ceiling; daily contact maintenance removes rows after 40 days.',
  identity_challenges:'Pre-account signup challenges and account-bound ceremonies have no FK. The current schema deletes matching account_id challenges before users deletion; unclaimed rows expire after five minutes and bounded cleanup removes them.',
  safety_cases:'Restricted case record keyed by subject account id without a foreign key, so ordinary account cascades cannot remove it (WH-015).',
  safety_case_findings:'Append-only case decisions owned through safety_cases, deliberately outside the account cascade.',
@@ -47,6 +48,7 @@ const unlinkedOwnership={
  safety_evidence_objects:'Restricted R2 evidence copies owned through safety_cases; deliberately outside the account cascade until audited disposal after case closure (WH-132).',
  safety_disclosures:'Two-person lawful-disclosure manifest owned through safety_cases, deliberately outside the account cascade (WH-132).',
  safety_disclosure_items:'Manifest items owned through safety_disclosures and safety_evidence_objects, deliberately outside the account cascade (WH-132).',
+ safety_retention_decisions:'Append-only operator retention decisions (extend or release at the one-year review) owned through safety_cases, deliberately outside the account cascade (WH-132).',
  operator_containments:'Operator containment audit keyed by subject account or project id without a foreign key, so closure is neither blocked nor erases the record; expires within 30 days and is never deleted (WH-050 F7).',
  file_cleanup:'Physical object deletion queue keyed by object_key, with project/owner identifiers copied without foreign keys so preservation holds can retain queued objects. Never expose keys in customer reports.'
 };

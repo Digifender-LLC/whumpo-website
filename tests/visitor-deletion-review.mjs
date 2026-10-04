@@ -56,8 +56,10 @@ try{
  await db.prepare('INSERT INTO app_deletion_receipts(id,project_id,proof_hash) VALUES(?,?,?)').bind(committed.id,a.project,proof).run();
  assert.deepEqual(await (await status(a,A,committed)).json(),{deleted:true,id:committed.id});assert.equal((await confirm(a,A,committed)).status,200);assert.ok(await exists(A));pass('Committed receipt remains recoverable without its review and cannot cause another deletion');
  const off=id();await m.prepareAppPage(a.ownerDB,a.user,a.project,off,null);await m.confirmAppPage(a.ownerDB,a.user,off);
- assert.equal((await call(a,B,'account/deletion-review',{})).status,404);
+ // WH-126: the visitor's own deletion review is an identity operation of the access instance, so page withdrawal
+ // does not take it away.
+ assert.equal((await call(a,B,'account/deletion-review',{})).status,200);
  assert.deepEqual(await (await status(a,rollback,rollbackReview)).json(),{deleted:true,id:rollbackReview.id});
- assert.equal((await confirm(a,rollback,rollbackReview)).status,200);pass('Read-only completion recovery survives page withdrawal; new review does not');
+ assert.equal((await confirm(a,rollback,rollbackReview)).status,200);pass('Read-only completion recovery and new reviews (access-instance identity) survive page withdrawal');
  console.log(`${passed} visitor-deletion authority and recovery regressions passed.`);
 }finally{await f.close();}

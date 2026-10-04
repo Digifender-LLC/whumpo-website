@@ -1,10 +1,10 @@
 {
   "formatVersion": 1,
-  "compiler": "project-content@3",
+  "compiler": "project-content@5",
   "schemaVersion": 3,
   "esbuildVersion": "0.28.2",
   "target": "es2022",
-  "content": "696709f0861bd101440311e2c6f7400d398381c1fffc741d8dc73112de296c95",
+  "content": "da02913c438da11aa463547694cf487e948bf8dc1ee9947ffc04773d098f7d53",
   "component": "c0dd3e64533cea88b7486a08dac8fd93ba0bceb3d932eb9d41fee74487fe8318",
   "modules": [
     {
@@ -79,7 +79,7 @@
     },
     {
       "path": "src/project-specification/compiler.ts",
-      "digest": "f13d91b4e48057587f9fafed23680489620ce95a12d72d14431b44da7b4cfe2b"
+      "digest": "3ff89c575e8a1c7ede093b6a4b51f954650ac92c3e0fd7196dd28610452713cb"
     },
     {
       "path": "src/project-specification/v2/json.ts",
@@ -87,7 +87,7 @@
     },
     {
       "path": "src/project-specification/v3/content.ts",
-      "digest": "6ccfe97267e297688e46d1ff646edc9c5173d87cc77a981423580e1a30814bf0"
+      "digest": "413224f11dce267a27c58eeeac55c5443630e490543c33807b86c7b3852ed968"
     },
     {
       "path": "src/project-specification/v3/modules.ts",
@@ -95,12 +95,12 @@
     },
     {
       "path": "src/project-specification/v3/schema.ts",
-      "digest": "08435285a4282cdfe09b01d4456ca68f28b15700c817105338076657cd63d4bc"
+      "digest": "177ac32f97a0e50350cd41a1ff815f860877fc4e97e47e6645777ffa002c2439"
     },
     {
       "path": "src/project-specification/v3/types.ts",
-      "digest": "a1560b3f09ed8e2c86e517e62be7612dd4415e7b30009cf3ce65dcd422d20a0c"
+      "digest": "f17ec53af0b41810d9b457adb36a1f21a37eeb85e4f3efbf1ae647ab5b678e6a"
     }
   ],
-  "compilerDigest": "068d4fee1ec6ee8475e02c75bc8658471a7d70fad67ec3ac437c00a02648e3f3"
+  "compilerDigest": "a00fe52f67453a586463fa7107ed9788f691bedc75032fa6d211759ed3af627f"
 }
