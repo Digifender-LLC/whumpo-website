@@ -5,6 +5,7 @@ import {resolveResource,type ResolvedResource} from './registry';
 import {accessHandlers,visitorPredicate} from './access';
 import {recordsHandlers} from './records';
 import {filesHandlers} from './files';
+import {collectionsHandlers} from './collections';
 
 /** WH-125 shared module request engine (whumpo-modules v1). Every call validates the current envelope,
  * resolves exactly one scoped resource from the server-derived principal, evaluates the policy table and,
@@ -21,9 +22,9 @@ export type ModuleWriteHandler=(db:D1Database,context:ModuleContext)=>Promise<{s
 export type ModuleHandlers=Partial<{[K in ModuleOperation]:(typeof moduleOperations)[K]['write'] extends true?ModuleWriteHandler:ModuleReadHandler}>;
 /** Delivered operation handlers. WH-125 delivered the engine; WH-126 registers `access.me` and `access.list`; WH-127
  * registers the records handlers (forms.submit, records.get/view/update/remove); WH-128 registers files.putBytes,
- * files.gallery and files.read; WH-129 registers its handlers here. An
+ * files.gallery and files.read; WH-129 registers collections.readPublic. An
  * operation without a handler is `unavailable`, never a generated or fallback implementation. */
-export const moduleHandlers:ModuleHandlers=Object.freeze({...accessHandlers,...recordsHandlers,...filesHandlers});
+export const moduleHandlers:ModuleHandlers=Object.freeze({...accessHandlers,...recordsHandlers,...filesHandlers,...collectionsHandlers});
 
 const denied=(d:Extract<ModuleDecision,{decision:'deny'}>)=>new ModuleError(d.reason==='not_found'?'not_found':'forbidden');
 const principalKey=(p:ModulePrincipal)=>p.kind==='owner'?['owner',p.userId,p.projectId]:p.kind==='visitor'?['visitor',p.visitorId,p.projectId]:['public',p.projectId];

@@ -122,5 +122,8 @@ export function decideModule(p:ModulePrincipal,instance:ModuleInstance,operation
   if(operation==='access.me')return p.kind==='visitor'?allow():deny('sign_in_required');
   return p.kind==='owner'?allow():deny('forbidden');
  }
- return allow();
+ // WH-129 content: collections.readPublic serves only the snapshot an exact directory publication review already made
+ // public, so every principal may read it from an active instance; drafts and history stay on the owner directory routes.
+ if(instance.kind==='content')return instance.config.collections.some(x=>x.id===t.collectionId)?allow():deny('not_found');
+ return deny('not_found');
 }
