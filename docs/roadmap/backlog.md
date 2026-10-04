@@ -7909,6 +7909,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/mobile-api-v1.md](../../docs/mobile-api-v1.md)
+- [tools/prototypes/mobile-v1.mjs](../../tools/prototypes/mobile-v1.mjs)
+- [tests/mobile-v1-contract.mjs](../../tests/mobile-v1-contract.mjs)
 
 ### Execution coordination
 
@@ -7918,6 +7921,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 - 2026-09-30: docs/android-app.md records the accepted product/architecture baseline and current service mapping against f90bf5f plus the working tree. Exact v1 wire contracts and native implementation acceptance remain this lane's future work; no Android execution issue or release is claimed.
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
+- 2026-10-04: docs/mobile-api-v1.md freezes the /api/mobile/v1 contract (34 operations mapped to existing handlers or declared new adapters, native bearer/handoff/revocation model, client_update_required admission, four admitted review controls, idempotency, pagination, exclusions, journey/evidence matrix and source gaps) against b4671f9, with synthetic fixtures and an offline contract test. docs/android-app.md is refreshed against current source. Planned only: no mobile route, native session, Android code, FCM adapter or device acceptance. Owner decisions (minimum Android version, Play distribution/identity, Play Integrity, session cap, native take-down, push default, stale-client status code) are listed in the contract. Live issue/dependency state was not re-checked offline.
 
 ## WH-082 — Build the native Android foundation and reproducible checks
 
