@@ -243,9 +243,9 @@ try{
  await refused(()=>c.disposeSafetyEvidence({DB:db,FILES},approver.p,{objectId:'ev-1',caseId:'case-1',disposeRef:'dispose-1'}),'conflict'); // case still open
  await c.closeSafetyCase(db,reviewer.p,{caseId:'case-1',closeRef:'close-1'});
  await refused(()=>c.disposeSafetyEvidence({DB:db,FILES},reviewer.p,{objectId:'ev-1',caseId:'case-1',disposeRef:'dispose-1'}),'missing_role');
- r=await call('evidence/dispose',{objectId:'ev-1',caseId:'case-1',disposeRef:'dispose-1'},{token:approver.fixture.token});assert.equal(r.status,200);
- await c.disposeSafetyEvidence({DB:db,FILES},approver.p,{objectId:'ev-1',caseId:'case-1',disposeRef:'dispose-1'});
- assert.equal(await exists(restricted),false);assert.equal(await exists('restricted/safety-evidence/case-1/ev-2'),true);checks++;
+ // WH-132 retention: a closed case keeps its evidence until an operator releases its one-year retention term.
+ await refused(()=>c.disposeSafetyEvidence({DB:db,FILES},approver.p,{objectId:'ev-1',caseId:'case-1',disposeRef:'dispose-1'}),'conflict');
+ assert.equal(await exists(restricted),true);checks++;
 
  // ---- Conflict of interest and non-disclosure to the subject.
  const selfCase=await workspaceFixture(db,m);
@@ -258,14 +258,90 @@ try{
  await c.releasePreservationHold(db,approver.p,{holdId:'h-op',caseId:'case-op',releaseRef:'release-op'});
  void selfCase;
 
+ // ---- WH-132 retention review: one-year default term, operator review at expiry, exact preview digest -> apply,
+ // release or extend, nothing deleted while any hold is active, never automatic.
+ assert.equal(c.safetyRetentionDays,365);
+ const term=await row('SELECT opened_at,retention_due_at FROM safety_cases WHERE id=?','case-1');assert.equal(term.retention_due_at-term.opened_at,365*86400);
+ for(const o of await all("SELECT captured_at,retention_due_at FROM safety_evidence_objects WHERE case_id='case-1'"))assert.equal(o.retention_due_at-o.captured_at,365*86400);checks++;
+ /** Simulated passage of time: the fixture lifts the immutability guards for one statement and restores the exact schema. */
+ const age=async(caseId,days=400)=>{
+  const guards=await all("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name IN ('safety_cases_update','safety_cases_close_held','safety_evidence_objects_update')");
+  for(const g of guards)await run(`DROP TRIGGER ${g.name}`);
+  try{await run('UPDATE safety_cases SET opened_at=opened_at-?,retention_due_at=retention_due_at-? WHERE id=?',days*86400,days*86400,caseId);
+   await run('UPDATE safety_evidence_objects SET captured_at=captured_at-?,retention_due_at=retention_due_at-? WHERE case_id=?',days*86400,days*86400,caseId);}
+  finally{for(const g of guards)await run(g.sql);}
+ };
+ const queue=async who=>(await c.listSafetyRetentionReviews(db,who.p));
+ const preview=(who,input)=>c.previewSafetyRetentionDecision(db,who.p,input),apply=(who,input)=>c.applySafetyRetentionDecision(db,who.p,input);
+ // Not yet due: not listed, no preview, no decision.
+ assert.ok(!(await queue(approver)).some(i=>i.caseId==='case-1'));checks++;
+ await refused(()=>preview(approver,{caseId:'case-1',decision:'release',decisionRef:'ret-early'}),'conflict');
+ const early=await row("SELECT due_at FROM safety_case_retention WHERE case_id='case-1'");
+ await refused(()=>apply(approver,{caseId:'case-1',decision:'release',decisionRef:'ret-early',reviewSha256:'0'.repeat(64)}),'conflict');
+ await assert.rejects(()=>run("INSERT INTO safety_retention_decisions VALUES('case-1',1,'release',?,NULL,?,'ret-direct',?,unixepoch())",early.due_at,'0'.repeat(64),approver.ref),/safety_retention_changed/);checks++;
+ // Due: listed for operators with a case role, never to the case subject; nothing was deleted by expiry itself.
+ await age('case-1');
+ let due=(await queue(approver)).find(i=>i.caseId==='case-1');
+ assert.deepEqual([due.status,due.releasable,due.storedEvidence,due.activeHolds,due.openDisclosures],['retention_review_due',true,3,0,0]);assert.ok(due.retentionDueAt<=Date.now()/1000);checks++;
+ assert.ok((await queue(auditor)).some(i=>i.caseId==='case-1'));await refused(()=>queue(reviewer),'missing_role');
+ assert.equal(await count('safety_evidence_objects',"case_id='case-1' AND disposed_at IS NULL"),3);assert.equal(await exists(restricted),true);checks++;
+ r=await call('retention/list',{},{token:auditor.fixture.token});assert.equal(r.status,200);assert.ok(r.body.result.some(i=>i.caseId==='case-1'&&i.status==='retention_review_due'));checks++;
+ assert.equal((await call('retention/preview',{caseId:'case-1',decision:'release',decisionRef:'ret-1',extendDays:5},{token:approver.fixture.token})).status,400);
+ assert.equal((await call('retention/preview',{caseId:'case-1',decision:'purge',decisionRef:'ret-1'},{token:approver.fixture.token})).status,400);checks++;
+ await refused(()=>preview(reviewer,{caseId:'case-1',decision:'release',decisionRef:'ret-1'}),'missing_role');
+ await refused(()=>preview(auditor,{caseId:'case-1',decision:'release',decisionRef:'ret-1'}),'missing_role');
+ // Preview writes nothing; apply needs the exact digest of the same decision.
+ const reviewed=await preview(approver,{caseId:'case-1',decision:'release',decisionRef:'ret-1'});
+ assert.equal(reviewed.releasable,true);assert.equal(reviewed.evidence.length,3);assert.match(reviewed.reviewSha256,/^[0-9a-f]{64}$/);assert.equal(await count('safety_retention_decisions'),0);checks++;
+ await refused(()=>apply(approver,{caseId:'case-1',decision:'release',decisionRef:'ret-1',reviewSha256:'f'.repeat(64)}),'conflict');
+ await refused(()=>apply(approver,{caseId:'case-1',decision:'release',decisionRef:'ret-other',reviewSha256:reviewed.reviewSha256}),'conflict');
+ await refused(()=>apply(approver,{caseId:'case-1',decision:'extend',extendDays:30,decisionRef:'ret-1',reviewSha256:reviewed.reviewSha256}),'conflict');
+ await refused(()=>apply(reviewer,{caseId:'case-1',decision:'release',decisionRef:'ret-1',reviewSha256:reviewed.reviewSha256}),'missing_role');
+ r=await call('retention/apply',{caseId:'case-1',decision:'release',decisionRef:'ret-1',reviewSha256:reviewed.reviewSha256},{token:approver.fixture.token});assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.result.decision,'release');
+ assert.deepEqual(await apply(approver,{caseId:'case-1',decision:'release',decisionRef:'ret-1',reviewSha256:reviewed.reviewSha256}),{caseId:'case-1',decision:'release',seq:1,nextDueAt:null},'Exact retry is idempotent');
+ assert.equal(await count('safety_retention_decisions',"case_id='case-1'"),1);checks++;
+ // Release is final and deletes nothing itself; disposal stays the separate audited operation.
+ await refused(()=>preview(approver,{caseId:'case-1',decision:'extend',extendDays:30,decisionRef:'ret-2'}),'conflict');
+ assert.equal(await exists(restricted),true);due=(await queue(approver)).find(i=>i.caseId==='case-1');assert.equal(due.status,'released_pending_disposal');assert.equal(due.releasable,false);checks++;
+ r=await call('evidence/dispose',{objectId:'ev-1',caseId:'case-1',disposeRef:'dispose-1'},{token:approver.fixture.token});assert.equal(r.status,200);
+ await c.disposeSafetyEvidence({DB:db,FILES},approver.p,{objectId:'ev-1',caseId:'case-1',disposeRef:'dispose-1'});
+ assert.equal(await exists(restricted),false);assert.equal(await exists('restricted/safety-evidence/case-1/ev-2'),true);checks++;
+ const viewed=await c.readSafetyCase(db,auditor.p,{caseId:'case-1'});assert.equal(viewed.retention.released,true);assert.equal(viewed.retention.decisions[0].reviewSha256,reviewed.reviewSha256);checks++;
+ for(const sql of ["UPDATE safety_retention_decisions SET decision='extend'","DELETE FROM safety_retention_decisions","UPDATE safety_cases SET retention_due_at=retention_due_at+1 WHERE id='case-1'"])await assert.rejects(()=>run(sql),/safety_case_immutable/);checks++;
+ // Any active hold on the subject (here from another case) blocks release, and so blocks disposal.
+ await c.openSafetyCase(db,reviewer.p,{caseId:'case-r1',subjectUserId:other.account,intakeRef:'intake-r1'});await c.closeSafetyCase(db,reviewer.p,{caseId:'case-r1',closeRef:'close-r1'});
+ await c.openSafetyCase(db,reviewer.p,{caseId:'case-r2',subjectUserId:other.account,intakeRef:'intake-r2'});
+ await c.placePreservationHold(db,approver.p,{holdId:'h-r2',caseId:'case-r2',legalBasisRef:'basis-r2',reviewDays:30});
+ await age('case-r1');
+ assert.ok(!(await queue(approver)).some(i=>i.caseId==='case-r2'),'A case within its term is not listed');
+ due=(await queue(approver)).find(i=>i.caseId==='case-r1');assert.equal(due.activeHolds,1);assert.equal(due.releasable,false);checks++;
+ const held=await preview(approver,{caseId:'case-r1',decision:'release',decisionRef:'ret-r1'});assert.equal(held.releasable,false);assert.equal(held.activeHolds,1);
+ await refused(()=>apply(approver,{caseId:'case-r1',decision:'release',decisionRef:'ret-r1',reviewSha256:held.reviewSha256}),'active_hold');
+ await c.releasePreservationHold(db,approver.p,{holdId:'h-r2',caseId:'case-r2',releaseRef:'release-r2'});
+ assert.equal((await apply(approver,{caseId:'case-r1',decision:'release',decisionRef:'ret-r1',reviewSha256:held.reviewSha256})).decision,'release');checks++;
+ // An open case cannot be released; the operator extends it instead (1-366 days from the decision).
+ await age('case-r2');
+ const open=await preview(approver,{caseId:'case-r2',decision:'release',decisionRef:'ret-r2'});assert.equal(open.releasable,false);
+ await refused(()=>apply(approver,{caseId:'case-r2',decision:'release',decisionRef:'ret-r2',reviewSha256:open.reviewSha256}),'conflict');
+ for(const extendDays of [0,367,1.5,undefined])await refused(()=>preview(approver,{caseId:'case-r2',decision:'extend',decisionRef:'ret-r2x',...(extendDays===undefined?{}:{extendDays})}),'invalid_input');
+ const longer=await preview(approver,{caseId:'case-r2',decision:'extend',extendDays:30,decisionRef:'ret-r2x'});
+ const extended=await apply(approver,{caseId:'case-r2',decision:'extend',extendDays:30,decisionRef:'ret-r2x',reviewSha256:longer.reviewSha256});
+ assert.equal(extended.seq,1);assert.ok(Math.abs(extended.nextDueAt-(Date.now()/1000+30*86400))<120);
+ assert.ok(!(await queue(approver)).some(i=>i.caseId==='case-r2'),'An extended case leaves the queue until its new due date');
+ await refused(()=>preview(approver,{caseId:'case-r2',decision:'release',decisionRef:'ret-r2y'}),'conflict');checks++;
+ await c.closeSafetyCase(db,reviewer.p,{caseId:'case-r2',closeRef:'close-r2'});
+ // The queue never lists a case about the operator themself.
+ await age('case-op');
+ assert.ok((await queue(approver)).some(i=>i.caseId==='case-op'));assert.ok(!(await queue(auditor)).some(i=>i.caseId==='case-op'));checks++;
+
  // ---- Audit: every attempt is recorded with identifiers only; no raw material in case storage or responses.
  const audit=await c.readSafetyCaseAudit(db,auditor.p,{caseId:'case-1'}),seen=new Set(audit.map(e=>e.action+':'+e.outcome+':'+e.reason));
  for(const expected of ['open_case:denied:unauthenticated','open_case:denied:missing_role','open_case:allowed:ok','place_hold:rejected:invalid_input','place_hold:rejected:not_found','capture_evidence:denied:missing_role',
   'capture_evidence:allowed:ok','capture_evidence:rejected:conflict','request_disclosure:rejected:invalid_input','approve_disclosure:rejected:conflict','approve_disclosure:allowed:ok','record_disclosure:allowed:ok',
-  'cancel_disclosure:allowed:ok','read_disclosure:allowed:ok','dispose_evidence:rejected:conflict','dispose_evidence:allowed:ok','close_case:rejected:active_hold','close_case:allowed:ok','read_case:denied:unauthenticated'])
+  'cancel_disclosure:allowed:ok','read_disclosure:allowed:ok','dispose_evidence:rejected:conflict','dispose_evidence:allowed:ok','preview_retention:rejected:conflict','preview_retention:denied:missing_role','preview_retention:allowed:ok','decide_retention:rejected:conflict','decide_retention:denied:missing_role','decide_retention:allowed:ok','close_case:rejected:active_hold','close_case:allowed:ok','read_case:denied:unauthenticated'])
   {assert.ok(seen.has(expected),expected);checks++;}
  const everything=JSON.stringify([await all('SELECT * FROM safety_case_audit'),await all('SELECT * FROM safety_cases'),await all('SELECT * FROM safety_preservation_holds'),await all('SELECT * FROM safety_evidence_objects'),await all('SELECT * FROM safety_disclosures'),audit,manifest]);
  assert.doesNotMatch(everything,new RegExp(MARK+'|example\\.invalid|raw'));checks++;
  assert.equal(network,0);
- console.log(`Safety case operations passed (${d1?'local D1 + local R2':'SQLite + in-memory R2'}): ${checks} checks. Authenticated fresh-passkey HTTP surface (declared/stale/revoked/foreign-origin refused), project/object/account holds over photo, version, visitor, project, owner, account, contact, traffic and R2 cleanup paths, invisible preservation of profile photos, app document overwrites and cleared recovery-point copies, 50,000 preserved-record capacity failing closed, restricted evidence capture/resume/disposal, two-person manifest-only disclosure, restore suppression, conflict-of-interest non-disclosure, release and the ${inventory.sites}-site deletion inventory. Synthetic placeholders only; nothing transmitted.`);
+ console.log(`Safety case operations passed (${d1?'local D1 + local R2':'SQLite + in-memory R2'}): ${checks} checks. One-year retention review (not due, due queue without self-cases, exact preview digest -> apply, release or 1-366 day extension, final release, holds on the subject and open cases blocking release, disposal only after release), Authenticated fresh-passkey HTTP surface (declared/stale/revoked/foreign-origin refused), project/object/account holds over photo, version, visitor, project, owner, account, contact, traffic and R2 cleanup paths, invisible preservation of profile photos, app document overwrites and cleared recovery-point copies, 50,000 preserved-record capacity failing closed, restricted evidence capture/resume/disposal, two-person manifest-only disclosure, restore suppression, conflict-of-interest non-disclosure, release and the ${inventory.sites}-site deletion inventory. Synthetic placeholders only; nothing transmitted.`);
 }finally{globalThis.fetch=originalFetch;await fixture.close();}

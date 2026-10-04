@@ -261,7 +261,7 @@ try{
   assert.equal((await gateway(a,removal(records,target),s1)).body.code,'forbidden');
   assert.equal((await gateway(a,removal(records,target),v2)).body.code,'forbidden');
   assert.equal((await ownerCall(b,removal(records,target))).body.code,'not_found');
-  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at) VALUES('case-wh127',?,'intake-1','human:reviewer',unixepoch())",a.user);
+  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh127',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",a.user);
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh127','case-wh127',?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",a.user,a.project);
   assert.equal((await ownerCall(a,removal(records,target))).body.code,'unavailable');
   await assert.rejects(()=>run('DELETE FROM module_records WHERE id=?',target),/safety_preservation_hold/);

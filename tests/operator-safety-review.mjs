@@ -19,7 +19,7 @@ const transport=session=>(url,init)=>http.handleSafetyCaseRequest(new Request('h
 const read=(session,action,input={},reauth=async()=>{throw Error('unexpected reauthentication');})=>client.operatorSafetyRead(action,input,{fetch:transport(session),reauth});
 try{
  // Only the four audited read actions exist in the client, and each is a real server action.
- assert.deepEqual([...client.operatorReadActions],['holds/list','cases/read','cases/audit','disclosures/read']);
+ assert.deepEqual([...client.operatorReadActions],['holds/list','retention/list','cases/read','cases/audit','disclosures/read']);
  assert.ok(client.operatorReadActions.every(a=>http.safetyCaseActions.includes(a)));checks++;
  for(const write of http.safetyCaseActions.filter(a=>!client.operatorReadActions.includes(a)))assert.throws(()=>client.operatorReadBody(write,{}),/Only read actions/);checks++;
  for(const bad of [{caseId:'has space'},{caseId:''},{caseId:'x'.repeat(129)},{caseId:'ok',extra:'1'}])assert.throws(()=>client.operatorReadBody('cases/read',bad),/opaque identifier/);checks++;
@@ -39,16 +39,25 @@ try{
  r=await read(auditor,'cases/audit',{caseId:'case-ui'});assert.equal(r.state,'ok');assert.ok(r.result.some(e=>e.action==='read_case'&&e.outcome==='allowed'));checks++;
  assert.equal((await read(auditor,'disclosures/read',{disclosureId:'d-absent',caseId:'case-ui'})).state,'not_found');checks++;
  assert.equal((await read(auditor,'cases/read',{caseId:'case-absent'})).state,'not_found');checks++;
+ // WH-132 retention: the case read shows its one-year term; the queue lists only cases past their term.
+ r=await read(auditor,'cases/read',{caseId:'case-ui'});assert.equal(r.result.retention.released,false);assert.equal(r.result.retention.reviewDue,false);assert.deepEqual(r.result.retention.decisions,[]);
+ assert.ok(r.result.retention.dueAt-r.result.openedAt===365*86400);checks++;
+ r=await read(auditor,'retention/list');assert.equal(r.state,'ok');assert.deepEqual(r.result,[]);
+ // Simulated passage of time: the fixture lifts the case guards for one statement and restores the exact schema.
+ const guards=(await db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name IN ('safety_cases_update','safety_cases_close_held')").all()).results;
+ for(const g of guards)await db.prepare(`DROP TRIGGER ${g.name}`).run();
+ await db.prepare("UPDATE safety_cases SET opened_at=opened_at-34560000,retention_due_at=retention_due_at-34560000 WHERE id='case-ui'").run();for(const g of guards)await db.prepare(g.sql).run();
+ r=await read(auditor,'retention/list');assert.deepEqual(r.result.map(i=>[i.caseId,i.status,i.activeHolds,i.releasable]),[['case-ui','retention_review_due',1,false]]);checks++;
  // A reviewer reads the case but not the hold list or audit (role-gated per section).
  assert.equal((await read(reviewer,'cases/read',{caseId:'case-ui'})).state,'ok');
- assert.equal((await read(reviewer,'holds/list')).state,'restricted');assert.equal((await read(reviewer,'cases/audit',{caseId:'case-ui'})).state,'restricted');checks++;
+ assert.equal((await read(reviewer,'holds/list')).state,'restricted');assert.equal((await read(reviewer,'retention/list')).state,'restricted');assert.equal((await read(reviewer,'cases/audit',{caseId:'case-ui'})).state,'restricted');checks++;
  // An ordinary customer session holds no role: every read is restricted and nothing leaks.
- for(const [action,input] of [['holds/list',{}],['cases/read',{caseId:'case-ui'}],['cases/audit',{caseId:'case-ui'}],['disclosures/read',{disclosureId:'d',caseId:'case-ui'}]]){
+ for(const [action,input] of [['holds/list',{}],['retention/list',{}],['cases/read',{caseId:'case-ui'}],['cases/audit',{caseId:'case-ui'}],['disclosures/read',{disclosureId:'d',caseId:'case-ui'}]]){
   const result=await read(customer,action,input);assert.deepEqual(result,{state:'restricted'});}
  checks++;
  // The case subject cannot see their own case (conflict of interest answers as absent) even if granted a role.
  await c.grantSafetyCaseRole(db,admin.p,{grantId:'g-subject',operatorAccountId:subject.account,role:'case_auditor'});
- assert.equal((await read(subject,'cases/read',{caseId:'case-ui'})).state,'not_found');assert.deepEqual((await read(subject,'holds/list')).result,[]);checks++;
+ assert.equal((await read(subject,'cases/read',{caseId:'case-ui'})).state,'not_found');assert.deepEqual((await read(subject,'holds/list')).result,[]);assert.deepEqual((await read(subject,'retention/list')).result,[]);checks++;
  // A stale passkey proof runs the ordinary reauthentication once and retries the same read.
  const stale=await workspaceSession(db,m,{account:auditor.id,credential:auditor.fixture.credential},-700),session={token:stale.token};let reauths=0;
  r=await read(session,'cases/read',{caseId:'case-ui'},async()=>{reauths++;session.token=(await workspaceSession(db,m,{account:auditor.id,credential:auditor.fixture.credential})).token;});
@@ -57,7 +66,7 @@ try{
  // Every read attempt, including refusals, is in the server audit; the review reads changed no case state.
  const audit=await c.readSafetyCaseAudit(db,auditor.p,{caseId:'case-ui'}),seen=new Set(audit.map(e=>e.action+':'+e.outcome+':'+e.reason));
  for(const expected of ['read_case:allowed:ok','read_case:denied:missing_role','read_audit:denied:missing_role','read_case:denied:conflict_of_interest'])assert.ok(seen.has(expected),expected);checks++;
- assert.equal((await db.prepare('SELECT count(*) n FROM safety_case_findings').first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM safety_preservation_holds WHERE released_at IS NULL").first()).n,1);checks++;
+ assert.equal((await db.prepare('SELECT count(*) n FROM safety_case_findings').first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM safety_preservation_holds WHERE released_at IS NULL").first()).n,1);assert.equal((await db.prepare('SELECT count(*) n FROM safety_retention_decisions').first()).n,0);checks++;
  assert.equal(network,0);
- console.log(`Operator safety review passed (${d1?'local D1':'SQLite'}): ${checks} checks. Read-only client limited to holds/list, cases/read, cases/audit and disclosures/read; per-section role gating; customer and subject non-disclosure; one passkey reauthentication per stale read; audited refusals; no navigation link; no state change.`);
+ console.log(`Operator safety review passed (${d1?'local D1':'SQLite'}): ${checks} checks. Read-only client limited to holds/list, retention/list, cases/read, cases/audit and disclosures/read (retention term on the case, due queue); per-section role gating; customer and subject non-disclosure; one passkey reauthentication per stale read; audited refusals; no navigation link; no state change.`);
 }finally{globalThis.fetch=originalFetch;await fixture.close();}

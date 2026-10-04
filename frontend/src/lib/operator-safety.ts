@@ -1,7 +1,7 @@
-/** WH-132 restricted case review client. Read-only: it can call only the four audited read actions of the existing
+/** WH-132 restricted case review client. Read-only: it can call only the five audited read actions of the existing
  * operator API, never a write. The server still enforces the fresh passkey proof and the named case role on every
  * call; this client only reauthenticates once when the proof is stale and reports a missing role as "restricted". */
-export const operatorReadActions=Object.freeze(['holds/list','cases/read','cases/audit','disclosures/read'] as const);
+export const operatorReadActions=Object.freeze(['holds/list','retention/list','cases/read','cases/audit','disclosures/read'] as const);
 export type OperatorReadAction=typeof operatorReadActions[number];
 export const operatorSafetyPrefix='/api/operator/safety-cases/v1/';
 /** Matches the server's opaque identifier rule; anything else is refused before a request is made. */
@@ -9,7 +9,7 @@ export const opaqueReference=/^[A-Za-z0-9_.:-]{1,128}$/;
 export type OperatorReadResult={state:'ok';result:unknown}|{state:'restricted'}|{state:'not_found'}|{state:'error';message:string};
 type Fetch=(input:string,init:RequestInit)=>Promise<Response>;
 
-const inputs:Record<OperatorReadAction,readonly string[]>={'holds/list':[],'cases/read':['caseId'],'cases/audit':['caseId'],'disclosures/read':['disclosureId','caseId']};
+const inputs:Record<OperatorReadAction,readonly string[]>={'holds/list':[],'retention/list':[],'cases/read':['caseId'],'cases/audit':['caseId'],'disclosures/read':['disclosureId','caseId']};
 export function operatorReadBody(action:OperatorReadAction,input:Record<string,string>={}){
  if(!operatorReadActions.includes(action))throw Error('Only read actions are available here.');
  const keys=inputs[action];

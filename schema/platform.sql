@@ -4796,6 +4796,9 @@ CREATE TABLE safety_cases (
  closed_at INTEGER CHECK(closed_at IS NULL OR closed_at>=opened_at),
  closed_by TEXT CHECK(closed_by IS NULL OR (closed_by GLOB 'human:?*' AND length(closed_by)<=128 AND closed_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  close_ref TEXT CHECK(close_ref IS NULL OR (length(close_ref) BETWEEN 1 AND 128 AND close_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ -- WH-132 default retention (owner decision 2026-10-04, pending counsel): set at opening from the source constant
+ -- (safetyRetentionDays, one year); at expiry an operator reviews the case (safety_retention_decisions). Nothing lapses.
+ retention_due_at INTEGER NOT NULL CHECK(retention_due_at>opened_at),
  CHECK((closed_at IS NULL)=(closed_by IS NULL) AND (closed_by IS NULL)=(close_ref IS NULL)),
  CHECK(opened_by<>'human:'||subject_user_id)
 );
@@ -4852,7 +4855,8 @@ CREATE TABLE safety_case_audit (
  at INTEGER NOT NULL CHECK(at>=0),
  actor_ref TEXT CHECK(actor_ref IS NULL OR (actor_ref GLOB 'human:?*' AND length(actor_ref)<=128 AND actor_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
-  'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure')),
+  'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
+  'list_retention','preview_retention','decide_retention')),
  case_id TEXT CHECK(case_id IS NULL OR (length(case_id) BETWEEN 1 AND 128 AND case_id NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  target_ref TEXT CHECK(target_ref IS NULL OR (length(target_ref) BETWEEN 1 AND 128 AND target_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
@@ -4901,6 +4905,8 @@ CREATE TABLE safety_evidence_objects (
  size INTEGER NOT NULL CHECK(size BETWEEN 1 AND 1048576),
  captured_by TEXT NOT NULL CHECK(captured_by GLOB 'human:?*' AND length(captured_by)<=128 AND captured_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
  captured_at INTEGER NOT NULL CHECK(captured_at>=0),
+ -- WH-132: each object's own default retention term (safetyRetentionDays from capture); the case's review covers it.
+ retention_due_at INTEGER NOT NULL CHECK(retention_due_at>captured_at),
  stored_at INTEGER CHECK(stored_at IS NULL OR stored_at>=captured_at),
  disposed_at INTEGER CHECK(disposed_at IS NULL OR (stored_at IS NOT NULL AND disposed_at>=stored_at)),
  disposed_by TEXT CHECK(disposed_by IS NULL OR (disposed_by GLOB 'human:?*' AND length(disposed_by)<=128 AND disposed_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
@@ -4938,6 +4944,35 @@ CREATE TABLE safety_disclosure_items (
  PRIMARY KEY(disclosure_id,evidence_object_id)
 );
 
+-- WH-132 retention review (owner decision 2026-10-04, pending counsel). Cases and their evidence objects have a
+-- default one-year term (retention_due_at). At expiry the case appears in the operator review queue as
+-- retention_review_due; nothing lapses or is deleted automatically. A preservation approver reviews an exact preview
+-- digest and either extends the term (1-366 days from the decision) or releases it. Release is final, needs a closed
+-- case with no active hold on the case or its subject, no open disclosure and no unfinished capture, and only then may
+-- evidence objects be disposed of (still a separate audited operation). Decisions are append-only.
+CREATE TABLE safety_retention_decisions (
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ seq INTEGER NOT NULL CHECK(seq BETWEEN 1 AND 1000),
+ decision TEXT NOT NULL CHECK(decision IN ('extend','release')),
+ reviewed_due_at INTEGER NOT NULL CHECK(reviewed_due_at>=0),
+ next_due_at INTEGER,
+ review_sha256 TEXT NOT NULL CHECK(length(review_sha256)=64 AND review_sha256 NOT GLOB '*[^0-9a-f]*'),
+ decision_ref TEXT NOT NULL CHECK(length(decision_ref) BETWEEN 1 AND 128 AND decision_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decided_by TEXT NOT NULL CHECK(decided_by GLOB 'human:?*' AND length(decided_by)<=128 AND decided_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decided_at INTEGER NOT NULL CHECK(decided_at>=reviewed_due_at),
+ PRIMARY KEY(case_id,seq),
+ UNIQUE(case_id,decision_ref),
+ CHECK((decision='extend' AND next_due_at IS NOT NULL AND next_due_at>decided_at AND next_due_at<=decided_at+31622400) OR (decision='release' AND next_due_at IS NULL))
+);
+-- The current retention due date of each case: the latest extension (or the case's own term) and never earlier than
+-- the term of any evidence object not yet disposed of.
+CREATE VIEW safety_case_retention AS
+ SELECT c.id AS case_id,c.subject_user_id,
+  max(COALESCE((SELECT d.next_due_at FROM safety_retention_decisions d WHERE d.case_id=c.id AND d.decision='extend' ORDER BY d.seq DESC LIMIT 1),c.retention_due_at),
+   COALESCE((SELECT max(o.retention_due_at) FROM safety_evidence_objects o WHERE o.case_id=c.id AND o.disposed_at IS NULL),0)) AS due_at,
+  EXISTS(SELECT 1 FROM safety_retention_decisions d WHERE d.case_id=c.id AND d.decision='release') AS released
+ FROM safety_cases c;
+
 CREATE TRIGGER safety_case_roles_capacity BEFORE INSERT ON safety_case_roles WHEN (SELECT count(*) FROM safety_case_roles)>=1000
 BEGIN SELECT RAISE(ABORT,'safety_case_capacity'); END;
 CREATE TRIGGER safety_case_roles_update BEFORE UPDATE ON safety_case_roles
@@ -4952,7 +4987,7 @@ CREATE TRIGGER safety_cases_admit BEFORE INSERT ON safety_cases BEGIN
 END;
 CREATE TRIGGER safety_cases_update BEFORE UPDATE ON safety_cases
 WHEN OLD.closed_at IS NOT NULL OR NEW.closed_at IS NULL OR NEW.id IS NOT OLD.id OR NEW.subject_user_id IS NOT OLD.subject_user_id
- OR NEW.intake_ref IS NOT OLD.intake_ref OR NEW.opened_by IS NOT OLD.opened_by OR NEW.opened_at IS NOT OLD.opened_at
+ OR NEW.intake_ref IS NOT OLD.intake_ref OR NEW.opened_by IS NOT OLD.opened_by OR NEW.opened_at IS NOT OLD.opened_at OR NEW.retention_due_at IS NOT OLD.retention_due_at
 BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_cases_close_held BEFORE UPDATE ON safety_cases
 WHEN EXISTS(SELECT 1 FROM safety_preservation_holds WHERE case_id=OLD.id AND released_at IS NULL)
@@ -5033,9 +5068,13 @@ CREATE TRIGGER safety_evidence_objects_update BEFORE UPDATE ON safety_evidence_o
 WHEN NEW.id IS NOT OLD.id OR NEW.case_id IS NOT OLD.case_id OR NEW.hold_id IS NOT OLD.hold_id OR NEW.subject_user_id IS NOT OLD.subject_user_id
  OR NEW.source IS NOT OLD.source OR NEW.source_ref IS NOT OLD.source_ref OR NEW.storage_key IS NOT OLD.storage_key OR NEW.content_type IS NOT OLD.content_type
  OR NEW.sha256 IS NOT OLD.sha256 OR NEW.size IS NOT OLD.size OR NEW.captured_by IS NOT OLD.captured_by OR NEW.captured_at IS NOT OLD.captured_at
+ OR NEW.retention_due_at IS NOT OLD.retention_due_at
  OR OLD.disposed_at IS NOT NULL OR (OLD.stored_at IS NOT NULL AND NEW.stored_at IS NOT OLD.stored_at)
  OR (NEW.disposed_at IS NOT NULL AND (OLD.stored_at IS NULL
   OR NOT EXISTS(SELECT 1 FROM safety_cases WHERE id=OLD.case_id AND closed_at IS NOT NULL)
+  -- WH-132: disposal only after an operator released the case's retention, and never while any hold on the subject is active.
+  OR NOT EXISTS(SELECT 1 FROM safety_retention_decisions WHERE case_id=OLD.case_id AND decision='release')
+  OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND (case_id=OLD.case_id OR subject_user_id=OLD.subject_user_id))
   OR EXISTS(SELECT 1 FROM safety_disclosure_items i JOIN safety_disclosures d ON d.id=i.disclosure_id WHERE i.evidence_object_id=OLD.id AND d.state IN ('requested','approved'))))
 BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_evidence_objects_retained BEFORE DELETE ON safety_evidence_objects BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
@@ -5061,6 +5100,20 @@ WHEN NOT EXISTS(SELECT 1 FROM safety_disclosures d JOIN safety_evidence_objects 
 BEGIN SELECT RAISE(ABORT,'safety_case_evidence_missing'); END;
 CREATE TRIGGER safety_disclosure_items_immutable BEFORE UPDATE ON safety_disclosure_items BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_disclosure_items_retained BEFORE DELETE ON safety_disclosure_items BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_retention_decisions_admit BEFORE INSERT ON safety_retention_decisions BEGIN
+ SELECT RAISE(ABORT,'safety_case_immutable') WHERE NEW.seq<>COALESCE((SELECT max(seq) FROM safety_retention_decisions WHERE case_id=NEW.case_id),0)+1
+  OR EXISTS(SELECT 1 FROM safety_retention_decisions WHERE case_id=NEW.case_id AND decision='release');
+ SELECT RAISE(ABORT,'safety_retention_changed') WHERE NOT EXISTS(SELECT 1 FROM safety_case_retention r WHERE r.case_id=NEW.case_id AND r.released=0
+  AND r.due_at=NEW.reviewed_due_at AND r.due_at<=NEW.decided_at);
+ SELECT RAISE(ABORT,'safety_retention_case_open') WHERE NEW.decision='release' AND EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NULL);
+ SELECT RAISE(ABORT,'safety_hold_active') WHERE NEW.decision='release' AND (
+  EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND (h.case_id=NEW.case_id OR h.subject_user_id=(SELECT subject_user_id FROM safety_cases WHERE id=NEW.case_id)))
+  OR EXISTS(SELECT 1 FROM safety_disclosures WHERE case_id=NEW.case_id AND state IN ('requested','approved'))
+  OR EXISTS(SELECT 1 FROM safety_evidence_objects WHERE case_id=NEW.case_id AND stored_at IS NULL));
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_retention_decisions)>=100000;
+END;
+CREATE TRIGGER safety_retention_decisions_immutable BEFORE UPDATE ON safety_retention_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_retention_decisions_retained BEFORE DELETE ON safety_retention_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 
 -- Ordinary deletion paths for held scope. Account holds cover the account cascade and every project of the
 -- subject; project holds cover one project; object holds cover one project photo. Customer-facing callers

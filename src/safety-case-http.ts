@@ -25,6 +25,7 @@ async function body(request:Request){
 }
 type Handler=(env:Environment,principal:unknown,data:Record<string,unknown>)=>Promise<unknown>;
 const s=(v:unknown)=>v as string;
+const retention=(d:Record<string,unknown>)=>({caseId:s(d.caseId),decision:d.decision as 'extend'|'release',decisionRef:s(d.decisionRef),...(d.extendDays===undefined?{}:{extendDays:d.extendDays as number})});
 const actions:Record<string,{keys:readonly string[];optional?:readonly string[];run:Handler}>={
  'roles/grant':{keys:['grantId','operatorAccountId','role'],run:(e,p,d)=>cases.grantSafetyCaseRole(e.DB,p,{grantId:s(d.grantId),operatorAccountId:s(d.operatorAccountId),role:d.role as cases.SafetyCaseRole})},
  'roles/revoke':{keys:['grantId','revokeRef'],run:(e,p,d)=>cases.revokeSafetyCaseRole(e.DB,p,{grantId:s(d.grantId),revokeRef:s(d.revokeRef)})},
@@ -45,6 +46,9 @@ const actions:Record<string,{keys:readonly string[];optional?:readonly string[];
  'disclosures/approve':{keys:['disclosureId','caseId','manifestSha256'],run:(e,p,d)=>cases.approveSafetyDisclosure(e.DB,p,{disclosureId:s(d.disclosureId),caseId:s(d.caseId),manifestSha256:s(d.manifestSha256)})},
  'disclosures/record':{keys:['disclosureId','caseId','outcomeRef'],run:(e,p,d)=>cases.recordSafetyDisclosure(e.DB,p,{disclosureId:s(d.disclosureId),caseId:s(d.caseId),outcomeRef:s(d.outcomeRef)})},
  'disclosures/cancel':{keys:['disclosureId','caseId','cancelRef'],run:(e,p,d)=>cases.cancelSafetyDisclosure(e.DB,p,{disclosureId:s(d.disclosureId),caseId:s(d.caseId),cancelRef:s(d.cancelRef)})},
+ 'retention/list':{keys:[],run:(e,p)=>cases.listSafetyRetentionReviews(e.DB,p)},
+ 'retention/preview':{keys:['caseId','decision','decisionRef'],optional:['extendDays'],run:(e,p,d)=>cases.previewSafetyRetentionDecision(e.DB,p,retention(d))},
+ 'retention/apply':{keys:['caseId','decision','decisionRef','reviewSha256'],optional:['extendDays'],run:(e,p,d)=>cases.applySafetyRetentionDecision(e.DB,p,{...retention(d),reviewSha256:s(d.reviewSha256)})},
  'disclosures/read':{keys:['disclosureId','caseId'],run:(e,p,d)=>cases.readSafetyDisclosure(e.DB,p,{disclosureId:s(d.disclosureId),caseId:s(d.caseId)})},
 };
 export const safetyCaseActions=Object.freeze(Object.keys(actions));
