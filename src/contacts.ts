@@ -52,5 +52,6 @@ export async function contactInbox(db:D1Database,userId:string,projectId:string)
 export async function deleteContact(db:D1Database,userId:string,id:string){
  await db.prepare('DELETE FROM contact_submissions WHERE id=? AND project_id IN(SELECT id FROM projects WHERE owner_user_id=?)').bind(id,userId).run();
 }
-/** Expiry skips projects of an account under an active safety preservation hold (WH-015); the hold release resumes ordinary expiry. */
-export async function cleanupContacts(db:D1Database){await db.prepare("DELETE FROM contact_submissions WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND project_id NOT IN (SELECT p.id FROM projects p JOIN safety_preservation_holds h ON h.subject_user_id=p.owner_user_id WHERE h.released_at IS NULL)").run();await db.prepare("DELETE FROM contact_receipts WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')").run();}
+/** Expiry skips projects inside an active safety preservation hold's scope (WH-015); the hold release resumes ordinary expiry.
+ * The inbox already hides expired messages, so retained held messages are not visible to the owner. */
+export async function cleanupContacts(db:D1Database){await db.prepare("DELETE FROM contact_submissions WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND project_id NOT IN (SELECT project_id FROM safety_held_projects)").run();await db.prepare("DELETE FROM contact_receipts WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')").run();}
