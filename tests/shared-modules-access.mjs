@@ -379,6 +379,31 @@ try{
   const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['modules.put','accessModuleReview','review-visitor-access-setup'])assert.ok(!prompt.includes(word),word);
  });
 
+ await check('applied role review history never blocks revoke or grant; pending reviews stay bounded',async()=>{
+  const role=await row("SELECT * FROM module_access_roles WHERE project_id=? AND visitor_id=?",b.project,bv.visitorId);
+  if(role?.state!=='granted')await setRole(b,bv.visitorId,'grant');
+  const original=await row("SELECT r.* FROM module_access_role_reviews r JOIN module_access_role_applies a ON a.review_id=r.id WHERE r.project_id=? AND r.visitor_id=? AND r.action='grant' ORDER BY a.created_at DESC LIMIT 1",b.project,bv.visitorId);
+  const columns=(await rows('PRAGMA table_info(module_access_role_reviews)')).map(c=>c.name).filter(c=>c!=='id');
+  const applyColumns=(await rows('PRAGMA table_info(module_access_role_applies)')).map(c=>c.name).filter(c=>!['id','review_id'].includes(c));
+  const lifted=await rows("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name IN ('module_access_role_review_admit','module_access_role_apply_admit','module_access_role_apply')");
+  const copies=(prefix,n,pending)=>run(`INSERT INTO module_access_role_reviews(id,${columns.join(',')}) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<${n})
+   SELECT printf('${prefix}%07x-0000-4000-8000-%012d',i,i),${columns.map(c=>pending&&c==='created_at'?'unixepoch()':pending&&c==='expires_at'?'unixepoch()+500':c).join(',')} FROM n,module_access_role_reviews WHERE id=?`,original.id);
+  // Synthetic history: 500 applied copies of the grant (admission triggers lifted, test-only).
+  for(const t of lifted)await run('DROP TRIGGER '+t.name);
+  try{
+   await copies('a',500,false);
+   await run(`INSERT INTO module_access_role_applies(id,review_id,${applyColumns.join(',')}) SELECT 'b'||substr(r.id,2),r.id,${applyColumns.map(c=>'a.'+c).join(',')} FROM module_access_role_reviews r,module_access_role_applies a WHERE r.id LIKE 'a%-0000-4000-8000-%' AND r.project_id=? AND a.review_id=?`,b.project,original.id);
+  }finally{for(const t of lifted)await run(t.sql);}
+  assert.ok((await row('SELECT count(*) n FROM module_access_role_reviews WHERE project_id=?',b.project)).n>500);
+  await setRole(b,bv.visitorId,'revoke');assert.deepEqual((await me(b,theirs,bv)).body.result.roles,[]);
+  // 500 pending (unapplied, unexpired) reviews still refuse another until they expire or are removed.
+  const admit=lifted.find(t=>t.name==='module_access_role_review_admit');
+  await run('DROP TRIGGER module_access_role_review_admit');try{await copies('c',500,true);}finally{await run(admit.sql);}
+  assert.notEqual((await control(b,roleAction(b,bv.visitorId,'grant'))).status,200);
+  await run("DELETE FROM module_access_role_reviews WHERE id LIKE 'c%-0000-4000-8000-%'");
+  await setRole(b,bv.visitorId,'grant');assert.deepEqual((await me(b,theirs,bv)).body.result.roles,['staff']);
+ });
+
  await check('closure counts, cascades and no secrets or values in Chat or rows',async()=>{
   const dump=JSON.stringify(await rows('SELECT * FROM chat_turns'))+JSON.stringify(await rows('SELECT * FROM module_access_role_reviews'))+JSON.stringify(await rows('SELECT * FROM module_request_receipts'));
   for(const secret of [v1.session,v1.recoveryCode,v2.session,bv.session])assert.ok(!dump.includes(secret));

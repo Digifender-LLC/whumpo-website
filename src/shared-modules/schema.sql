@@ -137,7 +137,10 @@ CREATE TRIGGER module_activation_review_admit BEFORE INSERT ON module_activation
  SELECT RAISE(ABORT,'module_activation_changed') WHERE NEW.expected_config_revision>0 AND NOT EXISTS(SELECT 1 FROM module_instances WHERE id=NEW.resource_id AND project_id=NEW.project_id AND local_id=NEW.local_id AND kind=NEW.kind AND config_revision=NEW.expected_config_revision);
  -- WH-126: a project has one visitor identity namespace (one project session cookie), so at most one access instance.
  SELECT RAISE(ABORT,'module_activation_access_single') WHERE NEW.kind='access' AND NEW.expected_config_revision=0 AND EXISTS(SELECT 1 FROM module_instances WHERE project_id=NEW.project_id AND kind='access');
- SELECT RAISE(ABORT,'module_activation_capacity') WHERE (SELECT count(*) FROM module_activation_reviews WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM module_activation_reviews)>=50000;
+ -- Capacity bounds pending (unapplied) reviews only: applied reviews are retained history and never block a later
+ -- activation, configuration change or disable.
+ SELECT RAISE(ABORT,'module_activation_capacity') WHERE (SELECT count(*) FROM module_activation_reviews r WHERE r.project_id=NEW.project_id AND NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id))>=500
+  OR (SELECT count(*) FROM module_activation_reviews r WHERE NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id))>=50000;
 END;
 CREATE TRIGGER module_activation_review_immutable BEFORE UPDATE ON module_activation_reviews BEGIN SELECT RAISE(ABORT,'module_activation_immutable'); END;
 CREATE TRIGGER module_activation_link_admit BEFORE INSERT ON module_activation_links BEGIN
@@ -352,7 +355,9 @@ CREATE TRIGGER module_access_role_review_admit BEFORE INSERT ON module_access_ro
  SELECT RAISE(ABORT,'module_access_changed') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_access_states s ON s.instance_id=i.id JOIN app_visitors v ON v.id=NEW.visitor_id AND v.project_id=i.project_id AND v.access_id=i.id
   WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.local_id=NEW.local_id AND i.kind='access' AND i.config_revision=NEW.config_revision AND s.revision=NEW.expected_access_revision);
  SELECT RAISE(ABORT,'module_access_changed') WHERE NEW.action='revoke' AND NOT EXISTS(SELECT 1 FROM module_access_roles WHERE instance_id=NEW.instance_id AND visitor_id=NEW.visitor_id AND role=NEW.role AND state='granted');
- SELECT RAISE(ABORT,'module_access_capacity') WHERE (SELECT count(*) FROM module_access_role_reviews WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM module_access_role_reviews)>=50000;
+ -- Capacity bounds pending (unapplied) reviews only: applied role reviews are retained history and never block a later grant or revoke.
+ SELECT RAISE(ABORT,'module_access_capacity') WHERE (SELECT count(*) FROM module_access_role_reviews r WHERE r.project_id=NEW.project_id AND NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id))>=500
+  OR (SELECT count(*) FROM module_access_role_reviews r WHERE NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id))>=50000;
 END;
 CREATE TRIGGER module_access_role_review_immutable BEFORE UPDATE ON module_access_role_reviews BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
 CREATE TRIGGER module_access_role_link_admit BEFORE INSERT ON module_access_role_links BEGIN

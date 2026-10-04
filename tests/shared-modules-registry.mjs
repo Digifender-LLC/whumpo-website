@@ -309,6 +309,31 @@ try{
   await assert.rejects(()=>run('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,?,?,?,?,?,?,?)',id(),c.project,head.revision+1,id(),JSON.stringify({...JSON.parse(head.spec_json),instances:[]}),head.spec_digest,head.lock_json,head.manifest_json,head.manifest_digest),/specification_changed/);
  });
 
+ await check('applied review history never exhausts capacity; pending reviews stay bounded',async()=>{
+  // Synthetic history: 500 applied copies of the starter's activation review (admission triggers lifted, test-only).
+  const original=await row("SELECT r.* FROM module_activation_reviews r JOIN module_activation_applies a ON a.review_id=r.id WHERE r.project_id=? LIMIT 1",starter.project);
+  const columns=(await rows('PRAGMA table_info(module_activation_reviews)')).map(c=>c.name).filter(c=>c!=='id');
+  const applyColumns=(await rows('PRAGMA table_info(module_activation_applies)')).map(c=>c.name).filter(c=>!['id','review_id'].includes(c));
+  const lifted=await rows("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name IN ('module_activation_review_admit','module_activation_apply_admit','module_activation_apply')");
+  const copies=(prefix,n,pending)=>run(`INSERT INTO module_activation_reviews(id,${columns.join(',')}) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<${n})
+   SELECT printf('${prefix}%07x-0000-4000-8000-%012d',i,i),${columns.map(c=>pending&&c==='created_at'?'unixepoch()':pending&&c==='expires_at'?'unixepoch()+500':c).join(',')} FROM n,module_activation_reviews WHERE id=?`,original.id);
+  for(const t of lifted)await run('DROP TRIGGER '+t.name);
+  try{
+   await copies('a',500,false);
+   await run(`INSERT INTO module_activation_applies(id,review_id,${applyColumns.join(',')}) SELECT 'b'||substr(r.id,2),r.id,${applyColumns.map(c=>'a.'+c).join(',')} FROM module_activation_reviews r,module_activation_applies a WHERE r.id LIKE 'a%-0000-4000-8000-%' AND r.project_id=? AND a.review_id=?`,starter.project,original.id);
+  }finally{for(const t of lifted)await run(t.sql);}
+  assert.ok((await row('SELECT count(*) n FROM module_activation_reviews WHERE project_id=?',starter.project)).n>500);
+  // The owner can still disable and re-activate: applied history does not count.
+  const off=await review(starter,'members','disable');assert.equal((await apply(starter,off)).status,200);
+  assert.equal((await instance(starter,'members')).state,'inactive');
+  // 500 pending (unapplied, unexpired) reviews still refuse another until they expire or are removed.
+  const admit=lifted.find(t=>t.name==='module_activation_review_admit');
+  await run('DROP TRIGGER module_activation_review_admit');try{await copies('c',500,true);}finally{await run(admit.sql);}
+  assert.notEqual((await control(starter,{type:'moduleActivationReview',projectId:starter.project,instanceId:'members',action:'activate'})).status,200);
+  await run("DELETE FROM module_activation_reviews WHERE id LIKE 'c%-0000-4000-8000-%'");
+  await activate(starter,'members');assert.equal((await instance(starter,'members')).state,'active');
+ });
+
  await check('visitor values stay out of Chat, model context and receipts; closure and cascades',async()=>{
   for(const t of ['chat_turns','module_request_receipts','module_activation_reviews','module_instances','activity_events']){
    const dump=JSON.stringify(await rows('SELECT * FROM '+t));assert.ok(!dump.includes(marker),t);
