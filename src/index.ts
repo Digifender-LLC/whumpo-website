@@ -68,6 +68,8 @@ import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
+import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
+import {contactDelivery} from './contact-email';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
 import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
@@ -402,6 +404,17 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if(method==='GET'&&inboxMatch)return json(await contactInbox(env.DB,user.id,inboxMatch[1]));
   const messageMatch=pathname.match(/^\/api\/contact-messages\/([0-9a-f-]{36})$/);
   if(method==='DELETE'&&messageMatch){await deleteContact(env.DB,user.id,messageMatch[1]);return json({ok:true});}
+  // WH-036 Dashboard control for the owner's notification address. Verification codes are sent only while delivery is activated.
+  const notifyMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/contact-notifications(?:\/(verification|confirm))?$/);
+  if(notifyMatch){
+    const [,projectId,step]=notifyMatch;
+    if(!step&&method==='GET')return json({...await contactNotificationStatus(env.DB,user.id,projectId),deliveryActive:!!contactDelivery(env)});
+    if(!step&&method==='PUT'){const data=await body(request);return json({destination:await proposeContactDestination(env.DB,user.id,projectId,data?.address)});}
+    if(!step&&method==='DELETE'){await removeContactDestination(env.DB,user.id,projectId);return json({ok:true});}
+    if(step==='verification'&&method==='POST')return json(await requestContactVerification(env.DB,contactDelivery(env)?.settings??null,user.id,projectId));
+    if(step==='confirm'&&method==='POST'){const data=await body(request);return json({destination:await confirmContactDestination(env.DB,user.id,projectId,data?.code)});}
+    return error(405,'Method not allowed');
+  }
   if(method==='GET'&&pathname==='/api/domain-hosting')return json({enabled:!!hostingConfig(env),connections:await hostingConnections(env.DB,user.id)});
   if(method==='POST'&&pathname==='/api/domain-hosting/review'){
     const data=await body(request);if(typeof data?.id!=='string'||typeof data.claimId!=='string')return error(400,'Choose a domain ownership claim.');
@@ -614,6 +627,9 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
 
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
+    // WH-036 every-minute contact notice drain. No cron trigger for it is configured; the owner adds "* * * * *" only when
+    // activating (docs/contact-forms.md), and even then nothing runs unless contactDelivery(env) finds the reviewed provider and binding.
+    if(_event.cron==='* * * * *'){const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},

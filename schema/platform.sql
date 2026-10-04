@@ -1392,7 +1392,7 @@ CREATE TABLE contact_notification_destinations (
 CREATE TABLE contact_notification_suppressions (
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
- reason TEXT NOT NULL CHECK(reason IN ('bounce','complaint','unsubscribe')),
+ reason TEXT NOT NULL CHECK(reason IN ('bounce','complaint','unsubscribe','provider')),
  created_at TEXT NOT NULL,
  PRIMARY KEY(user_id,address)
 );
@@ -1414,9 +1414,44 @@ CREATE TABLE contact_notification_outbox (
  expires_at TEXT NOT NULL,
  accepted_at TEXT,
  provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
- last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained')),
+ last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling')),
  CHECK((kind='new_message')=(submission_id IS NOT NULL)),
  CHECK((state IN ('accepted','bounced','complained'))=(accepted_at IS NOT NULL))
+);
+
+-- WH-036 exact Chat review of the owner's notification address (owner decision, October 4, 2026). The review id is the
+-- preparing chat turn; confirmation by a later turn replaces the project's destination atomically (contact_destination_review_apply).
+CREATE TABLE contact_destination_reviews (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
+ expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE
+);
+
+-- WH-036 spending ceiling: provider calls per UTC day. A send is refused (contact_send_ceiling) when the 32 most recent
+-- UTC days would exceed the day's ceiling (it can only be lowered), so any billing cycle of up to 31 days stays within it.
+CREATE TABLE contact_notification_send_ledger (
+ day TEXT PRIMARY KEY CHECK(length(day)=10),
+ sends INTEGER NOT NULL DEFAULT 0 CHECK(sends>=0),
+ ceiling INTEGER NOT NULL CHECK(ceiling BETWEEN 0 AND 100000)
+);
+
+-- WH-036 operator-reviewed reset of one permanent suppression (owner decision, October 4, 2026). Inserted only by the
+-- local operator CLI (tools/contact-suppression-reset.mjs) after a digest-pinned preview; the audit row is immutable.
+CREATE TABLE contact_notification_suppression_resets (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
+ suppression_reason TEXT NOT NULL CHECK(suppression_reason IN ('bounce','complaint','unsubscribe','provider')),
+ suppressed_at TEXT NOT NULL,
+ operator_ref TEXT NOT NULL CHECK(length(operator_ref) BETWEEN 1 AND 128),
+ reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
+ request_digest TEXT NOT NULL CHECK(length(request_digest)=64),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(user_id,address,suppressed_at)
 );
 
 CREATE TABLE backend_imports (
@@ -1955,6 +1990,7 @@ CREATE INDEX contact_notification_outbox_destination ON contact_notification_out
 CREATE INDEX contact_notification_outbox_user ON contact_notification_outbox(user_id,kind,created_at);
 CREATE INDEX contact_notification_outbox_expiry ON contact_notification_outbox(expires_at);
 CREATE INDEX contact_notification_destinations_address ON contact_notification_destinations(user_id,address);
+CREATE INDEX contact_destination_reviews_owner ON contact_destination_reviews(user_id,project_id);
 
 CREATE INDEX usage_review_owner_time ON usage_review_requests(user_id,created_at,id);
 
@@ -3627,8 +3663,44 @@ END;
 
 CREATE TRIGGER contact_suppression_immutable BEFORE UPDATE ON contact_notification_suppressions BEGIN SELECT RAISE(ABORT,'contact_suppression_final'); END;
 CREATE TRIGGER contact_suppression_delete BEFORE DELETE ON contact_notification_suppressions
-WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND NOT EXISTS(SELECT 1 FROM contact_notification_suppression_resets r WHERE r.user_id=OLD.user_id AND r.address=OLD.address AND r.suppressed_at=OLD.created_at)
 BEGIN SELECT RAISE(ABORT,'contact_suppression_final'); END;
+
+-- An operator reset must name the exact current suppression; it removes that suppression and the final-suppressed destination
+-- (refused inside a safety preservation hold by safety_hold_contact_destination_retained). The owner then sets and verifies again.
+CREATE TRIGGER contact_suppression_reset_insert BEFORE INSERT ON contact_notification_suppression_resets BEGIN
+ SELECT RAISE(ABORT,'contact_suppression_reset_stale') WHERE NOT EXISTS(SELECT 1 FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address AND created_at=NEW.suppressed_at AND reason=NEW.suppression_reason);
+END;
+CREATE TRIGGER contact_suppression_reset_immutable BEFORE UPDATE ON contact_notification_suppression_resets BEGIN SELECT RAISE(ABORT,'contact_suppression_reset_final'); END;
+CREATE TRIGGER contact_suppression_reset_apply AFTER INSERT ON contact_notification_suppression_resets BEGIN
+ DELETE FROM contact_notification_destinations WHERE user_id=NEW.user_id AND address=NEW.address AND state='suppressed';
+ DELETE FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address AND created_at=NEW.suppressed_at;
+END;
+
+CREATE TRIGGER contact_destination_review_insert BEFORE INSERT ON contact_destination_reviews BEGIN
+ SELECT RAISE(ABORT,'contact_destination_review_changed') WHERE NEW.status!='pending' OR NEW.confirmed_by IS NOT NULL OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
+END;
+CREATE TRIGGER contact_destination_review_identity BEFORE UPDATE ON contact_destination_reviews
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.address!=OLD.address OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied' OR NEW.confirmed_by IS NULL
+BEGIN SELECT RAISE(ABORT,'contact_destination_review_changed'); END;
+CREATE TRIGGER contact_destination_review_confirm BEFORE UPDATE ON contact_destination_reviews BEGIN
+ SELECT RAISE(ABORT,'contact_destination_review_changed') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id) OR NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'contact_destination_suppressed') WHERE EXISTS(SELECT 1 FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address) OR EXISTS(SELECT 1 FROM contact_notification_destinations WHERE project_id=NEW.project_id AND state='suppressed');
+END;
+-- The same address keeps its current state; a different address replaces the destination (its queued notices cascade) and starts unverified.
+CREATE TRIGGER contact_destination_review_apply AFTER UPDATE ON contact_destination_reviews BEGIN
+ DELETE FROM contact_notification_destinations WHERE project_id=NEW.project_id AND address!=NEW.address;
+ INSERT INTO contact_notification_destinations(id,user_id,project_id,address,created_at) SELECT NEW.id,NEW.user_id,NEW.project_id,NEW.address,strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE NOT EXISTS(SELECT 1 FROM contact_notification_destinations WHERE project_id=NEW.project_id);
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('contact-notify:'||NEW.id,NEW.user_id,NEW.project_id,'contact.notifications','Set the reviewed contact notification address (verification required)',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+
+CREATE TRIGGER contact_send_ledger_insert BEFORE INSERT ON contact_notification_send_ledger BEGIN
+ SELECT RAISE(ABORT,'contact_send_final') WHERE NEW.sends!=0;
+END;
+CREATE TRIGGER contact_send_ledger_update BEFORE UPDATE ON contact_notification_send_ledger BEGIN
+ SELECT RAISE(ABORT,'contact_send_final') WHERE NEW.day IS NOT OLD.day OR NEW.ceiling>OLD.ceiling OR NEW.sends<OLD.sends;
+ SELECT RAISE(ABORT,'contact_send_ceiling') WHERE NEW.sends>OLD.sends AND (SELECT coalesce(sum(sends),0) FROM contact_notification_send_ledger WHERE day>date(NEW.day,'-32 days') AND day<=NEW.day)-OLD.sends+NEW.sends>NEW.ceiling;
+END;
 
 -- Suppression is atomic with its effect: the destination becomes final-suppressed and unsent notices are cancelled.
 CREATE TRIGGER contact_suppression_apply AFTER INSERT ON contact_notification_suppressions BEGIN

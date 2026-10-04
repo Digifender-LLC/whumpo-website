@@ -19,4 +19,8 @@ interface Env {
   SUPPORT_HOURS?: string;
   SUPPORT_NOTIFICATION_PROVIDER?: string;
   SUPPORT_NOTIFICATION_REVIEW?: string;
+  // WH-036 owner activation of contact notices (docs/contact-forms.md). All three unset means inactive.
+  CONTACT_NOTIFICATION_PROVIDER?: string;
+  CONTACT_NOTIFICATION_REVIEW?: string;
+  CONTACT_EMAIL?: SendEmail;
 }

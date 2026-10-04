@@ -18,7 +18,7 @@ Rules for using this document:
 | Incident owner | The platform owner (the sole operator and sole tester). | Declares severity, authorizes any control in Section 2, and is the only person who may authorize new spend or a new service (Section 4). |
 | Operator | The same person, using the local checkout, Wrangler login and private `.secrets/` files. | No second operator, deputy or on-call rotation is documented. This is gap G1. |
 | Scribe | The operator, writing the Section 5 record as they go. | |
-| Customer communicator | The owner. | No outbound notification provider is selected ([WH-036](roadmap/backlog.md)); an in-app support page and saved responses exist ([Section 15](#15-support-hours-escalation-and-customer-communication)); the drafts in Section 14 are unsent templates. |
+| Customer communicator | The owner. | Cloudflare Email Service is selected for content-free contact notices but not activated, and no platform email for incidents exists ([WH-036](contact-forms.md#owner-notification-delivery-wh-036)); an in-app support page and saved responses exist ([Section 15](#15-support-hours-escalation-and-customer-communication)); the drafts in Section 14 are unsent templates. |
 | Legal/safety | Not established. | Required before a real cohort: restricted incident handling, NCMEC provider-reporting access and counsel ([content safety](content-safety.md)). Owner-deferred scanner work does not remove this. |
 
 ### Severity

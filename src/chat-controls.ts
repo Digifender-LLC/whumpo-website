@@ -16,6 +16,7 @@ export const confirmationControls = {
  backendForm:{verb:'confirm-backend-form',label:'Confirm the reviewed website form change'},
  directory:{verb:'confirm-directory',label:'Confirm the reviewed directory change'},
  contact:{verb:'confirm-contact',label:'Confirm the reviewed contact form change'},
+ contactNotification:{verb:'confirm-contact-notify',label:'Confirm the reviewed contact notification address'},
  version:{verb:'confirm-version-delete',label:'Delete the reviewed saved version'},
  photo:{verb:'confirm-photo-delete',label:'Delete the reviewed photo'},
 } as const;

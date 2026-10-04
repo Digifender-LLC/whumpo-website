@@ -38,6 +38,7 @@ function protectionMetadata(catalog){
  return {profiles,requirements};
 }
 const unlinkedOwnership={
+ contact_notification_send_ledger:'WH-036 platform-wide daily provider-call counters (no account, project or address) enforcing the owner spending ceiling; daily contact maintenance removes rows after 40 days.',
  identity_challenges:'Pre-account signup challenges and account-bound ceremonies have no FK. The current schema deletes matching account_id challenges before users deletion; unclaimed rows expire after five minutes and bounded cleanup removes them.',
  safety_cases:'Restricted case record keyed by subject account id without a foreign key, so ordinary account cascades cannot remove it (WH-015).',
  safety_case_findings:'Append-only case decisions owned through safety_cases, deliberately outside the account cascade.',

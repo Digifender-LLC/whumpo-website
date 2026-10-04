@@ -40,7 +40,7 @@ export async function contactPage(request:Request,env:Env,projectId:string,fetch
    }
    stage='save-message';
    await saveContact(env.DB,projectId,revision,{id:form.get('id'),name:form.get('name'),email:form.get('email'),message:form.get('message')});
-   return page('Message received','<p>Your message is in the site owner’s private inbox. No email was sent automatically.</p><p>You can close this page.</p>');
+   return page('Message received','<p>Your message is in the site owner’s private inbox. Its content was not emailed to anyone; the owner reads it in Whumpo.</p><p>You can close this page.</p>');
   }
   const html=`<p>Send a message to ${esc(target.name)}.</p><form method="post"><input type="hidden" name="id" value="${crypto.randomUUID()}"><input type="hidden" name="revision" value="${target.revision}"><label for="name">Name</label><input id="name" name="name" maxlength="100" autocomplete="name" required><label for="email">Email</label><input id="email" name="email" type="email" maxlength="254" autocomplete="email" required><label for="message">Message</label><textarea id="message" name="message" maxlength="2000" required></textarea><p class="note">Your name, email and message are visible to this site’s owner in Whumpo for up to 30 days. Messages are not sent to AI. Avoid passwords, payment details or other sensitive information.</p>${local?'':`<div class="cf-turnstile" data-sitekey="${esc(env.TURNSTILE_SITE_KEY)}" data-action="contact" data-cdata="${projectId}"></div><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`}<button type="submit">Send message</button></form>`;
   return request.method==='HEAD'?new Response(null,{headers}):page('Contact '+target.name,html);
