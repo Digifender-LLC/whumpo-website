@@ -1,0 +1,13 @@
+# Gradle and Android build outputs
+.gradle/
+.kotlin/
+build/
+/captures/
+# Machine-local SDK path; never commit it
+local.properties
+# IDE state
+.idea/
+*.iml
+# Signing material must never enter the repository
+*.jks
+*.keystore

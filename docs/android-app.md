@@ -96,7 +96,7 @@ Request notification permission in context and keep every core workflow availabl
 | Packet | Outcome | Prerequisites |
 | --- | --- | --- |
 | WH-081 | Freeze supported journeys, v1 operation contracts/fixtures, current-version admission and acceptance matrix against current source. **Contract frozen October 4, 2026** ([mobile-api-v1](mobile-api-v1.md)); owner decisions listed there remain open. | WH-105 interaction and WH-113 identity contracts, current source and live issue/dependency review. |
-| WH-082 | Native shell, branding, navigation, protected state, local/test build variants and reproducible CI checks. | WH-081. |
+| WH-082 | Native shell, branding, navigation, protected state, local/test build variants and reproducible CI checks. **Shell implemented in source October 4, 2026** ([build and checks](android-build.md)); app build/lint/instrumentation verified only in CI. Not identity, provider, signed-release or device acceptance. | WH-081. |
 | WH-083 | Passkeys, native API/session adapter, completed-enrollment browser return exchange and verified App Links; closes the [source gaps](mobile-api-v1.md#source-gaps-wh-083084-must-close). | WH-081, WH-115. |
 | WH-084 | Connected native Chat/project/review journey and admitted interactive forms with authenticated preview handoff and interruption recovery. | WH-082, WH-083, WH-106. |
 | WH-085 | Explicit photo/share intake and recoverable uploads under current safety rules. | WH-084. |
