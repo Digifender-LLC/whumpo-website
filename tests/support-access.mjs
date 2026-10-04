@@ -1,0 +1,141 @@
+import assert from 'node:assert/strict';
+import {databaseFixture} from './helpers/current-database.mjs';
+import {currentFixtureModules} from './helpers/current-modules.mjs';
+import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {runUsageReview} from '../tools/usage-review-input.mjs';
+Error.stackTraceLimit=0;
+// WH-035: independent support access, private tenant boundaries, distinct saved/delivered/read states, provider gating.
+const modules=await currentFixtureModules(['src/index.ts','src/support.ts','src/support-delivery.ts','src/support-shape.ts','src/usage-review-requests.ts']);
+const worker=(await modules.module('src/index.ts')).default,support=await modules.module('src/support.ts'),delivery=await modules.module('src/support-delivery.ts'),shape=await modules.module('src/support-shape.ts'),service=await modules.module('src/usage-review-requests.ts');
+const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID(),run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('No network call is permitted');};
+// No AI key, no provider, no support values: the baseline outage environment.
+const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){throw Error('No background work is permitted');}};
+let cases=0;async function test(name,fn){try{await fn();cases++;}catch(e){console.error(name,e);throw e;}}
+async function http(o,path,method='GET',body,status=200,{origin='https://whumpo.com',config=env}={}){
+ const response=await worker.fetch(new Request('https://whumpo.com'+path,{method,headers:{...(o?{cookie:'__Host-whumpo_session='+o.auth.token}:{}),origin,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})}),config,ctx);
+ assert.equal(response.status,status,await response.clone().text());assert.match(response.headers.get('cache-control'),/no-store/);return response.json();
+}
+const api=(o,rest='',...args)=>http(o,'/api/support/v1'+rest,...args);
+async function owner(){const auth=await workspaceFixture(db,modules.identity);return {auth,user:auth.account};}
+const old=new Date(Date.now()-3*3600000).toISOString();
+try{
+ // A has not finished onboarding, has a stuck Chat turn and a held AI request, and no AI provider exists.
+ const a=await owner(),b=await owner(),stuckTurn=id(),heldAI=id();
+ await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'PRIVATE-A-CHAT','',?,'ai','pending')",stuckTurn,a.user,old);
+ await run("INSERT INTO standard_ai_requests(id,user_id,request_hash,state,created_at,updated_at) VALUES(?,?,?,'reserved',?,?)",heldAI,a.user,'a'.repeat(64),old,old);
+ const bTurn=id();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'PRIVATE-B-CHAT','',?,'ai','pending')",bTurn,b.user,old);
+ await run("INSERT INTO fair_use_reviews(id,user_id,policy_version,plan_id,category,opened_by,context,observation_json) VALUES(?,?,'v','starter','project_churn','PRIVATE-FAIR-USE-OPERATOR','PRIVATE-FAIR-USE-NOTE',?)",id(),a.user,JSON.stringify({version:1,entitlement:{planId:'starter'},metrics:{},asOf:'2026-10-04T00:00:00Z'}));
+
+ await test('Chat and onboarding are closed but support, status links and stuck operations stay available',async()=>{
+  const chat=await http(a,'/api/chat','GET',undefined,409);assert.equal(chat.code,'onboarding_required');assert.equal(chat.support,'/workspace/support?ref=status%3Aonboarding_required');
+  await http(a,'/api/workspace/dashboard','GET',undefined,409);
+  const overview=await api(a);assert.equal(overview.version,1);assert.deepEqual(overview.requests,[]);
+  assert.deepEqual(overview.operations.map(o=>o.family).sort(),['chat','standard_ai']);
+  const chatOp=overview.operations.find(o=>o.family==='chat');assert.equal(chatOp.id,stuckTurn);assert.equal(chatOp.needsAttention,true);assert.ok(chatOp.ageMinutes>=179);assert.equal(chatOp.reference,'operation:chat:'+stuckTurn);
+  assert.ok(!JSON.stringify(overview).includes('PRIVATE-A-CHAT'),'operation list never includes Chat content');
+  assert.deepEqual(overview.statusLinks.map(l=>l.code),['onboarding_required','chat_unavailable','usage_limit']);assert.ok(overview.statusLinks.every(l=>l.href.startsWith('/workspace/support?ref=status%3A')));
+  // Every status link resolves to a structured reference the support route accepts.
+  for(const link of overview.statusLinks)assert.equal(shape.parseSupportReference(decodeURIComponent(new URL(link.href,'https://whumpo.com').searchParams.get('ref'))).code,link.code);
+  assert.deepEqual(overview.config,{hours:null,contact:null,notifications:{enabled:false}},'No hours, address or provider is invented');
+  assert.equal((await row('SELECT count(*) n FROM chat_turns WHERE user_id=?',a.user)).n,1,'Support reads create no Chat turn');
+ });
+ await test('another account sees only its own operations',async()=>{
+  const overview=await api(b);assert.deepEqual(overview.operations.map(o=>o.id),[bTurn]);assert.ok(!JSON.stringify(overview).includes(heldAI));
+ });
+ await test('strict, authenticated, same-origin, idempotent submission',async()=>{
+  await api(null,'','GET',undefined,401);
+  const input={version:1,id:id(),kind:'help',statement:'PRIVATE-HELP-STATEMENT: my reply never finished.',reference:'operation:chat:'+stuckTurn};
+  await api(a,'/requests','POST',input,403,{origin:'https://foreign.invalid'});
+  for(const bad of [{...input,extra:true},{...input,version:2},{...input,kind:'other'},{...input,id:'nope'},{...input,statement:'  '},{...input,statement:'x'.repeat(951)},{...input,statement:'bad\u0000text'},{...input,reference:'free text'},{...input,reference:'status:unknown'},{...input,reference:'operation:chat:not-a-uuid'}])await api(a,'/requests','POST',bad,400);
+  await api(a,'/requests?x=1','POST',input,400);
+  await api(a,'/requests','POST',{...input,reference:'operation:chat:'+bTurn},404);
+  assert.equal((await row('SELECT count(*) n FROM usage_review_requests')).n,0,'Rejected requests save nothing');
+  const first=await api(a,'/requests','POST',input);assert.equal(first.replayed,false);assert.equal(first.request.state,'open');assert.equal(first.request.response.saved,false);assert.equal(first.request.read.state,'not_applicable');
+  assert.equal((await api(a,'/requests','POST',input)).replayed,true);
+  await api(a,'/requests','POST',{...input,statement:'A different statement'},409);
+  await api(a,'/requests','POST',{...input,id:id()},409);
+  const usage={version:1,id:id(),kind:'usage_review',statement:'PRIVATE-USAGE-STATEMENT: I maintain client sites.',reference:'status:usage_limit'};
+  assert.equal((await api(a,'/requests','POST',usage)).request.kind,'usage_review');
+  await api(a,'/requests','POST',{...usage,id:id()},409);
+  assert.equal((await row('SELECT count(*) n FROM chat_turns WHERE user_id=? AND id IN (?,?)',a.user,input.id,usage.id)).n,0,'No Chat turn is created');
+  const row2=await row('SELECT source,kind FROM usage_review_requests WHERE id=?',usage.id);assert.deepEqual({...row2},{source:'support',kind:'usage_review'});
+  a.help=input;a.usage=usage;
+ });
+ await test('cross-tenant tickets stay private',async()=>{
+  await api(b,'/requests/'+a.help.id,'GET',undefined,404);await api(b,'/requests/'+a.help.id+'/read','POST',{version:1},404);
+  await api(b,'/requests','POST',{...a.help,id:id()},404,{});
+  assert.deepEqual((await api(b)).requests,[]);
+  // Reusing A's ID is indistinguishable from a conflict and exposes nothing.
+  const clash=await api(b,'/requests','POST',{version:1,id:a.help.id,kind:'help',statement:'mine'},409);assert.ok(!JSON.stringify(clash).includes('PRIVATE'));
+  assert.equal((await row('SELECT user_id FROM usage_review_requests WHERE id=?',a.help.id)).user_id,a.user);
+ });
+ await test('operator queue, preview-bound answer, and saved/delivered/read are three states',async()=>{
+  const queue=await runUsageReview(service,db,{action:'queue',state:'open'});assert.equal(queue.queue.length,2);assert.ok(queue.queue.every(r=>r.user_id===a.user&&r.delivery_state===null));assert.deepEqual(queue.queue.map(r=>r.created_at),[...queue.queue.map(r=>r.created_at)].sort());
+  const answer={action:'answer',account:a.user,id:a.help.id,response:'Visible reply: we read your report.',operator:'PRIVATE-OPERATOR-IDENTITY'};
+  const preview=await runUsageReview(service,db,answer);assert.equal(preview.preview,true);
+  assert.equal((await api(a,'/requests/'+a.help.id)).request.state,'open');
+  await runUsageReview(service,db,answer,preview.applyDigest);
+  const saved=(await api(a,'/requests/'+a.help.id)).request;
+  assert.equal(saved.response.saved,true);assert.equal(saved.delivery.state,'none','No provider: nothing was delivered externally');assert.equal(saved.read.state,'unread');assert.equal(saved.publicResponse,answer.response);
+  assert.equal((await api(a,'/requests/'+a.help.id)).request.read.state,'unread','Fetching a request is not a read receipt');
+  const read=(await api(a,'/requests/'+a.help.id+'/read','POST',{version:1})).request;assert.equal(read.read.state,'read');assert.equal(read.delivery.state,'none');assert.equal(read.response.saved,true);
+  assert.deepEqual((await api(a,'/requests/'+a.help.id+'/read','POST',{version:1})).request.read,read.read,'Read receipt is idempotent');
+  await api(a,'/requests/'+a.help.id+'/read','POST',{version:1,extra:1},400);
+  const open=(await api(a,'/requests/'+a.usage.id+'/read','POST',{version:1})).request;assert.equal(open.read.state,'not_applicable','An unanswered request cannot be marked read');
+  await assert.rejects(()=>run("UPDATE usage_review_requests SET customer_read_at=NULL WHERE id=?",a.help.id),/immutable/);
+  const text=JSON.stringify([saved,read,await api(a)]);for(const secret of ['PRIVATE-OPERATOR','PRIVATE-FAIR-USE','answered_by','PRIVATE-B-CHAT','user_id'])assert.ok(!text.includes(secret),secret);
+  const answered=await runUsageReview(service,db,{action:'queue',state:'answered'});assert.equal(answered.queue.length,1);assert.ok(answered.queue[0].customer_read_at);
+ });
+ await test('the existing Chat path still sees only usage reviews and records a read',async()=>{
+  const list=await service.listUsageReviewRequests(db,a.user,'usage_review');assert.deepEqual(list.map(r=>r.id),[a.usage.id]);
+  assert.equal((await service.listUsageReviewRequests(db,a.user)).length,2);
+ });
+ await test('external notification needs a selected, implemented and reviewed provider',async()=>{
+  const settings=env=>support.supportConfig(env,['fixture-provider']).settings;
+  assert.equal(settings({}),null);assert.equal(settings({SUPPORT_NOTIFICATION_PROVIDER:'fixture-provider'}),null,'selected but not reviewed');assert.equal(settings({SUPPORT_NOTIFICATION_REVIEW:'review-1'}),null,'reviewed but not selected');
+  assert.equal(settings({SUPPORT_NOTIFICATION_PROVIDER:'other',SUPPORT_NOTIFICATION_REVIEW:'review-1'}),null,'not implemented');
+  assert.equal(support.supportConfig({SUPPORT_NOTIFICATION_PROVIDER:'x',SUPPORT_NOTIFICATION_REVIEW:'r'}).settings,null,'No provider is implemented in the repository');
+  assert.deepEqual(settings({SUPPORT_NOTIFICATION_PROVIDER:'fixture-provider',SUPPORT_NOTIFICATION_REVIEW:'review-1'}),{provider:'fixture-provider',review:'review-1'});
+  let sent=0;const result=await delivery.runSupportDelivery(db,null,async()=>{sent++;return {accepted:true};});assert.deepEqual(result,{enabled:false,queued:0,delivered:0,retried:0,failed:0,cancelled:0});assert.equal(sent,0);assert.equal((await row('SELECT count(*) n FROM support_deliveries')).n,0);
+  // Operator-supplied hours/contact appear only when set, and as plain text.
+  const configured=await http(a,'/api/support/v1','GET',undefined,200,{config:{...env,SUPPORT_HOURS:'OWNER-SUPPLIED-HOURS',SUPPORT_CONTACT:'OWNER-SUPPLIED-CONTACT',SUPPORT_NOTIFICATION_PROVIDER:'fixture-provider',SUPPORT_NOTIFICATION_REVIEW:'r'}});
+  assert.deepEqual(configured.config,{hours:'OWNER-SUPPLIED-HOURS',contact:'OWNER-SUPPLIED-CONTACT',notifications:{enabled:false}},'Unimplemented provider keeps notifications off');
+ });
+ await test('delivery retries are bounded, content-free and distinct from saved and read',async()=>{
+  const settings={provider:'fixture-provider',review:'review-1'},c=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",c.user);
+  async function answered(who,text='Reply'){const request={version:1,id:id(),kind:'help',statement:'PRIVATE-DELIVERY-STATEMENT'};await api(who,'/requests','POST',request);await service.answerUsageReview(db,who.user,request.id,text+' PRIVATE-DELIVERY-REPLY','PRIVATE-DELIVERY-OPERATOR');return request.id;}
+  const first=await answered(c),t0=new Date(),seen=[];
+  let mode='down';const sender=async n=>{seen.push(n);return mode==='down'?{accepted:false,retryable:true}:mode==='reject'?{accepted:false,retryable:false}:mode==='throw'?(()=>{throw Error('PRIVATE-PROVIDER-ERROR');})():{accepted:true};};
+  let r=await delivery.runSupportDelivery(db,settings,sender,{now:t0});assert.equal(r.queued,1);assert.equal(r.retried,1);
+  let state=await row('SELECT state,attempts,last_error FROM support_deliveries WHERE request_id=?',first);assert.deepEqual({...state},{state:'queued',attempts:1,last_error:'unavailable'});
+  assert.equal((await api(c,'/requests/'+first)).request.delivery.state,'queued');assert.equal((await api(c,'/requests/'+first)).request.response.saved,true);
+  r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+60000)});assert.equal(seen.length,1,'Not retried before its backoff time');
+  mode='throw';r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+6*60000)});assert.equal(r.retried,1);assert.equal((await row('SELECT attempts FROM support_deliveries WHERE request_id=?',first)).attempts,2);
+  mode='up';r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+30*60000)});assert.equal(r.delivered,1);
+  let seenView=(await api(c,'/requests/'+first)).request;assert.equal(seenView.delivery.state,'delivered');assert.equal(seenView.read.state,'unread','Delivery is not a read receipt');
+  r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+24*3600000)});assert.equal(r.delivered+r.retried+r.failed,0,'A delivered response is never sent again');
+  await assert.rejects(()=>run("UPDATE support_deliveries SET state='queued' WHERE request_id=?",first),/final/);
+  for(const n of seen){assert.deepEqual(Object.keys(n).sort(),['accountId','recipient','requestId','template']);assert.ok(!JSON.stringify(n).includes('PRIVATE'));}
+  // Rejection is terminal; exhaustion after the bounded number of attempts is terminal.
+  const second=await answered(c);mode='reject';r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+48*3600000)});assert.equal(r.failed,1);
+  assert.equal((await row('SELECT state,last_error FROM support_deliveries WHERE request_id=?',second)).last_error,'rejected');assert.equal((await api(c,'/requests/'+second)).request.delivery.state,'failed');assert.equal((await api(c,'/requests/'+second)).request.response.saved,true);
+  const third=await answered(c);mode='down';let at=t0.getTime()+72*3600000,failed=0;for(let i=0;i<6&&!failed;i++){failed+=(await delivery.runSupportDelivery(db,settings,sender,{now:new Date(at)})).failed;at+=7*3600000;}
+  assert.equal(failed,1);assert.deepEqual({...await row('SELECT attempts,last_error FROM support_deliveries WHERE request_id=?',third)},{attempts:delivery.maxSupportDeliveryAttempts,last_error:'exhausted'});
+  // A response read before delivery is cancelled, and a late provider enablement never notifies readers.
+  const fourth=await answered(c);await api(c,'/requests/'+fourth+'/read','POST',{version:1});mode='up';const before=seen.length;
+  r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(at+86400000)});assert.equal(seen.length,before);assert.equal((await row('SELECT count(*) n FROM support_deliveries WHERE request_id=?',fourth)).n,0);
+  // Concurrent drains cannot double send one attempt.
+  const fifth=await answered(c);mode='up';let sends=0;const counting=async()=>{sends++;return {accepted:true};};
+  await Promise.all([delivery.runSupportDelivery(db,settings,counting,{now:new Date(at+2*86400000)}),delivery.runSupportDelivery(db,settings,counting,{now:new Date(at+2*86400000)})]);assert.equal(sends,1,'One claim wins');assert.equal((await row('SELECT state FROM support_deliveries WHERE request_id=?',fifth)).state,'delivered');
+ });
+ await test('outage and deletion: support survives Chat failure; account deletion cascades',async()=>{
+  const chat=await worker.fetch(new Request('https://whumpo.com/api/chat',{method:'POST',headers:{cookie:'__Host-whumpo_session='+a.auth.token,origin:'https://whumpo.com','content-type':'application/json'},body:JSON.stringify({id:id(),revision:0,content:'hello'})}),env,ctx);
+  assert.equal(chat.status,409);
+  assert.equal((await api(a)).requests.length,2);
+  await db.prepare('DELETE FROM users WHERE id=?').bind(a.user).run();
+  assert.equal((await row('SELECT count(*) n FROM usage_review_requests WHERE user_id=?',a.user)).n,0);
+ });
+ assert.equal(network,0);
+ console.log('Support access passed ('+cases+' cases): identity-only access outside Chat/onboarding, own stuck-operation inventory, structured status links, strict idempotent submission, cross-tenant and internal-evidence privacy, preview-bound operator response, distinct saved/delivered/read states, provider gating, bounded content-free delivery retries and account-deletion cascade.');
+}finally{globalThis.fetch=originalFetch;await fixture.close();}

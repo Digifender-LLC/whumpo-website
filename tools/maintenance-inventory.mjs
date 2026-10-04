@@ -40,6 +40,9 @@ export const backlogInventory={
  health_budget:aged('site_health_budget','day','+63 days'),
  backup_unknown:queue('github_backups',"state IN ('dispatching','uncertain')",'dispatched_at',600000),
  dns_unknown:queue('cloudflare_dns_actions',"state IN ('sending','uncertain')",'created_at',600000),
+ // Internal attention thresholds only: they promise customers no response time.
+ support_open:queue('usage_review_requests',"state='open'",'created_at',3*daily),
+ support_delivery:queue('support_deliveries',"state='queued'",'next_attempt_at',3600000),
 };
 export const operationInventory={
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},

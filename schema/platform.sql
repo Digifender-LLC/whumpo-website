@@ -1248,16 +1248,37 @@ CREATE TABLE standard_ai_requests (
 );
 
 CREATE TABLE usage_review_requests (
- id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL DEFAULT 'usage_review' CHECK(kind IN ('usage_review','help')),
+ source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support')),
+ reference TEXT CHECK(reference IS NULL OR length(reference) BETWEEN 1 AND 200),
  statement TEXT NOT NULL CHECK(length(statement) BETWEEN 1 AND 950),
  created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  state TEXT NOT NULL DEFAULT 'open' CHECK(state IN ('open','answered')),
  public_response TEXT CHECK(length(public_response) BETWEEN 1 AND 2000),
  answered_by TEXT CHECK(length(answered_by) BETWEEN 1 AND 100),
  answered_at TEXT,
- CHECK((state='open' AND public_response IS NULL AND answered_by IS NULL AND answered_at IS NULL) OR
-       (state='answered' AND public_response IS NOT NULL AND answered_by IS NOT NULL AND answered_at IS NOT NULL))
+ customer_read_at TEXT,
+ CHECK((state='open' AND public_response IS NULL AND answered_by IS NULL AND answered_at IS NULL AND customer_read_at IS NULL) OR
+       (state='answered' AND public_response IS NOT NULL AND answered_by IS NOT NULL AND answered_at IS NOT NULL)),
+ CHECK(source='support' OR (kind='usage_review' AND reference IS NULL))
+);
+
+-- External notification of a saved response. A row exists only when an owner-selected,
+-- reviewed provider is configured; it records provider acceptance, never the content or customer read.
+CREATE TABLE support_deliveries (
+ request_id TEXT PRIMARY KEY REFERENCES usage_review_requests(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL CHECK(length(provider) BETWEEN 1 AND 60),
+ review TEXT NOT NULL CHECK(length(review) BETWEEN 1 AND 200),
+ state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','delivered','failed','cancelled')),
+ attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 20),
+ created_at TEXT NOT NULL,
+ next_attempt_at TEXT NOT NULL,
+ delivered_at TEXT,
+ last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted')),
+ CHECK((state='delivered' AND delivered_at IS NOT NULL) OR (state!='delivered' AND delivered_at IS NULL))
 );
 
 CREATE TABLE backend_imports (
@@ -1762,7 +1783,11 @@ CREATE INDEX backend_nominations_owner ON backend_nominations(user_id,created_at
 
 CREATE INDEX standard_ai_owner_time ON standard_ai_requests(user_id,created_at,id);
 
-CREATE UNIQUE INDEX usage_review_one_open ON usage_review_requests(user_id) WHERE state='open';
+CREATE UNIQUE INDEX usage_review_one_open ON usage_review_requests(user_id,kind) WHERE state='open';
+
+CREATE INDEX usage_review_queue ON usage_review_requests(state,created_at,id);
+
+CREATE INDEX support_delivery_due ON support_deliveries(state,next_attempt_at);
 
 CREATE INDEX usage_review_owner_time ON usage_review_requests(user_id,created_at,id);
 
@@ -3258,16 +3283,28 @@ WHEN OLD.ai_context_allowed=0 AND NEW.ai_context_allowed!=0
 BEGIN SELECT RAISE(ABORT,'private_chat_context'); END;
 
 CREATE TRIGGER usage_review_insert BEFORE INSERT ON usage_review_requests BEGIN
- SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.state!='open' OR NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0);
+ SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.state!='open' OR NEW.customer_read_at IS NOT NULL OR NOT (
+  (NEW.source='chat' AND EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0))
+  OR (NEW.source='support' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id)));
 END;
 
 CREATE TRIGGER usage_review_update BEFORE UPDATE ON usage_review_requests BEGIN
- SELECT RAISE(ABORT,'usage_review_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.statement IS NOT OLD.statement OR NEW.created_at IS NOT OLD.created_at OR OLD.state!='open' OR NEW.state!='answered';
+ SELECT RAISE(ABORT,'usage_review_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.kind IS NOT OLD.kind OR NEW.source IS NOT OLD.source OR NEW.reference IS NOT OLD.reference OR NEW.statement IS NOT OLD.statement OR NEW.created_at IS NOT OLD.created_at OR NOT (
+  (OLD.state='open' AND NEW.state='answered' AND NEW.customer_read_at IS NULL)
+  OR (OLD.state='answered' AND NEW.state='answered' AND OLD.customer_read_at IS NULL AND NEW.customer_read_at IS NOT NULL AND NEW.public_response IS OLD.public_response AND NEW.answered_by IS OLD.answered_by AND NEW.answered_at IS OLD.answered_at));
 END;
 
 CREATE TRIGGER usage_review_delete BEFORE DELETE ON usage_review_requests
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
 BEGIN SELECT RAISE(ABORT,'usage_review_immutable'); END;
+
+CREATE TRIGGER support_delivery_insert BEFORE INSERT ON support_deliveries BEGIN
+ SELECT RAISE(ABORT,'support_delivery_initial') WHERE NEW.state!='queued' OR NEW.attempts!=0 OR NOT EXISTS(SELECT 1 FROM usage_review_requests r WHERE r.id=NEW.request_id AND r.user_id=NEW.user_id AND r.state='answered');
+END;
+
+CREATE TRIGGER support_delivery_update BEFORE UPDATE ON support_deliveries BEGIN
+ SELECT RAISE(ABORT,'support_delivery_final') WHERE OLD.state!='queued' OR NEW.request_id IS NOT OLD.request_id OR NEW.user_id IS NOT OLD.user_id OR NEW.provider IS NOT OLD.provider OR NEW.review IS NOT OLD.review OR NEW.created_at IS NOT OLD.created_at OR NEW.attempts<OLD.attempts;
+END;
 
 CREATE TRIGGER backend_import_owner BEFORE INSERT ON backend_imports WHEN NOT EXISTS(
  SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id

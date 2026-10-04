@@ -34,7 +34,7 @@ The operator report labels an observed run `stalled` after 15 minutes and a sche
 
 ## Backlogs and recovery
 
-The report covers **32 queues**, including expired GitHub staging leases, visitor deletion reviews and unresolved OAuth exchanges. Exchanges older than ten minutes require attention; the age threshold never expires an uncertain provider outcome or authorizes key activation. This new queue is current-source only until the WH-117 coordinated test cutover. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
+WH-035 adds two read-only queues, `support_open` (open support/usage-review requests, 72-hour internal attention threshold) and `support_delivery` (queued external notifications, empty unless a provider is enabled); the inventory test now checks 36 queries. The report covers **32 queues**, including expired GitHub staging leases, visitor deletion reviews and unresolved OAuth exchanges. Exchanges older than ten minutes require attention; the age threshold never expires an uncertain provider outcome or authorizes key activation. This new queue is current-source only until the WH-117 coordinated test cutover. Retention ages begin at deletion eligibility, rather than the original write time; counts include only eligible records. Each query uses one explicit observation timestamp. Empty queues, unknown ages and query failures remain distinct.
 
 | Group | Covered work | Attention rule |
 | --- | --- | --- |

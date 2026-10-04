@@ -1,6 +1,8 @@
 import {projectRuntime} from './runtime-lane';
 import {safetyService,serviceSafetyReviews,readServiceSafetyReview,prepareServiceSafetyReview,confirmServiceSafetyReview} from './service-safety';
 import {listSavedWork,readSavedWork} from './saved-work';
+import {supportConfig,supportRoute} from './support';
+import {supportLink} from './support-shape';
 import {siteSafetyInventory,siteSafetyReviews,readSiteSafetyReview,prepareSiteSafetyReview,confirmSiteSafetyReview} from './site-safety';
 import {connectionStartInput,connectionReturnPath,readConnectionHandoff} from './chat-interactions/connection-handoff';
 import {isConnectionProvider} from './connection-handoff-shape';
@@ -151,7 +153,12 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   const {pathname}=new URL(request.url),method=request.method;
   const transport=workspaceTransport(env.DB,user.id);
   // Check persisted completion before reading workspace data or dispatching Chat work.
-  if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before opening your workspace.',code:'onboarding_required'},409);
+  // Support is identity-only: it is routed before the first-project gate and shares no Chat, AI budget or onboarding dependency.
+  if(pathname==='/api/support/v1'||pathname.startsWith('/api/support/v1/')){
+    const data=method==='POST'?await body(request):undefined;
+    return json(await supportRoute(env.DB,user.id,method,pathname,new URL(request.url).search,data,supportConfig(env)));
+  }
+  if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before opening your workspace.',code:'onboarding_required',support:supportLink('onboarding_required')},409);
   if(pathname==='/api/onboarding'){
     if(method==='GET')return json(await readOnboarding(env.DB,user.id));
     if(method==='PUT')return json(await saveOnboarding(env.DB,user.id,(await body(request))??{}));
@@ -544,7 +551,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
       if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)return error(429,'Too many recovery changes. Try again in a minute.');
     }
     const result = await (explicitAction?sendChatControl:sendConversation)(env.DB, user.id, data, configuredAI(env),{transport,githubTransport:transport,background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
-    return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
+    return result.error ? json({error:result.error,...(result.status===429?{support:supportLink('usage_limit')}:result.status===503?{support:supportLink('chat_unavailable')}:{})},result.status) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "GET" && pathname === "/api/projects") {
     const { results } = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles,created_at,updated_at FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 100")
