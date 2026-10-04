@@ -63,6 +63,7 @@ const metrics={
  pendingScanTickets:['photo_scan_tickets','user_id',"state='reserved'"],
  unresolvedStandardAI:['standard_ai_requests','user_id',"state IN ('reserved','dispatched','uncertain')"],
  usedInvitations:['invitations','used_by'],
+ funnelEvents:['funnel_events','user_id'],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

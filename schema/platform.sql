@@ -822,6 +822,9 @@ CREATE TABLE user_profiles (
  name TEXT NOT NULL DEFAULT '' CHECK(length(name)<=80),
  about_me TEXT NOT NULL DEFAULT '' CHECK(length(about_me)<=1200),
  share_context INTEGER NOT NULL DEFAULT 0 CHECK(share_context IN(0,1)),
+ -- WH-025 opt-in for content-free funnel measurements; withdrawal deletes recorded events.
+ measurement_consent INTEGER NOT NULL DEFAULT 0 CHECK(measurement_consent IN(0,1)),
+ measurement_consented_at TEXT CHECK((measurement_consent=1)=(measurement_consented_at IS NOT NULL)),
  theme TEXT NOT NULL DEFAULT 'system' CHECK(theme IN('system','light','dark')),
  photo TEXT CHECK(photo IS NULL OR length(photo)<=45000)
 , avatar_id TEXT NOT NULL DEFAULT 'cloud' CHECK(avatar_id IN ('cloud','sun','moon','leaf','star','planet')), photo_digest TEXT CHECK(photo_digest IS NULL OR length(photo_digest)=64));
@@ -1341,7 +1344,7 @@ CREATE TABLE content_risk_reversals (
 );
 
 CREATE TABLE maintenance_health (
- job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','applications','contacts','photos','github','cloudflare')),
+ job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','applications','contacts','photos','github','cloudflare')),
  run_id TEXT NOT NULL,
  started_at INTEGER NOT NULL CHECK(started_at>=0),
  finished_at INTEGER,

@@ -14,13 +14,14 @@ The [WH-052 background-job decision](background-jobs.md) retains this scheduler 
 | health | Hourly at :47 | Check due published sites and expire old health evidence |
 | fair_use | Daily 03:17 | Remove expired observations of removed projects |
 | traffic | Daily 03:17 | Expire old aggregate traffic counters |
+| funnel | Hourly at :47 and daily 03:17 | Prune [funnel measurements](funnel-metrics.md) older than 180 days, then derive consent-gated, content-free events from existing receipts (bounded, idempotent) |
 | applications | Daily 03:17 | Remove stale migration documents, deletion receipts and daily counters |
 | contacts | Daily 03:17 | Expire submissions and delivery receipts |
 | photos | Daily 03:17 | Process private object cleanup and bounded orphan detection |
 | github | Daily 03:17, when configured | Expire OAuth state/tokens and retry pending revocations |
 | cloudflare | Daily 03:17, when configured | Retire abandoned staged authorization and retry pending revocations |
 
-This wraps the existing [scheduled handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/); it does not introduce more frequent jobs, new provider calls or new services. The complete current schema stores at most eleven telemetry rows, one per allowlisted job. Each invocation writes a start record and a terminal record, plus the last-success timestamp for completed passes: at most 315 D1 write statements per day for 24 hourly and one daily invocation of the current schedule. Account allowance/actual row charges still require observation; no new recurring minimum is enabled.
+This wraps the existing [scheduled handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/); it does not introduce more frequent jobs, new provider calls or new services. The complete current schema stores at most thirteen telemetry rows, one per allowlisted job. Each invocation writes a start record and a terminal record, plus the last-success timestamp for completed passes. The original estimate of at most 315 D1 write statements per day predates the hourly `chat_drafts` and `funnel` jobs; each adds at most three telemetry writes per invocation (about 75 per day). The WH-025 `funnel` job also runs one bounded delete and one derivation batch per invocation and writes rows only for consenting accounts. Account allowance/actual row charges still require observation; no new recurring minimum is enabled.
 
 ## Meaning and failure behavior
 

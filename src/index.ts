@@ -35,6 +35,7 @@ import {listCMSMedia} from './cms-media';
 import {cmsExport} from './cms-export';
 import {readProjectDetails,saveProjectDetails} from './project-details';
 import {cleanupTraffic} from './site-traffic';
+import {maintainFunnelEvents} from './funnel-metrics/events';
 import {compareBackends} from './backend-diff';
 import {cleanupAppLifecycle} from './app-lifecycle';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage} from './app-pages';
@@ -556,12 +557,13 @@ export default {
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
-      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)}]);return;
+      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
     }
     await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
       {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:()=>cleanupTraffic(env.DB)},
+      {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
       {name:'applications',run:()=>cleanupAppLifecycle(env.DB)},
       {name:'contacts',run:()=>cleanupContacts(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
