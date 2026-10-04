@@ -1,6 +1,7 @@
 // WH-074 pooled build job envelope: two-tenant contamination/cache separation, output ownership, cancellation,
 // expiry, lease isolation, recorded cleanup failure, bounded capacity, owner session replay/concurrency, no visitor or
-// workflow wake path, and deterministic diagnostics before any optional model call. Uses the actual QuickJS runtime.
+// workflow wake path, deterministic diagnostics before any optional model call, and the WH-050 operator `build` freeze.
+// Uses the actual QuickJS runtime.
 import {fixtureExtensionPlan} from './helpers/composition.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
@@ -12,6 +13,7 @@ import {dirname,resolve} from 'node:path';
 import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
+import {runContainment,containmentInput} from '../tools/operator-containment-input.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture(),db=store.db,sql=store.sql;
 const {buildJobs:J,backendChat:{backendAction:rawBackendAction,backendChatCommand},appActivation:{prepareApplication},sendAIChat,readChat,sendChat}=m;
 const owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user),id=()=>crypto.randomUUID(),sha=x=>createHash('sha256').update(x).digest('hex');
@@ -175,5 +177,38 @@ try{
  const repaired=(await readChat(scope(hana),hana)).turns.find(t=>t.id===repair);assert.equal(repaired?.application_confirmation_id,repair);
  await sendChat(scope(hana),hana,{id:id(),revision:(await readChat(scope(hana),hana)).state.revision,content:'/application-build '+hT});assert.equal(modelCalls,1,'Status reads never wake the model');
 
- console.log('Build jobs passed: two-tenant fresh runtime memory, shared toolchain vs private artifact keys, output ownership, cancellation before/during/after execution, lease isolation, single spend, expiry, recorded cleanup failure holding capacity, per-project/account/pool bounds, owner replay/concurrency/lost lease, no visitor/workflow/scheduled wake path, and deterministic diagnostics before an optional model repair.');
+ // 11. WH-050 operator `build` freeze: refuses new jobs and cancels running/unpublished ones in the frozen scope only.
+ const ivy=await account(),jack=await account(),hours=n=>new Date(Date.now()+n*3600000).toISOString(),freeze=(subject,extra={})=>({action:'contain',id:id(),subject,scopes:{build:'freeze'},expiresAt:hours(2),operator:'human:fixture',reason:'Synthetic build containment',...extra});
+ async function contain(request){const preview=await runContainment(db,request);assert.equal(preview.preview,true);return runContainment(db,request,preview.applyDigest);}
+ for(const bad of [{build:1},{build:0},{build:'stop'}])assert.throws(()=>containmentInput(JSON.stringify(freeze({kind:'project',id:id()},{scopes:bad}))),/Invalid operator containment request/,'Build is freeze-only; limits stay as built');
+ const running=await draft(ivy),runningLease=await running.admit(),sibling=await draft(ivy),siblingLease=await sibling.admit(),neighbour=await draft(jack),neighbourLease=await neighbour.admit();
+ const projectFreeze=freeze({kind:'project',id:running.p});await contain(projectFreeze);
+ assert.equal((await job(running.t)).state,'cancelled','A project freeze cancels its running job in the same write');assert.ok((await job(running.t)).finished_at);
+ assert.equal(await J.dispatchBuildJob(db,runningLease),false);assert.equal(await J.finishBuildJob(db,runningLease,'failed',[]),false);
+ assert.equal((await job(sibling.t)).state,'running','Another project of the same account is untouched');assert.equal((await job(neighbour.t)).state,'running','Another tenant is untouched');
+ await J.reconcileBuildJobs(db);assert.deepEqual((await cleanups(running.t)).map(c=>c.reason),['not-dispatched'],'Cleanup is recorded by the deterministic reconciler');
+ await assert.rejects((await draft(ivy,running.p)).admit(),/build_job_capacity/,'New jobs in the frozen project are refused with the generic capacity error');
+ const refusedTurn=await turn(ivy);await assert.rejects(build(ivy,running.p,refusedTurn,note,noteIn('z'),noteOut('z'),service),e=>e.status===429&&!/contain|operator|freeze/i.test(e.message),'The owner sees only the generic capacity response');
+ assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(refusedTurn).first(),null,'A refused build saves nothing');
+ assert.throws(()=>sql.prepare("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'build','project',?,3,'human:x','r',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'))").run(id(),running.p,'f'.repeat(64)),/CHECK/,'No build allowance can be stored');
+ // A job that already succeeded but is not yet published is cancelled too, so it can never prepare an approval review.
+ const kP=await project(jack),kT=await turn(jack),kPlan=await fixtureExtensionPlan(scope(jack),jack,kP,kT,'custom.visitor-transition');
+ await J.cancelBuildJob(scope(jack),jack,neighbour.t);
+ const freezing=await owners.get(jack).scope(interceptDatabase(db,/^INSERT INTO app_activation_reviews/,async()=>{await contain(freeze({kind:'project',id:kP}));}));
+ assert.match((await rawBackendAction(freezing,jack,kT,{kind:'backend',operation:'buildApplication',projectId:kP,source:note,input:noteIn('k'),expected:noteOut('k'),planId:kPlan},service)).reply,/could not be confirmed/);
+ assert.equal((await job(kT)).state,'cancelled');assert.equal(await db.prepare('SELECT id FROM app_activation_reviews WHERE run_id=?').bind(kT).first(),null);
+ await assert.rejects(prepareApplication(scope(jack),jack,kP,id(),'enable',kT,kT),e=>e.status===409,'A frozen job never publishes later');
+ // An account freeze covers every project the account owns; status reports active build usage without content.
+ await contain(freeze({kind:'account',id:ivy}));assert.equal((await job(sibling.t)).state,'cancelled');assert.equal(await J.dispatchBuildJob(db,siblingLease),false);
+ await assert.rejects((await draft(ivy)).admit(),/build_job_capacity/,'Any project of a frozen account is refused');
+ const status=await runContainment(db,{action:'status',subject:{kind:'account',id:ivy}});assert.ok(status.usage.projects.every(p=>p.build.contained&&p.build.allowance===0));
+ // Lifting restores admission; cancelled jobs stay cancelled. Published jobs are never changed by a freeze.
+ for(const c of status.containments.filter(c=>c.state==='active'))await contain({action:'lift',id:c.id,operator:'human:fixture',reason:'Synthetic lift'});
+ assert.equal((await job(running.t)).state,'cancelled');await J.reconcileBuildJobs(db);
+ assert.match(await build(ivy,running.p,await turn(ivy),note,noteIn('after'),noteOut('after'),service),/Application review/,'Admission resumes after the lift');
+ const published=(await db.prepare("SELECT count(*) n FROM build_jobs WHERE state='published'").first()).n;await contain(freeze({kind:'account',id:alice}));
+ assert.equal((await db.prepare("SELECT count(*) n FROM build_jobs WHERE state='published'").first()).n,published,'A freeze never alters a published job');
+ assert.equal(neighbourLease.job,neighbour.t);
+
+ console.log('Build jobs passed: two-tenant fresh runtime memory, shared toolchain vs private artifact keys, output ownership, cancellation before/during/after execution, lease isolation, single spend, expiry, recorded cleanup failure holding capacity, per-project/account/pool bounds, owner replay/concurrency/lost lease, no visitor/workflow/scheduled wake path, deterministic diagnostics before an optional model repair, and the operator build freeze (refuses new jobs, cancels running and unpublished jobs in scope, generic response, lift restores admission).');
 }finally{await runtime?.dispose();await store.close();await rm(dir,{recursive:true,force:true});}

@@ -6,13 +6,16 @@ import {createHash} from 'node:crypto';
 // Nothing here deletes or edits customer data: an action inserts audit rows, a lift marks them lifted, rows expire.
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const iso=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-export const containmentScopes=Object.freeze(['backend','transition','contact','photo']);
+export const containmentScopes=Object.freeze(['backend','transition','contact','photo','build']);
+/** Freeze-only scopes: no temporary allowance exists, and the build limits stay as built (WH-074). */
+export const freezeOnlyScopes=Object.freeze(['build']);
 /** Normal per-project allowance and the highest temporary allowance an operator may set (platform, account and fair-share ceilings never change). */
 export const containmentAllowances=Object.freeze({
  backend:Object.freeze({normal:100,maximum:500,unit:'public backend calls per project per UTC day'}),
  transition:Object.freeze({normal:100,maximum:500,unit:'visitor transitions per project per UTC day'}),
  contact:Object.freeze({normal:20,maximum:100,unit:'contact submissions per project per rolling hour'}),
- photo:Object.freeze({normal:10000,maximum:50000,unit:'public photo reads per project per UTC month'})
+ photo:Object.freeze({normal:10000,maximum:50000,unit:'public photo reads per project per UTC month'}),
+ build:Object.freeze({normal:1,maximum:null,unit:'active owner build jobs per project (freeze only; a freeze also cancels running and unpublished jobs)'})
 });
 export const maximumContainmentMs=30*86400000;
 const fail=()=>{throw Error('Invalid operator containment request');};
@@ -35,7 +38,7 @@ export function containmentInput(raw){
    if(!Object.hasOwn(v.scopes,scope))continue;
    const effect=v.scopes[scope];
    if(effect==='freeze')scopes[scope]='freeze';
-   else if(target.kind==='project'&&Number.isSafeInteger(effect)&&effect>=0&&effect<=containmentAllowances[scope].maximum&&effect!==containmentAllowances[scope].normal)scopes[scope]=effect;
+   else if(target.kind==='project'&&!freezeOnlyScopes.includes(scope)&&Number.isSafeInteger(effect)&&effect>=0&&effect<=containmentAllowances[scope].maximum&&effect!==containmentAllowances[scope].normal)scopes[scope]=effect;
    else fail();
   }
   if(typeof v.expiresAt!=='string'||!iso.test(v.expiresAt)||!Number.isFinite(Date.parse(v.expiresAt))||new Date(Date.parse(v.expiresAt)).toISOString()!==v.expiresAt)fail();
@@ -65,7 +68,8 @@ async function usage(db,projects){
    coalesce((SELECT calls FROM backend_public_usage WHERE project_id=?1 AND day=${today}),0) AS backend,
    coalesce((SELECT attempts FROM app_daily_usage WHERE project_id=?1 AND day=${today}),0) AS transition,
    (SELECT count(*) FROM contact_receipts WHERE project_id=?1 AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) AS contact,
-   coalesce((SELECT read_ops FROM storage_project_usage WHERE project_id=?1 AND period=strftime('%Y-%m','now')),0) AS photo`).bind(project).first();
+   coalesce((SELECT read_ops FROM storage_project_usage WHERE project_id=?1 AND period=strftime('%Y-%m','now')),0) AS photo,
+   (SELECT count(*) FROM build_jobs WHERE project_id=?1 AND (state='running' OR cleanup<>'released')) AS build`).bind(project).first();
   const effective={};
   for(const scope of containmentScopes){
    const active=await db.prepare('SELECT coalesce(allowance,0) AS allowance FROM operator_contained_projects WHERE project_id=? AND scope=? ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1').bind(project,scope).first();
@@ -88,7 +92,7 @@ async function action(db,actionId){
  const {results}=await db.prepare(`SELECT ${columns} FROM operator_containments WHERE id=? ORDER BY scope`).bind(actionId).all();
  return results;
 }
-const notice='Operator-only. Customers see only the existing generic limit or busy responses; no containment, operator or reason is disclosed. Standard owner AI, workspace sessions, owner test runs, site HTML and stored data are unchanged. Nothing is deleted.';
+const notice='Operator-only. Customers see only the existing generic limit or busy responses; no containment, operator or reason is disclosed. Standard owner AI, workspace sessions, owner test runs, site HTML and stored data are unchanged. Nothing is deleted. A build freeze also cancels running and unpublished build jobs in scope (a test already sent is not recalled; saved drafts stay).';
 
 export async function runContainment(db,input,apply,now=Date.now()){
  // Validate even when called outside the CLI, before any database access.
@@ -121,7 +125,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
  const rows=await action(db,input.id);if(!rows.length)throw Error('Containment not found');
  if(rows.every(r=>r.lift_digest===digest))return apply===undefined?{preview:false,alreadyLifted:true,containments:rows.map(record)}:{applied:true,replayed:true,containments:rows.map(record)};
  if(rows.some(r=>r.lifted_at!==null))throw Error('Containment already lifted by a different request');
- if(apply===undefined)return {preview:true,request:input,containments:rows.map(record),applyDigest:digest,notice:'Lifting restores the normal allowances immediately. Usage already counted today stays counted.'};
+ if(apply===undefined)return {preview:true,request:input,containments:rows.map(record),applyDigest:digest,notice:'Lifting restores the normal allowances immediately. Usage already counted today stays counted, and build jobs cancelled by a freeze stay cancelled.'};
  await db.prepare("UPDATE operator_containments SET lifted_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),lift_operator_ref=?,lift_reason=?,lift_digest=? WHERE id=? AND lifted_at IS NULL").bind(input.operator,input.reason,digest,input.id).run();
  const saved=await action(db,input.id);
  if(!saved.every(r=>r.lift_digest===digest))throw Error('Lift outcome uncertain; read status and retry the same request');

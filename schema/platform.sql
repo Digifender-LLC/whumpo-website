@@ -676,14 +676,15 @@ CREATE TABLE storage_project_usage (
 
 -- Operator containment (WH-050 F7, runbook G3; tools/operator-containment.mjs). One row per action and public scope:
 -- a freeze (allowance NULL) or a temporary per-project allowance (project subjects only), enforced inside the public
--- admission triggers. Rows are the audit: append-only except one lift, always expiring within 30 days, and they never
+-- admission triggers. The `build` scope (WH-074) is freeze-only: it refuses new build jobs and cancels running or
+-- succeeded-but-unpublished ones in the frozen scope. Rows are the audit: append-only except one lift, always expiring within 30 days, and they never
 -- delete or change customer data. No foreign key, so closure is neither blocked nor erases the record.
 CREATE TABLE operator_containments (
  id TEXT NOT NULL CHECK(length(id)=36),
- scope TEXT NOT NULL CHECK(scope IN ('backend','transition','contact','photo')),
+ scope TEXT NOT NULL CHECK(scope IN ('backend','transition','contact','photo','build')),
  subject_kind TEXT NOT NULL CHECK(subject_kind IN ('account','project')),
  subject_id TEXT NOT NULL CHECK(length(subject_id)=36),
- allowance INTEGER CHECK(allowance IS NULL OR (allowance>=0 AND allowance<=CASE scope WHEN 'backend' THEN 500 WHEN 'transition' THEN 500 WHEN 'contact' THEN 100 ELSE 50000 END)),
+ allowance INTEGER CHECK(allowance IS NULL OR (scope<>'build' AND allowance>=0 AND allowance<=CASE scope WHEN 'backend' THEN 500 WHEN 'transition' THEN 500 WHEN 'contact' THEN 100 ELSE 50000 END)),
  operator_ref TEXT NOT NULL CHECK(length(operator_ref) BETWEEN 1 AND 128 AND operator_ref NOT GLOB '*[^A-Za-z0-9_.:@-]*'),
  reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
  request_digest TEXT NOT NULL CHECK(length(request_digest)=64),
@@ -2719,6 +2720,12 @@ BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
 
 CREATE TRIGGER operator_containment_retained BEFORE DELETE ON operator_containments BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
 
+-- WH-074 build freeze: cancel the frozen scope's running and succeeded-but-unpublished jobs in the same write, exactly as
+-- owner cancellation does. A test already sent is not recalled; cleanup is recorded by the deterministic reconciler.
+CREATE TRIGGER operator_containment_build_cancel AFTER INSERT ON operator_containments WHEN NEW.scope='build'
+BEGIN UPDATE build_jobs SET state='cancelled',finished_at=coalesce(finished_at,strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+ WHERE state IN ('running','succeeded') AND project_id IN (SELECT project_id FROM operator_contained_projects WHERE id=NEW.id AND scope='build'); END;
+
 CREATE TRIGGER backend_form_admit BEFORE INSERT ON backend_form_reviews BEGIN
  SELECT RAISE(ABORT,'backend_form_owner') WHERE NOT EXISTS(SELECT 1 FROM projects p JOIN backend_form_settings s ON s.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision);
  SELECT RAISE(ABORT,'backend_form_targets') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM publications s JOIN backend_publications b ON b.project_id=s.project_id JOIN backend_publication_reviews r ON r.id=b.review_id WHERE s.project_id=NEW.project_id AND s.version_id IS NOT NULL AND s.revision=NEW.site_revision AND b.review_id=NEW.backend_publication_id AND r.user_id=NEW.user_id AND r.status='applied');
@@ -3245,7 +3252,8 @@ CREATE TRIGGER application_build_immutable BEFORE UPDATE ON application_builds
 -- WH-074: a build job exists only for an owner's pending Chat request that already saved its build intent.
 -- Visitor, public, webhook and scheduled paths have no such turn and cannot create, wake or extend a job.
 -- Bounded shared pool: one active job per project, three per account and sixteen platform-wide, where a job stays
--- active until its cleanup is recorded as released.
+-- active until its cleanup is recorded as released. An active operator `build` freeze (WH-050) refuses admission with
+-- the same generic capacity error, so containment is never disclosed.
 CREATE TRIGGER build_job_admit BEFORE INSERT ON build_jobs BEGIN
  SELECT RAISE(ABORT,'build_job_owner') WHERE NOT EXISTS(
   SELECT 1 FROM application_builds b JOIN projects p ON p.id=b.project_id AND p.owner_user_id=b.user_id
@@ -3257,7 +3265,8 @@ CREATE TRIGGER build_job_admit BEFORE INSERT ON build_jobs BEGIN
   OR NOT EXISTS(SELECT 1 FROM backend_versions v WHERE v.id=NEW.id AND v.project_id=NEW.project_id AND NEW.artifact_key='private/'||v.project_id||'/'||v.id||'/'||v.digest);
  SELECT RAISE(ABORT,'build_job_capacity') WHERE (SELECT count(*) FROM build_jobs WHERE project_id=NEW.project_id AND (state='running' OR cleanup<>'released'))>=1
   OR (SELECT count(*) FROM build_jobs WHERE user_id=NEW.user_id AND (state='running' OR cleanup<>'released'))>=3
-  OR (SELECT count(*) FROM build_jobs WHERE state='running' OR cleanup<>'released')>=16;
+  OR (SELECT count(*) FROM build_jobs WHERE state='running' OR cleanup<>'released')>=16
+  OR EXISTS(SELECT 1 FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='build');
 END;
 
 -- Identity, lease, inputs and keys are immutable. Dispatch (the only spend) happens once, while running and unexpired.

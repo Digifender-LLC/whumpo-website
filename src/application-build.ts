@@ -61,7 +61,7 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
  ]);}catch(error){
   const saved=await read();if(saved){match(saved);return readApplicationBuild(db,user,id);}
   if(String(error).includes('welcome_first_draft_changed'))throw error;
-  if(String(error).includes('build_job_capacity'))throw new BackendError(429,'Another build for this project or account is still using shared build capacity. Nothing was saved; try again when it finishes.');
+  if(String(error).includes('build_job_capacity'))throw new BackendError(429,'Shared build capacity for this project or account is not available right now. Nothing was saved; try again later.');
   throw new BackendError(409,'Application draft was not saved. Check project ownership, the draft allowance and whether existing visitors require a data migration.');
  }
  // Deterministic diagnostics precede any spend; a failure is reported for an optional owner-requested repair.
