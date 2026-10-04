@@ -1,3 +1,4 @@
+import {requireArtifactsAvailable} from '../../artifact-admission';
 import {BackendError} from '../../backend-error';
 import {chatTurnGroups} from '../../chat-turn-groups';
 import {contentPolicyVersion} from '../../content-policy';
@@ -26,7 +27,7 @@ async function head(db:D1Database,user:string,project:string){
 async function holds(db:D1Database,user:string,artifact:Artifact){
  const target=JSON.parse(artifact.target_json) as ServiceClientTarget;
  await requireSpecificationAvailable(db,artifact.website_version_id);
- if(await db.prepare("SELECT 1 FROM content_screening_decisions WHERE user_id=? AND kind='generated_artifact' AND required=1 AND digest IN(?,?,?,?,?,?) LIMIT 1").bind(user,artifact.spec_digest,artifact.manifest_digest,artifact.preview_digest,artifact.candidate_digest,target.website.digest,target.backend?.digest??null).first())throw new BackendError(423,'These website service settings are held for safety review.');
+ await requireArtifactsAvailable(db,user,[artifact.spec_digest,artifact.manifest_digest,artifact.preview_digest,artifact.candidate_digest,target.website.digest,target.backend?.digest??null],'These website service settings are held for safety review.');
 }
 function artifact(compiled:Compiled):Artifact {
  const [preview,candidate]=compiled.artifacts;

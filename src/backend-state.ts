@@ -1,6 +1,7 @@
 import {projectRuntime} from './runtime-lane';
 import {hashToken} from './security';
-import {BackendError,listBackends,testBackend} from './backend-versions';
+import {BackendError,listBackends} from './backend-versions';
+import {testAdmittedBackend} from './artifact-admission';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const bytes=(s:string)=>new TextEncoder().encode(s).length;
 type Review={id:string;user_id:string;project_id:string;version_id:string;base_revision:number;before_json:string;input_json:string;after_json:string|null;result_json:string|null;status:string;expires_at:string;restore_review_id:string|null;restore_side:'before'|'after'|null};
@@ -30,7 +31,7 @@ export async function prepareBackendState(db:D1Database,service:Fetcher,user:str
  if(review.restore_review_id!==null||review.user_id!==user||review.project_id!==project||review.version_id!==version||review.input_json!==inputJson)throw new BackendError(409,'Review ID already used');
  if(review.status!=='preparing')return review;
  if(review.expires_at<=new Date().toISOString())throw new BackendError(409,'Data review expired; prepare a new review');
- const run=await testBackend(db,await projectRuntime(service,project),user,project,version,id,{state:JSON.parse(review.before_json),input:JSON.parse(review.input_json)});
+ const run=await testAdmittedBackend(db,await projectRuntime(service,project),user,project,version,id,{state:JSON.parse(review.before_json),input:JSON.parse(review.input_json)});
  if(run.state!=='complete')return review;
  const outcome='result'in run?run.result:undefined,value=outcome?.ok===true?outcome.value:null;
  const valid=value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===2&&'state'in value&&'result'in value&&bytes(JSON.stringify(value.state))<=4096&&bytes(JSON.stringify(value.result))<=4096;

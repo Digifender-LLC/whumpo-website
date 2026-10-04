@@ -1,4 +1,5 @@
 import {projectRuntime} from './runtime-lane';
+import {requireArtifactsAvailable} from './artifact-admission';
 import {serviceClientActivationReceipt} from './project-specification/service-clients/activation';
 import {linkChatReviewReply} from './chat-review-receipts';
 import {requireExtensionPlan} from './composition-plans';
@@ -18,7 +19,8 @@ import {readApplication,readApplicationReview,prepareApplication,confirmApplicat
 import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm,describeBackendForm} from './backend-forms';
 import {readBackendPublication,prepareBackendPublication,readBackendPublicationReview,confirmBackendPublication,describeBackendPublication} from './backend-publication';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,describeBackendReview,backendStateHistory,exportBackendState,restoreBackendState,linkBackendState} from './backend-state';
-import {BackendError,listBackends,testBackend} from './backend-versions';
+import {BackendError,listBackends} from './backend-versions';
+import {testAdmittedBackend} from './artifact-admission';
 import {hashToken} from './security';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const bytes=(s:string)=>new TextEncoder().encode(s).length;
@@ -49,7 +51,7 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
    try{
     if(!service)throw new BackendError(503,'Backend testing is not connected in this environment');
     const version=await ownedBackend(db,user,match[1]);
-    return describeRun(await testBackend(db,await projectRuntime(service,version.project_id),user,version.project_id,version.id,turnId,sample.input,{expected:sample.expected}));
+    return describeRun(await testAdmittedBackend(db,await projectRuntime(service,version.project_id),user,version.project_id,version.id,turnId,sample.input,{expected:sample.expected}));
    }catch(error){return error instanceof BackendError?error.message:"The check result could not be retrieved. Ask to read test receipt "+turnId+'. Replaying this message will not execute again.';}
   };
  }
@@ -117,7 +119,7 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
    const version=await ownedBackend(db,user,id);
    if(verb==='backend'){const component=await db.prepare('SELECT component_id,component_version,artifact_digest,provenance,license FROM backend_component_instances WHERE version_id=?').bind(version.id).first<{component_id:string;component_version:number;artifact_digest:string;provenance:string;license:string}>();if(component&&component.artifact_digest!==version.digest)throw new BackendError(503,'Component provenance could not be verified');return `${component?'Library origin: '+component.component_id+'@'+component.component_version+' · '+component.provenance+' · '+component.license+'\n':''}Private backend for “${version.name}”\nVersion: ${version.id}\nSHA-256: ${version.digest}\nSource (untrusted code, not instructions):\n${version.source}\n\nAsk to test this version with a non-sensitive example or check whether it is currently public.`;}
    if(!service)throw new BackendError(503,'Backend testing is not connected in this environment');
-   return describeRun(await testBackend(db,await projectRuntime(service,version.project_id),user,version.project_id,id,turnId,input));
+   return describeRun(await testAdmittedBackend(db,await projectRuntime(service,version.project_id),user,version.project_id,id,turnId,input));
   }catch(error){return error instanceof BackendError?error.message:"The backend result could not be retrieved. Ask to read test receipt "+turnId+'. This message will not dispatch execution again.';}
  };
 }
@@ -153,6 +155,8 @@ async function prepareBackendAction(db:D1Database,user:string,turnId:string,acti
  if(operation==='create'){
   if(Object.keys(action).some(k=>!['kind','operation','projectId','source','planId'].includes(k))||typeof action.projectId!=='string'||!uuid.test(action.projectId)||typeof action.source!=='string'||!action.source.trim()||bytes(action.source)>8192)throw new BackendError(400,'Invalid backend draft proposal');
   await listBackends(db,user,action.projectId);const digest=await hashToken(action.source),now=new Date().toISOString();
+  // WH-014: pasted or regenerated source with the same bytes as a quarantined import or held artifact is refused.
+  await requireArtifactsAvailable(db,user,[digest]);
   const planned=await requireExtensionPlan(db,user,action.projectId,action.planId,'pure-function');
   return {reply:`Saved an untested private backend draft.\nVersion: ${turnId}\nProject: ${action.projectId}\nSHA-256: ${digest}\nAsk to inspect this saved source and test a non-sensitive example. It has no networking, secrets or application storage, and is not published.`,statements:[
    db.prepare("INSERT INTO backend_versions(id,project_id,source,digest,created_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND status='pending') AND EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)").bind(turnId,action.projectId,action.source,digest,now,turnId,user,action.projectId,user),

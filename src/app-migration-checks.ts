@@ -1,4 +1,5 @@
 import {projectRuntime} from './runtime-lane';
+import {requireBackendVersionAvailable} from './artifact-admission';
 import {BackendError,callBackend} from './backend-versions';
 import {hashToken} from './security';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -21,6 +22,7 @@ export async function beginMigrationCheck(db:D1Database,user:string,project:stri
  if(previous){if(previous.user_id!==user||previous.project_id!==project||previous.to_version!==target||previous.transform_version!==transform||previous.test_id!==test)throw new BackendError(409,'Migration request ID already used');return readMigrationCheck(db,user,id);}
  const a=await db.prepare('SELECT a.version_id,a.revision,r.roster_json FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_recovery_rosters r ON r.project_id=a.project_id WHERE a.project_id=? AND a.owner_user_id=? AND a.enabled=0').bind(project,user).first<{version_id:string;revision:number;roster_json:string}>();
  if(!a)throw new BackendError(409,'Disable the owned application before preparing a migration');
+ await requireBackendVersionAvailable(db,target);await requireBackendVersionAvailable(db,transform);
  try{await db.batch([
   db.prepare('INSERT INTO app_recovery_points(id,user_id,project_id,version_id) VALUES(?,?,?,?)').bind(id,user,project,a.version_id),
   db.prepare('INSERT INTO app_migration_checks(id,user_id,project_id,from_version,to_version,transform_version,test_id,base_revision,roster_json) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,user,project,a.version_id,target,transform,test,a.revision,a.roster_json)
@@ -33,6 +35,8 @@ export async function beginMigrationCheck(db:D1Database,user:string,project:stri
 /** Claim at most three per-document executions. A running/uncertain claim never executes twice. */
 export async function advanceMigrationCheck(db:D1Database,service:Fetcher,user:string,id:string){
  const m=await owned(db,user,id),current=await readMigrationCheck(db,user,id);if(current.state!=='preparing')return current;
+ // WH-014: neither the transform nor the target program may run or be adopted while held.
+ await requireBackendVersionAvailable(db,m.transform_version);await requireBackendVersionAvailable(db,m.to_version);
  const code=await db.prepare('SELECT source,digest FROM backend_versions WHERE id=? AND project_id=?').bind(m.transform_version,m.project_id).first<{source:string;digest:string}>();
  if(!code||await hashToken(code.source)!==code.digest)throw new BackendError(409,'Migration source integrity check failed');
  const {results:pending}=await db.prepare("SELECT d.visitor_id,b.state_json FROM app_migration_documents d JOIN app_recovery_documents b ON b.point_id=d.migration_id AND b.visitor_id=d.visitor_id WHERE d.migration_id=? AND d.state='pending' ORDER BY d.visitor_id LIMIT 3").bind(id).all<{visitor_id:string;state_json:string}>();

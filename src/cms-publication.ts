@@ -1,4 +1,5 @@
 import {captureCMSArticleImages,type CMSArticleImage} from './cms-article-images';
+import {requireArtifactsAvailable,artifactHeldMessage,importedContentMessage} from './artifact-admission';
 import {freezeCMSPublicationMedia,inlineCMSPublicationImages} from './cms-publication-media';
 import {readCMSDraft} from './cms-content';
 import {renderCMSDraft} from './cms-preview';
@@ -14,7 +15,9 @@ export async function readCMSPublication(db:D1Database,user:string,id:string){co
 export async function prepareCMSPublication(db:D1Database,user:string,project:string,draft:string,id:string,env:Record<string,unknown>){
  if(!/^[0-9a-f-]{36}$/.test(id))throw new CMSProjectError(400,'Invalid review ID');
  const old=await db.prepare('SELECT id FROM cms_publication_reviews WHERE id=?').bind(id).first();
- if(old){const row=await readCMSPublication(db,user,id);if(row.project_id!==project||row.draft_request_id!==draft)throw new CMSProjectError(409,'Review ID already used');await recoverImages(db,user,row,env);return row;}
+ if(old){const row=await readCMSPublication(db,user,id);if(row.project_id!==project||row.draft_request_id!==draft)throw new CMSProjectError(409,'Review ID already used');await requireCMSPublicationAvailable(db,row.id);await recoverImages(db,user,row,env);return row;}
+ // WH-014: an article drafted from a WordPress import needs mandatory import checks that do not exist yet.
+ if(await db.prepare('SELECT 1 FROM cms_import_reviews WHERE id=? AND project_id=?').bind(draft,project).first())throw new CMSProjectError(423,importedContentMessage);
  const snap=await readCMSDraft(db,user,project,draft,env);if(typeof snap.revision!=='string'||!snap.revision)throw new CMSProjectError(409,'CMS revision unavailable');
  const base=await db.prepare("SELECT id FROM cms_publication_reviews WHERE project_id=? AND collection=? AND item_id=? AND status='published' AND withdrawn=0").bind(project,snap.collection,snap.item.id).first<{id:string}>();
  if(snap.item.status==='published'&&(!base||!snap.item.draftRevisionId||!snap.item.liveData))throw new CMSProjectError(409,'Read and stage changes to the current live article before preparing its replacement.');
@@ -25,8 +28,15 @@ export async function prepareCMSPublication(db:D1Database,user:string,project:st
  await requireApprovedCMSMedia(db,user,project,manifest);
  const resolveImage=(image:{asset:{_ref:string}})=>{const found=manifest.find(m=>m.mediaId===image.asset._ref);if(!found)throw new CMSProjectError(409,'Article image could not be captured');return {src:`/cms/media/${id}/${found.digest}.jpg`,width:found.width,height:found.height};};
  const privateHTML=renderCMSDraft(snap,false,resolveImage),publicHTML=renderCMSDraft(snap,true,resolveImage),digest=await hashToken(publicHTML);
+ try{await requireArtifactsAvailable(db,user,[digest]);}catch{throw new CMSProjectError(423,artifactHeldMessage);}
  try{await db.prepare('INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,replaces_publication_id,media_manifest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,draft,user,project,snap.collection,snap.item.id,snap.revision,JSON.stringify(snap),privateHTML,publicHTML,digest,base?.id??null,JSON.stringify(manifest)).run();}catch{}
  const row=await readCMSPublication(db,user,id);if(row.project_id!==project||row.draft_request_id!==draft)throw new CMSProjectError(409,'Review ID already used');await recoverImages(db,user,row,env,images);return row;
+}
+/** Imported or digest-held articles cannot be reviewed, approved, published or previewed as publications. */
+async function requireCMSPublicationAvailable(db:D1Database,id:string){
+ const row=await db.prepare('SELECT EXISTS(SELECT 1 FROM cms_import_reviews i JOIN cms_publication_reviews r ON r.draft_request_id=i.id WHERE r.id=?) imported,EXISTS(SELECT 1 FROM cms_held_publications WHERE id=?) held').bind(id,id).first<{imported:number;held:number}>();
+ if(row?.imported)throw new CMSProjectError(423,importedContentMessage);
+ if(row?.held)throw new CMSProjectError(423,artifactHeldMessage);
 }
 async function recoverImages(db:D1Database,user:string,row:Review,env:Record<string,unknown>,captured?:CMSArticleImage[]){
  if(!JSON.parse(row.media_manifest??'[]').length)return;
@@ -41,6 +51,7 @@ async function recoverImages(db:D1Database,user:string,row:Review,env:Record<str
 }
 export async function confirmCMSPublication(db:D1Database,user:string,id:string,env:Record<string,unknown>){
  let row=await readCMSPublication(db,user,id);if(row.status==='published')return row;
+ await requireCMSPublicationAvailable(db,id);
  await recoverImages(db,user,row,env);
  const {service,config}=await cmsConnection(db,user,row.project_id,env);
  if(row.status==='pending'){
@@ -59,7 +70,7 @@ export async function confirmCMSPublication(db:D1Database,user:string,id:string,
  if(row.status!=='published')throw new CMSProjectError(503,"Publication outcome is unresolved. Reopen saved publication review "+id+' to recover this exact approved request; do not prepare a replacement.');return row;
 }
 export function describeCMSPublication(r:Review){return r.withdrawn?`This historical publication is no longer current. Its content and history are retained. Publication: ${r.id}`:r.status==='published'?`CMS article published: ${cmsPublicURL(r)}\nReview: ${r.id}`:`Review CMS publication\nProject: ${r.project_id}\nTitle: ${JSON.parse(r.snapshot).item.data.title}\nDestination: ${cmsPublicURL(r)}\n${r.replaces_publication_id?'Replaces publication: '+r.replaces_publication_id+' (the current article stays live until confirmation succeeds)\n':''}Revision: ${r.revision}\nArticle SHA-256: ${r.digest}\nFrozen images: ${JSON.parse(r.media_manifest??'[]').length}\nPublish this exact native EmDash revision and make the reviewed article publicly accessible at the destination above.\nExpires: ${r.expires_at}\nUse the confirmation button for publication ${r.id} to publish this exact article.`;}
-export async function cmsPublicationPage(db:D1Database,user:string,id:string,files?:R2Bucket){const row=await readCMSPublication(db,user,id);if(await hashToken(row.public_html)!==row.digest)throw new CMSProjectError(503,'Publication preview could not be verified');const images=JSON.parse(row.media_manifest??'[]').length>0;if(images&&!files)throw new CMSProjectError(503,'Article image storage is unavailable');const html=images?await inlineCMSPublicationImages(db,files!,user,id,row.public_html):row.public_html;return new Response(html,{headers:{...previewHeaders,'content-security-policy':previewHeaders['content-security-policy']+(images?'; img-src data:':''),'x-robots-tag':'noindex, nofollow'}});}
+export async function cmsPublicationPage(db:D1Database,user:string,id:string,files?:R2Bucket){const row=await readCMSPublication(db,user,id);await requireCMSPublicationAvailable(db,id);if(await hashToken(row.public_html)!==row.digest)throw new CMSProjectError(503,'Publication preview could not be verified');const images=JSON.parse(row.media_manifest??'[]').length>0;if(images&&!files)throw new CMSProjectError(503,'Article image storage is unavailable');const html=images?await inlineCMSPublicationImages(db,files!,user,id,row.public_html):row.public_html;return new Response(html,{headers:{...previewHeaders,'content-security-policy':previewHeaders['content-security-policy']+(images?'; img-src data:':''),'x-robots-tag':'noindex, nofollow'}});}
 export function cmsPublicationCommand(db:D1Database,user:string,turn:string,content:string,env:Record<string,unknown>){const match=content.match(/^\/(publish-cms|cms-publication|confirm-cms-publish|cms-publications|recover-cms-publish)(?:\s+([\s\S]+))?$/i);if(!match)return;return async()=>{try{const parts=(match[2]??'').trim().split(/\s+/),verb=match[1].toLowerCase();if(verb==='cms-publications'){if(parts.length!==1)throw new CMSProjectError(400,"Choose the publishing space whose publication history you want to read.");return JSON.stringify(await listCMSPublications(db,user,parts[0]),null,2);}if(verb==='publish-cms'){if(parts.length!==2)throw new CMSProjectError(400,"Choose the project and saved article for its publication review.");return describeCMSPublication(await prepareCMSPublication(db,user,parts[0],parts[1],turn,env));}if(parts.length!==1)throw new CMSProjectError(400,'Choose a publication review ID');if(verb==='recover-cms-publish'){const saved=await readCMSPublication(db,user,parts[0]);return describeCMSPublication(await prepareCMSPublication(db,user,saved.project_id,saved.draft_request_id,saved.id,env));}return describeCMSPublication(await(verb==='confirm-cms-publish'?confirmCMSPublication(db,user,parts[0],env):readCMSPublication(db,user,parts[0])));}catch(e){return e instanceof CMSProjectError?e.message:'CMS publication could not be confirmed. Read the existing review before another attempt.';}};}
 export async function cmsPublicationLinks(db:D1Database,user:string){return (await db.prepare("SELECT t.id AS turn_id,r.id,r.status,r.withdrawn,r.expires_at,r.project_id,r.collection,r.item_id FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id JOIN chat_turns t ON t.user_id=r.user_id AND (t.id=r.id OR (json_extract(t.action_json,'$.type')='confirm' AND json_extract(t.action_json,'$.kind')='cmsPublish' AND json_extract(t.action_json,'$.reviewId')=r.id)) WHERE r.user_id=? AND p.owner_user_id=r.user_id AND t.status='completed' AND instr(t.assistant_text,'Use the confirmation button for publication '||r.id||' to publish this exact article.')>0 ORDER BY t.revision DESC LIMIT 100").bind(user).all()).results;}
 

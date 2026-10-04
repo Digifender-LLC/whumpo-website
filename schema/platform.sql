@@ -1998,6 +1998,8 @@ CREATE INDEX backend_imports_pending ON backend_imports(state,created_at,id);
 
 CREATE INDEX backend_imports_owner ON backend_imports(user_id,project_id,created_at);
 
+CREATE INDEX backend_imports_digest ON backend_imports(user_id,digest);
+
 CREATE UNIQUE INDEX photo_scan_one_reserved ON photo_scan_tickets(kind,subject_id,digest,policy_version) WHERE state='reserved';
 
 CREATE INDEX content_risk_evidence_owner ON content_risk_evidence(user_id,incident_id);
@@ -2034,7 +2036,8 @@ CREATE VIEW cms_live_articles AS
  SELECT r.id AS publication_id,r.project_id,r.user_id,r.collection,r.item_id,r.public_html,r.digest,json_extract(r.snapshot,'$.item.data.title') AS title,r.created_at
  FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id JOIN cms_instances c ON c.project_id=r.project_id
  WHERE r.status='published' AND r.withdrawn=0 AND p.owner_user_id=r.user_id AND c.state='ready'
- AND NOT EXISTS(SELECT 1 FROM blocked_cms_publications b WHERE b.review_id=r.id);
+ AND NOT EXISTS(SELECT 1 FROM blocked_cms_publications b WHERE b.review_id=r.id)
+ AND NOT EXISTS(SELECT 1 FROM cms_held_publications h WHERE h.id=r.id);
 
 CREATE VIEW project_service_status AS
  SELECT service.*,CASE WHEN site_live=1 OR cms_articles>0 OR backend_live=1 THEN 'live' WHEN status='live' THEN 'draft' ELSE status END AS service_status
@@ -2047,7 +2050,8 @@ CREATE VIEW project_service_status AS
 CREATE VIEW app_live_pages AS
  SELECT r.id,r.project_id,r.config_json,r.program_revision,s.revision
  FROM app_page_settings s JOIN app_page_reviews r ON r.id=s.review_id JOIN app_spaces a ON a.project_id=s.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
- WHERE r.status='applied' AND r.config_json IS NOT NULL AND a.enabled=1 AND a.owner_user_id=r.user_id AND a.revision=r.program_revision;
+ WHERE r.status='applied' AND r.config_json IS NOT NULL AND a.enabled=1 AND a.owner_user_id=r.user_id AND a.revision=r.program_revision
+ AND NOT EXISTS(SELECT 1 FROM held_backend_versions h WHERE h.id=a.version_id);
 
 CREATE VIEW app_recovery_rosters AS SELECT a.project_id,coalesce((SELECT json_group_array(json(row_json)) FROM (SELECT json_object('visitor',v.id,'revision',d.revision) row_json FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id WHERE v.project_id=a.project_id AND v.revoked=0 ORDER BY v.id)),'[]') roster_json FROM app_spaces a;
 
@@ -2076,13 +2080,33 @@ CREATE VIEW approved_cms_media AS
  AND julianday(s.expires_at)>julianday('now')
  AND NOT EXISTS(SELECT 1 FROM cms_media_uploads o WHERE o.project_id=u.project_id AND o.id<>u.id AND json_extract(o.result,'$.mediaId')=json_extract(u.result,'$.mediaId'));
 
+-- WH-014: the one fail-closed artifact gate (src/artifact-admission.ts). A required screening decision for generated or
+-- imported work under ANY policy version, or the same exact bytes waiting in backend import quarantine (imports have no
+-- approval state), holds that owner+digest. There is no completion receipt yet, so a required row is a terminal hold.
+-- Neither a row nor the absence of one is an approval; mandatory imported formats are denied separately.
+CREATE VIEW artifact_screening_holds AS
+ SELECT user_id,digest FROM content_screening_decisions WHERE required=1 AND kind IN ('generated_artifact','imported_code')
+ UNION ALL SELECT user_id,digest FROM backend_imports;
+
+CREATE VIEW held_backend_versions AS SELECT v.id FROM backend_versions v JOIN projects p ON p.id=v.project_id
+ WHERE EXISTS(SELECT 1 FROM artifact_screening_holds h WHERE h.user_id=p.owner_user_id AND h.digest=v.digest);
+
+-- Imported CMS articles (their draft request is a WordPress import review) need mandatory import checks that do not
+-- exist yet, so they stay private. Generated or owner articles are held by an exact rendered-article digest hold.
+CREATE VIEW cms_held_publications AS SELECT r.id FROM cms_publication_reviews r
+ WHERE EXISTS(SELECT 1 FROM cms_import_reviews i WHERE i.id=r.draft_request_id)
+ OR EXISTS(SELECT 1 FROM artifact_screening_holds h WHERE h.user_id=r.user_id AND h.digest=r.digest);
+
 -- A blocked receipt revokes every publication that froze the same native media ID.
 CREATE VIEW blocked_cms_publications AS
  SELECT DISTINCT m.review_id FROM cms_publication_media m JOIN cms_media_uploads u ON u.project_id=m.project_id AND json_extract(u.result,'$.mediaId')=m.media_id
  JOIN cms_media_safety s ON s.upload_id=u.id WHERE s.state='blocked';
 
-CREATE VIEW project_spec_held AS SELECT v.version_id FROM project_spec_versions v JOIN projects p ON p.id=v.project_id JOIN site_versions s ON s.id=v.version_id
- WHERE EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=p.owner_user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(v.spec_digest,v.manifest_digest,s.digest));
+-- Every saved website version (generated, restored or any future writer) is held by its exact rendered HTML digest, and a
+-- specification version also by its specification and manifest digests. Preview, export, diff, publication, serving,
+-- guest previews and module activation all consume this one view through requireSpecificationAvailable or triggers.
+CREATE VIEW project_spec_held AS SELECT s.id version_id FROM site_versions s JOIN projects p ON p.id=s.project_id LEFT JOIN project_spec_versions v ON v.version_id=s.id AND v.project_id=s.project_id
+ WHERE EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=p.owner_user_id AND d.digest IN(v.spec_digest,v.manifest_digest,s.digest));
 
 CREATE VIEW service_client_current AS SELECT p.id project_id,p.owner_user_id,
  coalesce(s.revision,0) site_revision,s.version_id live_version_id,
@@ -2097,7 +2121,7 @@ CREATE VIEW service_client_current AS SELECT p.id project_id,p.owner_user_id,
 
 CREATE VIEW service_client_held AS SELECT v.id FROM service_client_versions v JOIN projects p ON p.id=v.project_id
  WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=v.website_version_id)
- OR EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=p.owner_user_id AND d.kind='generated_artifact' AND d.required=1
+ OR EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=p.owner_user_id
  AND d.digest IN(v.spec_digest,v.manifest_digest,v.preview_digest,v.candidate_digest,json_extract(v.target_json,'$.website.digest'),json_extract(v.target_json,'$.backend.digest')));
 
 CREATE VIEW service_client_valid_proposals AS SELECT q.id FROM service_client_proposals q
@@ -2115,7 +2139,7 @@ CREATE VIEW service_client_valid_proposals AS SELECT q.id FROM service_client_pr
  AND (q.operation='prepare' AND q.restore_version_id IS NULL OR q.operation='restore' AND EXISTS(SELECT 1 FROM service_client_versions r WHERE r.id=q.restore_version_id AND r.project_id=q.project_id AND r.website_version_id=q.website_version_id AND r.spec_json=q.spec_json AND r.lock_json=q.lock_json AND (json_type(q.spec_json,'$.statelessForm')='null' OR json_extract(r.target_json,'$.backend.versionId') IS json_extract(q.target_json,'$.backend.versionId') AND json_extract(r.target_json,'$.backend.digest') IS json_extract(q.target_json,'$.backend.digest'))))
  AND NOT EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=q.website_version_id)
  AND NOT EXISTS(SELECT 1 FROM service_client_held WHERE id IN(q.base_version_id,q.restore_version_id))
- AND NOT EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=q.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(q.spec_digest,q.manifest_digest,q.preview_digest,q.candidate_digest,json_extract(q.target_json,'$.website.digest'),json_extract(q.target_json,'$.backend.digest')));
+ AND NOT EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=q.user_id AND d.digest IN(q.spec_digest,q.manifest_digest,q.preview_digest,q.candidate_digest,json_extract(q.target_json,'$.website.digest'),json_extract(q.target_json,'$.backend.digest')));
 
 CREATE VIEW service_client_activation_state AS
  SELECT a.id,r.status FROM service_client_activation_reviews a JOIN contact_reviews r ON a.service='contact' AND r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id
@@ -2136,7 +2160,7 @@ CREATE VIEW service_client_activation_valid AS SELECT a.id FROM service_client_a
  AND json_extract(a.target_json,'$.backend.versionId') IS c.backend_version_id AND json_extract(a.target_json,'$.backend.digest') IS c.backend_digest
  AND (json_type(v.spec_json,'$.statelessForm')='null' OR (json_extract(v.target_json,'$.backend.versionId')=c.backend_version_id AND json_extract(v.target_json,'$.backend.digest')=c.backend_digest))
  AND NOT EXISTS(SELECT 1 FROM service_client_held WHERE id=v.id)
- AND NOT EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=a.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')))
+ AND NOT EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=a.user_id AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')))
  AND (
   a.service='contact' AND a.enabled=(json_type(v.spec_json,'$.contact')<>'null') AND EXISTS(SELECT 1 FROM contact_reviews r WHERE r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id AND r.status='pending' AND r.enabled=a.enabled AND r.expected_revision=c.contact_revision AND r.publication_revision=CASE WHEN c.live_version_id IS NULL THEN -1 ELSE c.site_revision END AND r.expires_at=a.expires_at)
   OR a.service='statelessForm' AND a.enabled=(json_type(v.spec_json,'$.statelessForm')<>'null') AND EXISTS(SELECT 1 FROM backend_form_reviews r WHERE r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id AND r.status='pending' AND r.enabled=a.enabled AND r.base_revision=c.form_revision AND r.expires_at=a.expires_at AND (a.enabled=0 AND r.config_json IS NULL AND r.site_revision=-1 AND r.backend_publication_id IS NULL OR a.enabled=1 AND r.config_json=json_extract(v.spec_json,'$.statelessForm.config') AND r.site_revision=c.site_revision AND r.backend_publication_id=c.backend_review_id))
@@ -2145,7 +2169,7 @@ CREATE VIEW service_client_activation_valid AS SELECT a.id FROM service_client_a
 CREATE VIEW service_client_activation_held AS SELECT a.id FROM service_client_activation_reviews a
  WHERE NOT EXISTS(SELECT 1 FROM service_client_versions WHERE id=a.version_id AND project_id=a.project_id)
  OR EXISTS(SELECT 1 FROM service_client_held WHERE id=a.version_id)
- OR EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=a.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')));
+ OR EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=a.user_id AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')));
 
 CREATE VIEW service_client_blocked_contacts AS SELECT c.project_id FROM contact_settings c
  JOIN contact_reviews r ON r.project_id=c.project_id AND r.expected_revision+1=c.revision AND r.status='applied' AND r.enabled=1 AND r.publication_revision=c.publication_revision
@@ -2155,7 +2179,8 @@ CREATE VIEW backend_live_forms AS
  SELECT r.id,r.project_id,r.config_json,r.backend_publication_id,r.site_revision
  FROM backend_form_settings f JOIN backend_form_reviews r ON r.id=f.review_id JOIN projects p ON p.id=f.project_id AND p.owner_user_id=r.user_id JOIN publications s ON s.project_id=f.project_id JOIN backend_publications b ON b.project_id=f.project_id
  WHERE r.status='applied' AND r.enabled=1 AND s.version_id IS NOT NULL AND s.revision=r.site_revision AND b.review_id=r.backend_publication_id AND b.version_id IS NOT NULL
- AND NOT EXISTS(SELECT 1 FROM service_client_activation_held WHERE id=r.id);
+ AND NOT EXISTS(SELECT 1 FROM service_client_activation_held WHERE id=r.id)
+ AND NOT EXISTS(SELECT 1 FROM held_backend_versions h WHERE h.id=b.version_id);
 
 -- Active operator containment per project and public scope (account subjects cover every project they own).
 CREATE VIEW operator_contained_projects AS
@@ -3935,7 +3960,7 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
  );
  SELECT RAISE(ABORT,'specification_changed') WHERE NEW.target_version_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM site_versions WHERE id=NEW.target_version_id AND project_id=NEW.project_id);
  SELECT RAISE(ABORT,'specification_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM content_screening_decisions WHERE user_id=NEW.user_id AND kind='generated_artifact' AND required=1 AND digest IN (NEW.spec_digest,NEW.manifest_digest,NEW.html_digest));
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds WHERE user_id=NEW.user_id AND digest IN (NEW.spec_digest,NEW.manifest_digest,NEW.html_digest));
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id IN(NEW.base_version_id,NEW.target_version_id));
  SELECT RAISE(ABORT,'specification_quota') WHERE (SELECT count(*) FROM project_spec_proposals WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM project_spec_proposals)>=4000;
 END;
@@ -4206,7 +4231,7 @@ CREATE TRIGGER project_spec_apply_admit BEFORE INSERT ON project_spec_applies BE
   AND (q.target_version_id IS NULL OR EXISTS(SELECT 1 FROM site_versions WHERE id=q.target_version_id AND project_id=q.project_id))
  );
  SELECT RAISE(ABORT,'specification_expired') WHERE (SELECT expires_at FROM project_spec_proposals WHERE id=NEW.proposal_id)<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM content_screening_decisions s JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND s.user_id=q.user_id AND s.kind='generated_artifact' AND s.required=1 AND s.digest IN(q.spec_digest,q.manifest_digest,q.html_digest));
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds s JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND s.user_id=q.user_id AND s.digest IN(q.spec_digest,q.manifest_digest,q.html_digest));
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held h JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND h.version_id IN(q.base_version_id,q.target_version_id));
  SELECT RAISE(ABORT,'specification_quota') WHERE (SELECT count(*) FROM project_spec_applies WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM project_spec_applies)>=20000;
 END;
@@ -5202,3 +5227,57 @@ BEGIN
  FROM safety_preservation_holds WHERE released_at IS NULL
   AND ((scope='account' AND subject_user_id=OLD.user_id) OR (OLD.project_id IS NOT NULL AND scope='project' AND project_id=OLD.project_id)) ORDER BY placed_at,id LIMIT 1;
 END;
+
+-- WH-014 final-use rechecks. Every writer that saves, tests, publishes, activates, migrates or executes generated or
+-- imported backend source repeats the artifact gate inside its own statement, so a hold recorded concurrently (risk
+-- escalation, policy change, import of the same bytes) wins at commit. Withdrawal, disable and unpublish stay open.
+CREATE TRIGGER artifact_backend_version_held BEFORE INSERT ON backend_versions
+WHEN EXISTS(SELECT 1 FROM projects p JOIN artifact_screening_holds h ON h.user_id=p.owner_user_id AND h.digest=NEW.digest WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_backend_run_held BEFORE INSERT ON backend_runs
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_run_held BEFORE INSERT ON app_runs
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_backend_review_held BEFORE INSERT ON backend_publication_reviews
+WHEN NEW.operation='publish' AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_backend_review_apply_held BEFORE UPDATE OF status ON backend_publication_reviews
+WHEN NEW.status='applied' AND OLD.status<>'applied' AND NEW.operation='publish' AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_backend_publication_held BEFORE UPDATE OF version_id ON backend_publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_review_held BEFORE INSERT ON app_activation_reviews
+WHEN NEW.enabled=1 AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_review_apply_held BEFORE UPDATE OF status ON app_activation_reviews
+WHEN NEW.status='applied' AND OLD.status<>'applied' AND NEW.enabled=1 AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_space_held BEFORE UPDATE ON app_spaces
+WHEN NEW.enabled=1 AND (NEW.version_id IS NOT OLD.version_id OR OLD.enabled=0) AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_space_insert_held BEFORE INSERT ON app_spaces
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_migration_check_held BEFORE INSERT ON app_migration_checks
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id IN (NEW.to_version,NEW.transform_version))
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_migration_claim_held BEFORE UPDATE OF state ON app_migration_documents
+WHEN NEW.state='running' AND EXISTS(SELECT 1 FROM app_migration_checks m JOIN held_backend_versions h ON h.id IN (m.to_version,m.transform_version) WHERE m.id=NEW.migration_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_nomination_held BEFORE INSERT ON backend_nominations
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_nomination_consent_held BEFORE UPDATE OF state ON backend_nominations
+WHEN NEW.state='nominated' AND OLD.state<>'nominated' AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+-- CMS: imported articles never leave private drafts; held rendered articles cannot be reviewed, approved or published.
+CREATE TRIGGER artifact_cms_publication_held BEFORE INSERT ON cms_publication_reviews BEGIN
+ SELECT RAISE(ABORT,'imported_content_held') WHERE EXISTS(SELECT 1 FROM cms_import_reviews WHERE id=NEW.draft_request_id);
+ SELECT RAISE(ABORT,'artifact_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds WHERE user_id=NEW.user_id AND digest=NEW.digest);
+END;
+CREATE TRIGGER artifact_cms_publication_apply_held BEFORE UPDATE OF status ON cms_publication_reviews
+WHEN NEW.status IN ('approved','published') AND NEW.status<>OLD.status AND EXISTS(SELECT 1 FROM cms_held_publications WHERE id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;

@@ -63,7 +63,8 @@ import {listCMSPublications} from './cms-publication';
 import {readCMSCapabilities,readCMSStatus} from './cms-status';
 import {listCMS,readCMSReview,prepareCMS,confirmCMS,CMSProjectError} from './cms-projects';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState} from './backend-state';
-import {BackendError,listBackends,testBackend} from './backend-versions';
+import {BackendError,listBackends} from './backend-versions';
+import {testAdmittedBackend} from './artifact-admission';
 import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
@@ -387,7 +388,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1]),imports:await listBackendImports(env.DB,user.id,backendRoute[1])});
     if(method==='POST'){
       const data=await body(request);if(!data)return error(400,'A bounded JSON request is required');
-      return backendRoute[2]?json(await testBackend(env.DB,await projectRuntime(env.BACKEND_RUNTIME,backendRoute[1]),user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
+      return backendRoute[2]?json(await testAdmittedBackend(env.DB,await projectRuntime(env.BACKEND_RUNTIME,backendRoute[1]),user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
     }
   }
   // Shared module owner operations (whumpo-modules v1) on the workspace origin: the owner principal is the admitted
