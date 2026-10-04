@@ -1,4 +1,5 @@
 import {safetyService,serviceSafetyReviews,readServiceSafetyReview,prepareServiceSafetyReview,confirmServiceSafetyReview} from './service-safety';
+import {listSavedWork,readSavedWork} from './saved-work';
 import {siteSafetyInventory,siteSafetyReviews,readSiteSafetyReview,prepareSiteSafetyReview,confirmSiteSafetyReview} from './site-safety';
 import {connectionStartInput,connectionReturnPath,readConnectionHandoff} from './chat-interactions/connection-handoff';
 import {isConnectionProvider} from './connection-handoff-shape';
@@ -170,6 +171,14 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(review&&method==='GET'&&!review[3])return json({version:1,review:await readServiceSafetyReview(env.DB,user.id,safetyService(review[1]),review[2])});
     if(review&&method==='POST'&&review[3])return json(await confirmServiceSafetyReview(env.DB,user.id,safetyService(review[1]),review[2],await body(request)));
     return error(404,'Service withdrawal action not found.');
+  }
+  if(pathname==='/api/workspace/saved-work'||pathname.startsWith('/api/workspace/saved-work/')){
+    // Read-only metadata index: no reconciliation, provider call or approval authority.
+    const params=new URL(request.url).searchParams;
+    if(method==='GET'&&pathname==='/api/workspace/saved-work')return json(await listSavedWork(env.DB,user.id,params));
+    const item=pathname.match(/^\/api\/workspace\/saved-work\/([^/]+)\/([^/]+)$/);
+    if(method==='GET'&&item){if(params.size)return error(400,'Use the exact saved-work link.');return json(await readSavedWork(env.DB,user.id,item[1],item[2]));}
+    return error(404,'Saved-work view not found.');
   }
   if(pathname.startsWith('/api/workspace/site-safety')){
     const params=new URL(request.url).searchParams;
