@@ -1219,6 +1219,7 @@ A restored backup cannot resurrect deleted accounts, visitor data or revoked pub
 
 ### Verification
 
+- node tests/restore-suppression.mjs (and --d1)
 - Synthetic restore of pre-deletion snapshots and duplicate tombstone replay
 - pnpm test:app-lifecycle
 - pnpm test:app-document-recovery
@@ -1235,6 +1236,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/app-data.md](../../docs/app-data.md)
 - [src/app-lifecycle.ts](../../src/app-lifecycle.ts)
 - [src/app-document-recovery.ts](../../src/app-document-recovery.ts)
+- [src/account-lifecycle/schema.sql](../../src/account-lifecycle/schema.sql)
+- [src/restore-suppression.ts](../../src/restore-suppression.ts)
+- [tests/restore-suppression.mjs](../../tests/restore-suppression.mjs)
 
 ### Execution coordination
 
@@ -1242,7 +1246,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-04 UTC first slice, source and disposable local tests only, not deployed (current-schema change inside src/account-lifecycle/schema.sql; ships with the pending WH-018 owner-run empty-database cutover). Append-only, content-free restore_suppressions ledger (kind, opaque id, effect, staff revision) written by triggers inside every erasure/revocation commit including cascades (closure purge, project deletion, owner/self visitor erasure, visitor and staff revocation, record removal/expiry, photo removal, provider tokens to revoking and confirmed removal); guards refuse logical restores of suppressed accounts, projects, visitors, records, photos and tokens, un-revocations, older staff grants, recovery-point restores holding a suppressed visitor's document and saved-version references to a suppressed photo; operator-only src/restore-suppression.ts captures the current ledger, replays it atomically and idempotently onto an isolated whole-database candidate and gates traffic on checkRestoreSuppressions. tests/restore-suppression.mjs passes on SQLite (including a pre-deletion backup candidate verified through actual handlers) and local D1 (population, guards, gate/replay statements). Open: the ledger lives in the restored database (no independent off-database copy; tools/restore-inventory.mjs not fed from it), sessions/contacts/guest links/CMS/chat/version removals and R2 verification not covered, no expiry (LC-08), WH-059 traffic switch absent; acceptance criteria remain open.
 
 ## WH-020 — Benchmark customer outcomes and decide production inference privacy
 

@@ -170,7 +170,7 @@ try{
   assert.equal((await row("SELECT state FROM account_closure_steps WHERE closure_id=? AND step='purge'",closureA)).state,'pending');
   const done=await ok(await account(a,'closure/resume'));
   assert.equal(done.closure.state,'complete');assert.equal(done.closure.steps.at(-1).detail.primaryAccountRowsDeleted,true);
-  assert.equal(done.closure.obligations.cloudflareZonesPreserved,true);assert.equal(done.closure.obligations.restoreSuppression,'not-implemented');
+  assert.equal(done.closure.obligations.cloudflareZonesPreserved,true);assert.equal(done.closure.obligations.restoreSuppression,'ledger-recorded');
  });
 
  await check('final receipt survives the account cascade; private objects are queued, not silently dropped; other tenant intact',async()=>{

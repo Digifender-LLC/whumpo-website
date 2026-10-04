@@ -82,7 +82,7 @@ function presentClosure(id:string,reviewDigest:string,expiresAt:number,b:Awaited
    ...(b.repositories.length?[`GitHub repositories you backed up to stay in your GitHub account: ${b.repositories.join(', ')}. Whumpo does not delete repositories or rewrite their history.`]:[]),
    'Cloudflare zones, registrations and DNS records outside Whumpo are never deleted or changed by closure.',
    'Copies you downloaded, and data already processed by inference or payment providers under their terms, cannot be recalled by Whumpo.',
-   'Platform database backups can retain deleted rows until they expire (up to 30 days for D1 Time Travel). Restore-safe deletion suppression is not implemented yet.',
+   'Platform database backups can retain deleted rows until they expire (up to 30 days for D1 Time Travel). Whumpo records a content-free suppression entry for your account and its deleted data so a restore from such a backup is reconciled before it serves anyone.',
    'A minimal closure receipt (step journal and counts, no content) is kept after deletion.',
   ]};
 }
@@ -134,7 +134,7 @@ export async function confirmClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string
  const b=await closureBinding(db,user);
  if(JSON.stringify(b.binding)!==review.binding_json||await hashToken(review.binding_json)!==reviewDigest)throw new AccountLifecycleError(409,'stale_review','Your account changed since this review. Prepare a new review.');
  if(b.required.length)throw new AccountLifecycleError(409,'action_required','Complete the listed actions before closing your account.');
- const obligations={githubRepositoriesPreserved:b.counts.githubBackupRepositories,cloudflareZonesPreserved:true,providerCopies:'not-recallable',downloadedExports:'not-recallable',platformBackups:'expire-up-to-30-days',restoreSuppression:'not-implemented'};
+ const obligations={githubRepositoriesPreserved:b.counts.githubBackupRepositories,cloudflareZonesPreserved:true,providerCopies:'not-recallable',downloadedExports:'not-recallable',platformBackups:'expire-up-to-30-days',restoreSuppression:'ledger-recorded'};
  const at=now(),statements=[
   db.prepare("INSERT INTO account_closures(id,account_id,policy_version,review_digest,obligations_json,state,revision,created_at,updated_at) SELECT ?,?,1,?,?,'closing',1,?,? WHERE EXISTS(SELECT 1 FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='closure' AND review_digest=? AND expires_at>?)")
    .bind(reviewId,user,reviewDigest,JSON.stringify(obligations),at,at,reviewId,user,reviewDigest,at),
