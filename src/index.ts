@@ -71,8 +71,9 @@ import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disco
 import {githubGrantReviews,reviewGitHubGrant,confirmGitHubGrant,cancelGitHubGrant} from './github-grant-revocation';
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
-import {createGuestPreview,listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedback,resolveGuestFeedback,deleteGuestFeedback,cleanupGuestPreviews} from './guest-previews/owner';
+import {listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedback,resolveGuestFeedback,deleteGuestFeedback,cleanupGuestPreviews} from './guest-previews/owner';
 import {GuestPreviewError} from './guest-previews/policy';
+import {prepareGuestPreviewIssue,confirmGuestPreviewIssue} from './guest-previews/bindings';
 import {guestPreviewOrigin} from './hosts';
 import { StorageLimitError } from './storage-budget';
 import {uploadPhoto,listPhotos,readPhotoUpload,readPhoto,cleanupPhotos} from './files';
@@ -405,11 +406,17 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   }
   // WH-092 owner guest-preview controls. Issuance is feature-gated; listing, revocation,
   // resolution and deletion remain available to the current owner on any plan.
+  const guestPrepare=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/guest-previews\/prepare$/);
+  if(guestPrepare){
+    if(new URL(request.url).search)return error(400,'Use the exact guest preview link.');
+    if(method==='POST')return json(await prepareGuestPreviewIssue(env.DB,user.id,guestPrepare[1],await body(request)));
+    return error(405,'Method not allowed');
+  }
   const guestLinks=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/guest-previews$/);
   if(guestLinks){
     if(new URL(request.url).search)return error(400,'Use the exact guest preview link.');
     if(method==='GET')return json(await listGuestPreviews(env.DB,user.id,guestLinks[1]));
-    if(method==='POST')return json(await createGuestPreview(env.DB,user.id,guestLinks[1],await body(request),String(env.ENVIRONMENT)==='local'?'http://localhost:8788/guest-preview/':guestPreviewOrigin+'/'));
+    if(method==='POST')return json(await confirmGuestPreviewIssue(env.DB,user.id,guestLinks[1],await body(request),String(env.ENVIRONMENT)==='local'?'http://localhost:8788/guest-preview/':guestPreviewOrigin+'/'));
     return error(405,'Method not allowed');
   }
   const guestLink=pathname.match(/^\/api\/guest-previews\/([0-9a-f-]{36})(?:\/(revoke|feedback)(?:\/([0-9a-f-]{36}))?)?$/);

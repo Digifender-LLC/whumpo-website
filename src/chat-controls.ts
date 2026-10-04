@@ -31,6 +31,8 @@ export type ChatControl =
  | {type:'shortcut';kind:'project'|'versions'|'health'|'checkWebsite'|'application';projectId:string}
  | {type:'domainProof';hostname:string;projectId:string}
  | {type:'checkDomainProof';claimId:string}
+ | {type:'guestPreview';operation:'revoke';linkId:string}
+ | {type:'guestPreview';operation:'delete';linkId:string;confirmation:'DELETE'}
  | {type:'unpublish';projectId?:string};
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 const exact=(a:Record<string,unknown>,keys:string[])=>Object.keys(a).every(k=>keys.includes(k));
@@ -68,5 +70,10 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  }
  if(a.type==='domainProof'&&exact(a,['type','hostname','projectId'])&&id(a.projectId)&&typeof a.hostname==='string'&&/^[a-zA-Z0-9.-]{1,253}$/.test(a.hostname))return {action:{type:'domainProof',hostname:a.hostname.toLowerCase(),projectId:a.projectId},command:`/domain ${a.hostname.toLowerCase()} ${a.projectId}`,label:'Prepare ownership verification for '+a.hostname.toLowerCase()+'.',recentAuth:false};
  if(a.type==='checkDomainProof'&&exact(a,['type','claimId'])&&id(a.claimId))return {action:{type:'checkDomainProof',claimId:a.claimId},command:'/verify-domain '+a.claimId,label:'Check the saved domain ownership proof.',recentAuth:false};
+ if(a.type==='guestPreview'&&id(a.linkId)){
+  // WH-151: ids only. Issuance is never a control (its one-time token cannot enter Chat history).
+  if(a.operation==='revoke'&&exact(a,['type','operation','linkId'])&&Object.keys(a).length===3)return {action:{type:'guestPreview',operation:'revoke',linkId:a.linkId},command:'/guest-preview-revoke '+a.linkId,label:'Revoke this guest preview link now.',recentAuth:false};
+  if(a.operation==='delete'&&a.confirmation==='DELETE'&&Object.keys(a).length===4&&exact(a,['type','operation','linkId','confirmation']))return {action:{type:'guestPreview',operation:'delete',linkId:a.linkId,confirmation:'DELETE'},command:`/guest-preview-delete ${a.linkId} DELETE`,label:'Delete this guest preview link and its saved comments.',recentAuth:false};
+ }
  if(a.type==='unpublish'&&exact(a,['type','projectId'])&&(!Object.hasOwn(a,'projectId')||id(a.projectId)))return {action:a.projectId?{type:'unpublish',projectId:a.projectId as string}:{type:'unpublish'},command:'/unpublish'+(a.projectId?' '+a.projectId:''),label:'Prepare a review to take my website offline.',recentAuth:false};
 }

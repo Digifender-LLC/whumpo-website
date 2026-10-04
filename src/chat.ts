@@ -8,6 +8,8 @@ import {usageReviewCommand,prepareUsageReviewChat} from './usage-review-requests
 import {readStandardAIHistory,readStandardAIRequest,describeStandardAIHistory,describeStandardAIRequest} from './standard-ai-history';
 import {describeConnections} from './connection-chat';
 import {githubGrantChatControl,githubGrantChatActions} from './github-grant-chat';
+import {guestPreviewChatCommand} from './guest-previews/bindings';
+import {GuestPreviewError} from './guest-previews/policy';
 import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
 import {appRecoveryChatActions} from './app-recovery-chat-actions';
@@ -188,6 +190,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const health=healthChatCommand(db,userId,command,dnsOptions);
   const backend=backendChatCommand(db,userId,input.id,content,dnsOptions?.backendRuntime);
   const cms=dnsOptions?.cmsPublication?.(input.id,content)??cmsContentCommand(content,input.id,dnsOptions?.cmsContent)??cmsChatCommand(db,userId,input.id,content,dnsOptions?.cms);
+  let guestPreview:Awaited<ReturnType<typeof guestPreviewChatCommand>>;
+  if(control?.action.type==='guestPreview'){try{guestPreview=await guestPreviewChatCommand(db,userId,content);}catch(e){if(e instanceof GuestPreviewError)return {status:e.status,error:e.message};throw e;}}
   const githubGrant=control?.action.type==='githubGrant'?githubGrantChatControl(db,userId,command,dnsOptions):undefined;
   const external=githubGrant??cms??backend??hosting??dns??backup??health;
   const comparison=await diffCommand(db,userId,input.id,command);
@@ -203,6 +207,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if(usageReviewReply)reply=usageReviewReply.reply;
   else if(maintenance){try{reply=describeAppMaintenance(await listAppMaintenance(db,userId,maintenance.projectId,maintenance.page),maintenance.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Application maintenance could not be read. Try again; nothing was executed.'};}}
   else if(pendingCMS){try{reply=describePendingCMS(await pendingCMSWork(db,userId,pendingCMS.projectId,pendingCMS.page),pendingCMS.projectId);}catch(e){return {status:(e as {status?:number}).status??503,error:(e as {status?:number}).status===404?'Project not found':'Publishing work could not be read. Try again; no operation was retried.'};}}
+  else if(guestPreview)reply=guestPreview.reply;
   else if(githubGrant)reply='GitHub access removal request recorded. Open the saved review in Settings → External connections to check its state. Replaying this message will not send it again.';
   else if(cms)reply="CMS request recorded. Ask to inspect the saved setup or content request "+input.id+' to recover its saved state.';
   else if(backend)reply="Backend request recorded. Its result is not saved yet. Ask to read test receipt "+input.id+'. Replaying this message will not execute again.';
