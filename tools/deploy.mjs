@@ -3,11 +3,16 @@ import {fileURLToPath} from 'node:url';
 import {readJSON,verifyRelease,applyRelease,reconcileRelease,newJournal} from './release-manifest.mjs';
 import {prepareRelease} from './prepare-release.mjs';
 import {releaseProvider} from './release-provider.mjs';
+import {ciRelease} from './deploy-ci.mjs';
 
 async function main(args){
  const [command,value]=args;
  if(!command||command==='--help'){
-  console.log('Usage: pnpm build; pnpm deploy prepare REVIEW.json | status RELEASE_ID | apply RELEASE_ID\nPrepare archives four bundles/assets/schema and reads the live baseline. Apply changes the private test environment. Status is read-only. See docs/releases.md.');if(!command)process.exitCode=1;return;
+  console.log('Usage: pnpm run deploy ci | prepare REVIEW.json | status RELEASE_ID | apply RELEASE_ID\nci runs only inside Cloudflare Workers Builds after a merge to main and refuses schema/database changes. prepare/apply are the owner cutover path for those. Status is read-only. See docs/releases.md.');if(!command)process.exitCode=1;return;
+ }
+ if(command==='ci'){
+  if(args.length!==1)throw Error('Invalid release command');
+  await ciRelease(process.cwd(),await releaseProvider());return;
  }
  if(!['prepare','status','apply'].includes(command)||args.length!==2)throw Error('Invalid release command');
  if(command==='prepare'){
