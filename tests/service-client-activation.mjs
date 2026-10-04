@@ -115,10 +115,10 @@ try{
  const specDigest=(await db.prepare('SELECT spec_digest FROM service_client_versions WHERE id=?').bind(v3).first()).spec_digest;
  await db.prepare("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-hold',1,1,'risk_or_missing_history',100,90)").bind(owner.id,specDigest).run();
  await assert.rejects(lateDB.batch([lateDB.prepare('INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) VALUES(?,?,?,?,?,?)').bind(lateTurn,owner.id,lateRevision+1,lateCommand,latePrepared.reply,now()),...latePrepared.statements]),/service_client_activation_changed/);assert.equal(await db.prepare('SELECT id FROM chat_turns WHERE id=?').bind(lateTurn).first(),null);
- assert.equal(await m.activeContact(db,owner.project),null);assert.equal(await m.activeBackendForm(db,owner.project),null);assert.doesNotMatch(await(await served(owner)).text(),/townhello-tool-title|https:\/\/whumpo.com\/contact/);
+ assert.equal(await m.activeContact(db,owner.project),null);assert.equal(await m.activeBackendForm(db,owner.project),null);assert.doesNotMatch(await(await served(owner)).text(),/whumpo-tool-title|https:\/\/whumpo.com\/contact/);
  const heldCalls=calls,heldExecutions=executions;
  for(const url of [`https://${owner.project}.whumpo.site/`,`http://localhost/s/${owner.project}/`])for(const method of ['GET','HEAD']){
-  const page=await m.host.fetch(new Request(url,{method}),env);assert.equal(page.status,200);assert.doesNotMatch(await page.text(),/townhello-tool-title|https:\/\/whumpo.com\/contact/);
+  const page=await m.host.fetch(new Request(url,{method}),env);assert.equal(page.status,200);assert.doesNotMatch(await page.text(),/whumpo-tool-title|https:\/\/whumpo.com\/contact/);
  }
  for(const path of [`/api/service-client-versions/${v3}/preview`,`/api/service-client-activations/${lateContact.input.id}/preview`,`/api/service-client-activations/${lateContact.input.id}/diff`])assert.equal((await call(owner,path)).status,423);
  // Supply inert Turnstile bindings so this reaches the recorded-hold guard, not missing-provider configuration.

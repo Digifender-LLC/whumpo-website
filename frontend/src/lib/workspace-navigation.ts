@@ -1,3 +1,4 @@
+import {parseSupportReference} from '../../../src/support-shape';
 import {chatLocationId,type ChatLocation} from './chat-location';
 /** URL values are locators only; ambiguous or repeated targets are refused. */
 export function chatLocationTarget(search:string):ChatLocation|null{
@@ -23,4 +24,43 @@ export function selectedProject(search:string,projects:readonly {id:string}[]|un
  const value=values.length===1&&chatLocationId(values[0])?values[0]:null;
  if(!projects)return {project:'',stale:!value};
  return value&&projects.some(project=>project.id===value)?{project:value,stale:false}:{project:'',stale:true};
+}
+/** `/workspace` is the only Chat route. `/workspace/chat` is not an alias:
+ * superseded paths resolve to `missing`, never to another page. */
+export function workspaceView(pathname:string):string{
+ const parts=pathname.split('/');
+ if(parts[1]!=='workspace'||parts.length>4||parts.length===4&&parts[3]!=='')return 'missing';
+ const segment=parts[2]??'';
+ return !segment?'chat':segment==='chat'||!/^[a-z][a-z0-9-]{0,47}$/.test(segment)?'missing':segment;
+}
+/** Fixed, identity-only destinations. They are not part of any generated
+ * layout, render without profile/Chat/dashboard reads and need no model. */
+export const essentialDestinations=[
+ {view:'saved-work',label:'Saved work',hint:'Pending requests, reviews and results'},
+ {view:'safety',label:'Site & app safety',hint:'Take a website, backend or app offline'},
+ {view:'support',label:'Support',hint:'Ask for help, even when Chat is unavailable'},
+ {view:'security',label:'Account & security',hint:'Passkeys, recovery kit and sign-in'},
+] as const;
+export type EssentialView=typeof essentialDestinations[number]['view'];
+/** The bottom bar groups views; essentials and Profile live in one Help sheet. */
+export function navigationSection(view:string):'chat'|'dashboard'|'pages'|'settings'|'help'|null{
+ if(view==='chat')return 'chat';
+ if(view==='dashboard'||['cms','project','photos','inbox','domains','visitors'].includes(view))return 'dashboard';
+ if(view.startsWith('tab-'))return 'pages';
+ if(['settings','billing','connections'].includes(view))return 'settings';
+ if(view==='profile'||essentialDestinations.some(item=>item.view===view))return 'help';
+ return null;
+}
+const reservedLabels=new Set(['chat','dashboard','yourpages','pages','settings','help','helpandaccount','profile','yourprofile','signout','accounthelp','skiptoworkspace',...essentialDestinations.map(item=>item.label)].map(label=>normalized(label)));
+function normalized(label:string){return label.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]/g,'');}
+/** A generated page cannot impersonate or shadow a fixed control by name. */
+export function pageNavigationLabel(label:string){return reservedLabels.has(normalized(label))?label+' (your page)':label;}
+/** Error replies may carry one content-free support link. Only the exact
+ * current status shape is accepted; anything else shows no link. */
+export function supportReference(value:unknown):string|null{
+ if(typeof value!=='string'||!value.startsWith('/workspace/support?'))return null;
+ const params=new URLSearchParams(value.slice('/workspace/support?'.length)),refs=params.getAll('ref');
+ if([...params.keys()].some(key=>key!=='ref')||refs.length!==1)return null;
+ const parsed=parseSupportReference(refs[0]);
+ return parsed?.kind==='status'?refs[0]:null;
 }

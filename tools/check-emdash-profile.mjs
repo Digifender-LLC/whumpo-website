@@ -10,8 +10,8 @@ for(const config of [source,built]){
  for(const key of ['worker_loaders','services','dispatch_namespaces','send_email'])assert.equal((config[key]??[]).length,0,'Unapproved binding: '+key);
  assert.ok(!config.images?.binding,'Image transformation binding is outside this profile');
  assert.equal(config.d1_databases.length,1);
- assert.equal(config.d1_databases[0].database_name,'townhello-emdash-preview');
+ assert.equal(config.d1_databases[0].database_name,'whumpo-emdash-preview');
  assert.equal(config.r2_buckets.length,1);
- assert.equal(config.r2_buckets[0].bucket_name,'townhello-emdash-preview-media');
+ assert.equal(config.r2_buckets[0].bucket_name,'whumpo-emdash-preview-media');
 }
 console.log('EmDash profile checked: private bootstrap, isolated CMS stores, no Worker Loader, Images, provider service or email bindings.');

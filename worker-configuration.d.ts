@@ -12,7 +12,7 @@ interface __BaseEnv_Env {
 	AI_BASE_URL: "https://opencode.ai/zen/go/v1";
 	AI_MODEL: "muse-spark-1.3-contributor";
 	AI_PROTOCOL: "responses";
-	BACKEND_RUNTIME: Fetcher /* tellumo-runtime */;
+	BACKEND_RUNTIME: Fetcher /* whumpo-runtime */;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {

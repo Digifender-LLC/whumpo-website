@@ -5,14 +5,14 @@ import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fi
 const m=await currentSiteFixtureHandlers(),{hostname,verifyDNS,listDomains,sendChat,readChat,getBilling}=m;
 for(const invalid of ['whumpo.com','a.whumpo.com','whumpo.site','a.whumpo.site','https://foo.com','foo.com/path','127.0.0.1','localhost','foo.local','x..com','-x.com','x-.com','x.com:443','user@x.com','*.x.com','x'.repeat(64)+'.com'])assert.throws(()=>hostname(invalid));
 assert.equal(hostname(' WWW.EXAMPLE.COM '),'www.example.com');
-const dnsName='_tellumo.www.example.com',proof='tellumo-verification=abc';
+const dnsName='_whumpo.www.example.com',proof='whumpo-verification=abc';
 const response=(answer,status=0)=>async()=>new Response(JSON.stringify({Status:status,Answer:answer}));
 assert.equal(await verifyDNS(dnsName,proof,response([{name:dnsName+'.',type:16,data:JSON.stringify(proof)}])),true);
-for(const a of [{name:'_tellumo.other.com',type:16,data:JSON.stringify(proof)},{name:dnsName,type:5,data:JSON.stringify(proof)},{name:dnsName,type:16,data:JSON.stringify(proof+'wrong')}])assert.equal(await verifyDNS(dnsName,proof,response([a])),false);
+for(const a of [{name:'_whumpo.other.com',type:16,data:JSON.stringify(proof)},{name:dnsName,type:5,data:JSON.stringify(proof)},{name:dnsName,type:16,data:JSON.stringify(proof+'wrong')}])assert.equal(await verifyDNS(dnsName,proof,response([a])),false);
 assert.equal(await verifyDNS(dnsName,proof,response([],3)),false);
 for(const provider of [async()=>new Response('null'),async()=>new Response('bad'),async()=>new Response('x'.repeat(32769)),async()=>new Response('',{status:302,headers:{location:'https://other.com'}}),response([],2)])await assert.rejects(verifyDNS(dnsName,proof,provider),{status:503});
 const fixture=await databaseFixture({d1:true}),db=fixture.db,scopes=new Map(),scope=user=>scopes.get(user);const realFetch=globalThis.fetch;let mode='match',dnsCalls=0;
-globalThis.fetch=async(url,options)=>{const host=new URL(url instanceof Request?url.url:url).hostname;if(['127.0.0.1','localhost','[::1]'].includes(host))return realFetch(url,options);assert.equal(host,'cloudflare-dns.com','Only the fixed synthetic resolver may be called');dnsCalls++;assert.equal(options.redirect,'manual');const name=new URL(url).searchParams.get('name');const row=await db.prepare('SELECT token FROM domain_claims WHERE hostname=? ORDER BY created_at DESC LIMIT 1').bind(name.slice(9)).first();return new Response(JSON.stringify({Status:0,Answer:[{name:name+'.',type:16,data:JSON.stringify(mode==='match'?'tellumo-verification='+row.token:'wrong')}]}));};
+globalThis.fetch=async(url,options)=>{const host=new URL(url instanceof Request?url.url:url).hostname;if(['127.0.0.1','localhost','[::1]'].includes(host))return realFetch(url,options);assert.equal(host,'cloudflare-dns.com','Only the fixed synthetic resolver may be called');dnsCalls++;assert.equal(options.redirect,'manual');const name=new URL(url).searchParams.get('name');const row=await db.prepare('SELECT token FROM domain_claims WHERE hostname=? ORDER BY created_at DESC LIMIT 1').bind(name.slice(8)).first();return new Response(JSON.stringify({Status:0,Answer:[{name:name+'.',type:16,data:JSON.stringify(mode==='match'?'whumpo-verification='+row.token:'wrong')}]}));};
 async function account(){const a=await workspaceFixture(db,m);scopes.set(a.account,await a.scope());return a.account;}
 async function chat(user,content,id=crypto.randomUUID(),revision){const state=await readChat(scope(user),user);return {id,result:await sendChat(scope(user),user,{id,content,revision:revision??state.state.revision})};}
 async function project(user){return (await createFixtureProject(scope(user),user,'Domain Test','A useful business website')).project;}
@@ -20,7 +20,7 @@ try{
  const owner=await account(),other=await account(),p=await project(owner),q=await project(other);
  const created=await chat(owner,'/domain www.example.com '+p);assert.equal(created.result.status,200);
  const before=(await readChat(scope(owner),owner)).state.revision;await chat(owner,'/domain www.example.com '+p,created.id,before-1);assert.equal((await readChat(scope(owner),owner)).state.revision,before);
- let domains=await listDomains(scope(owner),owner);assert.equal(domains.domains.length,1);const claim=domains.domains[0];assert.equal(claim.status,'awaiting_dns');assert.equal(claim.connected,false);assert.equal(claim.record.value.length,85);
+ let domains=await listDomains(scope(owner),owner);assert.equal(domains.domains.length,1);const claim=domains.domains[0];assert.equal(claim.status,'awaiting_dns');assert.equal(claim.connected,false);assert.equal(claim.record.value.length,84);
  await chat(owner,'/domain www.example.com '+p);assert.equal((await listDomains(scope(owner),owner)).domains.length,1);assert.equal((await listDomains(scope(other),other)).domains.length,0);
  await assert.rejects(chat(other,'/verify-domain '+claim.id),{status:404});await assert.rejects(chat(other,'/domain www.other.com '+p),{status:404});assert.equal(dnsCalls,0);
  const checked=await chat(owner,'/verify-domain '+claim.id);assert.equal(checked.result.status,200);assert.equal((await listDomains(scope(owner),owner)).domains[0].status,'ownership_verified');assert.equal(dnsCalls,1);

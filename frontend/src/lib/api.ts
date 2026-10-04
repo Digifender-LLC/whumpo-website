@@ -4,11 +4,13 @@ import type {AppPageReviewPresentation} from '../../../src/app-page-review-shape
 import type {ApplicationReviewPresentation} from '../../../src/application-review-shape';
 import {QueryClient} from '@tanstack/react-query';
 import {invalidateIdentity} from './identity-invalidation';
-export class APIError extends Error{constructor(message:string,public status:number,public code?:string,public fieldId?:string){super(message)}}
+import {supportReference} from './workspace-navigation';
+/** `support` is the status reference from the server's content-free support-page link, kept only in the current shape. */
+export class APIError extends Error{constructor(message:string,public status:number,public code?:string,public fieldId?:string,public support?:string){super(message)}}
 export const queryClient=new QueryClient({defaultOptions:{queries:{retry:false,staleTime:15000,refetchOnWindowFocus:false},mutations:{retry:false}}});
 let workspaceGeneration=0;
 export function resetWorkspaceClient(){workspaceGeneration++;window.dispatchEvent(new Event('whumpo:workspace-reset'));queryClient.clear();}
-export async function api<T>(path:string,options:RequestInit={}):Promise<T>{const generation=workspaceGeneration;const response=await fetch('/api'+path,{credentials:'same-origin',...options,headers:{'content-type':'application/json',...options.headers}});const data=await response.json();if(generation!==workspaceGeneration)throw new APIError('Account access changed. Check your current workspace.',401);if(!response.ok){if(['proof_required','identity_changed','identity_incomplete'].includes(data.code))invalidateIdentity(true);throw new APIError(data.error??'This request could not finish.',response.status,typeof data.code==='string'?data.code:undefined,typeof data.fieldId==='string'?data.fieldId:undefined);}if(path==='/profile')requireCurrentAccountIdentity(data);return data;}
+export async function api<T>(path:string,options:RequestInit={}):Promise<T>{const generation=workspaceGeneration;const response=await fetch('/api'+path,{credentials:'same-origin',...options,headers:{'content-type':'application/json',...options.headers}});const data=await response.json();if(generation!==workspaceGeneration)throw new APIError('Account access changed. Check your current workspace.',401);if(!response.ok){if(['proof_required','identity_changed','identity_incomplete'].includes(data.code))invalidateIdentity(true);throw new APIError(data.error??'This request could not finish.',response.status,typeof data.code==='string'?data.code:undefined,typeof data.fieldId==='string'?data.fieldId:undefined,supportReference(data.support)??undefined);}if(path==='/profile')requireCurrentAccountIdentity(data);return data;}
 export function requireCurrentAccountIdentity(value:unknown):asserts value is {accountId:string}{
  if(!value||typeof value!=='object'||Array.isArray(value)||!('accountId'in value)||typeof value.accountId!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(value.accountId))throw new APIError('Whumpo needs its current account response. Refresh the app and try again.',409);
 }

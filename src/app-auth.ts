@@ -14,7 +14,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const tokenPattern = /^[0-9a-f]{64}$/;
 const b64 = (value:Uint8Array) => btoa(String.fromCharCode(...value)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const decode = (value:string) => Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')), c=>c.charCodeAt(0));
-const digest = (kind:string, token:string) => hashToken(`townhello-app-${kind}:`+token);
+const digest = (kind:string, token:string) => hashToken(`whumpo-app-${kind}:`+token);
 const nowSQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 const activeSQL = 'SELECT a.revision FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id WHERE a.project_id=? AND a.enabled=1';
 function rp(local:boolean,project:string) {

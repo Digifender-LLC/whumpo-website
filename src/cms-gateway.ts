@@ -17,13 +17,13 @@ export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:
   const preview=verified.path.match(cmsMediaPreviewPath);
   if(preview)return nativeCMSPreview(preview[1],config,env.MEDIA as R2Bucket|undefined,dispatch);
   const headers=new Headers({'content-type':'contentType' in verified?verified.contentType:'application/json','origin':config.origin,'x-emdash-request':'1'});
-  for(const name of ['x-townhello-cms-id','x-townhello-cms-expires','x-townhello-cms-signature'])headers.set(name,request.headers.get(name)!);
+  for(const name of ['x-whumpo-cms-id','x-whumpo-cms-expires','x-whumpo-cms-signature'])headers.set(name,request.headers.get(name)!);
   const internal=new Request(request.url,{method:request.method,headers,...(request.method!=='GET'?{body:verified.body}:{})});
   if(request.method==='GET')return await dispatch(internal);
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS _townhello_requests(id TEXT PRIMARY KEY,request_hash TEXT NOT NULL,status INTEGER,response TEXT,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS _whumpo_requests(id TEXT PRIMARY KEY,request_hash TEXT NOT NULL,status INTEGER,response TEXT,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))").run();
   if(verified.path===initialTaxonomyPath){const response=await assignInitialTaxonomies(env.DB,verified.id,verified.requestHash,verified.body as string);if(response.ok)invalidateTaxonomies();return response;}
   type Receipt={request_hash:string;status:number|null;response:string|null};
-  const read=()=>env.DB.prepare('SELECT request_hash,status,response FROM _townhello_requests WHERE id=?').bind(verified.id).first<Receipt>();
+  const read=()=>env.DB.prepare('SELECT request_hash,status,response FROM _whumpo_requests WHERE id=?').bind(verified.id).first<Receipt>();
   const receipt=(row:Receipt)=>row.request_hash!==verified.requestHash?reply(409,'CMS request ID already used'):row.status===null?reply(409,'CMS outcome unknown; inspect the existing request receipt before preparing another request'):new Response(row.response,{status:row.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
   const identified=request.method==='POST'&&identifiedDraftPath.test(verified.path)&&typeof verified.body==='string';
   const taxonomy=request.method==='POST'&&typeof verified.body==='string'?taxonomyIntent(verified.path,verified.body):null;
@@ -31,7 +31,7 @@ export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:
   if(taxonomy)await ensureTaxonomyIntents(env.DB);
   const old=await read();if(old){if(old.request_hash===verified.requestHash&&old.status===null){if(identified)await recoverIdentifiedDraft(env.DB,config,verified.id,verified.requestHash,verified.path,verified.body as string,dispatch);if(taxonomy)await recoverTaxonomyIntent(env.DB,config,verified.id,verified.requestHash,taxonomy,dispatch);return receipt((await read())!);}return receipt(old);}
   try{
-   const reserved=identified?{meta:{changes:await reserveIdentifiedDraft(env.DB,verified.id,verified.requestHash,identifiedDraftPath.exec(verified.path)![1])?1:0}}:taxonomy?{meta:{changes:await reserveTaxonomyIntent(env.DB,verified.id,verified.requestHash,taxonomy)?1:0}}:await env.DB.prepare('INSERT INTO _townhello_requests(id,request_hash) SELECT ?,? WHERE (SELECT count(*) FROM _townhello_requests)<100').bind(verified.id,verified.requestHash).run();
+   const reserved=identified?{meta:{changes:await reserveIdentifiedDraft(env.DB,verified.id,verified.requestHash,identifiedDraftPath.exec(verified.path)![1])?1:0}}:taxonomy?{meta:{changes:await reserveTaxonomyIntent(env.DB,verified.id,verified.requestHash,taxonomy)?1:0}}:await env.DB.prepare('INSERT INTO _whumpo_requests(id,request_hash) SELECT ?,? WHERE (SELECT count(*) FROM _whumpo_requests)<100').bind(verified.id,verified.requestHash).run();
    if(reserved.meta.changes!==1)return reply(429,'CMS write receipt storage is full');
   }catch{const found=await read();return found?receipt(found):reply(503,'CMS request reservation unavailable');}
   // Never replay uncertain writes. Only JSON, bounded responses are retained; never session cookies.
@@ -43,7 +43,7 @@ export async function cmsGateway(request:Request,env:Record<string,unknown>&{DB:
    const text=new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(data);const payload=JSON.parse(text);
    if(identified&&(!response.ok||!matchesIdentifiedDraft(payload,verified.body as string,verified.id)))return reply(409,'CMS draft outcome unknown; retry this exact request for identity recovery');
    if(taxonomy&&(!response.ok||!matchesTaxonomyIntent(payload,taxonomy)))return reply(409,'CMS taxonomy outcome unknown; retry this exact request for read-only recovery');
-   await env.DB.prepare('UPDATE _townhello_requests SET status=?,response=? WHERE id=? AND status IS NULL').bind(response.status,text,verified.id).run();
+   await env.DB.prepare('UPDATE _whumpo_requests SET status=?,response=? WHERE id=? AND status IS NULL').bind(response.status,text,verified.id).run();
   }catch{/* Dispatch or acknowledgment failed. Retain the reservation and reconcile by read. */}
   const final=await read();return final?receipt(final):reply(503,'CMS receipt unavailable');
  }catch(error){return error instanceof CMSBridgeError?reply(error.status,error.message):reply(503,'CMS gateway unavailable');}

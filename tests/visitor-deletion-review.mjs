@@ -52,7 +52,7 @@ try{
  const expired=await visitor(a),expiredReview=await review(a,expired);await m.cleanupAppLifecycle(future('+6 minutes'));
  assert.equal(await db.prepare('SELECT id FROM app_deletion_reviews WHERE id=?').bind(expiredReview.id).first(),null);assert.ok(await exists(expired));pass('Maintenance expires review metadata without deleting the visitor');
  // A committed current receipt remains recoverable after its review row expires.
- const committed={id:id(),revision:1},proof=await m.hashToken(JSON.stringify(['townhello-app-deletion',A.session,a.project,committed.id,committed.revision]));
+ const committed={id:id(),revision:1},proof=await m.hashToken(JSON.stringify(['whumpo-app-deletion',A.session,a.project,committed.id,committed.revision]));
  await db.prepare('INSERT INTO app_deletion_receipts(id,project_id,proof_hash) VALUES(?,?,?)').bind(committed.id,a.project,proof).run();
  assert.deepEqual(await (await status(a,A,committed)).json(),{deleted:true,id:committed.id});assert.equal((await confirm(a,A,committed)).status,200);assert.ok(await exists(A));pass('Committed receipt remains recoverable without its review and cannot cause another deletion');
  const off=id();await m.prepareAppPage(a.ownerDB,a.user,a.project,off,null);await m.confirmAppPage(a.ownerDB,a.user,off);

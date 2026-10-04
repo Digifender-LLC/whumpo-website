@@ -3,7 +3,7 @@ import {hashToken,newSessionToken} from './security';
 import {BackendError,callBackend} from './backend-versions';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const bytes=(s:string)=>new TextEncoder().encode(s).length;
-const sessionHash=(token:string)=>hashToken('townhello-app-session:'+token);
+const sessionHash=(token:string)=>hashToken('whumpo-app-session:'+token);
 type Identity={visitor_id:string;project_id:string;version_id:string;program_revision:number;token_hash:string};
 type Run={id:string;visitor_id:string;project_id:string;version_id:string;request_hash:string;base_revision:number;state:string;result_json:string|null};
 // INTERNAL ONLY: call after successful project-scoped visitor authentication.

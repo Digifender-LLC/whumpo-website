@@ -29,7 +29,7 @@ export async function captureCMSDatabase(query,{maxBytes=64*1024*1024,maxRows=10
   }
   tables.push({name:table.name,columns,rows});
  }
- const result={format:'townhello-cms-database-v1',schema:definitions,tables};return {snapshot:result,digest:hash(result),rows:total,bytes};
+ const result={format:'whumpo-cms-database-v1',schema:definitions,tables};return {snapshot:result,digest:hash(result),rows:total,bytes};
 }
 export async function stableCMSDatabase(query,options){
  const first=await captureCMSDatabase(query,options),second=await captureCMSDatabase(query,options);
@@ -37,7 +37,7 @@ export async function stableCMSDatabase(query,options){
 }
 // Used only for isolated local restore verification of a freshly captured, trusted snapshot.
 export function restoreCapturedCMSDatabase(database,snapshot){
- if(snapshot.format!=='townhello-cms-database-v1')throw Error('Unsupported CMS database snapshot');
+ if(snapshot.format!=='whumpo-cms-database-v1')throw Error('Unsupported CMS database snapshot');
  database.exec('PRAGMA foreign_keys=OFF; BEGIN');
  try{
   for(const s of snapshot.schema.filter(s=>s.type==='table'))database.prepare(s.sql).run();
@@ -54,7 +54,7 @@ export function restoreCapturedCMSDatabase(database,snapshot){
 
 // Only for a fresh, isolated D1 binding. Callers must never supply a live target.
 export async function restoreCapturedCMSD1(database,snapshot){
- if(snapshot?.format!=='townhello-cms-database-v1'||!Array.isArray(snapshot.schema)||!Array.isArray(snapshot.tables))throw Error('Unsupported CMS database snapshot');
+ if(snapshot?.format!=='whumpo-cms-database-v1'||!Array.isArray(snapshot.schema)||!Array.isArray(snapshot.tables))throw Error('Unsupported CMS database snapshot');
  const existing=await database.prepare("SELECT name FROM sqlite_schema WHERE sql IS NOT NULL AND substr(name,1,7)<>'sqlite_' AND substr(name,1,4)<>'_cf_' LIMIT 1").first();
  if(existing)throw Error('CMS restore target must be empty');
  const statements=['PRAGMA defer_foreign_keys=ON'];

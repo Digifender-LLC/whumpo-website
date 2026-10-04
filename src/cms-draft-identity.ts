@@ -15,13 +15,13 @@ export async function identityRequest(config:CMSBridgeConfig,path:string,id:stri
  request.headers.set('origin',config.origin);request.headers.set('x-emdash-request','1');return request;
 }
 export async function ensureDraftIdentities(db:D1Database){
- await db.prepare('CREATE TABLE IF NOT EXISTS _townhello_draft_identities(request_id TEXT PRIMARY KEY REFERENCES _townhello_requests(id),collection TEXT NOT NULL CHECK(collection IN (\'posts\',\'pages\')),slug TEXT NOT NULL UNIQUE)').run();
+ await db.prepare('CREATE TABLE IF NOT EXISTS _whumpo_draft_identities(request_id TEXT PRIMARY KEY REFERENCES _whumpo_requests(id),collection TEXT NOT NULL CHECK(collection IN (\'posts\',\'pages\')),slug TEXT NOT NULL UNIQUE)').run();
 }
 /** Both inserts commit together; a lost batch acknowledgement never authorizes dispatch. */
 export async function reserveIdentifiedDraft(db:D1Database,id:string,hash:string,collection:string){
  const results=await db.batch([
-  db.prepare('INSERT INTO _townhello_requests(id,request_hash) SELECT ?,? WHERE (SELECT count(*) FROM _townhello_requests)<100').bind(id,hash),
-  db.prepare('INSERT INTO _townhello_draft_identities(request_id,collection,slug) SELECT id,?,? FROM _townhello_requests WHERE id=? AND request_hash=? AND status IS NULL').bind(collection,slug(id),id,hash),
+  db.prepare('INSERT INTO _whumpo_requests(id,request_hash) SELECT ?,? WHERE (SELECT count(*) FROM _whumpo_requests)<100').bind(id,hash),
+  db.prepare('INSERT INTO _whumpo_draft_identities(request_id,collection,slug) SELECT id,?,? FROM _whumpo_requests WHERE id=? AND request_hash=? AND status IS NULL').bind(collection,slug(id),id,hash),
  ]);return results[0].meta.changes===1&&results[1].meta.changes===1;
 }
 function sameData(actual:unknown,expected:unknown):boolean{
@@ -43,7 +43,7 @@ export async function boundedCMSJSON(response:Response){
 /** Reconciliation only reads an identity reserved before dispatch; it never repeats POST. */
 export async function recoverIdentifiedDraft(db:D1Database,config:CMSBridgeConfig,id:string,hash:string,path:string,body:string,dispatch:(request:Request)=>Promise<Response>){
  const collection=identifiedDraftPath.exec(path)?.[1];if(!collection||!validCMSDraft(body))return;
- const identity=await db.prepare('SELECT collection,slug FROM _townhello_draft_identities WHERE request_id=?').bind(id).first<{collection:string;slug:string}>();
+ const identity=await db.prepare('SELECT collection,slug FROM _whumpo_draft_identities WHERE request_id=?').bind(id).first<{collection:string;slug:string}>();
  if(!identity||identity.collection!==collection||identity.slug!==slug(id))return;
- try{const text=await boundedCMSJSON(await dispatch(await identityRequest(config,path+'/'+identity.slug,id)));if(text&&matchesIdentifiedDraft(JSON.parse(text),body,id))await db.prepare('UPDATE _townhello_requests SET status=201,response=? WHERE id=? AND request_hash=? AND status IS NULL').bind(text,id,hash).run();}catch{/* Missing, changed or unavailable drafts remain unresolved. */}
+ try{const text=await boundedCMSJSON(await dispatch(await identityRequest(config,path+'/'+identity.slug,id)));if(text&&matchesIdentifiedDraft(JSON.parse(text),body,id))await db.prepare('UPDATE _whumpo_requests SET status=201,response=? WHERE id=? AND request_hash=? AND status IS NULL').bind(text,id,hash).run();}catch{/* Missing, changed or unavailable drafts remain unresolved. */}
 }

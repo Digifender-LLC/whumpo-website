@@ -95,7 +95,7 @@ await test('unknown operation and reads with bodies are refused',()=>{
 const zone='0123456789abcdef0123456789abcdef',strip=p=>p.replace(/^\/client\/v4/,'');
 await test('GitHub BackupPaths document is the exact recovery query in source',()=>assert.equal(graphqlDocuments.BackupPaths,src.backupPathsQuery));
 await test('Cloudflare dnsRecoveryRead admits exactly the catalog reconcile reads',()=>{
- const a={zone_id:zone,record_name:'_tellumo.www.example.com'};
+ const a={zone_id:zone,record_name:'_whumpo.www.example.com'};
  for(const op of connectorCatalog.providers.cloudflare.operations['dnsRecord.create'].reconcile){
   const params=op==='zone.get'?{zone}:{zone,name:a.record_name};
   assert.equal(src.dnsRecoveryRead(a,strip(buildRequest(connectorCatalog,'cloudflare',op,params).path),'GET',undefined),true,op);
@@ -106,7 +106,7 @@ await test('Cloudflare dnsRecoveryRead admits exactly the catalog reconcile read
  assert.equal(src.dnsRecoveryRead(a,strip(buildRequest(connectorCatalog,'cloudflare','zones.list',{page:1}).path),'GET',undefined),false);
 });
 await test('GitHub backupRecoveryRead admits exactly the catalog reconcile reads',()=>{
- const b={repo_owner:'synthetic-org',repo_name:'site',branch:'main',path:'tellumo/11111111-1111-4111-8111-111111111111/versions/22222222-2222-4222-8222-222222222222'},head='a'.repeat(40);
+ const b={repo_owner:'synthetic-org',repo_name:'site',branch:'main',path:'whumpo/11111111-1111-4111-8111-111111111111/versions/22222222-2222-4222-8222-222222222222'},head='a'.repeat(40);
  const repo=buildRequest(connectorCatalog,'github','repository.get',{owner:b.repo_owner,name:b.repo_name});
  const ref=buildRequest(connectorCatalog,'github','branch.head',{owner:b.repo_owner,name:b.repo_name,branch:b.branch});
  const paths=buildRequest(connectorCatalog,'github','backup.paths',{},{query:graphqlDocuments.BackupPaths,variables:src.backupPathsVariables(b.repo_owner,b.repo_name,b.path,head)});
@@ -220,8 +220,8 @@ async function runConformance(label,make){
   await rejects(()=>rt.read(owner(),'cloudflare','zones.list',{page:1}),'NOT_CONNECTED');assert.equal(s.calls.length,1);
  });
  // Durable dispatch receipts and unknown outcomes.
- const prepared=async(rt,marker='m-1')=>{rt.connect('owner-a','cloudflare',token());return rt.prepareAction(owner(),'cloudflare','dnsRecord.create',{zone},{type:'TXT',name:'_tellumo.www.example.com',content:'"v"',ttl:1,comment:marker});};
- const observe=marker=>r=>({operationId:'dnsRecords.findExact',params:{zone,name:'_tellumo.www.example.com'},matches:j=>j.items.some(i=>i.marker===marker)});
+ const prepared=async(rt,marker='m-1')=>{rt.connect('owner-a','cloudflare',token());return rt.prepareAction(owner(),'cloudflare','dnsRecord.create',{zone},{type:'TXT',name:'_whumpo.www.example.com',content:'"v"',ttl:1,comment:marker});};
+ const observe=marker=>r=>({operationId:'dnsRecords.findExact',params:{zone,name:'_whumpo.www.example.com'},matches:j=>j.items.some(i=>i.marker===marker)});
  await t('lost response after the provider applied: uncertain, never redispatched, reconciled by readback',async()=>{
   const {rt,s}=make(),p=await prepared(rt);s.mode.lose='after';
   assert.equal((await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price})).state,'uncertain');
@@ -346,13 +346,13 @@ await test('approved deterministic rule: exact destination, template and limit; 
 await test('inclusion, configuration, consent and readiness are reported and enforced separately',async()=>{
  const {rt,s}=referenceFactory()();rt.connect('owner-a','cloudflare',token());
  assert.deepEqual(rt.status('owner-a','cloudflare'),{inclusion:'included',configuration:'configured',consent:'active',readiness:'private-test'});
- const p=await rt.prepareAction(owner(),'cloudflare','dnsRecord.create',{zone},{type:'TXT',name:'_tellumo.www.example.com',content:'"v"',ttl:1,comment:'m-2'});
+ const p=await rt.prepareAction(owner(),'cloudflare','dnsRecord.create',{zone},{type:'TXT',name:'_whumpo.www.example.com',content:'"v"',ttl:1,comment:'m-2'});
  s.mode.lose='after';await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price});s.mode.lose=null;
  rt.setInclusion('owner-a','cloudflare',false);
  assert.deepEqual(rt.status('owner-a','cloudflare'),{inclusion:'not-included',configuration:'configured',consent:'active',readiness:'private-test'});
  await rejects(()=>rt.read(owner(),'cloudflare','zones.list',{page:1}),'NOT_INCLUDED');
  // Loss of eligibility keeps reconciliation of an existing effect and disconnect available.
- assert.equal((await rt.reconcile(owner(),p.receiptId,()=>({operationId:'dnsRecords.findExact',params:{zone,name:'_tellumo.www.example.com'},matches:j=>j.items.some(i=>i.marker==='m-2')}))).state,'observed');
+ assert.equal((await rt.reconcile(owner(),p.receiptId,()=>({operationId:'dnsRecords.findExact',params:{zone,name:'_whumpo.www.example.com'},matches:j=>j.items.some(i=>i.marker==='m-2')}))).state,'observed');
  assert.equal((await rt.disconnect('owner-a','cloudflare')).state,'revoked');
  rt.setInclusion('owner-a','cloudflare',true);rt.setConfigured('cloudflare',false);
  assert.equal(rt.status('owner-a','cloudflare').configuration,'unconfigured');

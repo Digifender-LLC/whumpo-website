@@ -28,7 +28,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   // The operator login reads app metadata only. It is never installed or used for customer work.
   const app=JSON.parse(execFileSync('gh',['api','/apps/'+secrets.GITHUB_APP_SLUG],{encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:131072}));verifyGitHubApp(app,secrets);
   const c=JSON.parse(await readFile('wrangler.jsonc','utf8'));
-  if(c.name!=='tellumo-platform')throw Error('Expected the Whumpo platform Worker.');
+  if(c.name!=='whumpo-platform')throw Error('Expected the Whumpo platform Worker.');
   const credentials=process.env.CLOUDFLARE_API_TOKEN?{type:'api_token',token:process.env.CLOUDFLARE_API_TOKEN}:undefined;
   const api=cloudflareClient(c.account_id,fetch,credentials);db=remoteD1(api,c.d1_databases.find(b=>b.binding==='DB').database_id);
   requireFreshGitHubSetup(await connectionReadiness(api,db,c.name));

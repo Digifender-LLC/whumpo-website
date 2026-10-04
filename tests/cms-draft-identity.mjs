@@ -9,7 +9,7 @@ const {signCMSRequest,verifyCMSRequest,cmsGateway,nativeDraftIdentityAllowed,cms
 const dir=await mkdtemp('/tmp/whumpo-native-identity-');let store;
 try{
 
- store=await databaseFixture({d1:true,r2:true});const db=store.db,id=()=>crypto.randomUUID(),config={projectId:id(),ownerId:id(),secret:'local-identity-fixture-'.repeat(4),origin:'https://cms.test'},env={DB:db,TOWNHELLO_CMS_PROJECT_ID:config.projectId,TOWNHELLO_CMS_OWNER_ID:config.ownerId,TOWNHELLO_CMS_BRIDGE_KEY:config.secret,TOWNHELLO_CMS_ORIGIN:config.origin};
+ store=await databaseFixture({d1:true,r2:true});const db=store.db,id=()=>crypto.randomUUID(),config={projectId:id(),ownerId:id(),secret:'local-identity-fixture-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
  const path='/_emdash/api/content/posts',body=cmsDraftBody('Private article','The exact requested body.'),items=new Map();let writes=0,reads=0,drop=false,omit=false,mutate=false;
  const dispatch=async request=>{const v=await verifyCMSRequest(request,config);assert.ok(nativeDraftIdentityAllowed(request.method,v.path,v.body,v.id));
   if(request.method==='GET'){reads++;const payload=items.get(v.path.split('/').at(-1));return payload?Response.json(mutate?{...payload,data:{...payload.data,item:{...payload.data.item,data:{...payload.data.item.data,title:'Edited elsewhere'}}}}:payload):Response.json({error:'missing'},{status:404});}
@@ -22,14 +22,14 @@ try{
  const missing=id();drop=true;omit=true;assert.equal((await run(missing)).status,409);drop=false;omit=false;const count=writes;assert.equal((await run(missing)).status,409);assert.equal(writes,count);
  const changed=id();drop=true;assert.equal((await run(changed)).status,409);drop=false;mutate=true;assert.equal((await run(changed)).status,409);mutate=false;
  // Successful recovery persisted even when its acknowledgement was lost.
- const lostRecovery=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const statement=target.prepare(sql);if(!sql.startsWith('UPDATE _townhello_requests SET status=201'))return statement;return {bind(...args){const bound=statement.bind(...args);return {async run(){await bound.run();throw Error('Lost recovery acknowledgement');}};}};};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
+ const lostRecovery=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const statement=target.prepare(sql);if(!sql.startsWith('UPDATE _whumpo_requests SET status=201'))return statement;return {bind(...args){const bound=statement.bind(...args);return {async run(){await bound.run();throw Error('Lost recovery acknowledgement');}};}};};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
  assert.equal((await run(changed,body,{...env,DB:lostRecovery})).status,201);
  // A committed identity reservation with lost acknowledgement cannot dispatch.
  const lostBatch=new Proxy(db,{get(target,key){if(key==='batch')return async statements=>{await target.batch(statements);throw Error('Lost reservation acknowledgement');};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
  const lost=id(),before=writes;assert.equal((await run(lost,body,{...env,DB:lostBatch})).status,409);assert.equal(writes,before);assert.equal((await run(lost)).status,409);assert.equal(writes,before);
  // Incomplete receipts have no trustworthy stable identity; refuse recovery.
- const incomplete=id(),verified=await verifyCMSRequest(await signCMSRequest(config,path,incomplete,body),config);await db.prepare('INSERT INTO _townhello_requests(id,request_hash) VALUES(?,?)').bind(incomplete,verified.requestHash).run();const beforeReads=reads;assert.equal((await run(incomplete)).status,409);assert.equal(reads,beforeReads);
+ const incomplete=id(),verified=await verifyCMSRequest(await signCMSRequest(config,path,incomplete,body),config);await db.prepare('INSERT INTO _whumpo_requests(id,request_hash) VALUES(?,?)').bind(incomplete,verified.requestHash).run();const beforeReads=reads;assert.equal((await run(incomplete)).status,409);assert.equal(reads,beforeReads);
  const race=id(),raceBefore=writes;const results=await Promise.all(Array.from({length:5},()=>run(race)));assert.ok(results.every(r=>[201,409].includes(r.status)));assert.equal((await run(race)).status,201);assert.equal(writes,raceBefore+1);
- const foreign={...env,TOWNHELLO_CMS_OWNER_ID:id()};assert.equal((await run(first,body,foreign)).status,403);
+ const foreign={...env,WHUMPO_CMS_OWNER_ID:id()};assert.equal((await run(first,body,foreign)).status,403);
  console.log('Draft identity passed: atomic reservation, signed internal identity, read-only lost-response recovery, one dispatch under races, lost reservation/recovery acknowledgements, changed/missing draft refusal, incomplete isolation and owner boundary.');
 }finally{if(store)await store.close();await rm(dir,{recursive:true,force:true});}

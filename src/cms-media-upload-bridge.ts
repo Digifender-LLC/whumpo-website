@@ -22,10 +22,10 @@ export async function signCMSMediaUpload(config:CMSBridgeConfig,id:string,bytes:
  const photo=cleanPhoto(bytes),form=new FormData();form.set('file',new File([new Uint8Array(photo.bytes)],filename(name),{type:'image/jpeg'}));
  const request=new Request(config.origin+cmsMediaUploadPath,{method:'POST',body:form}),raw=new Uint8Array(await request.arrayBuffer()),type=request.headers.get('content-type')!,expires=Math.floor(now/1000)+60;
  const signature=hex(await crypto.subtle.sign('HMAC',await key(config),payload(config,id,expires,type,await digest(raw))));
- return new Request(request.url,{method:'POST',headers:{'content-type':type,'x-townhello-cms-id':id,'x-townhello-cms-expires':String(expires),'x-townhello-cms-signature':signature},body:raw});
+ return new Request(request.url,{method:'POST',headers:{'content-type':type,'x-whumpo-cms-id':id,'x-whumpo-cms-expires':String(expires),'x-whumpo-cms-signature':signature},body:raw});
 }
 export async function verifyCMSMediaUpload(request:Request,config:CMSBridgeConfig,now=Date.now()){
- const url=new URL(request.url),id=request.headers.get('x-townhello-cms-id')??'',time=request.headers.get('x-townhello-cms-expires')??'',signature=request.headers.get('x-townhello-cms-signature')??'',contentType=request.headers.get('content-type')??'',expires=Number(time),seconds=Math.floor(now/1000);
+ const url=new URL(request.url),id=request.headers.get('x-whumpo-cms-id')??'',time=request.headers.get('x-whumpo-cms-expires')??'',signature=request.headers.get('x-whumpo-cms-signature')??'',contentType=request.headers.get('content-type')??'',expires=Number(time),seconds=Math.floor(now/1000);
  if(!isCMSMediaUpload(request)||url.origin!==config.origin||url.search||url.hash||url.username||url.password||request.headers.has('cookie')||request.headers.has('authorization')||request.headers.has('content-encoding')||!uuid.test(id)||!/^\d{10}$/.test(time)||expires<=seconds||expires>seconds+60||!/^[0-9a-f]{64}$/.test(signature)||!/^multipart\/form-data; boundary=[A-Za-z0-9_-]{1,70}$/.test(contentType))throw new CMSBridgeError(403,'CMS upload not authorized');
  const raw=await body(request.clone());
  if(!await crypto.subtle.verify('HMAC',await key(config),Uint8Array.from(signature.match(/../g)!,s=>parseInt(s,16)),payload(config,id,expires,contentType,await digest(raw))))throw new CMSBridgeError(403,'CMS upload not authorized');

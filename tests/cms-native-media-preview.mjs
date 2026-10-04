@@ -3,7 +3,7 @@ import {build} from 'esbuild';
 // Seed only the disposable native fixture; production has no direct SQL/media write route.
 export async function verifyNativeMediaPreview(env,vars){
  const b=await build({entryPoints:['src/cms-bridge.ts'],bundle:true,format:'esm',platform:'node',write:false});const {signCMSRequest}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
- const config={projectId:vars.TOWNHELLO_CMS_PROJECT_ID,ownerId:vars.TOWNHELLO_CMS_OWNER_ID,origin:vars.TOWNHELLO_CMS_ORIGIN,secret:vars.TOWNHELLO_CMS_BRIDGE_KEY};
+ const config={projectId:vars.WHUMPO_CMS_PROJECT_ID,ownerId:vars.WHUMPO_CMS_OWNER_ID,origin:vars.WHUMPO_CMS_ORIGIN,secret:vars.WHUMPO_CMS_BRIDGE_KEY};
  const id='01ARZ3NDEKTSV4RRFFQ69G5FAV',key=id+'.png',bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6ioAAAAASUVORK5CYII=','base64');
  await env.DB.prepare('INSERT INTO media(id,filename,mime_type,size,storage_key,status) VALUES(?,?,?,?,?,?)').bind(id,'fixture.png','image/png',bytes.length,key,'ready').run();
  await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:'image/png'}});

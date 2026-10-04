@@ -14,13 +14,13 @@ import {join,resolve,dirname} from 'node:path';
 const build=spawnSync(process.execPath,['tools/build-emdash.mjs'],{stdio:'inherit'});if(build.status!==0)process.exit(build.status||1);
 // Do not accidentally run against another developer's process.
 try{await fetch('http://localhost:8799');throw Error('Port 8799 is already in use; stop its test server first.');}catch(error){if(error.message.includes('already in use'))throw error;}
-const dir=await mkdtemp(join(tmpdir(),'townhello-emdash-')),source=resolve('integrations/emdash/dist/server/wrangler.json'),config=JSON.parse(await readFile(source,'utf8'));
+const dir=await mkdtemp(join(tmpdir(),'whumpo-emdash-')),source=resolve('integrations/emdash/dist/server/wrangler.json'),config=JSON.parse(await readFile(source,'utf8'));
 config.main=resolve(dirname(source),config.main);config.assets.directory=resolve(dirname(source),config.assets.directory);
-config.vars={TOWNHELLO_CMS_PROJECT_ID:'11111111-1111-4111-8111-111111111111',TOWNHELLO_CMS_OWNER_ID:'22222222-2222-4222-8222-222222222222',TOWNHELLO_CMS_BRIDGE_KEY:'local-cms-bridge-fixture-'.repeat(3),TOWNHELLO_CMS_ORIGIN:'https://cms.test',EMDASH_SITE_URL:'https://cms.test'};
+config.vars={WHUMPO_CMS_PROJECT_ID:'11111111-1111-4111-8111-111111111111',WHUMPO_CMS_OWNER_ID:'22222222-2222-4222-8222-222222222222',WHUMPO_CMS_BRIDGE_KEY:'local-cms-bridge-fixture-'.repeat(3),WHUMPO_CMS_ORIGIN:'https://cms.test',EMDASH_SITE_URL:'https://cms.test'};
 delete config.triggers;
 await writeFile(join(dir,'cms.json'),JSON.stringify(config));
 await writeFile(join(dir,'probe.mjs'),"export default {fetch(request,env){const u=new URL(request.url);return env.CMS.fetch(new Request('https://cms.test'+u.pathname+u.search,request));}};");
-await writeFile(join(dir,'probe.json'),JSON.stringify({name:'townhello-cms-local-probe',main:'probe.mjs',compatibility_date:'2026-09-29',workers_dev:false,preview_urls:false,services:[{binding:'CMS',service:config.name}]}));
+await writeFile(join(dir,'probe.json'),JSON.stringify({name:'whumpo-cms-local-probe',main:'probe.mjs',compatibility_date:'2026-09-29',workers_dev:false,preview_urls:false,services:[{binding:'CMS',service:config.name}]}));
 let logs='',server;
 async function stopServer(){if(server&&server.exitCode===null){server.kill('SIGTERM');await new Promise(resolve=>{const timer=setTimeout(()=>{if(server.exitCode===null)server.kill('SIGKILL');resolve();},4000);server.once('exit',()=>{clearTimeout(timer);resolve();});});}}
 async function startServer(cmsPath){
@@ -44,12 +44,12 @@ try{
   await verifyNativeMediaPreview(proxy.env,config.vars);
   await verifyNativeMediaUpload(proxy.env,config.vars);
   const code=await bundle({entryPoints:['src/cms-bridge.ts'],bundle:true,format:'esm',platform:'node',write:false});const {verifyCMSInitialization,callCMS}=await import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));
-  const identity={projectId:config.vars.TOWNHELLO_CMS_PROJECT_ID,ownerId:config.vars.TOWNHELLO_CMS_OWNER_ID,secret:config.vars.TOWNHELLO_CMS_BRIDGE_KEY,origin:config.vars.TOWNHELLO_CMS_ORIGIN};
+  const identity={projectId:config.vars.WHUMPO_CMS_PROJECT_ID,ownerId:config.vars.WHUMPO_CMS_OWNER_ID,secret:config.vars.WHUMPO_CMS_BRIDGE_KEY,origin:config.vars.WHUMPO_CMS_ORIGIN};
   const service={fetch:async request=>fetch('http://localhost:8799'+new URL(request.url).pathname,{method:request.method,headers:request.headers,...(request.method!=='GET'?{body:await request.text()}:{}),redirect:'error'})};
   const recoveryId=randomUUID(),recoveryBody={status:'draft',data:{title:'Native identity recovery',content:[{_type:'block',style:'normal',markDefs:[],children:[{_type:'span',text:'Recover this exact private draft.',marks:[]}]}]}};
   const original=await callCMS(service,identity,'/_emdash/api/content/posts',recoveryId,recoveryBody);
   // Simulate a persisted article whose native response receipt was lost.
-  await proxy.env.DB.prepare('UPDATE _townhello_requests SET status=NULL,response=NULL WHERE id=?').bind(recoveryId).run();
+  await proxy.env.DB.prepare('UPDATE _whumpo_requests SET status=NULL,response=NULL WHERE id=?').bind(recoveryId).run();
   const recovered=await callCMS(service,identity,'/_emdash/api/content/posts',recoveryId,recoveryBody);
   if(recovered.item.id!==original.item.id||recovered._rev!==original._rev||recovered.item.slug!=='whumpo-draft-'+recoveryId)throw Error('Native draft identity recovery differs');
   if((await proxy.env.DB.prepare('SELECT count(*) n FROM ec_posts WHERE slug=?').bind('whumpo-draft-'+recoveryId).first()).n!==1)throw Error('Native recovery duplicated the article');
@@ -57,8 +57,8 @@ try{
   const taxonomyCode=await bundle({entryPoints:['src/cms-taxonomy-shape.ts'],bundle:true,format:'esm',platform:'node',write:false});const {cmsTaxonomyDefinition,cmsTaxonomyTerm}=await import('data:text/javascript;base64,'+Buffer.from(taxonomyCode.outputFiles[0].text).toString('base64'));
   for(const name of ['categories','tags'])for(const kind of ['definition','term']){
    const path=kind==='definition'?'/_emdash/api/taxonomies':'/_emdash/api/taxonomies/'+name+'/terms',readPath=kind==='definition'?path+'/'+name:path+'/studio-notes',body=kind==='definition'?cmsTaxonomyDefinition(name):cmsTaxonomyTerm('studio-notes','Studio notes');
-   const intent=await proxy.env.DB.prepare('SELECT request_id FROM _townhello_taxonomy_intents WHERE read_path=?').bind(readPath).first();if(!intent)throw Error('Native taxonomy recovery fixture has no reserved intent');
-   const before=await callCMS(service,identity,readPath,randomUUID());await proxy.env.DB.prepare('UPDATE _townhello_requests SET status=NULL,response=NULL WHERE id=?').bind(intent.request_id).run();
+   const intent=await proxy.env.DB.prepare('SELECT request_id FROM _whumpo_taxonomy_intents WHERE read_path=?').bind(readPath).first();if(!intent)throw Error('Native taxonomy recovery fixture has no reserved intent');
+   const before=await callCMS(service,identity,readPath,randomUUID());await proxy.env.DB.prepare('UPDATE _whumpo_requests SET status=NULL,response=NULL WHERE id=?').bind(intent.request_id).run();
    const recovered=await callCMS(service,identity,path,intent.request_id,body),key=kind==='definition'?'taxonomy':'term';
    if(recovered.reconciled!==true||recovered[key].id!==before[key].id)throw Error('Native taxonomy reconciliation changed identity');
   }

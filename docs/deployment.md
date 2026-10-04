@@ -31,7 +31,7 @@ Current domain/frontend configuration: see [Whumpo migration](whumpo-migration.m
 
 ## Public pricing panel — September 29, 2026
 
-Deployed the Monthly/Annual and Personal/Business pricing switches with three cards per audience to the test `tellumo-platform` Worker, active version `bca9c6e9-a275-4fde-a478-47a9effd6e63`. The deploy used an isolated checkout based on `c7223d2` containing only the pricing UI and policy update, so unrelated working-tree edits were excluded. No migration, payment flow, customer resource, or plan entitlement changed.
+Deployed the Monthly/Annual and Personal/Business pricing switches with three cards per audience to the test `whumpo-platform` Worker, active version `bca9c6e9-a275-4fde-a478-47a9effd6e63`. The deploy used an isolated checkout based on `c7223d2` containing only the pricing UI and policy update, so unrelated working-tree edits were excluded. No migration, payment flow, customer resource, or plan entitlement changed.
 
 `pnpm check`, `pnpm build`, and `git diff --check` passed in the isolated checkout. The platform deployment wrapper verified the active Worker version. Live `https://whumpo.com/api/health` returned 200. Browser readback confirmed the default Try it/Starter/Personal view, switching to annual Business/Business Pro/Enterprise with $790/$1,390 annual prices, and the unavailable trial/contact controls. Trial card verification and Enterprise contact remain planned.
 
@@ -43,9 +43,9 @@ On September 28 2026, the user authorized digifender.com as the temporary test d
 
 | Resource | Name | Purpose |
 | --- | --- | --- |
-| Worker | tellumo-platform | API and Static Assets |
+| Worker | whumpo-platform | API and Static Assets |
 | Custom domain | digifender.com | HTTPS test platform |
-| D1 | tellumo-control | Identity, projects, activity, invitations |
+| D1 | whumpo-control-chat-connections-test | Identity, projects, activity, invitations |
 | Turnstile | Whumpo test platform | Free managed signup verification |
 | Private repository | Digifender-LLC/whumpo-website | Source history |
 
@@ -165,7 +165,7 @@ TypeScript, source-export integration tests and AI-agent regressions passed. Exp
 
 ## Private project photos — September 29, 2026
 
-Created private Standard R2 bucket `tellumo-files`; Wrangler confirmed r2.dev public access disabled. The existing `vidshare` bucket was inspected only for aggregate usage (8 objects, 7.92 MB) and was not modified. Migration 0012 applied remotely. The workspace Worker has the FILES binding; the public-site Worker still has only D1. A daily 03:17 UTC cleanup handler drains queued deletions and batches orphan cleanup without a subrequest per object.
+Created private Standard R2 bucket `whumpo-files`; Wrangler confirmed r2.dev public access disabled. The existing `vidshare` bucket was inspected only for aggregate usage (8 objects, 7.92 MB) and was not modified. Migration 0012 applied remotely. The workspace Worker has the FILES binding; the public-site Worker still has only D1. A daily 03:17 UTC cleanup handler drains queued deletions and batches orphan cleanup without a subrequest per object.
 
 Final workspace release `8626f466-75f6-45cc-a339-62e08f5a4765`; public host `c88aba48-a907-4bd2-b54b-27d0fee4b677`. TypeScript, `test:files`, and source-export regressions passed. Photo tests cover metadata stripping with independent pixel decoding, malformed/oversized input, owner isolation, concurrent upload IDs, conflicting reuse, lost R2 and D1 acknowledgements, quota-before-storage, authentication/Origin, cleanup and zero AI use. Browser upload converted a synthetic PNG to JPEG and displayed the saved private photo.
 
@@ -328,7 +328,7 @@ An earlier assertion expected a headline-ending period from an ambiguously punct
 
 ## Private generated-code runtime foundation — September 29, 2026
 
-Added private `tellumo-runtime`, version `0cdb36f1-375d-49a8-bfa1-3d880220b960`, without public routes, preview URLs, credentials or storage. Workerd, remote preview and deployed service-binding adversarial suites passed. Custom CPU configuration was rejected by the provider's Free-plan validation and removed; no upgrade was made. The existing workspace remains version `9b8cdf4e-d510-4d28-b441-d3dcc40dd14c`. See backend-execution.md for limits, transport anomaly and remaining application gates.
+Added private `whumpo-runtime`, version `0cdb36f1-375d-49a8-bfa1-3d880220b960`, without public routes, preview URLs, credentials or storage. Workerd, remote preview and deployed service-binding adversarial suites passed. Custom CPU configuration was rejected by the provider's Free-plan validation and removed; no upgrade was made. The existing workspace remains version `9b8cdf4e-d510-4d28-b441-d3dcc40dd14c`. See backend-execution.md for limits, transport anomaly and remaining application gates.
 
 ## Owned backend draft/test gateway — September 29, 2026
 
@@ -352,7 +352,7 @@ TypeScript, D1 recovery tests, chat action/control tests and local multi-Worker 
 
 ## EmDash signed ownership bridge — September 29, 2026
 
-Built and deployed private CMS `80586f76-8a62-4e8e-a738-8219f9cff821`. Its existing D1/R2/KV resources and absence of public routes are unchanged. A private service-binding probe returned 503 `CMS ownership is not configured`; no owner, project or bridge secret has been assigned in production. Main TownHello remains on `cf8d9ce7-f9b3-40da-a964-9b122e07722b`.
+Built and deployed private CMS `80586f76-8a62-4e8e-a738-8219f9cff821`. Its existing D1/R2/KV resources and absence of public routes are unchanged. A private service-binding probe returned 503 `CMS ownership is not configured`; no owner, project or bridge secret has been assigned in production. Main Whumpo remains on `cf8d9ce7-f9b3-40da-a964-9b122e07722b`.
 
 TypeScript, private profile checker, Wrangler dry-run, gateway D1 tests and the reproducible actual EmDash setup/auth/schema integration passed. The latter uses disposable local resources and fixed synthetic credentials only. The source build command now runs the installed workspace Astro CLI directly, avoiding dependency on a globally discoverable pnpm executable. Project provisioning, consent, chat content management and public CMS launch remain unfinished.
 

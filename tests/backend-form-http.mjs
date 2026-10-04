@@ -16,10 +16,10 @@ await post('/api/projects/'+project+'/backend-publication',{id:reviewId,operatio
 const config={title:'Estimate your order',description:'Get an estimate before you place your order.',buttonLabel:'Calculate total',fields:[{key:'quantity',label:'Quantity',type:'number'},{key:'price',label:'Unit price',type:'number'},{key:'express',label:'Add express service ($5)',type:'boolean'},{key:'querySelector',label:'Order note',type:'text'}]},formId=crypto.randomUUID(),formPath='/api/projects/'+project+'/backend-form';
 assert.equal((await fetch(base+formPath)).status,401);assert.equal((await post(formPath,{id:formId,config},'https://evil.test')).status,403);
 assert.equal((await post(formPath,{id:formId,config})).status,200);
-assert.ok(!(await(await fetch(base+'/s/'+project)).text()).includes('townhello-backend-form'));
+assert.ok(!(await(await fetch(base+'/s/'+project)).text()).includes('whumpo-backend-form'));
 assert.equal((await post('/api/backend-form-reviews/'+formId+'/confirm',{},'https://evil.test')).status,403);
 assert.equal((await post('/api/backend-form-reviews/'+formId+'/confirm',{})).status,200);
-const publicPage=await fetch(base+'/s/'+project);assert.equal(publicPage.status,200);assert.ok((await publicPage.text()).includes('townhello-backend-form'));
+const publicPage=await fetch(base+'/s/'+project);assert.equal(publicPage.status,200);assert.ok((await publicPage.text()).includes('whumpo-backend-form'));
 const before=await post('/api/projects/'+project+'/backend-state',{});assert.equal(before.status,400);
 console.log('Local form HTTP fixture passed: real QuickJS calculator, session/origin review protection, private until confirmed. Disposable HTTP fixture; no persistent browser URL.');
 

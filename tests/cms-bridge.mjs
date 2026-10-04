@@ -7,9 +7,9 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const {module,identity}=await currentFixtureModules(["src/cms-bridge.ts", "src/cms-gateway.ts"]);
 const {signCMSRequest,verifyCMSRequest,cmsRequestAllowed}=await module('src/cms-bridge.ts'),{cmsGateway}=await module('src/cms-gateway.ts');
-const dir=await mkdtemp('/tmp/townhello-cms-bridge-');
+const dir=await mkdtemp('/tmp/whumpo-cms-bridge-');
 const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID();
-const config={projectId:id(),ownerId:id(),secret:'local-fixture-key-'.repeat(4),origin:'https://cms.test'},env={DB:db,TOWNHELLO_CMS_PROJECT_ID:config.projectId,TOWNHELLO_CMS_OWNER_ID:config.ownerId,TOWNHELLO_CMS_BRIDGE_KEY:config.secret,TOWNHELLO_CMS_ORIGIN:config.origin};
+const config={projectId:id(),ownerId:id(),secret:'local-fixture-key-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
 let dispatches=0;const dispatch=async()=>{dispatches++;return Response.json({ok:true},{headers:{'set-cookie':'must-not-leave-gateway=1'}});},setup={title:'Fixture',tagline:'CMS test',includeContent:false},path='/_emdash/api/setup';
 const execute=async(r,environment=env,handler=dispatch)=>cmsGateway(r,environment,handler);
 try{
@@ -30,7 +30,7 @@ try{
  const unknown=id();assert.equal((await execute(await signCMSRequest(config,path,unknown,setup),env,async()=>{dispatches++;throw Error('uncertain');})).status,409);
  assert.equal((await execute(await signCMSRequest(config,path,unknown,setup))).status,409);assert.equal(dispatches,3);
  // Lost reservation acknowledgement must not dispatch a write.
- const lossy=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const s=target.prepare(sql);if(!sql.startsWith('INSERT INTO _townhello_requests'))return s;return {bind(...args){const bound=s.bind(...args);return {async run(){await bound.run();throw Error('lost acknowledgment');}};}};};const v=target[key];return typeof v==='function'?v.bind(target):v;}});
+ const lossy=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const s=target.prepare(sql);if(!sql.startsWith('INSERT INTO _whumpo_requests'))return s;return {bind(...args){const bound=s.bind(...args);return {async run(){await bound.run();throw Error('lost acknowledgment');}};}};};const v=target[key];return typeof v==='function'?v.bind(target):v;}});
  const lost=id();assert.equal((await execute(await signCMSRequest(config,path,lost,setup),{...env,DB:lossy})).status,409);assert.equal(dispatches,3);
  const invalid=id();assert.equal((await execute(await signCMSRequest(config,path,invalid,setup),env,async()=>new Response('x'.repeat(65537),{headers:{'content-type':'application/json'}}))).status,502);
  assert.equal((await execute(await signCMSRequest(config,path,invalid,setup))).status,409);assert.equal(dispatches,3);

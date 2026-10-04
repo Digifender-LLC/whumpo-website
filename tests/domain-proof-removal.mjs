@@ -33,7 +33,7 @@ try{
  const blocked=await chat(owner,'/remove-domain-proof '+replacement.id);assert.equal(await db.prepare('SELECT id FROM domain_proof_removals WHERE id=?').bind(blocked.id).first(),null);
  // DNS recovery rows created after review must also survive removal attempts.
  const dnsClaim=await claim(owner,'dns.example.com'),dnsReview=await chat(owner,'/remove-domain-proof '+dnsClaim.id);
- await db.prepare("INSERT INTO cloudflare_dns_actions(id,user_id,claim_id,project_id,token_id,zone_id,zone_name,record_name,content,inventory_hash,created_at,expires_at) VALUES(?,?,?,?,'token','zone','example.com','_tellumo.dns.example.com','proof','hash',?,?)").bind(crypto.randomUUID(),owner.id,dnsClaim.id,owner.project,now(),new Date(Date.now()+600000).toISOString()).run();
+ await db.prepare("INSERT INTO cloudflare_dns_actions(id,user_id,claim_id,project_id,token_id,zone_id,zone_name,record_name,content,inventory_hash,created_at,expires_at) VALUES(?,?,?,?,'token','zone','example.com','_whumpo.dns.example.com','proof','hash',?,?)").bind(crypto.randomUUID(),owner.id,dnsClaim.id,owner.project,now(),new Date(Date.now()+600000).toISOString()).run();
  assert.equal((await confirm(owner,dnsReview.id)).result.status,409);assert.ok(await present(dnsClaim.id));assert.equal((await db.prepare('SELECT COUNT(*) n FROM cloudflare_dns_actions WHERE claim_id=?').bind(dnsClaim.id).first()).n,1);
  // Two simultaneous confirmations share a conversation revision; only one can commit.
  const second=await claim(owner,'two.example.com'),review=await chat(owner,'/remove-domain-proof '+second.id),state=await readChat(scope(owner.id),owner.id);

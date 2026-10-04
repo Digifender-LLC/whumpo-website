@@ -4,5 +4,5 @@ import {hashToken} from './security';
 // requesting recovery, so a lost response cannot strand the visitor.
 export async function replacementAppRecoveryCode(code:string,nonce:string){
  if(!/^[0-9a-f]{64}$/.test(code)||!/^[0-9a-f]{64}$/.test(nonce))throw new Error('Invalid recovery request');
- return hashToken('townhello-app-recovery-replacement:'+code+':'+nonce);
+ return hashToken('whumpo-app-recovery-replacement:'+code+':'+nonce);
 }
