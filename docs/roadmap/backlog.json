@@ -970,6 +970,7 @@
       "verification": [
         "node tests/account-closure-inventory.mjs",
         "node tests/account-lifecycle.mjs (and --d1)",
+        "node tests/account-lifecycle-client.mjs (and --d1)",
         "Synthetic lost-response, duplicate, callback-race and provider-timeout tests",
         "Verify export excludes secrets and other tenants",
         "pnpm check"
@@ -984,12 +985,15 @@
         "docs/workload-placement.md",
         "src/account-lifecycle/closure.ts",
         "src/account-lifecycle/export.ts",
-        "tests/account-lifecycle.mjs"
+        "tests/account-lifecycle.mjs",
+        "frontend/src/account-lifecycle.tsx",
+        "tests/account-lifecycle-client.mjs"
       ],
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-04 UTC first slice, source and disposable local tests only, not deployed (current-schema change: new input src/account-lifecycle/schema.sql needs the owner-run empty-database cutover). Authenticated /api/account/v1 routes: exact owner-bound export review plus fresh-passkey streamed ZIP (whumpo-account-export-v1, manifest last with per-file SHA-256 and omissions) composed from the Chat transcript, profile, billing, directory, access-roles and (only with explicit visitorData scope) records/files serializers, approved media only, no credentials/safety data/other tenants; exact fresh-passkey closure review/confirm with a durable closure row, stop-new-work admission guard (delayed OAuth callbacks refused in-transaction), withdraw, credential revocation through existing disconnect paths, hold/unresolved-operation waits, retained-record blockers and an atomic purge whose immutable receipt survives the cascade. tests/account-lifecycle.mjs passes on SQLite and local D1 (two owners, replay, interrupted confirm/journal/purge resume, hold refusal and release). Open: WH-052 outbox runner, UI, in-closure domain/CMS/visitor-app/backend teardown, operator reconciliation of retained receipts, LC-01/04/07 decisions, restore suppression; acceptance criteria remain open."
+        "2026-10-04 UTC first slice, source and disposable local tests only, not deployed (current-schema change: new input src/account-lifecycle/schema.sql needs the owner-run empty-database cutover). Authenticated /api/account/v1 routes: exact owner-bound export review plus fresh-passkey streamed ZIP (whumpo-account-export-v1, manifest last with per-file SHA-256 and omissions) composed from the Chat transcript, profile, billing, directory, access-roles and (only with explicit visitorData scope) records/files serializers, approved media only, no credentials/safety data/other tenants; exact fresh-passkey closure review/confirm with a durable closure row, stop-new-work admission guard (delayed OAuth callbacks refused in-transaction), withdraw, credential revocation through existing disconnect paths, hold/unresolved-operation waits, retained-record blockers and an atomic purge whose immutable receipt survives the cascade. tests/account-lifecycle.mjs passes on SQLite and local D1 (two owners, replay, interrupted confirm/journal/purge resume, hold refusal and release). Open: WH-052 outbox runner, UI, in-closure domain/CMS/visitor-app/backend teardown, operator reconciliation of retained receipts, LC-01/04/07 decisions, restore suppression; acceptance criteria remain open.",
+        "2026-10-04 UTC owner UI slice, source and disposable local tests only, not deployed: identity-only /workspace/account page (frontend/src/account-lifecycle.tsx) linked from Account security and Account help only (not Chat, shortcuts, generated pages or model tools), with export scope choice -> exact review -> fresh-passkey download, and closure exact review (removals, ordered effects, what remains, owner-action blockers) -> typed CLOSE + fresh-passkey confirm -> step-journal status with resume and final receipt. Client frontend/src/lib/account-lifecycle.ts reuses identityCeremony('reauth') once on proof_required. tests/account-lifecycle-client.mjs passes on SQLite and local D1 against the actual Worker routes. Not exercised in a real browser here; acceptance criteria remain open."
       ]
     },
     {

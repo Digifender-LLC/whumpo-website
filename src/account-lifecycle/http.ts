@@ -18,8 +18,8 @@ async function body(request:Request):Promise<unknown>{
  const text=await request.text();if(text.length>maxBody)throw invalid();
  try{return JSON.parse(text) as unknown;}catch{throw invalid();}
 }
-const actions=['export/prepare','export/download','closure/prepare','closure/confirm','closure/resume','closure/status'] as const;
-type Action=typeof actions[number];
+export const accountLifecycleActions=['export/prepare','export/download','closure/prepare','closure/confirm','closure/resume','closure/status'] as const;
+type Action=typeof accountLifecycleActions[number];
 
 /** Returns null for every other path. */
 export async function handleAccountLifecycleRequest(request:Request,env:Env):Promise<Response|null>{
@@ -28,7 +28,7 @@ export async function handleAccountLifecycleRequest(request:Request,env:Env):Pro
  const respond=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers});
  try{
   const action=url.pathname.slice(accountLifecyclePrefix.length) as Action;
-  if(!actions.includes(action)||request.method!=='POST'||url.search)return respond({error:'Not found',code:'not_found'},404);
+  if(!accountLifecycleActions.includes(action)||request.method!=='POST'||url.search)return respond({error:'Not found',code:'not_found'},404);
   const principal=await workspaceIdentity(request,env),db=admitWorkspace(env.DB,principal,'permit'),user=principal.accountId;
   const scoped=workspaceBindings(env,db,user),transport=workspaceTransport(db,user),data=await body(request);
   switch(action){

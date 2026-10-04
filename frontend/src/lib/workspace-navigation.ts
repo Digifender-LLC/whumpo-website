@@ -51,7 +51,7 @@ export function navigationSection(view:string):'chat'|'dashboard'|'pages'|'setti
  if(view==='profile'||essentialDestinations.some(item=>item.view===view))return 'help';
  return null;
 }
-const reservedLabels=new Set(['chat','dashboard','yourpages','pages','settings','help','helpandaccount','profile','yourprofile','signout','accounthelp','skiptoworkspace',...essentialDestinations.map(item=>item.label)].map(label=>normalized(label)));
+const reservedLabels=new Set(['chat','dashboard','yourpages','pages','settings','help','helpandaccount','profile','yourprofile','signout','accounthelp','skiptoworkspace','Account data and closure',...essentialDestinations.map(item=>item.label)].map(label=>normalized(label)));
 function normalized(label:string){return label.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]/g,'');}
 /** A generated page cannot impersonate or shadow a fixed control by name. */
 export function pageNavigationLabel(label:string){return reservedLabels.has(normalized(label))?label+' (your page)':label;}
