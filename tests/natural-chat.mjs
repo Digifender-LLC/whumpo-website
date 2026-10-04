@@ -1,4 +1,4 @@
-import {createFixtureWebsite,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {createFixtureWebsite,currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 Error.stackTraceLimit=0;
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -79,6 +79,8 @@ try{
  assert.equal((await confirm('backendPublication',endpoint.id)).status,200);assert.equal((await readChat(db,user)).turns.find(t=>t.id===endpoint.id).backend_publication_confirmation_id,undefined);
  const form=await askAction('Review a simple form for my website',{kind:'backend',operation:'reviewForm',projectId:project,form:{title:'A simple tool',description:'Try the saved function.',buttonLabel:'Run',fields:[{key:'value',label:'Value',type:'text'}]}});assert.equal(form.backend_form_confirmation_id,form.id);
  const formRead=await askAction('Show the saved website tool review',{kind:'backend',operation:'formReview',reviewId:form.id});assert.equal(formRead.backend_form_confirmation_id,form.id);assert.equal((await confirm('backendForm',form.id)).status,200);
+ // WH-126: an application consumes the project's visitor access module, set up through the real owner controls.
+ await enableFixtureVisitorAccess(db,user,project,{handlers:m});
  const application=await askAction('Review enabling my tested app',{kind:'backend',operation:'reviewApplication',versionId:version,runId:run});assert.equal(application.application_confirmation_id,application.id);
  const appRead=await askAction('Show that application review again',{kind:'backend',operation:'applicationReview',reviewId:application.id});assert.equal(appRead.application_confirmation_id,application.id);assert.equal(appRead.application_review.state,'ready');
  for(const turn of [websiteReview,endpoint,opened,form,formRead,application,appRead]){assert.doesNotMatch(turn.assistant_text,/(?:^|\s)\/(?:confirm|backend|application|app-page)(?:[-\s]|$)/);assert.match(turn.assistant_text,/confirmation button/);}
