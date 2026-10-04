@@ -41,6 +41,7 @@ export const deletionSites={
  'src/workspace-identity/kits.ts::users':blocked('safety_hold_account_retained','Pending-enrollment cancellation (account deletion) of a held account fails with its existing generic error.'),
  'src/contacts.ts::contact_submissions':{decision:'blocked',mechanism:'safety_hold_contact_retained + cleanupContacts excludes safety_held_projects',note:'Owner deletion is refused; expiry skips held projects. The inbox already hides expired messages.'},
  'src/contacts.ts::contact_receipts':excluded(receipts),
+ 'src/shared-modules/api.ts::module_request_receipts':excluded(receipts),
  'src/contacts.ts::contact_notification_outbox':{decision:'skips-held',mechanism:'cleanupContacts excludes safety_held_projects + safety_hold_contact_outbox_retained',note:'Content-free delivery metadata (no visitor name, email or message); expiry skips held projects and a direct delete is refused while held.'},
  'src/contact-notifications.ts::contact_notification_destinations':blocked('safety_hold_contact_destination_retained','Owner removal or replacement of a notification address inside a held project is refused; the destination carries only the owner-supplied address.'),
  'src/guest-previews/owner.ts::guest_preview_feedback':blocked('safety_hold_guest_feedback_retained','Owner comment deletion inside a held account/project.'),

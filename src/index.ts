@@ -68,7 +68,7 @@ import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
-import {handleModuleRequest} from './shared-modules/api';
+import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
 import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
@@ -625,8 +625,9 @@ export default {
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
       {name:'applications',run:async()=>{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}},
-      // Form-submission expiry: the contact inbox and WH-127 module records (both skip safety-held projects).
-      {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);}},
+      // Form-submission expiry: the contact inbox and WH-127 module records (both skip safety-held projects), then content-free
+      // module request receipts past their 30-day replay window.
+      {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);}},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},

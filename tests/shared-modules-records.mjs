@@ -315,6 +315,49 @@ try{
   await assert.rejects(()=>run("INSERT INTO module_records VALUES(?,?,?,'request','request-form',1,'visitor',?,'{}',1,?,?,unixepoch(),unixepoch(),unixepoch()+86400)",id(),theirs.id,a.project,v1.visitorId,id(),id()),/module_request_unavailable/);
  });
 
+ await check('receipt windows: sliding instance cap, owner exemption, per-staff edit cap, replay and 30-day prune',async()=>{
+  const r=await instance(a,'requests'),v6=await visitor(a),base=(await gateway(a,submission(r),v6));assert.equal(base.status,200,JSON.stringify(base.body));
+  let entry=base.body.result.entryId,rev=1;const replayable=submission(r);assert.equal((await gateway(a,replayable,v2)).status,200);
+  // Seed synthetic content-free receipts with the admission trigger lifted (test-only; restored in finally).
+  const admit=await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='module_request_admit'");
+  const seed=(n,age,{kind='visitor',operation='forms.submit',hash="printf('%064d',0)"}={})=>run(`INSERT INTO module_request_receipts
+   WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<${n})
+   SELECT ?,printf('seed-%031d',abs(random())%1000000000000),?,?,?,${hash},printf('%064d',0),?,?,?,?,1,'{}',unixepoch()-? FROM n`,
+   r.id,a.project,operation,kind,r.config_revision,r.activation_revision,r.module_digest,r.schema_digest,age);
+  const seeded=()=>run("DELETE FROM module_request_receipts WHERE request_id LIKE 'seed-%'");
+  await run('DROP TRIGGER module_request_admit');
+  try{await seed(20000,25*3600);await seed(40,31*86400);await seed(5000,31*86400,{kind:'owner'});}finally{await run(admit.sql);}
+  // A full instance window from yesterday no longer limits: the cap counts only the last 24 hours.
+  assert.equal((await gateway(a,submission(r),v6)).status,200,'Receipts older than 24 hours do not count');
+  await run('DROP TRIGGER module_request_admit');
+  try{await seed(20000,60);}finally{await run(admit.sql);}
+  const flooded=await gateway(a,submission(r),v6);assert.equal(flooded.status,429);assert.equal(flooded.body.code,'limited');
+  assert.equal((await gateway(a,replayable,v2)).body.receipt.replayed,true,'An exact replay still reads its receipt back at the cap');
+  // Owner operations are exempt: edit and removal still commit while visitors are limited.
+  const edited=await ownerCall(a,change(r,entry,rev,{count:3}));assert.equal(edited.status,200,JSON.stringify(edited.body));rev++;
+  const spare=(await rows("SELECT id FROM module_records WHERE instance_id=? AND visitor_id=? AND id!=? ORDER BY created_at DESC LIMIT 1",r.id,v2.visitorId,entry))[0].id;
+  const removed=await ownerCall(a,removal(r,spare));assert.equal(removed.status,200,JSON.stringify(removed.body));
+  // Retention prune: receipts past the 30-day replay window go (owner and visitor alike); newer ones stay.
+  const before=await row("SELECT count(*) n FROM module_request_receipts WHERE request_id LIKE 'seed-%'").then(x=>x.n);
+  await sharedModules.cleanupModuleRequestReceipts(db);
+  assert.equal(await row("SELECT count(*) n FROM module_request_receipts WHERE created_at<=unixepoch()-?",sharedModules.moduleReceiptRetentionSeconds).then(x=>x.n),0);
+  assert.equal(await row("SELECT count(*) n FROM module_request_receipts WHERE request_id LIKE 'seed-%'").then(x=>x.n),before-5040);
+  assert.equal((await gateway(a,replayable,v2)).body.receipt.replayed,true,'Receipts inside the window still replay');
+  await seeded();
+  // Staff edits: 60 per hour per visitor identity and instance; owner edits and other staff are unaffected.
+  const staffEdit=await gateway(a,change(r,entry,rev,{count:4}),s1);assert.equal(staffEdit.status,200,JSON.stringify(staffEdit.body));rev++;
+  const own=await row("SELECT principal_hash h FROM module_request_receipts WHERE request_id=?",staffEdit.body.requestId);
+  await run('DROP TRIGGER module_request_admit');
+  const used=await row("SELECT count(*) n FROM module_request_receipts WHERE instance_id=? AND principal_hash=? AND operation='records.update' AND created_at>unixepoch()-3600",r.id,own.h).then(x=>x.n);
+  try{await seed(59-used,60,{operation:'records.update',hash:`'${own.h}'`});}finally{await run(admit.sql);}
+  const last=await gateway(a,change(r,entry,rev,{count:5}),s1);assert.equal(last.status,200,JSON.stringify(last.body));rev++;
+  const over=await gateway(a,change(r,entry,rev,{count:6}),s1);assert.equal(over.status,429);assert.equal(over.body.code,'limited');
+  assert.equal((await ownerCall(a,change(r,entry,rev,{count:6}))).status,200,'Owner edits are not capped');rev++;
+  assert.equal((await gateway(a,submission(r,'staff-form'),s1)).status,200,'The edit cap does not limit submissions');
+  await seeded();
+  const recovered=await gateway(a,change(r,entry,rev,{count:7}),s1);assert.equal(recovered.status,200,JSON.stringify(recovered.body));
+ });
+
  await check('records.summary@1 and the owner records panel routes: counts only, owner only',async()=>{
   const view=await m.readViewBinding(a.scope,a.user,'records-summary',a.project);assert.equal(view.status,'ready',JSON.stringify(view));assert.equal(view.binding,'records.summary@1');
   const item=view.data.items.find(i=>i.localId==='requests');assert.equal(item.resourceId,records.id);assert.equal(item.state,'active');assert.equal(item.configRevision,records.config_revision);assert.equal(item.retentionDays,30);
@@ -393,7 +436,7 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, the owner records export serializer with its visitor-scoped slice and tamper-checked import validation, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
+ process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, the owner records export serializer with its visitor-scoped slice and tamper-checked import validation, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, sliding receipt windows with owner exemption, per-staff edit cap and 30-day receipt prune, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
 

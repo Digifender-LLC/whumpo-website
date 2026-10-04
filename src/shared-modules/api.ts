@@ -100,6 +100,17 @@ export async function handleModuleRequest(db:D1Database,principal:ModulePrincipa
  if(!saved)throw new ModuleError('unresolved');
  return {...saved,receipt:{...saved.receipt!,replayed:false}};
 }
+/** Replay window: a receipt answers an exact resend of its (resource, requestId) for 30 days, matching the 30-day
+ * anonymous intake caps that count receipts. Older receipts are content-free and pruned by the daily maintenance job.
+ * After that a resend is a new request: a records write whose change event is still retained conflicts on it; any
+ * other operation is evaluated afresh against current state. Clients retry with the same requestId within minutes. */
+export const moduleReceiptRetentionSeconds=30*86400;
+export async function cleanupModuleRequestReceipts(db:D1Database){
+ for(let batch=0;batch<10;batch++){
+  const result=await db.prepare('DELETE FROM module_request_receipts WHERE rowid IN (SELECT rowid FROM module_request_receipts WHERE created_at<=unixepoch()-? ORDER BY created_at LIMIT 5000)').bind(moduleReceiptRetentionSeconds).run();
+  if((result.meta?.changes??0)<5000)break;
+ }
+}
 /** HTTP adapter: typed error bodies only, never submitted values. */
 export function moduleErrorResponse(error:unknown){
  if(error instanceof ModuleError)return Response.json(error.body(),{status:error.status,headers:{'cache-control':'no-store'}});

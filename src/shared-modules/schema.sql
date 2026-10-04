@@ -96,6 +96,8 @@ CREATE INDEX module_activation_applies_user ON module_activation_applies(user_id
 
 -- Shared idempotent receipts for module API writes (whumpo-modules v1). Same (resource, requestId) and the
 -- same request hash reads this receipt after current permission is rechecked; a different hash conflicts.
+-- Receipts are content-free and kept for the 30-day replay window, then pruned by the daily maintenance job; the
+-- 30-day anonymous intake caps (module_record_admit) count within the same window.
 -- result_json is the handler's bounded, content-minimized result and never echoes submitted values.
 CREATE TABLE module_request_receipts (
  instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
@@ -115,6 +117,10 @@ CREATE TABLE module_request_receipts (
  PRIMARY KEY(instance_id,request_id)
 ) STRICT;
 CREATE INDEX module_request_receipts_project ON module_request_receipts(project_id,created_at);
+-- Sliding-window admission (instance and per-principal caps) and the 30-day retention prune (cleanupModuleRequestReceipts).
+CREATE INDEX module_request_receipts_instance ON module_request_receipts(instance_id,created_at);
+CREATE INDEX module_request_receipts_principal ON module_request_receipts(instance_id,principal_hash,operation,created_at);
+CREATE INDEX module_request_receipts_age ON module_request_receipts(created_at);
 -- WH-127 anonymous intake caps count public receipts platform-wide and per project.
 CREATE INDEX module_request_receipts_public ON module_request_receipts(principal_kind,created_at);
 
@@ -240,7 +246,14 @@ CREATE TRIGGER module_request_admit BEFORE INSERT ON module_request_receipts BEG
    WHERE x.id=d.value AND x.project_id=i.project_id AND a.state='active')));
  SELECT RAISE(ABORT,'module_request_stale') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id
   WHERE i.id=NEW.instance_id AND i.config_revision=NEW.config_revision AND a.revision=NEW.activation_revision);
- SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_request_receipts WHERE instance_id=NEW.instance_id)>=20000 OR abs(NEW.created_at-unixepoch())>60;
+ SELECT RAISE(ABORT,'module_request_limited') WHERE abs(NEW.created_at-unixepoch())>60;
+ -- Flood guard over a sliding 24-hour window of non-owner receipts. Owner operations (removal, export, revocation) are
+ -- never refused by it, and owner receipts do not consume visitor/staff/public capacity.
+ SELECT RAISE(ABORT,'module_request_limited') WHERE NEW.principal_kind!='owner'
+  AND (SELECT count(*) FROM module_request_receipts WHERE instance_id=NEW.instance_id AND principal_kind!='owner' AND created_at>unixepoch()-86400)>=20000;
+ -- Staff/visitor record edits: 60 per hour per visitor identity and instance (submissions have their own 20/hour cap).
+ SELECT RAISE(ABORT,'module_request_limited') WHERE NEW.principal_kind='visitor' AND NEW.operation='records.update'
+  AND (SELECT count(*) FROM module_request_receipts WHERE instance_id=NEW.instance_id AND principal_hash=NEW.principal_hash AND operation='records.update' AND created_at>unixepoch()-3600)>=60;
 END;
 CREATE TRIGGER module_request_receipt_immutable BEFORE UPDATE ON module_request_receipts BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;
 
