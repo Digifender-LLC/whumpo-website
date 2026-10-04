@@ -2506,9 +2506,11 @@
         "src/site-traffic.ts",
         "docs/workload-placement.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/111",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-04 first slice (main ae96716 plus uncommitted work, Node 22.22.0, repository requires 24): local-only synthetic-client harness tools/capacity.mjs (pnpm capacity) and docs/capacity-and-fairness.md. Four synthetic tenants including one noisy tenant drove site, photo, contact, public backend and visitor-application paths over loopback against disposable local D1/R2 and the real QuickJS runtime; recorded latency percentiles, 429/503 responses, runtime bounds, D1 statements per request and a victim-versus-noisy comparison (victim p50 512 to 1084 ms, p95 1129 to 4091 ms; 4 of 120 victim public-backend calls refused busy). One tenant held to its project/account allowances; two filler accounts drained the shared 1,000/day backend budget and a victim under its own cap was refused; a pre-set shared R2 read counter denied every tenant's photos while HTML kept serving. Findings F1-F8 (shared first-come budgets, no admission control on the public site host, global tenant-blind runtime gate, allowances keyed by target, narrow per-IP coverage, time-only recovery, no alerts) are recorded, not fixed. Alerts and cohort limits are proposals pending owner decision. No live load, deployment, Cloudflare or provider contact; figures are not Cloudflare production limits and not cost evidence. Open: owner decision on cohort limits/alerts, remedies for F1-F5, Node 24 re-record, any live experiment (needs an exact bounded reviewed plan). Acceptance not complete."
+      ]
     },
     {
       "id": "WH-051",
