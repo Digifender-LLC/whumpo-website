@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 133 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 140 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -4790,7 +4790,7 @@ All selected connections reuse server-controlled explicit bounded reads, reviewe
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-004, WH-009, WH-052, WH-122, WH-105, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-004, WH-009, WH-052, WH-122, WH-105, WH-116, WH-140, WH-141, WH-142, WH-143, WH-144, WH-145, WH-146. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -4805,6 +4805,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/customer-benchmarks.md](../../docs/customer-benchmarks.md)
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/connectors.md](../../docs/connectors.md)
+- [tools/prototypes/connectors.mjs](../../tools/prototypes/connectors.mjs)
+- [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
+- [docs/integrations/github-connection.md](../../docs/integrations/github-connection.md)
 
 ### Execution coordination
 
@@ -4813,6 +4817,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-04 UTC: WH-140 freezes the common connector contract in docs/connectors.md with an offline reference and synthetic conformance harness, and splits delivery into WH-141–146. Parent acceptance is unchanged and closes only after every child; provider sandbox/customer acceptance remains in WH-031/032/096–100.
 
 ## WH-089 — Define cumulative tier contracts and roll out the Creator display name
 
@@ -5542,6 +5547,386 @@ Issue: https://github.com/zemdregon/whumpo/issues/65. Planning owner: Unassigned
 ### Evidence
 
 - 2026-10-02 UTC: maps the already completed WH-090C/#65 handoff without reopening it or expanding its historical acceptance. e21a106 verified current schema/identity/provider boundaries and live cleanup; e27e088 later changed only favicon assets. Future tier/collaboration adapters remain required by parent WH-090/#62.
+
+## WH-140 — Freeze the common connector contract and decompose WH-056
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every connector slice and provider adapter builds against one frozen catalog, operation declaration, authority/consent/receipt model and offline conformance suite instead of inventing its own.
+
+### Scope
+
+- Freeze the provider catalog shape: server-controlled origins, scopes, typed path/query/body templates, bounds, price and WH-116 data class per operation
+- Freeze authority classes (owner-request versus approved deterministic rule), request-bound lookup/data-use consent, receipt states, unknown-outcome reconciliation, refresh/revocation and the four distinct inclusion/configuration/consent/readiness states
+- Map existing GitHub/Cloudflare vault, admission, review and receipt machinery onto the contract with exact gaps; declare planned operations for the five new providers without verifying or enabling them
+- Add an offline reference runtime and synthetic-provider conformance harness without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/connectors.md states the frozen contract, gap map, planned provider declarations and child slices, marked planned
+- [ ] Offline checks reject widened hosts/scopes/paths, caller URLs, rule reads and unpriced or unreconcilable actions, and prove revoked/expired refusal, lost-response reconciliation without duplicate effect, consent binding and owner-request-only refusal from rule context
+- [ ] Existing pure GitHub/Cloudflare recovery, vault and catalogue functions agree with the catalog
+- [ ] WH-056 keeps its acceptance and depends on every child; no child reaches WH-031/032/036/049/096–100/104
+- [ ] Open owner decisions are listed rather than assumed
+
+### Verification
+
+- node tests/connectors-contract.mjs
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-004, WH-009, WH-052, WH-105, WH-116, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/connectors.md](../../docs/connectors.md)
+- [tools/prototypes/connectors.mjs](../../tools/prototypes/connectors.mjs)
+- [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
+- [docs/integrations/github-connection.md](../../docs/integrations/github-connection.md)
+- [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-141 — Shared connector catalog, typed request builder and operation admission in source
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+GitHub and Cloudflare transports can only send catalog-declared operations built from typed parameters, and provider identity, feature mapping and vault contexts derive from one server catalog.
+
+### Scope
+
+- TypeScript catalog and request builder matching the frozen v1 shapes; replace githubAccess.send free paths/caller-chosen operation and the Cloudflare path regex with operation IDs
+- Derive ConnectionProvider, isConnectionProvider, connectionFeature and vault context patterns from the catalog; planned providers stay unconfigured and refused
+- Record operation authority and readiness in the catalog; coordinate vault-context changes with the WH-117 key lifecycle
+
+### Acceptance criteria
+
+- [ ] No provider request can be built from a caller URL, host, path or undeclared query/body; existing GitHub/Cloudflare suites pass unchanged
+- [ ] Planned providers cannot start OAuth, seal credentials or reach a transport
+- [ ] No new scope, endpoint, binding or customer-visible behaviour
+
+### Verification
+
+- pnpm check
+- pnpm test:github-connection
+- pnpm test:github-backups
+- pnpm test:cloudflare-connection
+- node tests/connection-handoff.mjs
+- node tests/connection-vault.mjs
+- node tests/connectors-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-140, WH-117. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/connectors.md](../../docs/connectors.md)
+- [tools/prototypes/connectors.mjs](../../tools/prototypes/connectors.mjs)
+- [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
+- [src/github-connection.ts](../../src/github-connection.ts)
+- [src/cloudflare-connection.ts](../../src/cloudflare-connection.ts)
+- [src/connection-vault.ts](../../src/connection-vault.ts)
+- [src/feature-admission.ts](../../src/feature-admission.ts)
+- [src/connection-handoff-shape.ts](../../src/connection-handoff-shape.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-142 — Adapt GitHub and Cloudflare handlers to the common connector contract
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The existing GitHub backup and Cloudflare DNS journeys satisfy the common contract and pass the shared conformance suite against their D1-backed handlers.
+
+### Scope
+
+- Bind the explicit plan-inclusion price into backup/DNS reviews and confirmations; expose a common receipt-state view over github_backups and cloudflare_dns_actions without rewriting their history
+- Verify and register whether discovery metadata Chat replies re-enter later model context
+- Extract runConformance into a test helper and run it against the real handlers with disposable D1 and synthetic providers
+
+### Acceptance criteria
+
+- [ ] Conformance passes for both existing providers; lost replies still never redispatch
+- [ ] Explicit price, authority and receipt state appear in reviews and status without credentials
+- [ ] WH-031/032 live acceptance remains separate
+
+### Verification
+
+- pnpm check
+- pnpm test:github-connection
+- pnpm test:github-backups
+- pnpm test:cloudflare-connection
+- node tests/connection-handoff.mjs
+- node tests/chat-task-connection-status.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-141. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/connectors.md](../../docs/connectors.md)
+- [tools/prototypes/connectors.mjs](../../tools/prototypes/connectors.mjs)
+- [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
+- [src/github-backups.ts](../../src/github-backups.ts)
+- [src/cloudflare-dns.ts](../../src/cloudflare-dns.ts)
+- [src/connection-recovery.ts](../../src/connection-recovery.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-143 — Request-bound lookup consent and common minimized connector receipts
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Provider-selected content can be read only through an owner-confirmed, single-use, exact-query consent, and new connector actions record minimized durable receipts under admitted lifecycle classes.
+
+### Scope
+
+- Current-schema lookup-consent and connector-receipt tables with tenant, credential, digest and expiry guards; no data-preservation migration
+- Admit connector-content (after the owner retention decision) and register connector-receipts with readers, retention, deletion and export policy
+- Chat card bindings for lookup consent and action review via the WH-105 interaction contract; model-context destination gated on an approved non-training route record
+
+### Acceptance criteria
+
+- [ ] Consent is bound to owner, credential, operation, parameter digest and destination, single-use and voided by disconnect
+- [ ] External results are marked untrusted and cannot confirm consent, reviews or tools
+- [ ] Real connected content cannot reach the training-enabled test route
+- [ ] Receipts hold digests and identifiers only
+
+### Verification
+
+- Synthetic SQLite and local D1 consent/receipt tests
+- node tools/lifecycle-catalog.mjs and node tests/lifecycle-catalog.mjs
+- node tests/connectors-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-141, WH-009, WH-105, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/connectors.md](../../docs/connectors.md)
+- [tools/prototypes/connectors.mjs](../../tools/prototypes/connectors.mjs)
+- [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
+- [docs/inference-privacy.md](../../docs/inference-privacy.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-144 — Single-flight refresh custody and honest revocation for refresh-token providers
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Refresh-token providers renew access only inside admitted operations with one fenced refresh per credential, and disconnect reports remote revocation honestly per provider capability.
+
+### Scope
+
+- Generalize encrypted refresh custody beyond GitHub with catalog-derived purpose contexts and rotation-safe atomic replacement
+- Per-credential refresh claim, reauthorization-required state, lost-refresh retry with the same custody and no scope widening
+- Revocation kinds rfc7009, refresh-token delete and local-only owner removal with existing lease/claim discipline
+
+### Acceptance criteria
+
+- [ ] Concurrent uses cause one token-endpoint call; invalid_grant requires reauthorization
+- [ ] No background keep-alive refresh; credentials never leave the vault boundary
+- [ ] Owner-removal providers never claim remote revocation
+
+### Verification
+
+- Synthetic provider refresh/revocation tests on SQLite and local D1
+- node tests/connection-rotation.mjs
+- node tests/connectors-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-141, WH-117. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/connectors.md](../../docs/connectors.md)
+- [tools/prototypes/connectors.mjs](../../tools/prototypes/connectors.mjs)
+- [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
+- [docs/connection-key-lifecycle.md](../../docs/connection-key-lifecycle.md)
+- [src/connection-rotation.ts](../../src/connection-rotation.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-145 — Approved deterministic-rule authority for rule-eligible connector actions
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A WH-052 deterministic-rule job can invoke only connector actions that declare approved-rule authority, within its exact approved destination, template and limits, and only on a live-accepted adapter.
+
+### Scope
+
+- Rule approval binding {operation, destination digest, body template digest, limit, credential} to a rule revision; admission and claim-time limit enforcement
+- Refuse owner-request-only operations, reads and reconciliation from rule context; refuse visitor, runtime, webhook and maintainer contexts
+- No owner-maintenance inference import or funding; WH-069 consumes this bridge for rule execution
+
+### Acceptance criteria
+
+- [ ] Owner-request-only operations are refused from rule context even when scopes permit
+- [ ] Destination/template mismatch, exceeded limits and non-accepted adapters are refused before dispatch
+- [ ] Runtime connector actions run with maintenance inference unavailable
+
+### Verification
+
+- Synthetic job-envelope plus connector tests on SQLite and local D1
+- node tests/job-envelope-contract.mjs
+- node tests/connectors-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-143, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/connectors.md](../../docs/connectors.md)
+- [tools/prototypes/connectors.mjs](../../tools/prototypes/connectors.mjs)
+- [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-146 — Connected synthetic connector acceptance and privacy/rate-limit review
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The full owner lookup, consent, review, dispatch, lost-reply, reconcile, eligibility-loss and revocation journey passes on local D1 with synthetic providers, and privacy/deletion and rate limits are reviewed.
+
+### Scope
+
+- Connected local journeys for existing providers and one synthetic refresh-token provider through Chat cards and Settings
+- Per-owner/provider request limits and provider 429 handling; privacy/deletion review of connector classes
+- Record readiness as synthetic-conformant only; provider sandbox/customer acceptance stays in WH-031/032/096–100
+
+### Acceptance criteria
+
+- [ ] All conformance cases pass against implemented handlers on SQLite and local D1
+- [ ] Rate limits and deletion/export behaviour are documented and tested
+- [ ] No provider readiness above synthetic-conformant is claimed
+
+### Verification
+
+- Connected local D1 journey tests with synthetic providers
+- Privacy/deletion and rate-limit review record
+
+### Dependencies and blockers
+
+Planning dependencies: WH-142, WH-143, WH-144, WH-145. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/connectors.md](../../docs/connectors.md)
+- [tools/prototypes/connectors.mjs](../../tools/prototypes/connectors.mjs)
+- [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-admission.md](../../docs/feature-admission.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
 # F4 — Measured expansion
 
