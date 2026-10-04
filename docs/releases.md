@@ -203,3 +203,18 @@ Managed release `438cdaa6-4ef5-46b8-a8c1-ea3115ef61af` applied the owner-authori
 ## Current Chat, website and CMS contracts — October 1, 2026
 
 Managed release `925bb8a8-12b2-44f5-807a-251ab85a5905` deploys source `56cf575` with schema 0118/0119. This removes old command presentation/approval proof, guided/full-page website writers, compiler/schema-1 admission and CMS body/provenance compatibility paths. The schema reset clears retired workspace creation state; pre-cutover inspection found no old website/service-client/CMS content rows to delete. The owner's uncertain AI request and provider credentials remain intact. All four steps completed and independent version/binding/schema/asset/authentication readback passed. [Exact versions and verification limits](current-version-policy.md#current-contract-test-release). CMS functional testing remains deferred.
+
+## PR #160 shared modules and contact email cutover — October 4, 2026 UTC
+
+Owner-authorized database initialization cutover: created new empty database whumpo-control-2026-10-04 (ID: dba4c707-a0c0-4084-969b-6c43f6afebde), initialized complete current schema, and deployed all four Workers. Source: PR #160 branch `c/great-curie-8ryukc`, commit 1aa8f7c (config update: database bindings).
+
+Managed release `ebe32e52-6b71-4977-b56e-8976d1cf26c5` completed schema initialization → runtime → apps → sites → platform without repair/retry. Schema initialization at **2026-10-04T20:12:59.871Z** confirmed 219 tables, 1050 objects. All four Workers deployed and verified at **2026-10-04T20:14:02.808Z**.
+
+| Worker | Deployed version |
+| --- | --- |
+| runtime | `d74721c0-8780-41d5-a7c2-b906294c0eb4` |
+| apps | `e57f3682-5d73-4d82-a486-91454c1468c2` |
+| sites | `2cd364e3-bc4a-41dd-9a62-e6312af48993` |
+| platform | `cff0db50-216f-4e52-ad0c-63bff524e246` |
+
+Independent readback verified: homepage 200, anonymous Chat API 401 (proof required), health endpoint 200, all bindings match new database. CMS registry unchanged (empty). Schema SHA256: `68617fbf7b3757411247514411e3a7beb637df9ce1d1b090a22fc03c1c6f2742`. Owner invitation file: `.secrets/invitation-dde54bea1f61.txt` (private). Test data reset authorized and executed per PR #160 authorization on 2026-10-04. Baseline database 418b20b6-bdba-4ff1-b265-da9da9ad5955 remains (not deleted). No paid services, CMS functional testing or customer publication. Deployment complete; ready for PR merge to main.
