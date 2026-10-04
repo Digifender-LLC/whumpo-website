@@ -19,7 +19,7 @@ try{
  assert.equal(report.protectionClasses.find(g=>g.id==='guest-feedback').profile.applicationEncoding,'readable-records');assert.equal(report.protectionClasses.find(g=>g.id==='brand-kits').profile.applicationEncoding,'not-admitted');
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
 
- assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['file_cleanup','identity_challenges','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_preservation_holds','safety_preserved_records']);
+ assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['file_cleanup','identity_challenges','operator_containments','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_preservation_holds','safety_preserved_records']);
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='domain_connections'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='gateway_spend_attempts'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='chat_review_receipts'&&t.onDelete==='NO ACTION'));
