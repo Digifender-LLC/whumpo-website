@@ -1,5 +1,9 @@
 # Customer Cloudflare authorization
 
+## Common connector contract — October 4, 2026 UTC
+
+Cloudflare is mapped onto the planned [common bounded connector contract](../connectors.md) (WH-140), with its exact gaps listed there. That mapping changes no current behaviour, scope or endpoint; WH-141/142 adapt the handlers.
+
 ## Planned plan eligibility — September 30, 2026
 
 Customer Cloudflare OAuth and its reviewed DNS operations are planned **Business and Business Pro** benefits; Starter and Creator (the accepted new name for Personal; display rollout is WH-089) do not include external account connections. This is a launch-catalogue decision, not current server enforcement: the private Explore preview and existing provider configuration, consent and exact DNS reviews are unchanged, and real-money subscriptions remain disabled (the authorized sandbox is separately available). Ordinary custom-domain eligibility, manual DNS instructions and annual domain benefits keep their separate existing rules. Hosting on Whumpo does not require a customer Cloudflare account connection.
