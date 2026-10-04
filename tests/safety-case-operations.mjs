@@ -66,6 +66,7 @@ try{
  for(const [id,p,expires] of [['contact-1',p1,'2026-01-01T00:00:00.000Z'],['contact-2',p2,'2026-01-01T00:00:00.000Z'],['contact-o',pOther,'2026-01-01T00:00:00.000Z']])
   await run("INSERT INTO contact_submissions(id,project_id,settings_revision,request_hash,name,email,message,created_at,expires_at) VALUES(?,?,1,'h',?,?,?,'2026-01-01T00:00:00.000Z',?)",id,p,MARK,'v@example.invalid',MARK,expires);
  for(const p of [p1,p2,pOther])await run("INSERT INTO site_traffic_daily(project_id,day,requests) VALUES(?,date('now','-60 days'),3)",p);
+ for(const p of [p1,p2,pOther])await run("INSERT INTO site_traffic_quality(project_id,day,excluded_requests,missed_measurements,updated_at) VALUES(?,date('now','-60 days'),1,1,'2026-10-04T00:00:00.000Z')",p);
  const avatar=new TextEncoder().encode(MARK+'avatar'),avatarB64=Buffer.from(avatar).toString('base64');
  await run('INSERT INTO user_profiles(user_id,photo,photo_digest) VALUES(?,?,?)',subject,avatarB64,await sha(avatar));
  await run("INSERT INTO profile_photo_safety(user_id,digest,photo_revision,policy_version) VALUES(?,?,0,'2026-09-30')",subject,await sha(avatar));
@@ -121,7 +122,7 @@ try{
  await blocked(()=>m.deleteContact(db,subject,'contact-2'));
  await m.cleanupContacts(db);assert.deepEqual((await all('SELECT id FROM contact_submissions ORDER BY id')).map(r=>r.id),['contact-2']);checks++;
  assert.equal((await m.contactInbox(db,subject,p2)).messages.length,0);checks++;    // expired-but-held messages stay invisible to the owner
- await m.cleanupTraffic(db);assert.deepEqual((await all('SELECT project_id FROM site_traffic_daily')).map(r=>r.project_id),[p2]);checks++;
+ await m.cleanupTraffic(db);assert.deepEqual((await all('SELECT project_id FROM site_traffic_daily')).map(r=>r.project_id),[p2]);assert.deepEqual((await all('SELECT project_id FROM site_traffic_quality')).map(r=>r.project_id),[p2]);checks++;
  assert.equal((await m.readTraffic(db,subject,p2)).rows.length,0);checks++;
  // R2: the object-held photo's project is not project-held, so the pre-hold queued object is cleaned once no hold covers it.
  await run("UPDATE file_cleanup SET created_at='2026-01-01T00:00:00.000Z'");
@@ -189,7 +190,7 @@ try{
  for(const hold of ['h-object','h-project','h-account'])await c.releasePreservationHold(db,approver.p,{holdId:hold,caseId:'case-1',releaseRef:'release-'+hold});
  assert.equal(await count('safety_preserved_records'),0);checks++;
  await m.cleanupPhotos({DB:db,FILES});assert.equal(await exists(late.key),false);assert.equal(await count('file_cleanup','object_key=?',late.key),0);checks++;
- await m.cleanupContacts(db);await m.cleanupTraffic(db);assert.equal(await count('contact_submissions'),0);assert.equal(await count('site_traffic_daily'),0);checks++;
+ await m.cleanupContacts(db);await m.cleanupTraffic(db);assert.equal(await count('contact_submissions'),0);assert.equal(await count('site_traffic_daily'),0);assert.equal(await count('site_traffic_quality'),0);checks++;
  await run('DELETE FROM app_visitors WHERE id=?',visitor);await assert.rejects(()=>run('DELETE FROM site_versions WHERE id=?',v2),/version_removal_unreviewed/);await run('DELETE FROM project_files WHERE id=?',f1.id);
  await run('DELETE FROM app_spaces WHERE project_id=?',p2); // seeded fixture row; closure removes app spaces before the account
  await run('DELETE FROM users WHERE id=?',subject);assert.equal(await count('projects','owner_user_id=?',subject),0);checks++;
