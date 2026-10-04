@@ -47,7 +47,7 @@ export async function verifyLiveWorkspaceViews({db,id,browser,workspaceToken,rel
  }
  async function openPage(name){await page.getByRole('button',{name:'Your pages',exact:true}).click();await page.getByRole('dialog').getByRole('link',{name,exact:true}).click();}
  try{
-  await page.goto('https://whumpo.com/workspace/chat');
+  await page.goto('https://whumpo.com/workspace');
   await chat('temporary','Show me just the project status and recent activity for Meadow Garden here in Chat. Do not add a sidebar page or change my dashboard.',async turn=>{
    temporary=(await row('SELECT id FROM chat_interactions WHERE origin_turn_id=?',turn.id)).id;originalTemporary=temporary;assertView((await currentTemporary()).envelope.definition.workspaceView,['projects','activity']);assert.deepEqual((await current()).layout,originalLayout);
   });
@@ -82,7 +82,7 @@ export async function verifyLiveWorkspaceViews({db,id,browser,workspaceToken,rel
   await temp().getByRole('button',{name:'Dismiss view',exact:true}).click();await temp().getByText('This Chat item is no longer available.',{exact:false}).waitFor();
   await openPage('Garden pulse');await saved().getByText('Meadow Garden',{exact:true}).waitFor();await page.reload();await saved().getByText('Meadow Garden',{exact:true}).waitFor();
   await page.getByRole('link',{name:'Chat',exact:true}).click();await temp().getByText('This Chat item is no longer available.',{exact:false}).waitFor();
-  for(const [link,heading]of [['Settings','Settings'],['Profile','Your profile']]){await page.getByRole('link',{name:link,exact:true}).click();await page.getByRole('heading',{name:heading,exact:true}).waitFor();}
+  await page.getByRole('link',{name:'Settings',exact:true}).click();await page.getByRole('heading',{name:'Settings',exact:true}).waitFor();await page.getByRole('button',{name:'Help and account',exact:true}).click();await page.getByRole('dialog',{name:'Help and account'}).getByRole('link',{name:'Your profile',exact:true}).click();await page.getByRole('heading',{name:'Your profile',exact:true}).waitFor();
   assert.deepEqual(await calls(),before);assert.equal((await row('SELECT count(*) n FROM workspace_layout_receipts WHERE user_id=?',id)).n,7);
   for(const table of ['publications','site_versions','project_spec_proposals'])assert.equal((await row('SELECT count(*) n FROM '+table)).n,0);
   assert.equal((await row("SELECT count(*) n FROM standard_ai_requests WHERE user_id=? AND state<>'completed'",id)).n,0);

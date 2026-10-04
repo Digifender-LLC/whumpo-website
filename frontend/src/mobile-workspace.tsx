@@ -1,9 +1,11 @@
 import {QueryRecovery} from './query-recovery';
 import {useEffect,useState} from 'react';
 import {Link,useRouterState} from '@tanstack/react-router';
-import {MessageCircle,LayoutDashboard,PanelsTopLeft,Settings,ArrowRight} from 'lucide-react';
+import {MessageCircle,LayoutDashboard,PanelsTopLeft,Settings,ArrowRight,History,ShieldAlert,LifeBuoy,KeyRound,CircleHelp} from 'lucide-react';
 import {Dialog,DialogTrigger,DialogContent,DialogTitle,DialogDescription} from './components/ui/dialog';
 import {useWorkspace} from './workspace';
+import {SignOutButton} from './account-help';
+import {essentialDestinations,navigationSection,pageNavigationLabel,type EssentialView} from './lib/workspace-navigation';
 
 /** Follow the visible viewport so the composer remains above a phone keyboard. */
 export function useMobileViewport(){
@@ -32,9 +34,31 @@ export function useMobileViewport(){
   return()=>{viewport?.removeEventListener('resize',update);viewport?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);media.removeEventListener('change',update);document.documentElement.style.removeProperty('--workspace-height');document.documentElement.style.removeProperty('--workspace-bottom');document.documentElement.classList.remove('phone-keyboard')};
  },[]);
 }
+const essentialIcons:Record<EssentialView,typeof History>={'saved-work':History,safety:ShieldAlert,support:LifeBuoy,security:KeyRound};
+/** Fixed desktop controls. They never come from the generated layout and stay
+ * visible while optional pages scroll in their own region. */
+export function EssentialNavigation(){
+ return <nav aria-label="Help and account" className="sidebar-essentials shrink-0 flex flex-col gap-1 border-t pt-4 mt-4">
+  {essentialDestinations.map(item=>{const Icon=essentialIcons[item.view];return <Link key={item.view} to="/workspace/$view" params={{view:item.view}} search={{}} aria-label={item.label} className="flex gap-3 items-center rounded-xl px-3 py-2.5 text-sm"><Icon className="size-5 shrink-0"/><span className="sidebar-label">{item.label}</span></Link>;})}
+  <SignOutButton className="sidebar-sign-out justify-start gap-3 px-3 min-h-11 h-auto whitespace-normal border-0 shadow-none bg-transparent font-normal"/>
+ </nav>;
+}
 export function MobileNavigation({view,avatar}:{view:string;avatar:string}){
- const {dashboard,dashboardRead}=useWorkspace();const [pages,setPages]=useState(false);
- const section=['billing','connections'].includes(view)?'settings':view==='security'?'profile':['cms','project','photos','inbox','domains','visitors'].includes(view)?'dashboard':view;
- const pathname=useRouterState({select:s=>s.location.pathname});useEffect(()=>setPages(false),[pathname]);
- return <Dialog open={pages} onOpenChange={setPages}><nav className="mobile-navigation" aria-label="Mobile workspace"><Link activeOptions={{exact:true}} to="/workspace" search={{signup:false}} aria-current={view==='chat'?'page':undefined}><MessageCircle/><span>Chat</span></Link><Link to="/workspace/$view" params={{view:'dashboard'}} aria-current={section==='dashboard'?'page':undefined}><LayoutDashboard/><span>Dashboard</span></Link><DialogTrigger asChild><button aria-label="Your pages" data-active={view.startsWith('tab-')||undefined}><PanelsTopLeft/><span>Your pages</span></button></DialogTrigger><Link to="/workspace/$view" params={{view:'settings'}} aria-current={section==='settings'?'page':undefined}><Settings/><span>Settings</span></Link><Link to="/workspace/$view" params={{view:'profile'}} aria-current={section==='profile'?'page':undefined}><img src={avatar} alt=""/><span>Profile</span></Link></nav><DialogContent data-recovery-surface tabIndex={-1} className="mobile-pages-sheet"><DialogTitle>Your pages</DialogTitle><DialogDescription>A workspace that grows around what you do.</DialogDescription><div className="space-y-2"><QueryRecovery name="pages" {...dashboardRead} hasData={!!dashboard}/>{!dashboard?null:dashboard.layout.tabs.length?dashboard.layout.tabs.map(tab=><Link key={tab.id} to="/workspace/$view" params={{view:tab.id}} onClick={()=>setPages(false)} className="flex min-h-14 items-center justify-between gap-4 rounded-xl border px-4 font-medium"><span>{tab.label}</span><ArrowRight className="size-4 shrink-0"/></Link>):<div className="rounded-2xl bg-secondary p-5"><p className="font-semibold">A page made for your work.</p><p className="text-sm text-muted-foreground mt-2">Ask Whumpo to build a custom page around your workflow.</p><Link to="/workspace" search={{signup:false}} onClick={()=>setPages(false)} className="mt-3 inline-flex min-h-12 items-center gap-3 font-semibold">Back to Chat <ArrowRight className="size-4"/></Link></div>}</div></DialogContent></Dialog>;
+ const {dashboard,dashboardRead}=useWorkspace();const [sheet,setSheet]=useState<'pages'|'help'|null>(null);
+ const section=navigationSection(view);
+ const pathname=useRouterState({select:s=>s.location.pathname});useEffect(()=>setSheet(null),[pathname]);
+ return <Dialog open={!!sheet} onOpenChange={open=>{if(!open)setSheet(null);}}><nav className="mobile-navigation" aria-label="Mobile workspace">
+  <Link activeOptions={{exact:true}} to="/workspace" search={{signup:false}} aria-current={section==='chat'?'page':undefined}><MessageCircle/><span>Chat</span></Link>
+  <Link to="/workspace/$view" params={{view:'dashboard'}} aria-current={section==='dashboard'?'page':undefined}><LayoutDashboard/><span>Dashboard</span></Link>
+  <DialogTrigger asChild><button aria-label="Your pages" aria-haspopup="dialog" data-active={section==='pages'||undefined} onClick={()=>setSheet('pages')}><PanelsTopLeft/><span>Your pages</span></button></DialogTrigger>
+  <Link to="/workspace/$view" params={{view:'settings'}} aria-current={section==='settings'?'page':undefined}><Settings/><span>Settings</span></Link>
+  <DialogTrigger asChild><button aria-label="Help and account" aria-haspopup="dialog" data-active={section==='help'||undefined} onClick={()=>setSheet('help')}><CircleHelp/><span>Help</span></button></DialogTrigger>
+ </nav>
+ {sheet==='help'?<DialogContent data-recovery-surface tabIndex={-1} className="mobile-pages-sheet"><DialogTitle>Help and account</DialogTitle><DialogDescription>These controls work without Chat or the AI assistant.</DialogDescription><ul className="space-y-2">
+  {essentialDestinations.map(item=>{const Icon=essentialIcons[item.view];return <li key={item.view}><Link to="/workspace/$view" params={{view:item.view}} search={{}} onClick={()=>setSheet(null)} className="flex min-h-14 items-center gap-4 rounded-xl border px-4 py-2"><Icon className="size-5 shrink-0"/><span className="min-w-0"><span className="block font-medium">{item.label}</span><span className="block text-sm text-muted-foreground">{item.hint}</span></span></Link></li>;})}
+  <li><Link to="/workspace/$view" params={{view:'profile'}} onClick={()=>setSheet(null)} className="flex min-h-14 items-center gap-4 rounded-xl border px-4 py-2"><img src={avatar} alt="" className="size-6 rounded-full shrink-0"/><span className="font-medium">Your profile</span></Link></li>
+  <li><SignOutButton className="w-full min-h-14 h-auto justify-start gap-4 whitespace-normal rounded-xl px-4"/></li>
+ </ul></DialogContent>
+ :<DialogContent data-recovery-surface tabIndex={-1} className="mobile-pages-sheet"><DialogTitle>Your pages</DialogTitle><DialogDescription>Optional pages Whumpo made for your work. Chat can do everything they do.</DialogDescription><div className="space-y-2"><QueryRecovery name="pages" {...dashboardRead} hasData={!!dashboard}/>{!dashboard?null:dashboard.layout.tabs.length?dashboard.layout.tabs.map(tab=><Link key={tab.id} to="/workspace/$view" params={{view:tab.id}} onClick={()=>setSheet(null)} className="flex min-h-14 items-center justify-between gap-4 rounded-xl border px-4 font-medium"><span>{pageNavigationLabel(tab.label)}</span><ArrowRight className="size-4 shrink-0"/></Link>):<div className="rounded-2xl bg-secondary p-5"><p className="font-semibold">A page made for your work.</p><p className="text-sm text-muted-foreground mt-2">Ask Whumpo to build a custom page around your workflow.</p><Link to="/workspace" search={{signup:false}} onClick={()=>setSheet(null)} className="mt-3 inline-flex min-h-12 items-center gap-3 font-semibold">Back to Chat <ArrowRight className="size-4"/></Link></div>}</div></DialogContent>}
+ </Dialog>;
 }

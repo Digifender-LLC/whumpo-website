@@ -69,7 +69,7 @@ try{
  async function handle(req,res){try{
   const url=new URL(req.url,origin);
   if(req.headers.host!==new URL(origin).host){res.writeHead(403).end();return;}
-  if(url.pathname==='/_fixture/start'){res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+authority.token+'; Secure; HttpOnly; SameSite=Lax; Path=/',location:'/workspace/chat'}).end();return;}
+  if(url.pathname==='/_fixture/start'){res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+authority.token+'; Secure; HttpOnly; SameSite=Lax; Path=/',location:'/workspace'}).end();return;}
   if(url.pathname.startsWith('/api/')){
    const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks),input=body.length?JSON.parse(body):null;
    const trace={path:url.pathname,method:req.method,...(url.pathname==='/api/chat'&&req.method==='POST'?{input}:{})};requests.push(trace);
@@ -148,7 +148,7 @@ try{
  await openPage('Garden pulse');await saved().getByText('Meadow Garden',{exact:true}).waitFor();await page.reload();await saved().getByText('Meadow Garden',{exact:true}).waitFor();
  await page.getByRole('link',{name:'Chat',exact:true}).click();await temp().getByText('This Chat item is no longer available.',{exact:false}).waitFor();
  const beforeNavigation=calls.length;
- for(const [link,heading]of [['Settings','Settings'],['Profile','Your profile']]){await page.getByRole('link',{name:link,exact:true}).click();await page.getByRole('heading',{name:heading,exact:true}).waitFor();}
+ await page.getByRole('link',{name:'Settings',exact:true}).click();await page.getByRole('heading',{name:'Settings',exact:true}).waitFor();await page.getByRole('button',{name:'Help and account',exact:true}).click();await page.getByRole('dialog',{name:'Help and account'}).getByRole('link',{name:'Your profile',exact:true}).click();await page.getByRole('heading',{name:'Your profile',exact:true}).waitFor();
  assert.equal(calls.length,beforeNavigation);assert.equal((await row('SELECT count(*) n FROM workspace_layout_receipts WHERE user_id=?',user)).n,7);
  for(const table of ['publications','site_versions','project_spec_proposals'])assert.equal((await row('SELECT count(*) n FROM '+table)).n,0);
  assert.equal((await row('SELECT count(*) n FROM standard_ai_requests WHERE user_id=? AND state<>?',user,'completed')).n,0);

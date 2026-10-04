@@ -1,11 +1,16 @@
 import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
 import {Link} from '@tanstack/react-router';
-import {ArrowLeft,LifeBuoy} from 'lucide-react';
+import {ArrowLeft,LifeBuoy,LogOut} from 'lucide-react';
 import {Brand} from './components/brand';
 import {Button} from './components/ui/button';
 import {Dialog,DialogContent,DialogDescription,DialogHeader,DialogTitle} from './components/ui/dialog';
-import {IdentitySecurity} from './identity/flow';
+import {IdentitySecurity,useSignOut} from './identity/flow';
 
+/** Workspace sign-out through the shared identity controller; never a page-local adapter. */
+export function SignOutButton({className}:{className?:string}){
+ const {busy,error,signOut}=useSignOut();
+ return <><Button type="button" variant="outline" className={className??'min-h-11 h-auto whitespace-normal'} disabled={busy} onClick={()=>void signOut()}><LogOut className="size-4 shrink-0"/>Sign out</Button>{error&&<p role="alert" className="text-sm">{error}</p>}</>;
+}
 const HelpContext=createContext<{open:boolean;show:(trigger:HTMLButtonElement)=>void}|null>(null);
 export function AccountHelp(){
  const help=useContext(HelpContext);if(!help)throw Error('Account help needs the current identity workspace.');
