@@ -10,7 +10,7 @@ import {assertArtifactConfiguration} from './artifact-protection.mjs';
 
 const sourceTrees=['src','frontend','web','tools','compiler-locks','schema'];
 const sourceFiles=['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json',...Object.values(configFiles)];
-const supportedKeys=['$schema','name','account_id','main','compatibility_date','compatibility_flags','workers_dev','preview_urls','routes','vars','assets','d1_databases','services','r2_buckets','ratelimits','observability','triggers'];
+const supportedKeys=['$schema','name','account_id','main','compatibility_date','compatibility_flags','workers_dev','preview_urls','routes','vars','assets','d1_databases','services','r2_buckets','ratelimits','send_email','observability','triggers'];
 
 export function expectedServiceBindings(services){
  return services.map(({binding,service,entrypoint,...extra})=>{
