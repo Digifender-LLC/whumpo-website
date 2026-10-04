@@ -24,7 +24,7 @@ function describe(row:LinkRow){
 function describeFeedback(row:FeedbackRow){
  return {id:row.id,linkId:row.link_id,displayName:row.display_name,displayNameVerified:false as const,text:row.body,createdAt:row.created_at,resolvedAt:row.resolved_at};
 }
-async function ownedProject(db:D1Database,userId:string,projectId:string){
+export async function ownedProject(db:D1Database,userId:string,projectId:string){
  if(!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(id(projectId,'project'),userId).first())throw new GuestPreviewError(404,'Project not found.');
 }
 async function ownedLink(db:D1Database,userId:string,linkId:string){
@@ -32,7 +32,7 @@ async function ownedLink(db:D1Database,userId:string,linkId:string){
  if(!row)throw new GuestPreviewError(404,'Preview link not found.');
  return row;
 }
-function issuance(value:unknown){
+export function issuance(value:unknown){
  const v=value as Record<string,unknown>|null,allowed=['id','versionId','expiresInHours','feedback','label'];
  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!allowed.includes(k))||!['id','versionId','expiresInHours','feedback'].every(k=>Object.hasOwn(v,k)))
   throw new GuestPreviewError(400,'Provide a request ID, saved version, expiry in hours and whether guests may comment.');

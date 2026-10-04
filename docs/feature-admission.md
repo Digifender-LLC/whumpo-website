@@ -22,7 +22,7 @@ Provider calls recheck current credential and inclusion together in one database
 
 ### Guest preview links (WH-092)
 
-[Guest preview](guest-previews.md) issuance uses `creator.guest-feedback` with operation `dispatch` at the exact owned project scope, composed into the link insert with the current principal. Each anonymous guest read or comment re-evaluates the same inclusion for the link owner's project with `inclusionPredicate`, the identity-free half of `featurePredicate`, in the same statement as the link's own revocation/expiry/version checks. A guest is never a principal. Owner listing, revocation, resolution and deletion need only current identity and ownership.
+[Guest preview](guest-previews.md) issuance uses `creator.guest-feedback` with operation `dispatch` at the exact owned project scope, composed into the link insert with the current principal. Each anonymous guest read or comment re-evaluates the same inclusion for the link owner's project with `inclusionPredicate`, the identity-free half of `featurePredicate`, in the same statement as the link's own revocation/expiry/version checks. A guest is never a principal. Owner listing, revocation, resolution and deletion need only current identity and ownership. Issuance is reachable only through the prepared exact confirmation ([WH-151](guest-previews.md#owner-chat-and-view-bindings--wh-151)); the `guest-previews` view read is intentionally ungated.
 
 ## Protected recovery and local access
 

@@ -4983,7 +4983,7 @@
         "docs/feature-inclusion.md",
         "docs/chat-interactions.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/130",
       "owner": null,
       "evidence": []
     },

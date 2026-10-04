@@ -2,7 +2,7 @@
 
 ## Status — October 4, 2026 UTC
 
-**First slice (WH-150) implemented in source; verified only with local SQLite, local D1 and local R2 fixtures.** Not deployed, no live data read, no customer acceptance. There is no owner UI or Chat adapter yet: owners use the HTTP API below. The `creator.guest-feedback` catalogue entry stays `planned` until the remaining children pass (see [Decomposition](#decomposition)). Parent [WH-092](roadmap/backlog.md) stays open.
+**WH-150 and WH-151 implemented in source; verified only with local SQLite, local D1 and local R2 fixtures.** Not deployed, no live data read, no customer acceptance. Owners manage links from the shared view component `guest-previews` (Chat temporary views and saved pages), direct Chat controls for revoke and delete, and the HTTP API below. See [Owner Chat and view bindings](#owner-chat-and-view-bindings--wh-151). No model-facing way to read comments exists yet. The `creator.guest-feedback` catalogue entry stays `planned` until the remaining children pass (see [Decomposition](#decomposition)). Parent [WH-092](roadmap/backlog.md) stays open.
 
 No new Cloudflare product, plan or paid service is used. Links and comments live in the existing private control [D1](https://developers.cloudflare.com/d1/) database. Guest pages are served by the existing `whumpo-sites` Worker through its existing `*.whumpo.site/*` [route](https://developers.cloudflare.com/workers/configuration/routing/routes/); retention runs in the existing daily [Cron Trigger](https://developers.cloudflare.com/workers/configuration/cron-triggers/). D1 reads/writes and Worker requests count against existing account allowances. **Requires verification before activation:** that `preview.whumpo.site` resolves through Cloudflare to that route (an existing wildcard DNS record is assumed, not verified). No DNS change was made.
 
@@ -65,7 +65,8 @@ All routes are on `https://whumpo.com` and require the current workspace session
 | Route | Effect |
 | --- | --- |
 | `GET /api/projects/{project}/guest-previews` | List links: state (`active`, `expired`, `revoked`, `removed`), dates, label and comment counts. Never the token or any hash. |
-| `POST /api/projects/{project}/guest-previews` `{id, versionId, expiresInHours, feedback, label?}` | Issue a link. `id` is the idempotency key; a replay returns the link without the token. |
+| `POST /api/projects/{project}/guest-previews/prepare` `{id, versionId, expiresInHours, feedback, label?}` | Validate and return the exact readout (project, saved version and digest, expiry hours, comment setting, label) plus a `confirmation`. Writes nothing; refuses when inclusion is absent. |
+| `POST /api/projects/{project}/guest-previews` `{id, versionId, expiresInHours, feedback, label?, confirmation}` | Issue a link. This is the only issuance path: it re-prepares and refuses (409) unless `confirmation` still matches the exact readout. `id` is the idempotency key; a replay returns the link without the token. |
 | `POST /api/guest-previews/{link}/revoke` | Revoke immediately (idempotent, one-way). |
 | `DELETE /api/guest-previews/{link}` | Delete the link and its comments. |
 | `GET /api/guest-previews/{link}/feedback` | Read comments (at most 200 per link). |
@@ -73,6 +74,34 @@ All routes are on `https://whumpo.com` and require the current workspace session
 | `DELETE /api/guest-previews/{link}/feedback/{comment}` | Delete one comment. |
 
 Foreign owners receive 404 for every link, comment and project. Losing the session returns 401; already issued links keep their own expiry and revocation rules.
+
+## Owner Chat and view bindings — WH-151
+
+Registered in `src/guest-previews/bindings.ts` as an adapter over the WH-150 handlers. It has no table, token, eligibility or ownership logic of its own: every effect calls the handler the HTTP routes call, so identity, ownership and inclusion are identical on every surface.
+
+| Binding | Mode | Handler | Surface | Inclusion | Model context |
+| --- | --- | --- | --- | --- | --- |
+| `project.guest-previews@1` | read | `listGuestPreviews` via `readViewBinding` | View component `guest-previews` (project scope), shared by Chat temporary views and saved pages | Identity and ownership only | Link state, dates and comment counts |
+| `guest-preview.feedback@1` | read | `listGuestFeedback` | `GET /api/guest-previews/{link}/feedback`, opened by the owner on request | Identity and ownership only | Never |
+| `guest-preview.prepare@1` | prepare | `prepareGuestPreviewIssue` | `POST …/guest-previews/prepare` | Current `creator.guest-feedback` | Never |
+| `guest-preview.issue@1` | confirm | `confirmGuestPreviewIssue` | `POST …/guest-previews` | Current `creator.guest-feedback`, composed into the insert | Never |
+| `guest-preview.revoke@1`, `.delete@1` | action | `revokeGuestPreview`, `deleteGuestPreview` | HTTP and `ChatControl` `guestPreview` | Identity and ownership only | Never |
+| `guest-preview.resolve@1`, `.delete-comment@1` | action | `resolveGuestFeedback`, `deleteGuestFeedback` | HTTP (view panel) | Identity and ownership only | Never |
+
+- **Exact confirmation.** Preparation shows the project, the exact saved version (date and digest), the expiry as hours after confirmation, the comment setting and label. Its `confirmation` is a SHA-256 over owner, project, request ID, version, version digest, hours, comment setting and label. Issuance recomputes it, so a changed field, version, owner or a lost inclusion refuses without a row. The absolute expiry is fixed at the moment of confirmation, so the readout states the duration, not a clock time; the issued link then reports its exact `expiresAt`.
+- **Models cannot issue.** A model has no route, agent action, interaction binding or control for any row above except that a temporary or saved view may include the read-only `guest-previews` component. It is not offered an issue, revoke, delete, resolve or comment-reading action, and the agent prompt says so. Typed text is never a command, including the internal control strings.
+- **Token handling.** The token exists only in the `POST …/guest-previews` response (`no-store`) and in the owner panel's memory until dismissed or unmounted. It is not in any table (only its hash), query cache, storage, Chat turn, transcript, view fact, log or model input. A replay returns no token; a lost token needs revoke and a new link.
+- **Comments.** The view shows counts only. Text appears only after the owner presses **Show comments**, as plain text with the name labelled not verified. Nothing sends comments to Chat or a model. A reviewed privacy route for the owner to hand selected comments to the assistant is not built; until it exists, no comment can enter model context.
+- **Direct controls.** The panel's **Revoke link** and **Delete…** buttons call the HTTP handlers directly. `ChatControl` `{type:'guestPreview',operation:'revoke',linkId}` and `{…,operation:'delete',linkId,confirmation:'DELETE'}` run the same handlers through `sendChatControl` with no inference. Both stay available after inclusion ends because the view read, revoke and delete are not feature-gated (the interaction registry names `creator.guest-feedback` as the family, and only issuance enforces it).
+- **Boundaries.** The view component needs a project scope (an account-wide page reads as unavailable). A foreign or forged project ID reads as unavailable with no data, a forged link ID returns 404 and leaves the real link unchanged, and a lost workspace identity refuses every read and action.
+
+Direct `POST …/guest-previews` without a matching `confirmation` is no longer accepted.
+
+| Status | State |
+| --- | --- |
+| Implemented in source | Bindings, `guest-previews` view component and panel, confirmed issuance, ids-only Chat controls, agent prompt wording |
+| Configured / accepted | Nothing. Not deployed; no device, browser-journey or customer acceptance (WH-152, WH-153) |
+| Not built | Reviewed owner-requested route for sharing comments with the assistant; Chat card for preparation (the model cannot prepare yet, only the owner can); account-wide link list |
 
 ## Lifecycle, export, closure and safety
 
@@ -89,9 +118,13 @@ Registered as the current `guest-feedback` class in the [data lifecycle catalogu
 | Child | Scope | Status |
 | --- | --- | --- |
 | WH-150 | Link authority, isolated guest delivery, bounded feedback, owner API, lifecycle/closure registration (this page) | Source and local tests |
-| WH-151 | Register owner list/issue/revoke/resolve/delete through WH-105 bindings and WH-107/109/110 Chat/view adapters; issuance needs exact owner confirmation; comments stay out of model context | Planned |
+| WH-151 | Register owner list/issue/revoke/resolve/delete through WH-105 bindings and WH-107/109/110 Chat/view adapters; issuance needs exact owner confirmation; comments stay out of model context | Source and local tests; model-prepared issuance and comment hand-off route not built |
 | WH-152 | Accountless mobile/keyboard browser journey (preview, comment, revoke) plus owner-surface journey with synthetic approved assets | Planned |
 | WH-153 | Verify `preview.whumpo.site` routing, reviewed test deployment and live synthetic acceptance; then mark the catalogue entry `private-test` | Planned |
+
+## WH-151 verification — October 4, 2026 UTC
+
+Node 22 in this environment. `node tests/guest-preview-bindings.mjs` and `node tests/guest-preview-bindings.mjs --d1` pass 8 groups each over the actual worker, sites host, view registry, Chat control path and WH-150 handlers: registry names real handlers and the interaction binding; exact readout and confirmation (missing, malformed, changed field, other owner, other project, lost inclusion all refuse without a row); token absent from every table, Chat history, transcript, view facts, logs and model input; view parity with the HTTP list in a temporary Chat view and a saved page, with forged, foreign, null and non-UUID scopes; ids-only controls with forged and foreign link IDs and typed text; inert comments and no Chat or model effect; revoke, comment, delete and view after inclusion ends; lost identity. `tests/workspace-view-components.mjs` covers the shared component's strict validation. The existing `guest-previews` and `guest-preview-photos` suites now issue through prepare and confirm.
 
 ## Verification — October 4, 2026 UTC
 
