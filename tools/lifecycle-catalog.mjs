@@ -50,6 +50,8 @@ const unlinkedOwnership={
  safety_disclosure_items:'Manifest items owned through safety_disclosures and safety_evidence_objects, deliberately outside the account cascade (WH-132).',
  safety_retention_decisions:'Append-only operator retention decisions (extend or release at the one-year review) owned through safety_cases, deliberately outside the account cascade (WH-132).',
  operator_containments:'Operator containment audit keyed by subject account or project id without a foreign key, so closure is neither blocked nor erases the record; expires within 30 days and is never deleted (WH-050 F7).',
+ account_closures:'WH-018 final closure receipt keyed by the closed account id without a foreign key, so it survives the account cascade it records; never deletable and immutable once complete.',
+ account_closure_steps:'WH-018 closure step journal owned through account_closures, deliberately outside the account cascade; content-free counts only.',
  file_cleanup:'Physical object deletion queue keyed by object_key, with project/owner identifiers copied without foreign keys so preservation holds can retain queued objects. Never expose keys in customer reports.'
 };
 export async function currentLifecycleSchema(directory=root){

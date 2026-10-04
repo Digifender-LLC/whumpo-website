@@ -312,10 +312,11 @@
     {
       "id": "identity-admission-assertion",
       "tables": [
-        "identity_admission_checks"
+        "identity_admission_checks",
+        "account_closure_admission_checks"
       ],
       "scope": "platform",
-      "purpose": "Always-empty SQL assertion table used to atomically reject workspace batches after identity revocation.",
+      "purpose": "Always-empty SQL assertion tables used to atomically reject workspace batches after identity revocation and, for WH-018, while the account is closing.",
       "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
       "proposedRetention": "Remain empty in every deployment and restore.",
       "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
@@ -324,7 +325,8 @@
         "src/workspace-identity/schema.sql",
         "src/workspace-identity/ceremonies.ts",
         "docs/identity-web.md",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "src/account-lifecycle/schema.sql"
       ],
       "storageStatus": "current",
       "protection": {
@@ -2025,6 +2027,51 @@
         ],
         "remainingExposure": [
           "Rows link an account to milestone timing and same-account receipt identifiers; raw rows must stay operator-restricted and are never shown to customers or models."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "account-lifecycle",
+      "tables": [
+        "account_lifecycle_reviews",
+        "account_closures",
+        "account_closure_steps"
+      ],
+      "scope": "mixed",
+      "purpose": "WH-018 exact owner reviews for the platform account export and account closure (content-free binding of counts, project/module revisions and requested scope) and the resumable closure journal: one closure row per account id and six ordered, idempotent step rows with content-free counts. The closure row and journal are the final deletion receipt.",
+      "currentRetention": "Reviews expire after ten minutes; the owner's expired reviews are removed when the next review is prepared and every review cascades with the account. Closure rows and steps have no foreign key to users, survive the account cascade and cannot be updated after completion or deleted (database triggers).",
+      "proposedRetention": "Keep the closure receipt while it is needed to prove deletion and reconcile restores (LC-08), then expire it under an approved schedule; no expiry is implemented yet. Restore-safe suppression remains WH-019/059.",
+      "deletionAuthority": "Reviews: account cascade or opportunistic expiry. Closure receipt: none in this release; a future approved retention job only.",
+      "exportPolicy": "Reviews and the closure journal are not exported; the owner sees the closure status and receipt in the closure response. Never export review bindings of another account.",
+      "references": [
+        "src/account-lifecycle/schema.sql",
+        "src/account-lifecycle/closure.ts",
+        "src/account-lifecycle/export.ts",
+        "docs/account-closure.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "The owner through the authenticated account lifecycle routes while the account exists; restricted operators for the surviving closure receipt; no model, Chat or view reader"
+        ],
+        "processors": [
+          "Deterministic review binding, step runner and purge batch; no model, provider or network call except the existing provider revocation path"
+        ],
+        "remainingExposure": [
+          "The surviving closure receipt keeps the deleted account id with timestamps and counts; it must stay operator-restricted and minimal."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",

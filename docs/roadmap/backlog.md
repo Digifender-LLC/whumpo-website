@@ -1155,6 +1155,7 @@ An owner can export supported data and request closure without losing reconcilia
 ### Verification
 
 - node tests/account-closure-inventory.mjs
+- node tests/account-lifecycle.mjs (and --d1)
 - Synthetic lost-response, duplicate, callback-race and provider-timeout tests
 - Verify export excludes secrets and other tenants
 - pnpm check
@@ -1174,6 +1175,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/app-lifecycle.ts](../../src/app-lifecycle.ts)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workload-placement.md](../../docs/workload-placement.md)
+- [src/account-lifecycle/closure.ts](../../src/account-lifecycle/closure.ts)
+- [src/account-lifecycle/export.ts](../../src/account-lifecycle/export.ts)
+- [tests/account-lifecycle.mjs](../../tests/account-lifecycle.mjs)
 
 ### Execution coordination
 
@@ -1181,7 +1185,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-04 UTC first slice, source and disposable local tests only, not deployed (current-schema change: new input src/account-lifecycle/schema.sql needs the owner-run empty-database cutover). Authenticated /api/account/v1 routes: exact owner-bound export review plus fresh-passkey streamed ZIP (whumpo-account-export-v1, manifest last with per-file SHA-256 and omissions) composed from the Chat transcript, profile, billing, directory, access-roles and (only with explicit visitorData scope) records/files serializers, approved media only, no credentials/safety data/other tenants; exact fresh-passkey closure review/confirm with a durable closure row, stop-new-work admission guard (delayed OAuth callbacks refused in-transaction), withdraw, credential revocation through existing disconnect paths, hold/unresolved-operation waits, retained-record blockers and an atomic purge whose immutable receipt survives the cascade. tests/account-lifecycle.mjs passes on SQLite and local D1 (two owners, replay, interrupted confirm/journal/purge resume, hold refusal and release). Open: WH-052 outbox runner, UI, in-closure domain/CMS/visitor-app/backend teardown, operator reconciliation of retained receipts, LC-01/04/07 decisions, restore suppression; acceptance criteria remain open.
 
 ## WH-019 — Reconcile erasure and revocation after restores
 

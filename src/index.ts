@@ -13,6 +13,7 @@ import {handleInteractionRequest} from './chat-interactions/http';
 import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
 import {handleSafetyCaseRequest} from './safety-case-http';
+import {handleAccountLifecycleRequest} from './account-lifecycle/http';
 import {IdentityError} from './workspace-identity/authority';
 import {admitWorkspace,workspaceBindings,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
 import {FeatureInclusionError} from './feature-inclusion';
@@ -151,6 +152,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(pathname.startsWith('/api/auth/'))return error(404,'Not found');
   // WH-132 restricted operator case surface: own authentication/role gates, never the workspace router.
   const operator=await handleSafetyCaseRequest(request,env);if(operator)return operator;
+  // WH-018 account export and closure: own closure-permitting admission; every other route refuses a closing account.
+  const lifecycle=await handleAccountLifecycleRequest(request,env);if(lifecycle)return lifecycle;
   const principal=await workspaceIdentity(request,env);
   const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();

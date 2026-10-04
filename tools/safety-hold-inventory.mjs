@@ -109,6 +109,11 @@ export const deletionSites={
  'src/shared-modules/access-roles.ts::module_access_role_reviews':excluded(proposals),
  'src/shared-modules/records.ts::module_records':{decision:'blocked',mechanism:'safety_hold_module_record_retained + cleanupModuleRecords excludes safety_held_projects',note:'WH-127 owner record removal (records.remove) is refused as unavailable inside a held project; retention expiry skips held projects and the delete trigger backs both. Visitor erasure cascades only through app_visitors, which the visitor hold refuses.'},
  'src/project-specification/service-clients/store.ts::service_client_proposals':excluded(proposals),
+ // WH-018 account closure: the purge refuses inside an account hold (trigger) and the closure holds step first refuses any
+ // account/project/object hold, journaling a generic pending state; the closure receipt itself is never deletable.
+ 'src/account-lifecycle/closure.ts::users':blocked('safety_hold_account_retained + safety_hold_project_retained + closure holds step','Reviewed account closure purge. The holds step stops at a generic retention pause for any active account, project or object hold on the account; the cascade itself is refused by the account/project/file hold triggers, and the batch (including the completed journal) rolls back.'),
+ 'src/account-lifecycle/closure.ts::identity_challenges':excluded(credential),
+ 'src/account-lifecycle/closure.ts::account_lifecycle_reviews':excluded(proposals),
  'src/site-health.ts::site_health_budget':excluded('Platform monitoring budget; no customer content.'),
  'src/site-health.ts::site_health_checks':excluded('Platform availability checks of public pages; no customer content beyond the public URL status.'),
 };
@@ -121,6 +126,7 @@ export const otherPaths={
  'restore of a D1 archive (backup/restore)':{decision:'blocked',mechanism:'restore admission and inventory evidence refuse while a hold, open disclosure or unfinished capture exists (preservation-hold); stored evidence objects must be present with exact digests'},
  'visitor document overwrite by app runs, app recovery restore or migration apply':{decision:'preserved',mechanism:'safety_hold_app_document (previous revision copied to safety_preserved_records while an account/project hold is active; the write still succeeds, and past preserved-record capacity it fails closed)'},
  'website unpublish / publication withdrawal':{decision:'excluded',rationale:'No data is deleted; saved versions stay and are covered by the version hold.'},
+ 'WH-018 closure withdrawal (publications cleared, guest links revoked, active module instances suspended)':{decision:'excluded',rationale:'Stops serving only; no content row is deleted, and the later purge stays behind the closure holds step and hold triggers.'},
  'Cloudflare D1 Time Travel / provider-managed backups ageing':{decision:'excluded',rationale:'Provider-managed point-in-time history, not an ordinary Whumpo deletion path; held current data is retained in place. Handled by the written outside-hold-control procedure (docs/content-safety.md), required before case operations are activated.'},
  'native CMS resources and GitHub backups in customer-owned Cloudflare/GitHub accounts':{decision:'excluded',rationale:'External customer-owned resources Whumpo cannot preserve; CMS testing is owner-deferred. Withdrawal/deletion of these is not a Whumpo cleanup path. Handled by the written outside-hold-control procedure (docs/content-safety.md), required before case operations are activated.'},
  'Workers logs, local operator files and browser-local drafts':{decision:'excluded',rationale:'No case or evidence content is logged or written to operator files by the case surface; browser drafts are on the customer device.'},
