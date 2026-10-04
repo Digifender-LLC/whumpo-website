@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 130 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 133 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -1014,7 +1014,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/109. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1741,6 +1741,159 @@ Issue: https://github.com/zemdregon/whumpo/issues/80. Planning owner: Unassigned
 
 - 2026-10-02 UTC: extracted from open WH-020/#9 to supply its privacy foundation to WH-116. Current seven-family cohort at 9d64b9a passed with unchanged sources, 35 retained receipts and zero real-provider samples. Official model/privacy terms were rechecked. Current source adds closed evidence validation and compiler-lock fingerprinting; final connected rerun is recorded in the execution issue. Real-model comparison, confidential-route approval and provider activation remain open under WH-020/021.
 - 2026-10-02 UTC final acceptance: strict report admission rejected 19 malformed/contradictory inputs; full current cohort passed 7/7 at 04:58:18–05:01:04 UTC with unchanged 542-file fingerprint and 35 receipts (7 acknowledgments, 1 uncertain, 1 released). Real-provider samples remain zero; actual cost/latency remain unknown. Source digest and private run ID are in docs/customer-benchmarks.md. Fourteen roadmap dependency regressions and current graph checks passed. No runtime/provider activation or confidential-customer approval.
+
+## WH-131 — Restricted safety case contract, current schema and account-scope preservation holds
+
+Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **ready**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An active, named-human preservation hold blocks the ordinary account cascade and related deletion/expiry paths, while case records, findings and audit live outside the account lifecycle.
+
+### Scope
+
+- Canonical schema for cases, append-only findings, evidence links, account-scope holds, operator roles and audit
+- Deterministic trigger enforcement on account/project deletion, project owner change and contact deletion/expiry
+- Trusted operator module with role checks and same-transaction audit; closure inventory and lifecycle catalogue registration
+
+### Acceptance criteria
+
+- [ ] No ordinary account cascade destroys an actively held account, its risk evidence or its case records
+- [ ] Every attempt is audited as allowed/denied/rejected with opaque identifiers only
+- [ ] Cases open as uncertain flags; confirmation and correction are separate append-only human decisions
+- [ ] Holds require a preservation approver and legal basis reference, have a bounded review term, never lapse silently and release only explicitly
+
+### Verification
+
+- node tests/safety-cases.mjs
+- node tests/safety-cases.mjs --d1
+- node tests/content-risk-evidence.mjs
+- node tests/content-risk-review.mjs
+- node tests/account-closure-inventory.mjs
+- node tests/lifecycle-catalog.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-009, WH-010. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [src/safety-cases.ts](../../src/safety-cases.ts)
+- [schema/platform.sql](../../schema/platform.sql)
+- [tests/safety-cases.mjs](../../tests/safety-cases.mjs)
+- [docs/content-safety.md](../../docs/content-safety.md)
+- [docs/account-closure.md](../../docs/account-closure.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-132 — Authenticated restricted case operations and remaining preservation paths
+
+Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Named operators authenticate to a restricted case surface, and holds also protect evidence objects and every remaining per-object deletion or expiry path.
+
+### Scope
+
+- Authenticated operator identity bound to case roles; restricted CLI or review surface without model access
+- Restricted evidence object storage and object/project-scoped holds covering R2 cleanup, photo replacement, draft/traffic expiry and backup/restore suppression
+- Reviewed lawful export/disclosure operation design with audit; customer-facing behaviour during holds without disclosing a case
+
+### Acceptance criteria
+
+- [ ] Operator actions require authenticated identity, not declared references
+- [ ] Every ordinary deletion or expiry path for held scope is blocked or explicitly excluded with rationale
+- [ ] Export/disclosure is a separate audited reviewed operation; no raw material enters ordinary logs, GitHub or model context
+
+### Verification
+
+- Synthetic deletion/access/export/release tests on disposable SQLite and local D1
+- Inventory of every DELETE/expiry path against hold scope
+
+### Dependencies and blockers
+
+Planning dependencies: WH-131. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/content-safety.md](../../docs/content-safety.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [src/safety-cases.ts](../../src/safety-cases.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-133 — Qualified review and activation of restricted case and preservation procedure
+
+Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **blocked**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Legal applicability, hold terms, case retention and the operating procedure are approved by named humans before any live use.
+
+### Scope
+
+- Counsel review of preservation/reporting applicability, default review term and extension rules
+- Case-retention schedule for closed/released cases and audit
+- Named responsible operator, role administration and emergency escalation
+
+### Acceptance criteria
+
+- [ ] Approved procedure recorded with named decision owners; no model verdict
+- [ ] Live schema deployment and operator onboarding are separately reviewed; scanner/reporting work stays owner-deferred
+
+### Verification
+
+- Qualified review record (sanitized reference)
+- Desk-check of incident-runbooks Section 10 against the approved procedure
+
+### Dependencies and blockers
+
+Planning dependencies: WH-132. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Qualified US counsel review of applicability, preservation term, retention schedule and disclosure; owner names the responsible safety operator
+
+### References
+
+- [docs/content-safety.md](../../docs/content-safety.md)
+- [docs/incident-runbooks.md](../../docs/incident-runbooks.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
 ## WH-024 — Audit the supported owner journey for usability and accessibility
 
