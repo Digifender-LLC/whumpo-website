@@ -850,7 +850,7 @@
           "Deletion/expiry triggers and cleanup jobs read hold scope only; preservation triggers copy replaced/cleared payloads; operator capture copies held bytes into the reserved restricted R2 prefix"
         ],
         "remainingExposure": [
-          "Case metadata identifies a subject account; preserved payloads and evidence objects may hold sensitive or illegal material and are readable by Cloudflare-managed storage and Worker code. No review UI or counsel-approved transfer procedure exists."
+          "Case metadata identifies a subject account; preserved payloads and evidence objects may hold sensitive or illegal material and are readable by Cloudflare-managed storage and Worker code. Only a read-only restricted review page exists (no write UI), and no counsel-approved transfer procedure exists."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
