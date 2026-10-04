@@ -1887,7 +1887,7 @@
         "frontend/src/traffic-card.tsx",
         "docs/roadmap/alignment.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/139",
       "owner": null,
       "evidence": []
     },

@@ -1771,17 +1771,19 @@
       "id": "project-observability",
       "tables": [
         "site_health_checks",
-        "site_traffic_daily"
+        "site_traffic_daily",
+        "site_traffic_quality"
       ],
       "scope": "project",
-      "purpose": "Site health receipts and content-free daily request totals.",
-      "currentRetention": "Health checks older than 30 days and traffic older than the 30-day UTC window are pruned. Account/project cascades remove remaining rows.",
+      "purpose": "Site health receipts, content-free daily request totals and content-free daily measurement-quality counters (excluded automated requests, missed measurements).",
+      "currentRetention": "Health checks older than 30 days and traffic and measurement-quality rows older than the 30-day UTC window are pruned (held projects are skipped, WH-132). Account/project cascades remove remaining rows.",
       "proposedRetention": "Keep existing windows initially. Account closure purges linkable rows; only truly non-identifying platform aggregates may survive.",
       "deletionAuthority": "Documented automatic retention or reviewed account/project closure.",
-      "exportPolicy": "Owned daily totals and customer-visible health results, not raw request logs or visitor identifiers.",
+      "exportPolicy": "Owned daily totals, measurement-quality counters and customer-visible health results, not raw request logs, user agents or visitor identifiers.",
       "references": [
         "src/site-health.ts",
         "src/site-traffic.ts",
+        "src/site-diagnostics.ts",
         "docs/maintenance.md",
         "docs/data-protection.md",
         "src/workspace-data.ts",

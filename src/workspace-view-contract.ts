@@ -9,7 +9,10 @@ export const viewComponents={
  performance:{version:1,binding:'project.performance@1',feature:'core.insights'},
  // WH-151: managing existing guest links needs identity and ownership only, exactly as the HTTP handlers do, so it
  // stays available after plan or feature inclusion ends. Issuance re-checks creator.guest-feedback in its own handler.
- 'guest-previews':{version:1,binding:'project.guest-previews@1',feature:null}
+ 'guest-previews':{version:1,binding:'project.guest-previews@1',feature:null},
+ // WH-037: saved health, domain, form and measurement-quality facts for owned projects. Like the HTTP health report it needs
+ // identity and ownership only, so a problem stays diagnosable when insight inclusion ends. Traffic counts keep their own gate.
+ 'site-health':{version:1,binding:'project.site-health@1',feature:null}
 } as const;
 export type WidgetKind=keyof typeof viewComponents;
 export const widgetKinds=Object.keys(viewComponents) as WidgetKind[];

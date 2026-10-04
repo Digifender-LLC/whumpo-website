@@ -959,6 +959,17 @@ CREATE TABLE site_traffic_metadata (
  enabled_at TEXT NOT NULL
 );
 
+-- WH-037: aggregate-only measurement quality per project and UTC day. Counts requests excluded from the page metric
+-- (known automated clients, platform checks) and measurements that failed or were shed. No identifiers or headers.
+CREATE TABLE site_traffic_quality (
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ day TEXT NOT NULL CHECK(length(day)=10),
+ excluded_requests INTEGER NOT NULL DEFAULT 0 CHECK(excluded_requests>=0),
+ missed_measurements INTEGER NOT NULL DEFAULT 0 CHECK(missed_measurements>=0),
+ updated_at TEXT NOT NULL,
+ PRIMARY KEY(project_id,day)
+);
+
 CREATE TABLE cms_export_links (
  turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1800,6 +1811,7 @@ CREATE INDEX app_challenge_project ON app_auth_challenges(project_id);
 CREATE INDEX app_page_reviews_project ON app_page_reviews(project_id);
 
 CREATE INDEX site_traffic_retention ON site_traffic_daily(day);
+CREATE INDEX site_traffic_quality_retention ON site_traffic_quality(day);
 
 CREATE INDEX gateway_attempts_owner_task ON gateway_spend_attempts(user_id,task_id);
 

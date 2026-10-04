@@ -1,6 +1,7 @@
 import {activeBackendForm} from './backend-forms';
 import {hashToken} from './security';
 import {publishedHTML} from './published-html';
+import {platformCheckAgent} from './site-traffic';
 export class HealthError extends Error{constructor(public status:number,message:string){super(message);}}
 export type HealthOptions={healthChecks?:boolean;healthTransport?:typeof fetch};
 type Snapshot={id:string;name:string;owner_user_id:string;version_id:string;revision:number;html:string;digest:string;contact_revision:number;contact_enabled:number};
@@ -24,12 +25,12 @@ export async function checkHealth(db:D1Database,user:string,project:string,trans
  try{
   if(await hashToken(s.html)!==s.digest)throw Error('The saved website artifact failed its integrity check.');
   const url='https://'+project+'.whumpo.site/';
-  const response=await transport(url,{method:'GET',headers:{accept:'text/html','cache-control':'no-cache'},redirect:'manual',signal:AbortSignal.timeout(10000)});
+  const response=await transport(url,{method:'GET',headers:{accept:'text/html','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});
   const html=await pageText(response);if(await hashToken(html)!==await hashToken(publishedHTML(s.html,s.contact_enabled===1,project,form)))throw Error('The served page did not match the current saved version.');
   const {results:photos}=await db.prepare("SELECT v.file_id AS id,f.size,f.status FROM version_photos v LEFT JOIN project_files f ON f.id=v.file_id AND f.project_id=? WHERE v.version_id=? LIMIT 5").bind(project,s.version_id).all<{id:string;size:number|null;status:string|null}>();
   if(photos.length>4)throw Error('The website has more photo dependencies than this check supports.');
   if(photos.some(p=>p.status!=='ready'||p.size===null))throw Error('A published photo did not return the expected image response.');
-  const photoResults=await Promise.allSettled(photos.map(async photo=>{const response=await transport(url+'assets/'+photo.id+'.jpg',{method:'HEAD',headers:{accept:'image/jpeg','cache-control':'no-cache'},redirect:'manual',signal:AbortSignal.timeout(10000)});await response.body?.cancel();if(response.status!==200||response.headers.get('content-type')!=='image/jpeg'||response.headers.get('content-length')!==String(photo.size))throw Error('A published photo did not return the expected image response.');}));
+  const photoResults=await Promise.allSettled(photos.map(async photo=>{const response=await transport(url+'assets/'+photo.id+'.jpg',{method:'HEAD',headers:{accept:'image/jpeg','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});await response.body?.cancel();if(response.status!==200||response.headers.get('content-type')!=='image/jpeg'||response.headers.get('content-length')!==String(photo.size))throw Error('A published photo did not return the expected image response.');}));
   if(photoResults.some(r=>r.status==='rejected'))throw Error('A published photo did not return the expected image response.');
  }catch(cause){state='unhealthy';detail=cause instanceof Error&&['The saved website artifact failed its integrity check.','The published page did not return an HTML success response.','The published page exceeded the verification size limit.','The served page did not match the current saved version.','The website has more photo dependencies than this check supports.','A published photo did not return the expected image response.'].includes(cause.message)?cause.message:'The published website could not be verified within the bounded check. No automatic rollback was performed.';}
  await db.prepare(`UPDATE site_health_checks SET state=CASE WHEN EXISTS(SELECT 1 FROM publications s LEFT JOIN contact_settings c ON c.project_id=s.project_id JOIN projects p ON p.id=s.project_id WHERE p.id=? AND p.owner_user_id=? AND s.version_id=? AND s.revision=? AND COALESCE(c.revision,-1)=? AND (SELECT id FROM backend_live_forms WHERE project_id=p.id) IS ?) THEN ? ELSE 'superseded' END,detail=?,finished_at=? WHERE id=? AND user_id=? AND state='checking'`).bind(project,user,s.version_id,s.revision,s.contact_revision,form?.id??null,state,detail,now(),id,user).run();

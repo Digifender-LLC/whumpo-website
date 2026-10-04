@@ -48,7 +48,7 @@ try{
  sql.prepare('INSERT INTO github_refresh_custody(token_id,user_id,client_id,ciphertext,expires_at) VALUES(?,?,?,?,?)').run(newGH,owner,'fixture',await fixtureCiphertext(fixtureKeyring(),`whumpo:github:refresh:${owner}:${newGH}`,'PRIVATE_REFRESH_CANARY'),at(180*day));
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());
- assert.equal(report.backlogs.length,36);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
+ assert.equal(report.backlogs.length,37);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
  for(const queue of ['contact_receipts','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='contact_receipts').oldestAgeMs>=2*day,true);
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
@@ -72,5 +72,5 @@ try{
  const broken=await counterReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);assert.ok(broken.counters.every(c=>c.state==='unavailable'));assert.equal(broken.attention,true);assert.ok(!JSON.stringify(broken).includes('PRIVATE_'));
  assert.ok(!JSON.stringify(counters).includes(project)&&!JSON.stringify(counters).includes(owner));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 36 read-only queues, four receipt families, 12 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 37 read-only queues, four receipt families, 12 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
 }finally{sql.close();}
