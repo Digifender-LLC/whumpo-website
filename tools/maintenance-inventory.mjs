@@ -51,3 +51,22 @@ export const operationInventory={
  backups:{table:'github_backups',state:'state',states:['dispatching','uncertain'],time:'dispatched_at',guide:'docs/integrations/github-backups.md'},
  dns:{table:'cloudflare_dns_actions',state:'state',states:['sending','uncertain'],time:'created_at',guide:'docs/integrations/cloudflare-dns.md'},
 };
+// WH-050 F8 / runbook G1: shared platform counters against the ceilings their admission triggers enforce.
+// ?1 is the observation instant. `evidence` must appear in `enforcedBy`'s current schema SQL (tests check for drift).
+// Read-only and pull-based: nothing here delivers an alert; alert delivery stays owner-gated.
+export const counterThresholds=Object.freeze({warn:0.5,act:0.8});
+const day="strftime('%Y-%m-%d',?1)",month="strftime('%Y-%m',?1)";
+export const platformCounterInventory={
+ public_backend_calls:{sql:`SELECT coalesce(sum(calls),0) AS used FROM backend_public_usage WHERE day=${day}`,ceiling:1000,window:'UTC day',enforcedBy:'backend_public_usage_insert',evidence:'sum(calls) FROM backend_public_usage WHERE day=NEW.day),0)>=1000',note:'Account fair share starts at 50%.'},
+ visitor_transitions:{sql:`SELECT coalesce(sum(attempts),0) AS used FROM app_daily_usage WHERE day=${day}`,ceiling:1000,window:'UTC day',enforcedBy:'app_run_admit',evidence:'sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=1000',note:'Account fair share starts at 50%.'},
+ contact_receipts:{sql:'SELECT count(*) AS used FROM contact_receipts',ceiling:1000,window:'retained',enforcedBy:'contact_submission_guard',evidence:'(SELECT COUNT(*) FROM contact_receipts)>=1000',note:'Account fair share starts at 50%.'},
+ r2_reads:{sql:`SELECT coalesce((SELECT read_ops FROM storage_usage WHERE period=${month}),0) AS used`,ceiling:100000,window:'UTC month',enforcedBy:'storage_usage',evidence:'read_ops BETWEEN 0 AND 100000',note:'Public photo account fair share starts at 50%.'},
+ r2_writes:{sql:`SELECT coalesce((SELECT write_ops FROM storage_usage WHERE period=${month}),0) AS used`,ceiling:10000,window:'UTC month',enforcedBy:'storage_usage',evidence:'write_ops BETWEEN 0 AND 10000'},
+ visitor_runs:{sql:'SELECT count(*) AS used FROM app_runs',ceiling:10000,window:'retained',enforcedBy:'app_run_admit',evidence:'(SELECT count(*) FROM app_runs)>=10000'},
+ visitor_sessions:{sql:'SELECT count(*) AS used FROM app_sessions',ceiling:5000,window:'retained',enforcedBy:'app_session_admit',evidence:'(SELECT count(*) FROM app_sessions)>=5000'},
+ visitors:{sql:'SELECT count(*) AS used FROM app_visitors',ceiling:1000,window:'retained',enforcedBy:'app_visitor_admit',evidence:'(SELECT count(*) FROM app_visitors)>=1000'},
+ owner_backend_runs:{sql:`SELECT count(*) AS used FROM backend_runs WHERE day=${day}`,ceiling:1000,window:'UTC day',enforcedBy:'backend_runs_quota',evidence:'(SELECT count(*) FROM backend_runs WHERE day=NEW.day)>=1000'},
+ owner_backend_runs_retained:{sql:'SELECT count(*) AS used FROM backend_runs',ceiling:5000,window:'retained',enforcedBy:'backend_runs_quota',evidence:'(SELECT count(*) FROM backend_runs)>=5000'},
+ photo_files:{sql:'SELECT (SELECT count(*) FROM project_files)+(SELECT count(*) FROM file_cleanup) AS used',ceiling:500,window:'retained',enforcedBy:'project_file_cleanup_capacity',evidence:'(SELECT COUNT(*) FROM project_files)+(SELECT COUNT(*) FROM file_cleanup)>=500'},
+ operator_containments:{sql:'SELECT count(*) AS used FROM operator_containments',ceiling:10000,window:'retained',enforcedBy:'operator_containment_admit',evidence:'(SELECT count(*) FROM operator_containments)>=10000',note:'Containment audit rows are never deleted; at the ceiling new containment fails closed.'},
+};
