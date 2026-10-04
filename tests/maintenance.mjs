@@ -38,7 +38,7 @@ try{
  const user=crypto.randomUUID(),op=crypto.randomUUID(),date=new Date(now-1800000).toISOString();
  sql.prepare("INSERT INTO users VALUES(?,?,?)").run(user,'private@example.invalid',date);
  sql.prepare("INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,?,?)").run(op,user,'a'.repeat(64),date,date);
- sql.prepare("INSERT INTO file_cleanup VALUES('PRIVATE_OBJECT_KEY_CANARY',?)").run(new Date(now-91000000).toISOString());
+ sql.prepare("INSERT INTO file_cleanup(object_key,created_at) VALUES('PRIVATE_OBJECT_KEY_CANARY',?)").run(new Date(now-91000000).toISOString());
  sql.prepare("UPDATE maintenance_health SET status='running',started_at=?,finished_at=NULL WHERE job='traffic'").run(now-1000000);
  assert.equal((await maintenanceReport(db,now)).jobs.find(j=>j.job==='traffic').state,'stalled');
  sql.prepare("UPDATE maintenance_health SET status='completed' WHERE job='traffic'").run();

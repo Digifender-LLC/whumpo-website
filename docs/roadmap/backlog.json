@@ -1803,7 +1803,7 @@
         "tools/respond-usage-review.mjs",
         "docs/roadmap/alignment.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/135",
       "owner": null,
       "evidence": []
     },
