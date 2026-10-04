@@ -247,6 +247,12 @@ function checkUnsettled(state){
  ];
  for(const [table,column,values] of checks)requireCheck(!state.rows.get(table).some(row=>values.includes(row[column])),'uncertain-effect');
  requireCheck(!state.rows.get('stripe_customers').some(row=>row.lease!==null||row.customer_id===null),'uncertain-effect');
+ // WH-132: while a preservation hold, an open disclosure or an unfinished evidence capture exists (in the candidate or,
+ // through the inventory's source observation, in the current database), no archive may be admitted. A restore during a
+ // hold would roll back held records, case decisions or audit rows; it needs a separately reviewed procedure.
+ requireCheck(!state.rows.get('safety_preservation_holds').some(row=>row.released_at===null)
+  &&!state.rows.get('safety_disclosures').some(row=>['requested','approved'].includes(row.state))
+  &&!state.rows.get('safety_evidence_objects').some(row=>row.stored_at===null),'preservation-hold');
  // Native CMS storage/derived keys have their own deferred recovery adapters.
  for(const table of ['cms_instances','cms_media_uploads','cms_wordpress_sources'])requireCheck(state.rows.get(table).length===0,'cms-recovery-unavailable');
  for(const table of ['identity_sessions','identity_grants'])for(const session of state.rows.get(table)){
@@ -281,7 +287,9 @@ function checkCredentialObligations(state){
 }
 
 async function checkObjects(state,objects){
- const files=state.rows.get('project_files');
+ // Restricted evidence objects live outside D1; a recovered row must still name the exact stored bytes.
+ const evidence=state.rows.get('safety_evidence_objects').filter(row=>row.stored_at!==null&&row.disposed_at===null).map(row=>({object_key:row.storage_key,size:row.size,digest:row.sha256}));
+ const files=[...state.rows.get('project_files'),...evidence];
  requireCheck(files.length===0||objects&&typeof objects.get==='function','missing-objects');
  for(const row of files){
   let body;

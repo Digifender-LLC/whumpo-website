@@ -406,6 +406,22 @@ try{
   assert.equal((await store.replaceContentBrief(c.scope,c.user,request)).envelope.id,envelope.id);
   await denies(()=>store.replaceContentBrief(c.scope,c.user,{...request,contentIds:['about-text']}));await denies(()=>store.replaceContentBrief(b.scope,b.user,request),404);
  });
+ await test('inactive-draft expiry under a preservation hold keeps a restricted copy and stays invisible to the owner',async()=>{
+  const c=await owner(),{form}=await issue(c),held=await aged(c,form.envelope.definition),free=await owner(),{form:freeForm}=await issue(free),unheld=await aged(free,freeForm.envelope.definition);
+  const caseId='case-'+id().slice(0,8),holdId='hold-'+id().slice(0,8);
+  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch())",caseId,c.user);
+  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",holdId,caseId,c.user,c.project);
+  const before=(await row('SELECT count(*) n FROM safety_preserved_records')).n;
+  await retention.cleanupInteractionDrafts(db);
+  for(const draft of [held,unheld])assert.equal((await row('SELECT envelope_json FROM chat_interactions WHERE id=?',draft.envelope.id)).envelope_json,null);
+  const kept=await row('SELECT hold_id,project_id,source,source_id,payload_json FROM safety_preserved_records WHERE source_id=?',held.envelope.id);
+  assert.deepEqual([kept.hold_id,kept.project_id,kept.source],[holdId,c.project,'chat_interaction_draft']);assert.equal(JSON.parse(kept.payload_json).envelope.id,held.envelope.id);
+  assert.equal((await row('SELECT count(*) n FROM safety_preserved_records WHERE source_id=?',unheld.envelope.id)).n,0);assert.equal((await row('SELECT count(*) n FROM safety_preserved_records')).n,before+1);
+  await denies(()=>store.readInteraction(c.scope,c.user,held.envelope.id),410); // the owner sees the ordinary expiry
+  await assert.rejects(()=>run('DELETE FROM safety_preserved_records WHERE source_id=?',held.envelope.id),/safety_preservation_hold/);
+  await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?",holdId);
+  assert.equal((await row('SELECT count(*) n FROM safety_preserved_records WHERE source_id=?',held.envelope.id)).n,0);
+ });
  assert.equal(network,0);assert.equal((await row('SELECT count(*) n FROM chat_interaction_checks')).n,0);assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  await test('history omits copied draft defaults while export and fresh owned reads retain them',async()=>{
   const c=await owner(),{form}=await issue(c),draft={...mutation(form,'save-draft'),answers:{'field-1':'UNSUBMITTED_HISTORY_CANARY'}};
