@@ -30,9 +30,14 @@ export async function backendHttpFixture(){
   async function seedBackend(project,id,source,cookie){
    const imported=crypto.randomUUID(),path='/api/projects/'+project+'/backends';
    const post=(url,body)=>fetch(base+url,{method:'POST',headers:{origin:base,cookie,'content-type':'application/json'},body:JSON.stringify(body)});
-   const response=await post(path,{id:imported,source});assert.equal(response.status,202,await response.clone().text());
+   // The direct import stays quarantined and never becomes runnable. WH-014 holds the owner's exact quarantined bytes in
+   // every writer, so the import carries distinct bytes from the trusted version seeded below.
+   const quarantined=source+'\n// direct import awaiting review';
+   const response=await post(path,{id:imported,source:quarantined});assert.equal(response.status,202,await response.clone().text());
    assert.equal((await post(path+'/'+imported+'/test',{id:crypto.randomUUID(),input:null})).status,404);
    assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(imported).first(),null);
+   // Saving the quarantined bytes as a version is refused (no laundering into a runnable version).
+   await assert.rejects(db.prepare('INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),project,quarantined,await hashToken(quarantined),new Date().toISOString()).run(),/artifact_held/);
    // Distinct, trusted synthetic version. This does NOT promote the quarantined import.
    await db.prepare('INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,?,?,?)').bind(id,project,source,await hashToken(source),new Date().toISOString()).run();
   }
