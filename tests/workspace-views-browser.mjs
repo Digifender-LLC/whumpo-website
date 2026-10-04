@@ -92,7 +92,7 @@ try{
  await page.waitForFunction(user=>!window.fixtureQueryKeys().some(k=>k.includes(user)),a.user);assert.equal(await page.getByText('Private garden A',{exact:true}).count(),0);
  await refresh().click();await project().getByText('Private garden B',{exact:true}).waitFor();assert.equal(await page.getByText('Private garden A',{exact:true}).count(),0);
  phase='temporary view dismissal survives response loss, navigation and reload';
- await context.request.get(origin+'/_fixture/current');await page.goto(origin+'/workspace/chat');await temporary().getByText('Building',{exact:true}).waitFor();
+ await context.request.get(origin+'/_fixture/current');await page.goto(origin+'/workspace');await temporary().getByText('Building',{exact:true}).waitFor();
  phase='corrected view retires earlier facts without requiring navigation';const previousView=temporary();const response=await context.request.get(origin+'/_fixture/correct');const updated=await response.json();await page.evaluate(()=>window.fixtureRefreshChat());
  await previousView.getByText('A newer view continues this task.',{exact:false}).waitFor();assert.equal(await previousView.locator('[data-view-component]').count(),0);
  a.temporary=updated.interactionId;await temporary().getByText('Building',{exact:true}).waitFor();assert.equal(await temporary().locator('[data-view-component]').count(),1);

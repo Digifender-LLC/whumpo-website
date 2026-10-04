@@ -56,12 +56,44 @@ The earlier probes preserve two kinds of findings. Test expectations needed the 
 
 | Original requirement | Current state / next evidence |
 | --- | --- |
-| Chat-centered desktop/mobile navigation; optional saved views | Existing Chat-first shell and accepted routine adapters. Source change removes the duplicate history editor. Audit and remove superseded routine routes only after equivalent direct recovery is accepted. |
+| Chat-centered desktop/mobile navigation; optional saved views | Fixed **Help and account** navigation (desktop sidebar group, mobile **Help** sheet) replaces the scattered footer/profile entries; generated pages are marked optional and cannot take a fixed control's name. The `/workspace/chat` alias and the Profile page's private sign-out adapter are removed. Local browser evidence only; see [navigation simplification](#navigation-simplification--local-verification-only-october-4-2026-utc). |
 | Composer, selected project, interactions, pending review/result links across reload/returns/tabs | Existing exact Chat/form/consent recovery; reopened interaction locator added. Older review/result reopening is implemented through the shared current reader/renderer. Photos/inbox/visitors project selection now survives reload through the owned-project URL locator; Chat provider returns derive project from the current interaction. Remaining return paths need the connected acceptance map. |
 | Bounded account-scoped saved-work recovery without automatic effects | Reuse current history/index/read handlers; locator opens only fresh reads. The [read-only saved-work API](#consolidated-saved-work-index--backend-only) is wired with local fixture evidence; the page and tab-local recovery have local browser evidence; inference-outage acceptance remains. |
-| Essential account/security/sign-out/support, takedown and pending work | Independent account-help controls and the security route pass connected local and speech checks. Direct website withdrawal is deployed with scoped local outage acceptance. Backend/app direct withdrawal is deployed with scoped local outage verification; human support and consolidated pending-work access remain open. |
+| Essential account/security/sign-out/support, takedown and pending work | Saved work (pending work and reviews), Site & app safety, Support and Account & security plus Sign out are one fixed list outside the generated layout, on desktop and mobile, and render during Chat/dashboard outages. The Chat delivery banner shows the server's support link. A staffed human support destination is still not configured. |
 | Clear private state on logout/account change; refuse stale/revoked authority | Current cross-tab invalidation, request/ceremony fencing and foreground checks are implemented. Connected local signed-browser evidence is recorded below; physical devices and broader WH-112 acceptance remain separate. |
 | Keyboard, screen reader, zoom, reduced motion and soft-keyboard continuity | Existing accepted WH-024/107 evidence is the baseline. Changed navigation needs connected keyboard/Orca and responsive checks; physical device limitations remain explicit. |
+
+### Navigation simplification — local verification only (October 4, 2026 UTC)
+
+- **One fixed list of essentials.** `essentialDestinations` in `frontend/src/lib/workspace-navigation.ts` lists Saved work (pending requests, reviews and results), Site & app safety (urgent takedown), Support and Account & security. Desktop shows them, plus **Sign out**, in a **Help and account** navigation group below the optional pages. The pages list scrolls on its own, so eight generated pages or large text cannot push the essentials off screen. The mobile bar is Chat, Dashboard, Your pages, Settings and **Help**. Help opens a sheet with the same four destinations, Your profile and Sign out. None of these read the generated layout, profile, Chat or a model.
+- **Generated pages cannot impersonate controls.** A generated page label that matches a fixed control name (for example "Support" or "Sign out") is shown as "Support (your page)". Layout tab IDs are `tab-*` and cannot collide with fixed routes.
+- **One Chat route and one sign-out.** `/workspace` is the only Chat path. The `/workspace/chat` alias now shows "Page not found", and Chat navigation inside the workspace uses `/workspace`. The Profile page's own sign-out (`identityRequest` plus manual cache clearing and a full reload) is replaced by `useSignOut`/`SignOutButton`, which go through the shared identity controller. That controller clears Chat/form/photo/locator recovery and private queries when its readback confirms the change.
+- **Support link in Chat errors.** `APIError.support` keeps only a current `/workspace/support?ref=status:CODE` link (`supportReference`). A recoverable delivery failure (the real 503 when inference is unavailable) shows **Get help with this** next to **Retry message**. A refused send (for example 429) clears its pending request and shows a dismissible alert with the same link instead of a toast.
+- **Retry after returning from a fixed page.** Returning from Support (or any identity-only page) within the 15-second cache window used to leave a restored request's Retry disabled, because the cached conversation was never re-read after mount. The workspace now re-reads the conversation once on mount when a restored request exists. It sends nothing.
+- When inference is unavailable, the Chat footer links to Saved work and Support.
+
+Evidence (Node 22 agent sandbox): `node tests/workspace-navigation.mjs` is a new offline suite. It covers the single Chat route, the fixed essentials and section mapping, reserved page names, strict support links and project locators.
+
+`node tests/workspace-identity-browser.mjs --navigation` is a new keyboard-driven journey. It runs on the built UI, current Worker and disposable D1 with signed Chromium passkeys, and no model is configured. It covers:
+
+- Eight synthetic generated pages, five of them named like fixed controls.
+- Screen-reader names checked with Playwright ARIA snapshots: the mobile bar, the Help sheet and the desktop group.
+- Escape returning focus to Help, and every essential opened by keyboard while the draft survives browser Back.
+- Chat and dashboard outages leaving the Help sheet intact.
+- A reopened saved message surviving Support → Back to Whumpo and reload.
+- The Photos `?project=` selection surviving browser return.
+- GitHub provider and checkout return points.
+- The removed alias.
+- The real 503 support link, opening Support with the status prefilled.
+- A refused 429 retry with its link and no duplicate turn.
+- 200% zoom (640px CSS width) and 32px text with no horizontal scroll.
+- Reduced-motion sheet with no animation and focus return.
+- A simulated 430px phone keyboard keeping the composer visible and hiding the bar until it closes.
+- 1280px desktop at normal and large text, with essentials in view beside eight pages.
+- Sign-out from Help clearing every `whumpo.*` device record. Back and a `pageshow` restore cannot show the private view, and a fresh sign-in starts with an empty draft.
+- Zero `inference_calls`.
+
+Screenshots `/tmp/whumpo-navigation-{help-390,zoom-200,large-text,keyboard,desktop,desktop-large}.png` were inspected. Not run: Orca speech for the new controls, physical phones and their real soft keyboards, actual browser zoom (emulated by viewport width), installed-PWA behaviour, deployment and customer acceptance.
 
 ### Consolidated saved-work index
 
