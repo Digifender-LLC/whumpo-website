@@ -5,6 +5,7 @@ import {assertWorkspace} from './workspace-identity/admission';
 import {readLayout} from './workspace-layout';
 import {readProjectStatuses,readWorkspaceActivity,readWorkspaceStorage} from './workspace-data';
 import {readTraffic} from './site-traffic';
+import {readGuestPreviewFacts} from './guest-previews/bindings';
 import {object,exact,uuid,viewComponents,WorkspaceViewError,type WidgetKind} from './workspace-view-contract';
 import {readViewComponentData,viewBinding,type ViewComponentData} from './workspace-view-data';
 
@@ -13,11 +14,11 @@ import {readViewComponentData,viewBinding,type ViewComponentData} from './worksp
 export async function readViewBinding(db:D1Database,user:string,kind:WidgetKind,projectId:string|null,revalidate?:()=>Promise<void>):Promise<ViewComponentData>{
  await assertWorkspace(db,user);
  if(!Object.hasOwn(viewComponents,kind)||!(projectId===null||uuid(projectId)))throw new WorkspaceViewError(400,'invalid_view','Use a registered component and exact scope.');
- const gate={userId:user,projectId,featureId:viewComponents[kind].feature,operation:'read' as const};
+ const feature=viewComponents[kind].feature,gate=feature===null?null:{userId:user,projectId,featureId:feature,operation:'read' as const};
  let status:ViewComponentData['status']='ready',data:unknown=null,before:string|null=null;
  const ownedIds=async()=>JSON.stringify((await db.prepare('SELECT id FROM projects WHERE owner_user_id=? ORDER BY id').bind(user).all<{id:string}>()).results);
  try{
-  await assertFeature(db,gate);before=projectId===null?await ownedIds():null;
+  if(gate)await assertFeature(db,gate);before=projectId===null?await ownedIds():null;
   if(kind==='projects'||kind==='cms'){
    const {results}=await readProjectStatuses(db,user,projectId);
    if(results.some(p=>![0,1].includes(p.site_live)))throw new Error('Invalid saved project status');
@@ -29,6 +30,7 @@ export async function readViewBinding(db:D1Database,user:string,kind:WidgetKind,
    const {results}=await readWorkspaceActivity(db,user,projectId);data={items:results.map(a=>({id:a.id,projectId:a.project_id,summary:a.summary,createdAt:a.created_at}))};
   }else if(kind==='reviews')data=await readWorkspaceReviews(db,user,projectId);
   else if(kind==='traffic')data=await readTraffic(db,user,projectId);
+  else if(kind==='guest-previews'){if(projectId===null)status='unavailable';else data=await readGuestPreviewFacts(db,user,projectId);}
   else status='unavailable';
  }catch(error){status=error instanceof FeatureInclusionError?'denied':'unavailable';}
  // Discard already-read facts after late access changes; never return stale data
@@ -43,7 +45,7 @@ export async function readViewBinding(db:D1Database,user:string,kind:WidgetKind,
  }
  if(before!==null&&before!==await ownedIds())status='unavailable';
  await assertWorkspace(db,user);
- try{await assertFeature(db,gate);}catch(error){if(!(error instanceof FeatureInclusionError))throw error;status='denied';}
+ try{if(gate)await assertFeature(db,gate);}catch(error){if(!(error instanceof FeatureInclusionError))throw error;status='denied';}
  const header={version:1,kind,binding:viewBinding(kind,projectId),projectId,asOf:new Date().toISOString()};
  return readViewComponentData({...header,status,data:status==='ready'?data:null})??readViewComponentData({...header,status:'unavailable',data:null})!;
 }

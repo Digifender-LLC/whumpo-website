@@ -175,3 +175,7 @@ Release `0955f19c-b69e-4dae-b7e7-972e5df3aa3c`, source `81a7b9f`, passed the act
 ## Task-scoped observation handoff — October 3, 2026
 
 WH-110 reuses `readViewBinding` for current project and traffic facts supplied to website task continuations. Read/ownership predicates fence model dispatch and reply commit. A task can show its exact project's maintained status/traffic view, with progress attached to its originating task and no form submission, sidebar mutation or approval. Ordinary traffic inspection uses this same current reader. See [routine adapter scope and verification](chat-routine-journeys.md#project-status-and-traffic-adapter--october-3-2026); deployment and model acceptance remain separate.
+
+## Guest preview component (WH-151)
+
+`guest-previews` is a project-scoped registered component (`project.guest-previews@1`) read through `readViewBinding` by Chat temporary views and saved pages alike. Its registry feature is null: it needs current identity and project ownership only, like the WH-150 list handler, so management stays available after `creator.guest-feedback` inclusion ends. It returns link state and counts, never comment text, tokens or hashes. See [guest previews](guest-previews.md#owner-chat-and-view-bindings--wh-151).

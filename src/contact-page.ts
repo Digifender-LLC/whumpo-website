@@ -1,3 +1,4 @@
+import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {activeContact,saveContact,ContactError} from './contacts';
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const headers={'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','content-security-policy':"default-src 'none'; script-src https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src https://challenges.cloudflare.com; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"};
@@ -27,6 +28,9 @@ export async function contactPage(request:Request,env:Env,projectId:string,fetch
    stage='form-read';
    const form=await readForm(request),revision=Number(form.get('revision'));
    if(!Number.isSafeInteger(revision)||revision!==target.revision)throw new ContactError(409,'The form changed. Reload the website before sending.');
+   // One source may not fill the project's hourly/retained caps: bounded attempts per connection per project per UTC day.
+   stage='client-allowance';
+   try{await reservePublicClient(env.DB,'contact',projectId,await publicClientKey(request,'contact',projectId));}catch(cause){if(cause instanceof PublicClientLimitError)throw new ContactError(429,'Too many messages from this connection today. Please try again tomorrow.');throw cause;}
    if(!local){
     const token=form.get('cf-turnstile-response');if(!token||token.length>2048)throw new ContactError(400,'Complete verification before sending.');
     stage='verification-request';

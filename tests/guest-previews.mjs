@@ -28,7 +28,8 @@ const guest=(path,init={})=>m.host.fetch(new Request(guestOrigin+path,{...init,h
 const status=token=>guest('/api/link',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});
 const view=(token,extra='')=>guest('/view',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:'token='+encodeURIComponent(token)+extra});
 const comment=(token,data)=>guest('/api/feedback',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token,requestId:id(),text:'Looks good '+said,...data})});
-const issue=async(actor,project,versionId,extra={})=>{const r=await ok(await api(actor,`/projects/${project}/guest-previews`,'POST',{id:id(),versionId,expiresInHours:24,feedback:true,...extra}));if(r.token)tokens.push(r.token);return r;};
+const issuePost=async(actor,project,body)=>{const prepared=await api(actor,`/projects/${project}/guest-previews/prepare`,'POST',body);if(prepared.status!==200)return prepared;return api(actor,`/projects/${project}/guest-previews`,'POST',{...body,confirmation:(await prepared.clone().json()).confirmation});};
+const issue=async(actor,project,versionId,extra={})=>{const r=await ok(await issuePost(actor,project,{id:id(),versionId,expiresInHours:24,feedback:true,...extra}));if(r.token)tokens.push(r.token);return r;};
 async function owner(plan='personal'){
  const actor=await workspaceFixture(db,m),scope=await actor.scope();
  if(plan)await paidPlan(db,actor.account,plan);
@@ -58,14 +59,14 @@ try{
  let link;
 
  await check('tier and identity admission',async()=>{
-  const denied=await api(starter,`/projects/${starter.project}/guest-previews`,'POST',{id:id(),versionId:starter.version,expiresInHours:24,feedback:true});
+  const denied=await issuePost(starter,starter.project,{id:id(),versionId:starter.version,expiresInHours:24,feedback:true});
   assert.equal(denied.status,403);assert.match((await denied.json()).error,/Creator/);
   assert.equal((await row('SELECT count(*) n FROM guest_preview_links WHERE owner_user_id=?',starter.user)).n,0);
   // Explore with an exact project-scoped private-test grant: only that project, only that operation.
   const grantee=await owner(null),other=await createFixtureProject(grantee.scope,grantee.user,'Other','Other');
   await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'creator.guest-feedback','dispatch','private-test-acceptance','synthetic WH-092 fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),grantee.user,grantee.project);
   const granted=await issue(grantee,grantee.project,grantee.version);assert.equal(granted.link.state,'active');
-  assert.equal((await api(grantee,`/projects/${other.project}/guest-previews`,'POST',{id:id(),versionId:other.version,expiresInHours:24,feedback:true})).status,403);
+  assert.equal((await issuePost(grantee,other.project,{id:id(),versionId:other.version,expiresInHours:24,feedback:true})).status,403);
   assert.equal((await view(granted.token)).status,200);
   // Losing inclusion stops guest reads immediately; owner history and revocation remain.
   await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=?',grantee.user);
@@ -82,12 +83,12 @@ try{
 
  await check('issuance bounds, idempotency and hashed token',async()=>{
   for(const bad of [{expiresInHours:0},{expiresInHours:169},{expiresInHours:1.5},{feedback:'yes'},{label:'x'.repeat(81)},{label:'a\nb'},{extra:1}])
-   assert.equal((await api(a,`/projects/${a.project}/guest-previews`,'POST',{id:id(),versionId:a.version,expiresInHours:24,feedback:true,...bad})).status,400,JSON.stringify(bad));
-  assert.equal((await api(a,`/projects/${a.project}/guest-previews`,'POST',{id:id(),versionId:second.version,expiresInHours:24,feedback:true})).status,404);
-  assert.equal((await api(foreign,`/projects/${a.project}/guest-previews`,'POST',{id:id(),versionId:a.version,expiresInHours:24,feedback:true})).status,404);
+   assert.equal((await issuePost(a,a.project,{id:id(),versionId:a.version,expiresInHours:24,feedback:true,...bad})).status,400,JSON.stringify(bad));
+  assert.equal((await issuePost(a,a.project,{id:id(),versionId:second.version,expiresInHours:24,feedback:true})).status,404);
+  assert.equal((await issuePost(foreign,a.project,{id:id(),versionId:a.version,expiresInHours:24,feedback:true})).status,404);
   assert.equal((await api(foreign,`/projects/${a.project}/guest-previews`)).status,404);
   const request={id:id(),versionId:a.version,expiresInHours:24,feedback:true,label:'For Sam'};
-  const response=await api(a,`/projects/${a.project}/guest-previews`,'POST',request);
+  const response=await issuePost(a,a.project,request);
   assert.equal(response.headers.get('cache-control'),'no-store');
   link=await response.json();tokens.push(link.token);
   assert.match(link.token,/^[A-Za-z0-9_-]{43}$/);assert.equal(link.url,guestOrigin+'/#'+link.token);
@@ -95,9 +96,9 @@ try{
   assert.equal(link.link.expiresAt-link.link.createdAt,24*3600);
   const stored=await row('SELECT * FROM guest_preview_links WHERE id=?',request.id);
   assert.equal(stored.token_hash,sha(link.token));assert.ok(!JSON.stringify(stored).includes(link.token));
-  const replay=await ok(await api(a,`/projects/${a.project}/guest-previews`,'POST',request));
+  const replay=await ok(await issuePost(a,a.project,request));
   assert.equal(replay.replayed,true);assert.equal(replay.token,null);assert.equal(replay.link.id,request.id);
-  assert.equal((await api(a,`/projects/${a.project}/guest-previews`,'POST',{...request,expiresInHours:48})).status,409);
+  assert.equal((await issuePost(a,a.project,{...request,expiresInHours:48})).status,409);
   assert.equal((await row('SELECT count(*) n FROM guest_preview_links WHERE id=?',request.id)).n,1);
   const listed=await ok(await api(a,`/projects/${a.project}/guest-previews`));
   assert.equal(listed.links.length,1);assert.ok(!JSON.stringify(listed).includes(link.token));assert.ok(!JSON.stringify(listed).includes(stored.token_hash));
@@ -191,7 +192,7 @@ try{
   // Twenty active links per project; revocation frees a slot.
   const active=(await row('SELECT count(*) n FROM guest_preview_links WHERE project_id=? AND revoked_at IS NULL',a.project)).n;
   const extra=[];for(let n=active;n<20;n++)extra.push(await issue(a,a.project,v2,{feedback:false}));
-  assert.equal((await api(a,`/projects/${a.project}/guest-previews`,'POST',{id:id(),versionId:v2,expiresInHours:1,feedback:false})).status,409);
+  assert.equal((await issuePost(a,a.project,{id:id(),versionId:v2,expiresInHours:1,feedback:false})).status,409);
   for(const e of extra)await ok(await api(a,`/guest-previews/${e.link.id}/revoke`,'POST'));
   await issue(a,a.project,v2,{expiresInHours:1});
  });
@@ -224,7 +225,7 @@ try{
   const digest=(await row('SELECT digest FROM site_versions WHERE id=?',second.version)).digest;
   await run("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-hold',1,1,'risk_or_missing_history',100,90)",a.user,digest);
   assert.equal((await view(held.token)).status,404);assert.equal((await status(held.token)).status,404);assert.equal((await comment(held.token)).status,404);
-  assert.equal((await api(a,`/projects/${second.project}/guest-previews`,'POST',{id:id(),versionId:second.version,expiresInHours:24,feedback:true})).status,423);
+  assert.equal((await issuePost(a,second.project,{id:id(),versionId:second.version,expiresInHours:24,feedback:true})).status,423);
  });
 
  await check('preservation hold, retention, inventory and deletion cascade',async()=>{

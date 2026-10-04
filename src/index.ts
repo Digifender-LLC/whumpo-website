@@ -1,3 +1,4 @@
+import {projectRuntime} from './runtime-lane';
 import {safetyService,serviceSafetyReviews,readServiceSafetyReview,prepareServiceSafetyReview,confirmServiceSafetyReview} from './service-safety';
 import {listSavedWork,readSavedWork} from './saved-work';
 import {siteSafetyInventory,siteSafetyReviews,readSiteSafetyReview,prepareSiteSafetyReview,confirmSiteSafetyReview} from './site-safety';
@@ -36,6 +37,7 @@ import {listCMSMedia} from './cms-media';
 import {cmsExport} from './cms-export';
 import {readProjectDetails,saveProjectDetails} from './project-details';
 import {cleanupTraffic} from './site-traffic';
+import {cleanupPublicClients} from './public-admission';
 import {maintainFunnelEvents} from './funnel-metrics/events';
 import {compareBackends} from './backend-diff';
 import {cleanupAppLifecycle} from './app-lifecycle';
@@ -72,8 +74,9 @@ import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disco
 import {githubGrantReviews,reviewGitHubGrant,confirmGitHubGrant,cancelGitHubGrant} from './github-grant-revocation';
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
-import {createGuestPreview,listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedback,resolveGuestFeedback,deleteGuestFeedback,cleanupGuestPreviews} from './guest-previews/owner';
+import {listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedback,resolveGuestFeedback,deleteGuestFeedback,cleanupGuestPreviews} from './guest-previews/owner';
 import {GuestPreviewError} from './guest-previews/policy';
+import {prepareGuestPreviewIssue,confirmGuestPreviewIssue} from './guest-previews/bindings';
 import {guestPreviewOrigin} from './hosts';
 import { StorageLimitError } from './storage-budget';
 import {uploadPhoto,listPhotos,readPhotoUpload,readPhoto,cleanupPhotos} from './files';
@@ -367,7 +370,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1]),imports:await listBackendImports(env.DB,user.id,backendRoute[1])});
     if(method==='POST'){
       const data=await body(request);if(!data)return error(400,'A bounded JSON request is required');
-      return backendRoute[2]?json(await testBackend(env.DB,env.BACKEND_RUNTIME,user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
+      return backendRoute[2]?json(await testBackend(env.DB,await projectRuntime(env.BACKEND_RUNTIME,backendRoute[1]),user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
     }
   }
   const inboxMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/inbox$/);
@@ -408,11 +411,17 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   }
   // WH-092 owner guest-preview controls. Issuance is feature-gated; listing, revocation,
   // resolution and deletion remain available to the current owner on any plan.
+  const guestPrepare=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/guest-previews\/prepare$/);
+  if(guestPrepare){
+    if(new URL(request.url).search)return error(400,'Use the exact guest preview link.');
+    if(method==='POST')return json(await prepareGuestPreviewIssue(env.DB,user.id,guestPrepare[1],await body(request)));
+    return error(405,'Method not allowed');
+  }
   const guestLinks=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/guest-previews$/);
   if(guestLinks){
     if(new URL(request.url).search)return error(400,'Use the exact guest preview link.');
     if(method==='GET')return json(await listGuestPreviews(env.DB,user.id,guestLinks[1]));
-    if(method==='POST')return json(await createGuestPreview(env.DB,user.id,guestLinks[1],await body(request),String(env.ENVIRONMENT)==='local'?'http://localhost:8788/guest-preview/':guestPreviewOrigin+'/'));
+    if(method==='POST')return json(await confirmGuestPreviewIssue(env.DB,user.id,guestLinks[1],await body(request),String(env.ENVIRONMENT)==='local'?'http://localhost:8788/guest-preview/':guestPreviewOrigin+'/'));
     return error(405,'Method not allowed');
   }
   const guestLink=pathname.match(/^\/api\/guest-previews\/([0-9a-f-]{36})(?:\/(revoke|feedback)(?:\/([0-9a-f-]{36}))?)?$/);
@@ -588,7 +597,7 @@ export default {
     await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
       {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
-      {name:'traffic',run:()=>cleanupTraffic(env.DB)},
+      {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
       {name:'applications',run:()=>cleanupAppLifecycle(env.DB)},
       {name:'contacts',run:()=>cleanupContacts(env.DB)},

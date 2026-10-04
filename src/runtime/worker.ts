@@ -62,13 +62,18 @@ async function boundedBody(request:Request){
  try{return JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(all)) as unknown;}catch{return fail('invalid_request');}
 }
 const response=(body:unknown,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
-// Resource counter only, never tenant context. Bound concurrent fresh-Wasm allocations.
+// Resource counters only, never tenant context. Bound concurrent fresh-Wasm allocations per isolate.
+// The caller's opaque fairness lane (a per-project hash) may hold at most one of the two slots, so one
+// project cannot occupy the whole gate. Busy refusals run no guest code; callers do not charge them.
 let active=0;
+const lanes=new Set<string>();
 export default {
  async fetch(request:Request):Promise<Response>{
   if(request.method!=='POST'||new URL(request.url).pathname!=='/execute')return response({ok:false,error:'not_found'},404);
-  if(active>=2)return response({ok:false,error:'busy'},503);
-  active++;
+  const lane=request.headers.get('x-whumpo-lane')??'';
+  if(!/^[0-9a-f]{64}$/.test(lane))return response({ok:false,error:'invalid_request'},422);
+  if(active>=2||lanes.has(lane))return response({ok:false,error:'busy'},503);
+  active++;lanes.add(lane);
   try{
    const body=await boundedBody(request);
    if(!body||typeof body!=='object'||Array.isArray(body))return fail('invalid_request');
@@ -79,6 +84,6 @@ export default {
   }catch(error){
    const category=error instanceof GuestFailure?error.category:'unavailable';
    return response({ok:false,error:category},category==='unavailable'?503:422);
-  }finally{active--;}
+  }finally{active--;lanes.delete(lane);}
  }
 };

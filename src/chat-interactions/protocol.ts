@@ -9,7 +9,7 @@ export const bounds = Object.freeze({requestBytes:32768,definitionBytes:24576,an
 // One content field becomes one compiler operation; the current compiler accepts eight.
 export const contentFieldLimit=8;
 // Closed binding vocabulary. Registry entries never grant access or dispatch an action.
-export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'|'core.insights';source:string|null;handler:string|null;scope?:string;displays?:readonly string[]}>> = Object.freeze({
+export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'|'core.insights'|'creator.guest-feedback';source:string|null;handler:string|null;scope?:string;displays?:readonly string[]}>> = Object.freeze({
   'answer.value@1': {mode:'collect',feature:'core.editing',source:null,handler:null},
   'interaction.answers@1': {mode:'submit',feature:'core.editing',source:null,handler:null},
   'owned.projects@1': {mode:'select',feature:'core.editing',source:'src/chat-interactions/resource-options.ts',handler:'readOwnedResourceOptions',scope:'account'},
@@ -29,6 +29,8 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'cms.status@1': {mode:'read',feature:viewComponents.cms.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
   'project.performance@1': {mode:'read',feature:viewComponents.performance.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
   'workspace.reviews@1': {mode:'read',feature:viewComponents.reviews.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
+  // Feature family only: management reads stay ungated (viewComponents feature null) so revoke/delete outlive inclusion; issuance re-checks it.
+  'project.guest-previews@1': {mode:'read',feature:'creator.guest-feedback',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });

@@ -18,7 +18,8 @@ export async function readProjectObservations(db:D1Database,user:string,projectI
 export function observationGuards(db:D1Database,user:string,observations:ViewComponentData[]){
  return observations.flatMap(o=>{
   if(o.status!=='ready')return [];
-  const gate=featurePredicate(db,{userId:user,projectId:o.projectId,featureId:viewComponents[o.kind].feature,operation:'read'});
+  const feature=viewComponents[o.kind].feature;if(feature===null)return [];
+  const gate=featurePredicate(db,{userId:user,projectId:o.projectId,featureId:feature,operation:'read'});
   const projects=o.projectId===null&&o.kind==='traffic'?[...new Set(o.data.rows.map(row=>row.project_id))]:[];
   return [interactionGuard(db,gate.sql,gate.params),...projects.map(project=>interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)',[project,user]))];
  });
