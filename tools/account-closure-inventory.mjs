@@ -64,6 +64,9 @@ const metrics={
  unresolvedStandardAI:['standard_ai_requests','user_id',"state IN ('reserved','dispatched','uncertain')"],
  usedInvitations:['invitations','used_by'],
  funnelEvents:['funnel_events','user_id'],
+ guestPreviewLinks:['guest_preview_links','owner_user_id'],
+ activeGuestPreviewLinks:['guest_preview_links','owner_user_id','revoked_at IS NULL AND expires_at>unixepoch() AND version_id IS NOT NULL'],
+ guestPreviewFeedback:['guest_preview_feedback','link_id IN (SELECT id FROM guest_preview_links WHERE owner_user_id IN (SELECT id FROM scope))'],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

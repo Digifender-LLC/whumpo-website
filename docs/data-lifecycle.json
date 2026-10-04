@@ -1954,45 +1954,48 @@
     },
     {
       "id": "guest-feedback",
-      "tables": [],
-      "scope": "mixed",
-      "purpose": "Expiring accountless preview comments and guest-link authority.",
-      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
-      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
-      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
-      "references": [
-        "docs/data-protection.md",
-        "docs/roadmap/backlog.json",
-        "docs/inference-privacy.md"
+      "tables": [
+        "guest_preview_links",
+        "guest_preview_feedback"
       ],
-      "storageStatus": "planned",
+      "scope": "mixed",
+      "purpose": "WH-092 owner-issued expiring guest preview capabilities for one exact owner/project/saved version (token stored only as a SHA-256 hash) and accountless plain-text comments submitted through a current link. A guest is not an account, member or workspace principal.",
+      "currentRetention": "Links stop serving at expiry (1 hour to 7 days), immediately on owner revocation, when the bound saved version is removed (version_id cleared), on a recorded content hold or when the owner's feature inclusion ends. Ended links without feedback are pruned by the daily guest_previews job 30 days after ending; links with feedback and the feedback itself are retained until the owner deletes them or the project/account is deleted. Bounds: 20 active/200 retained links per project, 200 comments per link, 2,000 per owner. An active safety preservation hold blocks feedback deletion.",
+      "proposedRetention": "Owner-retained project feedback while used; set an abandoned-feedback age limit before commercial launch. Account closure revokes links first and purges links/feedback with the account unless a preservation hold applies.",
+      "deletionAuthority": "Current owner (identity and ownership; no paid-feature gate) revokes links and deletes links or individual comments; the daily maintenance job prunes ended feedback-less links; project/account deletion cascades. Guests cannot edit or delete submitted comments. Models, Chat and jobs cannot create links.",
+      "exportPolicy": "Owner JSON listing is the current export surface: link scope, label, state, dates and counts; comment text, unverified display name and resolution dates. Never export the raw token, token hash or request hashes, and never treat an exported link as transferable authority.",
+      "references": [
+        "src/guest-previews/schema.sql",
+        "src/guest-previews/owner.ts",
+        "src/guest-previews/guest.ts",
+        "src/guest-previews/policy.ts",
+        "docs/guest-previews.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
       "protection": {
-        "profile": "planned-adapter",
+        "profile": "managed-readable",
         "storage": [
-          "not-admitted"
+          "control-d1"
         ],
         "readers": [
-          "Exact guest capability and owner review; a guest is not a workspace member."
+          "Current project owner through the owner API; an anonymous holder of a current link reads only the bound preview rendering and its own receipt, never stored comments or link metadata beyond expiry and whether comments are allowed"
         ],
         "processors": [
-          "Deterministic preview/comment handling; maintenance sees only explicitly admitted comments with a reviewed privacy route."
+          "Deterministic owner/guest handlers and bounded daily retention; no model, Chat, notification, export job or third-party processor reads comments"
         ],
         "remainingExposure": [
-          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+          "Comments are unverified visitor-supplied text and may contain personal data or abuse; raw rows are readable to privileged operators. Anyone holding a current link can view the bound preview until it expires or is revoked."
         ],
-        "decision": "planned-adapter",
-        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; tokens are stored only as verifiers and extra blanket encryption would not remove authorized owner access. Verify minimization and recovery before broader admission.",
         "requirements": [
           "DP-02",
           "DP-03",
           "DP-04",
           "DP-05"
         ]
-      },
-      "implementationPackets": [
-        "WH-092"
-      ]
+      }
     },
     {
       "id": "lead-records",

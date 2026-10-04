@@ -1,7 +1,8 @@
 import {approvedPhotoSQL,photoBytesMatch} from './photo-safety';
 import {publicCMSPublicationImage} from './cms-publication-media';
 import {recordTraffic} from './site-traffic';
-import {customerProject,visitorProject,projectOrigin} from './hosts';
+import {customerProject,visitorProject,projectOrigin,guestPreviewHost} from './hosts';
+import {guestPreviewRequest} from './guest-previews/guest';
 import {activeBackendForm} from './backend-forms';
 import {backendFormScriptPolicy} from './backend-form-render';
 import {publicBackend} from './backend-publication';
@@ -19,6 +20,8 @@ const serving = {
   const url=new URL(request.url),headers={...previewHeaders,'cache-control':'no-store'};
   const local=['localhost','127.0.0.1'].includes(url.hostname),project=customerProject(url.hostname);
   if(visitorProject(url.hostname))return env.APP_HOST?env.APP_HOST.fetch(request):new Response('Application unavailable',{status:503,headers});
+  // WH-092 guest previews: one fixed host (or a local path prefix), never a project or custom domain.
+  if(url.hostname===guestPreviewHost||(local&&(url.pathname==='/guest-preview'||url.pathname.startsWith('/guest-preview/'))))return env.FILES?guestPreviewRequest(request,{DB:env.DB,FILES:env.FILES},local):new Response('Preview unavailable',{status:503,headers});
   if(project)url.pathname='/s/'+project+url.pathname;
   const backend=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/backend(?:\/([0-9a-f-]{36}))?$/);
   if(backend&&(local||!!project))return publicBackend(request,env.DB,env.BACKEND_RUNTIME,backend[1],backend[2]);
@@ -68,7 +71,7 @@ export default {
   const response=await serving.fetch(request,env);
   if(request.method==='GET'&&response.status===200&&response.headers.get('content-type')?.startsWith('text/html')){
    const url=new URL(request.url);
-   if(!visitorProject(url.hostname)){
+   if(!visitorProject(url.hostname)&&url.hostname!==guestPreviewHost&&!url.pathname.startsWith('/guest-preview')){
     const count=async()=>{
      let project=customerProject(url.hostname);
      if(!project&&['localhost','127.0.0.1'].includes(url.hostname))project=url.pathname.match(/^\/s\/([0-9a-f-]{36})(?:\/|$)/)?.[1]??null;
