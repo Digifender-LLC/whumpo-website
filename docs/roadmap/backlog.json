@@ -732,6 +732,123 @@
       "evidence": []
     },
     {
+      "id": "WH-131",
+      "title": "Restricted safety case contract, current schema and account-scope preservation holds",
+      "phase": "F1",
+      "priority": "P0",
+      "readiness": "ready",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-009",
+        "WH-010"
+      ],
+      "blockers": [],
+      "outcome": "An active, named-human preservation hold blocks the ordinary account cascade and related deletion/expiry paths, while case records, findings and audit live outside the account lifecycle.",
+      "scope": [
+        "Canonical schema for cases, append-only findings, evidence links, account-scope holds, operator roles and audit",
+        "Deterministic trigger enforcement on account/project deletion, project owner change and contact deletion/expiry",
+        "Trusted operator module with role checks and same-transaction audit; closure inventory and lifecycle catalogue registration"
+      ],
+      "acceptance": [
+        "No ordinary account cascade destroys an actively held account, its risk evidence or its case records",
+        "Every attempt is audited as allowed/denied/rejected with opaque identifiers only",
+        "Cases open as uncertain flags; confirmation and correction are separate append-only human decisions",
+        "Holds require a preservation approver and legal basis reference, have a bounded review term, never lapse silently and release only explicitly"
+      ],
+      "verification": [
+        "node tests/safety-cases.mjs",
+        "node tests/safety-cases.mjs --d1",
+        "node tests/content-risk-evidence.mjs",
+        "node tests/content-risk-review.mjs",
+        "node tests/account-closure-inventory.mjs",
+        "node tests/lifecycle-catalog.mjs"
+      ],
+      "references": [
+        "src/safety-cases.ts",
+        "schema/platform.sql",
+        "tests/safety-cases.mjs",
+        "docs/content-safety.md",
+        "docs/account-closure.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-132",
+      "title": "Authenticated restricted case operations and remaining preservation paths",
+      "phase": "F1",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "L",
+      "dependsOn": [
+        "WH-131"
+      ],
+      "blockers": [],
+      "outcome": "Named operators authenticate to a restricted case surface, and holds also protect evidence objects and every remaining per-object deletion or expiry path.",
+      "scope": [
+        "Authenticated operator identity bound to case roles; restricted CLI or review surface without model access",
+        "Restricted evidence object storage and object/project-scoped holds covering R2 cleanup, photo replacement, draft/traffic expiry and backup/restore suppression",
+        "Reviewed lawful export/disclosure operation design with audit; customer-facing behaviour during holds without disclosing a case"
+      ],
+      "acceptance": [
+        "Operator actions require authenticated identity, not declared references",
+        "Every ordinary deletion or expiry path for held scope is blocked or explicitly excluded with rationale",
+        "Export/disclosure is a separate audited reviewed operation; no raw material enters ordinary logs, GitHub or model context"
+      ],
+      "verification": [
+        "Synthetic deletion/access/export/release tests on disposable SQLite and local D1",
+        "Inventory of every DELETE/expiry path against hold scope"
+      ],
+      "references": [
+        "docs/content-safety.md",
+        "docs/data-lifecycle.md",
+        "src/safety-cases.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-133",
+      "title": "Qualified review and activation of restricted case and preservation procedure",
+      "phase": "F1",
+      "priority": "P0",
+      "readiness": "blocked",
+      "kind": "decision",
+      "size": "S",
+      "dependsOn": [
+        "WH-132"
+      ],
+      "blockers": [
+        "Qualified US counsel review of applicability, preservation term, retention schedule and disclosure; owner names the responsible safety operator"
+      ],
+      "outcome": "Legal applicability, hold terms, case retention and the operating procedure are approved by named humans before any live use.",
+      "scope": [
+        "Counsel review of preservation/reporting applicability, default review term and extension rules",
+        "Case-retention schedule for closed/released cases and audit",
+        "Named responsible operator, role administration and emergency escalation"
+      ],
+      "acceptance": [
+        "Approved procedure recorded with named decision owners; no model verdict",
+        "Live schema deployment and operator onboarding are separately reviewed; scanner/reporting work stays owner-deferred"
+      ],
+      "verification": [
+        "Qualified review record (sanitized reference)",
+        "Desk-check of incident-runbooks Section 10 against the approved procedure"
+      ],
+      "references": [
+        "docs/content-safety.md",
+        "docs/incident-runbooks.md",
+        "docs/data-lifecycle.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
       "id": "WH-016",
       "title": "Deliver abuse intake, policy consent and independent safety review",
       "phase": "F1",

@@ -58,6 +58,7 @@ const metrics={
  blockedProfilePhotos:['profile_photo_safety','user_id',"state='blocked'"],
  blockedProjectPhotos:['project_photo_safety','user_id',"state='blocked'"],
  riskEvidence:['content_risk_evidence','user_id'], riskCorrections:['content_risk_reversals','user_id'],
+ activePreservationHolds:['safety_preservation_holds','subject_user_id','released_at IS NULL'],
  scanTickets:['photo_scan_tickets','user_id'],
  pendingScanTickets:['photo_scan_tickets','user_id',"state='reserved'"],
  unresolvedStandardAI:['standard_ai_requests','user_id',"state IN ('reserved','dispatched','uncertain')"],
@@ -81,7 +82,7 @@ export async function accountClosureInventory(db,userId=null){
    'Identity counts cover rows linked to extant accounts; anonymous login/signup challenges and detached effect receipts need separate platform retention.',
    'Provider resources, R2 objects and backups have not been reconciled. Row counts are not resource counts.',
    'Saved configuration/proposal counts include full content copies. Metadata receipt counts do not prove independent restore suppression or safe deletion order.',
-   'No legal-hold or retention decision has been established; zero blocked records does not establish clearance.',
+   'An active preservation hold blocks the account cascade until its audited release. Zero active holds or blocked records does not establish legal clearance.',
    'Account closure, provider cancellation and restore-safe deletion orchestration are not implemented.',
   ]};
 }
