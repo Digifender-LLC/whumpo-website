@@ -39,6 +39,10 @@ function protectionMetadata(catalog){
 }
 const unlinkedOwnership={
  identity_challenges:'Pre-account signup challenges and account-bound ceremonies have no FK. The current schema deletes matching account_id challenges before users deletion; unclaimed rows expire after five minutes and bounded cleanup removes them.',
+ safety_cases:'Restricted case record keyed by subject account id without a foreign key, so ordinary account cascades cannot remove it (WH-015).',
+ safety_case_findings:'Append-only case decisions owned through safety_cases, deliberately outside the account cascade.',
+ safety_case_evidence:'Links to reviewed risk evidence ids owned through safety_cases, deliberately outside the account cascade.',
+ safety_preservation_holds:'Account-scope hold keyed by subject account id; an unreleased hold blocks that account deletion rather than following it.',
  file_cleanup:'Physical object deletion queue, keyed by object_key only. Recover tenant association from a separately retained object manifest; never expose keys in customer reports.'
 };
 export async function currentLifecycleSchema(directory=root){
