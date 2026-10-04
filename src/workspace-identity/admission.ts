@@ -10,7 +10,7 @@ const scopes=new WeakMap<object,Scope>();
 export function assertMaintenanceDatabase(db:D1Database){if(scopes.has(db))throw new Error('Platform maintenance authority is required.');}
 const unavailable=()=>new IdentityError(401,'proof_required','Sign in with your current passkey to continue.');
 const changed=()=>new IdentityError(409,'identity_changed','Your account access changed. Sign in again and review the current state before continuing.');
-const closing=()=>new IdentityError(409,'account_closing','This account is closing. Only closure status and your account export remain available.');
+const accountClosing=()=>new IdentityError(409,'account_closing','This account is closing. Only closure status and your account export remain available.');
 function scope(db:object,userId?:string){
  const value=scopes.get(db);
  if(!value||(userId!==undefined&&value.principal.accountId!==userId))throw unavailable();
@@ -31,12 +31,13 @@ export function admitWorkspace(db:D1Database,principal:IdentityPrincipal,closure
   const gate=identityPredicate(db,principal,context.policy);
   // This inserts zero rows on success. The always-empty table's abort trigger
   // rejects the whole batch on failure; no check/write race or durable guard rows.
-  const check=db.prepare(`INSERT INTO identity_admission_checks(denied) SELECT 1 WHERE NOT (${gate.sql})`).bind(...gate.params);
-  // WH-018 stop-new-work: same always-empty pattern, so a closure committed between two requests (or mid-flow, such
-  // as a delayed OAuth callback) refuses every later ordinary batch inside its own transaction.
-  const guards=context.closure==='refuse'?[check,db.prepare('INSERT INTO account_closure_admission_checks(denied) SELECT 1 WHERE EXISTS(SELECT 1 FROM account_closures WHERE account_id=?)').bind(principal.accountId)]:[check];
-  try{return (await db.batch<T>([...guards,...underlying])).slice(guards.length);}
-  catch(error){if(String(error).includes('identity_admission_denied'))throw changed();if(String(error).includes('account_closing'))throw closing();throw error;}
+  // WH-018 stop-new-work rides the same statement (denied=2 aborts as account_closing) so a closure committed between
+  // requests or mid-flow, such as a delayed OAuth callback, refuses every later ordinary batch inside its own
+  // transaction, and a read-only batch still issues no write other than this always-empty assertion.
+  const closing=context.closure==='refuse'?' OR EXISTS(SELECT 1 FROM account_closures WHERE account_id=?)':'';
+  const check=db.prepare(`INSERT INTO identity_admission_checks(denied) SELECT CASE WHEN NOT (${gate.sql}) THEN 1 ELSE 2 END WHERE NOT (${gate.sql})${closing}`).bind(...gate.params,...gate.params,...(closing?[principal.accountId]:[]));
+  try{return (await db.batch<T>([check,...underlying])).slice(1);}
+  catch(error){if(String(error).includes('identity_admission_denied'))throw changed();if(String(error).includes('account_closing'))throw accountClosing();throw error;}
  }
  function statement(original:D1PreparedStatement):D1PreparedStatement{
   const wrapped:D1PreparedStatement={

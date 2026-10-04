@@ -61,12 +61,6 @@ BEGIN SELECT RAISE(ABORT,'account_closure_immutable'); END;
 CREATE TRIGGER account_closure_steps_retained BEFORE DELETE ON account_closure_steps
 BEGIN SELECT RAISE(ABORT,'account_closure_retained'); END;
 
--- Always-empty assertion: ordinary workspace batches insert a row only when the account is closing, which aborts the
--- whole batch atomically with the domain statements (stop new work, including delayed OAuth callbacks).
-CREATE TABLE account_closure_admission_checks (denied INTEGER NOT NULL CHECK(denied=1)) STRICT;
-CREATE TRIGGER account_closure_admission_denied BEFORE INSERT ON account_closure_admission_checks
-BEGIN SELECT RAISE(ABORT,'account_closing'); END;
-
 -- WH-019 restore suppression ledger (docs/account-closure.md#wh-019-restore-safe-erasure-and-revocation-suppression--october-4-2026-utc).
 -- One content-free row per erased or revoked subject: an opaque identifier, what happened to it and, for staff grants,
 -- the access revision that ended the grant. No names, values, filenames, object keys, ciphertext or tokens. Rows are

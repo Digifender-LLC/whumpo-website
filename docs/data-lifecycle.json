@@ -312,11 +312,10 @@
     {
       "id": "identity-admission-assertion",
       "tables": [
-        "identity_admission_checks",
-        "account_closure_admission_checks"
+        "identity_admission_checks"
       ],
       "scope": "platform",
-      "purpose": "Always-empty SQL assertion tables used to atomically reject workspace batches after identity revocation and, for WH-018, while the account is closing.",
+      "purpose": "Always-empty SQL assertion table used to atomically reject workspace batches after identity revocation and, for WH-018, while the account is closing.",
       "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
       "proposedRetention": "Remain empty in every deployment and restore.",
       "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
@@ -2326,7 +2325,7 @@
         "workspace_layout_checks"
       ],
       "scope": "platform",
-      "purpose": "Always-empty SQL assertion tables used to atomically reject stale Chat interaction or workspace layout state, feature inclusion, project ownership and revision checks.",
+      "purpose": "Always-empty SQL assertion table used to atomically reject stale Chat interaction or workspace layout state, feature inclusion, project ownership and revision checks.",
       "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
       "proposedRetention": "Remain empty in every deployment and restore.",
       "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
