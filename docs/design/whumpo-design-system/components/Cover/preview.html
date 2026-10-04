@@ -1,0 +1,50 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Whumpo</title>
+<style>
+  html, body { margin:0; height:100%; }
+  body { background:var(--surface); color:var(--ink); font-family:var(--font-ui); overflow:hidden; }
+  .cover { position:relative; width:960px; height:288px; overflow:hidden; }
+  .art { position:absolute; top:0; left:480px; width:480px; height:288px; overflow:hidden; }
+  .art svg { display:block; width:504px; height:288px; }
+  .sky { fill:var(--sky-blue); }
+  .cloud { fill:var(--cloud-white); }
+  .star { fill:var(--sunshine); }
+  .deep { fill:var(--surface-inverse); }
+  .coral { fill:var(--cloud-coral); }
+  .xl { rx:var(--radius-xl); }
+  .words { position:absolute; left:var(--space-8); bottom:var(--space-8); max-width:440px; }
+  .name { margin:0; font-family:var(--font-display); font-size:92px; line-height:.92; font-weight:700; letter-spacing:-.02em; color:var(--ink); }
+  .tag { margin:var(--space-3) 0 0 6px; font-size:14px; line-height:20px; color:var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="art" aria-hidden="true">
+<svg viewBox="0 0 504 288" width="504" height="288">
+<!--
+  blocks      sky-blue 264×260 slab bled off the top (the identity colour, largest) · surface-inverse 224×208 (Deep Sky in light, Cloud White in dark) bled off the right · sunshine disc r24 (the star) · cloud-coral 112×16 pill once (rare warmth) — ≈ 40% of 960×288
+  arrangement one tall sky slab with a deep satellite, bottoms stepping down by space-8; the coral pill under the slab a space-4 clear
+  pattern     a cloud silhouette built from discs and a pill in cloud-white, from the mascot and "soft, rounded corners": the cloud-elephant on a blue sky reaching for a gold star
+  scales      corners radius-xl (28); pill rx = half its height; gutters space-4 (16); offsets space-6/space-8; disc radii 30·32·44 on the cloud
+-->
+<rect class="sky xl" x="0" y="-28" width="264" height="260" rx="28"/>
+<rect class="cloud" x="24" y="176" width="208" height="40" rx="20"/>
+<circle class="cloud" cx="72" cy="176" r="32"/>
+<circle class="cloud" cx="128" cy="156" r="44"/>
+<circle class="cloud" cx="190" cy="174" r="30"/>
+<circle class="star" cx="212" cy="64" r="24"/>
+<rect class="deep xl" x="280" y="56" width="224" height="208" rx="28"/>
+<rect class="coral" x="0" y="248" width="112" height="16" rx="8"/>
+</svg>
+</div>
+<div class="words">
+<h1 class="name">Whumpo</h1>
+<p class="tag">Big ideas. Less work.</p>
+</div>
+</div>
+</body>
+</html>

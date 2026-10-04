@@ -1,5 +1,9 @@
 # Optional GitHub connection
 
+## Common connector contract — October 4, 2026 UTC
+
+GitHub is mapped onto the planned [common bounded connector contract](../connectors.md) (WH-140), with its exact gaps listed there. That mapping changes no current behaviour, scope or endpoint; WH-141/142 adapt the handlers.
+
 ## Planned plan eligibility — September 30, 2026
 
 GitHub authorization and reviewed repository backups are planned **Business and Business Pro** benefits; Starter and Creator (the accepted new name for Personal; display rollout is WH-089) do not include external account connections. This is a launch-catalogue decision, not current server enforcement: the private Explore preview and existing provider configuration, consent and review gates are unchanged, and real-money subscriptions remain disabled (the authorized sandbox is separately available). Downloadable source export and owner sign-in are separate features with unchanged rules.

@@ -1,0 +1,189 @@
+{
+  "v": 3,
+  "assetGroups": {
+    "Icons": {
+      "files": {
+        "alert.svg": {
+          "blob": "e91f59de8ff26f437c0a0894663072a7",
+          "name": "alert.svg",
+          "size": 251,
+          "type": "image/svg+xml"
+        },
+        "chat.svg": {
+          "blob": "3981488897bcdd971aa0741e988f3089",
+          "name": "chat.svg",
+          "size": 365,
+          "type": "image/svg+xml"
+        },
+        "check.svg": {
+          "blob": "5ab4ebe6d1c6af661b758ea75111c4fb",
+          "name": "check.svg",
+          "size": 254,
+          "type": "image/svg+xml"
+        },
+        "clock.svg": {
+          "blob": "8791f8d001d11e6f35a244df4406d61a",
+          "name": "clock.svg",
+          "size": 242,
+          "type": "image/svg+xml"
+        },
+        "database.svg": {
+          "blob": "858c968200c4890782a10cd60462fc1c",
+          "name": "database.svg",
+          "size": 345,
+          "type": "image/svg+xml"
+        },
+        "globe.svg": {
+          "blob": "be4a0d1e4b1168d1558b7c2cb3247f11",
+          "name": "globe.svg",
+          "size": 327,
+          "type": "image/svg+xml"
+        },
+        "home.svg": {
+          "blob": "60379c793e267eec212fefd81fb35da7",
+          "name": "home.svg",
+          "size": 272,
+          "type": "image/svg+xml"
+        },
+        "person.svg": {
+          "blob": "28cb10905126828b7b2fd2b8f33677a2",
+          "name": "person.svg",
+          "size": 272,
+          "type": "image/svg+xml"
+        },
+        "send.svg": {
+          "blob": "e5f34371cd580e41a5945fd5ada822cb",
+          "name": "send.svg",
+          "size": 227,
+          "type": "image/svg+xml"
+        },
+        "server.svg": {
+          "blob": "21f765870f95969cfa53276bead975b5",
+          "name": "server.svg",
+          "size": 342,
+          "type": "image/svg+xml"
+        },
+        "spark.svg": {
+          "blob": "e85db2ed996d7a6c9eb15f5dc462c584",
+          "name": "spark.svg",
+          "size": 293,
+          "type": "image/svg+xml"
+        },
+        "storage.svg": {
+          "blob": "030b1fc232adbccec1ca5b06524298b6",
+          "name": "storage.svg",
+          "size": 269,
+          "type": "image/svg+xml"
+        }
+      },
+      "name": "Icons",
+      "order": [
+        "home.svg",
+        "globe.svg",
+        "database.svg",
+        "storage.svg",
+        "server.svg",
+        "person.svg",
+        "chat.svg",
+        "spark.svg",
+        "check.svg",
+        "alert.svg",
+        "clock.svg",
+        "send.svg"
+      ],
+      "tile": "xs"
+    },
+    "Logos": {
+      "files": {
+        "whumpo-mark-192.png": {
+          "blob": "ee9786f6e571fb0177ca380d5193bda9",
+          "name": "whumpo-mark-192.png",
+          "size": 37039,
+          "type": "image/png"
+        },
+        "whumpo-mark-48.png": {
+          "blob": "ce799db87fe2ef5e95d9991438e76357",
+          "name": "whumpo-mark-48.png",
+          "size": 3994,
+          "type": "image/png"
+        },
+        "whumpo-mark-512.png": {
+          "blob": "0be85df0e038f7ecc488c63c360d72d7",
+          "name": "whumpo-mark-512.png",
+          "size": 219419,
+          "type": "image/png"
+        },
+        "whumpo-mark-96.png": {
+          "blob": "699642b63b9b374a7052f0e1ba7b2223",
+          "name": "whumpo-mark-96.png",
+          "size": 12139,
+          "type": "image/png"
+        },
+        "whumpo-mark-original.png": {
+          "blob": "d97a45283ac377e5c2e88a22857ebf93",
+          "name": "whumpo-mark-original.png",
+          "size": 1661577,
+          "type": "image/png"
+        }
+      },
+      "name": "Logos",
+      "order": [
+        "whumpo-mark-original.png",
+        "whumpo-mark-512.png",
+        "whumpo-mark-192.png",
+        "whumpo-mark-96.png",
+        "whumpo-mark-48.png"
+      ],
+      "tile": "l"
+    },
+    "Reference": {
+      "files": {
+        "whumpo-brand-board.png": {
+          "blob": "50da8dd23d1a2ffabeeb0ba8baae959b",
+          "name": "whumpo-brand-board.png",
+          "size": 1499433,
+          "type": "image/png"
+        }
+      },
+      "name": "Reference",
+      "order": [
+        "whumpo-brand-board.png"
+      ],
+      "tile": "l"
+    }
+  },
+  "blobs": {},
+  "createdOnFiles": {
+    "at": "2026-10-04T01:44:32Z",
+    "v": 1
+  },
+  "docs": {
+    "readme": "project/README.md",
+    "sections": []
+  },
+  "groups": [
+    "Logos",
+    "Icons",
+    "Reference"
+  ],
+  "lastChange": {
+    "at": "2026-10-04T01:44:32Z",
+    "by": "Ender",
+    "note": "Initial system from the Whumpo Brand Identity System v1.1 and brand board.",
+    "via": "Cowork"
+  },
+  "layout": "files",
+  "libraries": [
+    {
+      "name": "react",
+      "version": "18"
+    },
+    {
+      "name": "react-dom",
+      "version": "18"
+    }
+  ],
+  "namespace": "Whumpo",
+  "sections": {},
+  "title": "Whumpo"
+}
