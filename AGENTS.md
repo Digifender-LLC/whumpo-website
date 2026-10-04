@@ -52,6 +52,7 @@ When delegating to subagents, route work based on task complexity and requiremen
 - Start planned work from `docs/roadmap/README.md` and `docs/roadmap/execution.md`. `docs/roadmap/backlog.json` owns task scope, dependencies and planning readiness; mapped GitHub issues own current execution state and claims.
 - Use `node tools/roadmap.mjs validate`, `alignment`, `next`, and `show WH-001` to inspect tasks. Check live issue/dependency evidence and current source before claiming work; a planning-ready task may already be assigned or completed.
 - Edit the JSON backlog, then run `node tools/roadmap.mjs render` and `render --check`; do not hand-edit generated `docs/roadmap/backlog.md`. Stripe sandbox setup is owner-authorized; preserve the real-money activation gate, owner-deferred CMS testing and CSAM scanner implementation, and distinguish implementation from activation/customer acceptance when closing work.
+- Resolve owner blockers with the built-in multiple-choice question tool (`AskUserQuestion`), not long prose lists. When a task is source-complete and waits on owner decisions, batch up to four questions per call, list a recommended option first, and keep options concrete (limits, providers, retention terms, role setup) with an "I'll specify" escape. Ask the most blocking questions first, then record each answer as a comment on the mapped issue and in the feature doc, noting which sub-questions remain open. An answer authorizes only the decision asked, not deployment, spending or provider activation.
 
 ## Documentation conventions
 
