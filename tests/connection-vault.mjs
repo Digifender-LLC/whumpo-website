@@ -51,7 +51,7 @@ for(const provider of ['github','cloudflare']){
  }
 }
 const context='whumpo:github:token:owner-a:record-a';
-for(const badContext of ['owner-a','whumpo:github:token:owner-a:record-a','whumpo:github:token:owner-a:record-a:extra','whumpo:github:other:owner-a:record-a','whumpo:github:token::record-a','whumpo:github:token:owner-a:'+('x'.repeat(129))])await refuses(seal(secret,badContext,value));
+for(const badContext of ['owner-a','legacy:github:token:owner-a:record-a','whumpo:github:token:owner-a:record-a:extra','whumpo:github:other:owner-a:record-a','whumpo:github:token::record-a','whumpo:github:token:owner-a:'+('x'.repeat(129))])await refuses(seal(secret,badContext,value));
 for(const badValue of ['',null,'x'.repeat(8193),'🌱'.repeat(2049),'\ud800'])await refuses(seal(secret,context,badValue));
 for(const good of ['x'.repeat(8192),'🌱'.repeat(2048)]){assert.equal(await unseal(secret,context,await seal(secret,context,good)),good);checks++;}
 const config=JSON.parse(secret),invalid=[

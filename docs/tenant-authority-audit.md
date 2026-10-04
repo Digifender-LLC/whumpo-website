@@ -4,7 +4,7 @@
 
 This is the consolidated authority map for source commit `a34a13171a768097b6bb80a548363dd7ab7e8659`. It complements the [security decision register](security-risk-actions.md), [acceptance gates](acceptance.md) and [roadmap issue](https://github.com/zemdregon/whumpo/issues/5). It is not a claim of exhaustive security or live acceptance.
 
-The Standard Codex Security scan `7b3504ac-bcbe-4100-bca2-9178209c4ba5` was sealed on October 1 at 12:07 UTC. The private local evidence directory is `~/.codex/state/plugins/codex-security/scans/Whumpo/a34a13171a768097b6bb80a548363dd7ab7e8659_20261001T045543Z_mwimhwec/`; its generated `report.md`, `scan-manifest.json`, `findings.json` and `coverage.json` preserve source evidence, counterevidence, reproduction procedures and investigation results. The repository records sanitized conclusions, not credentials or customer data.
+The Standard Codex Security scan `7b3504ac-bcbe-4100-bca2-9178209c4ba5` was sealed on October 1 at 12:07 UTC. The private local evidence directory is `~/.codex/state/plugins/codex-security/scans/<project>/a34a13171a768097b6bb80a548363dd7ab7e8659_20261001T045543Z_mwimhwec/`; its generated `report.md`, `scan-manifest.json`, `findings.json` and `coverage.json` preserve source evidence, counterevidence, reproduction procedures and investigation results. The repository records sanitized conclusions, not credentials or customer data.
 
 ## Scope and limits
 

@@ -69,7 +69,7 @@ table(['Boundary', 'Deployed implementation'], [
  ('Files', 'Private Standard R2 bucket whumpo-files; public bucket access disabled'),
  ('Published sites', 'whumpo-sites Worker at PROJECT_ID.whumpo.site; current version and exact photo references only'),
  ('AI provider', 'OpenAI-compatible Responses transport to OpenCode Go Muse Spark 1.3 Contributor'),
- ('Source control', 'Private GitHub repository Digifender-LLC/whumpo-website; deployment from the local CLI'),
+ ('Source control', 'Private GitHub repository zemdregon/Whumpo; deployment from the local CLI'),
 ])
 paragraph('Durable Objects, Workflows, Queues, Containers, Sandbox, Workers AI, AI Gateway, Artifacts and Registrar described earlier are architectural options, not deployed dependencies. The current assembler accepts reviewed components and bounded configuration; it does not execute arbitrary customer-generated code. General dynamic apps and isolated build execution remain open requirements under the cost constraint.')
 paragraph('Source of truth: wrangler.jsonc, wrangler.sites.jsonc, migrations, src and the deployment log. The public Worker has D1 and R2 bindings, but no identity or AI secrets. These bindings are not read-only credentials; route code enforces the public read boundary. No customer receives platform provider credentials.')

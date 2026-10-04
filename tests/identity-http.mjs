@@ -51,7 +51,7 @@ try{
  assert.equal((await handleIdentityRequest(new Request('https://whumpo.com/api/auth/login'),env)).status,404);
  await b.no('state',{},400,{method:'GET',body:undefined});
  const stale=new Browser();stale.cookies.set(identityCookies.session,'f'.repeat(64));await stale.no('state',{version:1},401);await stale.ok('logout');assert.equal(stale.cookies.size,0);
- const legacy=new Browser();legacy.cookies.set('whumpo_session','f'.repeat(64));assert.equal(await legacy.state(),null);await assert.rejects(()=>workspaceIdentity(new Request('https://whumpo.com/api/profile',{headers:{cookie:legacy.header()}}),env),e=>e.code==='proof_required');cases++;
+ const legacy=new Browser();legacy.cookies.set('legacy_session','f'.repeat(64));assert.equal(await legacy.state(),null);await assert.rejects(()=>workspaceIdentity(new Request('https://whumpo.com/api/profile',{headers:{cookie:legacy.header()}}),env),e=>e.code==='proof_required');cases++;
  limited=true;await b.no('login/options',{version:1},429);assert.equal(await b.state(),null);limited=false;apiLimited=true;await b.no('state',{version:1},429);apiLimited=false;
  phase='enrollment and strict authority';
  for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(b,path)).status,401);cases++;}
