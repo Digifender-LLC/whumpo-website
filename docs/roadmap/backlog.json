@@ -727,7 +727,7 @@
         "src/content-risk-evidence.ts",
         "tools/review-content-risk.mjs"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/109",
       "owner": null,
       "evidence": []
     },
