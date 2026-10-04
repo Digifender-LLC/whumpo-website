@@ -8,9 +8,11 @@ import {backendFormConfig} from './backend-form-render';
 import {handleModuleRequest} from './shared-modules/api';
 import {visitorPrincipal} from './shared-modules/access';
 import {ModuleError,moduleRequest} from './shared-modules/policy';
+import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
+import {verifyTurnstile} from './turnstile';
 import type {AuthenticationResponseJSON,RegistrationResponseJSON} from '@simplewebauthn/server';
 
-type AppEnv = Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'>;
+type AppEnv = Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'|'TURNSTILE_SECRET'>;
 const uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const route=new RegExp(`^/apps/(${uuid})/(.+)$`);
 const headers={
@@ -40,7 +42,7 @@ async function body(request:Request):Promise<Record<string,unknown>>{
 
 // Not mounted on the platform owner origin. A controlled visitor-host entry point
 // must call this handler; it must never serve arbitrary generated scripts/HTML.
-export async function applicationGateway(request:Request,env:AppEnv):Promise<Response>{
+export async function applicationGateway(request:Request,env:AppEnv,fetcher:typeof fetch=fetch):Promise<Response>{
  try{
   const local=String(env.ENVIRONMENT)==='local',url=new URL(request.url),hostProject=visitorProject(url.hostname),origin=local?'http://localhost:8787':hostProject?visitorOrigin(hostProject):'';
   if(!local&&hostProject)url.pathname='/apps/'+hostProject+url.pathname;
@@ -69,7 +71,22 @@ export async function applicationGateway(request:Request,env:AppEnv):Promise<Res
    try{
     const envelope=moduleRequest(await body(request));
     const principal=await visitorPrincipal(env.DB,session,project,envelope.resourceId)??{kind:'public' as const,projectId:project};
-    return json(await handleModuleRequest(env.DB,principal,envelope));
+    return json(await handleModuleRequest(env.DB,principal,envelope,undefined,{publicAdmission:async()=>{
+     // WH-127 anonymous public form intake reuses the contact form's admission: deployed environments fail closed
+     // without the Turnstile secret, one connection gets the contact allowance per project per UTC day (shared with the
+     // contact form, counted before verification), and Siteverify must name this visitor host, the module-form action
+     // and this exact resource. The commit trigger repeats the public form, publication and atomic caps.
+     if(!local&&!env.TURNSTILE_SECRET)throw new ModuleError('unavailable','Public form submissions are temporarily unavailable.');
+     try{await reservePublicClient(env.DB,'contact',project,await publicClientKey(request,'contact',project));}
+     catch(cause){if(cause instanceof PublicClientLimitError)throw new ModuleError('limited','Too many submissions from this connection today. Please try again tomorrow.');throw cause;}
+     if(local)return;
+     const token=request.headers.get('whumpo-turnstile-response');
+     if(!token||token.length>2048)throw new ModuleError('forbidden','Complete verification before sending.');
+     let outcome:'verified'|'failed'|'unavailable';
+     try{outcome=await verifyTurnstile(fetcher,env.TURNSTILE_SECRET!,token,ip,{hostname:url.hostname,action:'module-form',cdata:envelope.resourceId});}catch{outcome='unavailable';}
+     if(outcome==='unavailable')throw new ModuleError('unavailable','Verification is unavailable. Try again later.');
+     if(outcome==='failed')throw new ModuleError('forbidden','Verification failed. Reload the form and try again.');
+    }}));
    }catch(cause){if(cause instanceof ModuleError)return json(cause.body(),cause.status);throw cause;}
   }
   const page=await liveAppPage(env.DB,project);if(!page)return json({error:'Application page unavailable'},404);

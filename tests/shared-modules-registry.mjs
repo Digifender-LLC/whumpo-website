@@ -68,7 +68,9 @@ const instance=(o,localId)=>row('SELECT i.*,a.state,a.revision activation_revisi
 const envelope=(resource,operation,{target=null,input=null,requestId=undefined,configRevision=resource.config_revision}={})=>({api:'whumpo-modules',version:1,operation,resourceId:resource.id,configRevision,requestId:requestId===undefined?(m.modulePolicy.moduleOperations[operation].write?id():null):requestId,target,input});
 const submitHandler=async(_db,ctx)=>({statements:[],result:{accepted:true,formId:ctx.request.target.formId}});
 const handlers={'forms.submit':submitHandler,'records.get':async(_db,ctx)=>({fields:ctx.decision.fields,scope:ctx.decision.scope}),'access.list':async()=>({staff:0})};
-const publicCall=(o,input,h=handlers,mod=m)=>(mod.sharedModules?.handleModuleRequest??mod.handleModuleRequest)(db,{kind:'public',projectId:o.project},input,h);
+// Synthetic public writes pass an explicit admitted hook; the visitor gateway's real admission (Turnstile, allowance) is
+// covered by tests/shared-modules-records.mjs. Without the hook a public write is unavailable (asserted below).
+const publicCall=(o,input,h=handlers,mod=m,options={publicAdmission:async()=>{}})=>(mod.sharedModules?.handleModuleRequest??mod.handleModuleRequest)(db,{kind:'public',projectId:o.project},input,h,options);
 const ownerCall=(o,input,h=handlers,scope=o.scope)=>m.sharedModules.handleModuleRequest(scope,{kind:'owner',userId:o.user,projectId:o.project},input,h);
 const fails=async(promise,code)=>{await assert.rejects(promise,e=>{assert.ok(typeof e?.code==='string'&&typeof e?.category==='string'&&Number.isInteger(e?.status),String(e?.stack??e));assert.equal(e.code,code,e.message);return true;});};
 const submission=(resource,extra={})=>envelope(resource,'forms.submit',{target:{formId:'request-form'},input:{name:marker,note:marker},...extra});
@@ -145,6 +147,8 @@ try{
   await assert.rejects(publicCall(a,submission(records),{'forms.submit':async()=>({statements:[db.prepare('INSERT INTO module_activations(instance_id) VALUES(NULL)')],result:{accepted:true}})}),e=>e.code==='unresolved');
   // Not-yet-delivered operations are unavailable after the full resolver and policy pass, never a fallback.
   await fails(publicCall(a,submission(records),{}),'unavailable');
+  // A public write without the receiving host's public intake admission is unavailable before its handler runs.
+  await fails(publicCall(a,submission(records),handlers,m,{}),'unavailable');
   await fails(publicCall(a,envelope(records,'records.get',{target:{recordId:'request'}})),'forbidden');
   await fails(publicCall(a,submission(records,{target:{formId:'missing'}})),'not_found');
   await fails(publicCall(a,envelope(access,'access.list')),'forbidden');

@@ -115,6 +115,8 @@ CREATE TABLE module_request_receipts (
  PRIMARY KEY(instance_id,request_id)
 ) STRICT;
 CREATE INDEX module_request_receipts_project ON module_request_receipts(project_id,created_at);
+-- WH-127 anonymous intake caps count public receipts platform-wide and per project.
+CREATE INDEX module_request_receipts_public ON module_request_receipts(principal_kind,created_at);
 
 -- Review admission: prepared only by the owner's typed moduleActivationReview Chat control, for the exact
 -- owned project and current saved specification head; disable binds the current registry row.
@@ -393,8 +395,9 @@ CREATE TABLE module_records (
  schema_id TEXT NOT NULL CHECK(length(schema_id) BETWEEN 1 AND 40 AND schema_id NOT GLOB '*[^a-z0-9-]*'),
  form_id TEXT NOT NULL CHECK(length(form_id) BETWEEN 1 AND 40 AND form_id NOT GLOB '*[^a-z0-9-]*'),
  fields_revision INTEGER NOT NULL CHECK(fields_revision>=1),
- submitter_kind TEXT NOT NULL CHECK(submitter_kind IN ('visitor','staff')),
- visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
+ submitter_kind TEXT NOT NULL CHECK(submitter_kind IN ('public','visitor','staff')),
+ -- Anonymous submissions to a `public` form have no visitor identity; visitor and staff submissions always have one.
+ visitor_id TEXT REFERENCES app_visitors(id) ON DELETE CASCADE CHECK((submitter_kind='public')=(visitor_id IS NULL)),
  values_json TEXT NOT NULL CHECK(json_valid(values_json) AND json_type(values_json)='object' AND length(CAST(values_json AS BLOB))<=8192),
  revision INTEGER NOT NULL CHECK(revision>=1),
  created_request_id TEXT NOT NULL CHECK(length(created_request_id)=36),
@@ -423,17 +426,33 @@ CREATE TABLE module_record_events (
 CREATE INDEX module_record_events_project ON module_record_events(project_id,created_at);
 CREATE INDEX module_record_events_entry ON module_record_events(entry_id);
 
+-- Anonymous (`public`) submissions reuse the contact form's admission (docs/contact-forms.md#submission-boundary): the
+-- visitor gateway runs Turnstile Siteverify and the per-connection allowance before the engine commits, and this trigger
+-- repeats a `public` form on a published project and the contact caps over this project's anonymous module receipts
+-- (receipts outlive owner removal, so deleting records never recycles the allowance): 20 per hour (or the operator's
+-- `contact` containment allowance), 100 per project and 1,000 platform-wide in 30 days, and above 500 platform-wide an
+-- account already holding 100 is refused.
 CREATE TRIGGER module_record_admit BEFORE INSERT ON module_records BEGIN
  SELECT RAISE(ABORT,'module_request_unavailable') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id AND a.state='active'
   WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.kind='records'
-  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')=NEW.form_id AND json_extract(f.value,'$.recordId')=NEW.schema_id AND json_extract(f.value,'$.uploadCollectionId') IS NULL)
+  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')=NEW.form_id AND json_extract(f.value,'$.recordId')=NEW.schema_id AND json_extract(f.value,'$.uploadCollectionId') IS NULL
+   AND (NEW.submitter_kind!='public' OR json_extract(f.value,'$.submit')='public'))
   AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.schemas') s WHERE json_extract(s.value,'$.id')=NEW.schema_id AND json_extract(s.value,'$.fieldsRevision')=NEW.fields_revision)
-  AND NEW.expires_at=NEW.created_at+86400*json_extract(i.config_json,'$.retentionDays'));
+  AND NEW.expires_at=NEW.created_at+86400*json_extract(i.config_json,'$.retentionDays'))
+  OR NEW.submitter_kind='public' AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL);
  SELECT RAISE(ABORT,'module_request_stale') WHERE NEW.revision!=1 OR NEW.last_request_id!=NEW.created_request_id OR NEW.updated_at!=NEW.created_at OR abs(NEW.created_at-unixepoch())>60;
- SELECT RAISE(ABORT,'module_request_forbidden') WHERE NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=0);
+ SELECT RAISE(ABORT,'module_request_forbidden') WHERE NEW.visitor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=0);
  SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_records WHERE instance_id=NEW.instance_id)>=10000
   OR (SELECT count(*) FROM module_records WHERE project_id=NEW.project_id)>=20000
-  OR (SELECT count(*) FROM module_records WHERE visitor_id=NEW.visitor_id AND instance_id=NEW.instance_id AND created_at>unixepoch()-3600)>=20;
+  OR NEW.visitor_id IS NOT NULL AND (SELECT count(*) FROM module_records WHERE visitor_id=NEW.visitor_id AND instance_id=NEW.instance_id AND created_at>unixepoch()-3600)>=20;
+ SELECT RAISE(ABORT,'module_request_limited') WHERE NEW.submitter_kind='public' AND (
+  (SELECT count(*) FROM module_request_receipts WHERE project_id=NEW.project_id AND principal_kind='public' AND created_at>unixepoch()-3600)
+   >=coalesce((SELECT coalesce(allowance,0) FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='contact' ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1),20)
+  OR (SELECT count(*) FROM module_request_receipts WHERE project_id=NEW.project_id AND principal_kind='public' AND created_at>unixepoch()-2592000)>=100
+  OR (SELECT count(*) FROM module_request_receipts WHERE principal_kind='public' AND created_at>unixepoch()-2592000)>=1000
+  OR (SELECT count(*) FROM module_request_receipts WHERE principal_kind='public' AND created_at>unixepoch()-2592000)>=500
+   AND (SELECT count(*) FROM module_request_receipts r JOIN projects p ON p.id=r.project_id WHERE r.principal_kind='public' AND r.created_at>unixepoch()-2592000
+    AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))>=100);
 END;
 -- Identity, submitter, schema and retention never change; every change advances the revision by one under a new request,
 -- and an expired record cannot be changed.

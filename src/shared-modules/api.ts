@@ -40,7 +40,11 @@ async function authorize(db:D1Database,principal:ModulePrincipal,request:ModuleR
  if(decision.decision==='deny')throw denied(decision);
  return {request,resource,principal,decision} satisfies ModuleContext;
 }
-export async function handleModuleRequest(db:D1Database,principal:ModulePrincipal,input:unknown,handlers:ModuleHandlers=moduleHandlers){
+/** Anonymous (public) writes additionally pass the public intake admission of the receiving host (WH-127: the contact
+ * form's Turnstile Siteverify and per-connection allowance, applied by the visitor gateway). Without it a public write is
+ * `unavailable`; it runs after authorization and after an exact replay has been read back, before the handler. */
+export type ModuleRequestOptions={publicAdmission?:(context:ModuleContext)=>Promise<void>};
+export async function handleModuleRequest(db:D1Database,principal:ModulePrincipal,input:unknown,handlers:ModuleHandlers=moduleHandlers,options:ModuleRequestOptions={}){
  const request=moduleRequest(input),op=moduleOperations[request.operation];
  const context=await authorize(db,principal,request);
  const handler=handlers[request.operation];
@@ -63,6 +67,10 @@ export async function handleModuleRequest(db:D1Database,principal:ModulePrincipa
  // Permission was rechecked by authorize() above before an earlier receipt can be revealed.
  const existing=await readback();if(existing)return existing;
  if(!handler)throw new ModuleError('unavailable','This module operation is not delivered yet.');
+ if(principal.kind==='public'){
+  if(!options.publicAdmission)throw new ModuleError('unavailable','Public submissions to this form are not available here.');
+  await options.publicAdmission(context);
+ }
  const {statements,result}=await (handler as ModuleWriteHandler)(db,context),resultJSON=canonicalJSON(result,2048);
  const gate=principalPredicate(db,principal),r=context.resource;
  const receipt=db.prepare(`INSERT INTO module_request_receipts(instance_id,request_id,project_id,operation,principal_kind,principal_hash,request_hash,config_revision,activation_revision,module_digest,schema_digest,admitted,result_json,created_at)

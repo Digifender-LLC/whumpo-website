@@ -67,6 +67,15 @@ async function gateway(o,payload,v){
  assert.equal(response.headers.get('access-control-allow-origin'),null);
  return {status:response.status,body:await response.json()};
 }
+/** Anonymous visitor-origin request with the public intake admission inputs: connection, Turnstile header and Siteverify. */
+async function publicGateway(o,payload,{ip='192.0.2.20',token='fixture-token',verify,secret='fixture-secret'}={}){
+ const response=await appGateway.applicationGateway(new Request(o.host+'/modules',{method:'POST',headers:{'cf-connecting-ip':ip,'content-type':'application/json',origin:o.host,...(token?{'whumpo-turnstile-response':token}:{})},body:JSON.stringify(payload)}),{...env,TURNSTILE_SECRET:secret},verify);
+ return {status:response.status,body:await response.json()};
+}
+async function publish(o){
+ const head=await row('SELECT version_id FROM project_spec_heads WHERE project_id=?',o.project),chat=async content=>{const turn=id();return {turn,result:await m.sendChat(o.scope,o.user,{id:turn,revision:await revision(o),content})};};
+ const review=await chat('/publish '+head.version_id);assert.equal((await chat('/confirm '+review.turn)).result.status,200);
+}
 /** Workspace origin through the actual platform Worker with the owner's workspace session cookie. */
 async function workspace(o,path,{method='GET',payload,cookie=`__Host-whumpo_session=${o.token}`}={}){
  const response=await m.worker.fetch(new Request('https://whumpo.com'+path,{method,headers:{cookie,origin:'https://whumpo.com',...(payload?{'content-type':'application/json'}:{})},body:payload?JSON.stringify(payload):undefined}),{...(fixture.env??{}),...env},{waitUntil(){}});
@@ -112,7 +121,7 @@ try{
   assert.equal(JSON.parse((await row('SELECT values_json FROM module_records WHERE id=?',minimal.body.result.entryId)).values_json).note,undefined);
   assert.equal(await count(a),before+1);
   // Audiences: anonymous callers cannot submit a visitor form; plain visitors cannot use a staff form; anonymous public
-  // intake is unavailable until it carries the contact admission (Turnstile and caps).
+  // intake fails closed on a deployed host without the Turnstile secret (the admission is covered below).
   assert.equal((await gateway(a,submission(records),null)).body.code,'forbidden');
   assert.equal((await gateway(a,submission(records,'staff-form'),v1)).body.code,'forbidden');
   assert.equal((await gateway(a,submission(records,'public-form'),null)).body.code,'unavailable');
@@ -123,6 +132,60 @@ try{
   assert.equal((await gateway(b,submission(records),bv)).body.code,'not_found');
   assert.equal((await gateway(a,{...submission(records),configRevision:records.config_revision+1},v1)).body.code,'stale_configuration');
   assert.equal((await gateway(a,{...submission(records),input:{values:{...values,role:'staff'}}},v1)).body.code,'invalid_request');
+ });
+
+ await check('anonymous public intake reuses the contact admission: Turnstile, connection allowance, publication and atomic caps',async()=>{
+  let calls=0;const siteverify=(answer)=>async(url,options)=>{calls++;assert.equal(url,'https://challenges.cloudflare.com/turnstile/v0/siteverify');assert.equal(options.redirect,'manual');
+   const body=new URLSearchParams(options.body);assert.equal(body.get('secret'),'fixture-secret');assert.equal(body.get('response'),'fixture-token');return typeof answer==='function'?answer():Response.json(answer);};
+  const good=r=>siteverify({success:true,hostname:new URL(a.host).hostname,action:'module-form',cdata:r.id});
+  const publicValues=()=>({name:value('public-name'),topic:'visit',urgent:false,count:1});
+  // Policy and authorization run before any verification call: visitor/staff forms refuse anonymous callers outright.
+  assert.equal((await publicGateway(a,submission(records,'request-form'),{verify:good(records)})).body.code,'forbidden');
+  assert.equal((await publicGateway(a,submission(records,'staff-form'),{verify:good(records)})).body.code,'forbidden');
+  assert.equal(calls,0);
+  // Deployed hosts fail closed without the secret; the token is required; Siteverify must name this host, action and resource.
+  assert.equal((await publicGateway(a,submission(records,'public-form'),{secret:undefined,verify:good(records)})).body.code,'unavailable');
+  assert.equal((await publicGateway(a,submission(records,'public-form'),{ip:'192.0.2.21',token:'',verify:good(records)})).body.code,'forbidden');
+  for(const answer of [{success:false},{success:true,hostname:'evil.example',action:'module-form',cdata:records.id},{success:true,hostname:new URL(a.host).hostname,action:'contact',cdata:records.id},
+   {success:true,hostname:new URL(a.host).hostname,action:'module-form',cdata:theirs.id},{success:true,hostname:new URL(b.host).hostname,action:'module-form',cdata:records.id}])
+   assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.22',verify:siteverify(answer)})).body.code,'forbidden');
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.23',verify:siteverify(()=>new Response('x'.repeat(9000)))})).body.code,'unavailable');
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.23',verify:siteverify(()=>new Response(null,{status:302,headers:{location:'https://example.org'}}))})).body.code,'unavailable');
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.23',verify:async()=>{throw Error('offline');}})).body.code,'unavailable');
+  assert.equal(await row("SELECT count(*) n FROM module_records WHERE submitter_kind='public'").then(r=>r.n),0);
+  // A verified anonymous submission still needs a published website (repeated inside the commit).
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.24',verify:good(records)})).body.code,'unavailable');
+  await publish(a);
+  const ok=submission(records,'public-form',publicValues()),sent=await publicGateway(a,ok,{ip:'192.0.2.24',verify:good(records)});assert.equal(sent.status,200,JSON.stringify(sent.body));
+  assert.deepEqual(Object.keys(sent.body.result).sort(),['accepted','entryId','formId']);assert.ok(!markers.some(x=>JSON.stringify(sent.body).includes(x)));
+  const saved=await row('SELECT * FROM module_records WHERE id=?',sent.body.result.entryId);assert.equal(saved.submitter_kind,'public');assert.equal(saved.visitor_id,null);
+  // An exact replay reads the receipt back without another verification or allowance; a changed payload conflicts.
+  const before=calls,replay=await publicGateway(a,ok,{ip:'192.0.2.24',verify:good(records)});assert.equal(replay.body.receipt.replayed,true);assert.equal(calls,before);
+  assert.equal((await publicGateway(a,{...ok,input:{values:publicValues()}},{ip:'192.0.2.24',verify:good(records)})).body.code,'request_conflict');
+  assert.equal((await publicGateway(a,submission(records,'public-form',{...publicValues(),topic:'other'}),{ip:'192.0.2.25',verify:good(records)})).body.code,'invalid_request');
+  // Projection: the owner sees the anonymous record without a visitor id; staff views include it; no visitor owns it.
+  const listed=await workspace(a,`/api/projects/${a.project}/module-records/${records.id}/request`),item=listed.body.items.find(i=>i.entryId===saved.id);
+  assert.equal(item.submittedBy,'public');assert.equal(item.visitorId,null);assert.ok(Object.hasOwn(item.values,'name'));
+  assert.ok((await gateway(a,listView(records,'desk'),s1)).body.result.items.some(i=>i.entryId===saved.id));
+  assert.ok(!(await gateway(a,listView(records,'mine'),v1)).body.result.items.some(i=>i.entryId===saved.id));
+  assert.equal((await gateway(a,get(records,saved.id),v1)).body.code,'not_found');
+  // One connection: the contact allowance (10 per project per UTC day, shared with the contact form, counted before verification).
+  let refused=0;for(let n=0;n<11;n++){const r=await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'203.0.113.77',verify:good(records)});if(r.status===429){assert.equal(r.body.code,'limited');refused++;}}
+  assert.equal(refused,1);
+  assert.ok(!JSON.stringify(await rows('SELECT * FROM public_client_usage')).includes('203.0.113'),'Only hashed client keys are stored');
+  // A public-only instance needs no access dependency; the hourly project cap is atomic and owner removal never recycles it.
+  const enquiries={id:'enquiries',kind:'records',...pins('records'),dependencies:[],config:{retentionDays:90,schemas:[{id:'enquiry',fieldsRevision:1,fields:[{key:'message',label:'Message',type:'text',optional:false,read:'owner'}],staffWrite:[]}],
+   forms:[{id:'ask',recordId:'enquiry',submit:'public',uploadCollectionId:null}],views:[]}};
+  await configureFixtureModules(b.scope,b.user,b.project,[accessInstance,recordsInstance(),enquiries]);await activation(b,'enquiries');await publish(b);
+  const ask=await instance(b,'enquiries'),askGood=siteverify({success:true,hostname:new URL(b.host).hostname,action:'module-form',cdata:ask.id});
+  const askOne=(n)=>publicGateway(b,envelope(ask,'forms.submit',{target:{formId:'ask'},input:{values:{message:value('enquiry')}}}),{ip:`198.51.100.${n}`,verify:askGood});
+  const results=await Promise.all(Array.from({length:21},(_,n)=>askOne(n+1)));
+  assert.equal(results.filter(r=>r.status===200).length,20);assert.equal(results.filter(r=>r.status===429&&r.body.code==='limited').length,1);
+  const oneEntry=results.find(r=>r.status===200).body.result.entryId,removed=await ownerCall(b,envelope(ask,'records.remove',{target:{recordId:'enquiry',entryId:oneEntry}}));assert.equal(removed.status,200);
+  assert.equal((await askOne(30)).body.code,'limited','Removal does not recycle the hourly allowance');
+  // The operator's contact containment applies to anonymous module intake in the same way.
+  await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','project',?,0,'operator:fixture','Synthetic containment',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))",id(),a.project,'0'.repeat(64));
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.26',verify:good(records)})).body.code,'limited');
  });
 
  await check('records.get projects fields by audience and record scope on both origins',async()=>{
@@ -278,7 +341,7 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, field/record projection for owner, staff, submitter and anonymous callers on both origins, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
+ process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
 

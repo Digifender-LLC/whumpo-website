@@ -12,7 +12,7 @@ import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} 
  * that this request's record write actually happened (create, revision compare-and-swap or removal). Submitted values
  * are returned only to principals whose decision allows those fields, and never appear in errors or receipts. */
 type Schema=RecordsConfig['schemas'][number];
-type RecordRow={id:string;schema_id:string;fields_revision:number;submitter_kind:'visitor'|'staff';visitor_id:string|null;values_json:string;revision:number;created_at:number;updated_at:number};
+type RecordRow={id:string;schema_id:string;fields_revision:number;submitter_kind:'public'|'visitor'|'staff';visitor_id:string|null;values_json:string;revision:number;created_at:number;updated_at:number};
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 const localId=(v:unknown):v is string=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v);
 const invalid=()=>new ModuleError('invalid_request');
@@ -77,20 +77,24 @@ function event(db:D1Database,context:ModuleContext,entryId:string,kind:'form.acc
   .bind(context.resource.resourceId,context.request.requestId,context.resource.projectId,entryId,kind,revision,now);
 }
 
-/** forms.submit — visitor and staff intake through the access session. Public (anonymous) intake stays `unavailable`
- * until it carries the contact admission (Turnstile Siteverify and its atomic caps); forms with an upload collection
- * wait for the files module (WH-128). Result: opaque entry id only. */
+/** forms.submit — visitor and staff intake through the access session, and anonymous intake on `public` forms. An
+ * anonymous submission reaches this handler only after the engine ran the visitor gateway's public admission (the contact
+ * form's Turnstile Siteverify and per-connection allowance); `module_record_admit` repeats the public form, live
+ * publication and the contact-equivalent atomic caps inside the commit. Forms with an upload collection wait for the
+ * files module (WH-128). Result: opaque entry id only. */
 const submit:ModuleWriteHandler=async(db,context)=>{
  const visitor=visitorOf(context.principal);
- if(!visitor)throw new ModuleError('unavailable','Public submissions to this form are not available yet.');
+ if(!visitor&&context.principal.kind!=='public')throw new ModuleError('forbidden');
  if(!exact(context.request.target,['formId']))throw invalid();
  const form=config(context).forms.find(f=>f.id===context.request.target!.formId);if(!form)throw new ModuleError('not_found');
+ if(!visitor&&form.submit!=='public')throw new ModuleError('forbidden');
  if(form.uploadCollectionId!==null)throw new ModuleError('unavailable','Attachments for this form are not available yet.');
  const schema=schemaOf(context,form.recordId),values=submittedValues(schema,context.request.input);
  const entryId=crypto.randomUUID(),now=Math.floor(Date.now()/1000),retention=config(context).retentionDays*86400;
+ const submitter=visitor?(visitor.roles.length?'staff':'visitor'):'public';
  return {statements:[
   db.prepare('INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)')
-   .bind(entryId,context.resource.resourceId,context.resource.projectId,schema.id,form.id,schema.fieldsRevision,visitor.roles.length?'staff':'visitor',visitor.visitorId,canonicalJSON(values,8192),context.request.requestId,context.request.requestId,now,now,now+retention),
+   .bind(entryId,context.resource.resourceId,context.resource.projectId,schema.id,form.id,schema.fieldsRevision,submitter,visitor?.visitorId??null,canonicalJSON(values,8192),context.request.requestId,context.request.requestId,now,now,now+retention),
   event(db,context,entryId,'form.accepted',1,now)
  ],result:{accepted:true,formId:form.id,entryId}};
 };
