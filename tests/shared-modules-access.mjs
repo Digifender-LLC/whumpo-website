@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {authenticator} from './app-authenticator.mjs';
-import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureProject,configureFixtureModules} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
@@ -42,14 +42,9 @@ async function visitor(o){
  const result=await auth.appPasskeyVerify(db,o.project,'signup',options.challengeToken,key.registration(options.options),false);
  return {...result,key,cookie:`__Host-whumpo-app-session-${o.project}=${result.session}`};
 }
-/** Fixture-only: the content compiler still refuses instance-bearing specifications (WH-124/125 gap), so the saved
- * head's specification is rewritten in this disposable database before the actual activation reviews run. */
-async function configure(o,instances){
- const head=await row('SELECT h.version_id,v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',o.project);
- const spec=m.validateSpecification({...JSON.parse(head.spec_json),instances}),trigger=await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='project_spec_version_immutable'");
- await run('DROP TRIGGER project_spec_version_immutable');
- try{await run('UPDATE project_spec_versions SET spec_json=?,spec_digest=? WHERE version_id=?',JSON.stringify(spec),await m.jsonDigest(spec),head.version_id);}finally{await run(trigger.sql);}
-}
+/** Instances reach the saved head only through the real owner path (project-content@4): an exact modules.put review
+ * prepared as the AI turn's statements, then the recent-sign-in specificationApply control, before the activation reviews. */
+async function configure(o,instances){const saved=await configureFixtureModules(o.scope,o.user,o.project,instances);assert.ok(saved);return saved;}
 const revision=async(o,scope=o.scope)=>(await m.readChat(scope,o.user)).state.revision;
 async function control(o,action,{scope=o.scope,turn=id()}={}){return {id:turn,...await m.sendChatControl(scope,o.user,{id:turn,revision:await revision(o,scope),action})};}
 async function activation(o,instanceId,action='activate'){
@@ -254,6 +249,6 @@ try{
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  for(const secret of [v1.session,v1.recoveryCode])assert.ok(!logs.join('\n').includes(secret));
- process.stdout.write(`Shared module access passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — access.me on the visitor origin with signed passkey visitors, workspace/foreign/anonymous cookie refusals, owner access.list and access.roles@1, exact grant/revoke reviews with recent sign-in, readback and replay without re-grant, one-winner races, in-flight revocation inside the commit, revoked/erased visitors, plan loss, disable, closure and cascades, and a static no-inference check. No network, model or provider use.\n`);
+ process.stdout.write(`Shared module access passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — instances saved through the exact owner specification review, access.me on the visitor origin with signed passkey visitors, workspace/foreign/anonymous cookie refusals, owner access.list and access.roles@1, exact grant/revoke reviews with recent sign-in, readback and replay without re-grant, one-winner races, in-flight revocation inside the commit, revoked/erased visitors, plan loss, disable, closure and cascades, and a static no-inference check. No network, model or provider use.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

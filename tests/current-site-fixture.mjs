@@ -133,6 +133,18 @@ export async function changeFixtureWebsite(db,user,project,operations){
  assert.equal((await m.sendChatControl(db,user,{id:version,revision,action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}})).status,200);return version;
 }
 
+/** Saves module instances through the real owner path (WH-125/126 fixtures): one exact `modules.put` per new or
+ * changed instance, prepared as the AI turn's statements, then the recent-sign-in specificationApply control.
+ * Returns the saved version and its review row; an unchanged list saves nothing and returns null. */
+export async function configureFixtureModules(db,user,project,instances){
+ const m=await currentSiteFixtureHandlers(),head=await db.prepare('SELECT v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?').bind(project).first();assert.ok(head);
+ const saved=JSON.parse(head.spec_json).instances,operations=[];
+ for(const instance of instances){const prior=saved.find(i=>i.id===instance.id);if(!prior||await m.jsonDigest(prior)!==await m.jsonDigest(instance))operations.push({type:'modules.put',instance});}
+ if(!operations.length)return null;
+ const version=await changeFixtureWebsite(db,user,project,operations);
+ return {version,review:await db.prepare('SELECT q.* FROM project_spec_proposals q JOIN project_spec_versions v ON v.proposal_id=q.id WHERE v.version_id=?').bind(version).first()};
+}
+
 export async function createFixtureProject(db,user,name,purpose,theme='ocean'){
  const project=crypto.randomUUID(),now=new Date().toISOString();
  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,?,?,'draft',?,?)").bind(project,user,name,purpose,now,now).run();

@@ -96,14 +96,29 @@ export function changeSpecification(before:unknown,input:unknown){
    }
   }
   const spec=validateSpecification(next);check(!same(base,spec),'NO_CHANGE','operations');
-  let migration:SpecificationMigration='none';
-  for(const instance of spec.instances){
-   const prior=base.instances.find(i=>i.id===instance.id);if(prior&&same(prior,instance))continue;
-   const change=classifyModuleChange(prior,instance);
-   if(change.schema)reviews.add('schema');if(change.permissions)reviews.add('permissions');if(change.migration==='additive-optional')migration='additive-optional';
-  }
+  const {migration}=classifyInstances(base,spec,reviews);
   return {spec,reviews:[...reviews].sort(),migration};
  }
+/** Net instance change against the saved base. A removed instance is destructive (MIGRATION_REQUIRED), never a silent drop. */
+function classifyInstances(base:ProjectSpecification,spec:ProjectSpecification,reviews:Set<SpecificationReview>){
+ let migration:SpecificationMigration='none';
+ for(const prior of base.instances)check(spec.instances.some(i=>i.id===prior.id),'MIGRATION_REQUIRED','instances');
+ for(const instance of spec.instances){
+  const prior=base.instances.find(i=>i.id===instance.id);if(prior&&same(prior,instance))continue;
+  const change=classifyModuleChange(prior,instance);
+  if(change.schema)reviews.add('schema');if(change.permissions)reviews.add('permissions');if(change.migration==='additive-optional')migration='additive-optional';
+ }
+ return {migration};
+}
+/** Review classes for a whole-document forward transition (restore): the same instance hook table as edits,
+ * plus permissions for any changed page audience and integration/spending for any changed rule. */
+export function transitionReviews(before:unknown,after:unknown){
+ const base=validateSpecification(before),next=validateSpecification(after),reviews=new Set<SpecificationReview>();
+ const {migration}=classifyInstances(base,next,reviews);
+ if(next.pages.some(p=>p.audience!==(base.pages.find(b=>b.id===p.id)?.audience??'public')))reviews.add('permissions');
+ if(!same(base.rules,next.rules)){reviews.add('integration');reviews.add('spending');}
+ return {reviews:[...reviews].sort(),migration};
+}
 
 function pageConfiguration(spec:ProjectSpecification,page:SpecificationPage){
  const value=(id:string)=>spec.content.find(c=>c.id===id)!.text;

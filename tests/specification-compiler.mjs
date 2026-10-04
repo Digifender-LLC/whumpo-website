@@ -218,20 +218,39 @@ try{
  function reorder(value){if(Array.isArray(value))return value.map(reorder);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,reorder(v)]));return value;}
  assert.deepEqual(await m.compileProjectSpecification(reorder(content),reorder(lock)),output);
  const mutableLock=m.currentCompilerLock();mutableLock.modules.length=0;assert.deepEqual(m.currentCompilerLock(),lock);
- for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
+ for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.compiler.version=3;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
  const available=[lock.compiler,...lock.modules,...lock.components].map(a=>({...a,state:'available'}));
  m.assertCompilerAvailable(lock,available);
  for(let n=0;n<available.length;n++){const withdrawn=clone(available);withdrawn[n].state='withdrawn';rejects(()=>m.assertCompilerAvailable(lock,withdrawn),'COMPILER_UNAVAILABLE');}
  rejects(()=>m.assertCompilerAvailable(lock,[]),'COMPILER_UNAVAILABLE');
- // Module configuration is admitted against exact trusted pins, then remains unserved until WH-125 activation.
+ // project-content@4: instance configuration compiles against exact trusted pins as saved, inactive configuration
+ // (serving needs WH-125 activation). Notification/automation modules, integrations and rules stay unavailable.
+ assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',4,3]);
  await rejectsAsync(()=>m.compileProjectSpecification(detailing,lock),'UNAVAILABLE_CAPABILITY');
+ const configured={...clone(content),instances:clone(detailing.instances)},configuredOutput=await m.compileProjectSpecification(configured,lock);
+ assert.deepEqual(configuredOutput.artifacts.map(a=>[a.path,a.digest]),output.artifacts.map(a=>[a.path,a.digest]),'Instances add no compiled artifact');
+ assert.notEqual(configuredOutput.specificationDigest,output.specificationDigest);assert.deepEqual(configuredOutput.manifest.lock,lock);assert.equal(configuredOutput.manifest.activation,'not-configured');
+ assert.deepEqual(configuredOutput.specification.instances,detailing.instances);
+ await rejectsAsync(()=>m.compileProjectSpecification({...clone(configured),modules:[{id:'content',version:2},{id:'notifications',version:1}]},lock),'UNAVAILABLE_CAPABILITY');
+ // Owner edits classify against the saved base; the hook table refuses destructive changes before any save.
+ const added=await m.compileSpecificationChange(content,[{type:'modules.put',instance:clone(instance(detailing,'team'))}],lock);
+ assert.deepEqual(added.requiredReviews,['permissions','schema']);assert.equal(added.compiled.artifacts[0].digest,output.artifacts[0].digest);
+ const owned=added.compiled.specification,withRecords=await m.compileSpecificationChange(owned,[{type:'modules.put',instance:{...clone(instance(contactLike,'messages')),dependencies:[]}}],lock);
+ assert.deepEqual(withRecords.requiredReviews,['schema']);
+ await rejectsAsync(()=>m.compileSpecificationChange(withRecords.compiled.specification,[{type:'modules.put',instance:{...clone(instance(contactLike,'messages')),config:{...clone(instance(contactLike,'messages').config),schemas:[{id:'message',fieldsRevision:1,staffWrite:[],fields:[{key:'message',label:'Message',type:'number',optional:false,read:'owner'}]}]}}}],lock),'MIGRATION_REQUIRED');
+ // Restore is a forward revision under the target's exact lock, classified with the same table.
+ const restoredUp=await m.compileSpecificationRestore(content,configured,lock);assert.deepEqual(restoredUp.requiredReviews,['permissions','schema']);assert.equal(restoredUp.nextDigest,configuredOutput.specificationDigest);
+ assert.deepEqual((await m.compileSpecificationRestore(configured,configured,lock)).requiredReviews,[]);
+ await rejectsAsync(()=>m.compileSpecificationRestore(configured,content,lock),'MIGRATION_REQUIRED');
+ const priorLock=clone(lock);priorLock.compiler.version=3;await rejectsAsync(()=>m.compileSpecificationRestore(content,configured,priorLock),'COMPILER_LOCK_MISMATCH');
+ assert.deepEqual(m.transitionReviews(content,content),{reviews:[],migration:'none'});
  const stale=clone(detailing);instance(stale,'appointments').module.digest='0'.repeat(64);await rejectsAsync(()=>m.compileProjectSpecification(stale,lock),'STALE_MODULE_VERSION');
  const staleSchema=clone(detailing);instance(staleSchema,'team').schema.digest='f'.repeat(64);rejects(()=>m.assertModulesAvailable(staleSchema,m.moduleCatalog),'STALE_MODULE_VERSION');
  assert.deepEqual(m.assertModulesAvailable(detailing,m.moduleCatalog),detailing);
  for(const kind of ['records','files','access']){const withdrawn=m.moduleCatalog.map(e=>e.kind===kind?{...e,state:'withdrawn'}:e);rejects(()=>m.assertModulesAvailable(detailing,withdrawn),'MODULE_UNAVAILABLE');m.assertModulesAvailable(content,withdrawn);}
  rejects(()=>m.assertModulesAvailable(detailing,[]),'MODULE_UNAVAILABLE');
  const staff={...clone(content),instances:[clone(instance(detailing,'team'))]};staff.pages[0].audience='staff';await rejectsAsync(()=>m.compileProjectSpecification(staff,lock),'UNSUPPORTED_DELIVERY');
- const unused={...clone(content),instances:[clone(instance(detailing,'team'))]};await rejectsAsync(()=>m.compileProjectSpecification(unused,lock),'UNAVAILABLE_CAPABILITY');
+ const unused={...clone(content),instances:[clone(instance(detailing,'team'))]};assert.equal((await m.compileProjectSpecification(unused,lock)).artifacts[0].digest,output.artifacts[0].digest);
  const retired={...clone(content),schemaVersion:2,records:[],forms:[],files:[],access:{roles:[]}};delete retired.instances;await rejectsAsync(()=>m.compileProjectSpecification(retired,lock),'UNSUPPORTED_VERSION');
 
  const four=clone(content);four.pages=Array.from({length:4},(_,n)=>({...clone(four.pages[0]),id:'page-'+n,path:n?'/page-'+n:'/'}));
@@ -276,14 +295,14 @@ try{
  const missing=clone(content);delete missing.pages[0].photos;rejects(()=>m.validateSpecification(missing),'MISSING_FIELD');
  const {photos:omitted,...oldInput}=page;await assert.rejects(m.compileNewWebsite(oldInput));
  assert.equal(networkCalls,0);
- console.log('Compiler fixtures passed: schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
+ console.log('Compiler fixtures passed: project-content@4 instance-bearing compile/change/restore classification and @3 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
 }finally{globalThis.fetch=fetch;}
 
 // A second checkout/process proves input-path independence and that the build gate
 // rejects source/constant drift without rewriting any working-tree file.
 const dir=await mkdtemp('/tmp/whumpo-compiler-lock-');
 try{
- const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v3.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
+ const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v4.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
  for(const path of paths){await mkdir(dirname(join(dir,path)),{recursive:true});await copyFile(path,join(dir,path));}
  await symlink(resolve('node_modules'),join(dir,'node_modules'),'dir');
  const run=args=>spawnSync(process.execPath,['tools/check-specification-compiler.mjs',...args],{cwd:dir,encoding:'utf8'});

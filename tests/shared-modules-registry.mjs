@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
-import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureProject,configureFixtureModules} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
@@ -45,14 +45,18 @@ const accessInstance={id:'members',kind:'access',...pins('access'),dependencies:
 const recordFields=[{key:'name',label,type:'text',optional:false,read:'owner'},{key:'note',label:'Note',type:'text',optional:true,read:'staff'}];
 const recordsInstance=(fields=recordFields,fieldsRevision=1)=>({id:'requests',kind:'records',...pins('records'),dependencies:['members'],
  config:{retentionDays:90,schemas:[{id:'request',fieldsRevision,fields,staffWrite:[]}],forms:[{id:'request-form',recordId:'request',submit:'public',uploadCollectionId:null}],views:[]}});
-/** Fixture-only: the content compiler still refuses instance-bearing specifications (UNAVAILABLE_CAPABILITY until a
- * reviewed compiler identity cutover), so the saved head's specification is rewritten in this disposable database. */
-async function configure(o,instances){
- const head=await row('SELECT h.version_id,v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',o.project);
+/** Instances reach the saved head only through the real owner path (project-content@4): an exact modules.put review
+ * prepared as the AI turn's statements, then the recent-sign-in specificationApply control. */
+const configure=(o,instances)=>configureFixtureModules(o.scope,o.user,o.project,instances);
+const headSpec=async o=>JSON.parse((await row('SELECT v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',o.project)).spec_json);
+/** Direct seed, used once below and only because no owner path can produce it: a destructive (migration) change is
+ * refused when the specification is saved and when it is restored, so the activation layer's independent migration
+ * refusal is reachable only by rewriting the head in this disposable database. Returns an undo. */
+async function seedHead(o,instances){
+ const head=await row('SELECT h.version_id,v.spec_json,v.spec_digest FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',o.project);
  const spec=m.validateSpecification({...JSON.parse(head.spec_json),instances}),trigger=await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='project_spec_version_immutable'");
- await run('DROP TRIGGER project_spec_version_immutable');
- try{await run('UPDATE project_spec_versions SET spec_json=?,spec_digest=? WHERE version_id=?',JSON.stringify(spec),await m.jsonDigest(spec),head.version_id);}finally{await run(trigger.sql);}
- return head.version_id;
+ const write=async(json,digest)=>{await run('DROP TRIGGER project_spec_version_immutable');try{await run('UPDATE project_spec_versions SET spec_json=?,spec_digest=? WHERE version_id=?',json,digest,head.version_id);}finally{await run(trigger.sql);}};
+ await write(JSON.stringify(spec),await m.jsonDigest(spec));return ()=>write(head.spec_json,head.spec_digest);
 }
 const revision=async(o,scope=o.scope,mod=m)=>(await mod.readChat(scope,o.user)).state.revision;
 async function control(o,action,{scope=o.scope,mod=m,turn=id()}={}){return {id:turn,...await mod.sendChatControl(scope,o.user,{id:turn,revision:await revision(o,scope,mod),action})};}
@@ -74,7 +78,16 @@ try{
  let access,records;
 
  await check('owner activation review, recent sign-in, readback and Chat card',async()=>{
-  await configure(a,[accessInstance,recordsInstance()]);
+  const saved=await configure(a,[accessInstance,recordsInstance()]);
+  // The exact private-save review binds the module rows and the classified review set; nothing is active yet.
+  const envelope=JSON.parse(saved.review.envelope_json);assert.deepEqual(envelope.requiredReviews,['permissions','schema']);
+  assert.deepEqual(JSON.parse(saved.review.diff_json).map(r=>r.label),['Module members','Module requests']);
+  assert.match((await m.readChat(a.scope,a.user)).turns.find(t=>t.id===saved.review.id).assistant_text,/This review also covers: permissions .*; schema .*\.[\s\S]*own activation review/);
+  assert.deepEqual((await headSpec(a)).instances.map(i=>i.id),['members','requests']);
+  assert.equal((await row('SELECT count(*) n FROM module_instances WHERE project_id=?',a.project)).n,0,'Saving configuration activates nothing');
+  // Restore is classified with the same hook table: returning to the module-free first version would drop instances.
+  const headRevision=(await row('SELECT revision FROM project_spec_heads WHERE project_id=?',a.project)).revision;
+  await assert.rejects(m.prepareSpecification(a.scope,a.user,id(),{kind:'specification',operation:'restore',projectId:a.project,expectedRevision:headRevision,versionId:a.version}),e=>e.status===422);
   // A dependent cannot activate before its dependency; nothing is reviewed.
   const early=await control(a,{type:'moduleActivationReview',projectId:a.project,instanceId:'requests',action:'activate'});
   assert.equal(early.status,409);assert.match(early.error,/members/);assert.equal((await row('SELECT count(*) n FROM module_activation_reviews WHERE project_id=?',a.project)).n,0);
@@ -194,9 +207,14 @@ try{
   assert.equal((await apply(a,r)).status,200);records=await instance(a,'requests');assert.equal(records.config_revision,2);assert.equal(records.state,'active');
   await fails(publicCall(a,submission({...records,config_revision:1})),'stale_configuration');
   assert.equal((await publicCall(a,submission(records))).receipt.replayed,false);
-  await configure(a,[accessInstance,recordsInstance([recordFields[0]],2)]);
-  const removed=await control(a,{type:'moduleActivationReview',projectId:a.project,instanceId:'requests',action:'activate'});assert.equal(removed.status,409);assert.match(removed.error,/migration/);
-  await configure(a,[accessInstance,recordsInstance([...recordFields,{key:'extra',label:'Extra',type:'text',optional:true,read:'owner'}],2)]);
+  // The owner save path refuses a destructive change before anything is reviewed or saved.
+  const before=await headSpec(a),proposals=(await row('SELECT count(*) n FROM project_spec_proposals WHERE project_id=?',a.project)).n;
+  await assert.rejects(configure(a,[accessInstance,recordsInstance([recordFields[0]],2)]),e=>e.status===422);
+  assert.deepEqual(await headSpec(a),before);assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE project_id=?',a.project)).n,proposals);
+  // Defense in depth (direct seed, see seedHead): activation independently refuses a migration-bearing head.
+  const undo=await seedHead(a,[accessInstance,recordsInstance([recordFields[0]],2)]);
+  try{const removed=await control(a,{type:'moduleActivationReview',projectId:a.project,instanceId:'requests',action:'activate'});assert.equal(removed.status,409);assert.match(removed.error,/migration/);}finally{await undo();}
+  assert.deepEqual(await headSpec(a),before);
  });
 
  await check('concurrent activation and disable have one winner',async()=>{
@@ -281,7 +299,7 @@ try{
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  assert.ok(!logs.join('\n').includes(marker));
- say(`Shared module registry passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — exact owner activation/disable reviews with recent sign-in, readback and one-winner races, configRevision/pin/activation guards in the committing statements, envelope and client_update_required, two-owner foreign scope, revocation, withdrawn/stale pins, plan loss, idempotent receipts, closure and cascades, and a static no-inference check. No network, model or provider use; no visitor value stored or logged.`);
+ say(`Shared module registry passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — instances saved through the exact owner specification review (classified reviews, destructive save/restore refused), exact owner activation/disable reviews with recent sign-in, readback and one-winner races, configRevision/pin/activation guards in the committing statements, envelope and client_update_required, two-owner foreign scope, revocation, withdrawn/stale pins, plan loss, idempotent receipts, closure and cascades, and a static no-inference check. No network, model or provider use; no visitor value stored or logged.`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
 
