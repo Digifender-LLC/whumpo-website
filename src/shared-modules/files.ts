@@ -14,7 +14,7 @@ import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} 
  * consulted, and object keys never leave the server. Reads and galleries return only files whose exact digest has a
  * current safety approval, and bytes are re-hashed on delivery. No inference, provider, model context or Chat history. */
 type Collection=FilesConfig['collections'][number];
-type FileRow={id:string;object_key:string;digest:string;size:number;width:number;height:number;created_at:string;uploader_kind:'staff'|'visitor';safety:'pending'|'approved'|'blocked'};
+type FileRow={id:string;object_key:string;digest:string;size:number;width:number;height:number;created_at:string;uploader_kind:'owner'|'staff'|'visitor';safety:'pending'|'approved'|'blocked'};
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>plain(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const invalid=()=>new ModuleError('invalid_request');
@@ -48,8 +48,9 @@ const columns=`f.id,f.object_key,f.digest,f.size,f.width,f.height,f.created_at,m
  * server-chosen key and commits the photo row (which writes the pending safety receipt) and the module row beside the
  * receipt. A lost acknowledgement reads the receipt back; an uncommitted object is removed by the orphan sweep. */
 const putBytes:ModuleWriteHandler=async(db,context)=>{
+ if(context.principal.kind==='owner')return fileOwnerPhoto(db,context);
  const visitor=visitorOf(context.principal);
- if(!visitor)throw new ModuleError('forbidden','Owners add photos from the Photos panel.');
+ if(!visitor)throw new ModuleError('forbidden');
  if(!exact(context.request.target,['collectionId']))throw invalid();
  const collection=collectionOf(context,context.request.target.collectionId),input=context.request.input;
  if(!exact(input,['mediaType','byteLength','sha256'])||input.mediaType!=='image/jpeg'||!Number.isSafeInteger(input.byteLength)||Number(input.byteLength)<1
@@ -79,6 +80,33 @@ const putBytes:ModuleWriteHandler=async(db,context)=>{
    .bind(fileId,context.resource.resourceId,project,collection.id,uploader,visitor.visitorId,context.request.requestId,Math.floor(now.getTime()/1000))
  ],result:{fileId,collectionId:collection.id,safety:'pending'}};
 };
+
+/** Owner `files.putBytes` (workspace origin, JSON route) — files one of the project's existing owner photos into an owner
+ * collection (`upload` lists `owner`). The owner's bytes are already stored by the owner photo upload route (the only
+ * owner byte path, with its Chat handoff, exact recovery, quotas and pending safety receipt), so the owner names one of
+ * them by `fileId` and its exact `sha256` instead of sending bytes again: the collection reuses that `project_files` row
+ * and object, with no second object, row or reservation. A photo belongs to at most one collection; module uploads by
+ * staff or visitors can never be filed. Filing changes no safety state: galleries and publication still need the exact
+ * digest approval. The photo stays in the owner's library (Chat, pickers and website photo pages); removing it with the
+ * photo removal review removes it from the collection. `module_file_admit` repeats the active instance, the collection's
+ * `owner` upload policy and a ready photo of the same project inside the commit. */
+async function fileOwnerPhoto(db:D1Database,context:ModuleContext){
+ const t=context.request.target,input=context.request.input;
+ if(!exact(t,['collectionId'])||!exact(input,['fileId','sha256'])||!uuid(input.fileId)||typeof input.sha256!=='string'||!/^[0-9a-f]{64}$/.test(input.sha256))throw invalid();
+ const collection=collectionOf(context,t.collectionId);
+ if(!collection.upload.includes('owner'))throw new ModuleError('forbidden');
+ const project=context.resource.projectId;
+ const photo=await db.prepare(`SELECT f.id,f.digest,(SELECT mf.uploader_kind FROM module_files mf WHERE mf.file_id=f.id) filed,${photoSafetySQL} AS safety FROM project_files f JOIN projects p ON p.id=f.project_id
+  WHERE f.id=? AND f.project_id=? AND p.owner_user_id=? AND f.status='ready'`).bind(input.fileId,project,context.principal.kind==='owner'?context.principal.userId:'').first<{id:string;digest:string;filed:string|null;safety:'pending'|'approved'|'blocked'}>();
+ // Another project's photo, a pending reservation and a staff/visitor module upload are one generic not_found.
+ if(!photo||photo.filed!==null&&photo.filed!=='owner')throw new ModuleError('not_found');
+ if(photo.digest!==input.sha256)throw invalid();
+ if(photo.filed!==null)throw new ModuleError('invalid_request','This photo is already in a collection.');
+ return {statements:[
+  db.prepare("INSERT INTO module_files(file_id,instance_id,project_id,collection_id,uploader_kind,visitor_id,request_id,created_at) VALUES(?,?,?,?,'owner',NULL,?,?)")
+   .bind(photo.id,context.resource.resourceId,project,collection.id,context.request.requestId,Math.floor(Date.now()/1000))
+ ],result:{fileId:photo.id,collectionId:collection.id,safety:photo.safety}};
+}
 
 /** files.gallery — the collection's files visible to the caller, newest first (50). Visitors and staff need the
  * collection's gallery; everyone except the owner sees approved files only; the owner also sees each file's safety state. */
@@ -117,6 +145,6 @@ const read:ModuleReadHandler=async(db,context)=>{
 };
 
 /** Delivered files handlers (WH-128). `files.prepareUpload` stays unregistered: `files.putBytes` carries the declared
- * metadata with the bytes in one request. `files.requestRemoval` stays unregistered: owners remove module uploads with the
+ * metadata with the bytes in one request (staff and visitors) or names an existing owner photo (owner). `files.requestRemoval` stays unregistered: owners remove module uploads with the
  * existing exact photo removal review, which already respects saved-version references and safety holds. */
 export const filesHandlers:ModuleHandlers=Object.freeze({'files.putBytes':putBytes,'files.gallery':gallery,'files.read':read});

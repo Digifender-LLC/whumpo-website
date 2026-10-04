@@ -42,7 +42,7 @@ const pins=kind=>{const e=m.moduleCatalog.find(x=>x.kind===kind);return {module:
 const accessInstance={id:'members',kind:'access',...pins('access'),dependencies:[],config:{roles:['staff'],enrollment:'invitation'}};
 const collection=(id,read,upload,gallery)=>({id,read,upload,maxBytes:1048576,mediaTypes:['image/jpeg'],gallery});
 const filesInstance={id:'media',kind:'files',...pins('files'),dependencies:['members'],config:{collections:[
- collection('intake','staff',['staff'],{audience:'staff'}),collection('mine','submitter',['visitor'],{audience:'visitor'}),collection('private','owner',['staff'],null)]}};
+ collection('intake','staff',['staff'],{audience:'staff'}),collection('mine','submitter',['visitor'],{audience:'visitor'}),collection('private','owner',['staff'],null),collection('library','owner',['owner'],null)]}};
 const hex=async bytes=>Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
 
 async function owner(){
@@ -216,8 +216,81 @@ try{
   await run('UPDATE module_instances SET descriptor_json=? WHERE id=?',fresh.descriptor_json,fresh.id);
  });
 
+ await check('existing owner photos as an owner collection and a published gallery through the exact reviews',async()=>{
+  const fresh=await instance(a,'media'),ownerPhoto=async name=>{const fileId=id();const r=await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':encodeURIComponent(name)},body:jpegA}),{...env,DB:a.scope},a.user,a.project,fileId);assert.equal(r.status,'ready');return fileId;};
+  const p1=await ownerPhoto('Garden one'),p2=await ownerPhoto('Garden two'),p3=await ownerPhoto('Garden held');
+  const foreign=(await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':'Other'},body:jpegB}),{...env,DB:b.scope},b.user,b.project,id())).id;
+  const digest=async fileId=>(await row('SELECT digest FROM project_files WHERE id=?',fileId)).digest;
+  const file=async(fileId,collectionId='library',extra={})=>envelope(fresh,'files.putBytes',{target:{collectionId},input:{fileId,sha256:await digest(fileId),...extra}});
+  const before={rows:(await row('SELECT count(*) n FROM project_files')).n,objects:d1?null:(await FILES.list({prefix:'photos/'})).objects.length};
+  // The owner files an existing photo by id and exact digest: no bytes, no second row or object.
+  const filing=await file(p1),filed=await ownerCall(a,filing);assert.equal(filed.status,200,JSON.stringify(filed.body));
+  assert.deepEqual(filed.body.result,{fileId:p1,collectionId:'library',safety:'pending'});
+  const link=await row('SELECT * FROM module_files WHERE file_id=?',p1);assert.equal(link.uploader_kind,'owner');assert.equal(link.visitor_id,null);assert.equal(link.collection_id,'library');
+  assert.equal((await row('SELECT count(*) n FROM project_files')).n,before.rows,'No duplicate photo row');
+  if(!d1)assert.equal((await FILES.list({prefix:'photos/'})).objects.length,before.objects,'No duplicate object');
+  assert.equal((await ownerCall(a,filing)).body.receipt.replayed,true);
+  // Refusals: wrong digest, already filed, a module upload, another project's photo, a collection without owner upload, staff.
+  assert.equal((await ownerCall(a,{...(await file(p2)),input:{fileId:p2,sha256:'0'.repeat(64)}})).body.code,'invalid_request');
+  assert.equal((await ownerCall(a,await file(p1))).body.code,'invalid_request');
+  const moduleUpload=(await row("SELECT file_id FROM module_files WHERE project_id=? AND uploader_kind!='owner' LIMIT 1",a.project)).file_id;
+  assert.equal((await ownerCall(a,{...(await file(p2)),input:{fileId:moduleUpload,sha256:await digest(moduleUpload)}})).body.code,'not_found');
+  assert.equal((await ownerCall(a,{...(await file(p2)),input:{fileId:foreign,sha256:await digest(foreign)}})).body.code,'not_found');
+  assert.equal((await ownerCall(a,await file(p2,'intake'))).body.code,'forbidden');
+  assert.equal((await ownerCall(a,{...(await file(p2)),input:{fileId:p2,sha256:await digest(p2),name:'x'}})).body.code,'invalid_request');
+  assert.equal((await upload(a,await file(p2),staff)).body.code,'forbidden','Staff cannot use the owner collection');
+  assert.equal((await gateway(a,galleryOf(fresh,'library'),staff)).body.code,'forbidden','An owner-read collection is not served to staff');
+  await assert.rejects(()=>run("INSERT INTO module_files VALUES(?,?,?,'library','owner',?,?,unixepoch())",p2,fresh.id,a.project,staff.visitorId,id()),/CHECK|module_request/);
+  // Filed photos stay in the owner's library, Chat and model context; module uploads stay out.
+  const listed=await m.listPhotos(a.scope,a.user,a.project);assert.ok(listed.files.some(f=>f.id===p1));assert.ok(!listed.files.some(f=>f.id===moduleUpload));
+  assert.ok(JSON.stringify(await m.siteContext(a.scope,a.user)).includes(p1));
+  // The owner gallery shows every filed photo with its safety state; the gallery control refuses held photos.
+  assert.equal((await ownerCall(a,await file(p2))).status,200);assert.equal((await ownerCall(a,await file(p3))).status,200);
+  const ownerView=await ownerCall(a,galleryOf(fresh,'library'));assert.deepEqual(ownerView.body.result.items.map(i=>[i.uploadedBy,i.safety]).sort(),[['owner','pending'],['owner','pending'],['owner','pending']]);
+  const gallery={type:'galleryPageReview',projectId:a.project,instanceId:'media',collectionId:'library',pageId:'home'};
+  for(const action of [{...gallery,photos:[p1]},{...gallery,pageId:'Home'},{...gallery,projectId:'x'},{type:'galleryPageReview',projectId:a.project}])assert.ok(!m.chatControl(action));
+  const held=await control(a,gallery);assert.equal(held.status,409);assert.match(held.error,/no approved photos/);
+  await approve(p1);await approve(p2);
+  assert.equal((await control(a,{...gallery,collectionId:'intake'})).status,403,'Only an owner collection');
+  assert.equal((await control(a,{...gallery,collectionId:'missing'})).status,404);
+  assert.equal((await control(b,gallery)).status,404,'A foreign owner cannot use the collection');
+  assert.equal((await control(a,{...gallery,pageId:'nowhere'})).status>=400,true);
+  const prepared=await control(a,gallery);assert.equal(prepared.status,200,prepared.error);
+  const q=await row('SELECT * FROM project_spec_proposals WHERE id=?',prepared.id),spec=JSON.parse(q.spec_json),home=spec.pages.find(p=>p.id==='home');
+  assert.equal(home.component,'photo-page@1');assert.deepEqual(home.photos.map(p=>p.id).sort(),[p1,p2].sort(),'Approved owner-filed photos only, never the held one');
+  assert.deepEqual(home.photos.map(p=>p.alt).sort(),['Garden one','Garden two']);
+  assert.equal(await row('SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=? AND v.spec_digest=?',a.project,q.spec_digest),null,'Preparing saves nothing');
+  // Inside the commit: a proposal bound to a galleryPageReview turn is exactly the head with that page's photos replaced
+  // by approved owner-filed photos of that collection.
+  const synthetic=async(o,action)=>{const t=id(),r=await revision(o)+1;await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,'Synthetic gallery turn','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),?)",t,o.user,r,JSON.stringify(action));await run('UPDATE workspace_state SET revision=? WHERE user_id=?',r,o.user);return t;};
+  const copy=(turnId,specJSON)=>run('INSERT INTO project_spec_proposals SELECT ?,user_id,project_id,operation,expected_revision,draft_revision,base_version_id,target_version_id,base_digest,request_hash,proposal_digest,spec_digest,manifest_digest,policy_version,expires_at,?,lock_json,manifest_json,config_json,html,html_digest,diff_json,envelope_json FROM project_spec_proposals WHERE id=?',turnId,specJSON,q.id);
+  const page=photos=>JSON.stringify({...spec,pages:spec.pages.map(p=>p.id==='home'?{...p,photos}:p)});
+  for(const tampered of [page([{id:p3,alt:'Held'}]),page([{id:moduleUpload,alt:'Visitor'}]),page([...home.photos,{id:foreign,alt:'Foreign'}]),JSON.stringify({...spec,name:'Renamed'}),page([])])
+   await assert.rejects(copy(await synthetic(a,gallery),tampered),/specification_changed/);
+  await assert.rejects(copy(await synthetic(a,{...gallery,collectionId:'intake'}),q.spec_json),/specification_changed/,'Another collection admits nothing');
+  await copy(await synthetic(a,gallery),q.spec_json);
+  // Module uploads can never become website photos, even approved and by a direct insert.
+  await approve(moduleUpload).catch(()=>{});
+  await assert.rejects(()=>run('INSERT INTO version_photos(version_id,file_id,position,alt) SELECT version_id,?,3,? FROM project_spec_heads WHERE project_id=?',moduleUpload,'x',a.project),/version_photo_owner|UNIQUE|PRIMARY/);
+  // Saving is the existing recent-sign-in specificationApply; publication is the existing exact publication review.
+  const saved=await control(a,{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision});assert.equal(saved.status,200,saved.error);
+  const head=await row('SELECT version_id FROM project_spec_heads WHERE project_id=?',a.project);
+  assert.deepEqual((await rows('SELECT file_id FROM version_photos WHERE version_id=? ORDER BY position',head.version_id)).map(r=>r.file_id).sort(),[p1,p2].sort());
+  const site=path=>m.host.fetch(new Request(`https://${a.project}.whumpo.site${path}`),{...env,DB:db});
+  assert.equal((await site(`/assets/${p1}.jpg`)).status,404,'Not public before the publication review');
+  const review=await chat(a,'/publish '+head.version_id);assert.equal(review.result.status,200,JSON.stringify(review.result));
+  const confirmed=await chat(a,'/confirm '+review.turn);assert.equal(confirmed.result.status,200,JSON.stringify(confirmed.result));
+  const html=await (await site('/')).text();for(const p of [p1,p2])assert.ok(html.includes(`assets/${p}.jpg`));assert.ok(!html.includes(p3));
+  const served=await site(`/assets/${p1}.jpg`);assert.equal(served.status,200);assert.equal(await hex(new Uint8Array(await served.arrayBuffer())),await digest(p1));
+  assert.equal((await site(`/assets/${p3}.jpg`)).status,404,'A held photo is never served');
+  // WH-013: a later block stops public delivery of the published gallery photo at once.
+  await run("UPDATE project_photo_safety SET state='blocked',csam_check='unknown',sexual_check='matched',scanner_reference='synthetic-block',expires_at=NULL WHERE file_id=?",p2);
+  assert.equal((await site(`/assets/${p2}.jpg`)).status,404);
+  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['galleryPageReview','review-collection-gallery','files.putBytes'])assert.ok(!prompt.includes(word),word);
+ });
+
  await check('module uploads stay out of the owner photo library, Chat and model context',async()=>{
-  const ids=(await rows('SELECT file_id FROM module_files WHERE project_id=?',a.project)).map(r=>r.file_id);assert.ok(ids.length>=3);
+  const ids=(await rows("SELECT file_id FROM module_files WHERE project_id=? AND uploader_kind!='owner'",a.project)).map(r=>r.file_id);assert.ok(ids.length>=3);
   const listed=await m.listPhotos(a.scope,a.user,a.project);assert.ok(!listed.files.some(f=>ids.includes(f.id)));
   const context=JSON.stringify(await m.siteContext(a.scope,a.user)),inspected=await m.inspectWorkspace(a.scope,a.user,'photos');
   for(const fileId of ids){assert.ok(!context.includes(fileId));assert.ok(!inspected.includes(fileId));}
@@ -247,13 +320,17 @@ try{
   const fresh=await instance(b,'media'),v=await visitor(b);let limited=0,accepted=0;
   for(let n=0;n<11;n++){const r=await upload(b,await put(fresh,'mine'),v);if(r.status===429){assert.equal(r.body.code,'limited');limited++;}else{assert.equal(r.status,200,JSON.stringify(r.body));accepted++;}}
   assert.equal(accepted,10);assert.equal(limited,1);
-  const f=await row('SELECT * FROM project_files WHERE project_id=? LIMIT 1',b.project);
+  const f=await row('SELECT f.* FROM project_files f JOIN module_files mf ON mf.file_id=f.id WHERE f.project_id=? LIMIT 1',b.project);
   await assert.rejects(()=>run('UPDATE module_files SET collection_id=? WHERE file_id=?','intake',f.id),/module_request_immutable/);
   await assert.rejects(()=>run("INSERT INTO module_files VALUES(?,?,?,'intake','staff',?,?,unixepoch())",f.id,media.id,b.project,bv.visitorId,id()),/module_request|UNIQUE|PRIMARY|FOREIGN KEY/);
   const inventory=await accountClosureInventory(db,b.user);assert.equal(inventory.counts.moduleFiles,(await row('SELECT count(*) n FROM module_files WHERE project_id=?',b.project)).n);assert.ok(inventory.counts.moduleFiles>=10);
   for(const t of ['module_request_receipts','module_files','chat_turns','activity_events'])assert.ok(!JSON.stringify(await rows('SELECT * FROM '+t)).includes('photos/'+b.project+'/x'),t);
-  const uploaded=(await rows('SELECT file_id FROM module_files WHERE project_id=?',b.project)).map(r=>r.file_id);
+  // An owner photo filed into b's owner collection survives instance removal; only its collection row goes.
+  const ownerFiled=(await row("SELECT f.id,f.digest FROM project_files f WHERE f.project_id=? AND NOT EXISTS(SELECT 1 FROM module_files mf WHERE mf.file_id=f.id)",b.project));
+  assert.equal((await ownerCall(b,envelope(fresh,'files.putBytes',{target:{collectionId:'library'},input:{fileId:ownerFiled.id,sha256:ownerFiled.digest}}))).status,200);
+  const uploaded=(await rows("SELECT file_id FROM module_files WHERE project_id=? AND uploader_kind!='owner'",b.project)).map(r=>r.file_id);
   await run('DELETE FROM module_instances WHERE project_id=?',b.project);
+  assert.ok(await row('SELECT 1 FROM project_files WHERE id=?',ownerFiled.id),'Instance removal never removes owner photos');
   assert.equal((await row('SELECT count(*) n FROM module_files WHERE project_id=?',b.project)).n,0);
   for(const fileId of uploaded)assert.equal(await row('SELECT 1 FROM project_files WHERE id=?',fileId),null,'Instance removal never leaves module uploads behind as owner photos');
   assert.ok((await row("SELECT count(*) n FROM file_cleanup WHERE project_id=?",b.project)).n>=10,'Instance removal queues module objects');
@@ -261,7 +338,7 @@ try{
 
  await check('files paths never reach owner-maintenance inference',async()=>{
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
-  for(const entry of ['src/shared-modules/files.ts','src/shared-modules/api.ts','src/app-gateway.ts']){
+  for(const entry of ['src/shared-modules/files.ts','src/shared-modules/files-export.ts','src/shared-modules/files-gallery.ts','src/shared-modules/api.ts','src/app-gateway.ts']){
    const out=await build({entryPoints:[entry],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent'});
    assert.deepEqual(Object.keys(out.metafile.inputs).filter(p=>inference.test(p)),[],entry+' reaches owner-maintenance inference');
   }
@@ -270,6 +347,6 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
+ process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

@@ -382,7 +382,7 @@ try{
 
  await check('records paths never reach owner-maintenance inference',async()=>{
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
-  for(const entry of ['src/shared-modules/records.ts','src/shared-modules/api.ts','src/app-gateway.ts']){
+  for(const entry of ['src/shared-modules/records.ts','src/shared-modules/records-export.ts','src/shared-modules/api.ts','src/app-gateway.ts']){
    const out=await build({entryPoints:[entry],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent'});
    assert.deepEqual(Object.keys(out.metafile.inputs).filter(p=>inference.test(p)),[],entry+' reaches owner-maintenance inference');
    for(const name of ['AI_GATEWAY','OPENAI','ANTHROPIC','sendAIChat','agentPrompt','siteContext'])assert.ok(!out.outputFiles[0].text.includes(name),entry+' references '+name);

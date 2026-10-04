@@ -27,6 +27,7 @@ export type ChatControl =
  | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
  | {type:'accessModuleReview';projectId:string}
+ | {type:'galleryPageReview';projectId:string;instanceId:string;collectionId:string;pageId:string}
  | {type:'moduleActivationApply';reviewId:string;reviewDigest:string;expectedRevision:number}
  | {type:'accessRoleReview';projectId:string;instanceId:string;visitorId:string;action:'grant'|'revoke'}
  | {type:'accessRoleApply';reviewId:string;reviewDigest:string;expectedRevision:number}
@@ -65,6 +66,11 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='accessModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
   const action={type:'accessModuleReview' as const,projectId:a.projectId};
   return {action,command:`/review-visitor-access-setup ${action.projectId}`,label:'Review setting up visitor access for this project.',recentAuth:false};
+ }
+ // WH-128 published gallery: ids only. The server chooses the photos (approved owner-filed photos of the collection).
+ if(a.type==='galleryPageReview'&&exact(a,['type','projectId','instanceId','collectionId','pageId'])&&Object.keys(a).length===5&&id(a.projectId)&&[a.instanceId,a.collectionId,a.pageId].every(v=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v))){
+  const action={type:'galleryPageReview' as const,projectId:a.projectId,instanceId:a.instanceId as string,collectionId:a.collectionId as string,pageId:a.pageId as string};
+  return {action,command:`/review-collection-gallery ${action.projectId} ${action.instanceId} ${action.collectionId} ${action.pageId}`,label:`Review showing the “${action.collectionId}” collection on the “${action.pageId}” page.`,recentAuth:false};
  }
  if(a.type==='moduleActivationApply'&&exact(a,['type','reviewId','reviewDigest','expectedRevision'])&&Object.keys(a).length===4&&id(a.reviewId)&&typeof a.reviewDigest==='string'&&/^[0-9a-f]{64}$/.test(a.reviewDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
   const action={type:'moduleActivationApply' as const,reviewId:a.reviewId,reviewDigest:a.reviewDigest,expectedRevision:Number(a.expectedRevision)};

@@ -3847,7 +3847,9 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
     WHERE c.id=t.id AND c.state='pending' AND s.user_id=t.user_id AND i.project_id=NEW.project_id AND i.state='submitted'
     AND json_extract(i.envelope_json,'$.definition.continuationBinding') IN ('site.content-prepare@1','agent.task-continue@1')))))
    -- WH-126 owner visitor access setup: the typed accessModuleReview control of this project prepares a change.
-   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='accessModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id))
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='accessModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
+   -- WH-128 published gallery: the typed galleryPageReview control of this project prepares a change.
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='galleryPageReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id))
   LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=NEW.draft_revision
   AND coalesce(h.revision,0)=NEW.expected_revision AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest

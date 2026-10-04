@@ -490,15 +490,17 @@ CREATE TRIGGER module_record_event_immutable BEFORE UPDATE ON module_record_even
 -- object under photos/, project/account/platform quotas, pending safety receipt written by project_photo_safety_insert,
 -- exact-digest approval view, safety holds and the cleanup queue) plus this 1:1 row naming its files instance,
 -- collection and uploader. Upload authority is the collection's role policy, repeated here and in the engine's receipt
--- predicate; names, object keys and prefixes are never consulted. Module uploads are not part of the owner's Chat/model
--- photo library (lifecycle class module-files). Written only beside the engine's request receipt.
+-- predicate; names, object keys and prefixes are never consulted. Staff/visitor module uploads are not part of the owner's
+-- Chat/model photo library (lifecycle class module-files). An `owner` row files one of the project's existing owner photos
+-- into an owner collection (upload lists owner) without a second object or row; that photo stays in the owner's library.
+-- Written only beside the engine's request receipt.
 CREATE TABLE module_files (
  file_id TEXT PRIMARY KEY REFERENCES project_files(id) ON DELETE CASCADE,
  instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  collection_id TEXT NOT NULL CHECK(length(collection_id) BETWEEN 1 AND 40 AND collection_id NOT GLOB '*[^a-z0-9-]*'),
- uploader_kind TEXT NOT NULL CHECK(uploader_kind IN ('staff','visitor')),
- visitor_id TEXT NOT NULL REFERENCES app_visitors(id),
+ uploader_kind TEXT NOT NULL CHECK(uploader_kind IN ('owner','staff','visitor')),
+ visitor_id TEXT REFERENCES app_visitors(id) CHECK((uploader_kind='owner')=(visitor_id IS NULL)),
  request_id TEXT NOT NULL CHECK(length(request_id)=36),
  created_at INTEGER NOT NULL CHECK(created_at>0),
  UNIQUE(instance_id,request_id)
@@ -512,9 +514,11 @@ CREATE TRIGGER module_file_admit BEFORE INSERT ON module_files BEGIN
   WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.kind='files'
   AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.collections') c WHERE json_extract(c.value,'$.id')=NEW.collection_id
    AND EXISTS(SELECT 1 FROM json_each(c.value,'$.upload') u WHERE u.value=NEW.uploader_kind)));
+ -- Staff/visitor uploads are photo rows written in the same batch (no Chat handoff); an owner row names an existing
+ -- ready owner photo of the same project, whatever its upload handoff was.
  SELECT RAISE(ABORT,'module_request_stale') WHERE abs(NEW.created_at-unixepoch())>60 OR NOT EXISTS(SELECT 1 FROM project_files f
-  WHERE f.id=NEW.file_id AND f.project_id=NEW.project_id AND f.status='ready' AND f.handoff_json='null' AND f.object_key='photos/'||NEW.project_id||'/'||NEW.file_id||'.jpg');
- SELECT RAISE(ABORT,'module_request_forbidden') WHERE NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=0)
+  WHERE f.id=NEW.file_id AND f.project_id=NEW.project_id AND f.status='ready' AND (NEW.uploader_kind='owner' OR f.handoff_json='null') AND f.object_key='photos/'||NEW.project_id||'/'||NEW.file_id||'.jpg');
+ SELECT RAISE(ABORT,'module_request_forbidden') WHERE NEW.uploader_kind!='owner' AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=0)
   OR NEW.uploader_kind='staff' AND NOT EXISTS(SELECT 1 FROM module_access_roles r JOIN module_instances i ON i.id=NEW.instance_id
    WHERE r.visitor_id=NEW.visitor_id AND r.role='staff' AND r.state='granted' AND r.instance_id IN (SELECT value FROM json_each(i.dependencies_json)));
  SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_files WHERE visitor_id=NEW.visitor_id AND instance_id=NEW.instance_id AND created_at>unixepoch()-3600)>=10;
@@ -525,8 +529,36 @@ CREATE TRIGGER module_file_immutable BEFORE UPDATE ON module_files BEGIN SELECT 
 CREATE TRIGGER module_file_visitor_erased BEFORE DELETE ON app_visitors BEGIN
  DELETE FROM project_files WHERE id IN (SELECT file_id FROM module_files WHERE visitor_id=OLD.id);
 END;
--- Removing a files instance (only possible with its project today) removes its uploads as photo rows too, so they are
--- never left behind as owner library photos; held files refuse the delete.
+-- Removing a files instance (only possible with its project today) removes its staff/visitor uploads as photo rows too,
+-- so they are never left behind as owner library photos; held files refuse the delete. Owner-filed photos stay in the
+-- owner's library: only their collection rows cascade.
 CREATE TRIGGER module_file_instance_removed BEFORE DELETE ON module_instances WHEN OLD.kind='files' BEGIN
- DELETE FROM project_files WHERE id IN (SELECT file_id FROM module_files WHERE instance_id=OLD.id);
+ DELETE FROM project_files WHERE id IN (SELECT file_id FROM module_files WHERE instance_id=OLD.id AND uploader_kind!='owner');
+END;
+-- Staff/visitor module uploads are visitor-subject data and never become website photo references, so they can never be
+-- published; only owner photos (filed in a collection or not) pass, and version_photo_safety still needs the approval.
+CREATE TRIGGER module_file_not_published BEFORE INSERT ON version_photos
+WHEN EXISTS(SELECT 1 FROM module_files WHERE file_id=NEW.file_id AND uploader_kind!='owner')
+BEGIN SELECT RAISE(ABORT,'version_photo_owner'); END;
+
+-- WH-128 published gallery. A proposal prepared by the typed galleryPageReview control is exactly the current head with
+-- only the named page's photos (and its photo component) replaced by one to four photos that the owner filed into the
+-- named collection of this project's registered files instance and that currently have an exact-digest approval.
+-- Nothing else in the specification may change. Saving and publication keep their own photo safety triggers.
+CREATE TRIGGER project_spec_gallery_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='galleryPageReview') BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_turns t JOIN project_spec_heads h ON h.project_id=NEW.project_id JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+   JOIN json_each(v.spec_json,'$.pages') pg ON json_extract(pg.value,'$.id')=json_extract(t.action_json,'$.pageId')
+  WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.projectId')=NEW.project_id
+  AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+  AND json_array_length(NEW.spec_json,'$.pages['||pg.key||'].photos') BETWEEN 1 AND 4
+  AND json_extract(NEW.spec_json,'$.pages['||pg.key||'].component')='photo-page@1'
+  AND json(json_set(v.spec_json,'$.pages['||pg.key||'].photos',json(json_extract(NEW.spec_json,'$.pages['||pg.key||'].photos')),'$.pages['||pg.key||'].component','photo-page@1'))=json(NEW.spec_json)
+  AND NOT EXISTS(SELECT 1 FROM json_each(NEW.spec_json,'$.pages['||pg.key||'].photos') ph WHERE NOT EXISTS(
+   SELECT 1 FROM module_files mf JOIN module_instances i ON i.id=mf.instance_id AND i.project_id=mf.project_id AND i.kind='files'
+    JOIN project_files f ON f.id=mf.file_id AND f.project_id=mf.project_id JOIN approved_project_photos safe ON safe.id=f.id AND safe.digest=f.digest
+   WHERE mf.file_id=json_extract(ph.value,'$.id') AND mf.project_id=NEW.project_id AND mf.uploader_kind='owner' AND f.status='ready'
+   AND i.local_id=json_extract(t.action_json,'$.instanceId') AND mf.collection_id=json_extract(t.action_json,'$.collectionId')))
+ );
 END;
