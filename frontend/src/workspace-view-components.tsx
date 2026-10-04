@@ -5,23 +5,25 @@ import {isProjectFacts,readViewComponentData,viewBinding,type ProjectFacts} from
 import type {WidgetKind} from '../../src/workspace-view-contract';
 import {api,APIError,message,queryClient} from './lib/api';
 import {Button} from './components/ui/button';
+import {StatusBadge,type Status} from './components/whumpo/status-badge';
 import {TrafficCard} from './traffic-card';
 import {GuestPreviewsPanel} from './guest-previews-panel';
 import {SiteHealthCard} from './site-health-card';
 
 export const viewLabels:Record<WidgetKind,string>={projects:'Projects',usage:'AI assistance',storage:'File storage',activity:'Recent activity',traffic:'Page requests',cms:'Publishing desk',performance:'Processing performance',reviews:'Website reviews','guest-previews':'Guest preview links','site-health':'Website health'};
 export function CheckedAt({value}:{value:string}){return <p className="text-xs text-muted-foreground">Checked <time dateTime={value}>{new Date(value).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</time>. Saved status; refresh to check again.</p>;}
+const projectStatus:Record<ProjectFacts['state'],Status>={draft:'idle',building:'working',live:'ready',error:'attention'};
 /** The same trusted project element appears in Chat and saved/temporary views. */
 export function ProjectStatusFacts({value}:{value:ProjectFacts}){
  if(!isProjectFacts(value))return <p role="alert" className="text-sm">Update Whumpo to read this status.</p>;
- return <div className="space-y-3 text-sm"><p className="font-medium break-words">{value.name}</p><dl className="space-y-2"><div className="flex flex-wrap justify-between gap-x-4 gap-y-1"><dt className="text-muted-foreground">Project</dt><dd>{{draft:'Private draft',building:'Building',live:'Live services',error:'Needs attention'}[value.state]}</dd></div><div className="flex flex-wrap justify-between gap-x-4 gap-y-1"><dt className="text-muted-foreground">Website</dt><dd>{value.websitePublished?'Published':'Not published'}</dd></div></dl></div>;
+ return <div className="space-y-3 text-sm"><p className="font-medium break-words">{value.name}</p><dl className="space-y-2"><div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1"><dt className="text-muted-foreground">Project</dt><dd><StatusBadge status={projectStatus[value.state]}>{{draft:'Private draft',building:'Building',live:'Live services',error:'Needs attention'}[value.state]}</StatusBadge></dd></div><div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1"><dt className="text-muted-foreground">Website</dt><dd><StatusBadge status={value.websitePublished?'ready':'idle'}>{value.websitePublished?'Published':'Not published'}</StatusBadge></dd></div></dl></div>;
 }
 export function ViewComponentDisplay({value,owner,onChanged}:{value:unknown;owner?:string;onChanged?:()=>void}){
  const c=readViewComponentData(value);
  if(!c)return <p role="alert" className="text-sm">Update Whumpo to read this view.</p>;
  if(c.status!=='ready')return <p role="status" className="text-sm">{c.status==='denied'?'This information is not available with your current access.':c.kind==='performance'?'No processing telemetry is connected. Creating a page does not provision processing services.':'This information is temporarily unavailable. Try refreshing it.'}</p>;
  return <div className="space-y-4">
-  {c.kind==='projects'&&(c.data.items.length?<div className="space-y-4">{c.data.items.map(p=><div key={p.projectId} className="rounded-xl bg-background p-4"><ProjectStatusFacts value={p}/></div>)}</div>:<p className="text-sm text-muted-foreground">Your next idea starts here. Tell Whumpo what you’d like to make.</p>)}
+  {c.kind==='projects'&&(c.data.items.length?<div className="space-y-4">{c.data.items.map(p=><div key={p.projectId} className="rounded-md bg-surface-sunken p-4"><ProjectStatusFacts value={p}/></div>)}</div>:<p className="text-sm text-muted-foreground">Your next idea starts here. Tell Whumpo what you’d like to make.</p>)}
   {c.kind==='usage'&&<><p className="text-2xl font-bold">Standard AI included</p><p className="text-sm text-muted-foreground">Build and maintain your projects without spending credits, under fair use.</p><p className="text-xs text-muted-foreground">Advanced models are not enabled yet. Resource capacity and historical usage are separate.</p></>}
   {c.kind==='storage'&&<><p className="text-4xl font-bold">{(c.data.bytes/1048576).toFixed(1)} MB</p><p className="text-sm text-muted-foreground">{c.data.files.toLocaleString()} saved project photos. CMS media and database storage are not included in this measurement.</p></>}
   {c.kind==='activity'&&(c.data.items.length?<div className="space-y-4">{c.data.items.map(a=><div key={a.id} className="border-b pb-3 last:border-0"><p className="text-sm break-words">{a.summary}</p><time className="text-xs text-muted-foreground mt-1" dateTime={a.createdAt}>{new Date(a.createdAt).toLocaleString()}</time></div>)}</div>:<p className="text-sm text-muted-foreground">New project activity will appear here.</p>)}
@@ -51,6 +53,6 @@ function ViewComponentRead({owner,queryKey,path,request,kind,projectId}:{owner:s
  useEffect(()=>{if(query.error instanceof APIError&&query.error.code==='workspace_layout_changed')void queryClient.invalidateQueries({queryKey:['dashboard']});},[query.error]);
  return <div data-view-component={kind} className="space-y-4">
   {query.isFetching&&!(kind==='guest-previews'&&query.data&&!query.error)?<p role="status" className="text-sm">Checking current information…</p>:query.error?<p role="alert" className="text-sm">{message(query.error)}</p>:query.data?<ViewComponentDisplay value={query.data} owner={owner} onChanged={()=>void query.refetch()}/>:null}
-  <Button type="button" variant="outline" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh {viewLabels[kind].toLowerCase()}</Button>
+  <Button type="button" variant="secondary" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh {viewLabels[kind].toLowerCase()}</Button>
  </div>;
 }

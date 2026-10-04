@@ -1,8 +1,12 @@
 # Whumpo design system
 
-`whumpo-design-system/` is an export of the owner's Claude Design system "Whumpo" ([source artifact](https://claude.ai/artifact/54fhNthQuXKFUrsH7oqwPM), private), captured 2026-10-04 from the version last changed 2026-10-04T01:44Z. It is reference material: the app does not load these files yet.
+`whumpo-design-system/` is an export of the owner's Claude Design system "Whumpo" ([source artifact](https://claude.ai/artifact/54fhNthQuXKFUrsH7oqwPM), private), captured 2026-10-04 from the version last changed 2026-10-04T01:44Z. The app does not load these files directly: `frontend/` generates its token stylesheet from `tokens.json` and bundles its own copies of the fonts.
 
-Status: **imported, not implemented.** `frontend/` still follows [branding.md](../branding.md); adopting these tokens and components is separate work.
+Status: **being adopted in stages.**
+
+- Stage 1 (implemented): `tools/design-tokens.mjs` generates `frontend/src/design-tokens.css` from `tokens.json`; the workspace and landing styles draw color, radius, shadow, focus and type from it. Poppins (500/700) is bundled for display text and Inter stays the UI face. `pnpm check` rejects a stale token file.
+- Stage 2 (implemented): the nine components exist as typed React components in `frontend/src/components/`. `Brand` is `brand.tsx`; `Icon`, `StatusBadge`, `ChatMessage`, `ProgressCard`, `ServiceTile` and `ApprovalCard` are in `whumpo/`. `Button` is `ui/button.tsx` with the design system's `primary` (default), `secondary` and `quiet` variants plus `link` and `destructive`; the shadcn `default`/`outline`/`ghost` names and the unused `Badge` were removed. Cards, inputs, tabs and dialogs use the token radii and shadows. Chat turns use `ChatMessage`; the chat composer keeps its multi-line field and recovery behavior, so it takes the Composer look (raised surface, strong border, round send button) with a 20px radius instead of a single-line pill.
+- Stage 3 (implemented for the landing page, welcome, chat workspace, dashboard and saved work): hard-coded colors became tokens, existing corner radii and weights moved onto the design scale (Poppins ships 500/700, so nothing is heavier than bold), section labels use the `overline` style with sentence-case source text, page titles use the `title` style, landing icons use the provisional design icons, and project, website and saved-work states render as `StatusBadge`s with their existing words. `ApprovalCard`, `ProgressCard` and `ServiceTile` are available but not yet placed: the current review cards carry more than outcome/cost/risk, and no screen yet shows real step-by-step progress or a service list.
 
 ## Contents
 
@@ -15,7 +19,8 @@ Status: **imported, not implemented.** `frontend/` still follows [branding.md](.
 
 `tokens.css` and the generated API cards exist only inside the artifact viewer and are not included.
 
-## Differences from the current branding doc
+## Notes
 
-- Display face: this system uses Poppins (standing in for a planned Poppins Rounded); [branding.md](../branding.md) says rounded Nunito.
+- Display face: Poppins stands in for a planned Poppins Rounded, which is not a published face. [branding.md](../branding.md) now records Poppins for display and Inter for UI.
+- The 12 icons are provisional until a production set is approved.
 - The brand board here (`assets/Reference/whumpo-brand-board.png`) is a different file from [`../brand/whumpo-brand-board.png`](../brand/whumpo-brand-board.png).

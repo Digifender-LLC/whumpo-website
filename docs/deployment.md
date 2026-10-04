@@ -1,5 +1,31 @@
 # Whumpo test deployment
 
+## How deployment works now (October 4, 2026)
+
+**Merge to `main` deploys.** One Cloudflare Workers Builds production trigger on `whumpo-platform` watches `main` of this repository (root `/`; changes only under `docs/`, `*.md` or `integrations/emdash/` do not build):
+
+| Step | Command |
+| --- | --- |
+| Install | automatic from `pnpm-lock.yaml` (Node from `.node-version`) |
+| Build (gate) | `pnpm check && node tools/verify.mjs fast && node tools/verify.mjs protection && pnpm build` |
+| Deploy | `pnpm run deploy ci` |
+
+`deploy ci` (`tools/deploy-ci.mjs`) refuses to run outside Workers Builds. It verifies the build snapshot, generates its own version-3 review record from the commit SHA with `schemaChange: "none"`, refuses if the live control database is not exactly the current schema in that commit, if the configured database differs from the live platform's, or if CMS registrations exist, then runs the ordinary prepare/apply release (runtime → apps → sites → platform) under the D1 deployment lease and prints the journal to the build log. The archive lives only in the build machine; the build log is the record.
+
+Do not deploy by hand: no `wrangler deploy`, `wrangler versions`, `pnpm run deploy prepare/apply` or `--remote` commands from agent machines. (`pnpm deploy` is pnpm's built-in; use `pnpm run deploy`.) Schema changes, control-database replacement and CMS retirement remain **owner cutovers**: create a new empty D1 database, point the three `DB` bindings at it in a PR, then the owner runs `pnpm run deploy prepare` with a `schemaChange: "initialize"` review and `pnpm run deploy apply` (see [releases](releases.md)). Merge the PR only together with that cutover, because the automatic deploy refuses it.
+
+Runtime secrets are set by the owner with `wrangler secret put --name whumpo-platform` and persist across deploys.
+
+### Current resources
+
+| Resource | Name |
+| --- | --- |
+| Workers | `whumpo-runtime`, `whumpo-apps`, `whumpo-sites` (route `*.whumpo.site/*`), `whumpo-platform` (custom domain `whumpo.com`, crons) |
+| D1 | `whumpo-control` (`418b20b6-bdba-4ff1-b265-da9da9ad5955`) |
+| R2 | `whumpo-files` |
+
+**whumpo cutover, October 4, 2026:** the four former `tellumo-*` Workers were renamed in place to `whumpo-*` (keeping their secrets, `whumpo.com` custom domain, `*.whumpo.site/*` route and history). Release `2295230d-e3da-4bd7-8376-fe58c69495db` (source `da2fb30`) initialized the complete current schema in the new empty D1 `whumpo-control` and deployed all four Workers; R2 `FILES` is now the new empty `whumpo-files`. Test accounts, sessions and files from the old database/bucket were intentionally not carried over (owner decision: test users only). The old D1 `whumpo-control-chat-connections-test` and R2 `tellumo-files` are untouched and await owner retirement.
+
 **Current release, October 3, 2026:** [routine Chat status and traffic](chat-routine-release.md) `26d0acd8-ff05-45a4-810d-d593b8f29256`, source `74c95a3`, verifies four Workers, the unchanged 176-table/801-object schema, bindings and 39 assets. Deployed real Muse/Chromium passes selected-task overview, current count refresh without inference, natural status, revoked-access clearing in both cards and model replies, reload, signed two-key identity and cleanup. Final readback at 10:59 UTC confirms zero synthetic accounts/projects/traffic and one existing owner invitation. Local SQLite 130 cases, focused D1 18 cases, the seven-call built-browser journey and two real-Muse/local-D1 five-call conversations pass. Two uncertain acknowledgments remain WH-020 work. #98 remains open for admitted media/consent and broader recovery; #99/#95, physical-device and customer acceptance remain open. This update keeps the current database and schema; no reset, migration or old reader. Use the [release protocol](releases.md).
 
 
@@ -17,13 +43,13 @@ This is the first completed live release using the four-Worker archive/journal p
 
 **Natural-language Chat, September 30, 2026:** platform `2ed299fd-f7d4-4842-88c7-b7d950d7a59a` is deployed at 2026-09-30T20:49:28.692Z; all 108 migrations are applied. [Chat contracts and verification](natural-language-chat.md) cover the separate message/action routes, owned review receipts, agent knowledge and deferred vector retrieval. Only the platform Worker and its React assets were deployed through the binding-preserving wrapper. No customer content, other Worker, model route or paid service was changed. Readback at 2026-09-30T20:50:37.175Z verified workspace HTML, all 16 frontend assets, public health and authentication on both Chat endpoints. Private evidence: `.secrets/natural-chat-release-verification.json`.
 
-**Release tooling update, September 30, 2026:** the former bare `pnpm deploy` loop is replaced by prepare/status/apply commands with archived bundles, SQL and a partial-release journal. Read the [release/recovery protocol](releases.md) before the next deployment. Local tests and four actual Wrangler bundle round trips pass; this tooling update itself did not deploy or change schema. The standalone binding-preserving platform wrapper remains available; it is not a four-Worker release manifest.
+**Release tooling update, September 30, 2026:** the former bare `pnpm run deploy` loop is replaced by prepare/status/apply commands with archived bundles, SQL and a partial-release journal. Read the [release/recovery protocol](releases.md) before the next deployment. Local tests and four actual Wrangler bundle round trips pass; this tooling update itself did not deploy or change schema. The standalone binding-preserving platform wrapper remains available; it is not a four-Worker release manifest.
 
 Earlier September 30, 2026 at 18:36 UTC platform readback: `53df6f0f-d048-404b-9bb1-bd049215d4ef`, with all 16 frontend assets matching and health/auth checks passing. All 107 migrations were confirmed applied at 18:42 UTC, none pending. [Maintenance diagnostics](maintenance.md) records the deployment and remaining natural-cron acceptance. Private evidence: `.secrets/revocation-health-migration.json` and `.secrets/maintenance-release-verification.json`.
 
 Fresh read-only reconciliation at 18:48 UTC reconfirmed the platform above, all 107 migrations, Monitor and the other Workers: sites `ba9b4c29-0566-4541-8747-0834183c1197`; apps `9bee8593-ee7f-4dd3-8934-2b41f43d692e`; runtime `662ea586-726d-4a00-ad22-d84024a7c0b2`. No configuration or deployment was changed by that readback. Full scope is in the [capability matrix](capability-matrix.md). The platform is **whumpo.com**, customer content is on **whumpo.site**, and the private repository is **zemdregon/whumpo**. Digifender addresses below are historical and have no product fallback. Workers Paid ($5/month) is owner-authorized. Private R2 and the separate QuickJS runtime are in use; customer Containers/Stream/Gateway inference are not enabled by the platform's plan.
 
-Owner decision September 30: apply all pending migrations in the private test environment. At 14:21 UTC, `pnpm db:remote` applied 0075/0076; independent readback confirms all 93 migrations with no pending files and both Gateway receipt tables empty. No Worker or provider route changed. Private evidence: `.secrets/test-migrations-2026-09-30.json`. `pnpm deploy` and `pnpm db:remote` now match this release policy. Keep the CMS-binding-preserving platform wrapper. Database changes are not reverted by Worker rollback.
+Owner decision September 30: apply all pending migrations in the private test environment. At 14:21 UTC, `pnpm db:remote` applied 0075/0076; independent readback confirms all 93 migrations with no pending files and both Gateway receipt tables empty. No Worker or provider route changed. Private evidence: `.secrets/test-migrations-2026-09-30.json`. `pnpm run deploy` and `pnpm db:remote` now match this release policy. Keep the CMS-binding-preserving platform wrapper. Database changes are not reverted by Worker rollback.
 
 Use [current readiness](acceptance.md), [domain configuration](whumpo-migration.md) and [reconciliation decisions](docs-code-sync.md) for current status. Owner recovery is now included in the active release; see [recovery acceptance](owner-recovery.md). The sections below are chronological evidence, including past resource inventories and deferred features subsequently delivered.
 
@@ -45,7 +71,7 @@ On September 28 2026, the user authorized digifender.com as the temporary test d
 | --- | --- | --- |
 | Worker | whumpo-platform | API and Static Assets |
 | Custom domain | digifender.com | HTTPS test platform |
-| D1 | whumpo-control-chat-connections-test | Identity, projects, activity, invitations |
+| D1 | whumpo-control | Identity, projects, activity, invitations |
 | Turnstile | Whumpo test platform | Free managed signup verification |
 | Private repository | Digifender-LLC/whumpo-website | Source history |
 
@@ -57,7 +83,7 @@ The root URL serves the public landing page. The account and project dashboard l
 
 The domain has a Free Website plan. The existing account reports Workers Standard enabled; the user approved its included allowance after that distinction was explained. This deployment does not change the subscription. Included usage is shared with other apps, so application quotas cannot guarantee an account-wide zero bill.
 
-The stack uses features available with free allowances. R2, Containers, Sandbox SDK, Workers for Platforms, Registrar purchases, Workers AI, and hosted build services are not provisioned. AI testing now uses the user-authorized existing OpenCode Go subscription. Those parts of the broader design remain deferred. No GitHub Actions workflows, hosted runners, Packages, Git LFS, or paid apps are configured; deploy locally with Wrangler.
+The stack uses features available with free allowances. R2, Containers, Sandbox SDK, Workers for Platforms, Registrar purchases, Workers AI, and hosted build services are not provisioned. AI testing now uses the user-authorized existing OpenCode Go subscription. Those parts of the broader design remain deferred. GitHub Actions runs only the read-only `.github/workflows/ci.yml` (type-check, build, roadmap render check and a gitleaks secret scan) on pull requests and pushes to `main`, within the private-repository Free plan's included minutes. No deploy workflow, Packages, Git LFS, or paid apps are configured; deploy locally with Wrangler.
 
 Static files are served without Worker invocation except /api routes. D1 reads/writes/storage and Worker request/CPU usage remain metered under the existing plan. Log sampling is 10 percent. Rate limits reduce application work but are per Cloudflare location, still require Worker invocation, and are not financial caps.
 
@@ -81,7 +107,7 @@ Email is an account identifier, not verified ownership. No special authorization
 
 Run `pnpm invite` to create a code; open the generated local `.secrets/invitation-*.txt`. These files are ignored by Git and restricted to the local user. `TURNSTILE_SECRET` is a Wrangler secret. The configured site key is public.
 
-Apply forward migrations with `pnpm db:remote`, then `pnpm deploy`. The current migrations are additive. `wrangler rollback` can restore a prior Worker version, but never assume that it reverses database migrations. Before future destructive migrations, implement and verify database export/restore.
+Apply forward migrations with `pnpm db:remote`, then `pnpm run deploy`. The current migrations are additive. `wrangler rollback` can restore a prior Worker version, but never assume that it reverses database migrations. Before future destructive migrations, implement and verify database export/restore.
 
 When replacing the temporary domain, update the Worker custom domain and Turnstile allowed hostnames. Cookies are host-only and API mutations enforce same-origin requests.
 
@@ -131,7 +157,7 @@ Migration 0008 adds publication pointers, revisions and expiring exact-version r
 
 `/publish`, `/restore VERSION_ID` and `/unpublish` prepare a review; `/confirm REVIEW_ID` or the review button applies it. Review expiry, current publication revision, ownership and the plan's live-site limit are checked atomically in D1. Explore allows one live site. Public serving accepts GET/HEAD only and exposes no workspace API or authentication routes. It has only a D1 binding, no AI key or identity secrets. Responses remain sandboxed, script-free and no-store. New drafts do not alter live pages; restore uses the retained HTML; unpublish removes the public pointer.
 
-The initial remote migration rejected a trigger written with `SELECT CASE ... END`; local SQLite had accepted it. A command sequence erroneously continued into deployment. The workspace was rolled back to the preview release, the guards were rewritten as `SELECT RAISE(...) WHERE ...`, and the remote migration succeeded. `tools/deploy.mjs` now makes migration success a mandatory gate before building or deploying either Worker. `pnpm deploy` runs that sequence and stops immediately on failure.
+The initial remote migration rejected a trigger written with `SELECT CASE ... END`; local SQLite had accepted it. A command sequence erroneously continued into deployment. The workspace was rolled back to the preview release, the guards were rewritten as `SELECT RAISE(...) WHERE ...`, and the remote migration succeeded. `tools/deploy.mjs` now makes migration success a mandatory gate before building or deploying either Worker. `pnpm run deploy` runs that sequence and stops immediately on failure.
 
 Disposable D1 tests passed confirmation ownership, same-request concurrency, site quotas, stale/expired reviews, exact restoration, unpublish, public route/method boundaries and account deletion. Chat regressions passed after correcting a duplicate-request race. Browser checks exercised the review preview link and confirmation button, verified the button disappears after use, and observed the live-site counter update. Local development stores publication state locally; use the separate site-host dev server on port 8788 when inspecting that state rather than following the production hostname displayed by the current UI.
 

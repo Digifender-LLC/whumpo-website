@@ -4,7 +4,11 @@
 
 Release observation reads registration metadata from the database bound to the **active platform Worker**. Before platform cutover this is the baseline database; after cutover it is the target. The initialized target must match active registration metadata during the mixed interval. A missing active binding/database still refuses observation; it does not try another database. A completed release therefore remains inspectable after the unreferenced baseline is retired. `tests/release-provider.mjs` exercises this actual observer with synthetic provider responses; live `status` for release `7c4f9344-bd6c-4fc7-a3ab-964e631ad8f3` also passed after baseline deletion. The sealed archive is unchanged; the observer correction is subsequent operator tooling.
 
-## Prepare before changing anything
+## Automatic releases (merge to main)
+
+Routine releases are automatic: Cloudflare Workers Builds runs `pnpm run deploy ci` after the build gate on every merge to `main`. It writes the review record below itself (`review` names the commit SHA, `schemaChange: "none"`), runs prepare then apply in one process under the same D1 lease, and prints the journal. It refuses initialization, schema drift, a changed control database and CMS registrations; nothing is deployed in that case. A failed or interrupted CI release leaves its journal only in the build log; the next release prepares again from the actual live state, and an uncertain step is reconciled by the owner as described below. The manual prepare/status/apply steps below are the **owner cutover** path only.
+
+## Prepare before changing anything (owner cutover)
 
 1. Keep one operator and a stable checkout. Review source, service contracts, provider obligations and the current database binding. Run the appropriate feature checks and `pnpm build`.
 2. Write a private review. For an unchanged current database:
@@ -22,9 +26,9 @@ Release observation reads registration metadata from the database bound to the *
    ```
 
    These declarations record an actual review, not an automatic approval. The build and complete SQL digests pin its inputs.
-3. `pnpm deploy prepare .secrets/release-review.json` compiles and archives the four Workers and reads the baseline; it performs no remote mutation. Preserve the complete private archive.
-4. `pnpm deploy status RELEASE_ID` reads current versions, exact database schema and CMS registration metadata. It never retries or settles a journal.
-5. `pnpm deploy apply RELEASE_ID` initializes an empty database if reviewed, then deploys runtime → apps → sites → platform. The platform wrapper checks the complete current schema and preserves registered services/keys. Each operation records intent and successful CLI completion before readback. Resume skips confirmed steps and refuses uncertain commands.
+3. `pnpm run deploy prepare .secrets/release-review.json` compiles and archives the four Workers and reads the baseline; it performs no remote mutation. Preserve the complete private archive.
+4. `pnpm run deploy status RELEASE_ID` reads current versions, exact database schema and CMS registration metadata. It never retries or settles a journal.
+5. `pnpm run deploy apply RELEASE_ID` initializes an empty database if reviewed, then deploys runtime → apps → sites → platform. The platform wrapper checks the complete current schema and preserves registered services/keys. Each operation records intent and successful CLI completion before readback. Resume skips confirmed steps and refuses uncertain commands.
 6. Verify application behavior, assets, identity/ownership boundaries, routing and schedules separately. `deployed` confirms deployment identities; it does not mean customer, physical-device or restoration acceptance passed.
 
 The standalone platform wrapper is for scoped work against an already current database. It refuses the old schema. `db:remote` and numbered migration settings are removed. `pnpm db:local` initializes an empty local database or confirms an exact current one; it does not overwrite occupied or drifted state. `pnpm db:status` inspects local schema. Use a fresh local persistence directory for a reset and use the same directory when starting development.

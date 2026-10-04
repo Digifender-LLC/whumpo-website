@@ -9,12 +9,12 @@ import {IdentitySecurity,useSignOut} from './identity/flow';
 /** Workspace sign-out through the shared identity controller; never a page-local adapter. */
 export function SignOutButton({className}:{className?:string}){
  const {busy,error,signOut}=useSignOut();
- return <><Button type="button" variant="outline" className={className??'min-h-11 h-auto whitespace-normal'} disabled={busy} onClick={()=>void signOut()}><LogOut className="size-4 shrink-0"/>Sign out</Button>{error&&<p role="alert" className="text-sm">{error}</p>}</>;
+ return <><Button type="button" variant="secondary" className={className??'min-h-11 h-auto whitespace-normal'} disabled={busy} onClick={()=>void signOut()}><LogOut className="size-4 shrink-0"/>Sign out</Button>{error&&<p role="alert" className="text-sm">{error}</p>}</>;
 }
 const HelpContext=createContext<{open:boolean;show:(trigger:HTMLButtonElement)=>void}|null>(null);
 export function AccountHelp(){
  const help=useContext(HelpContext);if(!help)throw Error('Account help needs the current identity workspace.');
- return <Button data-account-help aria-haspopup="dialog" aria-expanded={help.open} variant="ghost" className="min-h-11 shrink-0" onClick={event=>help.show(event.currentTarget)}><LifeBuoy className="size-4"/>Account help</Button>;
+ return <Button data-account-help aria-haspopup="dialog" aria-expanded={help.open} variant="quiet" className="min-h-11 shrink-0" onClick={event=>help.show(event.currentTarget)}><LifeBuoy className="size-4"/>Account help</Button>;
 }
 /** One host outside profile/welcome/Chat reads. Their completion cannot close
  * the panel; identity changes still unmount it with the workspace authority. */
@@ -30,7 +30,7 @@ export function AccountHelpProvider({children}:{children:ReactNode}){
    <DialogHeader className="pr-10 text-left shrink-0"><DialogTitle ref={heading} tabIndex={-1}>Account help</DialogTitle><DialogDescription className="[.phone-keyboard_&]:sr-only">Manage your passkeys, recovery kit or sign-in. Closing this panel keeps your unsaved answer in place.</DialogDescription></DialogHeader>
    <div className="min-h-0 overflow-y-auto overscroll-contain space-y-6 pr-1">
     <p className="text-sm text-muted-foreground">Support works without Chat and promises no response time. Never share your recovery key in Chat or with support.</p>
-    <div className="flex flex-wrap gap-3"><Button asChild variant="outline" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'safety'}} search={{}} onClick={()=>setOpen(false)}>Site & app safety</Link></Button><Button asChild variant="outline" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'saved-work'}} search={{}} onClick={()=>setOpen(false)}>Saved work</Link></Button><Button asChild variant="outline" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'support'}} search={{}} onClick={()=>setOpen(false)}>Get support</Link></Button></div>
+    <div className="flex flex-wrap gap-3"><Button asChild variant="secondary" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'safety'}} search={{}} onClick={()=>setOpen(false)}>Site & app safety</Link></Button><Button asChild variant="secondary" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'saved-work'}} search={{}} onClick={()=>setOpen(false)}>Saved work</Link></Button><Button asChild variant="secondary" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'support'}} search={{}} onClick={()=>setOpen(false)}>Get support</Link></Button></div>
     {open&&<IdentitySecurity/>}
    </div>
   </DialogContent>
@@ -44,7 +44,7 @@ export function AccountSecurityPage(){
  useEffect(()=>{document.title='Account security — Whumpo';if(document.activeElement===document.body)content.current?.querySelector<HTMLElement>('[data-identity-step]')?.focus();},[]);
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-xl space-y-7">
   <Brand/>
-  <Button variant="ghost" asChild className="min-h-11"><Link to="/workspace" search={{signup:false}}><ArrowLeft className="size-4"/>Back to Whumpo</Link></Button>
+  <Button variant="quiet" asChild className="min-h-11"><Link to="/workspace" search={{signup:false}}><ArrowLeft className="size-4"/>Back to Whumpo</Link></Button>
   <div ref={content}><IdentitySecurity/></div>
  </div></main>;
 }

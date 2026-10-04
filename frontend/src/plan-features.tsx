@@ -6,7 +6,7 @@ export function PlanFeatureDetails({planId}:{planId:string}) {
   const packaging=launchPackaging(planId),plan=publicPlans.find(p=>p.id===planId);
   if(!packaging||!plan||planId==='explore')return null;
   const included=new Set<string>(packaging.featureIds),parent=publicPlans.find(p=>p.id===packaging.inherits);
-  return <details className="min-w-0 rounded-xl border border-current/15 p-4 text-sm">
+  return <details className="min-w-0 rounded-md border border-current/15 p-4 text-sm">
     <summary className="min-h-11 cursor-pointer content-center rounded-md font-semibold focus-visible:outline-2 focus-visible:outline-offset-4">{plan.name}: planned features</summary>
     <div className="mt-3 space-y-4 leading-relaxed">
       {parent&&<p>Everything in {parent.name}, plus more.</p>}
