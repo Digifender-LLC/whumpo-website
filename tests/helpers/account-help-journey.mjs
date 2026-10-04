@@ -11,7 +11,7 @@ export async function accountHelpJourney({page,context,db,state,requests,origin,
  phase('account help retains welcome draft');
  const draft='Unsubmitted welcome name';await enter(page.getByLabel('Your name',{exact:true}),draft);
  await hearOrca('account help opens during welcome',open,[/Account help/i,/Manage your passkeys/i,/heading/i]);
- assert.match(await dialog().innerText(),/Human support is not connected/);
+ assert.match(await dialog().innerText(),/Support works without Chat and promises no response time/);
  await dialog().getByRole('heading',{name:'Account security',exact:true}).waitFor();
  const before=requests.length;await activate(dialog().getByRole('button',{name:'Check saved progress',exact:true}));
  await page.waitForLoadState('networkidle');

@@ -68,13 +68,22 @@ export async function readPhoto(env:Pick<Env,'DB'|'FILES'>,userId:string,id:stri
  if(object.size!==row.size){await object.body.cancel();throw new FileError(503,'Photo could not be verified');}const bytes=new Uint8Array(await object.arrayBuffer());if(!await photoBytesMatch(bytes,row.digest))throw new FileError(503,'Photo could not be verified');
  return new Response(bytes,{headers:{'content-type':'image/jpeg','content-length':String(object.size),'content-disposition':'inline; filename="photo.jpg"','cache-control':'private, no-store','content-security-policy':"sandbox; default-src 'none'",'x-content-type-options':'nosniff','referrer-policy':'no-referrer','cross-origin-resource-policy':'same-origin'}});
 }
-/** Account/project removal queues object keys; late writes are caught by a bounded orphan sweep. */
+/** Account/project removal queues object keys; late writes are caught by a bounded orphan sweep.
+ * Queued objects inside an active preservation hold's scope stay queued (and stored) until release (WH-132).
+ * Only the `photos/` prefix is ever listed or deleted; restricted safety evidence lives outside it. */
+export const heldCleanupSQL="EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND ((h.scope='account' AND h.subject_user_id=file_cleanup.owner_user_id) OR (h.scope='project' AND h.project_id=file_cleanup.project_id)))";
 export async function cleanupPhotos(env:Pick<Env,'DB'|'FILES'>,now=new Date()){
  const cutoff=new Date(now.getTime()-3600000).toISOString();
- const {results}=await env.DB.prepare('SELECT object_key FROM file_cleanup WHERE created_at<? LIMIT 100').bind(cutoff).all<{object_key:string}>();
- for(const row of results){await env.FILES.delete(row.object_key);await env.DB.prepare('DELETE FROM file_cleanup WHERE object_key=?').bind(row.object_key).run();}
- // Read at most 500 reservations once, avoiding one subrequest per listed object.
- const {results:active}=await env.DB.prepare('SELECT object_key FROM project_files').all<{object_key:string}>();
+ const {results}=await env.DB.prepare(`SELECT object_key FROM file_cleanup WHERE created_at<? AND object_key NOT GLOB 'restricted/*' AND NOT ${heldCleanupSQL} LIMIT 100`).bind(cutoff).all<{object_key:string}>();
+ for(const row of results){
+  // The queue row is released first: a hold placed after the read makes the database refuse it, keeping the
+  // object. A lost R2 delete afterwards leaves an unreferenced object for the orphan sweep below.
+  try{await env.DB.prepare('DELETE FROM file_cleanup WHERE object_key=?').bind(row.object_key).run();}
+  catch(error){if(String(error).includes('safety_preservation_hold'))continue;throw error;}
+  await env.FILES.delete(row.object_key);
+ }
+ // Read at most 500 reservations once, avoiding one subrequest per listed object. Queued keys belong to the queue above.
+ const {results:active}=await env.DB.prepare('SELECT object_key FROM project_files UNION SELECT object_key FROM file_cleanup').all<{object_key:string}>();
  const retained=new Set(active.map(row=>row.object_key));
  const listed=await env.FILES.list({prefix:'photos/',limit:1000});
  const orphaned=listed.objects.filter(object=>object.uploaded.toISOString()<cutoff&&!retained.has(object.key)).map(object=>object.key);

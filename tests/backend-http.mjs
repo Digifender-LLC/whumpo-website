@@ -62,7 +62,7 @@ if(sites){
  const off=crypto.randomUUID();assert.equal((await post(publicationPath,{id:off,operation:'unpublish',versionId:version})).status,200);
  assert.equal((await post('/api/backend-publication-reviews/'+off+'/confirm',{})).status,200);assert.equal((await invoke()).status,404);
  console.log('Public endpoint HTTP acceptance passed: owner/session/origin review boundary, actual bound QuickJS output, anonymous JSON headers and reviewed withdrawal.');
-}else{assert.equal((await post(publicationConfirm,{})).status,200);console.log('Publication API boundary passed; set TELLUMO_SITES_TEST_URL for actual public runtime acceptance.');}
+}else{assert.equal((await post(publicationConfirm,{})).status,200);console.log('Publication API boundary passed; set WHUMPO_SITES_TEST_URL for actual public runtime acceptance.');}
 
 // Expected-output assertions use the same private runtime, receipt and quotas.
 const checkedId=crypto.randomUUID(),checkPath=path+'/'+version+'/test';

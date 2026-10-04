@@ -818,16 +818,21 @@
         "safety_cases",
         "safety_case_findings",
         "safety_case_evidence",
-        "safety_preservation_holds"
+        "safety_preservation_holds",
+        "safety_preserved_records",
+        "safety_evidence_objects",
+        "safety_disclosures",
+        "safety_disclosure_items"
       ],
       "scope": "mixed",
-      "purpose": "Restricted case references, append-only uncertain/confirmed/corrected findings, links to reviewed risk evidence and account-scope preservation holds. Opaque identifiers only; no raw content.",
-      "currentRetention": "Independent of the customer account lifecycle: no foreign key to users and no delete path. An unreleased hold blocks account/project deletion, project owner change, contact deletion and contact expiry for that account. No case age purge.",
+      "purpose": "Restricted case references, append-only uncertain/confirmed/corrected findings, links to reviewed risk evidence, account/project/object preservation holds, trigger-preserved small payloads (replaced profile photos, discarded or expired Chat drafts) under an active hold, restricted evidence-object copies and two-person lawful-disclosure manifests. Opaque identifiers and digests only in case rows; preserved payloads and evidence bytes are restricted content.",
+      "currentRetention": "Independent of the customer account lifecycle: no foreign key to users and no ordinary delete path. An unreleased hold blocks account/project deletion and owner change, photo/version removal, visitor deletion/erasure, guest-feedback and contact deletion, contact/traffic expiry and R2 cleanup of queued objects in its scope; profile-photo replacement and Chat draft clearing are preserved in place. Preserved payloads are removed when the last covering hold is released. Evidence objects remain until an audited disposal after case closure. No case age purge.",
       "proposedRetention": "Case-specific basis, scope, review deadline and audited release decided by named humans with qualified counsel; routine closed-case metadata retention still requires an owner/counsel schedule. No blanket permanent retention.",
-      "deletionAuthority": "No ordinary deletion. Only a future reviewed case-retention procedure may purge closed, released cases; owner, customer, model and agents cannot remove or release held evidence.",
-      "exportPolicy": "Excluded from the customer account export and model context. Lawful disclosure/export is a separate reviewed operation (not implemented).",
+      "deletionAuthority": "No ordinary deletion. Preserved payloads follow hold release; evidence objects need an authenticated preservation approver's audited disposal after case closure. A future reviewed case-retention procedure may purge closed cases; owner, customer, model and agents cannot remove or release held evidence.",
+      "exportPolicy": "Excluded from the customer account export, ordinary logs, GitHub and model context. Lawful disclosure is a separate two-person reviewed operation over an exact digest manifest that records an out-of-band transfer; the platform transmits nothing.",
       "references": [
         "src/safety-cases.ts",
+        "src/safety-case-http.ts",
         "docs/content-safety.md",
         "docs/account-closure.md"
       ],
@@ -835,16 +840,17 @@
       "protection": {
         "profile": "managed-readable",
         "storage": [
-          "control-d1"
+          "control-d1",
+          "private-r2"
         ],
         "readers": [
-          "Trusted restricted operator integration with case_reviewer/preservation_approver/case_auditor roles; every attempt audited"
+          "Authenticated restricted operator surface (fresh passkey session plus case_reviewer/preservation_approver/case_auditor/disclosure_approver role); every attempt audited; no evidence-byte read route"
         ],
         "processors": [
-          "Deletion triggers and contact expiry read active hold existence only"
+          "Deletion/expiry triggers and cleanup jobs read hold scope only; preservation triggers copy replaced/cleared payloads; operator capture copies held bytes into the reserved restricted R2 prefix"
         ],
         "remainingExposure": [
-          "Case metadata identifies a subject account and is sensitive; operator authentication and restricted evidence object storage are not implemented."
+          "Case metadata identifies a subject account; preserved payloads and evidence objects may hold sensitive or illegal material and are readable by Cloudflare-managed storage and Worker code. No review UI or counsel-approved transfer procedure exists."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
@@ -863,13 +869,15 @@
         "safety_case_audit"
       ],
       "scope": "platform",
-      "purpose": "Named human operator role grants/revocations and the append-only audit of every case access attempt and decision.",
+      "purpose": "Authenticated named human operator role grants/revocations (including role administration bootstrapped once by operator tooling) and the append-only audit of every case access attempt and decision.",
       "currentRetention": "Append-only; no delete path. Bounded at 1,000 role rows and 100,000 audit rows, after which operations fail closed.",
       "proposedRetention": "Retain at least as long as the related cases; schedule requires owner/counsel review.",
       "deletionAuthority": "No ordinary deletion; revocation is one-way and audited.",
       "exportPolicy": "Operator audit only; never in customer exports, ordinary logs or model context.",
       "references": [
         "src/safety-cases.ts",
+        "src/safety-case-http.ts",
+        "tools/safety-case-bootstrap.mjs",
         "docs/content-safety.md"
       ],
       "storageStatus": "current",
@@ -879,13 +887,13 @@
           "control-d1"
         ],
         "readers": [
-          "Trusted operator tooling; audit reads require case_auditor"
+          "Role administrators and case auditors through the authenticated restricted operator surface"
         ],
         "processors": [
           "None beyond role checks inside case operations"
         ],
         "remainingExposure": [
-          "Operator references are declarations until authenticated operator identity exists."
+          "Operator references are account identifiers derived from authenticated passkey sessions; the bootstrap relies on the operator Cloudflare credential trust root."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
@@ -1719,15 +1727,16 @@
       "id": "usage-reviews",
       "tables": [
         "usage_review_requests",
+        "support_deliveries",
         "fair_use_reviews",
         "fair_use_project_lifecycle"
       ],
       "scope": "owner",
-      "purpose": "Customer usage appeals, private operator investigations and metadata-only churn observation.",
+      "purpose": "Customer help and usage-review requests (Chat or independent support page), operator responses with separate saved/delivery/read state, private operator investigations and metadata-only churn observation.",
       "currentRetention": "Removed-project observations expire after 90 days; investigations/customer requests have no general purge and cascade with account. Monitor is nonblocking.",
       "proposedRetention": "Proposed 90 days after resolution/removal for necessary metadata, with explicit open-case review. Closure/export must remain available regardless of usage concerns.",
       "deletionAuthority": "Customer closure and qualified review operator; minimum unresolved case handling cannot retain unrelated site/chat content by default.",
-      "exportPolicy": "Customer's submitted request and customer-visible response; exclude private operator investigation details and model context copies.",
+      "exportPolicy": "Customer's submitted request, customer-visible response and its delivery/read states; exclude private operator investigation details, reviewer identities and model context copies.",
       "references": [
         "docs/usage-review-requests.md",
         "docs/pricing-and-model-policy.md",

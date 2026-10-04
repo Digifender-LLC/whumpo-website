@@ -1,5 +1,6 @@
 import {siteSafetyJourney} from './helpers/site-safety-journey.mjs';
 import {savedWorkJourney} from './helpers/saved-work-journey.mjs';
+import {supportJourney} from './helpers/support-journey.mjs';
 import {crossTabIdentityJourney} from './helpers/cross-tab-identity-journey.mjs';
 import {accountHelpJourney} from './helpers/account-help-journey.mjs';
 import {accessibilityAudit} from './helpers/accessibility-audit.mjs';
@@ -20,9 +21,9 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 const accessibility=process.argv.includes('--accessibility'),accountHelp=process.argv.includes('--account-help'),a11y=accessibilityAudit();
-const siteSafety=process.argv.includes('--site-safety'),savedWork=process.argv.includes('--saved-work');
+const siteSafety=process.argv.includes('--site-safety'),savedWork=process.argv.includes('--saved-work'),support=process.argv.includes('--support');
 const grantJourney=process.argv.includes('--github-grant'),crossTab=process.argv.includes('--cross-tab');
-if([accessibility,grantJourney,crossTab,accountHelp,siteSafety,savedWork].filter(Boolean).length>1)throw Error('Run the owner accessibility and GitHub grant journeys separately.');
+if([accessibility,grantJourney,crossTab,accountHelp,siteSafety,savedWork,support].filter(Boolean).length>1)throw Error('Run the owner accessibility and GitHub grant journeys separately.');
 let providerCalls=0,modelCalls=0;
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp('/tmp/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
@@ -34,7 +35,7 @@ try{
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
  const bundled=await build({stdin:{contents:"export {saveBackend,testBackend} from './src/backend-versions';export {prepareBackendPublication,confirmBackendPublication} from './src/backend-publication';export {prepareApplication,confirmApplication} from './src/app-activation';export {prepareAppPage,confirmAppPage} from './src/app-pages';export {createWebsite} from './src/project-specification/store';export {publicationCommand} from './src/publications';export {default as worker} from './src/index';export {hashToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export {sendConversation,readChat} from './src/chat';export {startGitHub,finishGitHub} from './src/github-connection';export {initializeConnectionKeys} from './src/connection-rotation';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
  const {saveBackend,testBackend,prepareBackendPublication,confirmBackendPublication,prepareApplication,confirmApplication,prepareAppPage,confirmAppPage,createWebsite,publicationCommand,worker,hashToken,admitWorkspace,resolveIdentity,sendConversation,readChat,startGitHub,finishGitHub,initializeConnectionKeys}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
- fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility','--account-help','--cross-tab','--site-safety','--saved-work']});const db=fixture.db;
+ fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility','--account-help','--cross-tab','--site-safety','--saved-work','--support']});const db=fixture.db;
  const code=crypto.randomUUID();await db.prepare("INSERT INTO invitations VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'),NULL,NULL)").bind(await hashToken(code)).run();
  crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
  globalThis.fetch=async(url,...args)=>{if(accessibility&&String(url)==='https://opencode.ai/zen/go/v1/responses'){const body=JSON.parse(args[0].body),ack=body.max_output_tokens===256;if(!ack){audit.calls++;assert(audit.steps.length,'Unexpected inference request');}return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(ack?{intent:'editing'}:{reply:'Scripted owner request prepared.',action:audit.steps.shift()})}]}],usage:{input_tokens:100,output_tokens:100}});}if(grantJourney&&String(url)==='https://opencode.ai/zen/go/v1/responses'){modelCalls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Prepared.',action:{kind:'githubAccess',operation:'review'}})}]}],usage:{input_tokens:200,output_tokens:80}});}if(grantJourney&&String(url)==='https://api.github.com/applications/browser-grant/grant'){providerCalls++;return new Response(null,{status:204});}if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
@@ -53,6 +54,7 @@ try{
    const requestHeaders=canonical?{...req.headers,host:'whumpo.com',...(req.headers.origin?{origin:'https://whumpo.com'}:{})}:req.headers;
    const response=await worker.fetch(new Request(target,{method:req.method,headers:requestHeaders,...(['GET','HEAD'].includes(req.method)?{}:{body})}),identity?{...env,ENVIRONMENT:'local'}:env,{waitUntil:p=>background.push(p)});
    if(req.method==='POST'&&response.status===200&&/^\/api\/workspace\/(site|service)-safety\/reviews/.test(url.pathname)&&(audit.loseSafetyPrepare&&!url.pathname.endsWith('/confirm')||audit.loseSafetyConfirm&&url.pathname.endsWith('/confirm'))){audit.loseSafetyPrepare=false;audit.loseSafetyConfirm=false;res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end();return;}
+   if(audit.loseSupportCreate&&req.method==='POST'&&url.pathname==='/api/support/v1/requests'&&response.status===200){audit.loseSupportCreate=false;res.writeHead(200,{'content-type':'application/json'}).end();return;}
    if(audit.loseChat&&url.pathname==='/api/chat'&&req.method==='POST'&&response.status===200){audit.loseChat=false;audit.failChat=true;res.writeHead(200,{'content-type':'application/json'}).end();return;}
    if(audit.holdDashboard&&url.pathname==='/api/workspace/dashboard'&&response.status===200){audit.holdDashboard=false;await new Promise(done=>{audit.releaseDashboard=done;});}
    if(!response){res.writeHead(404).end();return;}
@@ -76,7 +78,7 @@ try{
   const append=Element.prototype.append;Element.prototype.append=function(...nodes){const result=append.apply(this,nodes);for(const node of nodes)if(node instanceof HTMLIFrameElement&&node.title==='Recovery kit print view')node.contentWindow.print=()=>{window.__printedKit=node.contentDocument.body.textContent;node.contentWindow.dispatchEvent(new Event('afterprint'));};return result;};
  });
  page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
- const {reach,activate,enter}=keyboardJourney(page,accessibility||accountHelp||crossTab||siteSafety||savedWork);
+ const {reach,activate,enter}=keyboardJourney(page,accessibility||accountHelp||crossTab||siteSafety||savedWork||support);
  async function focusHeading(text){if(accessibility||crossTab){await page.getByRole('heading',{name:text,exact:true}).waitFor();await page.waitForFunction(t=>document.activeElement?.textContent===t,text);}}
  const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');
  async function authenticator(){return (await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})).authenticatorId}
@@ -190,6 +192,7 @@ try{
   return {project,version};
  }});
  if(savedWork)await savedWorkJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
+ if(support)await supportJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
  if(crossTab)await crossTabIdentityJourney({page,context,db,origin,requests,cdp,auth,state:audit,phase:value=>{phase=value;}});
  if(accessibility)await ownerUsabilityJourney({page,context,db,env,state:audit,origin,activate,enter,reach,phase:value=>{phase=value;},audit:a11y.check});
  if(accountHelp){await page.goto(origin+'/workspace/settings');await activate(page.getByRole('button',{name:'Account help',exact:true}));await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('heading',{name:'Account security',exact:true}).waitFor();await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();}

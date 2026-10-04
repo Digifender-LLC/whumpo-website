@@ -807,7 +807,7 @@
         "docs/data-lifecycle.md",
         "src/safety-cases.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/132",
       "owner": null,
       "evidence": []
     },
@@ -1803,7 +1803,7 @@
         "tools/respond-usage-review.mjs",
         "docs/roadmap/alignment.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/135",
       "owner": null,
       "evidence": []
     },
@@ -4983,7 +4983,7 @@
         "docs/feature-inclusion.md",
         "docs/chat-interactions.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/130",
       "owner": null,
       "evidence": []
     },

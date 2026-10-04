@@ -8,7 +8,7 @@ const built=await build({stdin:{contents:"export * from './src/github-connection
 const m=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const {startGitHub,cancelGitHub,finishGitHub,disconnectGitHub,connectionStatus,githubInstallations,githubAccess,cleanupGitHub,seal,unseal}=m;
 const fixture=await databaseFixture({d1:true}),db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
-const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'tellumo-test',key:fixtureKeyring('ab'.repeat(32))};
+const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'whumpo-test',key:fixtureKeyring('ab'.repeat(32))};
 async function account(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
 const denied=async()=>{throw Error('No transport expected');};let calls=0,exchanges=0,revocations=[];
 function provider(start,{token='ghu_synthetic',expires=28800,revokeStatus=204,userStatus=200,beforeUser,includeRefresh=false}={}){return async(url,init={})=>{calls++;assert.equal(init.redirect,'manual');assert.ok(init.signal);const parsed=new URL(url);

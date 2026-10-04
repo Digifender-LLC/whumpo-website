@@ -46,8 +46,8 @@ On September 28 2026, the user authorized digifender.com as the temporary test d
 | Worker | tellumo-platform | API and Static Assets |
 | Custom domain | digifender.com | HTTPS test platform |
 | D1 | tellumo-control | Identity, projects, activity, invitations |
-| Turnstile | TellUmo test platform | Free managed signup verification |
-| Private repository | zemdregon/TellUmo | Source history |
+| Turnstile | Whumpo test platform | Free managed signup verification |
+| Private repository | Digifender-LLC/whumpo-website | Source history |
 
 The workers.dev endpoint and preview URLs are disabled. Wrangler manages the apex custom domain and its certificate. www is not attached.
 

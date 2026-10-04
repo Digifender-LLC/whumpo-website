@@ -1,6 +1,8 @@
 import {projectRuntime} from './runtime-lane';
 import {safetyService,serviceSafetyReviews,readServiceSafetyReview,prepareServiceSafetyReview,confirmServiceSafetyReview} from './service-safety';
 import {listSavedWork,readSavedWork} from './saved-work';
+import {supportConfig,supportRoute} from './support';
+import {supportLink} from './support-shape';
 import {siteSafetyInventory,siteSafetyReviews,readSiteSafetyReview,prepareSiteSafetyReview,confirmSiteSafetyReview} from './site-safety';
 import {connectionStartInput,connectionReturnPath,readConnectionHandoff} from './chat-interactions/connection-handoff';
 import {isConnectionProvider} from './connection-handoff-shape';
@@ -10,6 +12,7 @@ import {WorkspaceViewError} from './workspace-view-contract';
 import {handleInteractionRequest} from './chat-interactions/http';
 import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
+import {handleSafetyCaseRequest} from './safety-case-http';
 import {IdentityError} from './workspace-identity/authority';
 import {admitWorkspace,workspaceBindings,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
 import {FeatureInclusionError} from './feature-inclusion';
@@ -73,8 +76,9 @@ import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disco
 import {githubGrantReviews,reviewGitHubGrant,confirmGitHubGrant,cancelGitHubGrant} from './github-grant-revocation';
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
-import {createGuestPreview,listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedback,resolveGuestFeedback,deleteGuestFeedback,cleanupGuestPreviews} from './guest-previews/owner';
+import {listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedback,resolveGuestFeedback,deleteGuestFeedback,cleanupGuestPreviews} from './guest-previews/owner';
 import {GuestPreviewError} from './guest-previews/policy';
+import {prepareGuestPreviewIssue,confirmGuestPreviewIssue} from './guest-previews/bindings';
 import {guestPreviewOrigin} from './hosts';
 import { StorageLimitError } from './storage-budget';
 import {uploadPhoto,listPhotos,readPhotoUpload,readPhoto,cleanupPhotos} from './files';
@@ -138,6 +142,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
   if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, featureCatalogue: launchFeatureCatalogue, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", currency: "USD", draft: true, checkoutMode: "test", subscriptionsEnabled: subscriptionsEnabled(env) });
   if(pathname.startsWith('/api/auth/'))return error(404,'Not found');
+  // WH-132 restricted operator case surface: own authentication/role gates, never the workspace router.
+  const operator=await handleSafetyCaseRequest(request,env);if(operator)return operator;
   const principal=await workspaceIdentity(request,env);
   const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
@@ -150,7 +156,12 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   const {pathname}=new URL(request.url),method=request.method;
   const transport=workspaceTransport(env.DB,user.id);
   // Check persisted completion before reading workspace data or dispatching Chat work.
-  if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before opening your workspace.',code:'onboarding_required'},409);
+  // Support is identity-only: it is routed before the first-project gate and shares no Chat, AI budget or onboarding dependency.
+  if(pathname==='/api/support/v1'||pathname.startsWith('/api/support/v1/')){
+    const data=method==='POST'?await body(request):undefined;
+    return json(await supportRoute(env.DB,user.id,method,pathname,new URL(request.url).search,data,supportConfig(env)));
+  }
+  if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before opening your workspace.',code:'onboarding_required',support:supportLink('onboarding_required')},409);
   if(pathname==='/api/onboarding'){
     if(method==='GET')return json(await readOnboarding(env.DB,user.id));
     if(method==='PUT')return json(await saveOnboarding(env.DB,user.id,(await body(request))??{}));
@@ -403,15 +414,21 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   const exportMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/export$/);
   if (method === 'GET' && exportMatch) {
     const archive = await ownedExport(env.DB, user.id, exportMatch[1], env.FILES);
-    return archive ? new Response(archive, {headers:{'content-type':'application/zip','content-disposition':`attachment; filename="tellumo-site-${exportMatch[1]}.zip"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer'}}) : error(404,'Saved version not found');
+    return archive ? new Response(archive, {headers:{'content-type':'application/zip','content-disposition':`attachment; filename="whumpo-site-${exportMatch[1]}.zip"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer'}}) : error(404,'Saved version not found');
   }
   // WH-092 owner guest-preview controls. Issuance is feature-gated; listing, revocation,
   // resolution and deletion remain available to the current owner on any plan.
+  const guestPrepare=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/guest-previews\/prepare$/);
+  if(guestPrepare){
+    if(new URL(request.url).search)return error(400,'Use the exact guest preview link.');
+    if(method==='POST')return json(await prepareGuestPreviewIssue(env.DB,user.id,guestPrepare[1],await body(request)));
+    return error(405,'Method not allowed');
+  }
   const guestLinks=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/guest-previews$/);
   if(guestLinks){
     if(new URL(request.url).search)return error(400,'Use the exact guest preview link.');
     if(method==='GET')return json(await listGuestPreviews(env.DB,user.id,guestLinks[1]));
-    if(method==='POST')return json(await createGuestPreview(env.DB,user.id,guestLinks[1],await body(request),String(env.ENVIRONMENT)==='local'?'http://localhost:8788/guest-preview/':guestPreviewOrigin+'/'));
+    if(method==='POST')return json(await confirmGuestPreviewIssue(env.DB,user.id,guestLinks[1],await body(request),String(env.ENVIRONMENT)==='local'?'http://localhost:8788/guest-preview/':guestPreviewOrigin+'/'));
     return error(405,'Method not allowed');
   }
   const guestLink=pathname.match(/^\/api\/guest-previews\/([0-9a-f-]{36})(?:\/(revoke|feedback)(?:\/([0-9a-f-]{36}))?)?$/);
@@ -444,7 +461,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   const directoryHistoryRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory\/history$/);
   if(method==='GET'&&directoryHistoryRoute)return json(await directoryHistory(env.DB,user.id,directoryHistoryRoute[1]));
   const directoryExportRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory\/snapshots\/([0-9a-f-]{36})\/export$/);
-  if(method==='GET'&&directoryExportRoute)return json(await exportDirectory(env.DB,user.id,directoryExportRoute[1],directoryExportRoute[2]),200,{'content-disposition':'attachment; filename="tellumo-directory-'+directoryExportRoute[2]+'.json"'});
+  if(method==='GET'&&directoryExportRoute)return json(await exportDirectory(env.DB,user.id,directoryExportRoute[1],directoryExportRoute[2]),200,{'content-disposition':'attachment; filename="whumpo-directory-'+directoryExportRoute[2]+'.json"'});
   const directoryProject=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory$/);
   if(method==='GET'&&directoryProject){const d=await readDirectory(env.DB,user.id,directoryProject[1]);return json({projectId:d.id,name:d.name,revision:d.revision,listings:d.draft,published:d.published,publishedAt:d.published?d.published_at:null});}
   if(method==='GET'&&pathname==='/api/site-health')return json(await listHealth(env.DB,user.id));
@@ -537,7 +554,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
       if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)return error(429,'Too many recovery changes. Try again in a minute.');
     }
     const result = await (explicitAction?sendChatControl:sendConversation)(env.DB, user.id, data, configuredAI(env),{transport,githubTransport:transport,background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
-    return result.error ? error(result.status, result.error) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
+    return result.error ? json({error:result.error,...(result.status===429?{support:supportLink('usage_limit')}:result.status===503?{support:supportLink('chat_unavailable')}:{})},result.status) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "GET" && pathname === "/api/projects") {
     const { results } = await env.DB.prepare("SELECT id,name,purpose,service_status AS status,site_live,backend_live,cms_articles,created_at,updated_at FROM project_service_status WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 100")

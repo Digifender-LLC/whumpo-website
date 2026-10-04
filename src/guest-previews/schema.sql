@@ -82,12 +82,14 @@ CREATE TRIGGER guest_preview_feedback_update BEFORE UPDATE ON guest_preview_feed
 WHEN NEW.id IS NOT OLD.id OR NEW.link_id IS NOT OLD.link_id OR NEW.request_id IS NOT OLD.request_id OR NEW.request_hash IS NOT OLD.request_hash
  OR NEW.display_name IS NOT OLD.display_name OR NEW.body IS NOT OLD.body OR NEW.created_at IS NOT OLD.created_at
 BEGIN SELECT RAISE(ABORT,'guest_preview_immutable'); END;
--- Like contact submissions, visitor-supplied feedback is preserved under an active account hold.
+-- Like contact submissions, visitor-supplied feedback is preserved while its account or project is held.
 CREATE TRIGGER safety_hold_guest_feedback_retained BEFORE DELETE ON guest_preview_feedback
-WHEN EXISTS(SELECT 1 FROM guest_preview_links l JOIN safety_preservation_holds h ON h.subject_user_id=l.owner_user_id WHERE l.id=OLD.link_id AND h.released_at IS NULL)
+WHEN EXISTS(SELECT 1 FROM guest_preview_links l JOIN safety_preservation_holds h ON h.released_at IS NULL
+ AND ((h.scope='account' AND h.subject_user_id=l.owner_user_id) OR (h.scope='project' AND h.project_id=l.project_id)) WHERE l.id=OLD.link_id)
 BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
 -- A cascading feedback delete no longer sees its parent link, so guard the link itself too.
 CREATE TRIGGER safety_hold_guest_link_retained BEFORE DELETE ON guest_preview_links
 WHEN EXISTS(SELECT 1 FROM guest_preview_feedback WHERE link_id=OLD.id)
- AND EXISTS(SELECT 1 FROM safety_preservation_holds WHERE subject_user_id=OLD.owner_user_id AND released_at IS NULL)
+ AND EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL
+  AND ((scope='account' AND subject_user_id=OLD.owner_user_id) OR (scope='project' AND project_id=OLD.project_id)))
 BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;

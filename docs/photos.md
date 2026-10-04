@@ -25,7 +25,7 @@ Deleting a project or account cascades D1 photo rows into a durable cleanup queu
 
 ## Budget
 
-The existing account already had R2 enabled. Before adding TellUmo, its only listed bucket had 8 objects totaling 7.92 MB. The separate `tellumo-files` bucket uses Standard storage, with r2.dev public access disabled. Cloudflare's published free tier currently includes 10 GB-month storage, 1 million Class A operations and 10 million Class B operations per month for Standard storage. These allowances are shared across the account. The app's storage and request limits reduce usage but do not impose an account-wide bill cap or reserve unused allowances from other applications. No paid image transformation or image generation service is used.
+The existing account already had R2 enabled. Before adding Whumpo, its only listed bucket had 8 objects totaling 7.92 MB. The separate `tellumo-files` bucket uses Standard storage, with r2.dev public access disabled. Cloudflare's published free tier currently includes 10 GB-month storage, 1 million Class A operations and 10 million Class B operations per month for Standard storage. These allowances are shared across the account. The app's storage and request limits reduce usage but do not impose an account-wide bill cap or reserve unused allowances from other applications. No paid image transformation or image generation service is used.
 
 References: [R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/), [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [JPEG interchange format](https://www.w3.org/Graphics/JPEG/jfif3.pdf).
 

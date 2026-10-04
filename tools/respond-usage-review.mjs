@@ -12,5 +12,5 @@ try{
  const db=remoteD1(cloudflareClient(config.account_id),config.d1_databases.find(b=>b.binding==='DB').database_id);
  console.log(JSON.stringify(await runUsageReview(service,db,input,args[3]),null,2));
 }catch{
- console.error('Usage review unavailable. Check the private input, operator authorization and migration 0097. Preview the exact customer-visible response before applying its digest. After an uncertain write, read or retry the same response; do not invent a replacement.');process.exitCode=1;
+ console.error('Usage review unavailable. Check the private input, operator authorization and the current schema. Preview the exact customer-visible response before applying its digest. After an uncertain write, read or retry the same response; do not invent a replacement.');process.exitCode=1;
 }

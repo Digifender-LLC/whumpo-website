@@ -35,7 +35,7 @@ try{
  const removed=await compareVersions(scope(a.id),a.id,old,photoOld);assert.ok(removed.changes.some(c=>c.label==='Photo '+photo1&&c.after===null));
  const htmlOnly=await draft(a,config,renderSite(config)+'<!-- New renderer bytes -->');const bytes=await compareVersions(scope(a.id),a.id,htmlOnly,old);assert.equal(bytes.changes.length,0);assert.equal(bytes.htmlChanged,true);
  const review=await chat(a,'/publish '+next);const rd=await compareReview(scope(a.id),a.id,review.id);assert.equal(rd.before.id,old);assert.equal(rd.after.id,next);assert.equal(rd.kind,'publish');await assert.rejects(compareReview(scope(b.id),b.id,review.id),e=>e.status===404);
- if(process.env.TELLUMO_DIFF_FIXTURE)await writeFile(process.env.TELLUMO_DIFF_FIXTURE,await diffPage(rd).text());
+ if(process.env.WHUMPO_DIFF_FIXTURE)await writeFile(process.env.WHUMPO_DIFF_FIXTURE,await diffPage(rd).text());
  // Guided receipt pins its baseline, even when publication changes after the read.
  const free=await chat(a,'/diff '+next);assert.equal(free.result.status,200);const turn=(await readChat(scope(a.id),a.id)).turns.at(-1);assert.equal(turn.comparison_version_id,next);assert.equal(turn.comparison_baseline_id,old);assert.equal((await getBilling(scope(a.id),a.id)).standardAI.creditCharge,0);
  await publish(a,next);await assert.rejects(compareReview(scope(a.id),a.id,review.id),e=>e.status===409);assert.equal((await db.prepare('SELECT baseline_id FROM chat_comparisons WHERE turn_id=?').bind(free.id).first()).baseline_id,old);assert.equal((await compareVersions(scope(a.id),a.id,next)).changes.length,0);

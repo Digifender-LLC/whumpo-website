@@ -42,8 +42,12 @@ const unlinkedOwnership={
  safety_cases:'Restricted case record keyed by subject account id without a foreign key, so ordinary account cascades cannot remove it (WH-015).',
  safety_case_findings:'Append-only case decisions owned through safety_cases, deliberately outside the account cascade.',
  safety_case_evidence:'Links to reviewed risk evidence ids owned through safety_cases, deliberately outside the account cascade.',
- safety_preservation_holds:'Account-scope hold keyed by subject account id; an unreleased hold blocks that account deletion rather than following it.',
- file_cleanup:'Physical object deletion queue, keyed by object_key only. Recover tenant association from a separately retained object manifest; never expose keys in customer reports.'
+ safety_preservation_holds:'Account/project/object hold keyed by subject account id (and project/file id) without foreign keys; an unreleased hold blocks deletion in its scope rather than following it.',
+ safety_preserved_records:'Payloads preserved under an active hold, keyed by subject account id without a foreign key; removed only when the last covering hold is released (WH-132).',
+ safety_evidence_objects:'Restricted R2 evidence copies owned through safety_cases; deliberately outside the account cascade until audited disposal after case closure (WH-132).',
+ safety_disclosures:'Two-person lawful-disclosure manifest owned through safety_cases, deliberately outside the account cascade (WH-132).',
+ safety_disclosure_items:'Manifest items owned through safety_disclosures and safety_evidence_objects, deliberately outside the account cascade (WH-132).',
+ file_cleanup:'Physical object deletion queue keyed by object_key, with project/owner identifiers copied without foreign keys so preservation holds can retain queued objects. Never expose keys in customer reports.'
 };
 export async function currentLifecycleSchema(directory=root){
  const db=new DatabaseSync(':memory:');

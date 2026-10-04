@@ -9,19 +9,20 @@ export const backlogInventory={
  chat_drafts:queue('chat_interactions',`removed_at IS NULL AND state!='submitted' AND ${date('COALESCE(draft_saved_at,created_at)','+7 days')}<=?1`,date('COALESCE(draft_saved_at,created_at)','+7 days'),2*3600000),
  connection_exchanges:queue('connection_oauth_exchanges',"state='dispatched'",'created_at',600000),
  imports:queue('backend_imports',"state='pending'",'created_at',3600000),
- photos:queue('file_cleanup','1=1','created_at'),
+ // WH-132: objects/rows retained by an active preservation hold are intentionally not backlog.
+ photos:queue('file_cleanup',"NOT EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND ((h.scope='account' AND h.subject_user_id=file_cleanup.owner_user_id) OR (h.scope='project' AND h.project_id=file_cleanup.project_id)))",'created_at'),
  github:queue('github_token_vault t LEFT JOIN github_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'h.requested_at'),
  cloudflare:queue('cloudflare_token_vault t LEFT JOIN cloudflare_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'h.requested_at'),
  standard_ai:queue('standard_ai_requests',"state IN ('reserved','dispatched','uncertain')",'updated_at',600000),
  fair_use:aged('fair_use_project_lifecycle','removed_at','+90 days'),
- traffic:aged('site_traffic_daily','day','+30 days'),
+ traffic:queue('site_traffic_daily',`${date('day','+30 days')}<=?1 AND project_id NOT IN (SELECT project_id FROM safety_held_projects)`,date('day','+30 days')),
  public_clients:aged('public_client_usage','day','+2 days'),
  app_migration_documents:queue('app_migration_documents','NOT EXISTS(SELECT 1 FROM app_migration_current c WHERE c.id=migration_id)',null),
  app_owner_erasures:expiry('app_owner_erasures'),
  app_deletion_receipts:expiry('app_deletion_receipts'),
  app_deletion_reviews:expiry('app_deletion_reviews'),
  app_usage:aged('app_daily_usage','day','+36 days'),
- contact_submissions:expiry('contact_submissions'),
+ contact_submissions:queue('contact_submissions','expires_at<=?1 AND project_id NOT IN (SELECT project_id FROM safety_held_projects)','expires_at'),
  guest_previews:queue('guest_preview_links l',"coalesce(l.revoked_at,l.expires_at)+2592000<=unixepoch(?1) AND NOT EXISTS(SELECT 1 FROM guest_preview_feedback f WHERE f.link_id=l.id)","strftime('%Y-%m-%dT%H:%M:%fZ',coalesce(l.revoked_at,l.expires_at)+2592000,'unixepoch')"),
  contact_receipts:expiry('contact_receipts'),
  github_oauth:expiry('github_oauth_states'),
@@ -40,6 +41,9 @@ export const backlogInventory={
  health_budget:aged('site_health_budget','day','+63 days'),
  backup_unknown:queue('github_backups',"state IN ('dispatching','uncertain')",'dispatched_at',600000),
  dns_unknown:queue('cloudflare_dns_actions',"state IN ('sending','uncertain')",'created_at',600000),
+ // Internal attention thresholds only: they promise customers no response time.
+ support_open:queue('usage_review_requests',"state='open'",'created_at',3*daily),
+ support_delivery:queue('support_deliveries',"state='queued'",'next_attempt_at',3600000),
 };
 export const operationInventory={
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},

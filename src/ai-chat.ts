@@ -122,7 +122,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       if (!(await dispatchInference(db,userId,id))) return {status:200};
     }
     if(!task&&dnsOptions?.background)dnsOptions.background(startAcknowledgment(db,userId,id,billing.period,content,config,transport));
-    let result = await complete({ ...config, maxOutputTokens: outputLimit, timeoutMs:canFollow?45000:config.timeoutMs, sessionId: `tellumo-${userId}` }, messages, modelTransport);
+    let result = await complete({ ...config, maxOutputTokens: outputLimit, timeoutMs:canFollow?45000:config.timeoutMs, sessionId: `whumpo-${userId}` }, messages, modelTransport);
     if(result.inputTokens>boundInput()||result.outputTokens>outputLimit)throw new ProviderError('invalid_response');
     // Validate task-only memory separately; ordinary agent envelopes stay strict.
     function scopedResponse(raw:string){try{return taskResponse(raw,task!.progress);}catch{throw new ProposalError('task_progress');}}
@@ -155,7 +155,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       await db.batch([...informationTaskGuards(db,userId,task,'succeeded',id),
         db.prepare('UPDATE chat_turns SET ai_context_allowed=0 WHERE id=? AND user_id=?').bind(id,userId),
         db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,JSON.stringify({type:'task_lookup',taskId:task.data.taskId,submissionId:task.form.submission.id,previousTurnId:task.progress!.turnId}),result.inputTokens,result.outputTokens)]);
-      const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`tellumo-${userId}`},next,modelTransport);
+      const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`whumpo-${userId}`},next,modelTransport);
       if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
       result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
     }else
@@ -168,7 +168,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
       if(next&&new TextEncoder().encode(JSON.stringify(next)).length+512<=followupInputBound){
         // Persist the lookup before dispatch; lost acknowledgments never retry it.
         await db.batch([...inspectionGuards,...(task?informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id):[]),db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,inspection,result.inputTokens,result.outputTokens)]);
-        const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`tellumo-${userId}`},next,modelTransport);
+        const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`whumpo-${userId}`},next,modelTransport);
         if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
         result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
       }else proposal=lookup;

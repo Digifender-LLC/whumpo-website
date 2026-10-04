@@ -232,7 +232,7 @@ Corrections are immutable per owner/incident and require an existing incident be
 
 History reads use a single tenant-scoped evidence/correction query and retain all ages, including old unresolved critical incidents. More than 10,000 results, malformed evidence or a failed query raises an error; callers must hold the applicable action rather than substitute an empty history. Missing accounts are rejected. Evidence/reviewer references are omitted from the calculation input. History currently always reports `complete:false`: no trusted ingestion/backfill or coverage certification exists, so even an empty ledger cannot establish lower-risk sampling. Media/import baseline gates remain mandatory.
 
-Ordinary account deletion cascades these rows unless a [WH-015 preservation hold](#restricted-safety-cases-and-preservation-holds--source-foundation-local-only) is active. The ledger itself is **not a legal preservation archive**; restricted evidence object storage, authenticated adjudication, independent appeals, calibrated evidence producers and dispatcher/action integration remain required before activation. No existing customer Chat was read or retrospectively scored, and no customer evidence was invented.
+Ordinary account deletion cascades these rows unless a [WH-015 preservation hold](#restricted-safety-cases-and-preservation-holds--source-foundation-local-only) is active. The ledger itself is **not a legal preservation archive**; deployment of the WH-132 restricted case surface, adjudication policy, independent appeals, calibrated evidence producers and dispatcher/action integration remain required before activation. No existing customer Chat was read or retrospectively scored, and no customer evidence was invented.
 
 Verification: `pnpm check`, `node tests/content-risk-evidence.mjs`, `node tests/content-risk.mjs` and `node tests/account-closure-inventory.mjs` passed. The evidence test applies the full schema to disposable in-memory SQLite and covers owner separation, duplicate/conflicting records, correction replay/conflicts, strongest-incident scoring, a 400-day-old critical incident, lost insert/correction acknowledgements, immutable records, future-date refusal, read failures and account cascades. These are local SQL/service tests, not detector or live evidence-ingestion acceptance.
 
@@ -240,18 +240,76 @@ Migration 0105 was applied to the private test D1 database on September 30, 2026
 
 ## Restricted safety cases and preservation holds — source foundation, local only
 
-October 4, 2026 UTC, WH-015 contract/current-schema slice ([WH-131](roadmap/backlog.md)). `src/safety-cases.ts` and the canonical `schema/platform.sql` add six tables. They hold only opaque identifiers, never raw content, allegations, imagery, messages, names or credentials. The module is a trusted operator integration with no HTTP route, Chat tool, model access or CLI.
+October 4, 2026 UTC. The WH-015 contract/current-schema slice is [WH-131](roadmap/backlog.md); the authenticated operator surface, evidence storage, scoped holds and disclosure are [WH-132](roadmap/backlog.md). Implemented in `src/safety-cases.ts`, `src/safety-case-http.ts` and the canonical `schema/platform.sql` (ten tables and two views). **Implemented in source and verified locally only. Not deployed, not configured and not accepted. No operator has been bootstrapped, no live database was read, and no evidence was captured.** The case tables hold only opaque identifiers and digests, never allegations, messages, names or credentials.
 
-- **Roles.** Operator references must be `human:<id>`. The schema rejects `model:`, `agent:` and every other actor form. There are three roles. `case_reviewer` opens cases, links evidence, records findings and closes cases. `preservation_approver` places and releases holds. `case_auditor` reads the audit and the list of active holds. All three roles can read a case. Grants are refused when an operator would grant a role to themselves. Revocation is one-way and takes effect immediately. Role administration is not itself role-gated: it is owner-held operator tooling. Actor references are **declarations, not authentication**, until WH-132 adds authenticated operator identity.
-- **Cases and findings.** Cases deliberately have no foreign key to `users`, so an ordinary account cascade cannot remove them. Every case opens as `uncertain_flag`. Linking ledger evidence from the same subject never changes the finding. Only an explicit reviewer decision with a decision reference records `confirmed_policy_finding`, and a later `not_confirmed` decision appends a correction. The findings history is append-only and rejects no-op decisions. The separate risk-ledger kinds are unchanged. A case can only be closed after every one of its holds is released.
-- **Holds.** A hold covers the whole subject account (`scope='account'`). It requires a preservation approver, an opaque `legal_basis_ref` and a review term of 1 to 366 days. The `legal_basis_ref` points to the separate human applicability and retention decision; no model can supply it. A hold stays in force until an explicit audited release. Past its review date it is reported as `overdue`, but it **never lapses silently**. Hold records are immutable apart from that single release transition.
-- **Enforced by database triggers while a hold is unreleased.** The following are refused with `safety_preservation_hold`: `DELETE` of the account (which also preserves the cascaded risk evidence, projects, files and other cascaded records), project deletion, project owner change, and contact-submission deletion. Contact expiry (`cleanupContacts`) skips held projects. Enrollment cancellation and owner contact deletion fail with their existing generic errors, which do not reveal that a hold exists. After release, the ordinary cascade proceeds and the case records remain.
-- **Audit.** Every attempt is recorded in `safety_case_audit` as allowed, denied (missing role) or rejected (invalid input, conflict, not found, active hold, closed case, capacity or unavailable). This covers grants, revocations, operations and reads. The audit row is written in the same transaction as the operation and states the result that was actually committed. Invalid actors or references are recorded as `NULL`, never copied. Capacity limits fail closed at 10,000 cases or holds, 1,000 role rows, 1,000 evidence links per case and 100,000 audit rows.
-- `accountClosureInventory` counts `activePreservationHolds`.
+### Authenticated operators (WH-132)
 
-**Not implemented:** authenticated operator identity, a restricted CLI and a case review UI; restricted storage of evidence objects; holds narrower or wider than one account (for example R2 objects, a single project, visitor data or backups); preservation during per-object deletion and expiry paths other than contacts (for example profile-photo replacement, Chat draft expiry and traffic cleanup); lawful export or disclosure; a case-retention schedule; and any scanner, hash matching, provider or NCMEC reporting work, which remains owner-deferred. Legal applicability and the procedure require qualified review before live use (WH-133).
+- **Identity.** Every operation takes the operator's resolved Whumpo passkey principal (`resolveIdentity` → `IdentityPrincipal`) and derives the actor `human:<accountId>` itself. Declared actor references are not accepted anywhere; an `actor` field in an HTTP body is refused as `invalid_input`. The SQL that commits each operation repeats the identity gate (ready account, live session, **passkey proof within the last 10 minutes**), so a session revoked or a proof that goes stale between the read and the write is refused. Unauthenticated attempts are audited as `denied/unauthenticated` with no actor.
+- **Roles.** `role_administrator` grants and revokes the other roles. `case_reviewer` opens cases, links evidence, records findings, requests disclosures and closes cases. `preservation_approver` places and releases holds and captures and disposes of evidence. `case_auditor` reads the audit. `disclosure_approver` approves and records disclosures. Grants require a ready passkey identity and are refused for oneself. Revocation is one-way and immediate.
+- **Bootstrap.** The first `role_administrator` is created once with `node tools/safety-case-bootstrap.mjs --grant ID --account ACCOUNT_UUID [--apply]`. That uses the operator Cloudflare D1 credential, which is the same trust root as the other operator tools. It only succeeds while no administrator is active. Every later grant needs that administrator's authenticated session.
+- **Conflict of interest.** An operator cannot act on, read or list a case or hold whose subject is their own account. Such a case is answered exactly as an absent case (`not_found`) and audited as `conflict_of_interest`.
+- **Restricted surface.** `POST /api/operator/safety-cases/v1/<action>` serves same-origin JSON only, behind the existing origin check and API rate limiter. Bodies must use exact keys with `version: 1` and be at most 16 KB. Responses are `no-store`. The surface has no Chat tool, agent, model access or customer route. Nothing is logged. Identity failures return the ordinary `proof_required`/`identity_changed` codes so the browser can reauthenticate. **No review UI was built**; the actions are callable by an authenticated operator client only.
 
-Verification (local only): `node tests/safety-cases.mjs` passed with 77 checks on disposable SQLite and with `--d1` on actual local D1. Mutation checks confirmed that the deletion, admission and immutability triggers each make a test fail when they are removed. Synthetic placeholders only. The schema was not deployed, and no live database was read.
+### Cases, findings and audit
+
+Cases have no foreign key to `users`, so an ordinary account cascade cannot remove them. Every case opens as `uncertain_flag`. Linking ledger evidence never changes the finding. Only an explicit reviewer decision with a decision reference records `confirmed_policy_finding`, and a later `not_confirmed` decision appends a correction. The findings history is append-only. A case closes only after every hold is released, every disclosure is closed and every evidence capture has finished. Every attempt, read or write, is written to `safety_case_audit` in the same transaction as the outcome it states. Capacity limits fail closed: 10,000 cases, holds, preserved records or evidence objects; 1,000 roles; 1,000 evidence objects or links per case; 100 disclosures per case; and 100,000 audit rows.
+
+### Holds and their scope
+
+A hold needs a preservation approver, an opaque `legal_basis_ref` and a review term of 1–366 days. It stays in force until an explicit audited release. Past its review date it reports `overdue`, but it never lapses. There are three scopes:
+
+- `account`: everything the subject owns.
+- `project`: one project owned by the subject.
+- `object`: one project photo. The hold also pins its project against deletion and owner transfer.
+
+Every per-object deletion and expiry path is listed in `tools/safety-hold-inventory.mjs`. That script scans the source for `DELETE FROM`, R2 deletes and cascades and fails on any path that is unclassified or stale. At October 4, 2026 it lists **78 deletion sites**:
+
+| Decision | Sites |
+|---|---|
+| Blocked by a hold trigger | 10 |
+| Skipped by expiry | 3 |
+| Preserved | 1 |
+| Hold mechanism itself | 2 |
+| Explicitly excluded, with rationale | 62 |
+
+It also lists **10 other paths**, such as overwrites, cascades, restore, Time Travel and external copies. In summary:
+
+- **Blocked** (`RAISE(ABORT,'safety_preservation_hold')`): account deletion and its cascade; project deletion; project owner change; photo removal (`project_files`); site version removal; app visitor deletion and owner visitor erasure; contact deletion; guest-preview feedback and links; and the R2 cleanup queue row.
+- **Skipped by expiry:** contact expiry, traffic rollup expiry, and R2 photo cleanup. A photo removed shortly before an account or project hold stays queued and stored, because queue rows now carry the project and owner. The orphan sweep only lists `photos/` and treats queued keys as retained.
+- **Preserved without visible difference:** profile-photo replacement or removal, and Chat draft discard or inactive expiry. The trigger copies the previous payload into restricted `safety_preserved_records`. Copies follow a covering hold and are deleted when no hold covers them.
+- **Restore:** restore admission refuses (`preservation-hold`) while a hold, an open disclosure or an unfinished capture exists, and inventory evidence must include every stored evidence object with its exact size and digest.
+- **Explicitly excluded, with rationale in the inventory:** authentication, session, queue and idempotency rows; content-free operational records; app document overwrite and recovery points (an owner question); D1 Time Travel and external copies (CMS, GitHub), which are outside this database's control; and browser-only drafts.
+
+**Customer behaviour.** A hold is never disclosed. A blocked action fails with the existing generic error for that action. Expired rows that are retained stay outside the customer's read window. Preserved overwrites look exactly like ordinary success.
+
+### Restricted evidence objects
+
+`captureSafetyEvidence` is available to preservation approvers. It copies a held project photo, a held profile photo or a preserved record into private R2 under `restricted/safety-evidence/<case>/<id>`. The source facts are read server-side, never supplied by the operator. The capture is recorded before the copy, the copy is conditional (`onlyIf` absent) and carries a sha256, and an exact retry resumes after a lost R2 response. No ordinary path lists or deletes the `restricted/` prefix; R2 stays private, with no public route. `disposeSafetyEvidence` deletes an object only after the case is closed and no disclosure is open, and the disposal is audited.
+
+### Lawful export and disclosure — design, manifest-only
+
+Disclosure is a separate two-person operation:
+
+1. A `case_reviewer` requests it with an opaque `legal_process_ref`, a `recipient_ref` and 1–100 stored evidence objects. The manifest sha256 is computed over the sorted items.
+2. A **different** `disclosure_approver` approves that exact manifest. Approval requires every item to be stored, not disposed of and digest-matching.
+3. A `disclosure_approver` records the out-of-band transfer's opaque `outcome_ref`. Either role can cancel before the transfer is recorded.
+
+**Whumpo transmits nothing.** There is no export endpoint, provider, email or download of evidence bytes. The actual transfer procedure is an owner and counsel question. Manifests contain identifiers and digests only.
+
+### Not implemented
+
+- A review UI.
+- A case-retention schedule.
+- Capture of app documents and recovery points.
+- Preservation of D1 Time Travel or external copies.
+- The counsel-approved transfer procedure.
+- Any scanner, hash matching, provider or NCMEC reporting work, which remains owner-deferred.
+
+Legal applicability and the procedure require qualified review before live use (WH-133).
+
+### Verification (local only)
+
+All runs used synthetic placeholders on disposable databases. `node tests/safety-cases.mjs` passed with 84 checks on disposable SQLite and with `--d1` on local D1. `node tests/safety-case-operations.mjs` passed with 99 checks on SQLite with in-memory R2, and with `--d1` on local D1 and local R2. It covers the HTTP surface (declared, stale, revoked, foreign-origin and customer sessions refused), all three hold scopes over every blocked or expiring path, R2 retention, profile-photo preservation, evidence capture, resume and disposal, two-person disclosure, restore suppression, release, conflict-of-interest non-disclosure, and an audit with no raw markers. `tests/chat-interaction-storage.mjs` covers held Chat draft expiry.
 
 ## Operator safety review workflow
 
