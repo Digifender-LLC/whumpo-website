@@ -12,6 +12,7 @@ import {AccountHelp} from './account-help';
 import {useWorkspaceAccount} from './identity/flow';
 import {checkChatRequest,checkFormRequest,checkPhotoUpload,localRecoveryCopy,localRecoveryDestination,localRecoveryNeedsCheck,readLocalRecovery,type LocalCheck,type LocalRecoveryItem} from './lib/local-recovery';
 import {readPhotoUploadStatus} from '../../src/photo-upload-shape';
+import {StatusBadge,type Status} from './components/whumpo/status-badge';
 import type {InteractionReceipt} from '../../src/chat-interactions/types';
 
 const wrap='min-h-11 h-auto whitespace-normal text-left';
@@ -74,11 +75,13 @@ export function SavedWorkPage(){
   </section>
  </div></main>;
 }
+// Status colour follows the design system; the phase word stays the signal.
+const phaseStatus:Record<SavedWorkItem['phase'],Status>={review:'attention',form:'attention',working:'working',uncertain:'working',attention:'attention',finished:'ready',expired:'idle'};
 function SavedWorkEntry({item}:{item:SavedWorkItem}){
  const status=savedWorkStatus(item),expiry=savedWorkExpiry(item),destination=savedWorkDestination(item),place=item.projectName??'Your account',id='saved-work-'+item.kind+'-'+item.id;
  return <article data-saved-work-key={item.key} tabIndex={-1} aria-labelledby={id} className="rounded-lg border bg-card p-4 sm:p-5 space-y-2 min-w-0">
   <h4 id={id} className="font-semibold break-words">{place}<span className="sr-only">, {savedWorkKinds[item.kind]}</span></h4>
-  <p className="text-sm font-medium" data-saved-work-phase={item.phase}>{status.label}</p>
+  <p className="text-sm font-medium" data-saved-work-phase={item.phase}><StatusBadge status={phaseStatus[item.phase]}>{status.label}</StatusBadge></p>
   <p className="text-sm text-muted-foreground">{status.detail}</p>
   {expiry&&<p className="text-sm">{expiry}</p>}
   {destination?<Button asChild variant="secondary" className={wrap}>{destination.kind==='safety'

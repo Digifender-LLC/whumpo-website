@@ -121,11 +121,11 @@ export function StripePricingTable({
       {state.status === 'ready' && tableId ? (
         <>
           {audience === 'personal' && (
-            <p className="text-center text-sm font-semibold text-[#0f2d5b]">
+            <p className="text-center text-sm font-semibold text-ink">
               7-day free trial · Payment method required
             </p>
           )}
-          <p className="mb-5 mt-2 text-center text-sm text-[#526780]">
+          <p className="mb-5 mt-2 text-center text-sm text-ink-muted">
             Test mode. Test checkout does not activate trial or paid access in Whumpo.
           </p>
           {createElement('stripe-pricing-table', {
@@ -135,7 +135,7 @@ export function StripePricingTable({
           })}
         </>
       ) : (
-        <div className="flex h-full min-h-80 flex-col items-center justify-center rounded-xl border border-[#dce6ef] bg-white p-8 text-center">
+        <div className="flex h-full min-h-80 flex-col items-center justify-center rounded-xl border border-line bg-surface-raised p-8 text-center">
           <p role="status" className="text-xl font-bold">
             {state.status === 'loading'
               ? 'Loading plans…'
@@ -143,7 +143,7 @@ export function StripePricingTable({
                 ? 'Plans could not load'
                 : 'Plans are coming soon'}
           </p>
-          <p className="mt-4 max-w-md text-sm text-[#526780]">
+          <p className="mt-4 max-w-md text-sm text-ink-muted">
             The invite-only preview is free. Explore Whumpo while we prepare our paid plans.
           </p>
           {state.status === 'error' && (
@@ -159,7 +159,7 @@ export function StripePricingTable({
               Try again
             </Button>
           )}
-          <Button asChild variant="secondary" className="mt-6 rounded-full bg-white">
+          <Button asChild variant="secondary" className="mt-6">
             <Link to="/workspace" search={{ signup: true }}>
               Explore with an invite
             </Link>

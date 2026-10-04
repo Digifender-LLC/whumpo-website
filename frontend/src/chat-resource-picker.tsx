@@ -17,7 +17,7 @@ export function ChatResourceOptions({field,id,description,invalid,locked,ready,i
  return <div className="space-y-2">
   <fieldset disabled={locked||!ready} aria-describedby={description} aria-invalid={invalid||(ready&&missing.length>0)} className="min-w-0 space-y-2"><legend className="sr-only">{field.label}</legend>
    {multiple&&<p className="text-xs text-muted-foreground">Choose up to {maxItems}. {selected.length} selected.</p>}
-   {items.map((item,index)=>{const checked=selected.includes(item.id);return <label key={item.id} htmlFor={index?id+'-'+item.id:id} className={'flex min-h-12 gap-3 items-center rounded-md border p-3 text-sm '+(checked?'border-primary bg-primary/5':'bg-background')}>
+   {items.map((item,index)=>{const checked=selected.includes(item.id);return <label key={item.id} htmlFor={index?id+'-'+item.id:id} className={'flex min-h-12 gap-3 items-center rounded-md border p-3 text-sm '+(checked?'border-link bg-action-soft':'bg-background')}>
     <input id={index?id+'-'+item.id:id} data-field={index?undefined:field.id} type={multiple?'checkbox':'radio'} name={id} checked={checked} disabled={multiple&&!checked&&selected.length>=maxItems} required={!multiple&&field.required} aria-describedby={description} aria-invalid={invalid} onChange={()=>onChange(multiple?(checked?selected.filter(s=>s!==item.id):[...selected,item.id]):item.id)} className="size-5 shrink-0 accent-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"/>
     <span className="min-w-0 break-words">{item.name}{photo&&item.photo&&<span className="block text-xs text-muted-foreground mt-1">{item.photo.width} × {item.photo.height} · {Math.ceil(item.photo.size/1024)} KB</span>}</span>
    </label>;})}

@@ -44,7 +44,6 @@
  .phone-keyboard .chat-composer>p{display:none}
  .workspace-page{padding:24px 16px 28px}
  .workspace-page>p:first-child{display:none}
- .workspace-page>h1{font-size:30px;line-height:1.15}
  .workspace-page>div{margin-top:24px}
  .workspace-page>p{margin-bottom:24px}
  .workspace-card{border-radius:22px;min-width:0;overflow-wrap:anywhere}
