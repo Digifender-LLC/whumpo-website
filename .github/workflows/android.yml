@@ -103,6 +103,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          # The API 36 image's default userdata partition (~7.2 GB) does not fit
+          # the runner's free disk; a smaller partition is enough for these tests.
+          disk-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
           script: ./gradlew connectedLocalDebugAndroidTest connectedDeployedDebugAndroidTest
