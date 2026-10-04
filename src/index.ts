@@ -407,7 +407,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   const exportMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/export$/);
   if (method === 'GET' && exportMatch) {
     const archive = await ownedExport(env.DB, user.id, exportMatch[1], env.FILES);
-    return archive ? new Response(archive, {headers:{'content-type':'application/zip','content-disposition':`attachment; filename="tellumo-site-${exportMatch[1]}.zip"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer'}}) : error(404,'Saved version not found');
+    return archive ? new Response(archive, {headers:{'content-type':'application/zip','content-disposition':`attachment; filename="whumpo-site-${exportMatch[1]}.zip"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer'}}) : error(404,'Saved version not found');
   }
   // WH-092 owner guest-preview controls. Issuance is feature-gated; listing, revocation,
   // resolution and deletion remain available to the current owner on any plan.
@@ -454,7 +454,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   const directoryHistoryRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory\/history$/);
   if(method==='GET'&&directoryHistoryRoute)return json(await directoryHistory(env.DB,user.id,directoryHistoryRoute[1]));
   const directoryExportRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory\/snapshots\/([0-9a-f-]{36})\/export$/);
-  if(method==='GET'&&directoryExportRoute)return json(await exportDirectory(env.DB,user.id,directoryExportRoute[1],directoryExportRoute[2]),200,{'content-disposition':'attachment; filename="tellumo-directory-'+directoryExportRoute[2]+'.json"'});
+  if(method==='GET'&&directoryExportRoute)return json(await exportDirectory(env.DB,user.id,directoryExportRoute[1],directoryExportRoute[2]),200,{'content-disposition':'attachment; filename="whumpo-directory-'+directoryExportRoute[2]+'.json"'});
   const directoryProject=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory$/);
   if(method==='GET'&&directoryProject){const d=await readDirectory(env.DB,user.id,directoryProject[1]);return json({projectId:d.id,name:d.name,revision:d.revision,listings:d.draft,published:d.published,publishedAt:d.published?d.published_at:null});}
   if(method==='GET'&&pathname==='/api/site-health')return json(await listHealth(env.DB,user.id));

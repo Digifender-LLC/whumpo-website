@@ -24,7 +24,7 @@ try{
  const request=new Request('https://'+a.project+'.whumpo.site'),page=await host.fetch(request,store.env);assert.match(await page.text(),new RegExp('https://whumpo.com/contact/'+a.project));assert.match(page.headers.get('content-security-policy'),/allow-popups-to-escape-sandbox/);
  const env={...store.env,ENVIRONMENT:'test',TURNSTILE_SECRET:'fixture',TURNSTILE_SITE_KEY:'fixture',API_LIMITER:{limit:async()=>({success:true})}};
  const url='https://whumpo.com/contact/'+a.project;
- const form=await contactPage(new Request(url),env,a.project);assert.equal(form.status,200);const formHTML=await form.text();assert.match(formHTML,/data-action="contact"/);if(process.env.TELLUMO_FORM_FIXTURE)await writeFile(process.env.TELLUMO_FORM_FIXTURE,formHTML);assert.ok(!formHTML.includes('Private message:'));
+ const form=await contactPage(new Request(url),env,a.project);assert.equal(form.status,200);const formHTML=await form.text();assert.match(formHTML,/data-action="contact"/);if(process.env.WHUMPO_FORM_FIXTURE)await writeFile(process.env.WHUMPO_FORM_FIXTURE,formHTML);assert.ok(!formHTML.includes('Private message:'));
  const payload={...msg(),revision:String(revision),'cf-turnstile-response':'fixture'};
  const post=(data=payload,origin='https://whumpo.com')=>new Request(url,{method:'POST',headers:{origin},body:new URLSearchParams(data)});
  let calls=0;const good=async(_url,options)=>{if(options)assert.equal(options.redirect,'manual');calls++;return Response.json({success:true,hostname:'whumpo.com',action:'contact',cdata:a.project});};
@@ -41,7 +41,7 @@ try{
  assert.equal((await contactPage(from('203.0.113.51'),env,a.project,good)).status,200);assert.equal((await contactInbox(scope(a.id),a.id,a.project)).messages.length,12);
  assert.ok(!JSON.stringify((await db.prepare('SELECT * FROM public_client_usage').all()).results).includes('203.0.113'),'Only hashed client keys are stored');
  const history=JSON.stringify(await readChat(scope(a.id),a.id)),context=JSON.stringify(await siteContext(scope(a.id),a.id));assert.ok(!history.includes(payload.message));assert.ok(!context.includes(payload.message));
- if(process.env.TELLUMO_INBOX_FIXTURE)await writeFile(process.env.TELLUMO_INBOX_FIXTURE,JSON.stringify({inbox:await contactInbox(scope(a.id),a.id,a.project),chat:await readChat(scope(a.id),a.id),project:a.project}));
+ if(process.env.WHUMPO_INBOX_FIXTURE)await writeFile(process.env.WHUMPO_INBOX_FIXTURE,JSON.stringify({inbox:await contactInbox(scope(a.id),a.id,a.project),chat:await readChat(scope(a.id),a.id),project:a.project}));
  // Publication changes revoke both visible link and intake, including an in-flight verified request.
  const stale=msg();await publish(a);assert.equal(await activeContact(db,a.project),null);await assert.rejects(saveContact(db,a.project,revision,stale),e=>e.status===409);assert.equal((await contactPage(new Request(url),env,a.project)).status,404);assert.ok(!(await (await host.fetch(request,store.env)).text()).includes('/contact/'));
  // Stale publication review cannot enable a newer publication.

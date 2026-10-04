@@ -6,7 +6,7 @@ Owner requested a stopping point, all pending source saved to GitHub, and the ac
 
 - Repository: https://github.com/zemdregon/whumpo
 - **Resume development on `codex/identity-admission`**, using the commit containing this handoff. PR #79 stays OPEN and DRAFT. Its current source is newer than the older primary `main` checkout.
-- Worktree on this host: `/home/ender/.codex/worktrees/pricing-release/TellUmo`. The former `/home/ender/Documents/TellUmo` path is absent; `/home/ender/Documents/Whumpo` is the older checkout described below.
+- Worktree on this host: see `git worktree list`. `/home/ender/Documents/Whumpo` is the older checkout described below.
 - Last deployed runtime source: `f84eac35170d4caecd738e00b89f8bf6efcab432`. Release-evidence commit: `4aaa85baacc22487e28b253db15eb9aee255e66b`.
 - Test platform Worker: `7890ab49-4c01-4a1e-90a8-2c3792e3f77c`, independently verified October 3 at `21:58:41.824Z`. All 40 served assets match; the other three Workers, bindings, 177-table/806-object schema and CMS registry are unchanged. See [release evidence](../chat-workspace-continuity.md#backendapp-safety-test-deployment--october-3-2026-utc).
 - Latest roadmap count: **26/122 accepted parent tasks**. [WH-111/#100](https://github.com/zemdregon/whumpo/issues/100) remains open. The broader goal remains incomplete. GitHub issues own live claims/status; `backlog.json` owns scope/dependencies. Refresh both before resuming.

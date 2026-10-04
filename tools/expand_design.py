@@ -26,7 +26,7 @@ doc.paragraphs[3].text = 'Version 0.5  |  September 29, 2026'
 first_section = next(p for p in doc.paragraphs if p.text.startswith('1. Executive Summary'))
 intro = first_section.insert_paragraph_before()
 intro.add_run('Current implementation. ').bold = True
-intro.add_run('TellUmo runs an invitation-only test at whumpo.com with passkeys, conversational onboarding, metered Muse edits, reusable websites, photos, publication and source export. Contact forms, directory CRUD and recovery, comparisons, health checks and reviewed integration controls are also deployed. Real customer provider setup and acceptance remain pending; the full MVP is incomplete. Sections 1 through 25 preserve the original product vision. Sections 26 through 33 supersede implementation and infrastructure assumptions with current evidence and remaining work. Stripe remains deferred and payments are disabled.')
+intro.add_run('Whumpo runs an invitation-only test at whumpo.com with passkeys, conversational onboarding, metered Muse edits, reusable websites, photos, publication and source export. Contact forms, directory CRUD and recovery, comparisons, health checks and reviewed integration controls are also deployed. Real customer provider setup and acceptance remain pending; the full MVP is incomplete. Sections 1 through 25 preserve the original product vision. Sections 26 through 33 supersede implementation and infrastructure assumptions with current evidence and remaining work. Stripe remains deferred and payments are disabled.')
 
 def paragraph(text):
     doc.add_paragraph(text)
@@ -69,7 +69,7 @@ table(['Boundary', 'Deployed implementation'], [
  ('Files', 'Private Standard R2 bucket tellumo-files; public bucket access disabled'),
  ('Published sites', 'tellumo-sites Worker at PROJECT_ID.whumpo.site; current version and exact photo references only'),
  ('AI provider', 'OpenAI-compatible Responses transport to OpenCode Go Muse Spark 1.3 Contributor'),
- ('Source control', 'Private GitHub repository zemdregon/TellUmo; deployment from the local CLI'),
+ ('Source control', 'Private GitHub repository zemdregon/Whumpo; deployment from the local CLI'),
 ])
 paragraph('Durable Objects, Workflows, Queues, Containers, Sandbox, Workers AI, AI Gateway, Artifacts and Registrar described earlier are architectural options, not deployed dependencies. The current assembler accepts reviewed components and bounded configuration; it does not execute arbitrary customer-generated code. General dynamic apps and isolated build execution remain open requirements under the cost constraint.')
 paragraph('Source of truth: wrangler.jsonc, wrangler.sites.jsonc, migrations, src and the deployment log. The public Worker has D1 and R2 bindings, but no identity or AI secrets. These bindings are not read-only credentials; route code enforces the public read boundary. No customer receives platform provider credentials.')

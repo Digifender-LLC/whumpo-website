@@ -6,7 +6,7 @@ const req=createRequire(import.meta.resolve('wrangler'));
 const {Miniflare,convertV4MiniflareOptions}=req('miniflare');
 const remote=process.env.RUNTIME_PREVIEW_URL;
 if(remote)assert.ok(['localhost','127.0.0.1'].includes(new URL(remote).hostname),'Use the local Wrangler remote-preview proxy, never a public execution endpoint.');
-const dir=await mkdtemp('/tmp/tellumo-runtime-');
+const dir=await mkdtemp('/tmp/whumpo-runtime-');
 execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','deploy','--config','wrangler.runtime.jsonc','--dry-run','--outdir',dir],{stdio:'pipe'});
 const mf=remote?{dispatchFetch:(url,init)=>fetch(new URL(new URL(url).pathname,remote),init),dispose:async()=>{}}:new Miniflare(convertV4MiniflareOptions({modulesRoot:dir,modules:[{type:'ESModule',path:dir+'/worker.js'},...(await readdir(dir)).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/'+p}))],compatibilityDate:'2026-09-29'}));
 const lane=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
