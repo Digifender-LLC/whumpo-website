@@ -1,8 +1,12 @@
 # Whumpo design system
 
-`whumpo-design-system/` is an export of the owner's Claude Design system "Whumpo" ([source artifact](https://claude.ai/artifact/54fhNthQuXKFUrsH7oqwPM), private), captured 2026-10-04 from the version last changed 2026-10-04T01:44Z. It is reference material: the app does not load these files yet.
+`whumpo-design-system/` is an export of the owner's Claude Design system "Whumpo" ([source artifact](https://claude.ai/artifact/54fhNthQuXKFUrsH7oqwPM), private), captured 2026-10-04 from the version last changed 2026-10-04T01:44Z. The app does not load these files directly: `frontend/` generates its token stylesheet from `tokens.json` and bundles its own copies of the fonts.
 
-Status: **imported, not implemented.** `frontend/` still follows [branding.md](../branding.md); adopting these tokens and components is separate work.
+Status: **being adopted in stages.**
+
+- Stage 1 (implemented): `tools/design-tokens.mjs` generates `frontend/src/design-tokens.css` from `tokens.json`; the workspace and landing styles draw color, radius, shadow, focus and type from it. Poppins (500/700) is bundled for display text and Inter stays the UI face. `pnpm check` rejects a stale token file.
+- Stage 2 (planned): shared components replace their existing equivalents.
+- Stage 3 (planned): screen-by-screen migration.
 
 ## Contents
 
@@ -15,7 +19,8 @@ Status: **imported, not implemented.** `frontend/` still follows [branding.md](.
 
 `tokens.css` and the generated API cards exist only inside the artifact viewer and are not included.
 
-## Differences from the current branding doc
+## Notes
 
-- Display face: this system uses Poppins (standing in for a planned Poppins Rounded); [branding.md](../branding.md) says rounded Nunito.
+- Display face: Poppins stands in for a planned Poppins Rounded, which is not a published face. [branding.md](../branding.md) now records Poppins for display and Inter for UI.
+- The 12 icons are provisional until a production set is approved.
 - The brand board here (`assets/Reference/whumpo-brand-board.png`) is a different file from [`../brand/whumpo-brand-board.png`](../brand/whumpo-brand-board.png).

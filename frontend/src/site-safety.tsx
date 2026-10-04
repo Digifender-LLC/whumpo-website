@@ -39,9 +39,9 @@ export function SiteSafetyPage(){
  }
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-3xl space-y-7">
   <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><Button asChild variant="ghost" className={wrap}><Link to="/workspace/$view" params={{view:'dashboard'}} search={{}}><ArrowLeft className="size-4"/>Back to Dashboard</Link></Button><AccountHelp/></div>
-  <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-extrabold">Site & app safety</h1><p className="mt-3 text-muted-foreground">Take published work offline while keeping its saved versions and data. These controls work independently of Chat.</p><p className="mt-3 text-sm text-muted-foreground">Each review names exactly what it takes offline: a website, backend tool or visitor app. CMS articles have separate publishing controls and are outside this page.</p></header>
-  {error&&<p role="alert" className="rounded-xl border p-4 text-sm">{error}</p>}
-  {reviewId&&service===undefined&&<section aria-label="Website withdrawal review" className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4">
+  <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Site & app safety</h1><p className="mt-3 text-muted-foreground">Take published work offline while keeping its saved versions and data. These controls work independently of Chat.</p><p className="mt-3 text-sm text-muted-foreground">Each review names exactly what it takes offline: a website, backend tool or visitor app. CMS articles have separate publishing controls and are outside this page.</p></header>
+  {error&&<p role="alert" className="rounded-md border p-4 text-sm">{error}</p>}
+  {reviewId&&service===undefined&&<section aria-label="Website withdrawal review" className="rounded-lg border bg-card p-5 sm:p-6 space-y-4">
    <h2 tabIndex={-1} className="text-xl font-bold">Saved withdrawal</h2>
    {detail.isFetching&&<p role="status">Checking the saved review…</p>}
    {detail.error&&<p role="alert">{message(detail.error)}</p>}
@@ -51,7 +51,7 @@ export function SiteSafetyPage(){
   {service!==undefined&&(service==='backend'||service==='application'?<ServiceSafetyPanel key={service+projectId} kind={service} project={projectId} review={reviewId}/>:<p role="alert">This saved service link is not valid. Choose a current service below.</p>)}
   <section className="space-y-4" aria-labelledby="safety-websites"><div className="flex flex-wrap items-center justify-between gap-3"><h2 id="safety-websites" className="text-xl font-bold">Your published work</h2><Button variant="outline" className={wrap} disabled={busy||inventory.isFetching} onClick={()=>void inventory.refetch()}>Check publication status</Button></div>
    {inventory.isFetching&&<p role="status">Checking your published work…</p>}{inventory.error&&<p role="alert">{message(inventory.error)}</p>}
-   {inventory.data&&!inventory.error&&!inventory.isFetching&&<>{inventory.data.projects.map(project=><article key={project.id} className="rounded-2xl border bg-card p-5 space-y-3" aria-label={project.name}>
+   {inventory.data&&!inventory.error&&!inventory.isFetching&&<>{inventory.data.projects.map(project=><article key={project.id} className="rounded-lg border bg-card p-5 space-y-3" aria-label={project.name}>
     <h3 className="font-bold text-lg break-words">{project.name}</h3><p className="text-sm break-all">{project.url}</p><p className="text-sm">{project.versionId?'Website published':'Website offline'}</p><div className="flex flex-wrap gap-3">
      {project.versionId&&<Button variant="outline" className={wrap} disabled={busy} onClick={()=>{const id=crypto.randomUUID();void act(()=>send<Receipt>(base+'/reviews',{version:1,id,projectId:project.id,expectedRevision:project.revision}),id,project.id);}}>Review taking website offline</Button>}
      <Button variant="ghost" className={wrap} disabled={busy} onClick={()=>{setReviewAfter(null);void navigate({to:'/workspace/$view',params:{view:'safety'},search:{project:project.id}});}}>Saved withdrawals</Button>

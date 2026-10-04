@@ -135,8 +135,8 @@ export function StripePricingTable({
           })}
         </>
       ) : (
-        <div className="flex h-full min-h-80 flex-col items-center justify-center rounded-3xl border border-[#dce6ef] bg-white p-8 text-center">
-          <p role="status" className="text-xl font-extrabold">
+        <div className="flex h-full min-h-80 flex-col items-center justify-center rounded-xl border border-[#dce6ef] bg-white p-8 text-center">
+          <p role="status" className="text-xl font-bold">
             {state.status === 'loading'
               ? 'Loading plans…'
               : state.status === 'error'
