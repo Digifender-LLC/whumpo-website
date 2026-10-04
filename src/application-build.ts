@@ -1,3 +1,4 @@
+import {projectRuntime} from './runtime-lane';
 import {BackendError,listBackends,testBackend} from './backend-versions';
 import {prepareApplication,readApplicationReview,describeApplicationReview} from './app-activation';
 import {hashToken} from './security';
@@ -57,7 +58,7 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
   throw new BackendError(409,'Application draft was not saved. Check project ownership, the draft allowance and whether existing visitors require a data migration.');
  }
  try{
-  const run=await testBackend(db,service,user,action.projectId,id,id,action.input,{expected:action.expected});
+  const run=await testBackend(db,await projectRuntime(service,action.projectId),user,action.projectId,id,id,action.input,{expected:action.expected});
   if(run.state==='complete'&&'result' in run&&run.result?.ok===true&&run.result?.check?.status==='passed')return describeApplicationReview(await prepareApplication(db,user,action.projectId,id,'enable',id,id));
   return await readApplicationBuild(db,user,id);
  }catch{

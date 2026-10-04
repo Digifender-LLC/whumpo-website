@@ -650,8 +650,27 @@ CREATE TABLE backend_publication_reviews (
 CREATE TABLE backend_public_usage (
  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
  day TEXT NOT NULL,
- calls INTEGER NOT NULL CHECK(calls BETWEEN 1 AND 100),
+ calls INTEGER NOT NULL CHECK(calls BETWEEN 0 AND 100),
  publication_id TEXT NOT NULL REFERENCES backend_publication_reviews(id)
+);
+
+-- Per-client attempt sub-limits inside each project's public allowance (WH-075, src/public-admission.ts).
+-- client_key is a scope/project/UTC-day SHA-256 of the connecting address (IPv6 /64), never the address.
+CREATE TABLE public_client_usage (
+ scope TEXT NOT NULL CHECK(scope IN ('backend','contact','photo')),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ client_key TEXT NOT NULL CHECK(length(client_key)=64),
+ day TEXT NOT NULL,
+ uses INTEGER NOT NULL CHECK(uses BETWEEN 1 AND 400),
+ PRIMARY KEY(scope,project_id,client_key,day)
+);
+
+-- Per-project monthly public photo reads, charged with the platform storage_usage ceiling (WH-075).
+CREATE TABLE storage_project_usage (
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ period TEXT NOT NULL,
+ read_ops INTEGER NOT NULL CHECK(read_ops BETWEEN 1 AND 10000),
+ PRIMARY KEY(project_id,period)
 );
 
 CREATE TABLE backend_form_settings (
@@ -1685,6 +1704,8 @@ CREATE UNIQUE INDEX cms_discard_pending ON cms_discard_reviews(publication_id) W
 CREATE INDEX backend_publication_reviews_project ON backend_publication_reviews(project_id);
 
 CREATE INDEX backend_public_usage_day ON backend_public_usage(day);
+CREATE INDEX public_client_usage_day ON public_client_usage(day);
+CREATE INDEX storage_project_usage_period ON storage_project_usage(period);
 
 CREATE INDEX backend_form_reviews_project ON backend_form_reviews(project_id);
 
@@ -2138,7 +2159,9 @@ WHEN NOT EXISTS(SELECT 1 FROM contact_submissions WHERE id=NEW.id)
 BEGIN
  SELECT RAISE(ABORT,'contact_received') WHERE EXISTS(SELECT 1 FROM contact_receipts WHERE id=NEW.id);
  SELECT RAISE(ABORT,'contact_unavailable') WHERE NOT EXISTS(SELECT 1 FROM contact_settings c JOIN publications s ON s.project_id=c.project_id WHERE c.project_id=NEW.project_id AND c.revision=NEW.settings_revision AND c.enabled=1 AND s.version_id IS NOT NULL AND s.revision=c.publication_revision);
- SELECT RAISE(ABORT,'contact_capacity') WHERE (SELECT COUNT(*) FROM contact_receipts WHERE project_id=NEW.project_id)>=100 OR (SELECT COUNT(*) FROM contact_receipts)>=1000;
+ SELECT RAISE(ABORT,'contact_capacity') WHERE (SELECT COUNT(*) FROM contact_receipts WHERE project_id=NEW.project_id)>=100 OR (SELECT COUNT(*) FROM contact_receipts)>=1000 OR
+ -- Fair share: once 500 receipts are retained platform-wide, only accounts retaining fewer than 100 are admitted.
+ ((SELECT COUNT(*) FROM contact_receipts)>=500 AND (SELECT COUNT(*) FROM contact_receipts r JOIN projects p ON p.id=r.project_id WHERE p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))>=100);
  SELECT RAISE(ABORT,'contact_rate') WHERE (SELECT COUNT(*) FROM contact_receipts WHERE project_id=NEW.project_id AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour'))>=20;
 END;
 
@@ -2430,11 +2453,39 @@ CREATE TRIGGER backend_public_usage_insert BEFORE INSERT ON backend_public_usage
  SELECT RAISE(ABORT,'backend_public_quota') WHERE
  coalesce((SELECT calls FROM backend_public_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=100 OR
  coalesce((SELECT sum(u.calls) FROM backend_public_usage u JOIN projects p ON p.id=u.project_id WHERE u.day=NEW.day AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=500 OR
- coalesce((SELECT sum(calls) FROM backend_public_usage WHERE day=NEW.day),0)>=1000;
+ coalesce((SELECT sum(calls) FROM backend_public_usage WHERE day=NEW.day),0)>=1000 OR
+ -- Fair share: once half the platform pool is used, only accounts under 100 calls today are admitted.
+ (coalesce((SELECT sum(calls) FROM backend_public_usage WHERE day=NEW.day),0)>=500 AND
+  coalesce((SELECT sum(u.calls) FROM backend_public_usage u JOIN projects p ON p.id=u.project_id WHERE u.day=NEW.day AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=100);
 END;
 
+-- Increment by reservation, or refund exactly one call of the same day after the runtime reported busy/unavailable.
 CREATE TRIGGER backend_public_usage_update BEFORE UPDATE ON backend_public_usage BEGIN
- SELECT RAISE(ABORT,'backend_public_counter') WHERE NEW.project_id<>OLD.project_id OR NEW.day<>strftime('%Y-%m-%d','now') OR NEW.calls<> (OLD.calls*(NEW.day=OLD.day)+1);
+ SELECT RAISE(ABORT,'backend_public_counter') WHERE NEW.project_id<>OLD.project_id OR NOT (
+  (NEW.day=strftime('%Y-%m-%d','now') AND NEW.calls=OLD.calls*(NEW.day=OLD.day)+1) OR
+  (NEW.day=OLD.day AND NEW.calls=OLD.calls-1 AND NEW.publication_id=OLD.publication_id));
+END;
+
+CREATE TRIGGER public_client_usage_insert BEFORE INSERT ON public_client_usage BEGIN
+ SELECT RAISE(ABORT,'public_client_counter') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR NEW.uses<>1;
+ SELECT RAISE(ABORT,'public_client_quota') WHERE coalesce((SELECT uses FROM public_client_usage WHERE scope=NEW.scope AND project_id=NEW.project_id AND client_key=NEW.client_key AND day=NEW.day),0)>=CASE NEW.scope WHEN 'backend' THEN 20 WHEN 'contact' THEN 10 ELSE 400 END;
+END;
+
+CREATE TRIGGER public_client_usage_update BEFORE UPDATE ON public_client_usage BEGIN
+ SELECT RAISE(ABORT,'public_client_counter') WHERE NEW.scope<>OLD.scope OR NEW.project_id<>OLD.project_id OR NEW.client_key<>OLD.client_key OR NEW.day<>OLD.day OR NEW.uses<>OLD.uses+1;
+END;
+
+CREATE TRIGGER storage_project_usage_insert BEFORE INSERT ON storage_project_usage BEGIN
+ SELECT RAISE(ABORT,'storage_project_counter') WHERE NEW.period<>strftime('%Y-%m','now') OR NEW.read_ops<>1;
+ SELECT RAISE(ABORT,'storage_project_quota') WHERE
+ coalesce((SELECT read_ops FROM storage_project_usage WHERE project_id=NEW.project_id AND period=NEW.period),0)>=10000 OR
+ -- Fair share: once half the platform read ceiling is used, only accounts under 10,000 reads this month are admitted.
+ (coalesce((SELECT read_ops FROM storage_usage WHERE period=NEW.period),0)>=50000 AND
+  coalesce((SELECT sum(u.read_ops) FROM storage_project_usage u JOIN projects p ON p.id=u.project_id WHERE u.period=NEW.period AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=10000);
+END;
+
+CREATE TRIGGER storage_project_usage_update BEFORE UPDATE ON storage_project_usage BEGIN
+ SELECT RAISE(ABORT,'storage_project_counter') WHERE NEW.project_id<>OLD.project_id OR NEW.period<>OLD.period OR NEW.read_ops<>OLD.read_ops+1;
 END;
 
 CREATE TRIGGER backend_form_admit BEFORE INSERT ON backend_form_reviews BEGIN
@@ -2601,11 +2652,19 @@ CREATE TRIGGER app_session_page BEFORE INSERT ON app_sessions WHEN NEW.page_revi
 
 CREATE TRIGGER app_run_admit BEFORE INSERT ON app_runs BEGIN
  SELECT RAISE(ABORT,'app_run_identity') WHERE NEW.state<>'running' OR NOT EXISTS(SELECT 1 FROM app_visitors v JOIN app_spaces a ON a.project_id=v.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_documents d ON d.visitor_id=v.id JOIN app_sessions s ON s.visitor_id=v.id WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=0 AND a.enabled=1 AND a.version_id=NEW.version_id AND a.revision=NEW.program_revision AND d.revision=NEW.base_revision AND s.token_hash=NEW.session_hash AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'));
- SELECT RAISE(ABORT,'app_run_quota') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR (SELECT count(*) FROM app_runs)>=10000 OR (SELECT count(*) FROM app_runs WHERE visitor_id=NEW.visitor_id AND day=NEW.day)>=20 OR coalesce((SELECT attempts FROM app_daily_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=100 OR coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=1000;
+ SELECT RAISE(ABORT,'app_run_quota') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR (SELECT count(*) FROM app_runs)>=10000 OR (SELECT count(*) FROM app_runs WHERE visitor_id=NEW.visitor_id AND day=NEW.day)>=20 OR coalesce((SELECT attempts FROM app_daily_usage WHERE project_id=NEW.project_id AND day=NEW.day),0)>=100 OR coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=1000
+ -- Fair share: once half the platform pool is used, only accounts under 100 transitions today are admitted.
+ OR (coalesce((SELECT sum(attempts) FROM app_daily_usage WHERE day=NEW.day),0)>=500 AND coalesce((SELECT sum(u.attempts) FROM app_daily_usage u JOIN projects p ON p.id=u.project_id WHERE u.day=NEW.day AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id)),0)>=100);
 END;
 
 CREATE TRIGGER app_run_meter AFTER INSERT ON app_runs BEGIN
  INSERT INTO app_daily_usage(project_id,day,attempts) VALUES(NEW.project_id,NEW.day,1) ON CONFLICT(project_id,day) DO UPDATE SET attempts=attempts+1;
+END;
+
+-- A run the runtime refused (busy) or never answered (unavailable) returns its project allowance exactly once.
+-- The run row and its per-visitor daily count remain, so attempts stay bounded per visitor.
+CREATE TRIGGER app_run_refund AFTER UPDATE OF state ON app_runs WHEN OLD.state='running' AND NEW.state='failed' AND json_extract(NEW.result_json,'$.error') IN ('busy','unavailable') BEGIN
+ UPDATE app_daily_usage SET attempts=attempts-1 WHERE project_id=NEW.project_id AND day=NEW.day AND attempts>0;
 END;
 
 CREATE TRIGGER app_deletion_receipt_immutable BEFORE UPDATE ON app_deletion_receipts BEGIN SELECT RAISE(ABORT,'app_deletion_receipt_immutable'); END;

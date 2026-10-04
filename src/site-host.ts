@@ -12,7 +12,8 @@ import {directoryPage} from './directory-page';
 import {publishedHTML} from './published-html';
 import {requireSpecificationAvailable} from './specification-safety';
 import { previewHeaders } from './components';
-import {reserveStorage,StorageLimitError} from './storage-budget';
+import {reservePublicPhotoRead,StorageLimitError} from './storage-budget';
+import {PublicClientLimitError} from './public-admission';
 /** Public serving boundary: only current published HTML and its exact photo dependencies. */
 const serving = {
  async fetch(request:Request,env:Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher}):Promise<Response>{
@@ -42,7 +43,7 @@ const serving = {
     const photo=await env.DB.prepare(`SELECT s.version_id,f.object_key,f.size,f.digest FROM publications s JOIN version_photos v ON v.version_id=s.version_id JOIN project_files f ON f.id=v.file_id AND f.project_id=s.project_id WHERE s.project_id=? AND f.id=? AND f.status='ready' AND ${approvedPhotoSQL}`).bind(asset[1],asset[2]).first<{version_id:string;object_key:string;size:number;digest:string}>();
     if(!photo)return new Response('Photo not found',{status:404,headers});
     await requireSpecificationAvailable(env.DB,photo.version_id);
-    await reserveStorage(env.DB,'read');
+    await reservePublicPhotoRead(env.DB,request,asset[1]);
     const object=await env.FILES.get(photo.object_key);
     if(!object||object.size!==photo.size||object.customMetadata?.sha256!==photo.digest){await object?.body.cancel();return new Response('Photo unavailable',{status:503,headers});}
     const bytes=new Uint8Array(await object.arrayBuffer());if(!await photoBytesMatch(bytes,photo.digest))return new Response('Photo unavailable',{status:503,headers});
@@ -59,7 +60,7 @@ const serving = {
    const formPolicy=form?"; script-src "+await backendFormScriptPolicy()+"; connect-src "+projectOrigin(match[1])+"":'';
    const sandbox='sandbox'+(form?' allow-scripts allow-forms':'')+(contact?' allow-popups allow-popups-to-escape-sandbox':'')+';';
    return new Response(request.method==='HEAD'?null:html,{headers:{...headers,'content-security-policy':headers['content-security-policy'].replace('sandbox;',sandbox)+"; img-src 'self'"+formPolicy}});
-  }catch(cause){return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
+  }catch(cause){if(cause instanceof PublicClientLimitError)return new Response('Too many photo requests from this connection today',{status:429,headers});return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
  }
 } satisfies ExportedHandler<Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher}>;
 

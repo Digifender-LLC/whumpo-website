@@ -1,11 +1,12 @@
 import type {CMSArticleImage} from './cms-article-images';
 import {CMSProjectError} from './cms-error';
-import {reserveStorage} from './storage-budget';
+import {reserveStorage,reservePublicPhotoRead} from './storage-budget';
+import {PublicClientLimitError} from './public-admission';
 type Media={review_id:string;media_id:string;user_id:string;project_id:string;digest:string;size:number;width:number;height:number;state:'pending'|'ready'};
 export const cmsPublicationMediaKey=(row:Pick<Media,'project_id'|'review_id'|'digest'>)=>`cms-publications/${row.project_id}/${row.review_id}/${row.digest}.jpg`;
 const hash=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),v=>v.toString(16).padStart(2,'0')).join('');
-async function verifiedObject(db:D1Database,files:R2Bucket,row:Media){
- await reserveStorage(db,'read');const object=await files.get(cmsPublicationMediaKey(row));if(!object)return null;
+async function verifiedObject(db:D1Database,files:R2Bucket,row:Media,reserve=()=>reserveStorage(db,'read')){
+ await reserve();const object=await files.get(cmsPublicationMediaKey(row));if(!object)return null;
  if(object.size!==row.size||object.size>1048576){await object.body.cancel();throw new CMSProjectError(503,'Frozen article image could not be verified');}
  const bytes=new Uint8Array(await object.arrayBuffer());if(await hash(bytes)!==row.digest)throw new CMSProjectError(503,'Frozen article image could not be verified');return bytes;
 }
@@ -32,7 +33,7 @@ export async function publicCMSPublicationImage(request:Request,db:D1Database,fi
  if(!['GET','HEAD'].includes(request.method))return new Response(null,{status:405,headers:{...headers,allow:'GET, HEAD'}});
  const row=await db.prepare("SELECT m.* FROM cms_publication_media m JOIN cms_live_articles a ON a.publication_id=m.review_id AND a.project_id=m.project_id AND a.user_id=m.user_id WHERE m.project_id=? AND m.review_id=? AND m.digest=? AND m.state='ready' LIMIT 1").bind(project,review,digest).first<Media>();
  if(!row)return new Response(null,{status:404,headers});
- try{const bytes=await verifiedObject(db,files,row);if(!bytes)return new Response(null,{status:503,headers});return new Response(request.method==='HEAD'?null:new Uint8Array(bytes),{headers:{...headers,'content-length':String(bytes.length)}});}catch{return new Response(null,{status:503,headers});}
+ try{const bytes=await verifiedObject(db,files,row,()=>reservePublicPhotoRead(db,request,project));if(!bytes)return new Response(null,{status:503,headers});return new Response(request.method==='HEAD'?null:new Uint8Array(bytes),{headers:{...headers,'content-length':String(bytes.length)}});}catch(cause){return new Response(null,{status:cause instanceof PublicClientLimitError?429:503,headers});}
 }
 
 /** Inline only verified frozen JPEGs into an authenticated review; no public access is granted. */

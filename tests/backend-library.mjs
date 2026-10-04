@@ -36,7 +36,7 @@ try{
  for(const table of ['backend_runs','backend_publications'])assert.equal((await db.prepare('SELECT COUNT(*) n FROM '+table).first()).n,0);
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','deploy','--config','wrangler.runtime.jsonc','--dry-run','--outdir',dir+'/runtime'],{stdio:'pipe',maxBuffer:16*1024*1024});
  const req=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=req('miniflare');runtime=new Miniflare(convertV4MiniflareOptions({modulesRoot:dir+'/runtime',modules:[{type:'ESModule',path:dir+'/runtime/worker.js'},...(await readdir(dir+'/runtime')).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/runtime/'+p}))],compatibilityDate:'2026-09-29'}));
- async function run(reference,input){const e=await readBackendComponent(reference);return (await runtime.dispatchFetch('http://runtime/execute',{method:'POST',body:JSON.stringify({version:1,source:e.source,input})})).json();}
+ async function run(reference,input){const e=await readBackendComponent(reference);return (await runtime.dispatchFetch('http://runtime/execute',{method:'POST',headers:{'x-whumpo-lane':'a'.repeat(64)},body:JSON.stringify({version:1,source:e.source,input})})).json();}
  for(const e of backendLibrary){assert.equal(e.artifactDigest,(await readBackendComponent(e.reference)).digest);assert.deepEqual(await run(e.reference,e.example.input),{ok:true,value:e.example.expected});assert.deepEqual(e.capabilities,[]);}
  assert.deepEqual(await run('line-total@1',{items:[]}),{ok:true,value:{totalCents:0}});
  assert.deepEqual(await run('line-total@1',{items:Array.from({length:50},()=>({unitCents:100000000,quantity:1000}))}),{ok:true,value:{totalCents:5000000000000}});

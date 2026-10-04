@@ -103,6 +103,8 @@ const service={fetch:async(url,init)=>{
  stats.runtime++;stats.runtimeInflight++;stats.runtimePeak=Math.max(stats.runtimePeak,stats.runtimeInflight);const t=performance.now();
  try{return await runtime.dispatchFetch(url,init);}finally{stats.runtimeInflight--;stats.runtimeMs.push(performance.now()-t);}
 }};
+// Seeding calls testBackend directly, bypassing the platform's per-project lane wrapper; give them a fixture lane.
+const seedRuntime={fetch:(url,init)=>service.fetch(url,{...init,headers:{'x-whumpo-lane':'e'.repeat(64),...init?.headers}})};
 const cdb=countingDatabase(db);
 const env={...store.env,DB:cdb,ENVIRONMENT:'local',AUTH_LIMITER,API_LIMITER,BACKEND_RUNTIME:service,ASSETS:{fetch:async request=>{const p=new URL(request.url).pathname;const file=['/visitor.js','/visitor.css'].includes(p)?p:'/index.html';return new Response(await readFile('public-app'+file),{headers:{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}});}}};
 const seedEnv={...store.env,DB:db};
@@ -133,7 +135,7 @@ const abusive='export default i=>{if(i&&i.mode==="spin"){while(true){}}if(i&&i.m
 async function publishBackend(t,project,source){
  const version=id(),run=id(),review=id();
  await m.backend.saveBackend(t.scope,t.user,project,version,source);
- const test=await m.backend.testBackend(t.scope,service,t.user,project,version,run,{a:1,b:2});if(!test?.result?.ok)throw Error('Seed backend test failed '+JSON.stringify(test));
+ const test=await m.backend.testBackend(t.scope,seedRuntime,t.user,project,version,run,{a:1,b:2});if(!test?.result?.ok)throw Error('Seed backend test failed '+JSON.stringify(test));
  await api(t,'/projects/'+project+'/backend-publication',{id:review,operation:'publish',versionId:version,runId:run});
  await api(t,'/backend-publication-reviews/'+review+'/confirm',{});
  return version;
@@ -153,7 +155,7 @@ async function seedTenant(name,role,{abusiveSource=false}={}){
  // Visitor application on the same project: program, live page, invited visitor sessions.
  const appVersion=id(),appTest=id(),appReview=id(),pageReview=id();
  await m.backend.saveBackend(t.scope,t.user,t.project,appVersion,'export default ({state,input})=>({state:{note:input.note,edits:(state.edits??0)+1},result:"Saved"})');
- const tested=await m.backend.testBackend(t.scope,service,t.user,t.project,appVersion,appTest,{state:{},input:{note:'seed'}});if(!tested?.result?.ok)throw Error('App test failed');
+ const tested=await m.backend.testBackend(t.scope,seedRuntime,t.user,t.project,appVersion,appTest,{state:{},input:{note:'seed'}});if(!tested?.result?.ok)throw Error('App test failed');
  await m.appActivation.prepareApplication(t.scope,t.user,t.project,appReview,'enable',appVersion,appTest);await m.appActivation.confirmApplication(t.scope,t.user,appReview);
  await api(t,'/projects/'+t.project+'/application-page',{id:pageReview,form:{title:'Capacity notebook',description:'Synthetic',buttonLabel:'Save',fields:[{key:'note',label:'Note',type:'text'}]}});
  await api(t,'/application-page-reviews/'+pageReview+'/confirm',{});
@@ -241,7 +243,9 @@ try{
  log(`Seeded ${tenantCount} tenants (published photo site, contact form, public backend, live visitor app) in ${round((performance.now()-t0)/1000)} s`);
 
  // Runtime bounds, called directly at the service boundary (no gateway, no quotas).
- const call=async(source,input,rawBody)=>{const t=performance.now();const r=await runtime.dispatchFetch('https://runtime/execute',{method:'POST',headers:{'content-type':'application/json'},body:rawBody??JSON.stringify({version:1,source,input})});const body=await r.json().catch(()=>({}));return {status:r.status,result:body.ok===true?'ok':body.error??'?',ms:performance.now()-t};};
+ // Each direct call names an opaque fairness lane (WH-075); by default a fresh lane, like distinct projects.
+ const newLane=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
+ const call=async(source,input,rawBody,lane=newLane())=>{const t=performance.now();const r=await runtime.dispatchFetch('https://runtime/execute',{method:'POST',headers:{'content-type':'application/json','x-whumpo-lane':lane},body:rawBody??JSON.stringify({version:1,source,input})});const body=await r.json().catch(()=>({}));return {status:r.status,result:body.ok===true?'ok':body.error??'?',ms:performance.now()-t};};
  const bound=[];const row=async(name,source,input,raw)=>{const first=await call(source,input,raw);const after=await call('export default ({a,b})=>({sum:a+b})',{a:1,b:2});bound.push({case:name,status:first.status,result:first.result,ms:round(first.ms),nextBenign:after.result});};
  await call(calculator,{a:1,b:1});
  await row('benign sum',calculator,{a:1,b:2});
@@ -255,14 +259,14 @@ try{
  await row('request body over 48 KiB','export default ()=>1',null,JSON.stringify({version:1,source:'export default ()=>1',input:{v:'x'.repeat(50000)}}));
  await row('regex backtracking','export default ()=>/^(a+)+$/.test("a".repeat(40)+"b")',{});
  report.runtimeBounds=bound;
- // Concurrency gate: runtime allows 2 simultaneous guest executions, then returns busy (503).
+ // Concurrency gate: runtime allows 2 simultaneous guest executions, at most 1 per lane, then returns busy (503).
  const conc=[];
- for(const [label,source,input] of [['benign',calculator,{a:1,b:2}],['spinning',abusive,{mode:'spin'}]]){
+ for(const lanes of ['distinct','same'])for(const [label,source,input] of [['benign',calculator,{a:1,b:2}],['spinning',abusive,{mode:'spin'}]]){
   for(const level of smoke?[1,2,4]:[1,2,4,8,16]){
    const waves=smoke?2:4,res=[];const t=performance.now();
-   for(let w=0;w<waves;w++)res.push(...await Promise.all(Array.from({length:level},()=>call(source,input))));
+   for(let w=0;w<waves;w++){const shared=newLane();res.push(...await Promise.all(Array.from({length:level},()=>call(source,input,undefined,lanes==='same'?shared:newLane()))));}
    const ms=res.map(r=>r.ms).sort((a,b)=>a-b),busy=res.filter(r=>r.result==='busy').length;
-   conc.push({workload:label,concurrency:level,calls:res.length,busy,okOrGuestError:res.length-busy,p50:round(pct(ms,50)),p95:round(pct(ms,95)),max:round(ms[ms.length-1]),throughputPerSec:round(res.length/((performance.now()-t)/1000),1)});
+   conc.push({lanes,workload:label,concurrency:level,calls:res.length,busy,okOrGuestError:res.length-busy,p50:round(pct(ms,50)),p95:round(pct(ms,95)),max:round(ms[ms.length-1]),throughputPerSec:round(res.length/((performance.now()-t)/1000),1)});
   }
  }
  report.runtimeConcurrency=conc;
@@ -308,6 +312,10 @@ try{
   await Promise.all([pool(nj,smoke?8:24),...victims.map(t=>pool(victimJobs(t,{phase:'B-noisy',group:'victim'}),3))]);loop.disable();
   const wall=(performance.now()-start)/1000;
   report.phases.B={wallSeconds:round(wall),eventLoopDelayMs:{p50:round(loop.percentile(50)/1e6),p99:round(loop.percentile(99)/1e6),max:round(loop.max/1e6)},victim:allSummary(victimRows('B-noisy')),victimByKind:summarize(victimRows('B-noisy')),noisy:allSummary(records.filter(r=>r.phase==='B-noisy'&&r.group==='noisy')),noisyByKind:summarize(records.filter(r=>r.phase==='B-noisy'&&r.group==='noisy')),d1Statements:stats.d1-d0,runtimeCalls:stats.runtime-r0,runtimePeakInflight:stats.runtimePeak,previousPeak:peak0};
+  // F4: runtime refusals (503 busy/unavailable) must not be charged; executed calls (200/422) are.
+  const charged=[];
+  for(const t of [noisy,...victims]){const mine=records.filter(r=>r.tenant===t.name&&r.kind==='backend');charged.push({tenant:t.name,executed:mine.filter(r=>r.status===200||r.status===422).length,busy503:mine.filter(r=>r.status===503).length,refused429:mine.filter(r=>r.status===429).length,projectCounter:(await db.prepare('SELECT calls FROM backend_public_usage WHERE project_id=?').bind(t.project).first())?.calls??0});}
+  report.phases.B.backendCharging=charged;
   log(`Phase B (noisy neighbour) ${report.phases.B.wallSeconds}s`);
  }
  // ---- Phase P: what per-IP limits do and do not do
@@ -318,10 +326,25 @@ try{
    await probe('contact form GET, one IP (API_LIMITER 120/60 s)',()=>ops.contactGet(t,{phase:'P'},'203.0.113.77'),n),
    await probe('contact form GET, distinct IP each request',()=>ops.contactGet(t,{phase:'P'}),n),
    await probe('site page GET, one IP (no limiter in site host)',()=>ops.site(t,{phase:'P'},'203.0.113.78'),n),
-   await probe('public backend POST, one IP (project quota only)',(i)=>ops.backend(t,{phase:'P'},{a:i,b:1},'203.0.113.79'),smoke?3:5),
+   await probe('public backend POST, one IP (20/client/project/day inside the project quota)',(i)=>ops.backend(t,{phase:'P'},{a:i,b:1},'203.0.113.79'),smoke?3:5),
    await probe('visitor app page GET, one IP (API_LIMITER 120/60 s)',()=>ops.appPage(t,{phase:'P'},'203.0.113.80'),n),
   ];
   log('Per-IP limiter probe done.');
+ }
+ // ---- Phase L: anonymous lockout (F5). One source floods a fresh tenant; others must still be served.
+ {
+  const t=await seedTenant('lockout','victim');const one='203.0.113.90',start=performance.now();
+  const probe=async(label,fn,n,concurrency=1)=>{const rows=[];const jobs=Array.from({length:n},(_,i)=>async()=>{rows.push(await fn(i));});await pool(jobs,concurrency);return {label,requests:n,ok:rows.filter(r=>r.status===200).length,limited429:rows.filter(r=>r.status===429).length,other:rows.filter(r=>![200,429].includes(r.status)).length};};
+  const rows=[
+   await probe('public backend POST, one IP',i=>ops.backend(t,{phase:'L'},{a:i,b:1},one),bounded(40)),
+   await probe('public backend POST, distinct IPs afterwards',i=>ops.backend(t,{phase:'L'},{a:i,b:2}),bounded(10)),
+   await probe('contact POST, one IP',()=>ops.contactPost(t,{phase:'L'},one),bounded(15)),
+   await probe('contact POST, distinct IPs afterwards',()=>ops.contactPost(t,{phase:'L'}),bounded(3)),
+   await probe('photo GET, one IP',()=>ops.photo(t,{phase:'L'},one),smoke?20:450,8),
+   await probe('photo GET, distinct IPs afterwards',()=>ops.photo(t,{phase:'L'}),bounded(10)),
+  ];
+  report.phases.L={wallSeconds:round((performance.now()-start)/1000),rows,projectBackendCalls:(await db.prepare('SELECT calls FROM backend_public_usage WHERE project_id=?').bind(t.project).first())?.calls??0,clientLimits:{backend:20,contact:10,photo:400}};
+  log(`Phase L (anonymous lockout) ${report.phases.L.wallSeconds}s`);
  }
  // ---- Phase D: shared daily budgets. Real traffic from filler accounts, 5 projects each.
  {
@@ -336,8 +359,11 @@ try{
   await pool(shuffle(jobs),16);
   const after=await usage(),victimAfter=await own(victims[0]);
   const probes=[];for(let i=0;i<bounded(5);i++)probes.push(await ops.backend(victims[0],{phase:'D-victim-probe',group:'victim'}));
+  // A brand-new light account after the fillers: fair share must still admit it.
+  const fresh=await account();fresh.name='fresh-light';const freshProject=await newProjectRow(fresh,'Fresh light');await publishBackend(fresh,freshProject,calculator);
+  for(let i=0;i<bounded(10);i++)await ops.backend({...fresh,project:freshProject},{phase:'D-fresh-probe',group:'victim'});
   const finalUsage=await usage(),accountSums=(await db.prepare('SELECT p.owner_user_id u,sum(c.calls) n FROM backend_public_usage c JOIN projects p ON p.id=c.project_id WHERE c.day=? GROUP BY p.owner_user_id ORDER BY n DESC').bind(day()).all()).results;
-  report.phases.D={wallSeconds:round((performance.now()-start)/1000),platformBackendCallsBefore:before,afterFillers:after,afterVictimProbe:finalUsage,fillerProjects:fillers.length,fillerAccounts:accounts,fillerCodes:summarize(records.filter(r=>r.phase==='D-fill')).backend?.codes,victimOwnProjectCallsBefore:victimBefore,victimOwnProjectCallsAfter:victimAfter,victimProbeCodes:summarize(records.filter(r=>r.phase==='D-victim-probe')).backend?.codes,largestAccountDailySum:accountSums[0]?.n??0,platformCap:1000,accountCap:500,projectCap:100};
+  report.phases.D={wallSeconds:round((performance.now()-start)/1000),platformBackendCallsBefore:before,afterFillers:after,afterVictimProbe:finalUsage,fillerProjects:fillers.length,fillerAccounts:accounts,fillerCodes:summarize(records.filter(r=>r.phase==='D-fill')).backend?.codes,victimOwnProjectCallsBefore:victimBefore,victimOwnProjectCallsAfter:victimAfter,victimProbeCodes:summarize(records.filter(r=>r.phase==='D-victim-probe')).backend?.codes,freshAccountProbeCodes:summarize(records.filter(r=>r.phase==='D-fresh-probe')).backend?.codes,accountDailySums:accountSums.map(r=>r.n),largestAccountDailySum:accountSums[0]?.n??0,platformCap:1000,accountCap:500,projectCap:100,fairShare:{reserveFrom:500,perAccount:100}};
   log(`Phase D (shared platform budget) ${report.phases.D.wallSeconds}s: platform used ${finalUsage}/1000`);
  }
  // ---- Phase C: serving and recovery while the backend budget is exhausted and the noisy tenant is spent
@@ -349,23 +375,29 @@ try{
   await sample('victim contact form GET',()=>ops.contactGet(t,{phase:'C'}),n);
   await sample('victim visitor app page',()=>ops.appPage(t,{phase:'C'}),n);
   await sample('victim visitor transition',async()=>{const v=t.visitors[10];const before=records.length;await ops.visitor(t,{phase:'C'},v,1);return records[before];},3);
-  await sample('victim public backend (platform daily budget spent)',()=>ops.backend(t,{phase:'C'}),3);
+  await sample('victim public backend after filler accounts (fair share)',()=>ops.backend(t,{phase:'C'}),3);
   await sample('noisy tenant own site page',()=>ops.site(noisy,{phase:'C'}),n);
   // Runtime recovery after hostile traffic: a benign call succeeds immediately.
   const recovery=[];for(let i=0;i<5;i++)recovery.push((await call(calculator,{a:1,b:2})).result);
   report.phases.C={samples:rows,runtimeRecoveryAfterHostile:recovery};
   log('Phase C (serving and recovery) done.');
  }
- // ---- Phase E: shared monthly R2 read budget (platform-wide, not per tenant)
+ // ---- Phase E: monthly R2 read budgets. Counters are pre-set by fixture writes (the mechanism is measured, not 100,000 requests).
  {
   const period=new Date().toISOString().slice(0,7),readsBefore=(await db.prepare('SELECT read_ops FROM storage_usage WHERE period=?').bind(period).first())?.read_ops??0;
-  // Synthetic pre-load of the counter: 100,000 real requests are unnecessary to show the shared effect.
-  await db.prepare('UPDATE storage_usage SET read_ops=? WHERE period=?').bind(99990,period).run();
+  const count=rows=>({requests:rows.length,ok:rows.filter(r=>r.status===200).length,status503:rows.filter(r=>r.status===503).length,status429:rows.filter(r=>r.status===429).length});
+  // E1: the noisy tenant reaches its per-project monthly budget (10,000) while the platform is past the 50,000 fair-share mark.
+  const trigger=(await db.prepare("SELECT sql FROM sqlite_master WHERE name='storage_project_usage_update'").first()).sql;
+  await db.prepare('DROP TRIGGER storage_project_usage_update').run();await db.prepare('UPDATE storage_project_usage SET read_ops=? WHERE project_id=? AND period=?').bind(9990,noisy.project,period).run();await db.prepare(trigger).run();
+  await db.prepare('UPDATE storage_usage SET read_ops=? WHERE period=?').bind(60000,period).run();
   const burst=[];for(let i=0;i<20;i++)burst.push(await ops.photo(noisy,{phase:'E',group:'noisy'}));
   const victim=[];for(let i=0;i<5;i++)victim.push(await ops.photo(victims[1]??victims[0],{phase:'E',group:'victim'}));
+  // E2: the platform ceiling itself still applies to everyone.
+  await db.prepare('UPDATE storage_usage SET read_ops=? WHERE period=?').bind(99995,period).run();
+  const ceiling=[];for(let i=0;i<10;i++)ceiling.push(await ops.photo(victims[(i%victims.length)],{phase:'E',group:'victim'}));
   const html=await ops.site(victims[0],{phase:'E',group:'victim'});
-  report.phases.E={readOpsBeforeCounterPreload:readsBefore,counterSetTo:99990,noisyPhotoBurst:{requests:20,ok:burst.filter(r=>r.status===200).length,status503:burst.filter(r=>r.status===503).length},victimPhotoAfter:{requests:5,ok:victim.filter(r=>r.status===200).length,status503:victim.filter(r=>r.status===503).length},victimHtmlStatus:html.status,platformReadCeiling:100000};
-  log('Phase E (R2 read budget) done.');
+  report.phases.E={readOpsBeforeCounterPreload:readsBefore,noisyProjectCounterSetTo:9990,platformCounterSetTo:60000,noisyPhotoBurst:count(burst),victimPhotoAfter:count(victim),platformCeiling:{counterSetTo:99995,victimPhotos:count(ceiling)},victimHtmlStatus:html.status,platformReadCeiling:100000,projectReadBudget:10000};
+  log('Phase E (R2 read budgets) done.');
  }
  report.limiterDenied=limiterState.denied;
  report.d1StatementsTotal=stats.d1;report.runtimeCallsTotal=stats.runtime;

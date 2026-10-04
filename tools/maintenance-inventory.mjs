@@ -15,6 +15,7 @@ export const backlogInventory={
  standard_ai:queue('standard_ai_requests',"state IN ('reserved','dispatched','uncertain')",'updated_at',600000),
  fair_use:aged('fair_use_project_lifecycle','removed_at','+90 days'),
  traffic:aged('site_traffic_daily','day','+30 days'),
+ public_clients:aged('public_client_usage','day','+2 days'),
  app_migration_documents:queue('app_migration_documents','NOT EXISTS(SELECT 1 FROM app_migration_current c WHERE c.id=migration_id)',null),
  app_owner_erasures:expiry('app_owner_erasures'),
  app_deletion_receipts:expiry('app_deletion_receipts'),

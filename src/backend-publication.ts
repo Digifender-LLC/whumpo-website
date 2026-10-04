@@ -1,3 +1,5 @@
+import {projectRuntime} from './runtime-lane';
+import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {BackendError,listBackends,callBackend} from './backend-versions';
 import {hashToken} from './security';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -40,7 +42,7 @@ export async function confirmBackendPublication(db:D1Database,user:string,id:str
 }
 export function describeBackendPublication(row:Review){
  return `Backend ${row.operation} review ${row.id}\nStatus: ${row.status}\nEndpoint: ${backendEndpoint(row.project_id)}\nVersion: ${row.version_id}\nSHA-256: ${row.digest}\nBase revision: ${row.base_revision}\nSuccessful test: ${row.run_id??'not applicable'}\nExpires: ${row.expires_at}\n`+
- (row.operation==='publish'?'Anyone can POST JSON to this endpoint. The function receives only that JSON, without private project data, credentials or network access. Calls are limited to 100/project/day, 500/account/day and 1,000/platform/day (UTC). A passing example does not prove all inputs work. Function output is public to its caller; never embed secrets in source.':'This takes the endpoint offline. Already admitted calls may finish. Saved versions and private project data are retained.')+
+ (row.operation==='publish'?'Anyone can POST JSON to this endpoint. The function receives only that JSON, without private project data, credentials or network access. Calls are limited to 100/project/day, 500/account/day and 1,000/platform/day (UTC), with at most 20/day from one caller connection per project; once half the platform pool is used, accounts that already made 100 calls today wait for the next UTC day. Calls the runtime refuses as busy are not counted. A passing example does not prove all inputs work. Function output is public to its caller; never embed secrets in source.':'This takes the endpoint offline. Already admitted calls may finish. Saved versions and private project data are retained.')+
  `\nSource (untrusted code):\n${row.source}\n`+(row.status==='pending'?"Only you can apply this exact review using its confirmation button.":"This review was applied. Ask for the current status of project "+row.project_id+' for the current endpoint state.');
 }
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin','content-security-policy':"default-src 'none'; frame-ancestors 'none'"};
@@ -60,10 +62,17 @@ export async function publicBackend(request:Request,db:D1Database,service:Fetche
   const row=await db.prepare('SELECT b.review_id,v.source,v.digest FROM backend_publications b JOIN backend_versions v ON v.id=b.version_id AND v.project_id=b.project_id JOIN backend_publication_reviews r ON r.id=b.review_id AND r.status=\'applied\' JOIN projects p ON p.id=b.project_id AND p.owner_user_id=r.user_id WHERE b.project_id=?').bind(project).first<{review_id:string;source:string;digest:string}>();
   if(!row||publication&&row.review_id!==publication)return reply({ok:false,error:'not_found'},404);
   if(!service||await hashToken(row.source)!==row.digest)return reply({ok:false,error:'unavailable'},503);
-  // The insert trigger runs before UPSERT and serializes all three quotas. An
-  // uncertain reservation acknowledgment must not dispatch the function.
+  // One anonymous source may spend at most a bounded share of the project allowance (attempts, never refunded).
+  try{await reservePublicClient(db,'backend',project,await publicClientKey(request,'backend',project));}catch(cause){if(cause instanceof PublicClientLimitError)return reply({ok:false,error:'client_allowance_exhausted'},429);throw cause;}
+  // The insert trigger runs before UPSERT and serializes the project, account, platform and fair-share quotas.
+  // An uncertain reservation acknowledgment must not dispatch the function.
+  const day=new Date().toISOString().slice(0,10);
   try{await db.prepare("INSERT INTO backend_public_usage(project_id,day,calls,publication_id) VALUES(?,strftime('%Y-%m-%d','now'),1,?) ON CONFLICT(project_id) DO UPDATE SET day=excluded.day,calls=CASE WHEN backend_public_usage.day=excluded.day THEN backend_public_usage.calls+1 ELSE 1 END,publication_id=excluded.publication_id").bind(project,row.review_id).run();}catch{return reply({ok:false,error:'allowance_or_publication_unavailable'},429);}
-  const outcome=await callBackend(service,row.source,input);
-  return reply(outcome,outcome.ok?200:outcome.error==='unavailable'||outcome.error==='busy'?503:422);
+  const outcome=await callBackend(await projectRuntime(service,project),row.source,input);
+  const refused=!outcome.ok&&(outcome.error==='unavailable'||outcome.error==='busy');
+  // The runtime ran no guest code (busy) or gave no verdict: return the project/account/platform call. Best effort;
+  // a lost refund leaves the call spent, never over-admits. Guest failures did execute and stay charged.
+  if(refused)try{await db.prepare('UPDATE backend_public_usage SET calls=calls-1 WHERE project_id=? AND day=? AND calls>0 AND publication_id=?').bind(project,day,row.review_id).run();}catch{/* Keep the reservation. */}
+  return reply(outcome,outcome.ok?200:refused?503:422);
  }catch{return reply({ok:false,error:'unavailable'},503);}
 }
