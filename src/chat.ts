@@ -40,6 +40,8 @@ import {dnsChatCommand,type DNSChatOptions} from './dns-chat';
 import {listPhotos} from './files';
 import {photoRemovalCommand} from './photo-removal';
 import {applyServiceClientsCommand,serviceClientChatLinks} from './project-specification/service-clients/store';
+import {prepareAccessModuleCommand} from './shared-modules/access-setup';
+import {BackendError} from './backend-error';
 import {prepareModuleActivationCommand,applyModuleActivationCommand,moduleActivationChatLinks,moduleActivationFailure} from './shared-modules/activation';
 import {prepareAccessRoleCommand,applyAccessRoleCommand,accessRoleChatLinks,accessRoleFailure} from './shared-modules/access-roles';
 import {ModuleError} from './shared-modules/policy';
@@ -205,14 +207,16 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const versionRemoval=await versionRemovalCommand(db,userId,input.id,command);
   const serviceClients=await applyServiceClientsCommand(db,userId,input.id,command);
   const specification=await applySpecificationCommand(db,userId,input.id,command);
-  let moduleReview:Awaited<ReturnType<typeof prepareModuleActivationCommand>>,moduleApply:Awaited<ReturnType<typeof applyModuleActivationCommand>>;
+  let moduleReview:Awaited<ReturnType<typeof prepareModuleActivationCommand>>,moduleApply:Awaited<ReturnType<typeof applyModuleActivationCommand>>,accessSetup:Awaited<ReturnType<typeof prepareAccessModuleCommand>>;
   try{
     if(control?.action.type==='moduleActivationReview')moduleReview=await prepareModuleActivationCommand(db,userId,input.id,command);
     if(control?.action.type==='moduleActivationApply')moduleApply=await applyModuleActivationCommand(db,userId,input.id,command);
     // WH-126 staff role reviews share the module review slot: exactly one typed control runs per turn.
     if(control?.action.type==='accessRoleReview')moduleReview=await prepareAccessRoleCommand(db,userId,input.id,command);
     if(control?.action.type==='accessRoleApply')moduleApply=await applyAccessRoleCommand(db,userId,input.id,command);
-  }catch(e){if(e instanceof ModuleError)return {status:e.status,error:e.message};throw e;}
+    // WH-126 owner visitor access setup prepares the existing exact specification review (saved by specificationApply).
+    if(control?.action.type==='accessModuleReview')accessSetup=await prepareAccessModuleCommand(db,userId,input.id,command);
+  }catch(e){if(e instanceof ModuleError||e instanceof BackendError)return {status:e.status,error:e.message};throw e;}
   const removal = await photoRemovalCommand(db,userId,input.id,command);
   const domain = await domainCommand(db,userId,input.id,command);
   const publication = await publicationCommand(db,userId,input.id,command);
@@ -233,6 +237,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if(contact)reply=contact.reply;
   else if(serviceClients)reply=serviceClients.reply;
   else if(specification)reply=specification.reply;
+  else if(accessSetup)reply=accessSetup.reply;
   else if(moduleReview)reply=moduleReview.reply;
   else if(moduleApply)reply=moduleApply.reply;
   else if(versionRemoval)reply=versionRemoval.reply;
@@ -317,6 +322,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if(versionRemoval)statements.push(...versionRemoval.statements);
   if(serviceClients)statements.push(...serviceClients.statements);
   if(specification)statements.push(...specification.statements);
+  if(accessSetup)statements.push(...accessSetup.statements);
   if(moduleReview)statements.push(...moduleReview.statements);
   if(moduleApply)statements.push(...moduleApply.statements);
   if (removal) statements.push(...removal.statements);

@@ -4,6 +4,9 @@
 export const moduleBindings=Object.freeze({
  'module.instances@1':{mode:'read',scope:'project',handler:'readModuleInstances',surface:'view widget modules (saved page and Chat temporary view)',inclusion:'identity and ownership only',modelContext:'instance ids, kinds, states and revisions'},
  moduleActivationReview:{mode:'prepare',scope:'project',handler:'prepareModuleActivationCommand',surface:'ChatControl moduleActivationReview',inclusion:'activate: current core.forms (records) or core.editing prepare; disable: identity and ownership only',modelContext:'review summary without configuration values'},
+ // WH-126 owner visitor access setup: prepares the existing exact specification review for the fixed standard access
+ // instance; saving is specificationApply and activation is moduleActivationReview/Apply. Never a model action.
+ accessModuleReview:{mode:'prepare',scope:'project',handler:'prepareAccessModuleCommand',surface:'ChatControl accessModuleReview (Visitors panel)',inclusion:'identity and ownership only (activation re-checks core.editing)',modelContext:'specification review summary'},
  moduleActivationApply:{mode:'confirm',scope:'review',handler:'applyModuleActivationCommand',surface:'ChatControl moduleActivationApply (recent sign-in)',inclusion:'activate: current inclusion confirm composed into the receipt insert; disable: identity and ownership only',modelContext:'applied receipt summary'},
  // WH-126 access module: owner staff roster and exact staff role reviews. Visitor ids are opaque; no credential,
  // recovery code, session, document or visitor-submitted value is a binding output.

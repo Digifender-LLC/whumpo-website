@@ -105,6 +105,6 @@ try{
  });
  assert.equal(network,0);assert.equal((await row('SELECT count(*) n FROM inference_calls')).n,0);
  // Only the WH-126 visitor access fixture (exact specification save and module activation controls) writes Chat turns.
- assert.equal((await row("SELECT count(*) n FROM chat_turns WHERE user_text<>'Synthetic current website fixture' AND coalesce(json_extract(action_json,'$.type'),'') NOT IN ('specificationApply','moduleActivationReview','moduleActivationApply')")).n,0);
+ assert.equal((await row("SELECT count(*) n FROM chat_turns WHERE user_text<>'Synthetic current website fixture' AND coalesce(json_extract(action_json,'$.type'),'') NOT IN ('accessModuleReview','specificationApply','moduleActivationReview','moduleActivationApply')")).n,0);
  console.log(`Service safety: ${cases} scenario groups passed (${process.argv.includes('--d1')?'local D1':'SQLite'}): strict owned metadata, actual public-route withdrawal, retained visitor documents and access-instance sign-in, exact/replayed/stale/expired reviews, shared handler recovery and transaction-time identity. Runtime responses are synthetic; zero maintainer/provider calls.`);
 }finally{globalThis.fetch=originalFetch;await fixture.close();}

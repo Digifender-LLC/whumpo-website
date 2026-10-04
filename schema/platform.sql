@@ -3840,12 +3840,14 @@ CREATE TRIGGER specification_site_added AFTER INSERT ON site_versions BEGIN UPDA
 
 CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposals BEGIN
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
-  SELECT 1 FROM projects p JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND t.status='pending'
-   AND (t.mode='ai' OR (t.mode='guided' AND EXISTS(
+  SELECT 1 FROM projects p JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id
+   AND ((t.status='pending' AND (t.mode='ai' OR (t.mode='guided' AND EXISTS(
     SELECT 1 FROM chat_interaction_continuations c JOIN chat_interaction_submissions s ON s.id=c.id
     JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
     WHERE c.id=t.id AND c.state='pending' AND s.user_id=t.user_id AND i.project_id=NEW.project_id AND i.state='submitted'
-    AND json_extract(i.envelope_json,'$.definition.continuationBinding') IN ('site.content-prepare@1','agent.task-continue@1'))))
+    AND json_extract(i.envelope_json,'$.definition.continuationBinding') IN ('site.content-prepare@1','agent.task-continue@1')))))
+   -- WH-126 owner visitor access setup: the typed accessModuleReview control of this project prepares a change.
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='accessModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id))
   LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=NEW.draft_revision
   AND coalesce(h.revision,0)=NEW.expected_revision AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
@@ -3859,6 +3861,24 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
 END;
 
 CREATE TRIGGER project_spec_proposal_immutable BEFORE UPDATE ON project_spec_proposals BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
+
+-- WH-126 owner visitor access setup. A proposal prepared by the typed accessModuleReview control is exactly the current
+-- head plus one appended standard access instance (id visitors, no dependencies, no staff role, invitation enrollment)
+-- in a project whose head has no access instance; nothing else in the specification may change.
+CREATE TRIGGER project_spec_access_setup_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='accessModuleReview') BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+  WHERE h.project_id=NEW.project_id AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+  AND json_array_length(NEW.spec_json,'$.instances')=json_array_length(v.spec_json,'$.instances')+1
+  AND json(json_remove(NEW.spec_json,'$.instances[#-1]'))=json(v.spec_json)
+  AND NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.instances') e WHERE json_extract(e.value,'$.kind')='access')
+  AND json_extract(NEW.spec_json,'$.instances[#-1].id')='visitors' AND json_extract(NEW.spec_json,'$.instances[#-1].kind')='access'
+  AND json_array_length(NEW.spec_json,'$.instances[#-1].dependencies')=0 AND json_array_length(NEW.spec_json,'$.instances[#-1].config.roles')=0
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.enrollment')='invitation'
+ );
+END;
+
 
 CREATE TRIGGER project_spec_version_immutable BEFORE UPDATE ON project_spec_versions BEGIN SELECT RAISE(ABORT,'specification_immutable'); END;
 

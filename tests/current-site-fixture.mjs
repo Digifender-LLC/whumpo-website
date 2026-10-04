@@ -28,6 +28,8 @@ export async function currentSiteFixtureHandlers(){
   export * as moduleAccess from './src/shared-modules/access';
   export * as moduleAccessRoles from './src/shared-modules/access-roles';
   export * as moduleAccessExport from './src/shared-modules/access-export';
+  export * as accessSetup from './src/shared-modules/access-setup';
+  export {readAppAccess} from './src/app-access';
   export * as appResource from './src/app-resource';
   export * as sharedModuleRecords from './src/shared-modules/records';
   export * as sharedModuleFiles from './src/shared-modules/files';
@@ -177,38 +179,52 @@ async function syncFixtureChat(db,user){
  await db.prepare('UPDATE workspace_state SET revision=max(revision,(SELECT coalesce(max(revision),0) FROM chat_turns WHERE user_id=?)) WHERE user_id=?').bind(user,user).run();
 }
 /** WH-126: project visitor identity belongs to the project's access module instance, which a visitor application
- * consumes. Saves one access instance through the real owner path (`configureFixtureModules`: exact `modules.put` review
- * and the recent-sign-in specificationApply control) and activates it with the exact moduleActivationReview/Apply Chat
- * controls (`setFixtureVisitorAccess`). Projects created without a website get
- * a minimal private website first (the specification is where instances are configured). Returns the registry row. */
-export async function enableFixtureVisitorAccess(db,user,project,{id='visitors',roles=['staff'],handlers}={}){
+ * consumes. Uses the real owner path end to end: the typed `accessModuleReview` owner control prepares the exact
+ * website review for the fixed standard access instance (`visitors`, no staff role, invitation enrollment), the
+ * recent-sign-in specificationApply control saves it (`setupFixtureVisitorAccess`), and the exact
+ * moduleActivationReview/Apply controls activate it (`setFixtureVisitorAccess`). Projects created without a website
+ * first get a minimal private website through a synthetic AI first-draft turn (website drafting is an AI path; the
+ * specification is where instances are configured). Returns the registry row. */
+export async function enableFixtureVisitorAccess(db,user,project,{handlers}={}){
  const m=handlers??await currentSiteFixtureHandlers();await syncFixtureChat(db,user);
  if(!await db.prepare('SELECT 1 FROM project_spec_heads WHERE project_id=?').bind(project).first()){
   const p=await db.prepare('SELECT name,purpose FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first();assert.ok(p);
   const text=p.purpose||p.name;
   await createFixtureWebsite(db,user,project,{name:p.name,headline:p.name,description:text,theme:'ocean',aboutTitle:'About us',aboutText:text,sections:[],photos:[]},m);
  }
- const entry=m.moduleCatalog.find(x=>x.kind==='access');
- await configureFixtureModules(db,user,project,[{id,kind:'access',module:{...entry.module},schema:{...entry.schema},dependencies:[],config:{roles,enrollment:'invitation'}}],m);
- return setFixtureVisitorAccess(db,user,project,'activate',{id,handlers:m});
+ await setupFixtureVisitorAccess(db,user,project,{handlers:m});
+ return setFixtureVisitorAccess(db,user,project,'activate',{handlers:m});
 }
-/** Activates or disables the project's access instance with the exact moduleActivationReview/Apply Chat controls.
- * Activation needs current core.editing inclusion: a scoped synthetic preview grant covers this one review and is
- * revoked right after, so serving never depends on it. Returns the registry row. */
-export async function setFixtureVisitorAccess(db,user,project,action,{id='visitors',handlers}={}){
- const m=handlers??await currentSiteFixtureHandlers(),grants=[];await syncFixtureChat(db,user);
+/** The owner visitor access setup control (`accessModuleReview`) followed by the recent-sign-in specificationApply
+ * control. Returns the saved version id and the exact review row. */
+export async function setupFixtureVisitorAccess(db,user,project,{handlers}={}){
+ const m=handlers??await currentSiteFixtureHandlers(),turn=crypto.randomUUID();await syncFixtureChat(db,user);
+ const r=await m.sendChatControl(db,user,{id:turn,revision:(await m.readChat(db,user)).state.revision,action:{type:'accessModuleReview',projectId:project}});assert.equal(r.status,200,r.error);
+ const review=await m.readSpecificationProposal(db,user,turn),applied=await applyFixtureWebsite(db,user,review,m);assert.equal(applied.status,200,applied.error);
+ return {version:applied.version,review};
+}
+/** Runs `fn` with a scoped synthetic core.editing preview grant (prepare and confirm) for this project, revoked right
+ * after, so serving never depends on it. Feature inclusion fixture only; it is not an owner action. */
+export async function withFixtureEditingGrant(db,user,project,fn){
+ const grants=[];
  for(const operation of ['prepare','confirm']){
   const grant=crypto.randomUUID();grants.push(grant);
   await db.prepare("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.editing',?,'private-test-acceptance','synthetic WH-126 visitor access fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)").bind(grant,user,project,operation).run();
  }
- try{
+ try{return await fn();}
+ finally{for(const grant of grants)await db.prepare('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=? AND revoked_at IS NULL').bind(grant).run();}
+}
+/** Activates or disables the project's access instance with the exact moduleActivationReview/Apply Chat controls.
+ * Activation needs current core.editing inclusion: a scoped synthetic preview grant covers this one review
+ * (`withFixtureEditingGrant`). Returns the registry row. */
+export async function setFixtureVisitorAccess(db,user,project,action,{id='visitors',handlers}={}){
+ const m=handlers??await currentSiteFixtureHandlers();await syncFixtureChat(db,user);
+ await withFixtureEditingGrant(db,user,project,async()=>{
   const control=async action=>{const turn=crypto.randomUUID(),revision=(await m.readChat(db,user)).state.revision;const r=await m.sendChatControl(db,user,{id:turn,revision,action});assert.equal(r.status,200,r.error);return turn;};
   const turn=await control({type:'moduleActivationReview',projectId:project,instanceId:id,action});
   const review=await db.prepare('SELECT * FROM module_activation_reviews WHERE id=?').bind(turn).first();assert.ok(review);
   await control({type:'moduleActivationApply',reviewId:review.id,reviewDigest:review.review_digest,expectedRevision:review.expected_activation_revision});
- }finally{
-  for(const grant of grants)await db.prepare('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=? AND revoked_at IS NULL').bind(grant).run();
- }
+ });
  return db.prepare("SELECT i.*,a.state,a.revision activation_revision FROM module_instances i JOIN module_activations a ON a.instance_id=i.id WHERE i.project_id=? AND i.kind='access'").bind(project).first();
 }
 /** SQL for a synthetic visitor row in the project's access instance: bind (visitor, project, project). */

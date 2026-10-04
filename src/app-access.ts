@@ -1,5 +1,6 @@
 import {BackendError} from './backend-versions';
 import {readApplication} from './app-activation';
+import {readAccessSetup} from './shared-modules/access-setup';
 
 // Owner metadata only. Visitor documents, recovery codes and credential material
 // must not appear here or in agent context. WH-126: visitor identities, invitations and sessions belong to the
@@ -15,7 +16,8 @@ export async function readAppAccess(db:D1Database,user:string,project:string){
  CASE WHEN i.used_by IS NOT NULL THEN 'used' WHEN i.revoked=1 THEN 'cancelled' WHEN i.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') THEN 'expired' WHEN ac.state IS NOT 'active' OR i.activation_revision<>ac.revision THEN 'inactive' ELSE 'ready' END AS status
  FROM app_invitations i JOIN projects p ON p.id=i.project_id LEFT JOIN module_activations ac ON ac.instance_id=i.access_id
  WHERE i.project_id=? AND p.owner_user_id=? ORDER BY i.expires_at DESC,i.code_hash LIMIT 100`).bind(project,user).all();
- return {...application,visitors:visitors.results,invitations:invitations.results};
+ // WH-126: which owner setup step comes next for the project's access instance (ids and states only).
+ return {...application,accessSetup:await readAccessSetup(db,user,project),visitors:visitors.results,invitations:invitations.results};
 }
 
 export async function cancelAppInvitation(db:D1Database,user:string,project:string,id:string){

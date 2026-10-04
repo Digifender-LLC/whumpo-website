@@ -338,6 +338,47 @@ try{
   const dump=JSON.stringify(exported);for(const secret of [v1.session,v1.recoveryCode,v2.session])assert.ok(!dump.includes(secret));
  });
 
+ await check('owner visitor access setup: the typed control prepares the exact standard website review; saving and activation stay separate',async()=>{
+  const e=await owner(),f=await owner(),setup={type:'accessModuleReview',projectId:e.project};
+  assert.deepEqual(await m.accessSetup.readAccessSetup(e.scope,e.user,e.project),{state:'not-configured',instanceId:null});
+  // The control carries the project id only; the server chooses the instance. Extra keys or a bad id are not a control.
+  for(const action of [{...setup,instanceId:'visitors'},{...setup,config:{roles:['staff']}},{type:'accessModuleReview',projectId:'not-a-project'},{type:'accessModuleReview'}])assert.ok(!m.chatControl(action));
+  assert.equal((await control(f,setup)).status,404,'A foreign owner cannot prepare setup');
+  assert.equal(await row('SELECT count(*) n FROM project_spec_proposals WHERE project_id=?',e.project).then(r=>r.n),0);
+  const prepared=await control(e,setup);assert.equal(prepared.status,200,prepared.error);
+  const q=await row('SELECT * FROM project_spec_proposals WHERE id=?',prepared.id),spec=JSON.parse(q.spec_json),standard=spec.instances.at(-1);
+  assert.equal(q.operation,'change');assert.deepEqual(JSON.parse(q.envelope_json).requiredReviews,['schema']);
+  assert.deepEqual({id:standard.id,kind:standard.kind,dependencies:standard.dependencies,config:standard.config},{id:'visitors',kind:'access',dependencies:[],config:{roles:[],enrollment:'invitation'}});
+  assert.deepEqual({module:standard.module,schema:standard.schema},pins('access'),'Current catalog pin');
+  assert.deepEqual(JSON.parse(q.diff_json).map(r=>[r.label,r.before]),[['Module visitors',null]]);
+  const turn=(await m.readChat(e.scope,e.user)).turns.find(t=>t.id===prepared.id);assert.deepEqual(turn.specification_review,{id:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision});
+  assert.equal((await rows('SELECT id FROM module_instances WHERE project_id=?',e.project)).length,0,'Preparing registers nothing');
+  // Defense in depth: a proposal bound to an accessModuleReview turn must be exactly the head plus the standard instance.
+  const synthetic=async project=>{const t=id(),r=await revision(e)+1;await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,'Synthetic setup turn','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),?)",t,e.user,r,JSON.stringify({type:'accessModuleReview',projectId:project}));await run('UPDATE workspace_state SET revision=? WHERE user_id=?',r,e.user);return t;};
+  const copy=(turnId,spec)=>run('INSERT INTO project_spec_proposals SELECT ?,user_id,project_id,operation,expected_revision,draft_revision,base_version_id,target_version_id,base_digest,request_hash,proposal_digest,spec_digest,manifest_digest,policy_version,expires_at,?,lock_json,manifest_json,config_json,html,html_digest,diff_json,envelope_json FROM project_spec_proposals WHERE id=?',turnId,spec,q.id);
+  for(const tampered of [{...spec,instances:[...spec.instances.slice(0,-1),{...standard,config:{roles:['staff'],enrollment:'invitation'}}]},{...spec,instances:[...spec.instances.slice(0,-1),{...standard,id:'members'}]},{...spec,name:'Renamed'},{...spec,instances:spec.instances.slice(0,-1)}])
+   await assert.rejects(copy(await synthetic(e.project),JSON.stringify(tampered)),/specification_changed/);
+  await assert.rejects(copy(await synthetic(f.project),q.spec_json),/specification_changed/,'A setup turn for another project admits nothing');
+  await copy(await synthetic(e.project),q.spec_json);
+  // Saving is the existing recent-sign-in specificationApply; the instance is saved inactive.
+  const saved=await control(e,{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision});assert.equal(saved.status,200,saved.error);
+  assert.deepEqual(await m.accessSetup.readAccessSetup(e.scope,e.user,e.project),{state:'saved',instanceId:'visitors'});
+  assert.equal((await m.readAppAccess(e.scope,e.user,e.project)).accessSetup.state,'saved');
+  const again=await control(e,setup);assert.equal(again.status,400);assert.match(again.error,/already has a visitor access module/);
+  await activation(e,'visitors');
+  assert.deepEqual(await m.accessSetup.readAccessSetup(e.scope,e.user,e.project),{state:'registered',instanceId:'visitors'});
+  assert.equal((await instance(e,'visitors')).state,'active');
+  // A project with a non-access module already using the standard id is refused; a project without a website is told why.
+  const g=await owner();await configure(g,[{id:'visitors',kind:'content',...pins('content'),dependencies:[],config:{collections:[{id:'directory',type:'directory-listing@1'}]}}]);
+  const taken=await control(g,{type:'accessModuleReview',projectId:g.project});assert.equal(taken.status,400);assert.match(taken.error,/already uses the “visitors” id/);
+  const h=await workspaceFixture(db,m),hScope=await h.scope(),hProject=id();
+  await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'No site','','draft',strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))",hProject,h.account);
+  assert.deepEqual(await m.accessSetup.readAccessSetup(hScope,h.account,hProject),{state:'website-required',instanceId:null});
+  const none=await m.sendChatControl(hScope,h.account,{id:id(),revision:(await m.readChat(hScope,h.account)).state.revision,action:{type:'accessModuleReview',projectId:hProject}});assert.equal(none.status,404);assert.match(none.error,/private website first/);
+  // The site agent is never told about module operations or this control.
+  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['modules.put','accessModuleReview','review-visitor-access-setup'])assert.ok(!prompt.includes(word),word);
+ });
+
  await check('closure counts, cascades and no secrets or values in Chat or rows',async()=>{
   const dump=JSON.stringify(await rows('SELECT * FROM chat_turns'))+JSON.stringify(await rows('SELECT * FROM module_access_role_reviews'))+JSON.stringify(await rows('SELECT * FROM module_request_receipts'));
   for(const secret of [v1.session,v1.recoveryCode,v2.session,bv.session])assert.ok(!dump.includes(secret));
@@ -353,7 +394,7 @@ try{
 
  await check('access paths never reach owner-maintenance inference',async()=>{
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
-  for(const entry of ['src/shared-modules/access.ts','src/shared-modules/access-roles.ts','src/app-gateway.ts']){
+  for(const entry of ['src/shared-modules/access.ts','src/shared-modules/access-roles.ts','src/shared-modules/access-setup.ts','src/app-gateway.ts']){
    const out=await build({entryPoints:[entry],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent'});
    assert.deepEqual(Object.keys(out.metafile.inputs).filter(p=>inference.test(p)),[],entry+' reaches owner-maintenance inference');
    for(const name of ['AI_GATEWAY','OPENAI','ANTHROPIC','sendAIChat','agentPrompt'])assert.ok(!out.outputFiles[0].text.includes(name),entry+' references '+name);
@@ -363,6 +404,6 @@ try{
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  for(const secret of [v1.session,v1.recoveryCode])assert.ok(!logs.join('\n').includes(secret));
- process.stdout.write(`Shared module access passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — instances saved through the exact owner specification review, access.me on the visitor origin with signed passkey visitors, workspace/foreign/anonymous cookie refusals, owner access.list and access.roles@1, exact grant/revoke reviews with recent sign-in, readback and replay without re-grant, one-winner races, in-flight revocation inside the commit, revoked/erased visitors, plan loss, disable, visitor identity owned by the access instance (gateway enrollment, sign-in, recovery, export and deletion review with no visitor application; disable signs out and old invitations never re-admit; one access instance per project; the application consumes it and its custom-function document descriptor validates against the access descriptor), the roles export serializer and its import validation, closure and cascades, and a static no-inference check. No network, model or provider use.\n`);
+ process.stdout.write(`Shared module access passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — instances saved through the exact owner specification review, access.me on the visitor origin with signed passkey visitors, workspace/foreign/anonymous cookie refusals, owner access.list and access.roles@1, exact grant/revoke reviews with recent sign-in, readback and replay without re-grant, one-winner races, in-flight revocation inside the commit, revoked/erased visitors, plan loss, disable, visitor identity owned by the access instance (gateway enrollment, sign-in, recovery, export and deletion review with no visitor application; disable signs out and old invitations never re-admit; one access instance per project; the application consumes it and its custom-function document descriptor validates against the access descriptor), the owner visitor access setup control (the exact standard website review with its shape repeated in the commit, then the separate save and activation reviews), the roles export serializer and its import validation, closure and cascades, and a static no-inference check. No network, model or provider use.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

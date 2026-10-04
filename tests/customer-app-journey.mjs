@@ -10,7 +10,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {authenticator} from './app-authenticator.mjs';
 import {taskListAppJourney} from './task-list-app-journey.mjs';
-import {enableFixtureVisitorAccess} from './current-site-fixture.mjs';
+import {createFixtureWebsite,withFixtureEditingGrant} from './current-site-fixture.mjs';
 const id=()=>crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-app-journey-');let fixture,runtime;
 try{
  fixture=await databaseFixture({d1:true,r2:true});
@@ -47,9 +47,41 @@ try{
  const origin='https://app-'+project+'.whumpo.site';
  const visit=(url,init)=>host.fetch(new Request(url,init),env);
  assert.equal((await visit(origin+'/')).status,404);
- // WH-126: visitor identity belongs to the project's access module instance, saved and activated through the owner's
- // exact specification and activation reviews before the application that consumes it.
- const enableAccess=async(account,project)=>enableFixtureVisitorAccess(await account.scope(),account.user,project,{handlers:m});
+ // WH-126: visitor identity belongs to the project's access module instance. The owner sets it up through the
+ // Visitors panel controls on the real typed endpoint: accessModuleReview prepares the exact website review of the
+ // fixed standard instance, specificationApply (recent sign-in) saves it, and moduleActivationReview/Apply activate it.
+ async function ownerAction(account,action,status=200){
+  const state=await (await call(account,'/chat')).json(),r=await call(account,'/chat/actions',{id:id(),revision:state.state.revision,action});
+  assert.equal(r.status,status,await r.clone().text());if(status!==200)return r.json();
+  return (await (await call(account,'/chat')).json()).turns.at(-1);
+ }
+ async function accessState(account,project){const r=await call(account,'/projects/'+project+'/application-access');assert.equal(r.status,200,await r.clone().text());return r.json();}
+ const enableAccess=async(account,project)=>{
+  if((await accessState(account,project)).accessSetup.state==='website-required'){
+   assert.match((await ownerAction(account,{type:'accessModuleReview',projectId:project},404)).error,/draft the project’s private website first/);
+   // Visitor access is saved in the website configuration. Drafting the first private website is the AI path; this
+   // suite runs no inference, so a synthetic AI first-draft turn stands in for it.
+   const p=await db.prepare('SELECT name,purpose FROM projects WHERE id=?').bind(project).first();
+   await createFixtureWebsite(await account.scope(),account.user,project,{name:p.name,headline:p.name,description:p.purpose,theme:'ocean',aboutTitle:'About us',aboutText:p.purpose,sections:[],photos:[]},m);
+  }
+  assert.deepEqual((await accessState(account,project)).accessSetup,{state:'not-configured',instanceId:null});
+  {const scope=await foreign.scope(),r=await m.sendChatControl(scope,foreign.user,{id:id(),revision:(await m.readChat(scope,foreign.user)).state.revision,action:{type:'accessModuleReview',projectId:project}});assert.equal(r.status,404,'A foreign owner cannot prepare visitor access setup');}
+  const setup=await ownerAction(account,{type:'accessModuleReview',projectId:project}),review=setup.specification_review;
+  assert.ok(review,'The setup turn carries the exact website review');assert.match(setup.assistant_text,/Changed fields: Module visitors/);assert.match(setup.assistant_text,/saved inactive/);assert.match(setup.assistant_text,/This review also covers: schema/);assert.ok(!/permissions \(/.test(setup.assistant_text),'No permissions review class: no staff role');
+  assert.equal(JSON.parse((await db.prepare('SELECT diff_json FROM project_spec_proposals WHERE id=?').bind(review.id).first()).diff_json).length,1);
+  assert.equal((await accessState(account,project)).accessSetup.state,'not-configured','Preparing the review saves nothing');
+  await ownerAction(account,{type:'specificationApply',reviewId:review.id,proposalDigest:'0'.repeat(64),expectedRevision:review.expectedRevision},409);
+  await ownerAction(account,{type:'specificationApply',reviewId:review.id,proposalDigest:review.proposalDigest,expectedRevision:review.expectedRevision});
+  const saved=await accessState(account,project);assert.deepEqual(saved.accessSetup,{state:'saved',instanceId:'visitors'});assert.equal(saved.visitorAccess,null);
+  assert.equal((await call(account,'/projects/'+project+'/application-access/invitations',{})).status,409);
+  assert.match((await ownerAction(account,{type:'accessModuleReview',projectId:project},400)).error,/already has a visitor access module/);
+  await withFixtureEditingGrant(await account.scope(),account.user,project,async()=>{
+   const activation=(await ownerAction(account,{type:'moduleActivationReview',projectId:project,instanceId:'visitors',action:'activate'})).module_activation_review;assert.equal(activation.action,'activate');
+   await ownerAction(account,{type:'moduleActivationApply',reviewId:activation.id,reviewDigest:activation.reviewDigest,expectedRevision:activation.expectedRevision});
+  });
+  const active=await accessState(account,project);assert.equal(active.visitorAccess.state,'active');assert.equal(active.accessSetup.state,'registered');
+  const row=await db.prepare("SELECT config_json FROM module_instances WHERE project_id=? AND kind='access'").bind(project).first();assert.deepEqual(JSON.parse(row.config_json),{enrollment:'invitation',roles:[]});
+ };
  assert.match((await chat('/app-status '+project)).turns.at(-1).assistant_text,/No application configured/);
  await json(path+'/application-access/invitations',{},409);
  await enableAccess(owner,project);
