@@ -6,13 +6,15 @@ import {cleanPhoto} from './photo-format';
 import {CMSProjectError} from './cms-error';
 import {cmsItemId} from './cms-content-shape';
 import {cmsMediaMetadata} from './cms-media';
-type Upload={id:string;user_id:string;project_id:string;origin:string;filename:string;digest:string;size:number;width:number;height:number;result:string|null;created_at:string};
+type Upload={id:string;user_id:string;project_id:string;origin:string;filename:string;digest:string;size:number;width:number;height:number;result:string|null;created_at:string;safety?:'approved'|'pending'|'blocked'};
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
-const view=(row:Upload)=>({requestId:row.id,filename:row.filename,size:row.size,width:row.width,height:row.height,status:row.result?'saved':'unresolved',createdAt:row.created_at,result:row.result?JSON.parse(row.result):null});
+const view=(row:Upload)=>({requestId:row.id,filename:row.filename,size:row.size,width:row.width,height:row.height,status:row.result?'saved':'unresolved',safety:row.safety??'pending',createdAt:row.created_at,result:row.result?JSON.parse(row.result):null});
+// WH-013: every receipt starts held; only the trusted approved_cms_media view can report approval.
+const uploadSQL="SELECT u.*,CASE WHEN EXISTS(SELECT 1 FROM approved_cms_media a WHERE a.upload_id=u.id) THEN 'approved' WHEN EXISTS(SELECT 1 FROM cms_media_safety s WHERE s.upload_id=u.id AND s.state='blocked') THEN 'blocked' ELSE 'pending' END AS safety FROM cms_media_uploads u";
 export async function readCMSUploads(db:D1Database,user:string,project:string,env:Record<string,unknown>){
  const {service,config}=await cmsConnection(db,user,project,env);let uploadEnabled=false;
  try{uploadEnabled=supportsCMSUpload(await callCMS(service,config,cmsCapabilitiesPath,crypto.randomUUID()));}catch{/* Old/unavailable native artifacts never enable uploads. */}
- const rows=await db.prepare('SELECT * FROM cms_media_uploads WHERE user_id=? AND project_id=? ORDER BY created_at DESC,id DESC LIMIT 20').bind(user,project).all<Upload>();
+ const rows=await db.prepare(uploadSQL+' WHERE u.user_id=? AND u.project_id=? ORDER BY u.created_at DESC,u.id DESC LIMIT 20').bind(user,project).all<Upload>();
  return {projectId:project,uploadEnabled,maxBytes:1048576,maxDimension:1600,uploads:rows.results.map(view)};
 }
 /** Bytes are never stored in control D1 or copied to model context. */
@@ -21,7 +23,7 @@ export async function uploadCMSMedia(db:D1Database,user:string,project:string,id
  if(!uuid.test(id)||typeof name!=='string'||name.length>100||!/^[A-Za-z0-9][A-Za-z0-9 _.-]{0,95}\.jpe?g$/i.test(name))throw new CMSProjectError(400,'Choose a valid upload ID and a simple JPEG filename');
  let photo;try{photo=cleanPhoto(bytes);}catch{throw new CMSProjectError(400,'Use the image picker to prepare a JPEG no larger than 1 MiB and 1600 pixels per side');}
  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(photo.bytes))),v=>v.toString(16).padStart(2,'0')).join('');
- const read=()=>db.prepare('SELECT * FROM cms_media_uploads WHERE id=?').bind(id).first<Upload>();let row=await read();
+ const read=()=>db.prepare(uploadSQL+' WHERE u.id=?').bind(id).first<Upload>();let row=await read();
  if(row&&(row.user_id!==user||row.project_id!==project||row.origin!==config.origin||row.filename!==name||row.digest!==digest||row.size!==photo.bytes.length))throw new CMSProjectError(409,'This upload ID belongs to a different request. Re-select the original file to recover it.');
  if(row?.result)return view(row);
  let capable=false;try{capable=supportsCMSUpload(await callCMS(service,config,cmsCapabilitiesPath,crypto.randomUUID()));}catch{}

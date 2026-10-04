@@ -3,6 +3,7 @@ import {callCMS} from './cms-bridge';
 import {cmsItemId} from './cms-content-shape';
 import {cmsMediaPath} from './cms-media-path';
 import {CMSProjectError} from './cms-error';
+import {cmsMediaSafety} from './cms-media-safety';
 const integer=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null;
 export function cmsMediaMetadata(value:unknown,page:number){
  const data=value as {items:Record<string,unknown>[];totalCount:unknown};
@@ -16,6 +17,10 @@ export function cmsMediaMetadata(value:unknown,page:number){
 export async function listCMSMedia(db:D1Database,user:string,project:string,page:unknown,env:Record<string,unknown>){
  const {service,config}=await cmsConnection(db,user,project,env);
  if(typeof page!=='number'||!Number.isInteger(page)||page<1||page>1000)throw new CMSProjectError(400,'Choose a media page from 1 to 1000');
- try{return {projectId:project,...cmsMediaMetadata(await callCMS(service,config,cmsMediaPath(page),crypto.randomUUID()),page)};}
+ let listing;
+ try{listing=cmsMediaMetadata(await callCMS(service,config,cmsMediaPath(page),crypto.randomUUID()),page);}
  catch(error){if(error instanceof CMSProjectError)throw error;throw new CMSProjectError(503,'Media browsing is not available on this CMS connection yet');}
+ // Metadata only. Native items without a confirmed Whumpo receipt have no coverage and stay held.
+ const safety=await cmsMediaSafety(db,user,project,listing.items.map(i=>i.id));
+ return {projectId:project,...listing,items:listing.items.map(item=>({...item,safety:safety.get(item.id)??'pending'}))};
 }
