@@ -86,6 +86,7 @@
     "test:chat-reply": "node tests/chat-reply.mjs",
     "test:cms-pending": "node tests/cms-pending.mjs",
     "test:cms-mapped-import": "node tests/cms-mapped-import.mjs",
+    "test:cms-media-safety": "node tests/cms-media-safety.mjs",
     "test:cms-imports": "node tests/cms-imports.mjs",
     "test:wordpress-media": "node tests/cms-wordpress-media.mjs",
     "test:wordpress-taxonomies": "node tests/cms-wordpress-taxonomies.mjs",

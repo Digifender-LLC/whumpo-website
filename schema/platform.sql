@@ -1326,9 +1326,25 @@ CREATE TABLE project_photo_safety (
  CHECK(state!='approved' OR (csam_check='clear' AND sexual_check='clear' AND scanner_reference IS NOT NULL AND length(scanner_reference) BETWEEN 1 AND 200 AND expires_at IS NOT NULL AND julianday(expires_at) IS NOT NULL))
 );
 
+-- WH-013: exact CMS upload receipt clearance. Reuses the photo coverage contract and photo_scan_tickets.
+CREATE TABLE cms_media_safety (
+ upload_id TEXT PRIMARY KEY REFERENCES cms_media_uploads(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL,
+ digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*'),
+ policy_version TEXT NOT NULL CHECK(policy_version='2026-09-30'),
+ state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','approved','blocked')),
+ csam_check TEXT NOT NULL DEFAULT 'unknown' CHECK(csam_check IN ('unknown','clear','matched')),
+ sexual_check TEXT NOT NULL DEFAULT 'unknown' CHECK(sexual_check IN ('unknown','clear','matched')),
+ scanner_reference TEXT,
+ expires_at TEXT,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ CHECK(state!='approved' OR (csam_check='clear' AND sexual_check='clear' AND scanner_reference IS NOT NULL AND length(scanner_reference) BETWEEN 1 AND 200 AND expires_at IS NOT NULL AND julianday(expires_at) IS NOT NULL))
+);
+
 CREATE TABLE "photo_scan_tickets" (
  id TEXT PRIMARY KEY,
- kind TEXT NOT NULL CHECK(kind IN ('profile','project')),
+ kind TEXT NOT NULL CHECK(kind IN ('profile','project','cms')),
  subject_id TEXT NOT NULL,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  digest TEXT NOT NULL CHECK(length(digest)=64),
@@ -1831,7 +1847,8 @@ CREATE INDEX feature_preview_scope ON feature_preview_grants(user_id,project_id,
 CREATE VIEW cms_live_articles AS
  SELECT r.id AS publication_id,r.project_id,r.user_id,r.collection,r.item_id,r.public_html,r.digest,json_extract(r.snapshot,'$.item.data.title') AS title,r.created_at
  FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id JOIN cms_instances c ON c.project_id=r.project_id
- WHERE r.status='published' AND r.withdrawn=0 AND p.owner_user_id=r.user_id AND c.state='ready';
+ WHERE r.status='published' AND r.withdrawn=0 AND p.owner_user_id=r.user_id AND c.state='ready'
+ AND NOT EXISTS(SELECT 1 FROM blocked_cms_publications b WHERE b.review_id=r.id);
 
 CREATE VIEW project_service_status AS
  SELECT service.*,CASE WHEN site_live=1 OR cms_articles>0 OR backend_live=1 THEN 'live' WHEN status='live' THEN 'draft' ELSE status END AS service_status
@@ -1862,6 +1879,21 @@ CREATE VIEW approved_project_photos AS
  WHERE f.status='ready' AND s.policy_version='2026-09-30' AND s.state='approved'
  AND s.csam_check='clear' AND s.sexual_check='clear' AND length(s.scanner_reference)>0
  AND julianday(s.expires_at)>julianday('now');
+
+-- One exact confirmed receipt per native media ID; ambiguous native identity is held, never approved.
+CREATE VIEW approved_cms_media AS
+ SELECT u.id AS upload_id,u.user_id,u.project_id,json_extract(u.result,'$.mediaId') AS media_id,u.digest,u.size,u.width,u.height
+ FROM cms_media_uploads u JOIN projects p ON p.id=u.project_id AND p.owner_user_id=u.user_id
+ JOIN cms_media_safety s ON s.upload_id=u.id AND s.user_id=u.user_id AND s.project_id=u.project_id AND s.digest=u.digest
+ WHERE u.result IS NOT NULL AND s.policy_version='2026-09-30' AND s.state='approved'
+ AND s.csam_check='clear' AND s.sexual_check='clear' AND length(s.scanner_reference)>0
+ AND julianday(s.expires_at)>julianday('now')
+ AND NOT EXISTS(SELECT 1 FROM cms_media_uploads o WHERE o.project_id=u.project_id AND o.id<>u.id AND json_extract(o.result,'$.mediaId')=json_extract(u.result,'$.mediaId'));
+
+-- A blocked receipt revokes every publication that froze the same native media ID.
+CREATE VIEW blocked_cms_publications AS
+ SELECT DISTINCT m.review_id FROM cms_publication_media m JOIN cms_media_uploads u ON u.project_id=m.project_id AND json_extract(u.result,'$.mediaId')=m.media_id
+ JOIN cms_media_safety s ON s.upload_id=u.id WHERE s.state='blocked';
 
 CREATE VIEW project_spec_held AS SELECT v.version_id FROM project_spec_versions v JOIN projects p ON p.id=v.project_id JOIN site_versions s ON s.id=v.version_id
  WHERE EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=p.owner_user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(v.spec_digest,v.manifest_digest,s.digest));
@@ -2879,7 +2911,11 @@ CREATE TRIGGER cms_publication_media_admit BEFORE INSERT ON cms_publication_medi
   AND u.origin=d.origin AND d.state='connected' AND json_extract(u.result,'$.mediaId')=NEW.media_id AND u.digest=NEW.digest AND u.size=NEW.size AND u.width=NEW.width AND u.height=NEW.height
   AND EXISTS(SELECT 1 FROM json_each(r.media_manifest) m WHERE json_extract(m.value,'$.mediaId')=NEW.media_id AND json_extract(m.value,'$.digest')=NEW.digest AND json_extract(m.value,'$.size')=NEW.size AND json_extract(m.value,'$.width')=NEW.width AND json_extract(m.value,'$.height')=NEW.height)
  );
+ SELECT RAISE(ABORT,'cms_media_safety_required') WHERE NOT EXISTS(SELECT 1 FROM approved_cms_media a WHERE a.user_id=NEW.user_id AND a.project_id=NEW.project_id AND a.media_id=NEW.media_id AND a.digest=NEW.digest AND a.size=NEW.size AND a.width=NEW.width AND a.height=NEW.height);
 END;
+
+CREATE TRIGGER cms_publication_media_freeze_safety BEFORE UPDATE OF state ON cms_publication_media WHEN NEW.state='ready' AND NOT EXISTS(SELECT 1 FROM approved_cms_media a WHERE a.user_id=NEW.user_id AND a.project_id=NEW.project_id AND a.media_id=NEW.media_id AND a.digest=NEW.digest)
+ BEGIN SELECT RAISE(ABORT,'cms_media_safety_required'); END;
 
 CREATE TRIGGER cms_publication_media_immutable BEFORE UPDATE ON cms_publication_media WHEN NEW.review_id<>OLD.review_id OR NEW.media_id<>OLD.media_id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.digest<>OLD.digest OR NEW.size<>OLD.size OR NEW.width<>OLD.width OR NEW.height<>OLD.height OR OLD.state<>'pending' OR NEW.state<>'ready' BEGIN SELECT RAISE(ABORT,'cms_media_immutable'); END;
 
@@ -2888,6 +2924,10 @@ CREATE TRIGGER cms_publication_media_retained BEFORE DELETE ON cms_publication_m
 CREATE TRIGGER cms_publication_media_approval BEFORE UPDATE OF status ON cms_publication_reviews WHEN NEW.status IN ('approved','published') AND (
  (SELECT count(*) FROM cms_publication_media WHERE review_id=NEW.id AND state='ready')<>json_array_length(NEW.media_manifest)
 ) BEGIN SELECT RAISE(ABORT,'cms_media_not_frozen'); END;
+
+CREATE TRIGGER cms_publication_media_safety BEFORE UPDATE OF status ON cms_publication_reviews WHEN NEW.status IN ('approved','published') AND EXISTS(
+ SELECT 1 FROM cms_publication_media m WHERE m.review_id=NEW.id AND NOT EXISTS(SELECT 1 FROM approved_cms_media a WHERE a.user_id=m.user_id AND a.project_id=m.project_id AND a.media_id=m.media_id AND a.digest=m.digest)
+) BEGIN SELECT RAISE(ABORT,'cms_media_safety_required'); END;
 
 CREATE TRIGGER cms_import_admission BEFORE INSERT ON cms_import_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_deployments d ON d.project_id=c.project_id WHERE c.project_id=NEW.project_id AND c.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND c.state='ready' AND d.state='connected') OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_discard_reviews WHERE id=NEW.id) OR (SELECT count(*) FROM cms_import_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_import_reviews)>=500
  BEGIN SELECT RAISE(ABORT,'cms_import_unavailable'); END;
@@ -3371,7 +3411,8 @@ CREATE TRIGGER publication_photo_safety_update BEFORE UPDATE OF version_id ON pu
 CREATE TRIGGER photo_scan_ticket_owner BEFORE INSERT ON photo_scan_tickets WHEN
  NEW.state!='reserved' OR julianday(NEW.expires_at)<=julianday('now') OR julianday(NEW.expires_at)>julianday('now','+1 hour') OR julianday(NEW.expires_at) IS NULL OR NOT (
  (NEW.kind='profile' AND NEW.subject_id=NEW.user_id AND EXISTS(SELECT 1 FROM profile_photo_safety s JOIN user_profiles p ON p.user_id=s.user_id AND p.photo_digest=s.digest WHERE s.user_id=NEW.user_id AND s.digest=NEW.digest AND s.policy_version=NEW.policy_version AND s.state='pending')) OR
- (NEW.kind='project' AND EXISTS(SELECT 1 FROM project_photo_safety s JOIN project_files f ON f.id=s.file_id AND f.digest=s.digest JOIN projects p ON p.id=f.project_id AND p.owner_user_id=s.user_id WHERE s.file_id=NEW.subject_id AND s.user_id=NEW.user_id AND s.digest=NEW.digest AND s.policy_version=NEW.policy_version AND s.state='pending'))
+ (NEW.kind='project' AND EXISTS(SELECT 1 FROM project_photo_safety s JOIN project_files f ON f.id=s.file_id AND f.digest=s.digest JOIN projects p ON p.id=f.project_id AND p.owner_user_id=s.user_id WHERE s.file_id=NEW.subject_id AND s.user_id=NEW.user_id AND s.digest=NEW.digest AND s.policy_version=NEW.policy_version AND s.state='pending')) OR
+ (NEW.kind='cms' AND EXISTS(SELECT 1 FROM cms_media_safety s JOIN cms_media_uploads u ON u.id=s.upload_id AND u.digest=s.digest AND u.user_id=s.user_id AND u.project_id=s.project_id JOIN projects p ON p.id=u.project_id AND p.owner_user_id=s.user_id WHERE s.upload_id=NEW.subject_id AND s.user_id=NEW.user_id AND s.digest=NEW.digest AND s.policy_version=NEW.policy_version AND s.state='pending' AND u.result IS NOT NULL))
 ) BEGIN SELECT RAISE(ABORT,'photo_scan_ticket_owner'); END;
 
 CREATE TRIGGER photo_scan_ticket_quota BEFORE INSERT ON photo_scan_tickets WHEN
@@ -3392,6 +3433,22 @@ CREATE TRIGGER project_photo_safety_immutable BEFORE UPDATE ON project_photo_saf
  NEW.file_id!=OLD.file_id OR NEW.user_id!=OLD.user_id OR NEW.digest!=OLD.digest OR NEW.policy_version!=OLD.policy_version OR NEW.created_at!=OLD.created_at OR
  NOT ((OLD.state='pending' AND NEW.state IN ('approved','blocked')) OR (OLD.state='approved' AND NEW.state='blocked') OR (OLD.state='approved' AND NEW.state='pending' AND julianday(OLD.expires_at)<=julianday('now') AND NEW.csam_check='unknown' AND NEW.sexual_check='unknown' AND NEW.scanner_reference IS NULL AND NEW.expires_at IS NULL))
  BEGIN SELECT RAISE(ABORT,'project_photo_safety_immutable'); END;
+
+CREATE TRIGGER cms_media_safety_owner BEFORE INSERT ON cms_media_safety WHEN
+ NEW.state!='pending' OR NEW.csam_check!='unknown' OR NEW.sexual_check!='unknown' OR NEW.scanner_reference IS NOT NULL OR NEW.expires_at IS NOT NULL OR NOT EXISTS(
+ SELECT 1 FROM cms_media_uploads u JOIN projects p ON p.id=u.project_id WHERE u.id=NEW.upload_id AND u.user_id=NEW.user_id AND u.project_id=NEW.project_id AND u.digest=NEW.digest AND p.owner_user_id=NEW.user_id
+) BEGIN SELECT RAISE(ABORT,'cms_media_safety_owner'); END;
+
+-- Every receipt starts held. There is no customer, model or upload path that can approve it.
+CREATE TRIGGER cms_media_safety_insert AFTER INSERT ON cms_media_uploads
+ BEGIN INSERT INTO cms_media_safety(upload_id,user_id,project_id,digest,policy_version) VALUES(NEW.id,NEW.user_id,NEW.project_id,NEW.digest,'2026-09-30'); END;
+
+CREATE TRIGGER cms_media_safety_immutable BEFORE UPDATE ON cms_media_safety WHEN
+ NEW.upload_id!=OLD.upload_id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.digest!=OLD.digest OR NEW.policy_version!=OLD.policy_version OR NEW.created_at!=OLD.created_at OR
+ NOT ((OLD.state='pending' AND NEW.state IN ('approved','blocked')) OR (OLD.state='approved' AND NEW.state='blocked') OR (OLD.state='approved' AND NEW.state='pending' AND julianday(OLD.expires_at)<=julianday('now') AND NEW.csam_check='unknown' AND NEW.sexual_check='unknown' AND NEW.scanner_reference IS NULL AND NEW.expires_at IS NULL))
+ BEGIN SELECT RAISE(ABORT,'cms_media_safety_immutable'); END;
+
+CREATE TRIGGER cms_media_safety_retained BEFORE DELETE ON cms_media_safety WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'cms_media_safety_retained'); END;
 
 CREATE TRIGGER content_screening_insert BEFORE INSERT ON content_screening_decisions WHEN
  NEW.first_required!=NEW.required OR NEW.escalation_reason IS NOT NULL OR NEW.escalated_at IS NOT NULL

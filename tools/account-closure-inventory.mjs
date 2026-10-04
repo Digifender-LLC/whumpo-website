@@ -57,6 +57,7 @@ const metrics={
  blockedBackendImports:['backend_imports','user_id',"state='blocked'"],
  blockedProfilePhotos:['profile_photo_safety','user_id',"state='blocked'"],
  blockedProjectPhotos:['project_photo_safety','user_id',"state='blocked'"],
+ blockedCMSMedia:['cms_media_safety','user_id',"state='blocked'"],
  riskEvidence:['content_risk_evidence','user_id'], riskCorrections:['content_risk_reversals','user_id'],
  activePreservationHolds:['safety_preservation_holds','subject_user_id','released_at IS NULL'],
  scanTickets:['photo_scan_tickets','user_id'],

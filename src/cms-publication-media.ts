@@ -2,6 +2,7 @@ import type {CMSArticleImage} from './cms-article-images';
 import {CMSProjectError} from './cms-error';
 import {reserveStorage,reservePublicPhotoRead} from './storage-budget';
 import {PublicClientLimitError} from './public-admission';
+import {requireApprovedCMSMedia} from './cms-media-safety';
 type Media={review_id:string;media_id:string;user_id:string;project_id:string;digest:string;size:number;width:number;height:number;state:'pending'|'ready'};
 export const cmsPublicationMediaKey=(row:Pick<Media,'project_id'|'review_id'|'digest'>)=>`cms-publications/${row.project_id}/${row.review_id}/${row.digest}.jpg`;
 const hash=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),v=>v.toString(16).padStart(2,'0')).join('');
@@ -15,6 +16,8 @@ export async function freezeCMSPublicationMedia(db:D1Database,files:R2Bucket,use
  const owner=await db.prepare('SELECT r.id FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(review,user,user).first();
  if(!owner)throw new CMSProjectError(404,'CMS publication review not found');
  const rows=(await db.prepare('SELECT * FROM cms_publication_media WHERE review_id=? ORDER BY media_id').bind(review).all<Media>()).results;
+ // Held media are never copied into the publication store; SQL rechecks clearance at freeze and approval.
+ if(rows.length)await requireApprovedCMSMedia(db,user,rows[0].project_id,rows.map(r=>({mediaId:r.media_id,digest:r.digest})));
  for(const row of rows){
   let bytes=await verifiedObject(db,files,row);
   if(!bytes){
@@ -27,18 +30,20 @@ export async function freezeCMSPublicationMedia(db:D1Database,files:R2Bucket,use
   if(row.state==='pending')await db.prepare("UPDATE cms_publication_media SET state='ready' WHERE review_id=? AND media_id=? AND state='pending'").bind(review,row.media_id).run();
  }
 }
-/** Exact current-publication membership is checked before any private bucket read. */
+/** Exact current-publication membership and current media clearance are checked before any private bucket read.
+ * GET and HEAD share this gate; blocked media also withdraw the article through cms_live_articles. */
 export async function publicCMSPublicationImage(request:Request,db:D1Database,files:R2Bucket,project:string,review:string,digest:string){
  const headers={'content-type':'image/jpeg','cache-control':'no-store','x-content-type-options':'nosniff','cross-origin-resource-policy':'cross-origin'};
  if(!['GET','HEAD'].includes(request.method))return new Response(null,{status:405,headers:{...headers,allow:'GET, HEAD'}});
- const row=await db.prepare("SELECT m.* FROM cms_publication_media m JOIN cms_live_articles a ON a.publication_id=m.review_id AND a.project_id=m.project_id AND a.user_id=m.user_id WHERE m.project_id=? AND m.review_id=? AND m.digest=? AND m.state='ready' LIMIT 1").bind(project,review,digest).first<Media>();
+ const row=await db.prepare("SELECT m.* FROM cms_publication_media m JOIN cms_live_articles a ON a.publication_id=m.review_id AND a.project_id=m.project_id AND a.user_id=m.user_id JOIN approved_cms_media safe ON safe.user_id=m.user_id AND safe.project_id=m.project_id AND safe.media_id=m.media_id AND safe.digest=m.digest WHERE m.project_id=? AND m.review_id=? AND m.digest=? AND m.state='ready' LIMIT 1").bind(project,review,digest).first<Media>();
  if(!row)return new Response(null,{status:404,headers});
  try{const bytes=await verifiedObject(db,files,row,()=>reservePublicPhotoRead(db,request,project));if(!bytes)return new Response(null,{status:503,headers});return new Response(request.method==='HEAD'?null:new Uint8Array(bytes),{headers:{...headers,'content-length':String(bytes.length)}});}catch(cause){return new Response(null,{status:cause instanceof PublicClientLimitError?429:503,headers});}
 }
 
-/** Inline only verified frozen JPEGs into an authenticated review; no public access is granted. */
+/** Inline only verified, currently cleared frozen JPEGs into an authenticated review; no public access is granted. */
 export async function inlineCMSPublicationImages(db:D1Database,files:R2Bucket,user:string,review:string,html:string){
  const rows=(await db.prepare("SELECT m.* FROM cms_publication_media m JOIN cms_publication_reviews r ON r.id=m.review_id JOIN projects p ON p.id=m.project_id WHERE m.review_id=? AND m.user_id=? AND r.user_id=m.user_id AND p.owner_user_id=m.user_id ORDER BY m.media_id").bind(review,user).all<Media>()).results;
+ if(rows.length)await requireApprovedCMSMedia(db,user,rows[0].project_id,rows.map(r=>({mediaId:r.media_id,digest:r.digest})));
  for(const row of rows){
   if(row.state!=='ready')throw new CMSProjectError(409,'Publication images need recovery before preview');
   const bytes=await verifiedObject(db,files,row);if(!bytes)throw new CMSProjectError(503,'Frozen article image is unavailable');

@@ -4,6 +4,7 @@ import {readCMSDraft} from './cms-content';
 import {CMSProjectError} from './cms-projects';
 import {previewHeaders} from './components';
 import {escapeCMS as escape,renderCMSRichText} from './cms-rich-text';
+import {requireApprovedCMSMedia} from './cms-media-safety';
 /** Shared Whumpo article layout fed by native CMS data, never tenant HTML. */
 export function renderCMSDraft(snapshot:{projectId?:string;collection:string;revision?:string;item:any},published=false,resolveImage?:(image:CMSImageBlock)=>CMSResolvedImage){
  const {item}=snapshot,blocks=item?.data?.content,title=item?.data?.title;
@@ -18,6 +19,7 @@ export function renderCMSDraft(snapshot:{projectId?:string;collection:string;rev
 }
 async function privateDraftHTML(db:D1Database,user:string,snapshot:Awaited<ReturnType<typeof readCMSDraft>>,env:Record<string,unknown>){
  const images=await captureCMSArticleImages(db,user,snapshot.projectId,snapshot.item.data?.content,env);
+ await requireApprovedCMSMedia(db,user,snapshot.projectId,images);
  let html=renderCMSDraft(snapshot,false,image=>{const row=images.find(i=>i.mediaId===image.asset._ref);if(!row)throw new CMSProjectError(409,'Image unavailable');return {src:`/api/cms/${snapshot.projectId}/media/${row.mediaId}/preview`,width:row.width,height:row.height};});
  for(const image of images){let binary='';for(let i=0;i<image.bytes.length;i+=8192)binary+=String.fromCharCode(...image.bytes.subarray(i,i+8192));html=html.replaceAll(`src="/api/cms/${snapshot.projectId}/media/${image.mediaId}/preview"`,`src="data:image/jpeg;base64,${btoa(binary)}"`);}
  return {html,images:images.length};
