@@ -9,9 +9,9 @@ const answerText=(value:Answer)=>typeof value==='boolean'?value?'Yes':'No':Array
 /** Plain current historical facts, with only navigation to a fresh scoped read. */
 export function ChatInteractionHistory({value,onOpen}:{value:unknown;onOpen:(id:string)=>void}){
  const form=readHistoryInteraction(value);
- if(!form)return <p role="status" className="rounded-xl border p-4 text-sm">This form record needs the current Whumpo response. Refresh before opening it.</p>;
+ if(!form)return <p role="status" className="rounded-md border p-4 text-sm">This form record needs the current Whumpo response. Refresh before opening it.</p>;
  const replacement=form.replacementInteractionId;
- return <section aria-label="Saved form record" className="rounded-xl border bg-card p-4 space-y-3 text-sm min-w-0">
+ return <section aria-label="Saved form record" className="rounded-md border bg-card p-4 space-y-3 text-sm min-w-0">
   {form.state==='removed'?<><h3 className="font-semibold">Form removed</h3><p>{form.removal.reason==='discarded'?'This unsubmitted form was discarded.':'This unsubmitted form reached seven days of inactivity.'} Its answers and starting values are no longer available.</p></>:<>
    <h3 className="font-semibold break-words">{form.title}</h3><p className="text-muted-foreground break-words">{form.summary}</p>
    <p className="font-medium">{form.kind==='view'?'Saved Chat view':{open:'Answers not submitted',submitted:'Answers saved',superseded:'Replaced by a newer form',expired:'Answer window closed',canceled:'Form discarded'}[form.state]}</p>

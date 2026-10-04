@@ -13,7 +13,7 @@ export function CMSWordPressImages({project,plan,onReview,disabled=false}:{proje
  const uploads=useQuery({queryKey:['cms-uploads',project],queryFn:()=>api<Uploads>(`/cms/${project}/media/uploads`),retry:false});
  const saved=Array.from(new Map((uploads.data?.uploads??[]).filter(row=>row.status==='saved'&&row.result&&/^[0-9A-HJKMNP-TV-Z]{26}$/.test(row.result.mediaId)).map(row=>[row.result!.mediaId,row])).values());
  const ids=plan.images.map(image=>choices[image.position]??''),ready=ids.length>0&&ids.every(id=>saved.some(row=>row.result!.mediaId===id&&row.safety==='approved')&&!failed[id]);
- return <div className="space-y-4 rounded-xl border bg-muted/30 p-3 sm:p-4">
+ return <div className="space-y-4 rounded-md border bg-muted/30 p-3 sm:p-4">
   <div><h5 className="font-semibold text-sm">Match your images</h5><p className="mt-2 text-sm text-muted-foreground">Choose an uploaded image for each place in this article. Original captions and descriptions stay with the article. We won’t download images from your old website.</p></div>
   {uploads.isPending?<p role="status" className="text-sm">Loading your saved images…</p>:uploads.error?<p role="alert" className="text-sm">{message(uploads.error)}</p>:!saved.length?<p className="text-sm">Add images in the Media library on this page, then refresh this list. Only confirmed uploads from this publishing space can be used.</p>:<div className="space-y-5">{plan.images.map(image=>{
    const selected=saved.find(row=>row.result!.mediaId===choices[image.position]),selectId=labelId+'-'+image.position;

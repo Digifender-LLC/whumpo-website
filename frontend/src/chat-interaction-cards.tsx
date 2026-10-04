@@ -26,7 +26,7 @@ function ProjectStatusRead({owner,interactionId,digest,projectId}:{owner:string;
 /** Closed maintained display adapter. Mounting a closed panel reads no data. */
 export function ChatInteractionCards(props:{owner:string;interactionId:string;digest:string;projectId:string}){
  const [open,setOpen]=useState(false);
- return <details className="rounded-xl border bg-secondary/20" onToggle={event=>setOpen(event.currentTarget.open)}>
+ return <details className="rounded-md border bg-secondary/20" onToggle={event=>setOpen(event.currentTarget.open)}>
   <summary className="min-h-11 cursor-pointer p-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Current project status</summary>
   {open&&<ProjectStatusRead {...props}/>}
  </details>;

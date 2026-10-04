@@ -9,7 +9,7 @@ export function GitHubGrantReviewCard({review,onAction,busy=false}:{review:GitHu
  const state=review.state==='review'&&review.expiresAt<=new Date().toISOString()?'expired':review.state;
  const status={review:'Your approval is needed',expired:'Review expired',cancelled:'Cancelled',dispatching:'Waiting for a confirmed result',uncertain:'Result needs recovery',revoked:'Access removal confirmed'}[state];
  const act=async(operation:'confirm'|'cancel')=>{if(busy||working)return;setWorking(true);setError('');try{await onAction(operation==='confirm'?{type:'githubGrant',operation,reviewId:review.id,confirmation:'REVOKE_APP_ACCESS'}:{type:'githubGrant',operation,reviewId:review.id});}catch(e){setError(message(e))}finally{setWorking(false)}};
- return <section aria-label="GitHub access review" className="rounded-2xl border bg-card p-4 sm:p-5 space-y-4 text-sm min-w-0">
+ return <section aria-label="GitHub access review" className="rounded-lg border bg-card p-4 sm:p-5 space-y-4 text-sm min-w-0">
   <div><h3 className="font-bold text-base">Remove GitHub app access</h3><p className="text-muted-foreground mt-1" role="status">{status}</p></div>
   <dl className="space-y-2"><div><dt className="text-xs text-muted-foreground">GitHub account</dt><dd className="font-semibold break-words">{review.login} <span className="font-normal text-muted-foreground">· ID {review.githubUserId}</span></dd></div><div><dt className="text-xs text-muted-foreground">Saved credentials covered</dt><dd>{review.credentialCount}</dd></div></dl>
   <p className="leading-relaxed break-words">{review.disclosure}</p>

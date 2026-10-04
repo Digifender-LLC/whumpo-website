@@ -38,7 +38,7 @@ export function ServiceSafetyPanel({kind,project,review}:{kind:SafetyService;pro
   if(!current)return;const stamp=current.id+':'+current.state;if(lastResult.current===stamp)return;lastResult.current=stamp;
   if(document.activeElement===document.body||document.activeElement?.textContent?.startsWith('Confirm taking '))resultHeading.current?.focus();
  },[current]);
- return <section aria-label={label(kind)+' withdrawals'} className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4">
+ return <section aria-label={label(kind)+' withdrawals'} className="rounded-lg border bg-card p-5 sm:p-6 space-y-4">
   <h2 ref={heading} tabIndex={-1} className="text-xl font-bold">{label(kind)} withdrawals</h2>
   {action.error&&<p role="alert" className="text-sm">{action.error}</p>}
   {review&&<><div className="flex flex-wrap gap-3"><Button className={wrap} variant="outline" disabled={detail.isFetching||action.busy} onClick={()=>void detail.refetch()}>Check saved result</Button><Button variant="ghost" className={wrap} onClick={()=>void navigate({to:'/workspace/$view',params:{view:'safety'},search:{project,service:kind}})}>Close review</Button></div>
