@@ -1806,6 +1806,49 @@
       }
     },
     {
+      "id": "public-admission-counters",
+      "tables": [
+        "public_client_usage",
+        "storage_project_usage"
+      ],
+      "scope": "project",
+      "purpose": "Per-client public attempt counters (backend, contact, photo) and per-project monthly public photo read counters that keep one source or tenant from exhausting shared allowances (WH-075).",
+      "currentRetention": "Client rows hold only a scope/project/UTC-day SHA-256 key of the connecting address (IPv6 /64) and a count; the daily traffic maintenance job deletes rows older than the previous UTC day. Project read counters are deleted once older than the previous month. Project deletion cascades both.",
+      "proposedRetention": "Keep the two-day client window and two-month project window; never store raw addresses, request bodies or visitor identities here.",
+      "deletionAuthority": "Documented automatic retention or project/account closure cascade.",
+      "exportPolicy": "Not exported: abuse-control counters, not owner content. Pseudonymous client keys are never shown to owners.",
+      "references": [
+        "src/public-admission.ts",
+        "src/storage-budget.ts",
+        "docs/capacity-and-fairness.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Admission triggers and bounded operator diagnostics only"
+        ],
+        "processors": [
+          "Deterministic admission counters in the public site host and contact form"
+        ],
+        "remainingExposure": [
+          "An unsalted per-day hash of an IPv4 address can be brute-forced by someone with database access; rows are short-lived and never exported."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "product-measurement",
       "tables": [
         "funnel_events"

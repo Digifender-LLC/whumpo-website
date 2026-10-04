@@ -4012,7 +4012,7 @@
         "docs/roadmap/alignment.md",
         "docs/workload-placement.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/128",
       "owner": null,
       "evidence": [
         "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."

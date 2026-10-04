@@ -1,3 +1,4 @@
+import {projectRuntime} from './runtime-lane';
 import {hashToken,newSessionToken} from './security';
 import {BackendError,callBackend} from './backend-versions';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -48,7 +49,7 @@ export async function transitionAppData(db:D1Database,service:Fetcher,token:stri
  try{await db.prepare('INSERT INTO app_runs(id,visitor_id,project_id,version_id,session_hash,request_hash,base_revision,program_revision) VALUES(?,?,?,?,?,?,?,?)').bind(id,actor.visitor_id,project,actor.version_id,actor.token_hash,fingerprint,revision,actor.program_revision).run();}catch{
   const found=await read();if(found)return receipt(found);throw new BackendError(409,'Application changed or execution allowance reached');
  }
- const outcome=await callBackend(service,code.source,payload),value=outcome.ok?outcome.value:null;
+ const outcome=await callBackend(await projectRuntime(service,project),code.source,payload),value=outcome.ok?outcome.value:null;
  const valid=value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===2&&'state'in value&&'result'in value&&bytes(JSON.stringify((value as {state:unknown}).state))<=4096&&bytes(JSON.stringify((value as {result:unknown}).result))<=4096;
  const proposed=value as {state:unknown;result:unknown};
  const result=valid?{ok:true,value:proposed.result,revision:revision+1}:outcome.ok?{ok:false,error:'invalid_transition'}:outcome;

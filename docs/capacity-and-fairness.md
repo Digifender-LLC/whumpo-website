@@ -1,13 +1,13 @@
 # Capacity, abuse and tenant-fairness measurement (WH-050)
 
-**First slice, recorded October 4, 2026 UTC against main `ae96716` plus the uncommitted harness.** Roadmap task [WH-050](roadmap/backlog.md) (P0). This slice delivers a reproducible **local** synthetic-client harness and its measured results. It does **not** complete WH-050: no live experiment was run, no alerting exists, and the cohort limits below are proposals awaiting an owner decision.
+**First slice, recorded October 4, 2026 UTC against main `ae96716` plus the uncommitted harness.** The [WH-075 first-slice fairness fixes](#wh-075-first-slice-fairness-fixes--october-4-2026-utc) were re-measured with the same harness the same day; the "before" tables below are the original WH-050 record. Roadmap task [WH-050](roadmap/backlog.md) (P0). This slice delivers a reproducible **local** synthetic-client harness and its measured results. It does **not** complete WH-050: no live experiment was run, no alerting exists, and the cohort limits below are proposals awaiting an owner decision.
 
 > **Local-only evidence.** Every number here came from a disposable local D1/R2 fixture, the real QuickJS runtime Worker under Miniflare/workerd, and the real platform, site and visitor handlers called in one Node process behind a loopback HTTP server. Nothing touched Cloudflare, a provider, a deployed URL or the network beyond `127.0.0.1`. These figures describe one 4-vCPU machine and these fixtures. They are **not** Cloudflare production limits or capacity, and absolute latencies must not be read as a service-level expectation. See [What this does not prove](#what-this-does-not-prove).
 
 ## Run it
 
 ```sh
-node tools/capacity.mjs              # full default envelope, about 4 minutes on the recorded machine
+node tools/capacity.mjs              # full default envelope, about 5 minutes on the recorded machine (309 s with WH-075 phase L)
 node tools/capacity.mjs --smoke      # tiny volumes, about 70 seconds, proves the harness works
 node tools/capacity.mjs --json out.json --scale 2 --tenants 6 --seed 7
 ```
@@ -31,7 +31,7 @@ Paths driven over loopback HTTP, each from a distinct synthetic client IP (`cf-c
 | Public backend | anonymous `POST /s/PROJECT/backend` (real QuickJS) |
 | Visitor app | `GET /apps/PROJECT/` page and authenticated `POST /apps/PROJECT/data` transitions (real QuickJS; sessions issued by the fixture, so WebAuthn sign-in cost is unmeasured) |
 
-Scenarios: **Runtime bounds** and **concurrency gate** (direct to the runtime Worker), **unit cost** (sequential, unloaded), **A** victims alone, **S** simultaneous hostile and benign backend burst, **B** the same victim workload while the noisy tenant floods every path (one noisy backend source is benign on ordinary input but spins, allocates or recurses on request), **P** per-IP limiter probes, **D** shared platform daily backend budget (two filler accounts, five projects each, real traffic), **C** serving and recovery after saturation, **E** shared monthly R2 read budget.
+Scenarios: **Runtime bounds** and **concurrency gate** (direct to the runtime Worker), **unit cost** (sequential, unloaded), **A** victims alone, **S** simultaneous hostile and benign backend burst, **B** the same victim workload while the noisy tenant floods every path (one noisy backend source is benign on ordinary input but spins, allocates or recurses on request), **P** per-IP limiter probes, **D** shared platform daily backend budget (two filler accounts, five projects each, real traffic), **C** serving and recovery after saturation, **E** shared monthly R2 read budget (since WH-075: a per-project budget and the unchanged platform ceiling), **L** (WH-075) one-source anonymous lockout against a fresh tenant. Since WH-075 direct runtime calls carry a fairness lane and the concurrency table is measured with distinct and with one shared lane.
 
 The harness replaces the Workers rate-limit bindings with an exact in-memory fixed window using the limits read from `wrangler.jsonc`/`wrangler.apps.jsonc` (`AUTH_LIMITER` 10/60 s, `API_LIMITER` 120/60 s). That is a stand-in, not the Cloudflare implementation. D1 statements are counted by wrapping `env.DB`; runtime calls and in-flight peak by wrapping the service binding.
 
@@ -141,7 +141,47 @@ The noisy tenant consumed exactly its per-project public-backend and visitor all
 | Per-IP limits are not claimed as financial caps | **Met.** P shows distributed clients bypass them and three public paths have none. Do not describe `API_LIMITER` or `AUTH_LIMITER` as spend controls ([runbook C4/G2](incident-runbooks.md)). |
 | Any live load/cost experiment requires an exact bounded plan | **Honored.** No live load was run. Run nothing against `*.whumpo.site`, `whumpo.com` or any deployed Worker without a reviewed plan stating target, request count, duration, concurrency, expected cost and stop condition. |
 
-## Findings: fairness and abuse gaps (not fixed in this slice)
+## WH-075 first-slice fairness fixes — October 4, 2026 UTC
+
+Roadmap task [WH-075](roadmap/backlog.md) (first slice only; WH-075 is not complete). **Local evidence only**: same harness, machine and Node 22.22.0 as above, seed 50, scale 1, 4 tenants, total 308.6 s, re-run after the changes on branch `claude/wh-075-fairness` (uncommitted at recording time). Nothing was deployed and no Cloudflare product, binding or plan changed.
+
+What changed (current schema only, [`schema/platform.sql`](../schema/platform.sql); no migrations):
+
+| Finding | Change | Where |
+| --- | --- | --- |
+| F5 | **Per-client sub-limits inside each project allowance**: one connection (IPv4 address, or IPv6 /64) may make at most 20 public backend calls, 10 contact submissions and 400 public photo reads per project per UTC day. Counted as attempts (never refunded). Only a scope/project/day SHA-256 key is stored, in new table `public_client_usage` (classified `public-admission-counters` in the [lifecycle catalog](data-lifecycle.json); rows older than the previous UTC day are deleted by the daily `traffic` maintenance job). Refusal is 429 and does not spend the project allowance. | [`src/public-admission.ts`](../src/public-admission.ts), `src/backend-publication.ts`, `src/contact-page.ts`, `src/site-host.ts`, `src/cms-publication-media.ts` |
+| F1 | **Account fair share with the platform ceilings unchanged**: once half of a platform pool is used, an account that already holds a tenth of the pool is refused until the period rolls; accounts under that share keep the reserve. Public backend and visitor transitions: from 500/1,000 per UTC day, share 100. Contact receipts: from 500/1,000 retained, share 100. Public photo reads: from 50,000/100,000 per month, share 10,000. Existing project (100) and account (500 backend) caps are unchanged. | triggers `backend_public_usage_insert`, `app_run_admit`, `contact_submission_guard`, `storage_project_usage_insert` |
+| F3 | **Per-project photo budget**: public site photos and public CMS images charge a project budget of 10,000 reads/month (new table `storage_project_usage`) atomically with the 100,000 platform ceiling, plus the per-client 400/day. One project exhausting its budget gets 503 "This site's monthly photo allowance"; other tenants keep serving. Photos stay private R2, `no-store`, never public or shared-cacheable. | [`src/storage-budget.ts`](../src/storage-budget.ts) |
+| F4 | **Busy and unavailable runtime answers are not charged**: a `busy` refusal or an `unavailable` answer (no guest verdict) refunds the project/account/platform public call once (best effort; a lost refund leaves it spent) and the visitor-transition project attempt once (trigger `app_run_refund`). Guest failures (`work_limit`, `execution_failed`, ...) executed and stay charged; per-client and per-visitor attempt counts are not refunded. **Per-project runtime lane**: every dispatch carries `x-whumpo-lane` (SHA-256 of the project id, no tenant data) and the runtime lets one lane hold at most one of its two slots per isolate; a missing/invalid lane is 422 `invalid_request`. | [`src/runtime/worker.ts`](../src/runtime/worker.ts), [`src/runtime-lane.ts`](../src/runtime-lane.ts) |
+| F2 | **Not changed; documented.** The `tellumo-sites` Worker has no rate-limit binding, so no existing binding fits site HTML. The public backend and photo routes on that host are now admitted per client (F5); site HTML is still unlimited per IP. Adding a [Workers rate limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) binding to `wrangler.sites.jsonc` (a new namespace, like the existing `API_LIMITER`) is a configuration/deploy change for the owner; its plan availability and price were not re-verified here (no network) and **require verification**. A [WAF rate limiting rule](https://developers.cloudflare.com/waf/rate-limiting-rules/) remains plan dependent. | none |
+
+Standard owner AI is untouched: none of these counters meter AI, and no quota upgrades a plan.
+
+### After (same harness, re-recorded)
+
+| Measure | Before (WH-050) | After (WH-075 slice) |
+| --- | --- | --- |
+| One IP floods a fresh tenant's public backend (L) | one source could spend 100/100 | 40 sent: **20 ok, 20 x 429** `client_allowance_exhausted`; 10 other IPs afterwards: 10/10 ok; project counter 30 |
+| One IP floods contact POST (L) | one source could fill the 20/hour cap | 15 sent: **10 ok, 5 x 429**; 3 other IPs: 3/3 ok |
+| One IP floods photo GET (L) | unlimited | 450 sent: **400 ok, 50 x 429**; 10 other IPs: 10/10 ok |
+| Two filler accounts, 5 projects each, after 391 platform calls used (D) | fillers took the rest, platform 1,000/1,000; victim probes **0/5** | fillers stopped at **100 each** (200 ok, 799 x 429); platform 606/1,000 after probes; victim probes **5/5 ok**; a brand-new account **10/10 ok** |
+| Victim public backend in recovery phase (C) | 0/3 (429 until UTC rollover) | **3/3 ok** |
+| Noisy project at its 10,000 photo budget, platform at 60,000 (E) | (platform counter at 99,990) victims **0/5** photos | noisy 10 ok then 10 x 503; victims **5/5 ok** |
+| Platform read ceiling still enforced (E) | 503 for all at 100,000 | counter at 99,995: 5 ok, then 5 x 503 for victims (ceiling unchanged) |
+| Public backend charging during B | busy/failed attempts charged (victim usage 93 incl. refusals) | project counters equal executed calls exactly: noisy 100 executed / 19 busy / counter 100; victims 86/2/86, 85/0/85, 85/0/85 |
+| Runtime gate, one lane, 4 concurrent (direct) | n/a | 8/16 busy (distinct lanes 4/16); one lane never holds both slots (deterministic check in `tests/backend-runtime.mjs`) |
+| Victims in B: busy | 4 of 120 backend 503, 1 failed visitor transition | 1 of 120 backend 503 (not charged), 0 failed visitor transitions |
+| Victims alone (A): busy | 0 | 1 of 120 backend 503 and 2 of 108 visitor transitions `failed` (busy, refunded): the per-project lane serializes one tenant's own overlapping calls |
+| Victim latency A / B, all requests | p50 512 / 1,084 ms, p95 1,129 / 4,091 ms | p50 597 / 1,256 ms, p95 1,180 / 4,305 ms |
+| D1 statements per request (unit) | photo 4, contact POST 4, backend 2 | photo 6, contact POST 5, backend 3 |
+
+Latency and busy counts vary between runs (single run, timing dependent, one event loop, serialized local D1). The B latency degradation is unchanged in kind: site HTML and photo volume from many IPs is still admitted (F2), and local contention dominates.
+
+**Status of findings after this slice (local only):** F5 **resolved locally** for single-source lockout (distributed callers can still spend a project allowance: 5 sources for backend, 2 for contact's hourly cap). F1 **resolved locally** for the tested shape (two or more heavy accounts can no longer deny a light account), with a guarantee only while light accounts fit the reserve (about five accounts at their full share). F3 **resolved locally** (one tenant or client no longer exhausts every tenant's photos; many tenants together still reach the unchanged platform ceiling). F4 **partly resolved**: refusals are no longer charged and one project cannot hold the whole gate per isolate; the gateway still neither queues nor retries, a lone tenant now gets at most one concurrent execution per isolate, and multi-isolate behavior is unmeasured. F2, F6, F7, F8 **open**.
+
+Owner decisions this slice raises: the per-client limits (20/10/400 per day) can refuse legitimate visitors behind one shared address (offices, carrier NAT); the 10% fair share and 50% reserve thresholds; the 10,000/month per-project photo budget; whether to add a sites rate-limit binding (F2); whether a single tenant losing its second concurrent runtime slot is acceptable or a short wait/queue should replace `busy`.
+
+## Findings: fairness and abuse gaps (WH-050 record; status after WH-075 above)
 
 | ID | Finding | Evidence | Severity |
 | --- | --- | --- | --- |
