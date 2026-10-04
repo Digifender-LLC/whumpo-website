@@ -12,6 +12,8 @@ const source=ciCommit({WORKERS_CI_COMMIT_SHA:'a'.repeat(40)},()=>'');
 assert.deepEqual(source,{commit:'a'.repeat(40),dirty:false,branch:null});
 assert.equal(ciCommit({},args=>args[0]==='rev-parse'?'abcdef1':' M x').dirty,true);
 assert.throws(()=>ciCommit({},()=>{throw Error('no git');}),/source commit is unknown/);
+assert.equal(ciCommit({WORKERS_CI_COMMIT_SHA:'main'},args=>args[0]==='rev-parse'?'b'.repeat(40):'').commit,'b'.repeat(40));
+assert.throws(()=>ciCommit({WORKERS_CI_COMMIT_SHA:'main'},()=>{throw Error('no git');}),/source commit is unknown/);
 
 const review=ciReview({inputs:{sha256:'b'.repeat(64)}},artifact,source);
 assert.equal(review.schemaChange,'none');assert.ok(review.review.includes(source.commit));

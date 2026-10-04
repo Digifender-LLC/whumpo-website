@@ -12,7 +12,8 @@ import {prepareRelease} from './prepare-release.mjs';
 export const ciRefusal=reason=>Error('CI release refused: '+reason+' Nothing was deployed. Schema/database changes need an owner cutover; see docs/releases.md.');
 
 export function ciCommit(env=process.env,git=args=>execFileSync('git',args,{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim()){
- let commit=env.WORKERS_CI_COMMIT_SHA,dirty=false;
+ // Manual Workers Builds runs set WORKERS_CI_COMMIT_SHA to the branch name; only a hex SHA is trusted.
+ let commit=/^[0-9a-f]{7,40}$/.test(env.WORKERS_CI_COMMIT_SHA??'')?env.WORKERS_CI_COMMIT_SHA:undefined,dirty=false;
  if(!commit)try{commit=git(['rev-parse','HEAD']);}catch{}
  try{dirty=!!git(['status','--porcelain']);}catch{}
  if(!/^[0-9a-f]{7,40}$/.test(commit??''))throw ciRefusal('the source commit is unknown.');
