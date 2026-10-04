@@ -25,7 +25,7 @@ function CurrentComparison({owner,review}:{owner:string;review:SpecificationRevi
  },staleTime:0,gcTime:0,retry:false});
  return <div className="space-y-3 p-3 pt-0">
   {query.isFetching?<p role="status" className="text-sm">Checking the saved comparison…</p>:query.error?<p role="alert" className="text-sm">{message(query.error)}</p>:query.data?<SpecificationComparison value={query.data}/>:null}
-  <Button type="button" variant="outline" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh comparison</Button>
+  <Button type="button" variant="secondary" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh comparison</Button>
  </div>;
 }
 export function SpecificationReviewDetails({owner,value}:{owner:string;value:unknown}){

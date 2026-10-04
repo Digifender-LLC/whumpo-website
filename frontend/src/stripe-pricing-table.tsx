@@ -149,7 +149,7 @@ export function StripePricingTable({
           {state.status === 'error' && (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               className="mt-6 rounded-full"
               onClick={() => {
                 setState({ status: 'loading' });
@@ -159,7 +159,7 @@ export function StripePricingTable({
               Try again
             </Button>
           )}
-          <Button asChild variant="outline" className="mt-6 rounded-full bg-white">
+          <Button asChild variant="secondary" className="mt-6 rounded-full bg-white">
             <Link to="/workspace" search={{ signup: true }}>
               Explore with an invite
             </Link>

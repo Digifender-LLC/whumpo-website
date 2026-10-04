@@ -51,6 +51,6 @@ function ViewComponentRead({owner,queryKey,path,request,kind,projectId}:{owner:s
  useEffect(()=>{if(query.error instanceof APIError&&query.error.code==='workspace_layout_changed')void queryClient.invalidateQueries({queryKey:['dashboard']});},[query.error]);
  return <div data-view-component={kind} className="space-y-4">
   {query.isFetching&&!(kind==='guest-previews'&&query.data&&!query.error)?<p role="status" className="text-sm">Checking current information…</p>:query.error?<p role="alert" className="text-sm">{message(query.error)}</p>:query.data?<ViewComponentDisplay value={query.data} owner={owner} onChanged={()=>void query.refetch()}/>:null}
-  <Button type="button" variant="outline" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh {viewLabels[kind].toLowerCase()}</Button>
+  <Button type="button" variant="secondary" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh {viewLabels[kind].toLowerCase()}</Button>
  </div>;
 }

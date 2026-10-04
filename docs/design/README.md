@@ -5,7 +5,7 @@
 Status: **being adopted in stages.**
 
 - Stage 1 (implemented): `tools/design-tokens.mjs` generates `frontend/src/design-tokens.css` from `tokens.json`; the workspace and landing styles draw color, radius, shadow, focus and type from it. Poppins (500/700) is bundled for display text and Inter stays the UI face. `pnpm check` rejects a stale token file.
-- Stage 2 (planned): shared components replace their existing equivalents.
+- Stage 2 (implemented): the nine components exist as typed React components in `frontend/src/components/`. `Brand` is `brand.tsx`; `Icon`, `StatusBadge`, `ChatMessage`, `ProgressCard`, `ServiceTile` and `ApprovalCard` are in `whumpo/`. `Button` is `ui/button.tsx` with the design system's `primary` (default), `secondary` and `quiet` variants plus `link` and `destructive`; the shadcn `default`/`outline`/`ghost` names and the unused `Badge` were removed. Cards, inputs, tabs and dialogs use the token radii and shadows. Chat turns use `ChatMessage`; the chat composer keeps its multi-line field and recovery behavior, so it takes the Composer look (raised surface, strong border, round send button) with a 20px radius instead of a single-line pill.
 - Stage 3 (planned): screen-by-screen migration.
 
 ## Contents

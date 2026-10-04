@@ -4,7 +4,7 @@ import {Button} from './components/ui/button';
 export function QueryRecovery({name,error,fetching,hasData,retry}:{name:string;error:unknown;fetching:boolean;hasData:boolean;retry:()=>Promise<boolean>}){
  if(error)return <div className="rounded-md border bg-card p-4 space-y-3 text-sm">
   <p role="alert">{hasData?`Couldn’t refresh your ${name}. The last loaded view is still shown.`:`Couldn’t load your ${name}. Check your connection and try again.`}</p>
-  <Button type="button" variant="outline" size="sm" disabled={fetching} onClick={async event=>{
+  <Button type="button" variant="secondary" size="sm" disabled={fetching} onClick={async event=>{
    const button=event.currentTarget,surface=button.closest<HTMLElement>('[data-recovery-surface]');
    if(await retry()){
     // Restore keyboard position after the retry control disappears, unless the

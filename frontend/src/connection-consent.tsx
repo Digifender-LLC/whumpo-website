@@ -41,11 +41,11 @@ export function ConnectionConsent({provider,status,handoff=null,disabled=false,r
   {provider==='cloudflare'&&status.connected&&<p className="text-sm">To change accounts, disconnect first, then authorize the account you want.</p>}
   <div className="flex flex-wrap gap-2">
    <Button className="min-h-11" disabled={disabled||busy||unavailable} onClick={()=>void run(connect)}>{status.connected||status.expired?'Authorize again with ':'Authorize with '}{label}</Button>
-   <Button variant="outline" className="min-h-11" disabled={disabled||busy} onClick={()=>void run(refresh)}>Check connection status</Button>
-   {(status.connected||status.revocationPending||status.authorizationPending)&&<Button variant="outline" className="min-h-11" disabled={disabled||busy} onClick={()=>setDisconnect(true)}>Disconnect {label}</Button>}
+   <Button variant="secondary" className="min-h-11" disabled={disabled||busy} onClick={()=>void run(refresh)}>Check connection status</Button>
+   {(status.connected||status.revocationPending||status.authorizationPending)&&<Button variant="secondary" className="min-h-11" disabled={disabled||busy} onClick={()=>setDisconnect(true)}>Disconnect {label}</Button>}
   </div>
   {notice&&<p role="alert" className="text-sm break-words">{notice}</p>}
-  <Dialog open={disconnect} onOpenChange={value=>{if(!busy)setDisconnect(value)}}><DialogContent><DialogHeader><DialogTitle>Disconnect {label}?</DialogTitle><DialogDescription>This disables this account connection for Whumpo and cancels pending authorization. Existing published sites and saved backups are retained. Provider cleanup may remain pending.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={busy} onClick={()=>setDisconnect(false)}>Keep connection</Button><Button variant="destructive" disabled={busy||disabled} onClick={()=>void run(async()=>{await send(`/connections/${provider}/disconnect`);setDisconnect(false);await refresh();})}>Disconnect {label}</Button></DialogFooter></DialogContent></Dialog>
+  <Dialog open={disconnect} onOpenChange={value=>{if(!busy)setDisconnect(value)}}><DialogContent><DialogHeader><DialogTitle>Disconnect {label}?</DialogTitle><DialogDescription>This disables this account connection for Whumpo and cancels pending authorization. Existing published sites and saved backups are retained. Provider cleanup may remain pending.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" disabled={busy} onClick={()=>setDisconnect(false)}>Keep connection</Button><Button variant="destructive" disabled={busy||disabled} onClick={()=>void run(async()=>{await send(`/connections/${provider}/disconnect`);setDisconnect(false);await refresh();})}>Disconnect {label}</Button></DialogFooter></DialogContent></Dialog>
  </div>;
 }
 export function ChatConnectionConsent({owner,provider,handoff,disabled}:{owner:string;provider:ConnectionProvider;handoff:ConnectionHandoff;disabled:boolean}){
@@ -55,7 +55,7 @@ export function ChatConnectionConsent({owner,provider,handoff,disabled}:{owner:s
  const refresh=async()=>{await queryClient.invalidateQueries({queryKey:['connections']});const result=await q.refetch();if(result.error)throw result.error;};
  return <div className="space-y-3">
   {q.isFetching&&<p role="status" className="text-sm">Checking saved connection status…</p>}
-  {q.error&&<div role="alert" className="space-y-3 text-sm"><p>{message(q.error)}</p><Button variant="outline" className="min-h-11" disabled={disabled||q.isFetching} onClick={()=>void q.refetch()}>Check connection status</Button></div>}
+  {q.error&&<div role="alert" className="space-y-3 text-sm"><p>{message(q.error)}</p><Button variant="secondary" className="min-h-11" disabled={disabled||q.isFetching} onClick={()=>void q.refetch()}>Check connection status</Button></div>}
   {data&&!valid&&<p role="alert" className="text-sm">Update Whumpo to read this connection handoff.</p>}
   {valid&&!q.error&&q.isFetchedAfterMount&&<><ConnectionConsent provider={provider} status={data.status} handoff={handoff} disabled={disabled||q.isFetching||!data.canStart} refresh={refresh}/><p className="text-xs text-muted-foreground">Checked {new Date(data.observedAt).toLocaleTimeString()}.</p></>}
  </div>;

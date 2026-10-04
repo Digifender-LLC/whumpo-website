@@ -20,7 +20,7 @@ function ProjectStatusRead({owner,interactionId,digest,projectId}:{owner:string;
  },staleTime:0,gcTime:0,retry:false});
  return <div className="space-y-3 p-3 pt-0">
   {query.isFetching?<p role="status" className="text-sm">Checking current project status…</p>:query.error?<p role="alert" className="text-sm">{message(query.error)}</p>:query.data?<ProjectStatusDisplay value={query.data}/>:null}
-  <Button type="button" variant="outline" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh status</Button>
+  <Button type="button" variant="secondary" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh status</Button>
  </div>;
 }
 /** Closed maintained display adapter. Mounting a closed panel reads no data. */
