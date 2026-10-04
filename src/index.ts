@@ -73,6 +73,7 @@ import {contactDelivery} from './contact-email';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
 import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
+import {readOwnerFileCollections} from './shared-modules/files-gallery';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
 import {hostingConfig,hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,maintainHosting} from './domain-hosting';
@@ -390,6 +391,10 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   // workspace identity and project ownership; a visitor cookie never authenticates here (docs/shared-modules.md).
   const moduleMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/modules$/);
   if(method==='POST'&&moduleMatch)return json(await handleModuleRequest(env.DB,{kind:'owner',userId:user.id,projectId:moduleMatch[1]},await body(request)));
+  // WH-128 owner Photos panel: owner collections, unfiled photos and pages for the "Add to collection" and
+  // "Prepare gallery page" controls (dashboard only; never Chat or model input).
+  const ownerCollections=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-files$/);
+  if(method==='GET'&&ownerCollections)return json(await readOwnerFileCollections(env.DB,user.id,ownerCollections[1]));
   // WH-127 owner records panel: counts per records instance (the records.summary@1 facts), then the list below.
   const recordsSummary=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records$/);
   if(method==='GET'&&recordsSummary)return json(await readRecordsSummary(env.DB,user.id,recordsSummary[1]));

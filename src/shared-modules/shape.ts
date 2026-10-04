@@ -51,3 +51,13 @@ export function validRecordsSummaryFacts(d:unknown):d is RecordsSummaryFacts{
   &&Array.isArray(i.views)&&i.views.length<=8&&i.views.every(v=>exact(v,['viewId','recordId','audience','scope'])&&localName(v.viewId)&&localName(v.recordId)&&['staff','visitor'].includes(String(v.audience))&&['all','own'].includes(String(v.scope))))
   &&new Set(d.items.map(i=>(i as {localId:string}).localId)).size===d.items.length;
 }
+
+/** WH-128 owner photo-collection panel facts (dashboard only, owner route GET /api/projects/P/module-files): the saved
+ * specification's page ids and paths, the owner's ready library photos not yet in a collection (id and exact digest, so
+ * the owner's `files.putBytes` can name them), and per owner collection (`upload` lists `owner`) of each registered files
+ * instance its state, revisions and the owner-filed photo ids with their safety state. Never a staff or visitor upload. */
+export type OwnerFileCollections={
+ pages:{id:string;path:string}[];
+ candidates:{fileId:string;sha256:string}[];
+ collections:{instanceId:string;resourceId:string;configRevision:number;state:'inactive'|'active'|'suspended'|'migrating';collectionId:string;files:{fileId:string;safety:'pending'|'approved'|'blocked'}[]}[];
+};

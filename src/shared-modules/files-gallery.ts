@@ -1,8 +1,9 @@
 import {prepareSpecification} from '../project-specification/store';
-import {approvedPhotoSQL} from '../photo-safety';
+import {approvedPhotoSQL,photoSafetySQL} from '../photo-safety';
 import {assertWorkspace} from '../workspace-identity/admission';
 import {ModuleError} from './policy';
 import {currentSpecification,instanceOf,registeredInstances} from './registry';
+import type {OwnerFileCollections} from './shape';
 
 /** WH-128 published galleries. A typed owner Chat control (`galleryPageReview`), never a model action and never
  * advertised to the site agent: it prepares the existing exact private website review that sets one page's photos to the
@@ -40,4 +41,29 @@ export async function prepareGalleryPageCommand(db:D1Database,user:string,turn:s
  // the reply (BackendError on refusal). The owner's own photo name is the alt text, as for any website photo.
  return prepareSpecification(db,user,turn,{kind:'specification',operation:'change',projectId:project,expectedRevision:spec.revision,
   operations:[{type:'pages.setPhotos',pageId,photos:results.map(r=>({id:r.id,alt:r.name.trim()||'Photo'}))}]});
+}
+
+/** WH-128 owner Photos panel controls (GET /api/projects/P/module-files, workspace origin, dashboard only). Lists what the
+ * owner needs to file existing photos into an owner collection with the owner `files.putBytes` route and to start the
+ * typed `galleryPageReview` control: page ids, unfiled ready library photos with their exact digest, and the owner
+ * collections with their owner-filed photos and safety state. Staff and visitor uploads never appear. Read-only: filing
+ * and the gallery review keep their own server checks (module_file_admit, the exact specification and publication
+ * reviews). No Chat history or model context. */
+export async function readOwnerFileCollections(db:D1Database,user:string,project:string):Promise<OwnerFileCollections>{
+ if(!uuid.test(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
+ let pages:OwnerFileCollections['pages']=[];
+ try{pages=(await currentSpecification(db,user,project))?.pages.slice(0,16)??[];}catch(error){if(!(error instanceof ModuleError))throw error;}
+ const {results:candidates}=await db.prepare(`SELECT f.id fileId,f.digest sha256 FROM project_files f WHERE f.project_id=? AND f.status='ready' AND NOT EXISTS(SELECT 1 FROM module_files mf WHERE mf.file_id=f.id)
+  ORDER BY f.created_at DESC,f.id DESC LIMIT 50`).bind(project).all<{fileId:string;sha256:string}>();
+ const collections:OwnerFileCollections['collections']=[];
+ for(const row of (await registeredInstances(db,project)).filter(r=>r.kind==='files'&&r.state!==null).slice(0,8)){
+  const instance=await instanceOf(row);if(instance.kind!=='files')continue;
+  for(const c of instance.config.collections.filter(c=>c.upload.includes('owner'))){
+   const {results}=await db.prepare(`SELECT f.id fileId,${photoSafetySQL} AS safety FROM module_files mf JOIN project_files f ON f.id=mf.file_id AND f.project_id=mf.project_id
+    WHERE mf.instance_id=? AND mf.project_id=? AND mf.collection_id=? AND mf.uploader_kind='owner' AND f.status='ready' ORDER BY mf.created_at DESC,mf.file_id DESC LIMIT 50`)
+    .bind(row.id,project,c.id).all<{fileId:string;safety:'pending'|'approved'|'blocked'}>();
+   collections.push({instanceId:row.local_id,resourceId:row.id,configRevision:row.config_revision,state:row.state as OwnerFileCollections['collections'][number]['state'],collectionId:c.id,files:results});
+  }
+ }
+ return {pages,candidates,collections};
 }

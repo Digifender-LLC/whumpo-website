@@ -41,7 +41,7 @@ export function moduleDescriptor(projectId:string,resourceId:string,instance:Mod
   lifecycle:{exportFormat:1,exportHook,deleteHook:'project-cascade',restoreHook:'unsupported',migrateHook:'migration-required',portability:'platform-only'}};
 }
 
-export type CurrentSpecification={versionId:string;revision:number;digest:string;instances:ModuleInstance[]};
+export type CurrentSpecification={versionId:string;revision:number;digest:string;instances:ModuleInstance[];pages:{id:string;path:string}[]};
 /** The owned project's current saved specification head, revalidated against its saved digest. */
 export async function currentSpecification(db:D1Database,user:string,project:string):Promise<CurrentSpecification|null>{
  if(!uuid(project))throw new ModuleError('invalid_request','Choose an owned project.');
@@ -52,7 +52,7 @@ export async function currentSpecification(db:D1Database,user:string,project:str
  try{
   const spec=validateSpecification(JSON.parse(row.spec_json));
   if(await jsonDigest(spec)!==row.spec_digest)throw new ModuleError('unavailable','The saved website configuration failed its integrity check.');
-  return {versionId:row.version_id,revision:row.revision,digest:row.spec_digest,instances:spec.instances};
+  return {versionId:row.version_id,revision:row.revision,digest:row.spec_digest,instances:spec.instances,pages:spec.pages.map(p=>({id:p.id,path:p.path}))};
  }catch(error){
   if(error instanceof SpecificationError||error instanceof SyntaxError)throw new ModuleError('unavailable','The saved website configuration is not current.');
   throw error;

@@ -289,6 +289,56 @@ try{
   const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['galleryPageReview','review-collection-gallery','files.putBytes'])assert.ok(!prompt.includes(word),word);
  });
 
+ await check('owner Photos panel controls: Add to collection and Prepare gallery page over the real routes',async()=>{
+  // The panel's own client (frontend/src/lib/photo-collections.ts), driven against the actual workspace routes.
+  const built=await build({entryPoints:['frontend/src/lib/photo-collections.ts'],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+  const ui=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+  const c=await owner(),workspace=(o,path,init={})=>m.worker.fetch(new Request('https://whumpo.com/api'+path,{...init,headers:{cookie:`__Host-whumpo_session=${o.token}`,origin:'https://whumpo.com','content-type':'application/json'}}),{...(fixture.env??{}),...env},{waitUntil(){}});
+  const facts=async(o,project=o.project)=>{const r=await workspace(o,ui.ownerCollectionsPath(project));return {status:r.status,body:await r.json()};};
+  // Like the panel's api(): a non-2xx answer throws with the server's code.
+  const sends=[];let drop=false;
+  const send=o=>async(path,init)=>{sends.push(JSON.parse(init.body));const r=await workspace(o,path,init),body=await r.json();if(drop){drop=false;throw Error('Connection lost');}if(!r.ok)throw Object.assign(Error(body.error??body.code),{code:body.code});return body;};
+  let none=await facts(c);assert.equal(none.status,200);assert.deepEqual(none.body.collections,[]);assert.deepEqual(none.body.candidates,[]);assert.ok(none.body.pages.some(p=>p.id==='home'&&p.path==='/'));
+  assert.equal((await facts(a,c.project)).status,404,'Another owner cannot read the panel facts');
+  await configureFixtureModules(c.scope,c.user,c.project,[accessInstance,filesInstance]);await activation(c,'members');await activation(c,'media');
+  const ownerPhoto=async name=>{const fileId=id(),r=await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':encodeURIComponent(name)},body:jpegA}),{...env,DB:c.scope},c.user,c.project,fileId);assert.equal(r.status,'ready');return fileId;};
+  const p1=await ownerPhoto('Panel one'),p2=await ownerPhoto('Panel two');
+  let state=(await facts(c)).body;
+  assert.deepEqual(state.collections.map(x=>[x.instanceId,x.collectionId,x.state,x.files.length]),[['media','library','active',0]],'Only collections whose upload lists owner');
+  assert.deepEqual(state.candidates.map(x=>x.fileId).sort(),[p1,p2].sort());
+  for(const x of state.candidates)assert.equal(x.sha256,(await row('SELECT digest FROM project_files WHERE id=?',x.fileId)).digest);
+  assert.equal(ui.fileableCollections(state).length,1);assert.equal(ui.collectionOf(state,p1),undefined);
+  // Add to collection: a lost acknowledgement retries with the same request id and replays the receipt.
+  const file=ui.collectionFiler(send(c)),library=ui.fileableCollections(state)[0];
+  drop=true;await assert.rejects(file(c.project,library,ui.candidateOf(state,p1)),/Connection lost/);
+  const replay=await file(c.project,library,ui.candidateOf(state,p1));assert.equal(replay.receipt.replayed,true);assert.equal(sends[0].requestId,sends[1].requestId);
+  assert.deepEqual(sends[0],{api:'whumpo-modules',version:1,operation:'files.putBytes',resourceId:library.resourceId,configRevision:library.configRevision,requestId:sends[0].requestId,target:{collectionId:'library'},input:{fileId:p1,sha256:ui.candidateOf(state,p1).sha256}});
+  assert.equal((await row('SELECT count(*) n FROM module_files WHERE file_id=?',p1)).n,1);
+  state=(await facts(c)).body;assert.equal(ui.collectionOf(state,p1).collectionId,'library');assert.equal(ui.candidateOf(state,p1),undefined);
+  assert.deepEqual(state.collections[0].files,[{fileId:p1,safety:'pending'}]);
+  assert.ok((await m.listPhotos(c.scope,c.user,c.project)).files.some(f=>f.id===p1),'Filed photos stay in the owner library');
+  // Prepare gallery page: the typed control only; held photos make no gallery.
+  assert.equal(ui.galleryReady(state.collections[0],state.pages),false);
+  const action=ui.galleryReviewAction(c.project,state.collections[0],'home');assert.ok(m.chatControl(action));assert.deepEqual(action,{type:'galleryPageReview',projectId:c.project,instanceId:'media',collectionId:'library',pageId:'home'});
+  assert.equal((await control(c,action)).status,409);
+  await approve(p1);state=(await facts(c)).body;assert.equal(ui.galleryReady(state.collections[0],state.pages),true);
+  const prepared=await control(c,action);assert.equal(prepared.status,200,prepared.error);
+  const q=await row('SELECT * FROM project_spec_proposals WHERE id=?',prepared.id);assert.deepEqual(JSON.parse(q.spec_json).pages.find(p=>p.id==='home').photos.map(p=>p.id),[p1]);
+  assert.equal(await row('SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=? AND v.spec_digest=?',c.project,q.spec_digest),null,'Preparing saves nothing');
+  // A disabled instance offers no filing, and the server refuses a stale filing anyway.
+  const stale=ui.fileableCollections(state)[0],candidate=ui.candidateOf(state,p2);
+  await activation(c,'media','disable');state=(await facts(c)).body;assert.equal(state.collections[0].state,'inactive');assert.equal(ui.fileableCollections(state).length,0);
+  await assert.rejects(ui.collectionFiler(send(c))(c.project,stale,candidate));assert.equal(await row('SELECT 1 FROM module_files WHERE file_id=?',p2),null);
+  // Another owner's panel facts never list staff/visitor uploads: only owner-filed photos and unfiled owner photos.
+  const theirsA=(await rows("SELECT file_id FROM module_files WHERE project_id=? AND uploader_kind!='owner'",a.project)).map(r=>r.file_id),aFacts=JSON.stringify((await facts(a)).body);
+  assert.ok(theirsA.length);for(const fileId of theirsA)assert.ok(!aFacts.includes(fileId));
+  // The panel wires the shared client; the site agent's prompt advertises none of it.
+  const panel=await readFile('frontend/src/workspace-controls.tsx','utf8'),controls=await readFile('frontend/src/photo-collections.tsx','utf8');
+  for(const name of ['PhotoCollectionControl','CollectionGalleries','ownerCollectionsPath'])assert.ok(panel.includes(name),name);
+  assert.ok(controls.includes('galleryReviewAction(')&&controls.includes('collectionFiler(')&&!/fetch\(/.test(controls));
+  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['module-files','Add to collection','Prepare gallery page'])assert.ok(!prompt.includes(word),word);
+ });
+
  await check('module uploads stay out of the owner photo library, Chat and model context',async()=>{
   const ids=(await rows("SELECT file_id FROM module_files WHERE project_id=? AND uploader_kind!='owner'",a.project)).map(r=>r.file_id);assert.ok(ids.length>=3);
   const listed=await m.listPhotos(a.scope,a.user,a.project);assert.ok(!listed.files.some(f=>ids.includes(f.id)));
@@ -347,6 +397,6 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
+ process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the owner Photos panel client over the real routes (panel facts, Add to collection with request-id replay, Prepare gallery page, disabled-instance refusal, no staff/visitor uploads listed), the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
