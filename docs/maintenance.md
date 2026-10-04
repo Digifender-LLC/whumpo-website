@@ -13,7 +13,7 @@ The [WH-052 background-job decision](background-jobs.md) retains this scheduler 
 | hosting | Hourly at :47 | Refresh bounded custom-hostname provider records when configured |
 | health | Hourly at :47 | Check due published sites and expire old health evidence |
 | fair_use | Daily 03:17 | Remove expired observations of removed projects |
-| traffic | Daily 03:17 | Expire old aggregate traffic counters, hashed per-connection admission keys older than the previous UTC day and per-project photo read counters before last month (WH-075) |
+| traffic | Daily 03:17 | Expire old aggregate traffic counters and measurement-quality counters (WH-037), hashed per-connection admission keys older than the previous UTC day and per-project photo read counters before last month (WH-075) |
 | funnel | Hourly at :47 and daily 03:17 | Prune [funnel measurements](funnel-metrics.md) older than 180 days, then derive consent-gated, content-free events from existing receipts (bounded, idempotent) |
 | guest_previews | Daily 03:17 | Remove [guest preview link](guest-previews.md) metadata that ended over 30 days ago and never received comments (at most 500 per run); comments and their links stay |
 | applications | Daily 03:17 | Remove stale migration documents, deletion receipts and daily counters |
