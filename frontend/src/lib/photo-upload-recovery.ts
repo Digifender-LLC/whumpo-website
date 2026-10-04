@@ -12,6 +12,7 @@ function read(store:Store,owner:string):Record{
  if(v.owner!==owner){store.removeItem(photoRecoveryKey);return {version:1,owner,uploads:[]};}return v;
 }
 export function preparePhotoRecovery(store:Store,owner:string){read(store,owner);}
+export function listPhotoRecovery(store:Store,owner:string){return read(store,owner).uploads;}
 export function readPhotoRecovery(store:Store,owner:string,project:string){return read(store,owner).uploads.find(u=>u.projectId===project)??null;}
 export function writePhotoRecovery(store:Store,owner:string,upload:PhotoUpload){
  if(!validPhotoUpload(upload))throw Error('Invalid photo recovery details.');

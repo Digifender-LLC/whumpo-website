@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 /** Actual built UI/Worker/current D1. The fixed Saved work page needs identity
  * only: profile, Chat and generated-dashboard outages cannot hide it. It reads
  * metadata and opens existing exact destinations without sending anything. */
-export async function savedWorkJourney({page,db,state,requests,origin,activate,phase}){
+export async function savedWorkJourney({page,db,state,requests,origin,activate,enter,phase}){
  phase('saved work fixture');
  const user=(await db.prepare('SELECT owner_user_id id FROM projects').first()).id,start=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(user).first()).revision;
  const turns=[],add=async(status,text)=>{const id=crypto.randomUUID(),revision=start+turns.length+1;turns.push(id);
@@ -71,6 +71,61 @@ export async function savedWorkJourney({page,db,state,requests,origin,activate,p
  assert.equal(await reopened.getByRole('alert').count(),0,'The current client accepts the uncertain Chat status');
  assert(turnReads()>=1);assert.equal(await savedTurns(),beforeTurns);
 
+ phase('tab-local recovery: unsaved, confirmed and not-found states');
+ const localItem=(kind,state)=>page.locator(`[data-local-recovery="${kind}"][data-local-state="${state}"]`);
+ const composer=page.getByRole('textbox',{name:'Message Whumpo'}),chatPosts=()=>requests.filter(r=>r.path==='/api/chat'&&r.method==='POST').length,firstPost=chatPosts();
+ await page.goto(origin+'/workspace');await composer.waitFor();await page.waitForLoadState('networkidle');
+ // A committed message whose reply is lost: the server has its exact receipt. Transcript export commits without inference.
+ state.loseChat=true;await enter(composer,'export my chat');await activate(page.getByRole('button',{name:'Send message',exact:true}));
+ await page.getByRole('button',{name:'Retry message',exact:true}).waitFor();assert.equal(chatPosts(),firstPost+1);
+ const committed=(await db.prepare("SELECT count(*) n FROM chat_turns WHERE user_text='export my chat'").first()).n;assert.equal(committed,1);
+ // Unsent form answers and an unconfirmed photo, written in the existing current store shapes.
+ const project=(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(user).first()).id,form=crypto.randomUUID(),photo=crypto.randomUUID();
+ await page.evaluate(({user,project,form,photo})=>{
+  sessionStorage.setItem('whumpo.chat-forms.v1',JSON.stringify({version:1,owner:user,forms:{[form]:{definitionDigest:'a'.repeat(64),answerRevision:0,answers:{name:'Synthetic private answer'},updatedAt:Date.now(),dismissed:false,pending:null}}}));
+  sessionStorage.setItem('whumpo.photo-upload-recovery',JSON.stringify({version:1,owner:user,uploads:[{id:photo,projectId:project,name:'Synthetic porch photo',digest:'b'.repeat(64),size:2048,width:800,height:600,handoff:null}]}));
+ },{user,project,form,photo});
+ await page.goto(origin+'/workspace/saved-work');await page.getByRole('heading',{name:'On this device',level:2}).waitFor();
+ await localItem('chat-request','confirmed').getByText('Saved receipt confirmed',{exact:true}).waitFor();
+ await localItem('chat-draft','unsaved').getByText('Unsaved on this device',{exact:true}).waitFor();
+ await localItem('form-draft','unsaved').getByText('Unsaved on this device',{exact:true}).waitFor();
+ await localItem('photo','absent').getByText('Not found on the server',{exact:true}).waitFor();
+ const localText=await page.locator('[data-local-recovery-section]').innerText();
+ for(const secret of ['export my chat','Synthetic private answer','My unsent garden idea'])assert(!localText.includes(secret),'Local summary shows no message text or answers: '+secret);
+ assert.equal(await localItem('form-draft','unsaved').getByRole('link',{name:/^Open form in Chat/}).getAttribute('href'),'/workspace?signup=false&interaction='+form);
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Local section fits the mobile viewport');
+ await page.screenshot({path:'/tmp/whumpo-saved-work-local.png',fullPage:true});
+ assert.equal(chatPosts(),firstPost+1,'Checking local state resends nothing');
+
+ phase('selected project survives reload through the Photos locator');
+ await activate(localItem('photo','absent').getByRole('link',{name:/^Open Photos for this project/}));
+ await page.waitForURL(url=>new URL(url).pathname==='/workspace/photos'&&new URL(url).searchParams.get('project')===project);
+ const photoCard=page.locator(`[data-photo-upload="${project}"]`);await photoCard.getByText('No saved upload was found yet.',{exact:false}).waitFor();
+ assert.equal(await page.locator('#workspace-content select').first().inputValue(),project);
+ await page.reload();await photoCard.getByText('Unconfirmed upload:',{exact:false}).waitFor();assert.equal(await page.locator('#workspace-content select').first().inputValue(),project);
+ assert.equal(requests.filter(r=>r.method==='PUT'&&r.path.startsWith('/api/projects/')).length,0,'No upload is retried automatically');
+ const foreign=crypto.randomUUID();await page.goto(origin+'/workspace/photos?project='+foreign);await page.getByText('That project link is not available in your current account.',{exact:false}).waitFor();
+ assert.equal(await page.locator('#workspace-content select').first().inputValue(),'');assert.equal(requests.filter(r=>r.path.includes(foreign)).length,0,'A foreign locator is never read');
+
+ phase('opening Chat resolves the confirmed device record without resending');
+ state.failChat=false;await page.goto(origin+'/workspace/saved-work');await localItem('chat-request','confirmed').waitFor();
+ await activate(localItem('chat-request','confirmed').getByRole('link',{name:/^Open Chat/}));
+ await page.getByText('Your interrupted request is already saved in Chat.',{exact:true}).waitFor();assert.equal(chatPosts(),firstPost+1);
+ await page.goto(origin+'/workspace/saved-work');await page.getByRole('heading',{name:'On this device',level:2}).waitFor();await localItem('form-draft','unsaved').waitFor();
+ assert.equal(await page.locator('[data-local-recovery="chat-request"]').count(),0,'The resolved request leaves the device summary');
+
+ phase('unaccepted Chat request reads as not found and is never resent');
+ await page.goto(origin+'/workspace');await composer.waitFor();await page.waitForLoadState('networkidle');
+ state.stopChat=true;await enter(composer,'Synthetic unaccepted request');await activate(page.getByRole('button',{name:'Send message',exact:true}));
+ await page.getByRole('button',{name:'Retry message',exact:true}).waitFor();assert.equal(chatPosts(),firstPost+2);
+ await page.goto(origin+'/workspace/saved-work');await localItem('chat-request','absent').getByText('Not found on the server',{exact:true}).waitFor();
+ assert.match(await localItem('chat-request','absent').innerText(),/does not prove the request stopped/);
+ state.failChat=false;await activate(localItem('chat-request','absent').getByRole('link',{name:/^Open Chat/}));
+ await page.getByText('Your interrupted request hasn’t been confirmed yet.',{exact:false}).waitFor();await page.getByRole('button',{name:'Retry message',exact:true}).waitFor();
+ await page.waitForLoadState('networkidle');assert.equal(chatPosts(),firstPost+2,'Opening never resends');
+ assert.equal((await db.prepare("SELECT count(*) n FROM chat_turns WHERE user_text='Synthetic unaccepted request'").first()).n,0);
+ await page.goto(origin+'/workspace/saved-work');await localItem('chat-request','absent').waitFor();
+
  phase('late saved-work read after sign-out cannot restore private rows');
  await page.goto(origin+'/workspace/saved-work');await uncertainItem.waitFor();
  let release;await page.route('**/api/workspace/saved-work?*',async route=>{const reply=await route.fetch();await new Promise(done=>{release=()=>route.fulfill({response:reply}).then(done).catch(done);});});
@@ -85,8 +140,10 @@ export async function savedWorkJourney({page,db,state,requests,origin,activate,p
  await activate(page.getByRole('button',{name:'Sign in with a passkey',exact:true}));await page.getByRole('heading',{name:'Saved work',level:1}).waitFor();
  assert.equal(await page.getByRole('button',{name:'Open work',exact:true}).getAttribute('aria-pressed'),'true','Filters reset after the account session changes');
  await uncertainItem.waitFor();
- assert.equal(mutations(),beforeMutations,'Saved work sends no workspace mutation');assert.equal(await savedTurns(),beforeTurns);
+ assert.equal(await page.locator('[data-local-recovery-section]').count(),0,'Sign-out cleared this tab\'s device records');
+ assert.deepEqual(await page.evaluate(()=>['whumpo.chat-recovery','whumpo.chat-forms.v1','whumpo.photo-upload-recovery','whumpo.chat-location'].filter(k=>sessionStorage.getItem(k)!==null)),[]);
+ assert.equal(mutations(),beforeMutations+chatPosts()-firstPost,'Saved work sends no workspace mutation; only the two explicit Chat sends occurred');assert.equal(await savedTurns(),beforeTurns+1);
  assert.equal((await db.prepare('SELECT count(*) n FROM inference_calls').first()).n,beforeInference);
  await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();
- console.log('Saved work browser passed: signed owner, fixed Dashboard link during Chat/dashboard outage, direct reload with profile/Chat/dashboard outages, open/all views, kind filter, Show more pagination beyond 30 items with focus on the first new item, failed-refresh row hiding, 360/390/1280px and 200% text, exact uncertain Chat message reopened, Account help link and late read after sign-out. No mutation, inference or provider call.');
+ console.log('Saved work browser passed: signed owner, fixed Dashboard link during Chat/dashboard outage, direct reload with profile/Chat/dashboard outages, open/all views, kind filter, Show more pagination beyond 30 items with focus on the first new item, failed-refresh row hiding, 360/390/1280px and 200% text, exact uncertain Chat message reopened, Account help link and late read after sign-out. Tab-local Chat draft/request, form draft and photo records show unsaved, saved-receipt and not-found states without message text or answers; opening Chat resolves a confirmed request and never resends; the Photos project locator survives reload and refuses a foreign project; sign-out clears device records. No automatic mutation, inference or provider call.');
 }

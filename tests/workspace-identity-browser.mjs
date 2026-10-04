@@ -189,7 +189,7 @@ try{
   await prepareAppPage(scope,user,project,appPage,{title:'Garden notebook',description:'Synthetic notes',buttonLabel:'Save',fields:[{key:'note',label:'Note',type:'text'}]});await confirmAppPage(scope,user,appPage);
   return {project,version};
  }});
- if(savedWork)await savedWorkJourney({page,db,origin,requests,state:audit,activate,phase:value=>{phase=value;}});
+ if(savedWork)await savedWorkJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
  if(crossTab)await crossTabIdentityJourney({page,context,db,origin,requests,cdp,auth,state:audit,phase:value=>{phase=value;}});
  if(accessibility)await ownerUsabilityJourney({page,context,db,env,state:audit,origin,activate,enter,reach,phase:value=>{phase=value;},audit:a11y.check});
  if(accountHelp){await page.goto(origin+'/workspace/settings');await activate(page.getByRole('button',{name:'Account help',exact:true}));await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('heading',{name:'Account security',exact:true}).waitFor();await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();}
