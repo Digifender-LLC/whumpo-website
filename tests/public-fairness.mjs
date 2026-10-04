@@ -29,7 +29,7 @@ try{
  assert.equal(fair.publicClientSource(req()),'unknown');assert.equal(fair.publicClientSource(req('<script>')),'unknown');
  const p0=id();assert.match(await fair.publicClientKey(req('203.0.113.9'),'photo',p0),/^[0-9a-f]{64}$/);
  assert.notEqual(await fair.publicClientKey(req('203.0.113.9'),'photo',p0),await fair.publicClientKey(req('203.0.113.9'),'backend',p0),'Keys are scope-specific');
- assert.deepEqual({...fair.publicClientLimits},{backend:20,contact:10,photo:400});
+ assert.deepEqual({...fair.publicClientLimits},{backend:20,contact:10,photo:400,abuse:3});
 
  // F5 anonymous lockout: one source cannot spend the project allowance; other callers keep working.
  const a=await project(await user());await publish(a);

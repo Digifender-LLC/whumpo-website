@@ -7,8 +7,8 @@ import {hashToken} from './security';
  * and not a visitor identity: distributed callers still share the project allowance.
  * Limits are enforced by the public_client_usage trigger in schema/platform.sql.
  */
-export type PublicScope='backend'|'contact'|'photo';
-export const publicClientLimits:Readonly<Record<PublicScope,number>>=Object.freeze({backend:20,contact:10,photo:400});
+export type PublicScope='backend'|'contact'|'photo'|'abuse';
+export const publicClientLimits:Readonly<Record<PublicScope,number>>=Object.freeze({backend:20,contact:10,photo:400,abuse:3});
 export class PublicClientLimitError extends Error {status=429;constructor(){super('Too many requests from this connection today. Please try again tomorrow.');}}
 function ipv6Prefix(address:string){
  const [head,tail='']=address.split('::'),left=head?head.split(':'):[],right=address.includes('::')&&tail?tail.split(':'):[];

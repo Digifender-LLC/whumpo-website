@@ -49,6 +49,9 @@ const actions:Record<string,{keys:readonly string[];optional?:readonly string[];
  'retention/list':{keys:[],run:(e,p)=>cases.listSafetyRetentionReviews(e.DB,p)},
  'retention/preview':{keys:['caseId','decision','decisionRef'],optional:['extendDays'],run:(e,p,d)=>cases.previewSafetyRetentionDecision(e.DB,p,retention(d))},
  'retention/apply':{keys:['caseId','decision','decisionRef','reviewSha256'],optional:['extendDays'],run:(e,p,d)=>cases.applySafetyRetentionDecision(e.DB,p,{...retention(d),reviewSha256:s(d.reviewSha256)})},
+ 'reports/list':{keys:[],run:(e,p)=>cases.listAbuseReports(e.DB,p)},
+ 'reports/read':{keys:['reportId'],run:(e,p,d)=>cases.readAbuseReport(e.DB,p,{reportId:s(d.reportId)})},
+ 'reports/triage':{keys:['reportId','decision','decisionRef'],optional:['caseId'],run:(e,p,d)=>cases.triageAbuseReport(e.DB,p,{reportId:s(d.reportId),decision:d.decision as cases.AbuseReportDecision,decisionRef:s(d.decisionRef),...(d.caseId===undefined?{}:{caseId:s(d.caseId)})})},
  'disclosures/read':{keys:['disclosureId','caseId'],run:(e,p,d)=>cases.readSafetyDisclosure(e.DB,p,{disclosureId:s(d.disclosureId),caseId:s(d.caseId)})},
 };
 export const safetyCaseActions=Object.freeze(Object.keys(actions));

@@ -14,7 +14,7 @@ export type SafetyCaseReason='missing_role'|'invalid_input'|'conflict'|'not_foun
 type AuditReason=SafetyCaseReason|'ok'|'unauthenticated'|'conflict_of_interest';
 type Action='bootstrap_administrator'|'grant_role'|'revoke_role'|'open_case'|'link_evidence'|'record_finding'|'place_hold'|'release_hold'|'close_case'|'read_case'|'read_audit'|'list_holds'
  |'capture_evidence'|'dispose_evidence'|'request_disclosure'|'approve_disclosure'|'record_disclosure'|'cancel_disclosure'|'read_disclosure'
- |'list_retention'|'preview_retention'|'decide_retention';
+ |'list_retention'|'preview_retention'|'decide_retention'|'list_reports'|'read_report'|'triage_report';
 type Q={sql:string;params:unknown[]};
 type Database=Pick<D1Database,'prepare'|'batch'>;
 type EvidenceEnv={DB:Database;FILES:Pick<R2Bucket,'get'|'put'|'head'|'delete'>};
@@ -58,7 +58,7 @@ function classify(error:unknown):SafetyCaseReason{
  if(/safety_case_closed/.test(text))return 'case_closed';
  if(/safety_case_capacity/.test(text))return 'capacity';
  if(/safety_case_subject_missing|safety_case_evidence_missing|safety_hold_subject/.test(text))return 'not_found';
- if(/safety_case_immutable|safety_case_finding_order|safety_retention_changed|safety_retention_case_open|UNIQUE|CHECK constraint|FOREIGN KEY/.test(text))return 'conflict';
+ if(/safety_case_immutable|abuse_report_immutable|safety_case_finding_order|safety_retention_changed|safety_retention_case_open|UNIQUE|CHECK constraint|FOREIGN KEY/.test(text))return 'conflict';
  return 'unavailable';
 }
 async function record(db:Database,actor:string|null,action:Action,caseId:string|null,target:string|null,outcome:'denied'|'rejected',reason:AuditReason){
@@ -245,6 +245,62 @@ export async function listActivePreservationHolds(db:Database,principal:unknown)
    FROM safety_preservation_holds WHERE released_at IS NULL AND ${gate} ORDER BY review_due_at,id LIMIT 1000`],
   effect:()=>q`1`});
  return rows.filter(r=>r.subjectUserId!==accountId).map(r=>({...r,overdue:!!r.overdue}));
+}
+
+/** WH-016 abuse-report triage. Public reports (src/abuse-reports.ts) wait in this restricted queue; only an authenticated
+ * case role reads them, and the report's subject never sees their own reports. A report is never a finding: triage is one
+ * named human decision to open a new `uncertain_flag` case, link an existing open case of the same subject, or record the
+ * report as not actionable. Report details are reporter-supplied text: never route them to Chat, an agent or a model. */
+export type AbuseReportDecision='open_case'|'link_case'|'not_actionable';
+const reportId=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const isReport=(v:unknown):v is string=>typeof v==='string'&&reportId.test(v);
+const reportIndependent=(id:unknown)=>(account:string)=>q`NOT EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id} AND subject_user_id=${account})`;
+const reportMissing=(id:unknown)=>q`NOT EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id})`;
+export type AbuseReportQueueItem={id:string;projectId:string;subjectUserId:string;surface:'site'|'app';hostKind:'platform'|'custom';category:string;hasDetails:boolean;receivedAt:number};
+/** Reports awaiting triage, oldest first (at most 100). Reports about the operator themself are never listed to them. */
+export async function listAbuseReports(db:Database,principal:unknown):Promise<AbuseReportQueueItem[]>{
+ const {rows:[rows]}=await attempt(db,{principal,action:'list_reports',roles:['case_reviewer','case_auditor'],
+  reads:(gate,actor)=>[q`SELECT id,project_id AS projectId,subject_user_id AS subjectUserId,surface,host_kind AS hostKind,category,details IS NOT NULL AS hasDetails,received_at AS receivedAt
+   FROM abuse_reports WHERE triage='received' AND 'human:'||subject_user_id<>${actor} AND ${gate} ORDER BY received_at,id LIMIT 100`],
+  effect:()=>q`1`});
+ return rows.map(r=>({...r,hasDetails:!!r.hasDetails})) as AbuseReportQueueItem[];
+}
+export type AbuseReportView=AbuseReportQueueItem&{path:string;details:string|null;triage:'received'|'case_opened'|'case_linked'|'not_actionable';caseId:string|null;triagedBy:string|null;triagedAt:number|null;triageRef:string|null};
+/** Reviewer-only read of one report, including the reporter's bounded description. The read is audited; a report about
+ * the operator reads as absent. */
+export async function readAbuseReport(db:Database,principal:unknown,input:{reportId:string}):Promise<AbuseReportView>{
+ const id=input.reportId;
+ const {rows:[rows]}=await attempt(db,{principal,action:'read_report',target:id,roles:['case_reviewer'],valid:isReport(id),independent:reportIndependent(id),
+  reads:gate=>[q`SELECT id,project_id AS projectId,subject_user_id AS subjectUserId,surface,host_kind AS hostKind,category,details IS NOT NULL AS hasDetails,received_at AS receivedAt,
+   path,details,triage,case_id AS caseId,triaged_by AS triagedBy,triaged_at AS triagedAt,triage_ref AS triageRef FROM abuse_reports WHERE id=${id} AND ${gate}`],
+  effect:()=>q`EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id})`,missing:reportMissing(id)});
+ const row=rows[0];if(!row)throw new SafetyCaseError('unavailable');
+ return {...row,hasDetails:!!row.hasDetails} as AbuseReportView;
+}
+/** One audited triage decision. `open_case` opens a new case (always `uncertain_flag`, intake reference
+ * `abuse-report:<report id>`) in the same transaction; `link_case` attaches the report to an existing open case of the same
+ * subject; `not_actionable` records the decision reference only. Exact retries are idempotent; a report is triaged once. */
+export async function triageAbuseReport(db:Database,principal:unknown,input:{reportId:string;decision:AbuseReportDecision;decisionRef:string;caseId?:string}){
+ const {reportId:id,decision,decisionRef}=input,caseId=input.caseId??null;
+ const shaped=isReport(id)&&isOpaque(decisionRef)&&(decision==='not_actionable'?caseId===null:(decision==='open_case'||decision==='link_case')&&isOpaque(caseId));
+ const state=decision==='open_case'?'case_opened':decision==='link_case'?'case_linked':'not_actionable';
+ const intakeRef='abuse-report:'+id;
+ const writes=(gate:Q,actor:string):Q[]=>{
+  const pending=q`EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id} AND triage='received')`;
+  const opened=decision==='open_case'?[
+   q`INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) SELECT ${caseId},subject_user_id,${intakeRef},${actor},unixepoch(),unixepoch()+${retentionSeconds}
+    FROM abuse_reports WHERE id=${id} AND triage='received' AND ${gate} AND NOT EXISTS(SELECT 1 FROM safety_cases WHERE id=${caseId})`,
+   q`INSERT INTO safety_case_findings(case_id,seq,finding,reviewer_ref,decision_ref,recorded_at) SELECT ${caseId},1,'uncertain_flag',${actor},${intakeRef},unixepoch()
+    WHERE ${gate} AND ${pending} AND EXISTS(SELECT 1 FROM safety_cases WHERE id=${caseId} AND intake_ref=${intakeRef} AND opened_by=${actor}) AND NOT EXISTS(SELECT 1 FROM safety_case_findings WHERE case_id=${caseId})`]:[];
+  const linkable=decision==='open_case'?q`EXISTS(SELECT 1 FROM safety_cases WHERE id=${caseId} AND intake_ref=${intakeRef} AND opened_by=${actor})`
+   :decision==='link_case'?q`EXISTS(SELECT 1 FROM safety_cases c JOIN abuse_reports r ON r.id=${id} AND r.subject_user_id=c.subject_user_id WHERE c.id=${caseId} AND c.closed_at IS NULL)`:q`1`;
+  return [...opened,q`UPDATE abuse_reports SET triage=${state},case_id=${caseId},triaged_by=${actor},triaged_at=unixepoch(),triage_ref=${decisionRef} WHERE id=${id} AND triage='received' AND ${gate} AND ${linkable}`];
+ };
+ await attempt(db,{principal,action:'triage_report',caseId,target:id,roles:['case_reviewer'],valid:shaped,
+  independent:account=>q`(${reportIndependent(id)(account)} AND NOT EXISTS(SELECT 1 FROM safety_cases WHERE id=${caseId} AND subject_user_id=${account}))`,
+  writes,effect:actor=>q`EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id} AND triage=${state} AND case_id IS ${caseId} AND triaged_by=${actor} AND triage_ref=${decisionRef})`,
+  missing:decision==='link_case'?q`(${reportMissing(id)} OR ${caseMissing(caseId)})`:reportMissing(id)});
+ return {reportId:id,triage:state,caseId};
 }
 
 type CaptureSource={bytes:()=>Promise<Uint8Array>;sha256:string;size:number;contentType:'image/jpeg'|'application/json';covered:Q};

@@ -69,6 +69,7 @@ import {readDirectory,directoryHistory,exportDirectory,DirectoryError} from './d
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
+import {abuseReportPage,abuseReportPath} from './abuse-report-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
 import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
 import {contactDelivery} from './contact-email';
@@ -668,6 +669,8 @@ export default {
     try {
       const contactMatch=new URL(request.url).pathname.match(/^\/contact\/([0-9a-f-]{36})$/);
       if(contactMatch)return contactPage(request,env,contactMatch[1]);
+      // WH-016 public abuse reports: no session, Chat or AI; reports reach only the restricted operator queue.
+      if(new URL(request.url).pathname===abuseReportPath)return abuseReportPage(request,env);
       if (new URL(request.url).pathname.startsWith("/api/")) return comparisonErrorResponse(request,await handle(request, env, ctx));
       return env.ASSETS.fetch(request);
     } catch (cause) {

@@ -658,7 +658,7 @@ CREATE TABLE backend_public_usage (
 -- Per-client attempt sub-limits inside each project's public allowance (WH-075, src/public-admission.ts).
 -- client_key is a scope/project/UTC-day SHA-256 of the connecting address (IPv6 /64), never the address.
 CREATE TABLE public_client_usage (
- scope TEXT NOT NULL CHECK(scope IN ('backend','contact','photo')),
+ scope TEXT NOT NULL CHECK(scope IN ('backend','contact','photo','abuse')),
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  client_key TEXT NOT NULL CHECK(length(client_key)=64),
  day TEXT NOT NULL,
@@ -2757,7 +2757,7 @@ END;
 
 CREATE TRIGGER public_client_usage_insert BEFORE INSERT ON public_client_usage BEGIN
  SELECT RAISE(ABORT,'public_client_counter') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR NEW.uses<>1;
- SELECT RAISE(ABORT,'public_client_quota') WHERE coalesce((SELECT uses FROM public_client_usage WHERE scope=NEW.scope AND project_id=NEW.project_id AND client_key=NEW.client_key AND day=NEW.day),0)>=CASE NEW.scope WHEN 'backend' THEN 20 WHEN 'contact' THEN 10 ELSE 400 END;
+ SELECT RAISE(ABORT,'public_client_quota') WHERE coalesce((SELECT uses FROM public_client_usage WHERE scope=NEW.scope AND project_id=NEW.project_id AND client_key=NEW.client_key AND day=NEW.day),0)>=CASE NEW.scope WHEN 'backend' THEN 20 WHEN 'contact' THEN 10 WHEN 'abuse' THEN 3 ELSE 400 END;
 END;
 
 CREATE TRIGGER public_client_usage_update BEFORE UPDATE ON public_client_usage BEGIN
@@ -4887,7 +4887,7 @@ CREATE TABLE safety_case_audit (
  actor_ref TEXT CHECK(actor_ref IS NULL OR (actor_ref GLOB 'human:?*' AND length(actor_ref)<=128 AND actor_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
   'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
-  'list_retention','preview_retention','decide_retention')),
+  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report')),
  case_id TEXT CHECK(case_id IS NULL OR (length(case_id) BETWEEN 1 AND 128 AND case_id NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  target_ref TEXT CHECK(target_ref IS NULL OR (length(target_ref) BETWEEN 1 AND 128 AND target_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
@@ -5073,6 +5073,60 @@ CREATE TRIGGER safety_case_audit_capacity BEFORE INSERT ON safety_case_audit WHE
 BEGIN SELECT RAISE(ABORT,'safety_case_capacity'); END;
 CREATE TRIGGER safety_case_audit_immutable BEFORE UPDATE ON safety_case_audit BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_case_audit_retained BEFORE DELETE ON safety_case_audit BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+-- WH-016 public abuse reports about published Whumpo sites and applications (src/abuse-reports.ts). Unauthenticated
+-- intake behind origin, bounded body, Turnstile, a per-connection daily allowance (public_client_usage scope 'abuse')
+-- and the platform/project caps below, into the restricted WH-132 operator queue. No foreign key to users or projects:
+-- a report survives the subject's account or project deletion. Owner, Chat, agent, model and customer paths never read
+-- this table; only the authenticated case-role surface lists, reads and triages it. No reporter address, IP, contact
+-- detail or uploaded material is stored. Triage is one audited human decision: open a new uncertain_flag case, link an
+-- existing open case of the same subject, or record the report as not actionable. A report is never a finding.
+CREATE TABLE abuse_reports (
+ id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
+ project_id TEXT NOT NULL CHECK(length(project_id)=36 AND project_id NOT GLOB '*[^0-9a-f-]*'),
+ subject_user_id TEXT NOT NULL CHECK(length(subject_user_id) BETWEEN 1 AND 122 AND subject_user_id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ surface TEXT NOT NULL CHECK(surface IN ('site','app')),
+ host_kind TEXT NOT NULL CHECK(host_kind IN ('platform','custom')),
+ path TEXT NOT NULL CHECK(length(path) BETWEEN 1 AND 512 AND substr(path,1,1)='/'),
+ category TEXT NOT NULL CHECK(category IN ('child_safety','sexual_content','copyright','fraud_phishing','hate_harassment','gambling','malware_security','spam_abuse','other')),
+ details TEXT CHECK(details IS NULL OR length(details) BETWEEN 1 AND 1000),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
+ received_at INTEGER NOT NULL CHECK(received_at>=0),
+ triage TEXT NOT NULL DEFAULT 'received' CHECK(triage IN ('received','case_opened','case_linked','not_actionable')),
+ case_id TEXT REFERENCES safety_cases(id),
+ triaged_by TEXT CHECK(triaged_by IS NULL OR (triaged_by GLOB 'human:?*' AND length(triaged_by)<=128 AND triaged_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ triaged_at INTEGER CHECK(triaged_at IS NULL OR triaged_at>=received_at),
+ triage_ref TEXT CHECK(triage_ref IS NULL OR (length(triage_ref) BETWEEN 1 AND 128 AND triage_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ CHECK((triage='received')=(triaged_by IS NULL) AND (triaged_by IS NULL)=(triaged_at IS NULL) AND (triaged_at IS NULL)=(triage_ref IS NULL)),
+ CHECK((triage IN ('case_opened','case_linked'))=(case_id IS NOT NULL)),
+ CHECK(triaged_by IS NULL OR triaged_by<>'human:'||subject_user_id)
+);
+CREATE INDEX abuse_reports_queue ON abuse_reports(triage,received_at);
+CREATE INDEX abuse_reports_project ON abuse_reports(project_id,received_at);
+CREATE INDEX abuse_reports_received ON abuse_reports(received_at);
+-- The target must be a currently published site (or an enabled application) of its recorded owner at intake.
+-- Caps (owner decision pending; conservative test defaults): 10,000 retained, 1,000 awaiting triage platform-wide and
+-- 50 per project; 100 an hour platform-wide and 10 an hour per project. Concurrent intake cannot pass them.
+CREATE TRIGGER abuse_reports_admit BEFORE INSERT ON abuse_reports BEGIN
+ SELECT RAISE(ABORT,'abuse_report_immutable') WHERE NEW.triage<>'received' OR NEW.case_id IS NOT NULL OR NEW.received_at<>unixepoch();
+ SELECT RAISE(ABORT,'abuse_report_target') WHERE NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.subject_user_id)
+  OR (NEW.surface='site' AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL))
+  OR (NEW.surface='app' AND NOT EXISTS(SELECT 1 FROM app_spaces WHERE project_id=NEW.project_id AND enabled=1));
+ SELECT RAISE(ABORT,'abuse_report_capacity') WHERE (SELECT count(*) FROM abuse_reports)>=10000
+  OR (SELECT count(*) FROM abuse_reports WHERE triage='received')>=1000
+  OR (SELECT count(*) FROM abuse_reports WHERE triage='received' AND project_id=NEW.project_id)>=50;
+ SELECT RAISE(ABORT,'abuse_report_rate') WHERE (SELECT count(*) FROM abuse_reports WHERE received_at>unixepoch()-3600)>=100
+  OR (SELECT count(*) FROM abuse_reports WHERE project_id=NEW.project_id AND received_at>unixepoch()-3600)>=10;
+END;
+-- Only the single triage transition is allowed. A linked or opened case must be an open case about the same subject.
+CREATE TRIGGER abuse_reports_update BEFORE UPDATE ON abuse_reports
+WHEN OLD.triage<>'received' OR NEW.triage='received' OR NEW.id IS NOT OLD.id OR NEW.project_id IS NOT OLD.project_id OR NEW.subject_user_id IS NOT OLD.subject_user_id
+ OR NEW.surface IS NOT OLD.surface OR NEW.host_kind IS NOT OLD.host_kind OR NEW.path IS NOT OLD.path OR NEW.category IS NOT OLD.category
+ OR NEW.details IS NOT OLD.details OR NEW.request_hash IS NOT OLD.request_hash OR NEW.received_at IS NOT OLD.received_at
+ OR (NEW.case_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND subject_user_id=OLD.subject_user_id AND closed_at IS NULL))
+BEGIN SELECT RAISE(ABORT,'abuse_report_immutable'); END;
+-- Retained: there is no deletion path (retention term is an owner/counsel decision, docs/content-safety.md).
+CREATE TRIGGER abuse_reports_retained BEFORE DELETE ON abuse_reports BEGIN SELECT RAISE(ABORT,'abuse_report_immutable'); END;
 
 CREATE TRIGGER safety_preserved_records_admit BEFORE INSERT ON safety_preserved_records BEGIN
  SELECT RAISE(ABORT,'safety_hold_subject') WHERE NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE id=NEW.hold_id AND released_at IS NULL);
