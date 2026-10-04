@@ -1,8 +1,0 @@
-# Secret scan configuration for CI (.github/workflows/ci.yml).
-[extend]
-useDefault = true
-
-[[allowlists]]
-description = "Stripe publishable keys are public by design"
-regexTarget = "match"
-regexes = ['''pk_(test|live)_[0-9A-Za-z]+''']
