@@ -36,7 +36,6 @@
     "test:customer-app-journey": "node tests/customer-app-journey.mjs",
     "test:customer-site-journey": "node tests/customer-site-journey.mjs",
     "test:publications": "node tests/publications.mjs",
-    "deploy:sites": "wrangler deploy --config wrangler.sites.jsonc",
     "dev:sites": "wrangler dev --config wrangler.sites.jsonc --port 8788",
     "test:site-agent": "node tests/site-agent.mjs",
     "test:checkout": "node tests/checkout.mjs",

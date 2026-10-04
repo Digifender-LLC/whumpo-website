@@ -11,6 +11,13 @@ Whumpo is a private test-stage, Cloudflare-hosted AI website and application pla
 - Customer-written/generated backend source runs through the bounded QuickJS runtime. Do not execute model-produced source in the control Worker or relax publication/activation review gates.
 - Cloudflare OAuth credentials are customer-authorized and encrypted. Request only the scopes needed by an explicitly reviewed capability. Never log, print, export, or place credentials in model context.
 
+## Deployment (merge to main deploys)
+
+- Merging a pull request to `main` deploys all four Workers automatically. Cloudflare Workers Builds (trigger on `whumpo-platform`, branch `main`) runs `pnpm check && node tools/verify.mjs fast && node tools/verify.mjs protection && pnpm build`; only if that passes does it run `pnpm run deploy ci` (runtime → apps → sites → platform under the D1 deployment lease). A failing check means no deploy. GitHub cannot block merges on this plan, so keep `main` green: run the same commands locally before merging.
+- Agents ship by opening and merging PRs. Never run `wrangler deploy`, `wrangler versions upload/deploy`, `pnpm run deploy prepare/apply/ci`, `wrangler d1 execute --remote` or any other `--remote` command by hand, and never ask for Cloudflare API tokens. (`pnpm deploy` is pnpm's own built-in command; the release script is `pnpm run deploy`.)
+- `deploy ci` only releases code onto the exact current schema already live. Any change to the composed schema (`tools/current-schema.mjs` inputs), the control database binding, or CMS registrations makes the automatic deploy refuse. Those need an owner-run cutover (new empty D1, `pnpm run deploy prepare/apply` with `schemaChange: "initialize"`), see `docs/releases.md`. Say so in the PR description and do not merge such a PR without the owner.
+- Runtime secrets live on the Workers (`wrangler secret put` by the owner) and persist across deploys; never put secret values in Git, `vars` or build variables.
+
 ## Working rules
 
 - Current-version-only product: the owner explicitly rejects legacy support and compatibility fallbacks. Implement one current schema/API/client path, remove superseded adapters/aliases, and reject stale versions explicitly. All environments are disposable testing environments; the owner authorizes deleting obsolete test data. Use direct current-schema cutovers or fixture resets; do not build data-preservation migrations, old readers, dual protocols or downgrade renderers. Current-operation recovery must remain accurate. Historical evidence is not an active compatibility requirement.
