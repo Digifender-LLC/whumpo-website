@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 125 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 133 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -6144,7 +6144,7 @@ Composed interfaces and custom frontends reuse the same maintained tenant-scoped
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-065, WH-066, WH-009, WH-010, WH-071, WH-116, WH-122, WH-105. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-065, WH-066, WH-009, WH-010, WH-071, WH-116, WH-122, WH-105, WH-123, WH-124, WH-125, WH-126, WH-127, WH-128, WH-129, WH-130. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -6161,14 +6161,16 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workload-placement.md](../../docs/workload-placement.md)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/107. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-04 UTC: decomposed into WH-123–130 with the planned contract in docs/shared-modules.md. Planning only: no module table, API, binding or deployment exists; the parent acceptance is unchanged and closes only after every child.
 
 ## WH-071 — Specify workload placement and bounded custom execution paths
 
@@ -6452,6 +6454,382 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/shared-components.md](../../docs/shared-components.md)
 - [docs/app-data.md](../../docs/app-data.md)
 - [docs/roadmap/README.md](../../docs/roadmap/README.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-123 — Freeze the shared module contract and decompose WH-067
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every WH-067 slice builds against one frozen module identity, instance/configuration/version shape, API envelope and authorization model instead of inventing its own.
+
+### Scope
+
+- Freeze module kinds/pins, the instance envelope, kind configurations, configRevision and current-only migration hook classes on top of the WH-071 descriptor
+- Freeze the request envelope, closed operation set, principals, policy table, revocation behavior and host boundaries for content collections, records/forms, files/galleries and access
+- Map contact, directory, photos and visitor identity/data onto modules with explicit gaps; record WH-090/122 admission, WH-105 binding and WH-066 catalog registration points
+- Evaluate proven libraries/managed services with dated sources; add an offline shape/policy reference and checks without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/shared-modules.md states the frozen shapes, authorization rules, safety/publication/preservation boundaries and existing-service mapping, marked planned
+- [ ] Offline checks reject unknown/stale versions, caller-supplied authority, prefix/public-bucket authorization, workspace-membership principals and over-wide views/galleries
+- [ ] WH-067 keeps its acceptance and depends on every child; no child reaches WH-070/072/077/080/104
+- [ ] Open owner decisions are listed rather than assumed
+
+### Verification
+
+- node tests/shared-modules-contract.mjs
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-066, WH-071, WH-105, WH-116, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [tools/prototypes/shared-modules.mjs](../../tools/prototypes/shared-modules.mjs)
+- [tests/shared-modules-contract.mjs](../../tests/shared-modules-contract.mjs)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/project-specification.md](../../docs/project-specification.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-124 — Cut over to specification schema 3 with module pins and data classes
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Owners can describe records, forms, files and staff access in the saved specification using the frozen module configuration, without anything serving yet.
+
+### Scope
+
+- Replace schema 2 library-only records/forms/files/access sections with the frozen schema 3 configuration and exact module pins; pin a new compiler identity and remove the schema 2 reader
+- Reset obsolete schema 2 test specifications at a coordinated empty-database cutover; no conversion or old reader
+- Add trusted module catalog entries (available/withdrawn) beside the compiler and service-client catalogs; keep unimplemented kinds unsupported in the capability catalog
+- Register module-records, module-files and project-roles lifecycle classes with readers, processing, retention and export policy before any table
+- Keep the mounted single-homepage adapter, content@2 and page components unchanged
+
+### Acceptance criteria
+
+- [ ] Schema 3 rejects PNG, >1 MiB collections, public read audiences, unknown roles, over-wide views and missing access dependencies; staff upload and staff write are expressible
+- [ ] Permission widening classifies a permissions review; required/rename/type changes return MIGRATION_REQUIRED; optional field additions are additive-optional
+- [ ] Compiler pin drift, stale constants and schema 2 input reject; existing homepage creation/change/restore journeys still pass
+- [ ] Lifecycle catalogue validation passes with the new planned classes; no runtime table is admitted
+
+### Verification
+
+- node tools/check-specification-compiler.mjs --check and node tests/specification-compiler.mjs
+- node tests/current-website-specifications.mjs and node tests/specification-journey.mjs on disposable D1
+- node tools/lifecycle-catalog.mjs checks and tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-123, WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/project-specification.md](../../docs/project-specification.md)
+- [docs/project-specification-compiler.md](../../docs/project-specification-compiler.md)
+- [src/project-specification/v2/schema.ts](../../src/project-specification/v2/schema.ts)
+- [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-125 — Add the module instance registry, activation reviews and shared policy engine
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Approved module configuration becomes a scoped, activatable instance whose every API call passes one shared resolver and policy decision.
+
+### Scope
+
+- Current-schema instance and activation tables binding descriptor, configuration digest, configRevision and source specification version
+- Exact owner activation/disable reviews with recent authentication, consuming WH-122 inclusion (core.forms/core.editing) and current identity in the committing statement
+- Server-side resolveResource and policy decision composed into commit SQL; request envelope, idempotent receipts, typed errors and client_update_required
+- Register module.instances@1 and moduleActivationApply under WH-105; keep visitor-submitted values out of Chat and model context
+- Static import/fixture check that module handlers never reach owner-maintenance inference
+
+### Acceptance criteria
+
+- [ ] Foreign, stale configRevision, withdrawn pin, inactive instance and changed-input replay fail with the frozen typed errors inside every handler
+- [ ] Plan loss blocks new activation/widening but keeps owner read/export/disable and published serving
+- [ ] Lost acknowledgements read back existing receipts; concurrent activation/disable has one winner
+- [ ] Module paths pass with maintenance inference unavailable
+
+### Verification
+
+- Disposable SQLite/local D1 suite over actual handlers with two owners/projects, revocation and replay
+- node tests/feature-admission.mjs and chat interaction suites remain green
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-124. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/feature-admission.md](../../docs/feature-admission.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [src/project-specification/service-clients/activation.ts](../../src/project-specification/service-clients/activation.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-126 — Deliver the access module for project visitors and staff roles
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A project owner can grant and revoke a staff role on an enrolled project visitor without giving that person workspace, Chat or owner authority.
+
+### Scope
+
+- Move project visitor identity ownership from the application space to the access instance by current-schema cutover, reusing passkeys, invitations, recovery and sessions
+- Staff role grant/revoke through exact owner reviews with an access revision that invalidates sessions-bound decisions, cursors and pending writes
+- access.me on the visitor origin; owner access.list and access.roles@1/accessRoleApply bindings
+- Keep the existing per-visitor document and QuickJS transitions as an execution resource depending on the access instance
+
+### Acceptance criteria
+
+- [ ] Staff and visitors cannot use workspace cookies; owners and WH-054 members gain no visitor/staff authority; staff gain no Chat, publication, spending or identity management
+- [ ] Revocation takes effect on the next request and inside in-flight commits; replay never re-grants
+- [ ] Existing visitor sign-in, recovery, document transition, export and erasure suites pass after the cutover
+- [ ] Role grants, reviews and suppressions follow the project-roles lifecycle class
+
+### Verification
+
+- node tests/app-auth.mjs, tests/app-data.mjs and visitor deletion/recovery suites on complete-schema local D1
+- Two-project, revoked-visitor, revoked-staff and cross-origin cookie fixtures
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-125. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [src/app-gateway.ts](../../src/app-gateway.ts)
+- [src/app-auth.ts](../../src/app-auth.ts)
+- [src/app-access.ts](../../src/app-access.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-127 — Deliver the records and forms module with contact as a fixed instance
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Visitors submit validated forms into private records that owners, staff and submitters read only through their permitted views and fields.
+
+### Scope
+
+- Record storage adapter on shared D1 with forms.submit, records.view/get/update/remove, opaque scoped cursors and field projection
+- Public submissions reuse contact admission: Origin, body bound, rate limiter, Turnstile, atomic caps; visitor/staff submissions use the access session
+- Expose the existing contact inbox as a fixed-schema records instance over its current tables without changing its fields or 30-day retention
+- records.summary@1 binding, descriptor lifecycle hooks and visitor-scoped export serializer; form.accepted event handoff for WH-069
+
+### Acceptance criteria
+
+- [ ] Field/record permissions hold for owner, staff, submitter and anonymous callers on direct requests, including owner-only fields and own-record scope
+- [ ] Replay, changed-payload conflict, stale configRevision, quota and lost-response cases behave per contract; zero maintainer inference
+- [ ] Contact behavior and its suites are unchanged apart from the shared handler path
+- [ ] No booking, scheduling or arbitrary query capability is implied
+
+### Verification
+
+- node tests/contacts.mjs plus a new records suite on disposable D1 with two tenants and role revocation
+- Direct HTTP fixtures against the visitor and workspace origins
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-126. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [src/contacts.ts](../../src/contacts.ts)
+- [src/backend-form-shape.ts](../../src/backend-form-shape.ts)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-128 — Deliver the files and galleries module over private photo storage
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Staff or visitors upload files into collections governed by role policy, and permitted viewers see only approved files, without any public bucket.
+
+### Scope
+
+- Extend project_files with instance/collection and uploader identity by current-schema cutover; keep JPEG cleaning, 1 MiB bound, create-only R2 and reservations
+- files.prepareUpload/putBytes/read/gallery on the visitor origin; owner collection for existing project photos and the Chat upload handoff
+- Pending safety receipt on every upload; approved exact-digest reads with byte re-hash; reviewed removal and cleanup queue
+- Descriptor lifecycle hooks and export serializer for eligible approved files
+
+### Acceptance criteria
+
+- [ ] Staff-only upload is enforced by the collection role policy; names, prefixes and URLs grant nothing; visitors and anonymous callers are refused
+- [ ] Held, blocked or revoked files are never served, referenced or published; removal respects held state and preservation hooks
+- [ ] Existing photo upload, version, removal and publication suites pass
+- [ ] Public exposure happens only through existing exact publication reviews
+
+### Verification
+
+- node tests/files.mjs, tests/photo-versions.mjs and tests/photo-removal.mjs on disposable D1/R2
+- New two-tenant role/revocation/direct-API upload fixtures with synthetic clearances only
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-126, WH-010. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/photos.md](../../docs/photos.md)
+- [src/files.ts](../../src/files.ts)
+- [src/photo-safety.ts](../../src/photo-safety.ts)
+- [docs/safety-coverage.md](../../docs/safety-coverage.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-130 — Accept shared modules across two frontend compositions
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Two different frontends use one module API contract with no custom authentication or handlers, and the WH-067 acceptance is evidenced.
+
+### Scope
+
+- Build two synthetic compositions (a staff portal and a visitor intake/gallery) against the same records/files/access instances on the visitor origin
+- Cross-tenant, cross-user, role, direct-API, replay and revocation fixtures over actual handlers with maintenance inference unavailable
+- Run the existing contact, directory, photo and app lifecycle suites relevant to each slice and record evidence levels
+
+### Acceptance criteria
+
+- [ ] Every WH-067 acceptance criterion maps to passing local evidence; live or device acceptance is reported separately
+- [ ] Neither composition contains authentication, authorization or storage code of its own
+- [ ] No universal no-code engine, booking promise or public bucket is introduced
+
+### Verification
+
+- Connected local D1/R2 journey with two compositions and two tenants
+- Existing lifecycle suites listed in each slice
+- Import graph shows no maintainer inference in module paths
+
+### Dependencies and blockers
+
+Planning dependencies: WH-127, WH-128, WH-129. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/verification.md](../../docs/verification.md)
 
 ### Execution coordination
 
@@ -6971,6 +7349,55 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/maintenance.md](../../docs/maintenance.md)
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-129 — Expose the directory as a content collections module
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Directory listings use the shared module envelope and lifecycle while keeping their exact draft, publication and restore reviews.
+
+### Scope
+
+- Wrap directories, directory_reviews and directory_exports as a content-collections instance of type directory-listing@1
+- collections.readPublic through the module envelope; owner edits keep the existing review handlers
+- Descriptor lifecycle hooks and export serializer matching the current directory export
+
+### Acceptance criteria
+
+- [ ] Public reads return only the approved snapshot; drafts and history stay owner-only
+- [ ] Existing directory and history suites pass; stale configRevision and withdrawn pins refuse
+- [ ] No staff editing or new collection types are added
+
+### Verification
+
+- node tests/directories.mjs and node tests/directory-history.mjs on local D1
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-125. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/directories.md](../../docs/directories.md)
+- [src/directory.ts](../../src/directory.ts)
 
 ### Execution coordination
 
