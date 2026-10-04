@@ -1317,6 +1317,57 @@ CREATE TABLE support_deliveries (
  CHECK((state='delivered' AND delivered_at IS NOT NULL) OR (state!='delivered' AND delivered_at IS NULL))
 );
 
+-- WH-036: provider-neutral contact notification outbox. The inbox (contact_submissions) stays the source of truth;
+-- nothing here carries a visitor name, email or message. Rows are created only when a selected, implemented and
+-- reviewed provider is configured (src/contact-notifications.ts); no provider is implemented or enabled.
+CREATE TABLE contact_notification_destinations (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+ address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
+ state TEXT NOT NULL DEFAULT 'unverified' CHECK(state IN ('unverified','verified','suppressed')),
+ verification_code TEXT CHECK(verification_code IS NULL OR length(verification_code)=8),
+ verification_expires_at TEXT,
+ verification_failures INTEGER NOT NULL DEFAULT 0 CHECK(verification_failures BETWEEN 0 AND 5),
+ created_at TEXT NOT NULL,
+ verified_at TEXT,
+ CHECK(state!='unverified' OR verified_at IS NULL),
+ CHECK(state!='verified' OR (verified_at IS NOT NULL AND verification_code IS NULL)),
+ CHECK((verification_code IS NULL)=(verification_expires_at IS NULL))
+);
+
+-- Permanent per-account suppression of an address after a hard bounce, complaint or unsubscribe. It is never updated or
+-- deleted (except with the account), so a suppressed address cannot be re-added to resume delivery.
+CREATE TABLE contact_notification_suppressions (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
+ reason TEXT NOT NULL CHECK(reason IN ('bounce','complaint','unsubscribe')),
+ created_at TEXT NOT NULL,
+ PRIMARY KEY(user_id,address)
+);
+
+CREATE TABLE contact_notification_outbox (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ destination_id TEXT NOT NULL REFERENCES contact_notification_destinations(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('verification','new_message')),
+ submission_id TEXT CHECK(submission_id IS NULL OR length(submission_id)=36),
+ idempotency_key TEXT NOT NULL UNIQUE CHECK(length(idempotency_key) BETWEEN 10 AND 120),
+ provider TEXT NOT NULL CHECK(length(provider) BETWEEN 1 AND 60),
+ review TEXT NOT NULL CHECK(length(review) BETWEEN 1 AND 200),
+ state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','accepted','failed','cancelled','bounced','complained')),
+ attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 10),
+ created_at TEXT NOT NULL,
+ next_attempt_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ accepted_at TEXT,
+ provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
+ last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained')),
+ CHECK((kind='new_message')=(submission_id IS NOT NULL)),
+ CHECK((state IN ('accepted','bounced','complained'))=(accepted_at IS NOT NULL))
+);
+
 CREATE TABLE backend_imports (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1842,6 +1893,11 @@ CREATE UNIQUE INDEX usage_review_one_open ON usage_review_requests(user_id,kind)
 CREATE INDEX usage_review_queue ON usage_review_requests(state,created_at,id);
 
 CREATE INDEX support_delivery_due ON support_deliveries(state,next_attempt_at);
+CREATE INDEX contact_notification_outbox_due ON contact_notification_outbox(state,next_attempt_at);
+CREATE INDEX contact_notification_outbox_destination ON contact_notification_outbox(destination_id,kind,created_at);
+CREATE INDEX contact_notification_outbox_user ON contact_notification_outbox(user_id,kind,created_at);
+CREATE INDEX contact_notification_outbox_expiry ON contact_notification_outbox(expires_at);
+CREATE INDEX contact_notification_destinations_address ON contact_notification_destinations(user_id,address);
 
 CREATE INDEX usage_review_owner_time ON usage_review_requests(user_id,created_at,id);
 
@@ -3421,6 +3477,45 @@ CREATE TRIGGER support_delivery_update BEFORE UPDATE ON support_deliveries BEGIN
  SELECT RAISE(ABORT,'support_delivery_final') WHERE OLD.state!='queued' OR NEW.request_id IS NOT OLD.request_id OR NEW.user_id IS NOT OLD.user_id OR NEW.provider IS NOT OLD.provider OR NEW.review IS NOT OLD.review OR NEW.created_at IS NOT OLD.created_at OR NEW.attempts<OLD.attempts;
 END;
 
+CREATE TRIGGER contact_destination_insert BEFORE INSERT ON contact_notification_destinations BEGIN
+ SELECT RAISE(ABORT,'contact_destination_initial') WHERE NEW.state!='unverified' OR NEW.verification_code IS NOT NULL OR NEW.verification_failures!=0 OR NEW.verified_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'contact_destination_suppressed') WHERE EXISTS(SELECT 1 FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address);
+END;
+
+CREATE TRIGGER contact_destination_update BEFORE UPDATE ON contact_notification_destinations BEGIN
+ SELECT RAISE(ABORT,'contact_destination_final') WHERE OLD.state='suppressed' OR NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.project_id IS NOT OLD.project_id OR NEW.address IS NOT OLD.address OR NEW.created_at IS NOT OLD.created_at
+  OR (OLD.state='verified' AND NEW.state NOT IN ('verified','suppressed')) OR (OLD.state='verified' AND NEW.state='verified' AND (NEW.verified_at IS NOT OLD.verified_at OR NEW.verification_code IS NOT NULL));
+END;
+
+CREATE TRIGGER contact_suppression_immutable BEFORE UPDATE ON contact_notification_suppressions BEGIN SELECT RAISE(ABORT,'contact_suppression_final'); END;
+CREATE TRIGGER contact_suppression_delete BEFORE DELETE ON contact_notification_suppressions
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN SELECT RAISE(ABORT,'contact_suppression_final'); END;
+
+-- Suppression is atomic with its effect: the destination becomes final-suppressed and unsent notices are cancelled.
+CREATE TRIGGER contact_suppression_apply AFTER INSERT ON contact_notification_suppressions BEGIN
+ UPDATE contact_notification_outbox SET state='cancelled',last_error='suppressed' WHERE state='queued' AND destination_id IN(SELECT id FROM contact_notification_destinations WHERE user_id=NEW.user_id AND address=NEW.address);
+ UPDATE contact_notification_destinations SET state='suppressed',verification_code=NULL,verification_expires_at=NULL WHERE user_id=NEW.user_id AND address=NEW.address AND state!='suppressed';
+END;
+
+CREATE TRIGGER contact_outbox_insert BEFORE INSERT ON contact_notification_outbox BEGIN
+ SELECT RAISE(ABORT,'contact_outbox_initial') WHERE NEW.state!='queued' OR NEW.attempts!=0 OR NEW.accepted_at IS NOT NULL OR NEW.provider_ref IS NOT NULL OR NEW.last_error IS NOT NULL;
+ SELECT RAISE(ABORT,'contact_outbox_destination') WHERE NOT EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.id=NEW.destination_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND d.state=CASE NEW.kind WHEN 'verification' THEN 'unverified' ELSE 'verified' END);
+ SELECT RAISE(ABORT,'contact_outbox_submission') WHERE NEW.kind='new_message' AND NOT EXISTS(SELECT 1 FROM contact_submissions WHERE id=NEW.submission_id AND project_id=NEW.project_id);
+ SELECT RAISE(ABORT,'contact_outbox_rate') WHERE NEW.kind='verification' AND ((SELECT count(*) FROM contact_notification_outbox WHERE destination_id=NEW.destination_id AND kind='verification' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 day'))>=3
+  OR (SELECT count(*) FROM contact_notification_outbox WHERE user_id=NEW.user_id AND kind='verification' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 day'))>=10);
+ SELECT RAISE(ABORT,'contact_outbox_rate') WHERE NEW.kind='new_message' AND ((SELECT count(*) FROM contact_notification_outbox WHERE destination_id=NEW.destination_id AND kind='new_message' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 hour'))>=10
+  OR (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=NEW.destination_id AND kind='new_message' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 day'))>=50);
+END;
+
+-- Terminal states (failed, cancelled, bounced, complained) are final. Provider acceptance can only later become a bounce or complaint.
+CREATE TRIGGER contact_outbox_update BEFORE UPDATE ON contact_notification_outbox BEGIN
+ SELECT RAISE(ABORT,'contact_outbox_final') WHERE OLD.state IN ('failed','cancelled','bounced','complained') OR (OLD.state='accepted' AND NEW.state NOT IN ('accepted','bounced','complained'))
+  OR NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.project_id IS NOT OLD.project_id OR NEW.destination_id IS NOT OLD.destination_id OR NEW.kind IS NOT OLD.kind OR NEW.submission_id IS NOT OLD.submission_id
+  OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.provider IS NOT OLD.provider OR NEW.review IS NOT OLD.review OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
+  OR NEW.attempts<OLD.attempts OR (OLD.accepted_at IS NOT NULL AND (NEW.accepted_at IS NOT OLD.accepted_at OR NEW.attempts IS NOT OLD.attempts OR NEW.provider_ref IS NOT OLD.provider_ref));
+END;
+
 CREATE TRIGGER backend_import_owner BEFORE INSERT ON backend_imports WHEN NOT EXISTS(
  SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id
 ) OR EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.id) OR NEW.state!='pending'
@@ -4748,6 +4843,12 @@ WHEN NEW.owner_user_id IS NOT OLD.owner_user_id AND EXISTS(SELECT 1 FROM safety_
  AND ((scope='account' AND subject_user_id=OLD.owner_user_id) OR (scope IN ('project','object') AND project_id=OLD.id)))
 BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
 CREATE TRIGGER safety_hold_contact_retained BEFORE DELETE ON contact_submissions
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_contact_destination_retained BEFORE DELETE ON contact_notification_destinations
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_contact_outbox_retained BEFORE DELETE ON contact_notification_outbox
 WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
 BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
 -- Photo removal (and its R2 cleanup queue entry), saved-version removal and visitor deletion/owner erasure.

@@ -63,7 +63,7 @@
     "test:cloudflare-dns": "node tests/cloudflare-dns.mjs",
     "test:dns-agent": "node tests/dns-agent.mjs",
     "test:version-removal": "node tests/version-removal.mjs",
-    "test:contacts": "node tests/contacts.mjs",
+    "test:contacts": "node tests/contacts.mjs && node tests/contact-notifications.mjs",
     "test:version-diff": "node tests/version-diff.mjs",
     "test:first-ai-journey": "node tests/first-ai-journey.mjs",
     "test:backend-runtime": "node tests/backend-runtime.mjs",

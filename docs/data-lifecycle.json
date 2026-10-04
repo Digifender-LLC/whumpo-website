@@ -1035,6 +1035,49 @@
       }
     },
     {
+      "id": "contact-notifications",
+      "tables": [
+        "contact_notification_destinations",
+        "contact_notification_suppressions",
+        "contact_notification_outbox"
+      ],
+      "scope": "owner",
+      "purpose": "Owner-reviewed, provider-verified address for content-free new-message notices; delivery outbox with idempotency, bounded retries, bounce/complaint state and permanent suppression. The inbox stays the source of truth.",
+      "currentRetention": "Outbox rows expire 30 days after creation and daily maintenance removes them (skipping held projects). Destinations stay until the owner removes them or the project/account is removed. Suppressions are permanent per account so a suppressed address cannot be re-added; they cascade only with the account.",
+      "proposedRetention": "Keep as current. Suppression retention is a deliberate abuse/deliverability control and needs privacy review before any provider is enabled.",
+      "deletionAuthority": "Project owner removes the destination; account closure removes everything. Preservation holds refuse owner removal and expiry for held projects.",
+      "exportPolicy": "Owner's own address and verification state may be exported; no visitor content exists in these tables, and provider references and verification codes are excluded.",
+      "references": [
+        "src/contact-notifications.ts",
+        "docs/contact-forms.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Project owner status via scoped handlers and the content-free provider adapter"
+        ],
+        "processors": [
+          "Deterministic delivery runner; the selected transactional provider would receive the owner's address and a content-free notice only after a reviewed activation"
+        ],
+        "remainingExposure": [
+          "The owner address and short-lived verification code are stored readable in control D1; no provider is implemented or enabled."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "backend-artifacts",
       "tables": [
         "backend_versions",
