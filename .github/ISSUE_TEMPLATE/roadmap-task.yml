@@ -1,0 +1,26 @@
+name: Roadmap task
+description: Execution issue for a task in docs/roadmap/backlog.json
+title: "[WH-###] "
+labels: [roadmap]
+body:
+  - type: markdown
+    attributes:
+      value: Scope, dependencies and acceptance criteria live in `docs/roadmap/backlog.json`. This issue tracks execution state and claims only (see `docs/roadmap/execution.md`).
+  - type: input
+    id: task
+    attributes:
+      label: Roadmap ID
+      placeholder: WH-001
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: Copy the outcome from `node tools/roadmap.mjs show WH-###`.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Claim, blockers and handoff notes

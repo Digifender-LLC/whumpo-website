@@ -22,6 +22,7 @@ export const backlogInventory={
  app_deletion_reviews:expiry('app_deletion_reviews'),
  app_usage:aged('app_daily_usage','day','+36 days'),
  contact_submissions:expiry('contact_submissions'),
+ guest_previews:queue('guest_preview_links l',"coalesce(l.revoked_at,l.expires_at)+2592000<=unixepoch(?1) AND NOT EXISTS(SELECT 1 FROM guest_preview_feedback f WHERE f.link_id=l.id)","strftime('%Y-%m-%dT%H:%M:%fZ',coalesce(l.revoked_at,l.expires_at)+2592000,'unixepoch')"),
  contact_receipts:expiry('contact_receipts'),
  github_oauth:expiry('github_oauth_states'),
  github_staged:expiry('github_token_staging'),

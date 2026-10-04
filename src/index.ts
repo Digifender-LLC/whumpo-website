@@ -37,6 +37,7 @@ import {cmsExport} from './cms-export';
 import {readProjectDetails,saveProjectDetails} from './project-details';
 import {cleanupTraffic} from './site-traffic';
 import {cleanupPublicClients} from './public-admission';
+import {maintainFunnelEvents} from './funnel-metrics/events';
 import {compareBackends} from './backend-diff';
 import {cleanupAppLifecycle} from './app-lifecycle';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage} from './app-pages';
@@ -72,6 +73,9 @@ import {ConnectionError,githubConfig,startGitHub,cancelGitHub,finishGitHub,disco
 import {githubGrantReviews,reviewGitHubGrant,confirmGitHubGrant,cancelGitHubGrant} from './github-grant-revocation';
 import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
+import {createGuestPreview,listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedback,resolveGuestFeedback,deleteGuestFeedback,cleanupGuestPreviews} from './guest-previews/owner';
+import {GuestPreviewError} from './guest-previews/policy';
+import {guestPreviewOrigin} from './hosts';
 import { StorageLimitError } from './storage-budget';
 import {uploadPhoto,listPhotos,readPhotoUpload,readPhoto,cleanupPhotos} from './files';
 import {parsePhotoHandoff} from './chat-interactions/photo-handoff';
@@ -401,6 +405,26 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     const archive = await ownedExport(env.DB, user.id, exportMatch[1], env.FILES);
     return archive ? new Response(archive, {headers:{'content-type':'application/zip','content-disposition':`attachment; filename="tellumo-site-${exportMatch[1]}.zip"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer'}}) : error(404,'Saved version not found');
   }
+  // WH-092 owner guest-preview controls. Issuance is feature-gated; listing, revocation,
+  // resolution and deletion remain available to the current owner on any plan.
+  const guestLinks=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/guest-previews$/);
+  if(guestLinks){
+    if(new URL(request.url).search)return error(400,'Use the exact guest preview link.');
+    if(method==='GET')return json(await listGuestPreviews(env.DB,user.id,guestLinks[1]));
+    if(method==='POST')return json(await createGuestPreview(env.DB,user.id,guestLinks[1],await body(request),String(env.ENVIRONMENT)==='local'?'http://localhost:8788/guest-preview/':guestPreviewOrigin+'/'));
+    return error(405,'Method not allowed');
+  }
+  const guestLink=pathname.match(/^\/api\/guest-previews\/([0-9a-f-]{36})(?:\/(revoke|feedback)(?:\/([0-9a-f-]{36}))?)?$/);
+  if(guestLink){
+    const [,link,action,comment]=guestLink;
+    if(new URL(request.url).search)return error(400,'Use the exact guest preview link.');
+    if(!action&&method==='DELETE')return json(await deleteGuestPreview(env.DB,user.id,link));
+    if(action==='revoke'&&!comment&&method==='POST')return json(await revokeGuestPreview(env.DB,user.id,link));
+    if(action==='feedback'&&!comment&&method==='GET')return json(await listGuestFeedback(env.DB,user.id,link));
+    if(action==='feedback'&&comment&&method==='PATCH')return json(await resolveGuestFeedback(env.DB,user.id,link,comment,await body(request)));
+    if(action==='feedback'&&comment&&method==='DELETE')return json(await deleteGuestFeedback(env.DB,user.id,link,comment));
+    return error(405,'Method not allowed');
+  }
   const previewMatch = pathname.match(/^\/api\/site-versions\/([0-9a-f-]{36})\/preview$/);
   if (method === 'GET' && previewMatch) {
     return await ownedPreview(env,user.id,previewMatch[1]) ?? error(404,'Preview not found');
@@ -558,14 +582,16 @@ export default {
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
-      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)}]);return;
+      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
     }
     await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
       {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
+      {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
       {name:'applications',run:()=>cleanupAppLifecycle(env.DB)},
       {name:'contacts',run:()=>cleanupContacts(env.DB)},
+      {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
       {name:'cloudflare',enabled:!!cloudflareConfig(env),run:()=>cleanupCloudflare(env.DB,cloudflareConfig(env))},
@@ -583,7 +609,7 @@ export default {
       if(String(cause).includes('connection_write_key_changed'))return comparisonErrorResponse(request,error(503,new ConnectionVaultError('write-key').message));
       if(cause instanceof WorkspaceViewError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if(cause instanceof IdentityError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
-      if (cause instanceof FeatureInclusionError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
+      if (cause instanceof FeatureInclusionError || cause instanceof GuestPreviewError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, category: "unexpected" }));
       return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));
     }

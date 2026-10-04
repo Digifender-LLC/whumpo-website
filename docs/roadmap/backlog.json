@@ -1346,9 +1346,11 @@
         "docs/roadmap/identity-and-data-protection.md",
         "docs/roadmap/alignment.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/113",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-04 UTC source slice on branch claude/wh-025-funnel-metrics (not deployed): opt-in content-free funnel_events (allowlisted event/dimension CHECK, receipt keys, UTC minute) derived by the hourly funnel maintenance job from existing receipts, plus handler-side rejected-answer and cancel recorders; consent off by default (welcome bio step and Settings), not retroactive, deleted on withdrawal, 180-day pruning without re-derivation, account cascade and closure-inventory count; lifecycle class product-measurement; read-only suppressed operator report with receipt comparison; docs/funnel-metrics.md with proposed-until-baseline targets and an unsent feedback draft. node tests/funnel-metrics.mjs passes on SQLite and --d1 with actual handlers. Owner consent basis, retention and suppression floor remain undecided; signup, client prompts, print actions and surface changes are not measured. No live data, report run or feedback request sent."
+      ]
     },
     {
       "id": "WH-026",
@@ -2764,7 +2766,14 @@
         "WH-052",
         "WH-122",
         "WH-105",
-        "WH-116"
+        "WH-116",
+        "WH-140",
+        "WH-141",
+        "WH-142",
+        "WH-143",
+        "WH-144",
+        "WH-145",
+        "WH-146"
       ],
       "blockers": [],
       "outcome": "All selected connections reuse server-controlled explicit bounded reads, reviewed actions, scoped consent, current eligibility and reliable reconciliation.",
@@ -2801,13 +2810,321 @@
         "src/connection-vault.ts",
         "docs/customer-benchmarks.md",
         "docs/data-lifecycle.md",
-        "docs/roadmap/alignment.md"
+        "docs/roadmap/alignment.md",
+        "docs/connectors.md",
+        "tools/prototypes/connectors.mjs",
+        "tests/connectors-contract.mjs",
+        "docs/integrations/github-connection.md"
+      ],
+      "issue": "https://github.com/zemdregon/whumpo/issues/115",
+      "owner": null,
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
+        "2026-10-04 UTC: WH-140 freezes the common connector contract in docs/connectors.md with an offline reference and synthetic conformance harness, and splits delivery into WH-141\u2013146. Parent acceptance is unchanged and closes only after every child; provider sandbox/customer acceptance remains in WH-031/032/096\u2013100."
+      ]
+    },
+    {
+      "id": "WH-140",
+      "title": "Freeze the common connector contract and decompose WH-056",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "ready",
+      "kind": "decision",
+      "size": "S",
+      "dependsOn": [
+        "WH-004",
+        "WH-009",
+        "WH-052",
+        "WH-105",
+        "WH-116",
+        "WH-122"
+      ],
+      "blockers": [],
+      "outcome": "Every connector slice and provider adapter builds against one frozen catalog, operation declaration, authority/consent/receipt model and offline conformance suite instead of inventing its own.",
+      "scope": [
+        "Freeze the provider catalog shape: server-controlled origins, scopes, typed path/query/body templates, bounds, price and WH-116 data class per operation",
+        "Freeze authority classes (owner-request versus approved deterministic rule), request-bound lookup/data-use consent, receipt states, unknown-outcome reconciliation, refresh/revocation and the four distinct inclusion/configuration/consent/readiness states",
+        "Map existing GitHub/Cloudflare vault, admission, review and receipt machinery onto the contract with exact gaps; declare planned operations for the five new providers without verifying or enabling them",
+        "Add an offline reference runtime and synthetic-provider conformance harness without Worker imports"
+      ],
+      "acceptance": [
+        "docs/connectors.md states the frozen contract, gap map, planned provider declarations and child slices, marked planned",
+        "Offline checks reject widened hosts/scopes/paths, caller URLs, rule reads and unpriced or unreconcilable actions, and prove revoked/expired refusal, lost-response reconciliation without duplicate effect, consent binding and owner-request-only refusal from rule context",
+        "Existing pure GitHub/Cloudflare recovery, vault and catalogue functions agree with the catalog",
+        "WH-056 keeps its acceptance and depends on every child; no child reaches WH-031/032/036/049/096\u2013100/104",
+        "Open owner decisions are listed rather than assumed"
+      ],
+      "verification": [
+        "node tests/connectors-contract.mjs",
+        "node tools/roadmap.mjs validate, alignment and render --check",
+        "git diff --check"
+      ],
+      "references": [
+        "docs/connectors.md",
+        "tools/prototypes/connectors.mjs",
+        "tests/connectors-contract.mjs",
+        "docs/integrations/github-connection.md",
+        "docs/integrations/cloudflare-connection.md"
       ],
       "issue": null,
       "owner": null,
-      "evidence": [
-        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
-      ]
+      "evidence": []
+    },
+    {
+      "id": "WH-141",
+      "title": "Shared connector catalog, typed request builder and operation admission in source",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-140",
+        "WH-117"
+      ],
+      "blockers": [],
+      "outcome": "GitHub and Cloudflare transports can only send catalog-declared operations built from typed parameters, and provider identity, feature mapping and vault contexts derive from one server catalog.",
+      "scope": [
+        "TypeScript catalog and request builder matching the frozen v1 shapes; replace githubAccess.send free paths/caller-chosen operation and the Cloudflare path regex with operation IDs",
+        "Derive ConnectionProvider, isConnectionProvider, connectionFeature and vault context patterns from the catalog; planned providers stay unconfigured and refused",
+        "Record operation authority and readiness in the catalog; coordinate vault-context changes with the WH-117 key lifecycle"
+      ],
+      "acceptance": [
+        "No provider request can be built from a caller URL, host, path or undeclared query/body; existing GitHub/Cloudflare suites pass unchanged",
+        "Planned providers cannot start OAuth, seal credentials or reach a transport",
+        "No new scope, endpoint, binding or customer-visible behaviour"
+      ],
+      "verification": [
+        "pnpm check",
+        "pnpm test:github-connection",
+        "pnpm test:github-backups",
+        "pnpm test:cloudflare-connection",
+        "node tests/connection-handoff.mjs",
+        "node tests/connection-vault.mjs",
+        "node tests/connectors-contract.mjs"
+      ],
+      "references": [
+        "docs/connectors.md",
+        "tools/prototypes/connectors.mjs",
+        "tests/connectors-contract.mjs",
+        "src/github-connection.ts",
+        "src/cloudflare-connection.ts",
+        "src/connection-vault.ts",
+        "src/feature-admission.ts",
+        "src/connection-handoff-shape.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-142",
+      "title": "Adapt GitHub and Cloudflare handlers to the common connector contract",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-141"
+      ],
+      "blockers": [],
+      "outcome": "The existing GitHub backup and Cloudflare DNS journeys satisfy the common contract and pass the shared conformance suite against their D1-backed handlers.",
+      "scope": [
+        "Bind the explicit plan-inclusion price into backup/DNS reviews and confirmations; expose a common receipt-state view over github_backups and cloudflare_dns_actions without rewriting their history",
+        "Verify and register whether discovery metadata Chat replies re-enter later model context",
+        "Extract runConformance into a test helper and run it against the real handlers with disposable D1 and synthetic providers"
+      ],
+      "acceptance": [
+        "Conformance passes for both existing providers; lost replies still never redispatch",
+        "Explicit price, authority and receipt state appear in reviews and status without credentials",
+        "WH-031/032 live acceptance remains separate"
+      ],
+      "verification": [
+        "pnpm check",
+        "pnpm test:github-connection",
+        "pnpm test:github-backups",
+        "pnpm test:cloudflare-connection",
+        "node tests/connection-handoff.mjs",
+        "node tests/chat-task-connection-status.mjs"
+      ],
+      "references": [
+        "docs/connectors.md",
+        "tools/prototypes/connectors.mjs",
+        "tests/connectors-contract.mjs",
+        "src/github-backups.ts",
+        "src/cloudflare-dns.ts",
+        "src/connection-recovery.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-143",
+      "title": "Request-bound lookup consent and common minimized connector receipts",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-141",
+        "WH-009",
+        "WH-105",
+        "WH-116"
+      ],
+      "blockers": [],
+      "outcome": "Provider-selected content can be read only through an owner-confirmed, single-use, exact-query consent, and new connector actions record minimized durable receipts under admitted lifecycle classes.",
+      "scope": [
+        "Current-schema lookup-consent and connector-receipt tables with tenant, credential, digest and expiry guards; no data-preservation migration",
+        "Admit connector-content (after the owner retention decision) and register connector-receipts with readers, retention, deletion and export policy",
+        "Chat card bindings for lookup consent and action review via the WH-105 interaction contract; model-context destination gated on an approved non-training route record"
+      ],
+      "acceptance": [
+        "Consent is bound to owner, credential, operation, parameter digest and destination, single-use and voided by disconnect",
+        "External results are marked untrusted and cannot confirm consent, reviews or tools",
+        "Real connected content cannot reach the training-enabled test route",
+        "Receipts hold digests and identifiers only"
+      ],
+      "verification": [
+        "Synthetic SQLite and local D1 consent/receipt tests",
+        "node tools/lifecycle-catalog.mjs and node tests/lifecycle-catalog.mjs",
+        "node tests/connectors-contract.mjs"
+      ],
+      "references": [
+        "docs/connectors.md",
+        "tools/prototypes/connectors.mjs",
+        "tests/connectors-contract.mjs",
+        "docs/data-protection.md",
+        "docs/data-lifecycle.json",
+        "docs/inference-privacy.md",
+        "docs/chat-interactions.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-144",
+      "title": "Single-flight refresh custody and honest revocation for refresh-token providers",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-141",
+        "WH-117"
+      ],
+      "blockers": [],
+      "outcome": "Refresh-token providers renew access only inside admitted operations with one fenced refresh per credential, and disconnect reports remote revocation honestly per provider capability.",
+      "scope": [
+        "Generalize encrypted refresh custody beyond GitHub with catalog-derived purpose contexts and rotation-safe atomic replacement",
+        "Per-credential refresh claim, reauthorization-required state, lost-refresh retry with the same custody and no scope widening",
+        "Revocation kinds rfc7009, refresh-token delete and local-only owner removal with existing lease/claim discipline"
+      ],
+      "acceptance": [
+        "Concurrent uses cause one token-endpoint call; invalid_grant requires reauthorization",
+        "No background keep-alive refresh; credentials never leave the vault boundary",
+        "Owner-removal providers never claim remote revocation"
+      ],
+      "verification": [
+        "Synthetic provider refresh/revocation tests on SQLite and local D1",
+        "node tests/connection-rotation.mjs",
+        "node tests/connectors-contract.mjs"
+      ],
+      "references": [
+        "docs/connectors.md",
+        "tools/prototypes/connectors.mjs",
+        "tests/connectors-contract.mjs",
+        "docs/connection-key-lifecycle.md",
+        "src/connection-rotation.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-145",
+      "title": "Approved deterministic-rule authority for rule-eligible connector actions",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-143",
+        "WH-052"
+      ],
+      "blockers": [],
+      "outcome": "A WH-052 deterministic-rule job can invoke only connector actions that declare approved-rule authority, within its exact approved destination, template and limits, and only on a live-accepted adapter.",
+      "scope": [
+        "Rule approval binding {operation, destination digest, body template digest, limit, credential} to a rule revision; admission and claim-time limit enforcement",
+        "Refuse owner-request-only operations, reads and reconciliation from rule context; refuse visitor, runtime, webhook and maintainer contexts",
+        "No owner-maintenance inference import or funding; WH-069 consumes this bridge for rule execution"
+      ],
+      "acceptance": [
+        "Owner-request-only operations are refused from rule context even when scopes permit",
+        "Destination/template mismatch, exceeded limits and non-accepted adapters are refused before dispatch",
+        "Runtime connector actions run with maintenance inference unavailable"
+      ],
+      "verification": [
+        "Synthetic job-envelope plus connector tests on SQLite and local D1",
+        "node tests/job-envelope-contract.mjs",
+        "node tests/connectors-contract.mjs"
+      ],
+      "references": [
+        "docs/connectors.md",
+        "tools/prototypes/connectors.mjs",
+        "tests/connectors-contract.mjs",
+        "docs/job-envelope.md",
+        "docs/background-jobs.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-146",
+      "title": "Connected synthetic connector acceptance and privacy/rate-limit review",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-142",
+        "WH-143",
+        "WH-144",
+        "WH-145"
+      ],
+      "blockers": [],
+      "outcome": "The full owner lookup, consent, review, dispatch, lost-reply, reconcile, eligibility-loss and revocation journey passes on local D1 with synthetic providers, and privacy/deletion and rate limits are reviewed.",
+      "scope": [
+        "Connected local journeys for existing providers and one synthetic refresh-token provider through Chat cards and Settings",
+        "Per-owner/provider request limits and provider 429 handling; privacy/deletion review of connector classes",
+        "Record readiness as synthetic-conformant only; provider sandbox/customer acceptance stays in WH-031/032/096\u2013100"
+      ],
+      "acceptance": [
+        "All conformance cases pass against implemented handlers on SQLite and local D1",
+        "Rate limits and deletion/export behaviour are documented and tested",
+        "No provider readiness above synthetic-conformant is claimed"
+      ],
+      "verification": [
+        "Connected local D1 journey tests with synthetic providers",
+        "Privacy/deletion and rate-limit review record"
+      ],
+      "references": [
+        "docs/connectors.md",
+        "tools/prototypes/connectors.mjs",
+        "tests/connectors-contract.mjs",
+        "docs/data-lifecycle.md",
+        "docs/feature-admission.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
     },
     {
       "id": "WH-057",
@@ -3986,13 +4303,17 @@
         "docs/roadmap/chat-first-experience.md",
         "docs/roadmap/identity-and-data-protection.md",
         "docs/workspace-identity.md",
-        "docs/chat-interactions.md"
+        "docs/chat-interactions.md",
+        "docs/mobile-api-v1.md",
+        "tools/prototypes/mobile-v1.mjs",
+        "tests/mobile-v1-contract.mjs"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/117",
       "owner": null,
       "evidence": [
         "2026-09-30: docs/android-app.md records the accepted product/architecture baseline and current service mapping against f90bf5f plus the working tree. Exact v1 wire contracts and native implementation acceptance remain this lane's future work; no Android execution issue or release is claimed.",
-        "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance."
+        "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
+        "2026-10-04: docs/mobile-api-v1.md freezes the /api/mobile/v1 contract (34 operations mapped to existing handlers or declared new adapters, native bearer/handoff/revocation model, client_update_required admission, four admitted review controls, idempotency, pagination, exclusions, journey/evidence matrix and source gaps) against b4671f9, with synthetic fixtures and an offline contract test. docs/android-app.md is refreshed against current source. Planned only: no mobile route, native session, Android code, FCM adapter or device acceptance. Owner decisions (minimum Android version, Play distribution/identity, Play Integrity, session cap, native take-down, push default, stale-client status code) are listed in the contract. Live issue/dependency state was not re-checked offline."
       ]
     },
     {
@@ -4530,7 +4851,11 @@
         "WH-010",
         "WH-122",
         "WH-105",
-        "WH-116"
+        "WH-116",
+        "WH-150",
+        "WH-151",
+        "WH-152",
+        "WH-153"
       ],
       "blockers": [],
       "outcome": "A Creator shares one immutable private preview for accountless comments and can revoke access without granting workspace or release authority.",
@@ -4564,11 +4889,176 @@
         "docs/roadmap/alignment.md",
         "docs/plan-feature-contract.md"
       ],
+      "issue": "https://github.com/zemdregon/whumpo/issues/121",
+      "owner": null,
+      "evidence": [
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
+        "2026-10-04 UTC: decomposed into WH-150 (link authority, isolated delivery, bounded feedback, owner API and lifecycle; implemented in source with local tests), WH-151 (shared Chat/view adapters), WH-152 (browser acceptance) and WH-153 (release and live acceptance). The parent stays open until all four pass."
+      ]
+    },
+    {
+      "id": "WH-150",
+      "title": "Bind guest preview links to exact saved versions with bounded accountless feedback",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "ready",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-089",
+        "WH-066",
+        "WH-004",
+        "WH-009",
+        "WH-010",
+        "WH-122",
+        "WH-116"
+      ],
+      "blockers": [],
+      "outcome": "An owner with current inclusion issues an expiring, revocable, hash-stored link to one immutable saved version; guests view only that isolated preview on a separate host and may leave bounded plain-text comments the owner can read, resolve and delete.",
+      "scope": [
+        "Current schema for guest_preview_links/guest_preview_feedback with immutability, capacity, rate and preservation-hold guards",
+        "Owner HTTP handlers under current workspace identity; issuance composes creator.guest-feedback inclusion; list/revoke/resolve/delete stay outside the paid gate",
+        "Anonymous sites-Worker guest page, status, sandboxed view and feedback on preview.whumpo.site with the token only in the URL fragment and POST bodies",
+        "Lifecycle class, closure inventory counts, daily retention job and feature contract document"
+      ],
+      "acceptance": [
+        "Forged, replayed, expired, revoked, removed, held and no-longer-included links stop reads and comments, including an in-flight view",
+        "Guests see only the exact bound version through the shared isolated preview rendering; no other version, asset alias, draft, project or account data",
+        "Raw tokens are never stored, listed, exported or logged; comment markup and instructions stay inert and never reach Chat or a model",
+        "Owner identity loss and foreign owners are refused; rate, size and capacity limits hold on SQLite and local D1"
+      ],
+      "verification": [
+        "node tests/guest-previews.mjs and node tests/guest-previews.mjs --d1",
+        "node tests/guest-preview-photos.mjs (local D1/R2, synthetic clearance)",
+        "Lifecycle catalog, closure inventory, maintenance and related preview/specification/publication suites"
+      ],
+      "references": [
+        "docs/guest-previews.md",
+        "docs/project-specification-storage.md",
+        "docs/data-lifecycle.md",
+        "docs/feature-inclusion.md"
+      ],
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+        "2026-10-04 UTC: implemented in source on branch claude/wh-092-preview-links with local SQLite, local D1 and local D1/R2 fixtures; not deployed. See docs/guest-previews.md."
       ]
+    },
+    {
+      "id": "WH-151",
+      "title": "Register guest preview owner operations with shared Chat and view adapters",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-150",
+        "WH-105",
+        "WH-107",
+        "WH-109",
+        "WH-110"
+      ],
+      "blockers": [],
+      "outcome": "Owners list, issue, revoke, resolve and delete guest preview links and comments from the shared Chat/view surface using the WH-150 domain handlers, with exact confirmation before a link is issued.",
+      "scope": [
+        "Register read/action bindings for the existing WH-150 handlers; no second authority or storage",
+        "Issuance shows the exact version, expiry and comment setting and requires explicit owner confirmation; a model may only prepare it",
+        "Comments are shown to the owner as inert text and enter model context only by an explicit owner request with a reviewed privacy route",
+        "Keep the direct revoke control reachable without inference"
+      ],
+      "acceptance": [
+        "Chat and views enforce the same identity, ownership and inclusion as the HTTP handlers; hidden UI or forged identifiers cannot bypass them",
+        "The one-time token is shown only to the owner and never stored in Chat history, transcripts or model context",
+        "Revocation and deletion remain available after inclusion ends"
+      ],
+      "verification": [
+        "Connected Chat/view fixtures over the actual handlers with forged identifiers and lost inclusion",
+        "Transcript/model-context checks that no token or unrequested comment text is present"
+      ],
+      "references": [
+        "docs/guest-previews.md",
+        "docs/project-specification-storage.md",
+        "docs/data-lifecycle.md",
+        "docs/feature-inclusion.md",
+        "docs/chat-interactions.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-152",
+      "title": "Accept the accountless guest preview journey in real browsers",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-150",
+        "WH-151"
+      ],
+      "blockers": [],
+      "outcome": "A guest on mobile and keyboard-only desktop opens a link, views the preview, sends a comment and sees the link stop working after the owner revokes it from the shared owner surface.",
+      "scope": [
+        "Playwright journey at 390x844 and desktop with keyboard-only operation and screen-reader names for the guest page",
+        "Owner issue/revoke/resolve through the WH-151 surface with synthetic approved photo assets",
+        "Check headers, sandbox, no cookies, no horizontal overflow and focus order"
+      ],
+      "acceptance": [
+        "Accountless preview, comment and revoke journey passes on mobile and keyboard",
+        "No workspace cookie, token in a URL path/query or guest text in logs"
+      ],
+      "verification": [
+        "Local browser fixtures over the platform and sites Workers with disposable D1/R2"
+      ],
+      "references": [
+        "docs/guest-previews.md",
+        "docs/project-specification-storage.md",
+        "docs/data-lifecycle.md",
+        "docs/feature-inclusion.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-153",
+      "title": "Release and live-accept guest previews on the test platform",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "release",
+      "size": "S",
+      "dependsOn": [
+        "WH-150",
+        "WH-152"
+      ],
+      "blockers": [],
+      "outcome": "The guest preview host is verified to route to the sites Worker, the current schema and Workers are deployed in a reviewed test release, and a synthetic live journey passes before the catalogue marks the feature private-test.",
+      "scope": [
+        "Verify preview.whumpo.site resolves through the existing *.whumpo.site route without a customer DNS change; request explicit approval if a Whumpo-zone record is missing",
+        "Reviewed four-Worker release with the current schema cutover",
+        "Live synthetic issue/view/comment/revoke with cleanup; then set creator.guest-feedback implementation to private-test"
+      ],
+      "acceptance": [
+        "Live readback of host routing, headers and refusal paths with a disposable identity",
+        "Catalogue changes only after live acceptance; no paid service, purchase or customer DNS change"
+      ],
+      "verification": [
+        "Release manifest readback and an opt-in live fixture with cleanup evidence"
+      ],
+      "references": [
+        "docs/guest-previews.md",
+        "docs/project-specification-storage.md",
+        "docs/data-lifecycle.md",
+        "docs/feature-inclusion.md",
+        "docs/releases.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
     },
     {
       "id": "WH-093",

@@ -1,0 +1,21 @@
+name: Bug
+description: Something in Whumpo behaves differently from its feature document
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the environment (local or test), steps and what you expected.
+    validations:
+      required: true
+  - type: input
+    id: contract
+    attributes:
+      label: Feature document
+      placeholder: docs/chat-interactions.md
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Logs, screenshots or failing test output. Remove credentials and customer content first.

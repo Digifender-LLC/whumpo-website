@@ -12,6 +12,7 @@ import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';
 import {Label} from './components/ui/label';
 import {ProfilePicturePicker,profilePicture,avatarChoices} from './profile-picture-picker';
+import {MeasurementConsentChoice} from './measurement-consent';
 import {welcomePrompts,welcomeStage,type WelcomePrompt} from '../../src/welcome-prompts';
 const themes=[['ocean','Fresh & bright','#60B5FF'],['clay','Warm & cozy','#e7ab89'],['forest','Calm & natural','#78b9a1']] as const;
 export function Onboarding({profile}:{profile:Profile}){
@@ -22,7 +23,7 @@ export function Onboarding({profile}:{profile:Profile}){
  return <WelcomeConversation profile={profile} initial={state.data!.state!}/>;
 }
 function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
- const [draft,setDraft]=useState(initial),[name,setName]=useState(profile.name),[bio,setBio]=useState(profile.about_me),[share,setShare]=useState(!!profile.share_context),[busy,setBusy]=useState(false),[photoBusy,setPhotoBusy]=useState(false),[error,setError]=useState(''),[returnToReview,setReturnToReview]=useState(false);
+ const [draft,setDraft]=useState(initial),[name,setName]=useState(profile.name),[bio,setBio]=useState(profile.about_me),[share,setShare]=useState(!!profile.share_context),[measure,setMeasure]=useState(!!profile.measurement_consent),[busy,setBusy]=useState(false),[photoBusy,setPhotoBusy]=useState(false),[error,setError]=useState(''),[returnToReview,setReturnToReview]=useState(false);
  const navigate=useNavigate(),heading=useRef<HTMLHeadingElement>(null),lock=useRef(false),errorPanel=useRef<HTMLDivElement>(null);
  const actionFocus=useRef<{origin:Element|null;moved:boolean}|null>(null);
  const mayFocus=()=>{const focus=actionFocus.current;return focus?!focus.moved&&(document.activeElement===focus.origin||document.activeElement===document.body):document.activeElement===document.body;};
@@ -50,7 +51,7 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
    if(!name.trim())throw Error('What should we call you?');
    const changes={name:name.trim()};queryClient.setQueryData(['session'],await saveWelcomeProfile(profile,changes,()=>send<Profile>('/profile',{revision:profile.revision,...changes},'PATCH'),()=>api<Profile>('/profile')));
   }
-  if(prompt==='bio'){const changes={about_me:bio.trim(),share_context:share};queryClient.setQueryData(['session'],await saveWelcomeProfile(profile,changes,()=>send<Profile>('/profile',{revision:profile.revision,...changes},'PATCH'),()=>api<Profile>('/profile')));}
+  if(prompt==='bio'){const changes={about_me:bio.trim(),share_context:share,measurement_consent:measure};queryClient.setQueryData(['session'],await saveWelcomeProfile(profile,changes,()=>send<Profile>('/profile',{revision:profile.revision,...changes},'PATCH'),()=>api<Profile>('/profile')));}
   if(prompt==='idea'&&!draft.idea.trim())throw Error('Tell me a little about what you’d like to make.');
   if(prompt==='project-name'&&!draft.project_name.trim())throw Error('Give your project a working name. You can change it later.');
   if(prompt==='review'){
@@ -86,7 +87,7 @@ function WelcomeConversation({profile,initial}:{profile:Profile;initial:Draft}){
    <div className="rounded-2xl border bg-card p-4 sm:p-5 space-y-4">
     {prompt==='name'&&<div className="space-y-2"><Label htmlFor="welcome-name">Your name</Label><Input id="welcome-name" value={name} onChange={e=>setName(e.target.value)} autoComplete="name" maxLength={80} required disabled={waiting} className="min-h-12" placeholder="What your friends call you"/></div>}
     {prompt==='picture'&&<ProfilePicturePicker profile={profile} disabled={busy} onBusy={setPhotoBusy}/>}
-    {prompt==='bio'&&<><Label htmlFor="welcome-bio">A little about you <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="welcome-bio" value={bio} onChange={e=>setBio(e.target.value)} maxLength={1200} rows={4} disabled={waiting} placeholder="I’m a baker turning a weekend hobby into a small business…"/><label className="flex items-start gap-3 text-sm py-2"><input type="checkbox" checked={share} onChange={e=>setShare(e.target.checked)} disabled={waiting} className="mt-1 size-5 shrink-0"/><span>Use my name and bio to personalize the agent’s help.<span className="block text-xs text-muted-foreground mt-2 leading-relaxed">Optional. Shared text goes to the AI provider; the current test provider may use it for training. Your email and photo are never included.</span></span></label></>}
+    {prompt==='bio'&&<><Label htmlFor="welcome-bio">A little about you <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="welcome-bio" value={bio} onChange={e=>setBio(e.target.value)} maxLength={1200} rows={4} disabled={waiting} placeholder="I’m a baker turning a weekend hobby into a small business…"/><label className="flex items-start gap-3 text-sm py-2"><input type="checkbox" checked={share} onChange={e=>setShare(e.target.checked)} disabled={waiting} className="mt-1 size-5 shrink-0"/><span>Use my name and bio to personalize the agent’s help.<span className="block text-xs text-muted-foreground mt-2 leading-relaxed">Optional. Shared text goes to the AI provider; the current test provider may use it for training. Your email and photo are never included.</span></span></label><MeasurementConsentChoice checked={measure} onChange={setMeasure} disabled={waiting}/></>}
     {prompt==='idea'&&<><Label htmlFor="welcome-idea">Your first idea</Label><Textarea id="welcome-idea" value={draft.idea} onChange={e=>setDraft({...draft,idea:e.target.value})} maxLength={1000} rows={5} required disabled={waiting} placeholder="I’d love a website for my bakery where people can see the menu and get in touch…"/><div className="flex flex-wrap gap-2">{['A home for my portfolio','A website for my business','A useful little app'].map(idea=><Button key={idea} type="button" variant="outline" className="min-h-11 h-auto whitespace-normal text-left justify-start" disabled={waiting} onClick={()=>setDraft({...draft,idea})}>{idea}</Button>)}</div></>}
     {prompt==='project-name'&&<div className="space-y-2"><Label htmlFor="welcome-project">Working name</Label><Input id="welcome-project" value={draft.project_name} onChange={e=>setDraft({...draft,project_name:e.target.value})} maxLength={100} required disabled={waiting} className="min-h-12" placeholder="For example, Copper Oven"/></div>}
     {prompt==='audience'&&<div className="space-y-2"><Label htmlFor="welcome-audience">Who it’s for <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="welcome-audience" value={draft.audience} onChange={e=>setDraft({...draft,audience:e.target.value})} maxLength={1000} rows={3} disabled={waiting} placeholder="Neighbors looking for fresh bread and a friendly local bakery"/></div>}

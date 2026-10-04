@@ -28,7 +28,7 @@ try{
  assert.equal(sql.prepare("SELECT status FROM identity_credentials WHERE id='pending-key'").get().status,'staged');
  let report=await maintenanceReport(db);
  assert.equal(report.jobs.find(j=>j.job==='traffic').state,'failed');
- for(const name of ['identity','chat_drafts','imports','fair_use','applications','contacts','photos'])assert.equal(report.jobs.find(j=>j.job===name).state,'completed',name);
+ for(const name of ['identity','chat_drafts','imports','fair_use','guest_previews','applications','contacts','photos'])assert.equal(report.jobs.find(j=>j.job===name).state,'completed',name);
  for(const name of ['github','cloudflare'])assert.equal(report.jobs.find(j=>j.job===name).state,'skipped',name);
  assert.equal(listCalls,1);assert.ok(!JSON.stringify(report).includes('PRIVATE_SCHEDULER_CANARY'));
  failTraffic=false;await worker.scheduled({cron:'17 3 * * *'},env);

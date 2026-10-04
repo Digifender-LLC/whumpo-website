@@ -24,12 +24,20 @@ export async function versionPhotos(env:Pick<Env,'DB'|'FILES'>,versionId:string,
  }
  return assets;
 }
-export async function ownedPreview(env:Pick<Env,'DB'|'FILES'>,userId:string,id:string){
- const row=await env.DB.prepare('SELECT v.id,v.html,v.component_id,v.config_json FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(id,userId).first<{id:string;html:string;component_id:string;config_json:string}>();
- if(!row)return null;await requireSpecificationAvailable(env.DB,row.id);let html=row.html;
+export type SavedVersionRow={id:string;html:string;component_id:string;config_json:string};
+/** The single isolated preview rendering of one exact saved version, shared by the owner and
+ * guest-link paths: current-format/hold check, then digest-verified private photos inlined as
+ * data URIs. No object URL, asset alias or other version is ever exposed. */
+export async function savedVersionHTML(env:Pick<Env,'DB'|'FILES'>,row:SavedVersionRow){
+ await requireSpecificationAvailable(env.DB,row.id);let html=row.html;
  if(row.component_id==='photo-page@1'){
   const photos=await versionPhotos(env,row.id,photoConfig(JSON.parse(row.config_json)));
   for(const photo of photos){let binary='';for(let n=0;n<photo.bytes.length;n+=8192)binary+=String.fromCharCode(...photo.bytes.subarray(n,n+8192));html=html.replace(`src="assets/${photo.id}.jpg"`,`src="data:image/jpeg;base64,${btoa(binary)}"`);}
  }
- return new Response(html,{headers:{...previewHeaders,'content-security-policy':previewHeaders['content-security-policy']+"; img-src data:"}});
+ return html;
+}
+export async function ownedPreview(env:Pick<Env,'DB'|'FILES'>,userId:string,id:string){
+ const row=await env.DB.prepare('SELECT v.id,v.html,v.component_id,v.config_json FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(id,userId).first<SavedVersionRow>();
+ if(!row)return null;
+ return new Response(await savedVersionHTML(env,row),{headers:{...previewHeaders,'content-security-policy':previewHeaders['content-security-policy']+"; img-src data:"}});
 }

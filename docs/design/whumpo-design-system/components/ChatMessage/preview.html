@@ -1,0 +1,12 @@
+<!-- @dsCard group="Conversation" height=260 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>ChatMessage — preview</title></head>
+<body>
+<div id="root"></div>
+<script>
+  var W = window.Whumpo, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h("div",{className:"wh-stack",style:{background:"var(--surface-sunken)"}},h(W.ChatMessage,{from:"whumpo",avatarSrc:"/_blob/699642b63b9b374a7052f0e1ba7b2223"},"Hi! What would you like to build today?"),h(W.ChatMessage,{from:"you",time:"9:41 AM"},"I need a website for my bakery with online orders."),h(W.ChatMessage,{from:"whumpo",avatarSrc:"/_blob/699642b63b9b374a7052f0e1ba7b2223",time:"9:41 AM"},"Got it. I’ll help you get the site, domain, and online ordering set up. What’s the bakery called?")));
+</script>
+</body>
+</html>

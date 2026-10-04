@@ -1,0 +1,12 @@
+<!-- @dsCard group="Status" height=170 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>ServiceTile — preview</title></head>
+<body>
+<div id="root"></div>
+<script>
+  var W = window.Whumpo, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h("div",{className:"wh-tiles",style:{maxWidth:480}},h(W.ServiceTile,{name:"Website",icon:"home",status:"ready",statusLabel:"Live"}),h(W.ServiceTile,{name:"Domain",icon:"globe",status:"ready",statusLabel:"Connected"}),h(W.ServiceTile,{name:"Database",icon:"database",status:"ready",statusLabel:"Ready"}),h(W.ServiceTile,{name:"Storage",icon:"storage",status:"working",statusLabel:"Setting up"})));
+</script>
+</body>
+</html>

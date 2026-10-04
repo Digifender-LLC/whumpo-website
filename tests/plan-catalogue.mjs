@@ -42,5 +42,8 @@ for(const id of ['starter','personal','business','business-pro']){
  const html=renderDetails(id);assert.ok(html.includes(byId(id).name+': planned features'));assert.ok(html.includes('sandbox subscription does not enable them'));assert.ok(html.includes('Standard assistance uses no customer credits'));
  for(const feature of byId(id).launchFeatures.featureIds){const label=features.find(f=>f.id===feature).name;assert.ok(html.includes(label),label);}
 }
-const landing=renderPricing();assert.match(landing,/<h3[^>]*>Creator<\/h3>/);assert.ok(landing.includes('The invite-only preview is free'));assert.ok(landing.includes('Sandbox subscriptions are available for testing with no real charges'));assert.ok(landing.includes('Planned launch inclusions'));
+// The landing page no longer hard-codes plan cards: plans, prices and inclusions come from the live API/Stripe tables. The static shell must render no plan or price claim.
+const landing=renderPricing();assert.ok(landing.includes('The invite-only preview is free'));assert.ok(landing.includes('paid plans are not available yet'));assert.ok(landing.includes('Plan changes and future spending require your approval'));
+assert.ok(landing.includes('aria-label="Plans for"')&&landing.includes('aria-label="Billing"'));assert.ok(landing.includes('Loading plans'));
+assert.doesNotMatch(landing,/<h3[^>]*>(Creator|Personal|Starter|Business|Business Pro)<\/h3>/);assert.doesNotMatch(landing,/\$\d/);
 console.log('Plan catalogue passed: real public API, cumulative four-tier features, seven gated connections, common protections, stable personal ID/prices, no implicit activation, Chat text and rendered pricing/preferences.');

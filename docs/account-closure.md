@@ -32,4 +32,8 @@ No new paid services or provider writes are performed by the inventory.
 
 A read-only query of the private test D1 database succeeded at **2026-09-30 17:45:41 UTC**: one account, one project, no live project service records, no connected provider credentials or registered CMS/domain resources, and **one unresolved metered usage operation**. This operation requires reconciliation before closure; the inventory did not change it. Local evidence is `.secrets/account-closure-inventory.json` (ignored). External provider resources, R2 orphans, backups and actual deletion remain unverified. No Worker deployment or migration was needed for this operator tool.
 
+October 4, 2026: the inventory also counts WH-092 `guestPreviewLinks`, `activeGuestPreviewLinks` and `guestPreviewFeedback` ([guest previews](guest-previews.md)). Both tables cascade with the project and account; an active preservation hold blocks deletion of comments and of links that have comments. Closure must revoke active links before purge. `node tests/guest-previews.mjs` verifies the counts and cascades with synthetic data.
+
+October 4, 2026: the inventory also counts WH-025 `funnelEvents` (opt-in, content-free [funnel measurements](funnel-metrics.md)). They cascade with the account and are deleted immediately when the owner turns measurement off; `node tests/funnel-metrics.mjs` verifies the count and cascade with synthetic data.
+
 October 1, 2026: the read-only inventory also counts staged GitHub credentials (`githubStagedCredentials`) separately. They remain included in the total encrypted credential count and must be disconnected/revoked before any future account closure; a missing connection pointer does not mean no provider credential is retained. This adds no deletion capability.
