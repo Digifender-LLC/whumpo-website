@@ -6,12 +6,13 @@ const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}
 async function owner(user=crypto.randomUUID()){if(!owners.has(user)){const authority=await workspaceFixture(db,m,user);owners.set(user,authority);scopes.set(user,await authority.scope());}return user;}
 const {prepareBackendPublication:prepare,confirmBackendPublication:confirm,readBackendPublication:read,readBackendPublicationReview:review,publicBackend}=m.backendPublication,{saveBackend,testBackend}=m.backend,{backendChatCommand,backendAction}=m.backendChat,host=m.host;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();let calls=0;
-const service={fetch:async(url,init)=>{calls++;assert.deepEqual(Object.keys(init.headers),['content-type']);const body=JSON.parse(init.body);assert.deepEqual(Object.keys(body),['version','source','input']);return Response.json({ok:true,value:body.input});}};
+const service={fetch:async(url,init)=>{calls++;const headerNames=Object.keys(init.headers);assert.equal(headerNames[0],'content-type');assert.ok(headerNames.every(n=>['content-type','x-whumpo-lane'].includes(n)));if(headerNames.length>1)assert.match(init.headers['x-whumpo-lane'],/^[0-9a-f]{64}$/);const body=JSON.parse(init.body);assert.deepEqual(Object.keys(body),['version','source','input']);return Response.json({ok:true,value:body.input});}};
 async function account(user=id()){const project=id();await owner(user);await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Public function','','draft',?,?)").bind(project,user,now(),now()).run();return {user,project};}
 async function version(a){const v=id(),r=id();await saveBackend(scope(a.user),a.user,a.project,v,'export default input=>input');await testBackend(scope(a.user),service,a.user,a.project,v,r,42);return {v,r};}
 async function publish(a,v){const rid=id();await prepare(scope(a.user),a.user,a.project,rid,'publish',v.v,v.r);await confirm(scope(a.user),a.user,rid);return rid;}
-const request=(input={hello:'visitor'},extra={})=>new Request('https://00000000-0000-0000-0000-000000000000.whumpo.site/backend',{method:'POST',headers:{'content-type':'application/json',cookie:'secret=session',authorization:'Bearer platform-secret'},body:JSON.stringify(input),...extra});
-const call=(a,input,env=db)=>publicBackend(request(input),env,service,a.project);
+let ipCounter=0;const freshIp=()=>{ipCounter++;return `198.18.${(ipCounter>>8)&255}.${ipCounter&255}`;};
+const request=(input={hello:'visitor'},extra={},ip=freshIp())=>new Request('https://00000000-0000-0000-0000-000000000000.whumpo.site/backend',{method:'POST',headers:{'content-type':'application/json',cookie:'secret=session',authorization:'Bearer platform-secret','cf-connecting-ip':ip},body:JSON.stringify(input),...extra});
+const call=(a,input,env=db,ip)=>publicBackend(request(input,{},ip),env,service,a.project);
 try{
  const a=await account(),b=await account(),v=await version(a),vb=await version(b);calls=0;
  assert.equal((await call(a,{})).status,404);
@@ -43,8 +44,16 @@ try{
  // Account and platform ceilings span independently published projects.
  for(let i=0;i<4;i++){const p=await account(a.user),pv=await version(p);await publish(p,pv);assert.ok((await Promise.all(Array.from({length:100},()=>call(p,{})))).every(r=>r.status===200));}
  const extra=await account(a.user),extraV=await version(extra);await publish(extra,extraV);assert.equal((await call(extra,{})).status,429);
- for(let i=0;i<5;i++){const p=await account(b.user),pv=await version(p);await publish(p,pv);assert.ok((await Promise.all(Array.from({length:100},()=>call(p,{})))).every(r=>r.status===200));}
- const c=await account(),cv=await version(c);await publish(c,cv);assert.equal((await call(c,{})).status,429);
+ const platformUsed=async()=>(await db.prepare("SELECT sum(calls) n FROM backend_public_usage WHERE day=strftime('%Y-%m-%d','now')").first()).n;
+ assert.equal(await platformUsed(),500);
+ // WH-075 fair share: past half the platform pool, an account that already made 100 calls today is refused,
+ // while accounts under their 100-call share still get the reserve.
+ const b1=await account(b.user),b1v=await version(b1);await publish(b1,b1v);const firstB=await Promise.all(Array.from({length:105},()=>call(b1,{})));
+ assert.equal(firstB.filter(r=>r.status===200).length,100);assert.equal(firstB.filter(r=>r.status===429).length,5);
+ const b2=await account(b.user),b2v=await version(b2);await publish(b2,b2v);assert.equal((await call(b2,{})).status,429,'Account over its fair share waits while the reserve is in use');
+ for(let i=0;i<4;i++){const p=await account(),pv=await version(p);await publish(p,pv);assert.ok((await Promise.all(Array.from({length:100},()=>call(p,{})))).every(r=>r.status===200));}
+ assert.equal(await platformUsed(),1000);
+ const c=await account(),cv=await version(c);await publish(c,cv);assert.equal((await call(c,{})).status,429,'Platform ceiling is unchanged');
  const guided=await backendChatCommand(scope(a.user),a.user,id(),`/backend-publication ${a.project}`)();assert.ok(guided.includes(republish));
  const reviewText=await backendChatCommand(scope(a.user),a.user,id(),`/backend-publication-review ${republish}`)();assert.ok(reviewText.includes('Source (untrusted code)'));assert.ok(reviewText.includes('Anyone can POST JSON'));
  await assert.rejects(backendAction(scope(a.user),a.user,id(),{kind:'backend',operation:'confirmPublication',reviewId:republish}),e=>e.status===400);

@@ -34,6 +34,12 @@ try{
  assert.equal((await contactPage(post(),env,a.project,async()=>new Response('x'.repeat(9000)))).status,503);
  assert.equal((await contactPage(post(),env,a.project,async()=>new Response(null,{status:302,headers:{location:'https://example.org'}}))).status,503);
  assert.equal((await contactPage(post(),env,a.project,good)).status,200);assert.equal((await contactInbox(scope(a.id),a.id,a.project)).messages.length,1);
+ // WH-075: one connection gets at most 10 submission attempts per project per UTC day; other connections are unaffected.
+ const from=ip=>new Request(url,{method:'POST',headers:{origin:'https://whumpo.com','cf-connecting-ip':ip},body:new URLSearchParams({...msg(),revision:String(revision),'cf-turnstile-response':'fixture'})});
+ for(let i=0;i<10;i++)assert.equal((await contactPage(from('203.0.113.50'),env,a.project,good)).status,200);
+ const flooded=await contactPage(from('203.0.113.50'),env,a.project,good);assert.equal(flooded.status,429);assert.match(await flooded.text(),/this connection/);
+ assert.equal((await contactPage(from('203.0.113.51'),env,a.project,good)).status,200);assert.equal((await contactInbox(scope(a.id),a.id,a.project)).messages.length,12);
+ assert.ok(!JSON.stringify((await db.prepare('SELECT * FROM public_client_usage').all()).results).includes('203.0.113'),'Only hashed client keys are stored');
  const history=JSON.stringify(await readChat(scope(a.id),a.id)),context=JSON.stringify(await siteContext(scope(a.id),a.id));assert.ok(!history.includes(payload.message));assert.ok(!context.includes(payload.message));
  if(process.env.WHUMPO_INBOX_FIXTURE)await writeFile(process.env.WHUMPO_INBOX_FIXTURE,JSON.stringify({inbox:await contactInbox(scope(a.id),a.id,a.project),chat:await readChat(scope(a.id),a.id),project:a.project}));
  // Publication changes revoke both visible link and intake, including an in-flight verified request.
@@ -57,6 +63,16 @@ try{
  for(let n=count;n<1000;n+=50)await db.batch(await Promise.all(Array.from({length:Math.min(50,1000-n)},()=>receipt(b.project))));
  await publish(b);const brev=await enable(b);await assert.rejects(saveContact(db,b.project,brev,msg()),e=>e.status===429);
  await db.prepare('DELETE FROM users WHERE id=?').bind(cap.id).run();await db.prepare('DELETE FROM contact_receipts WHERE project_id=?').bind(b.project).run();
+ // WH-075 fair share: past 500 retained receipts platform-wide, an account already retaining 100 waits; others are admitted.
+ await db.prepare('DELETE FROM contact_receipts').run();
+ for(let n=0;n<500;n+=50)await db.batch(await Promise.all(Array.from({length:50},()=>receipt(b.project))));
+ const heavy=await account();await publish(heavy);const heavyRev=await enable(heavy);
+ const archive=crypto.randomUUID();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Second garden','Testing','draft',?,?)").bind(archive,heavy.id,now(),now()).run();
+ await db.batch(await Promise.all(Array.from({length:100},()=>receipt(archive))));
+ await assert.rejects(saveContact(db,heavy.project,heavyRev,msg()),e=>e.status===429,'Account at its fair share waits while the reserve is in use');
+ const light=await account();await publish(light);const lightRev=await enable(light);await saveContact(db,light.project,lightRev,msg());
+ await db.prepare('DELETE FROM contact_receipts WHERE project_id=?').bind(b.project).run();await saveContact(db,heavy.project,heavyRev,msg());
+ await db.prepare('DELETE FROM users WHERE id=?').bind(heavy.id).run();await db.prepare('DELETE FROM users WHERE id=?').bind(light.id).run();
  // An expired review cannot be confirmed even if it was fresh during the initial read.
  const expiryReview=await chat(a,'/contact-off '+a.project);
  let expired=false;const expiryDB=await owners.get(a.id).scope(interceptDatabase(db,/^UPDATE contact_reviews SET/,async()=>{if(expired)return;expired=true;await db.prepare('DROP TRIGGER contact_review_identity').run();await db.prepare("UPDATE contact_reviews SET expires_at='2000-01-01' WHERE id=?").bind(expiryReview.id).run();}));
@@ -64,5 +80,5 @@ try{
  // Time-based visibility and physical cleanup, without putting submitted content into logs.
  await db.prepare('DROP TRIGGER contact_submission_immutable').run();await db.prepare('DROP TRIGGER contact_receipt_immutable').run();await db.prepare("UPDATE contact_submissions SET expires_at='2000-01-01' WHERE project_id=?").bind(a.project).run();await db.prepare("UPDATE contact_receipts SET expires_at='2000-01-01' WHERE project_id=?").bind(a.project).run();assert.equal((await contactInbox(scope(a.id),a.id,a.project)).messages.length,0);await cleanupContacts(db);assert.equal((await db.prepare('SELECT COUNT(*) n FROM contact_submissions').first()).n,0);assert.equal((await db.prepare('SELECT COUNT(*) n FROM contact_receipts').first()).n,0);
  await db.prepare('DELETE FROM users WHERE id=?').bind(a.id).run();assert.equal(await activeContact(db,a.project),null);
- console.log('Contact checks passed: reviews, tenant boundaries, duplicate/deleted-message replay, public link, Origin/Turnstile/size checks, publication and disable races, atomic rate cap, private inbox isolation, AI restrictions and retention.');
+ console.log('Contact checks passed: reviews, tenant boundaries, duplicate/deleted-message replay, public link, Origin/Turnstile/size checks, publication and disable races, atomic rate cap, per-connection attempts and account fair share (WH-075), private inbox isolation, AI restrictions and retention.');
 }finally{await store.close();}
