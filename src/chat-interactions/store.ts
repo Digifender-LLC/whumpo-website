@@ -7,7 +7,8 @@ import type {ProjectSpecification} from '../project-specification/v3/types';
 import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers,validateDefinition,isFieldVisible} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
-import {connectionIntakeDefinition,connectionIntakeProvider,isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition,type ProjectIntakeTemplate} from './maintained';
+import {connectionIntakeDefinition,connectionIntakeProvider,isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition,isSupportRequestDefinition,isSupportStatusDefinition,supportRequestDefinition,supportStatusDefinition,type ProjectIntakeTemplate} from './maintained';
+import {supportHistoryCapacity} from '../support';
 import {informationDefinition,informationQuestions,isInformationDefinition,type InformationPurpose,type QuestionRequest} from './composition';
 import {readOwnedResourceOptions} from './resource-options';
 import {recordInteractionValidationFailure,recordInteractionCancel} from '../funnel-metrics/events';
@@ -15,7 +16,7 @@ import {readResourcePage,resourceCursor,type ResourceCursor} from './resource-sh
 import {photoField,readSelectedPhotos,selectedPhotoGuards} from './selected-photos';
 
 export class InteractionStoreError extends Error {
- constructor(readonly status:number,readonly code:string){super(code==='not_found'?'Chat form not found.':code==='draft_removed'?'This unsubmitted form was discarded or reached its draft retention limit. Ask for a new form.':code==='request_conflict'?'This request ID already describes another answer.':'This Chat form changed. Read its current state before continuing.');}
+ constructor(readonly status:number,readonly code:string){super(code==='not_found'?'Chat form not found.':code==='draft_removed'?'This unsubmitted form was discarded or reached its draft retention limit. Ask for a new form.':code==='request_conflict'?'This request ID already describes another answer.':code==='support_open'?'You already have an open help request. Ask Whumpo to show your support requests, or open Support, before sending another.':code==='support_capacity'?'Support history has reached its test capacity.':'This Chat form changed. Read its current state before continuing.');}
 }
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const identifier=(v:unknown):v is string=>typeof v==='string'&&uuid.test(v);
@@ -107,6 +108,28 @@ export async function preparePhotoIntake(db:D1Database,user:string,input:{origin
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  await assertFeature(db,feature(user,request.projectId));
  return prepareIssuedInteraction(db,user,request,photoIntakeDefinition(),issueHash,null,[interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)',[request.projectId,user])]);
+}
+
+const openHelp="EXISTS(SELECT 1 FROM usage_review_requests WHERE user_id=? AND kind='help' AND state='open')";
+/** WH-035: the agent may prepare a statement; the owner must review and explicitly submit it. */
+export async function prepareSupportRequest(db:D1Database,user:string,input:{originTurnId:string;statement:string}):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,8192);
+ if(!request||Object.keys(request).sort().join(',')!=='originTurnId,statement'||!identifier(request.originTurnId)||typeof request.statement!=='string')throw new InteractionError('SHAPE');
+ const definition=validateDefinition(supportRequestDefinition(request.statement.trim()));
+ const issueHash=await jsonDigest({operation:'support-request',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ if(await db.prepare(`SELECT 1 x WHERE ${openHelp}`).bind(user).first())throw new InteractionStoreError(409,'support_open');
+ await assertFeature(db,feature(user,null));
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},definition,issueHash,null,[]);
+}
+/** Fixed read-only support view; its card reads the owner's requests through src/support.ts. */
+export async function prepareSupportStatus(db:D1Database,user:string,input:{originTurnId:string}):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,4096);
+ if(!request||Object.keys(request).join(',')!=='originTurnId'||!identifier(request.originTurnId))throw new InteractionError('SHAPE');
+ const issueHash=await jsonDigest({operation:'support-status',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ await assertFeature(db,feature(user,null));
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},supportStatusDefinition(),issueHash,null,[]);
 }
 
 /** An account connection offered in an optional owned project task. No OAuth starts here. */
@@ -396,7 +419,16 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  const rejected=async(error:unknown)=>{if(error instanceof InteractionError&&error.fieldId)await recordInteractionValidationFailure(db,user,envelope.definition.template,raw.requestId);return error;};
  const {request}=await validateMutation(raw,envelope).catch(async error=>{throw await rejected(error);});
  // Each admitted adapter must enforce its complete current question policy.
- if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!((isPhotoIntakeDefinition(envelope.definition)||connectionIntakeProvider(envelope.definition)||isWorkspaceViewDefinition(envelope.definition))&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
+ const support=isSupportRequestDefinition(envelope.definition)&&envelope.scope.projectId===null;
+ if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!support&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!((isPhotoIntakeDefinition(envelope.definition)||connectionIntakeProvider(envelope.definition)||isWorkspaceViewDefinition(envelope.definition)||isSupportStatusDefinition(envelope.definition))&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
+ // The owner's explicit submit is the only path from this form to the existing support store.
+ const supportStatements:D1PreparedStatement[]=[];
+ if(support&&request.operation==='submit'){
+  if(await db.prepare(`SELECT 1 x WHERE ${openHelp}`).bind(user).first())throw new InteractionStoreError(409,'support_open');
+  if(((await db.prepare('SELECT count(*) n FROM usage_review_requests WHERE user_id=?').bind(user).first<{n:number}>())?.n??0)>=supportHistoryCapacity)throw new InteractionStoreError(409,'support_capacity');
+  supportStatements.push(interactionGuard(db,`NOT ${openHelp} AND (SELECT count(*) FROM usage_review_requests WHERE user_id=?)<?`,[user,user,supportHistoryCapacity]),
+   db.prepare("INSERT INTO usage_review_requests(id,user_id,statement,kind,source) VALUES(?,?,?,'help','chat_form')").bind(request.requestId,user,request.answers.statement as string));
+ }
  const resourceGuards:D1PreparedStatement[]=[];
  if(request.operation!=='cancel')resourceGuards.push(...selectedPhotoGuards(db,user,await readSelectedPhotos(db,user,saved.project_id,envelope.definition,request.answers)));
  if(request.operation!=='cancel'&&envelope.definition.template==='project-select@1'&&Object.hasOwn(request.answers,'project')){
@@ -415,6 +447,7 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  if(request.operation==='submit')statements.push(
   db.prepare("INSERT INTO chat_interaction_submissions(id,user_id,interaction_id,answers_json,answers_digest,answer_revision,created_at) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(request.requestId,user,saved.id,canonicalJSON(request.answers,16384),await jsonDigest(request.answers,16384),revision));
  if(request.operation==='submit'&&envelope.definition.continuationBinding)statements.push(db.prepare('INSERT INTO chat_interaction_continuations(id) VALUES(?)').bind(request.requestId));
+ statements.push(...supportStatements);
  try{await db.batch(statements);}catch(error){
   const committed=await receipt(db,user,request.requestId);
   if(committed){if(committed.request_hash!==requestHash)throw new InteractionStoreError(409,'request_conflict');return readInteractionReceipt(db,user,request.requestId);}

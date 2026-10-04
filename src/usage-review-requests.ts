@@ -2,7 +2,7 @@ import {BillingError} from './billing';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const fields='id,kind,reference,statement,created_at,state,public_response,answered_at,customer_read_at';
 export type UsageReviewRequest={id:string;kind:'usage_review'|'help';reference:string|null;statement:string;created_at:string;state:'open'|'answered';public_response:string|null;answered_at:string|null;customer_read_at:string|null};
-export type OperatorQueueRow=UsageReviewRequest&{user_id:string;source:'chat'|'support';delivery_state:'queued'|'delivered'|'failed'|'cancelled'|null};
+export type OperatorQueueRow=UsageReviewRequest&{user_id:string;source:'chat'|'support'|'chat_form';delivery_state:'queued'|'delivered'|'failed'|'cancelled'|null};
 function text(value:string,max:number){if(typeof value!=='string'||!value.trim()||value.trim().length>max||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value))throw new BillingError(400,'Invalid usage-review text.');return value.trim();}
 export function usageReviewCommand(content:string){return /^(?:\/usage-reviews?(?:\s|$)|request a usage review(?:\s*:|$)|show my usage reviews?(?: [0-9a-f-]{36})?$)/i.test(content);}
 export async function readUsageReviewRequest(db:Pick<D1Database,'prepare'>,user:string,id:string){

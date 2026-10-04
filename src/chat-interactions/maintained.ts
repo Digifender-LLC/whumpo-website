@@ -38,3 +38,26 @@ export function connectionIntakeProvider(d:Definition):'github'|'cloudflare'|nul
  }
  return null;
 }
+
+/** WH-035 Chat help intake. Whumpo may suggest the statement; only the owner's explicit
+ * submission saves it as a support request. No continuation, project or credential field. */
+export const supportStatementLimit=950;
+export function supportRequestDefinition(statement?:string):Definition{
+ return {version:1,kind:'form',template:'support-request@1',title:'Ask Whumpo support',summary:'Review the help request Whumpo prepared and edit it as needed. Nothing is sent until you choose Send to support. A platform operator reads it; no response time is promised. Responses appear in Chat and on the Support page.',presentation:'inline',fields:[
+  {id:'statement',type:'long-text',label:'What do you need help with?',help:'Up to 950 characters. Never include passwords, keys, payment details or your recovery kit.',required:true,binding:'answer.value@1',constraints:{maxLength:supportStatementLimit},...(statement===undefined?{}:{default:{value:statement,provenance:'suggested' as const}})}
+ ],cards:[],submitBinding:'support.request@1',continuationBinding:null};
+}
+export function isSupportRequestDefinition(d:Definition){
+ if(d.template!=='support-request@1'||d.fields.length!==1)return false;
+ const preset=d.fields[0].default;
+ const expected=supportRequestDefinition(preset?.provenance==='suggested'&&typeof preset.value==='string'?preset.value:undefined);
+ return JSON.stringify(sortKeys(d))===JSON.stringify(sortKeys(expected));
+}
+/** Fixed read-only view of the owner's own support requests and saved responses. */
+export function supportStatusDefinition():Definition{return {version:1,kind:'view',template:'status@1',title:'Your support requests',summary:'Your help requests and usage reviews with any saved operator response. Opening a response records that you read it. The Support page shows the same requests when Chat is unavailable.',presentation:'inline',fields:[],cards:[{id:'support-requests',binding:'support.requests@1',display:'support',limit:10,reviewId:null}],submitBinding:null,continuationBinding:null};}
+export function isSupportStatusDefinition(d:Definition){return JSON.stringify(sortKeys(d))===JSON.stringify(sortKeys(supportStatusDefinition()));}
+function sortKeys(value:unknown):unknown{
+ if(Array.isArray(value))return value.map(sortKeys);
+ if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,sortKeys((value as Record<string,unknown>)[k])]));
+ return value;
+}

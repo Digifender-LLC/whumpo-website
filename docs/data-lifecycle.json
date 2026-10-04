@@ -1822,7 +1822,7 @@
         "fair_use_project_lifecycle"
       ],
       "scope": "owner",
-      "purpose": "Customer help and usage-review requests (Chat or independent support page), operator responses with separate saved/delivery/read state, private operator investigations and metadata-only churn observation.",
+      "purpose": "Customer help and usage-review requests (Chat guided command, owner-submitted Chat help form, or independent support page), operator responses with separate saved/delivery/read state, private operator investigations and metadata-only churn observation. An owner-requested agent lookup may copy the owner's own help statement and customer-visible response into the existing agent_inspections class for one bounded follow-up; usage-review text is excluded.",
       "currentRetention": "Removed-project observations expire after 90 days; investigations/customer requests have no general purge and cascade with account. Monitor is nonblocking.",
       "proposedRetention": "Proposed 90 days after resolution/removal for necessary metadata, with explicit open-case review. Closure/export must remain available regardless of usage concerns.",
       "deletionAuthority": "Customer closure and qualified review operator; minimum unresolved case handling cannot retain unrelated site/chat content by default.",

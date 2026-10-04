@@ -24,8 +24,32 @@ export function supportRequest(row:Row):SupportRequest{
 async function readOwned(db:Pick<D1Database,'prepare'>,user:string,id:string){
  return db.prepare(`SELECT ${columns} FROM usage_review_requests r LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.id=? AND r.user_id=?`).bind(id,user).first<Row>();
 }
-async function listOwned(db:Pick<D1Database,'prepare'>,user:string){
- return (await db.prepare(`SELECT ${columns} FROM usage_review_requests r LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.user_id=? ORDER BY r.created_at DESC,r.id DESC LIMIT 25`).bind(user).all<Row>()).results;
+async function listOwned(db:Pick<D1Database,'prepare'>,user:string,limit=25){
+ return (await db.prepare(`SELECT ${columns} FROM usage_review_requests r LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.user_id=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?`).bind(user,limit).all<Row>()).results;
+}
+/** Support history bound per account (test capacity), shared by the page and the Chat form. */
+export const supportHistoryCapacity=200;
+/** Owner-only customer projection used by the Chat support view. Reading never records a customer read. */
+export async function listOwnedSupportRequests(db:Pick<D1Database,'prepare'>,user:string,limit=10){
+ if(!Number.isSafeInteger(limit)||limit<1||limit>25)throw new BillingError(400,'Invalid support list.');
+ return (await listOwned(db,user,limit)).map(supportRequest);
+}
+/** Counts only, for the owner agent's workspace context: no statement, response or operator detail. */
+export async function supportSummary(db:Pick<D1Database,'prepare'>,user:string){
+ const r=await db.prepare("SELECT coalesce(sum(state='open' AND kind='help'),0) open_help,coalesce(sum(state='open' AND kind='usage_review'),0) open_usage,coalesce(sum(state='answered' AND customer_read_at IS NULL),0) unread FROM usage_review_requests WHERE user_id=?").bind(user).first<{open_help:number;open_usage:number;unread:number}>();
+ return {openHelpRequest:(r?.open_help??0)>0,openUsageReview:(r?.open_usage??0)>0,unreadResponses:r?.unread??0};
+}
+/** WH-035 owner agent read. The owner's own help-request statements and customer-visible responses may enter the
+ * bounded follow-up; reviewer identity, fair-use evidence and provider detail never do. Usage-review text keeps its
+ * existing exclusion from model context (metadata only; the owner reads it in the Chat support view or Support page).
+ * The list is a bounded preview; one exact owned ID returns the full help text. Reading is not a customer read receipt. */
+export async function agentSupportRead(db:Pick<D1Database,'prepare'>,user:string,requestId:string|null){
+ const facts=(r:SupportRequest)=>({id:r.id,kind:r.kind,createdAt:r.createdAt,state:r.state,responseSaved:r.response.saved,answeredAt:r.answeredAt,delivery:r.delivery.state,read:r.read.state});
+ if(requestId!==null){
+  const r=await readSupportRequest(db,user,requestId);
+  return {version:1 as const,requests:[r.kind==='help'?{...facts(r),reference:r.reference,statement:r.statement,response:r.publicResponse}:{...facts(r),textAvailableToModel:false}]};
+ }
+ return {version:1 as const,requests:(await listOwnedSupportRequests(db,user,10)).map(r=>r.kind==='help'?{...facts(r),statementPreview:r.statement.slice(0,160)}:{...facts(r),textAvailableToModel:false})};
 }
 const families:{family:SupportOperation['family'];label:string;sql:string;minutes:number;next:string}[]=[
  {family:'chat',label:'Chat message',sql:"SELECT id,status AS state,created_at AS since FROM chat_turns WHERE user_id=? AND status IN ('pending','uncertain') ORDER BY created_at LIMIT 10",minutes:10,next:'Wait a few minutes, then ask for help here. Saved work, exports and recovery do not need Chat.'},
@@ -69,7 +93,7 @@ export async function createSupportRequest(db:Pick<D1Database,'prepare'>,user:st
  if(ref?.kind==='operation'&&!await db.prepare(`SELECT 1 AS x FROM ${tables[ref.family]} WHERE id=? AND user_id=?`).bind(ref.id,user).first())throw new BillingError(404,'That operation was not found in your account.');
  const open=await db.prepare("SELECT id FROM usage_review_requests WHERE user_id=? AND kind=? AND state='open'").bind(user,input.kind).first<{id:string}>();
  if(open)throw new BillingError(409,'You already have an open '+(input.kind==='help'?'help request':'usage review')+' ('+open.id+'). Read it before opening another.');
- if(((await db.prepare('SELECT count(*) AS n FROM usage_review_requests WHERE user_id=?').bind(user).first<{n:number}>())?.n??0)>=200)throw new BillingError(409,'Support history has reached its test capacity.');
+ if(((await db.prepare('SELECT count(*) AS n FROM usage_review_requests WHERE user_id=?').bind(user).first<{n:number}>())?.n??0)>=supportHistoryCapacity)throw new BillingError(409,'Support history has reached its test capacity.');
  try{await db.prepare("INSERT INTO usage_review_requests(id,user_id,statement,kind,source,reference) VALUES(?,?,?,?,'support',?)").bind(input.id,user,input.statement,input.kind,input.reference).run();}
  catch(cause){
   const raced=await readOwned(db,user,input.id);if(raced&&same(raced))return {request:supportRequest(raced),replayed:true};

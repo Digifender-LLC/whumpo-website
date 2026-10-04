@@ -12,10 +12,10 @@ import {AccountHelp} from './account-help';
 
 const wrap='min-h-11 h-auto whitespace-normal text-left',key=['support'];
 export function SupportLink({onNavigate}:{onNavigate?:()=>void}){return <Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}} onClick={onNavigate}><LifeBuoy className="size-4 shrink-0"/>Support</Link></Button>;}
-const when=(value:string)=>new Date(value).toLocaleString();
-const responseLabel=(r:SupportRequest)=>r.response.saved?'Response saved in Whumpo':'Waiting for an operator to read it';
-const readLabel=(r:SupportRequest)=>r.read.state==='read'?'You read the response '+when(r.read.at!):r.read.state==='unread'?'You have not opened the response yet':'No response to read yet';
-const kindLabel=(kind:SupportKind)=>kind==='help'?'Help request':'Usage review';
+export const when=(value:string)=>new Date(value).toLocaleString();
+export const responseLabel=(r:SupportRequest)=>r.response.saved?'Response saved in Whumpo':'Waiting for an operator to read it';
+export const readLabel=(r:SupportRequest)=>r.read.state==='read'?'You read the response '+when(r.read.at!):r.read.state==='unread'?'You have not opened the response yet':'No response to read yet';
+export const kindLabel=(kind:SupportKind)=>kind==='help'?'Help request':'Usage review';
 type Receipt={version:1;request:SupportRequest};
 
 /** Identity-only fixed page: it reads no profile, Chat, dashboard or AI state, so it works when those are unavailable. */

@@ -1338,7 +1338,7 @@ CREATE TABLE usage_review_requests (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  kind TEXT NOT NULL DEFAULT 'usage_review' CHECK(kind IN ('usage_review','help')),
- source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support')),
+ source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support','chat_form')),
  reference TEXT CHECK(reference IS NULL OR length(reference) BETWEEN 1 AND 200),
  statement TEXT NOT NULL CHECK(length(statement) BETWEEN 1 AND 950),
  created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -1349,7 +1349,7 @@ CREATE TABLE usage_review_requests (
  customer_read_at TEXT,
  CHECK((state='open' AND public_response IS NULL AND answered_by IS NULL AND answered_at IS NULL AND customer_read_at IS NULL) OR
        (state='answered' AND public_response IS NOT NULL AND answered_by IS NOT NULL AND answered_at IS NOT NULL)),
- CHECK(source='support' OR (kind='usage_review' AND reference IS NULL))
+ CHECK(source='support' OR (source='chat' AND kind='usage_review' AND reference IS NULL) OR (source='chat_form' AND kind='help' AND reference IS NULL))
 );
 
 -- External notification of a saved response. A row exists only when an owner-selected,
@@ -3630,7 +3630,11 @@ BEGIN SELECT RAISE(ABORT,'private_chat_context'); END;
 CREATE TRIGGER usage_review_insert BEFORE INSERT ON usage_review_requests BEGIN
  SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.state!='open' OR NEW.customer_read_at IS NOT NULL OR NOT (
   (NEW.source='chat' AND EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0))
-  OR (NEW.source='support' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id)));
+  OR (NEW.source='support' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
+  -- WH-035 Chat help intake: only the owner's own explicit submission of the maintained support form, with its exact statement.
+  OR (NEW.source='chat_form' AND EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
+   WHERE s.id=NEW.id AND s.user_id=NEW.user_id AND i.project_id IS NULL AND i.state='submitted'
+    AND json_extract(i.envelope_json,'$.definition.template')='support-request@1' AND json_extract(s.answers_json,'$.statement')=NEW.statement)));
 END;
 
 CREATE TRIGGER usage_review_update BEFORE UPDATE ON usage_review_requests BEGIN

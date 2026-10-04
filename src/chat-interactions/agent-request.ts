@@ -20,7 +20,8 @@ type ProposeAnswers={kind:'interaction';operation:'proposeAnswers';previousInter
 type WorkspaceViewRequest={kind:'interaction';operation:'showView';view:WorkspaceView};
 type ReplaceView={kind:'interaction';operation:'replaceView';previousInteractionId:string;definitionDigest:string;expectedAnswerRevision:number;view:WorkspaceView};
 type ConnectionIntake={kind:'interaction';operation:'requestConnection';projectId:string|null;provider:'github'|'cloudflare'};
-export type InteractionAction=TaskConnectionRequest|ConnectionIntake|ReplaceView|WorkspaceViewRequest|ResumeTask|PhotoIntake|Request|Read|Replace|Intake|SubmittedAnswers|ReplaceIntake|ProposeAnswers|RequestInformation|ReplaceInformation;
+type Support={kind:'interaction';operation:'requestSupport';statement:string}|{kind:'interaction';operation:'showSupport'}|{kind:'interaction';operation:'readSupport';requestId:string|null};
+export type InteractionAction=Support|TaskConnectionRequest|ConnectionIntake|ReplaceView|WorkspaceViewRequest|ResumeTask|PhotoIntake|Request|Read|Replace|Intake|SubmittedAnswers|ReplaceIntake|ProposeAnswers|RequestInformation|ReplaceInformation;
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 function answerChanges(value:unknown):boolean{
  try{
@@ -37,6 +38,10 @@ export function interactionActionRequest(value:unknown):value is InteractionActi
  const a=value as Record<string,unknown>;if(a.kind!=='interaction')return false;
  if(a.operation==='replaceView'){if(Object.keys(a).sort().join(',')!=='definitionDigest,expectedAnswerRevision,kind,operation,previousInteractionId,view'||!uuid(a.previousInteractionId)||typeof a.definitionDigest!=='string'||!/^[a-f0-9]{64}$/.test(a.definitionDigest)||!Number.isSafeInteger(a.expectedAnswerRevision)||Number(a.expectedAnswerRevision)<0)return false;try{workspaceViewDefinition(a.view);return true;}catch{return false;}}
  if(a.operation==='showView'){if(Object.keys(a).sort().join(',')!=='kind,operation,view')return false;try{workspaceViewDefinition(a.view);return true;}catch{return false;}}
+ // WH-035: the model may prepare a help statement or read the owner's own requests. There is no submit operation.
+ if(a.operation==='requestSupport')return Object.keys(a).sort().join(',')==='kind,operation,statement'&&typeof a.statement==='string'&&a.statement.trim().length>0&&a.statement.length<=950;
+ if(a.operation==='showSupport')return Object.keys(a).sort().join(',')==='kind,operation';
+ if(a.operation==='readSupport')return Object.keys(a).sort().join(',')==='kind,operation,requestId'&&(a.requestId===null||uuid(a.requestId));
  if(a.operation==='requestProjectBrief'||a.operation==='requestProjectSelection'||a.operation==='requestWritingStyle')return Object.keys(a).sort().join(',')==='kind,operation';
  if(a.operation==='resumeTask')return Object.keys(a).sort().join(',')==='kind,operation,projectId,submissionId,taskId'&&uuid(a.taskId)&&uuid(a.projectId)&&uuid(a.submissionId);
  if(a.operation==='connectionStatus')return Object.keys(a).sort().join(',')==='kind,operation,projectId,providers,submissionId,taskId'&&uuid(a.taskId)&&uuid(a.submissionId)&&uuid(a.projectId)&&Array.isArray(a.providers)&&a.providers.length>0&&a.providers.length<=2&&new Set(a.providers).size===a.providers.length&&a.providers.every(p=>p==='github'||p==='cloudflare');
