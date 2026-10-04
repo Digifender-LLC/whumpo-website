@@ -2,6 +2,7 @@ import {readSpecificationReviewIdentity,type SpecificationReviewIdentity} from '
 import {copyJSON} from './project-specification/v2/json';
 import {exact,object,uuid,viewComponents,type WidgetKind} from './workspace-view-contract';
 import type {GuestPreviewFacts} from './guest-previews/shape';
+import {validModuleInstanceFacts,type ModuleInstanceFacts} from './shared-modules/shape';
 import type {SiteDiagnosticsFacts,TrafficTelemetry} from './site-diagnostics-shape';
 import {healthStatuses,domainStates,telemetryStates,recommendedCommand} from './site-diagnostics-shape';
 
@@ -19,6 +20,7 @@ export type ViewFacts={
  performance:never;
  'guest-previews':GuestPreviewFacts;
  'site-health':SiteDiagnosticsFacts;
+ modules:ModuleInstanceFacts;
 };
 type Header<K extends WidgetKind>={version:1;kind:K;binding:string;projectId:string|null;asOf:string};
 export type ViewComponentData={[K in WidgetKind]:Header<K>&({status:'ready';data:ViewFacts[K]}|{status:'denied'|'unavailable';data:null})}[WidgetKind];
@@ -62,6 +64,7 @@ export function readViewComponentData(input:unknown):ViewComponentData|null{
   if(c.kind==='reviews')valid=exact(d,['items','denied','unavailable'])&&Array.isArray(d.items)&&integer(d.denied)&&integer(d.unavailable)&&d.items.length+Number(d.denied)+Number(d.unavailable)<=5&&d.items.every(r=>shape(r,['review','project','operation','expiresAt'])&&!!readSpecificationReviewIdentity(r.review)&&shape(r.project,['id','name'])&&scoped(r.project.id)&&text(r.project.name,100)&&['change','restore'].includes(String(r.operation))&&iso(r.expiresAt)&&r.expiresAt>String(c.asOf))&&new Set(d.items.map(r=>(r as {review:{id:string}}).review.id)).size===d.items.length;
   if(c.kind==='guest-previews')valid=c.projectId!==null&&exact(d,['canIssue','versions','links'])&&typeof d.canIssue==='boolean'&&Array.isArray(d.versions)&&d.versions.length<=10&&d.versions.every(v=>shape(v,['id','createdAt'])&&uuid(v.id)&&text(v.createdAt,40))&&Array.isArray(d.links)&&d.links.length<=200&&d.links.every(l=>shape(l,['id','versionId','label','feedbackEnabled','createdAt','expiresAt','revokedAt','state','feedbackCount','openFeedbackCount'])&&uuid(l.id)&&(l.versionId===null||uuid(l.versionId))&&typeof l.label==='string'&&l.label.length<=80&&typeof l.feedbackEnabled==='boolean'&&integer(l.createdAt)&&integer(l.expiresAt)&&(l.revokedAt===null||integer(l.revokedAt))&&['active','expired','revoked','removed'].includes(String(l.state))&&integer(l.feedbackCount)&&integer(l.openFeedbackCount)&&Number(l.openFeedbackCount)<=Number(l.feedbackCount))&&new Set(d.links.map(l=>(l as {id:string}).id)).size===d.links.length;
   if(c.kind==='site-health')valid=validDiagnostics(d,c.projectId,scoped);
+  if(c.kind==='modules')valid=c.projectId!==null&&validModuleInstanceFacts(d);
   if(c.kind==='cms')valid=exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=20&&(c.projectId===null||d.items.length===1)&&d.items.every(p=>shape(p,['projectId','name','publishedArticles'])&&scoped(p.projectId)&&text(p.name,100)&&integer(p.publishedArticles));
   return valid?c as ViewComponentData:null;
  }catch{return null;}

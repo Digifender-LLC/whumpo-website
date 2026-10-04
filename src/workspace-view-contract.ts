@@ -12,7 +12,10 @@ export const viewComponents={
  'guest-previews':{version:1,binding:'project.guest-previews@1',feature:null},
  // WH-037: saved health, domain, form and measurement-quality facts for owned projects. Like the HTTP health report it needs
  // identity and ownership only, so a problem stays diagnosable when insight inclusion ends. Traffic counts keep their own gate.
- 'site-health':{version:1,binding:'project.site-health@1',feature:null}
+ 'site-health':{version:1,binding:'project.site-health@1',feature:null},
+ // WH-125: configured/registered module instance states for one owned project. Identity and ownership only, so owner
+ // read and disable stay available after plan loss; activation handlers re-check inclusion. No visitor values.
+ modules:{version:1,binding:'module.instances@1',feature:null}
 } as const;
 export type WidgetKind=keyof typeof viewComponents;
 export const widgetKinds=Object.keys(viewComponents) as WidgetKind[];

@@ -2519,6 +2519,55 @@
       ]
     },
     {
+      "id": "module-registry",
+      "tables": [
+        "module_instances",
+        "module_activations",
+        "module_activation_reviews",
+        "module_activation_links",
+        "module_activation_applies",
+        "module_request_receipts"
+      ],
+      "scope": "project",
+      "purpose": "WH-125 shared module instance registry: one logical resource per configured project module instance with its exact pins, configuration digest/revision, WH-071 descriptor and source specification version; separate activation state; exact owner activation/disable reviews, Chat presentation links and applied receipts; and idempotent module request receipts. Configuration copies come only from the owner's saved specification. No visitor-, staff- or public-submitted value is stored: request receipts keep identity, hashes, revisions and a bounded content-free result.",
+      "currentRetention": "Registry rows and activation state remain while the project exists; disabling keeps configuration and revisions. Unapplied reviews expire after ten minutes and are pruned in bounded batches when a later review is prepared; a review with an applied receipt is retained (delete guarded while its project and account exist). Request receipts are bounded to 20,000 per instance and retained with the instance. Project and account deletion cascade.",
+      "proposedRetention": "Retain registry and receipts while the instance exists; decide a terminal-receipt metadata schedule (keeping replay protection) with WH-126–129 when each kind stores data. Removing an instance from the specification keeps its row (disabled) until a reviewed removal hook exists.",
+      "deletionAuthority": "Current owner exact activation/disable reviews (disable needs identity and ownership only and outlives plan loss); project/account deletion cascades. Models, Chat text, visitors and jobs cannot activate, disable or delete. No retention job deletes registry rows.",
+      "exportPolicy": "Owner status view lists local ids, kinds, states and revisions. Exclude review/request hashes, principal hashes and descriptors' internal references from customer export until WH-077 composes module descriptors; no visitor data exists here.",
+      "references": [
+        "src/shared-modules/schema.sql",
+        "src/shared-modules/registry.ts",
+        "src/shared-modules/activation.ts",
+        "src/shared-modules/api.ts",
+        "docs/shared-modules.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current project owner through the module status view and exact review/readback handlers; the shared module resolver for serving decisions"
+        ],
+        "processors": [
+          "Deterministic review, revision, pin and principal checks inside committing statements; zero maintainer inference, model context or provider access"
+        ],
+        "remainingExposure": [
+          "Raw rows (configuration copies, digests and request hashes) are readable to privileged operators; configuration may name owner-chosen field labels."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; the registry stores configuration and authority metadata, not visitor content, and blanket encryption would not remove authorized processing access.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "module-records",
       "tables": [],
       "scope": "visitor",

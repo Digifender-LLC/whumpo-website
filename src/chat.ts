@@ -40,6 +40,8 @@ import {dnsChatCommand,type DNSChatOptions} from './dns-chat';
 import {listPhotos} from './files';
 import {photoRemovalCommand} from './photo-removal';
 import {applyServiceClientsCommand,serviceClientChatLinks} from './project-specification/service-clients/store';
+import {prepareModuleActivationCommand,applyModuleActivationCommand,moduleActivationChatLinks,moduleActivationFailure} from './shared-modules/activation';
+import {ModuleError} from './shared-modules/policy';
 import {applySpecificationCommand,specificationChatLinks} from './project-specification/store';
 import {inspectWorkspace} from './workspace-read';
 import {domainCommand} from './domains';
@@ -104,6 +106,7 @@ async function projectChatTurns(db:D1Database,userId:string,turns:Record<string,
   await serviceClientChatLinks(db,userId,turns as Record<string,unknown>[]);
   await serviceClientActivationChatLinks(db,userId,turns as Record<string,unknown>[]);
   await specificationChatLinks(db,userId,turns as Record<string,unknown>[]);
+  await moduleActivationChatLinks(db,userId,turns as Record<string,unknown>[]);
   await interactionChatLinks(db,userId,turns as {id:unknown;[key:string]:unknown}[]);
 }
 export async function readSavedChatTurn(db:D1Database,userId:string,turnId:string){
@@ -200,6 +203,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const versionRemoval=await versionRemovalCommand(db,userId,input.id,command);
   const serviceClients=await applyServiceClientsCommand(db,userId,input.id,command);
   const specification=await applySpecificationCommand(db,userId,input.id,command);
+  let moduleReview:Awaited<ReturnType<typeof prepareModuleActivationCommand>>,moduleApply:Awaited<ReturnType<typeof applyModuleActivationCommand>>;
+  try{
+    if(control?.action.type==='moduleActivationReview')moduleReview=await prepareModuleActivationCommand(db,userId,input.id,command);
+    if(control?.action.type==='moduleActivationApply')moduleApply=await applyModuleActivationCommand(db,userId,input.id,command);
+  }catch(e){if(e instanceof ModuleError)return {status:e.status,error:e.message};throw e;}
   const removal = await photoRemovalCommand(db,userId,input.id,command);
   const domain = await domainCommand(db,userId,input.id,command);
   const publication = await publicationCommand(db,userId,input.id,command);
@@ -220,6 +228,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   else if(contact)reply=contact.reply;
   else if(serviceClients)reply=serviceClients.reply;
   else if(specification)reply=specification.reply;
+  else if(moduleReview)reply=moduleReview.reply;
+  else if(moduleApply)reply=moduleApply.reply;
   else if(versionRemoval)reply=versionRemoval.reply;
   else if (removal) reply = removal.reply;
   else if (domain) reply = domain.reply;
@@ -302,6 +312,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   if(versionRemoval)statements.push(...versionRemoval.statements);
   if(serviceClients)statements.push(...serviceClients.statements);
   if(specification)statements.push(...specification.statements);
+  if(moduleReview)statements.push(...moduleReview.statements);
+  if(moduleApply)statements.push(...moduleApply.statements);
   if (removal) statements.push(...removal.statements);
   if (domain) statements.push(...domain.statements);
   if (publication) statements.push(...publication.statements);
@@ -323,6 +335,12 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       const recovered=await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string;action_json:string|null;revision:number}>();
       if(matches(recovered))return {status:200};
       return {status:String(cause).includes('specification_held')?423:409,error:String(cause).includes('version_removal_specification')?'This version is retained by the current website configuration or a pending review.':String(cause).includes('specification_quota')?'Website review history has reached its test capacity.':'The website or its review changed, expired or is held for safety checks. Ask for a fresh review.'};
+    }
+    const moduleFailure=moduleActivationFailure(cause);
+    if(moduleFailure){
+      const recovered=await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string;action_json:string|null;revision:number}>();
+      if(matches(recovered))return {status:200};
+      return {status:moduleFailure.status,error:moduleFailure.message};
     }
     if(String(cause).includes('photo_safety_required'))return {status:423,error:'A photo is held for safety checks. It cannot be attached or published until approved.'};
     if(String(cause).includes('usage_review_requests.user_id'))return {status:409,error:'Another usage review was opened. Ask “show my usage reviews” to read it.'};

@@ -22,6 +22,13 @@ export async function currentSiteFixtureHandlers(){
   export * as guestPreviews from './src/guest-previews/owner';
   export * as guestPreviewPolicy from './src/guest-previews/policy';
   export * as guestPreviewBindings from './src/guest-previews/bindings';
+  export * as sharedModules from './src/shared-modules/api';
+  export * as moduleRegistry from './src/shared-modules/registry';
+  export * as moduleActivation from './src/shared-modules/activation';
+  export * as modulePolicy from './src/shared-modules/policy';
+  export {moduleCatalog} from './src/project-specification/catalog';
+  export {validateSpecification} from './src/project-specification/v3/schema';
+  export {jsonDigest} from './src/project-specification/v2/json';
   export {readViewBinding,readSavedViewComponent} from './src/workspace-view-bindings';
   export {readTemporaryViewComponent} from './src/chat-interactions/view-cards';
   export {prepareWorkspaceView,readInteraction} from './src/chat-interactions/store';

@@ -182,4 +182,6 @@ WH-110 reuses `readViewBinding` for current project and traffic facts supplied t
 
 ## Website health component (WH-037)
 
+`modules` is a project-scoped registered component (`module.instances@1`, WH-125) read through `readViewBinding`. Its registry feature is null: owner read and disable need only current identity and ownership, so they outlive plan loss; the owner card's buttons only prepare an exact `moduleActivationReview` in Chat. It returns instance states and revisions, never configuration or visitor-submitted values. See [shared modules](shared-modules.md#instance-registry-activation-reviews-and-policy-engine-wh-125--october-4-2026-utc).
+
 `site-health` is a registered component (`project.site-health@1`) read through `readViewBinding` by Chat temporary views and saved pages. Its registry feature is null: like the saved HTTP/Chat health report it needs current identity and ownership only, so a problem stays diagnosable after insight inclusion ends (the `traffic` component keeps `core.insights`). The `traffic` component's data now also carries aggregate `telemetry` (window, coverage start, per-project measurement state, excluded and missed counts). See [site health](site-health.md#owner-diagnostics-and-bindings--wh-037).

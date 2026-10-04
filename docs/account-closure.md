@@ -34,6 +34,8 @@ A read-only query of the private test D1 database succeeded at **2026-09-30 17:4
 
 October 4, 2026: the inventory also counts WH-092 `guestPreviewLinks`, `activeGuestPreviewLinks` and `guestPreviewFeedback` ([guest previews](guest-previews.md)). Both tables cascade with the project and account; an active preservation hold blocks deletion of comments and of links that have comments. Closure must revoke active links before purge. `node tests/guest-previews.mjs` verifies the counts and cascades with synthetic data.
 
+October 4, 2026: the inventory also counts WH-125 `moduleInstances`, `activeModuleInstances`, `moduleActivationReceipts` and `moduleRequestReceipts` ([shared modules](shared-modules.md#instance-registry-activation-reviews-and-policy-engine-wh-125--october-4-2026-utc)). All module registry tables cascade with the project and account; an applied activation review is retained while its project and account exist. Closure should disable active instances before purge. `node tests/shared-modules-registry.mjs` verifies the counts and cascades with synthetic data.
+
 October 4, 2026: the inventory also counts WH-025 `funnelEvents` (opt-in, content-free [funnel measurements](funnel-metrics.md)). They cascade with the account and are deleted immediately when the owner turns measurement off; `node tests/funnel-metrics.mjs` verifies the count and cascade with synthetic data.
 
 October 1, 2026: the read-only inventory also counts staged GitHub credentials (`githubStagedCredentials`) separately. They remain included in the total encrypted credential count and must be disconnected/revoked before any future account closure; a missing connection pointer does not mean no provider credential is retained. This adds no deletion capability.

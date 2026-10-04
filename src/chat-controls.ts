@@ -25,6 +25,8 @@ export type ChatControl =
  | {type:'confirm';kind:keyof typeof confirmationControls;reviewId:string}
  | {type:'serviceClientApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
+ | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
+ | {type:'moduleActivationApply';reviewId:string;reviewDigest:string;expectedRevision:number}
  | {type:'appRestore';projectId:string;reviewId:string;confirmation:'RESTORE'}
  | {type:'appMaintenance';kind:'upgrade'|'rollback'|'cancel';reviewId:string;confirmation:'UPGRADE'|'ROLLBACK'|'CANCEL'}
  | {type:'reviewDetail';kind:'backend'|'test';targetId:string}
@@ -50,6 +52,15 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='specificationApply'&&exact(a,['type','reviewId','proposalDigest','expectedRevision'])&&id(a.reviewId)&&typeof a.proposalDigest==='string'&&/^[0-9a-f]{64}$/.test(a.proposalDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
   const action={type:'specificationApply' as const,reviewId:a.reviewId,proposalDigest:a.proposalDigest,expectedRevision:Number(a.expectedRevision)};
   return {action,command:`/confirm-specification ${action.reviewId} ${action.proposalDigest} ${action.expectedRevision}`,label:'Save the exact reviewed private website version.',recentAuth:true};
+ }
+ // WH-125: ids, local instance id and revision only; configuration and visitor values never enter a control.
+ if(a.type==='moduleActivationReview'&&exact(a,['type','projectId','instanceId','action'])&&Object.keys(a).length===4&&id(a.projectId)&&typeof a.instanceId==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(a.instanceId)&&(a.action==='activate'||a.action==='disable')){
+  const action={type:'moduleActivationReview' as const,projectId:a.projectId,instanceId:a.instanceId,action:a.action as 'activate'|'disable'};
+  return {action,command:`/review-module-activation ${action.projectId} ${action.instanceId} ${action.action}`,label:`Review ${action.action==='activate'?'activating':'disabling'} the “${action.instanceId}” module.`,recentAuth:false};
+ }
+ if(a.type==='moduleActivationApply'&&exact(a,['type','reviewId','reviewDigest','expectedRevision'])&&Object.keys(a).length===4&&id(a.reviewId)&&typeof a.reviewDigest==='string'&&/^[0-9a-f]{64}$/.test(a.reviewDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
+  const action={type:'moduleActivationApply' as const,reviewId:a.reviewId,reviewDigest:a.reviewDigest,expectedRevision:Number(a.expectedRevision)};
+  return {action,command:`/confirm-module-activation ${action.reviewId} ${action.reviewDigest} ${action.expectedRevision}`,label:'Apply the exact reviewed module activation change.',recentAuth:true};
  }
  if(a.type==='confirm'&&exact(a,['type','kind','reviewId'])&&typeof a.kind==='string'&&Object.hasOwn(confirmationControls,a.kind)&&id(a.reviewId)){
   const kind=a.kind as keyof typeof confirmationControls,c=confirmationControls[kind];

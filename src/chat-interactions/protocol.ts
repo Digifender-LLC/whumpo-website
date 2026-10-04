@@ -33,6 +33,9 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'project.guest-previews@1': {mode:'read',feature:'creator.guest-feedback',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
   // Identity and ownership only (viewComponents feature null): the saved health report never needs insight inclusion.
   'project.site-health@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace']},
+  // WH-125 module instance status. Feature family only: like guest previews, the view read is identity and ownership only
+  // (viewComponents feature null) so owner read/disable outlive plan loss; activation re-checks core.forms/core.editing itself.
+  'module.instances@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });
