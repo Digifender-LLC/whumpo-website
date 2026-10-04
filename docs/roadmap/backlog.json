@@ -3962,7 +3962,7 @@
         "docs/roadmap/alignment.md",
         "docs/workload-placement.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/zemdregon/whumpo/issues/148",
       "owner": null,
       "evidence": []
     },

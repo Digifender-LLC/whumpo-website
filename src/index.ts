@@ -43,6 +43,7 @@ import {cleanupPublicClients} from './public-admission';
 import {maintainFunnelEvents} from './funnel-metrics/events';
 import {compareBackends} from './backend-diff';
 import {cleanupAppLifecycle} from './app-lifecycle';
+import {reconcileBuildJobs} from './build-jobs';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage} from './app-pages';
 import {readProfile,updateProfile,profilePhoto,updateProfilePhoto} from './profile';
 import {readAppAccess,cancelAppInvitation} from './app-access';
@@ -606,7 +607,7 @@ export default {
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
-      {name:'applications',run:()=>cleanupAppLifecycle(env.DB)},
+      {name:'applications',run:async()=>{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}},
       {name:'contacts',run:()=>cleanupContacts(env.DB)},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},

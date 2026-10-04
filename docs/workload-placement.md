@@ -156,7 +156,7 @@ No model calls, Cloudflare resources, runtime source/config changes, database mi
 - **WH-052/018:** use logical references and descriptor pins in durable jobs; retain authoritative domain receipts, current actor scope and unresolved outcomes. Do not store live provider connections in a job.
 - **WH-022/050:** attribute costs/fairness to stable identities; measure contention and total successful-work cost before physical moves. This packet does not introduce billing.
 - **WH-072:** implement the reviewed registry/migration protocol and actual adapter/binding limits; prove fencing and restore-aware deletion before activation.
-- **WH-073/074/075:** preserve resource identity and publication boundaries in asset delivery, private storage and pooled builds. New placement cannot bypass current safety or reveal private cache contents.
+- **WH-073/074/075:** preserve resource identity and publication boundaries in asset delivery, private storage and pooled builds. New placement cannot bypass current safety or reveal private cache contents. WH-074's source implementation ([build jobs](build-jobs.md)) keeps builds on the shared stateless QuickJS runtime with no per-customer always-on capacity, separates the shared toolchain key from private artifact keys, and leaves Containers as an owner-gated, unconfigured option.
 - **WH-055/079:** evaluate broader isolation and optional customer runtime AI separately. No maintainer fallback, exposed platform credentials or implicit provider funding.
 - **WH-077:** consume descriptors already shipped with modules, enumerate actual exclusions and prove the claimed portable subset. Reclassify portability only with fresh clean-target evidence.
 
