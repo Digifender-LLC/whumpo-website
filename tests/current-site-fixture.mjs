@@ -126,11 +126,21 @@ async function saveProposal(db,user,turn,prepared){
 export async function createFixtureWebsite(db,user,project,config){
  const m=await currentSiteFixtureHandlers(),turn=crypto.randomUUID(),prepared=await m.createWebsite(db,user,turn,project,config);await saveProposal(db,user,turn,prepared);return turn;
 }
-export async function changeFixtureWebsite(db,user,project,operations){
+/** Prepares an exact private website review (change operations or `{versionId}` restore) as the AI turn's statements. */
+export async function proposeFixtureWebsite(db,user,project,change){
  const m=await currentSiteFixtureHandlers(),turn=crypto.randomUUID(),head=await db.prepare('SELECT revision FROM project_spec_heads WHERE project_id=?').bind(project).first();assert.ok(head);
- await saveProposal(db,user,turn,await m.prepareSpecification(db,user,turn,{kind:'specification',operation:'change',projectId:project,expectedRevision:head.revision,operations}));
- const q=await m.readSpecificationProposal(db,user,turn),version=crypto.randomUUID(),revision=(await m.readChat(db,user)).state.revision;
- assert.equal((await m.sendChatControl(db,user,{id:version,revision,action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}})).status,200);return version;
+ const request=Array.isArray(change)?{kind:'specification',operation:'change',projectId:project,expectedRevision:head.revision,operations:change}:{kind:'specification',operation:'restore',projectId:project,expectedRevision:head.revision,versionId:change.versionId};
+ await saveProposal(db,user,turn,await m.prepareSpecification(db,user,turn,request));
+ return m.readSpecificationProposal(db,user,turn);
+}
+/** Applies a prepared review with the recent-sign-in specificationApply control; returns the control response and new version id. */
+export async function applyFixtureWebsite(db,user,q){
+ const m=await currentSiteFixtureHandlers(),version=crypto.randomUUID(),revision=(await m.readChat(db,user)).state.revision;
+ return {version,...await m.sendChatControl(db,user,{id:version,revision,action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}})};
+}
+export async function changeFixtureWebsite(db,user,project,operations){
+ const applied=await applyFixtureWebsite(db,user,await proposeFixtureWebsite(db,user,project,operations));
+ assert.equal(applied.status,200,applied.error);return applied.version;
 }
 
 /** Saves module instances through the real owner path (WH-125/126 fixtures): one exact `modules.put` per new or

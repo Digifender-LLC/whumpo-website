@@ -192,12 +192,28 @@ try{
  assert.deepEqual(m.changeSpecification(detailing,operationBatches[4]).reviews,['permissions']);
  const unchanged=clone(detailing);
  rejects(()=>m.changeSpecification(detailing,[...operationBatches[0],{type:'database.execute',sql:'synthetic-private-marker'}]),'UNSUPPORTED_OPERATION');assert.deepEqual(detailing,unchanged);
- for(const type of ['records.removeField','records.renameField','files.setPolicy','modules.remove','json.patch','module.install','resources.provision','publish','billing.spend'])rejects(()=>m.changeSpecification(detailing,[{type}]),'UNSUPPORTED_OPERATION');
+ for(const type of ['records.removeField','records.renameField','files.setPolicy','json.patch','module.install','resources.provision','publish','billing.spend'])rejects(()=>m.changeSpecification(detailing,[{type}]),'UNSUPPORTED_OPERATION');
  for(const type of ['maintainer.chat','model.complete','shell.run','webhook.call']){const bad=clone(rule);bad.effect.type=type;rejects(()=>m.changeSpecification(detailing,[{type:'rules.put',rule:bad}]),'INCOMPATIBLE');}
  rejects(()=>m.changeSpecification(detailing,[]),'INVALID_LIST');
  rejects(()=>m.changeSpecification(detailing,Array(9).fill(operationBatches[0][0])),'INVALID_LIST');
  rejects(()=>m.changeSpecification(detailing,[{type:'design.setTheme',theme:'ocean'}]),'NO_CHANGE');
  rejects(()=>m.changeSpecification(detailing,put(()=>{})),'NO_CHANGE');
+ // modules.remove (owner decision of October 4, 2026): only instances the caller verified were never activated are
+ // removable; the default removable set is empty, so removal fails closed. Dependents go in the same change.
+ const saved={...clone(content),instances:clone(detailing.instances)};
+ const remove=instanceId=>({type:'modules.remove',instanceId});
+ rejects(()=>m.changeSpecification(saved,[remove('appointments')]),'MIGRATION_REQUIRED');
+ rejects(()=>m.changeSpecification(saved,[remove('appointments')],['vehicle-photos','team']),'MIGRATION_REQUIRED');
+ const removedOne=m.changeSpecification(saved,[remove('appointments')],['appointments']);
+ assert.deepEqual(removedOne.spec.instances.map(i=>i.id),saved.instances.map(i=>i.id).filter(i=>i!=='appointments'));assert.deepEqual([removedOne.reviews,removedOne.migration],[[],'none']);
+ rejects(()=>m.changeSpecification(saved,[remove('team')],saved.instances.map(i=>i.id)),'MISSING_REFERENCE');
+ rejects(()=>m.changeSpecification(saved,[remove('missing')],['missing']),'MISSING_REFERENCE');
+ rejects(()=>m.changeSpecification(saved,[{...remove('appointments'),extra:1}],['appointments']),'UNKNOWN_FIELD');
+ assert.deepEqual(m.changeSpecification(saved,saved.instances.map(i=>remove(i.id)).reverse(),saved.instances.map(i=>i.id)).spec.instances,[]);
+ // Removing and re-adding the same id is a net put against the base, classified as usual (a kind change stays refused).
+ const directory={id:'appointments',kind:'content',module:clone(m.moduleCatalog.find(e=>e.kind==='content').module),schema:clone(m.moduleCatalog.find(e=>e.kind==='content').schema),dependencies:[],config:{collections:[{id:'directory',type:'directory-listing@1'}]}};
+ m.validateSpecification({...clone(saved),instances:[...saved.instances.filter(i=>i.id!=='appointments'),directory]});
+ rejects(()=>m.changeSpecification(saved,[remove('appointments'),{type:'modules.put',instance:directory}],['appointments']),'MIGRATION_REQUIRED');
 
  // Retention is the owner decision of October 4, 2026 (#107); docs and lifecycle class must quote the one constant.
  const days=m.recordsRetention.allowedDays,choices=`${days.slice(0,-1).join(', ')} or ${days.at(-1)} days`;
@@ -218,14 +234,14 @@ try{
  function reorder(value){if(Array.isArray(value))return value.map(reorder);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,reorder(v)]));return value;}
  assert.deepEqual(await m.compileProjectSpecification(reorder(content),reorder(lock)),output);
  const mutableLock=m.currentCompilerLock();mutableLock.modules.length=0;assert.deepEqual(m.currentCompilerLock(),lock);
- for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.compiler.version=3;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
+ for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.compiler.version=3;},l=>{l.compiler.version=4;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
  const available=[lock.compiler,...lock.modules,...lock.components].map(a=>({...a,state:'available'}));
  m.assertCompilerAvailable(lock,available);
  for(let n=0;n<available.length;n++){const withdrawn=clone(available);withdrawn[n].state='withdrawn';rejects(()=>m.assertCompilerAvailable(lock,withdrawn),'COMPILER_UNAVAILABLE');}
  rejects(()=>m.assertCompilerAvailable(lock,[]),'COMPILER_UNAVAILABLE');
- // project-content@4: instance configuration compiles against exact trusted pins as saved, inactive configuration
+ // project-content@5: instance configuration compiles against exact trusted pins as saved, inactive configuration
  // (serving needs WH-125 activation). Notification/automation modules, integrations and rules stay unavailable.
- assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',4,3]);
+ assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',5,3]);
  await rejectsAsync(()=>m.compileProjectSpecification(detailing,lock),'UNAVAILABLE_CAPABILITY');
  const configured={...clone(content),instances:clone(detailing.instances)},configuredOutput=await m.compileProjectSpecification(configured,lock);
  assert.deepEqual(configuredOutput.artifacts.map(a=>[a.path,a.digest]),output.artifacts.map(a=>[a.path,a.digest]),'Instances add no compiled artifact');
@@ -242,7 +258,10 @@ try{
  const restoredUp=await m.compileSpecificationRestore(content,configured,lock);assert.deepEqual(restoredUp.requiredReviews,['permissions','schema']);assert.equal(restoredUp.nextDigest,configuredOutput.specificationDigest);
  assert.deepEqual((await m.compileSpecificationRestore(configured,configured,lock)).requiredReviews,[]);
  await rejectsAsync(()=>m.compileSpecificationRestore(configured,content,lock),'MIGRATION_REQUIRED');
- const priorLock=clone(lock);priorLock.compiler.version=3;await rejectsAsync(()=>m.compileSpecificationRestore(content,configured,priorLock),'COMPILER_LOCK_MISMATCH');
+ await rejectsAsync(()=>m.compileSpecificationRestore(configured,content,lock,['team']),'MIGRATION_REQUIRED');
+ assert.deepEqual((await m.compileSpecificationRestore(configured,content,lock,configured.instances.map(i=>i.id))).requiredReviews,[]);
+ assert.deepEqual((await m.compileSpecificationChange(configured,[remove('appointments')],lock,['appointments'])).compiled.artifacts[0].digest,output.artifacts[0].digest);
+ const priorLock=clone(lock);priorLock.compiler.version=4;await rejectsAsync(()=>m.compileSpecificationRestore(content,configured,priorLock),'COMPILER_LOCK_MISMATCH');
  assert.deepEqual(m.transitionReviews(content,content),{reviews:[],migration:'none'});
  const stale=clone(detailing);instance(stale,'appointments').module.digest='0'.repeat(64);await rejectsAsync(()=>m.compileProjectSpecification(stale,lock),'STALE_MODULE_VERSION');
  const staleSchema=clone(detailing);instance(staleSchema,'team').schema.digest='f'.repeat(64);rejects(()=>m.assertModulesAvailable(staleSchema,m.moduleCatalog),'STALE_MODULE_VERSION');
@@ -295,14 +314,14 @@ try{
  const missing=clone(content);delete missing.pages[0].photos;rejects(()=>m.validateSpecification(missing),'MISSING_FIELD');
  const {photos:omitted,...oldInput}=page;await assert.rejects(m.compileNewWebsite(oldInput));
  assert.equal(networkCalls,0);
- console.log('Compiler fixtures passed: project-content@4 instance-bearing compile/change/restore classification and @3 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
+ console.log('Compiler fixtures passed: project-content@5 instance-bearing compile/change/restore classification, never-activated modules.remove, and @3/@4 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
 }finally{globalThis.fetch=fetch;}
 
 // A second checkout/process proves input-path independence and that the build gate
 // rejects source/constant drift without rewriting any working-tree file.
 const dir=await mkdtemp('/tmp/whumpo-compiler-lock-');
 try{
- const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v4.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
+ const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v5.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
  for(const path of paths){await mkdir(dirname(join(dir,path)),{recursive:true});await copyFile(path,join(dir,path));}
  await symlink(resolve('node_modules'),join(dir,'node_modules'),'dir');
  const run=args=>spawnSync(process.execPath,['tools/check-specification-compiler.mjs',...args],{cwd:dir,encoding:'utf8'});

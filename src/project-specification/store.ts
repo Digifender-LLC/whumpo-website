@@ -16,6 +16,13 @@ const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const digest=/^[0-9a-f]{64}$/;
 const changed=()=>new BackendError(409,'This website review changed or expired. Ask for a fresh review.');
+/** Saved instance ids with no registry row: never activated, so their configuration may be removed. Activation
+ * registers the row and it is never deleted while the project exists; the project_spec_versions trigger
+ * module_instance_spec_retained repeats this inside the commit. */
+async function removableInstances(db:D1Database,project:string,spec:ProjectSpecification){
+ const {results}=await db.prepare('SELECT local_id FROM module_instances WHERE project_id=?').bind(project).all<{local_id:string}>();
+ return spec.instances.map(i=>i.id).filter(local=>!results.some(r=>r.local_id===local));
+}
 function id(value:unknown):asserts value is string {if(typeof value!=='string'||!uuid.test(value))throw new BackendError(400,'Choose an owned project, version or review.');}
 function revision(value:unknown):asserts value is number {if(!Number.isSafeInteger(value)||Number(value)<0)throw new BackendError(400,'Read the current website revision before proposing a change.');}
 function safe(error:unknown):never {if(error instanceof BackendError)throw error;if(error instanceof SpecificationError||error instanceof Error&&error.message==='Rendered site too large')throw new BackendError(422,'This website configuration is not supported. Ask for a smaller compatible change.');throw error;}
@@ -65,7 +72,8 @@ function requiredReviews(value:unknown):SpecificationReview[]{
 }
 const description=(q:Pick<Proposal,'operation'|'expected_revision'|'expires_at'|'config_json'|'diff_json'|'envelope_json'>)=>{
  const name=(JSON.parse(q.config_json) as SiteConfig).name,fields=(JSON.parse(q.diff_json) as {label:string}[]).map(row=>row.label),classes=requiredReviews(JSON.parse(q.envelope_json).requiredReviews);
- const modules=fields.some(label=>label.startsWith('Module '))?'\nModule configuration is saved inactive. Each module needs its own activation review before anyone can use it.':'';
+ const rows=JSON.parse(q.diff_json) as {label:string;after:string|null}[],removed=rows.filter(row=>row.label.startsWith('Module ')&&row.after===null).map(row=>row.label.slice(7));
+ const modules=(rows.some(row=>row.label.startsWith('Module ')&&row.after!==null)?'\nModule configuration is saved inactive. Each module needs its own activation review before anyone can use it.':'')+(removed.length?`\nRemoves the saved configuration of never-activated module${removed.length>1?'s':''} ${removed.join(', ')}. No visitor data exists for ${removed.length>1?'them':'it'}.`:'');
  return `Website changes for “${name}”\n${q.operation==='restore'?'Restore this saved website configuration':'Save these website changes'}?\n${fields.length?'Changed fields: '+fields.join(', '):'The website text and theme stay the same.'}${classes.length?'\nThis review also covers: '+classes.map(c=>`${c} (${reviewClasses[c]})`).join('; ')+'.':''}\nReview the private preview and full comparison below. Approval creates a new private saved version at revision ${q.expected_revision+1}. Publishing requires its own review.${modules}\nThis does not change visitor data, permissions, connections or your live website.\nReview expires: ${q.expires_at}`;
 };
 function link(db:D1Database,user:string,turn:string,review:string,hash:string){return db.prepare('INSERT INTO project_spec_chat_links(turn_id,proposal_id,reply_digest) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,review,hash,turn,user);}
@@ -108,12 +116,14 @@ export async function prepareSpecification(db:D1Database,user:string,turn:string
    const saved=await db.prepare('SELECT spec_json,lock_json,spec_digest,manifest_digest FROM project_spec_versions WHERE version_id=? AND project_id=?').bind(target,current.project_id).first<{spec_json:string;lock_json:string;spec_digest:string;manifest_digest:string}>();
    if(!saved)throw new BackendError(404,'Saved website configuration not found.');
    // A saved version under another compiler identity is refused (COMPILER_LOCK_MISMATCH), never converted.
-   const restored=await compileSpecificationRestore(JSON.parse(current.spec_json),JSON.parse(saved.spec_json),JSON.parse(saved.lock_json));
+   const base=JSON.parse(current.spec_json) as ProjectSpecification;
+   const restored=await compileSpecificationRestore(base,JSON.parse(saved.spec_json),JSON.parse(saved.lock_json),await removableInstances(db,current.project_id,base));
    compiled=restored.compiled;reviews=restored.requiredReviews;
    if(compiled.specificationDigest!==saved.spec_digest||compiled.manifestDigest!==saved.manifest_digest||home(compiled).artifact.digest!==old.digest||home(compiled).artifact.html!==old.html)throw new BackendError(409,'The saved website failed its integrity check.');
   }else{
    if(current.draft_revision!==current.head_draft_revision)throw new BackendError(409,'The website draft changed. Read its current specification before preparing a new review.');
-   const change=await compileSpecificationChange(JSON.parse(current.spec_json),request.operations,JSON.parse(current.lock_json));
+   const base=JSON.parse(current.spec_json) as ProjectSpecification;
+   const change=await compileSpecificationChange(base,request.operations,JSON.parse(current.lock_json),await removableInstances(db,current.project_id,base));
    compiled=change.compiled;reviews=change.requiredReviews;
   }
   const {artifact,config,photos}=home(compiled);

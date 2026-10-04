@@ -42,7 +42,7 @@ async function visitor(o){
  const result=await auth.appPasskeyVerify(db,o.project,'signup',options.challengeToken,key.registration(options.options),false);
  return {...result,key,cookie:`__Host-whumpo-app-session-${o.project}=${result.session}`};
 }
-/** Instances reach the saved head only through the real owner path (project-content@4): an exact modules.put review
+/** Instances reach the saved head only through the real owner path (project-content@5): an exact modules.put review
  * prepared as the AI turn's statements, then the recent-sign-in specificationApply control, before the activation reviews. */
 async function configure(o,instances){const saved=await configureFixtureModules(o.scope,o.user,o.project,instances);assert.ok(saved);return saved;}
 const revision=async(o,scope=o.scope)=>(await m.readChat(scope,o.user)).state.revision;

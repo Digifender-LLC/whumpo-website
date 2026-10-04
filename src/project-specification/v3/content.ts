@@ -7,7 +7,7 @@ import type {ProjectSpecification} from './types';
 export async function renderContentSpecification(input:unknown){
  const spec=validateSpecification(input);
  requireSpec(spec.pages.every(page=>page.audience==='public'),'UNSUPPORTED_DELIVERY','pages.audience');
- // project-content@4: pinned instances are saved configuration only. They add no compiled artifact, and serving needs
+ // project-content@5: pinned instances are saved configuration only. They add no compiled artifact, and serving needs
  // the separate WH-125 activation review. Notification/automation modules (so integrations and rules) stay unavailable.
  requireSpec(spec.modules.length===1&&spec.modules[0].id==='content','UNAVAILABLE_CAPABILITY','modules');
  const artifacts=[];
@@ -33,14 +33,14 @@ export function createContentSpecification(input:unknown):ProjectSpecification {
   instances:[],integrations:[],rules:[]});
 }
 
-export async function renderContentChange(before:unknown,operations:unknown){
- const base=await renderContentSpecification(before),changed=changeSpecification(base.specification,operations);
+export async function renderContentChange(before:unknown,operations:unknown,removable:readonly string[]=[]){
+ const base=await renderContentSpecification(before),changed=changeSpecification(base.specification,operations,removable);
  const next=await renderContentSpecification(changed.spec);
  return {baseDigest:base.specificationDigest,next,diff:specificationDifference(base.specification,next.specification),requiredReviews:changed.reviews,migration:changed.migration};
 }
 
 /** Restore is a new forward revision: the saved target is classified against the current base with the same hook table. */
-export async function renderContentRestore(before:unknown,target:unknown){
- const base=await renderContentSpecification(before),next=await renderContentSpecification(target),change=transitionReviews(base.specification,next.specification);
+export async function renderContentRestore(before:unknown,target:unknown,removable:readonly string[]=[]){
+ const base=await renderContentSpecification(before),next=await renderContentSpecification(target),change=transitionReviews(base.specification,next.specification,removable);
  return {baseDigest:base.specificationDigest,next,requiredReviews:change.reviews,migration:change.migration};
 }

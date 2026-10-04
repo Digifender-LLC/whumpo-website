@@ -204,6 +204,16 @@ CREATE TRIGGER module_activation_update BEFORE UPDATE ON module_activations
 WHEN NEW.instance_id IS NOT OLD.instance_id OR NEW.revision!=OLD.revision+1
 BEGIN SELECT RAISE(ABORT,'module_instance_immutable'); END;
 
+-- A saved specification keeps every registered instance. Activation inserts the registry row and it is never deleted
+-- while the project exists, so "ever activated" is exactly "has a row". A new saved version (edit or restore) that
+-- drops or re-kinds a registered instance is refused inside the commit, closing the race where a removal review
+-- prepared while the instance was never activated is applied after an activation. Removing a never-activated
+-- instance's configuration is allowed; removing an activated one stays MIGRATION_REQUIRED until WH-077 export exists.
+CREATE TRIGGER module_instance_spec_retained BEFORE INSERT ON project_spec_versions BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE EXISTS(SELECT 1 FROM module_instances i WHERE i.project_id=NEW.project_id
+  AND NOT EXISTS(SELECT 1 FROM json_each(NEW.spec_json,'$.instances') j WHERE json_extract(j.value,'$.id')=i.local_id AND json_extract(j.value,'$.kind')=i.kind));
+END;
+
 -- Module request commit guard. The handler's statements and this receipt share one batch, so a failed guard
 -- aborts the effect: current active instance and active dependencies, exact configuration and activation
 -- revisions, unchanged pins and the composed principal predicate (`admitted`).

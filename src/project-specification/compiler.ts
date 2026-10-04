@@ -7,7 +7,7 @@ import {compilerCatalog,moduleCatalog,type CompilerAvailability,type ModuleAvail
 // Catalog availability is current server policy, separate from immutable artifact identity.
 // Withdrawing an artifact prevents new compilation/apply; historical bytes stay unchanged.
 export type {CompilerAvailability,ModuleAvailability} from './catalog';
-const lock={formatVersion:1,schemaVersion:3,compiler:{id:'project-content',version:4,digest:compilerArtifacts.compiler},modules:[{id:'content',version:2,digest:compilerArtifacts.content,dependencies:[]}],components:[{id:'site-page',version:1,digest:compilerArtifacts.component},{id:'photo-page',version:1,digest:compilerArtifacts.component}]};
+const lock={formatVersion:1,schemaVersion:3,compiler:{id:'project-content',version:5,digest:compilerArtifacts.compiler},modules:[{id:'content',version:2,digest:compilerArtifacts.content,dependencies:[]}],components:[{id:'site-page',version:1,digest:compilerArtifacts.component},{id:'photo-page',version:1,digest:compilerArtifacts.component}]};
 export function currentCompilerLock(){return copyJSON(lock);}
 
 /** Availability must come from trusted server state, never a model/request payload. */
@@ -36,15 +36,16 @@ export async function compileProjectSpecification(input:unknown,expectedLock:unk
   artifacts:result.artifacts.map(({html:_,...artifact})=>artifact),previewHeaders:result.previewHeaders,activation:'not-configured',published:false};
  return {...result,manifest,manifestDigest:await jsonDigest(manifest)};
 }
-export async function compileSpecificationChange(before:unknown,operations:unknown,expectedLock:unknown){
+/** `removable`: saved instance ids that trusted storage shows were never activated (see changeSpecification). */
+export async function compileSpecificationChange(before:unknown,operations:unknown,expectedLock:unknown,removable:readonly string[]=[]){
  assertCompilerAvailable(expectedLock,compilerCatalog);
- const change=await renderContentChange(assertModulesAvailable(before,moduleCatalog),operations),compiled=await compileProjectSpecification(change.next.specification,expectedLock);
+ const change=await renderContentChange(assertModulesAvailable(before,moduleCatalog),operations,removable),compiled=await compileProjectSpecification(change.next.specification,expectedLock);
  return {baseDigest:change.baseDigest,nextDigest:compiled.specificationDigest,diff:change.diff,requiredReviews:change.requiredReviews,migration:change.migration,compiled};
 }
 /** Restore compiles the saved target under its own exact lock and classifies it against the current base. */
-export async function compileSpecificationRestore(before:unknown,target:unknown,expectedLock:unknown){
+export async function compileSpecificationRestore(before:unknown,target:unknown,expectedLock:unknown,removable:readonly string[]=[]){
  assertCompilerAvailable(expectedLock,compilerCatalog);
- const change=await renderContentRestore(assertModulesAvailable(before,moduleCatalog),assertModulesAvailable(target,moduleCatalog)),compiled=await compileProjectSpecification(change.next.specification,expectedLock);
+ const change=await renderContentRestore(assertModulesAvailable(before,moduleCatalog),assertModulesAvailable(target,moduleCatalog),removable),compiled=await compileProjectSpecification(change.next.specification,expectedLock);
  return {baseDigest:change.baseDigest,nextDigest:compiled.specificationDigest,requiredReviews:change.requiredReviews,migration:change.migration,compiled};
 }
 export async function compileNewWebsite(input:unknown){

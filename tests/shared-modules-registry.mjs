@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
-import {currentSiteFixtureHandlers,createFixtureProject,configureFixtureModules} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureProject,configureFixtureModules,changeFixtureWebsite,proposeFixtureWebsite,applyFixtureWebsite} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
@@ -45,7 +45,7 @@ const accessInstance={id:'members',kind:'access',...pins('access'),dependencies:
 const recordFields=[{key:'name',label,type:'text',optional:false,read:'owner'},{key:'note',label:'Note',type:'text',optional:true,read:'staff'}];
 const recordsInstance=(fields=recordFields,fieldsRevision=1)=>({id:'requests',kind:'records',...pins('records'),dependencies:['members'],
  config:{retentionDays:90,schemas:[{id:'request',fieldsRevision,fields,staffWrite:[]}],forms:[{id:'request-form',recordId:'request',submit:'public',uploadCollectionId:null}],views:[]}});
-/** Instances reach the saved head only through the real owner path (project-content@4): an exact modules.put review
+/** Instances reach the saved head only through the real owner path (project-content@5): an exact modules.put review
  * prepared as the AI turn's statements, then the recent-sign-in specificationApply control. */
 const configure=(o,instances)=>configureFixtureModules(o.scope,o.user,o.project,instances);
 const headSpec=async o=>JSON.parse((await row('SELECT v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',o.project)).spec_json);
@@ -85,9 +85,6 @@ try{
   assert.match((await m.readChat(a.scope,a.user)).turns.find(t=>t.id===saved.review.id).assistant_text,/This review also covers: permissions .*; schema .*\.[\s\S]*own activation review/);
   assert.deepEqual((await headSpec(a)).instances.map(i=>i.id),['members','requests']);
   assert.equal((await row('SELECT count(*) n FROM module_instances WHERE project_id=?',a.project)).n,0,'Saving configuration activates nothing');
-  // Restore is classified with the same hook table: returning to the module-free first version would drop instances.
-  const headRevision=(await row('SELECT revision FROM project_spec_heads WHERE project_id=?',a.project)).revision;
-  await assert.rejects(m.prepareSpecification(a.scope,a.user,id(),{kind:'specification',operation:'restore',projectId:a.project,expectedRevision:headRevision,versionId:a.version}),e=>e.status===422);
   // A dependent cannot activate before its dependency; nothing is reviewed.
   const early=await control(a,{type:'moduleActivationReview',projectId:a.project,instanceId:'requests',action:'activate'});
   assert.equal(early.status,409);assert.match(early.error,/members/);assert.equal((await row('SELECT count(*) n FROM module_activation_reviews WHERE project_id=?',a.project)).n,0);
@@ -101,7 +98,11 @@ try{
   await assert.rejects(()=>m.sendChatControl(staleScope,a.user,{id:id(),revision:0,action:applyAction(r)}),e=>e.status===401);
   const tampered=await control(a,{...applyAction(r),reviewDigest:'f'.repeat(64)});assert.equal(tampered.status,409);
   const applied=await apply(a,r);assert.equal(applied.status,200,applied.error);
-  access=await instance(a,'members');assert.equal(access.state,'active');assert.equal(access.config_revision,1);assert.equal(access.activation_revision,1);assert.equal(access.id,r.resource_id);
+  access=await instance(a,'members');assert.equal(access.state,'active');
+  // Restore is classified with the same hook table: returning to the module-free first version would now drop an
+  // activated instance (never-activated removal is covered in its own group below).
+  const headRevision=(await row('SELECT revision FROM project_spec_heads WHERE project_id=?',a.project)).revision;
+  await assert.rejects(m.prepareSpecification(a.scope,a.user,id(),{kind:'specification',operation:'restore',projectId:a.project,expectedRevision:headRevision,versionId:a.version}),e=>e.status===422);assert.equal(access.config_revision,1);assert.equal(access.activation_revision,1);assert.equal(access.id,r.resource_id);
   // Lost acknowledgement: the same turn reads back; a new turn for the same review reads the saved receipt only.
   assert.equal((await m.sendChatControl(a.scope,a.user,{id:applied.id,revision:(await revision(a))-1,action:applyAction(r)})).status,200);
   const again=await apply(a,r);assert.equal(again.status,200);
@@ -267,6 +268,43 @@ try{
   assert.equal((await publicCall(b,submission(theirs))).receipt.replayed,false,'Owner session revocation is not visitor serving');
  });
 
+ await check('never-activated instances are removable through the exact review; activated ones are refused',async()=>{
+  const c=await owner({plan:null,grants:true}),remove=instanceId=>({type:'modules.remove',instanceId});
+  const savedVersions=async()=>(await row('SELECT count(*) n FROM project_spec_versions WHERE project_id=?',c.project)).n;
+  // Restore to the module-free first version drops two never-activated instances: allowed, no review class.
+  await configure(c,[accessInstance,recordsInstance()]);
+  const back=await proposeFixtureWebsite(c.scope,c.user,c.project,{versionId:c.version});assert.deepEqual(JSON.parse(back.envelope_json).requiredReviews,[]);
+  assert.equal((await applyFixtureWebsite(c.scope,c.user,back)).status,200);assert.deepEqual((await headSpec(c)).instances,[]);
+  // modules.remove: one exact comparison row (configuration before, nothing after) and a reply naming the removal.
+  await configure(c,[accessInstance,recordsInstance()]);
+  const q=await proposeFixtureWebsite(c.scope,c.user,c.project,[remove('requests')]);
+  assert.deepEqual(JSON.parse(q.diff_json).map(r=>[r.label,r.before!==null,r.after]),[['Module requests',true,null]]);assert.deepEqual(JSON.parse(q.envelope_json).requiredReviews,[]);
+  const reply=(await m.readChat(c.scope,c.user)).turns.find(t=>t.id===q.id).assistant_text;
+  assert.match(reply,/Removes the saved configuration of never-activated module requests/);assert.doesNotMatch(reply,/saved inactive/);assert.doesNotMatch(reply,new RegExp(label));
+  // A foreign owner cannot prepare or apply it.
+  await assert.rejects(m.prepareSpecification(starter.scope,starter.user,id(),{kind:'specification',operation:'change',projectId:c.project,expectedRevision:q.expected_revision,operations:[remove('requests')]}),e=>e.status===404);
+  await assert.rejects(control(starter,{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}),e=>e.status===404);
+  assert.equal((await applyFixtureWebsite(c.scope,c.user,q)).status,200);assert.deepEqual((await headSpec(c)).instances.map(i=>i.id),['members']);
+  // A dependency cannot be removed while a dependent remains (validation), and an activated instance never can.
+  await configure(c,[accessInstance,recordsInstance()]);
+  await assert.rejects(proposeFixtureWebsite(c.scope,c.user,c.project,[remove('members')]),e=>e.status===422);
+  await activate(c,'members');const versions=await savedVersions();
+  for(const change of [[remove('requests'),remove('members')],{versionId:c.version}])await assert.rejects(proposeFixtureWebsite(c.scope,c.user,c.project,change),e=>e.status===422);
+  assert.equal(await savedVersions(),versions);
+  // Race: a removal reviewed while `requests` was never activated cannot apply after it is activated; the
+  // module_instance_spec_retained trigger repeats the decision inside the commit.
+  const pending=await proposeFixtureWebsite(c.scope,c.user,c.project,[remove('requests')]);
+  await activate(c,'requests');
+  const late=await applyFixtureWebsite(c.scope,c.user,pending);assert.equal(late.status,409);
+  assert.equal(await savedVersions(),versions);assert.deepEqual((await headSpec(c)).instances.map(i=>i.id),['members','requests']);
+  assert.equal((await instance(c,'requests')).state,'active');
+  // Disabled is still ever-activated: removal stays MIGRATION_REQUIRED until a WH-077 export exists.
+  assert.equal((await apply(c,await review(c,'requests','disable'))).status,200);
+  await assert.rejects(changeFixtureWebsite(c.scope,c.user,c.project,[remove('requests')]),e=>e.status===422);
+  const head=await row('SELECT v.* FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',c.project);
+  await assert.rejects(()=>run('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,?,?,?,?,?,?,?)',id(),c.project,head.revision+1,id(),JSON.stringify({...JSON.parse(head.spec_json),instances:[]}),head.spec_digest,head.lock_json,head.manifest_json,head.manifest_digest),/specification_changed/);
+ });
+
  await check('visitor values stay out of Chat, model context and receipts; closure and cascades',async()=>{
   for(const t of ['chat_turns','module_request_receipts','module_activation_reviews','module_instances','activity_events']){
    const dump=JSON.stringify(await rows('SELECT * FROM '+t));assert.ok(!dump.includes(marker),t);
@@ -299,7 +337,7 @@ try{
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  assert.ok(!logs.join('\n').includes(marker));
- say(`Shared module registry passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — instances saved through the exact owner specification review (classified reviews, destructive save/restore refused), exact owner activation/disable reviews with recent sign-in, readback and one-winner races, configRevision/pin/activation guards in the committing statements, envelope and client_update_required, two-owner foreign scope, revocation, withdrawn/stale pins, plan loss, idempotent receipts, closure and cascades, and a static no-inference check. No network, model or provider use; no visitor value stored or logged.`);
+ say(`Shared module registry passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — instances saved through the exact owner specification review (classified reviews, destructive save/restore refused, never-activated removal allowed and refused once activated, including the commit-time race), exact owner activation/disable reviews with recent sign-in, readback and one-winner races, configRevision/pin/activation guards in the committing statements, envelope and client_update_required, two-owner foreign scope, revocation, withdrawn/stale pins, plan loss, idempotent receipts, closure and cascades, and a static no-inference check. No network, model or provider use; no visitor value stored or logged.`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
 
