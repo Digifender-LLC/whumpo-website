@@ -1152,6 +1152,43 @@ CREATE TABLE application_builds (
  request_hash TEXT NOT NULL CHECK(length(request_hash)=64)
 );
 
+-- WH-074 pooled build job envelope (src/build-jobs.ts, docs/build-jobs.md). One bounded job per owner-requested
+-- application build. Only the SHA-256 of the per-job lease is stored; the lease never leaves the request that admitted it.
+-- Shared toolchain keys hold no tenant input; the private artifact key is bound to project, job and source digest.
+-- A row is a record of shared capacity in use, never an allocated container, server or warm workspace.
+CREATE TABLE build_jobs (
+ id TEXT PRIMARY KEY REFERENCES application_builds(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ purpose TEXT NOT NULL CHECK(purpose='project-build'),
+ origin TEXT NOT NULL CHECK(origin='owner-chat'),
+ lease_digest TEXT NOT NULL CHECK(length(lease_digest)=64),
+ input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+ toolchain_key TEXT NOT NULL CHECK(length(toolchain_key)=81 AND substr(toolchain_key,1,17)='shared/toolchain/' AND substr(toolchain_key,18) NOT GLOB '*[^0-9a-f]*'),
+ artifact_key TEXT NOT NULL CHECK(length(artifact_key)=146 AND artifact_key='private/'||project_id||'/'||id||'/'||substr(artifact_key,83) AND substr(artifact_key,83) NOT GLOB '*[^0-9a-f]*'),
+ state TEXT NOT NULL DEFAULT 'running' CHECK(state IN ('running','succeeded','failed','cancelled','expired','published')),
+ cleanup TEXT NOT NULL DEFAULT 'pending' CHECK(cleanup IN ('pending','released','failed')),
+ diagnostics_json TEXT CHECK(diagnostics_json IS NULL OR (json_valid(diagnostics_json) AND json_type(diagnostics_json)='array' AND length(CAST(diagnostics_json AS BLOB))<=2048)),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ expires_at TEXT NOT NULL,
+ dispatched_at TEXT,
+ finished_at TEXT,
+ CHECK((state='running')=(finished_at IS NULL))
+);
+
+-- Append-only cleanup attempts. A failed or missing cleanup keeps the job's capacity slot held until a later attempt
+-- records release; nothing treats an unconfirmed workspace, memory or disk as free.
+CREATE TABLE build_job_cleanups (
+ job_id TEXT NOT NULL REFERENCES build_jobs(id) ON DELETE CASCADE,
+ attempt INTEGER NOT NULL CHECK(attempt BETWEEN 1 AND 5),
+ outcome TEXT NOT NULL CHECK(outcome IN ('released','failed')),
+ reason TEXT NOT NULL CHECK(reason IN ('runtime-returned','not-dispatched','runtime-unconfirmed','runtime-bound-elapsed')),
+ held_ms INTEGER NOT NULL CHECK(held_ms>=0),
+ recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ PRIMARY KEY(job_id,attempt),
+ CHECK((outcome='failed')=(reason='runtime-unconfirmed'))
+);
+
 CREATE TABLE app_owner_erasures (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1875,6 +1912,9 @@ CREATE UNIQUE INDEX cms_import_source_current ON cms_import_reviews(project_id,s
 CREATE INDEX domain_proof_removal_claim ON domain_proof_removals(claim_id,status);
 
 CREATE INDEX application_builds_owner ON application_builds(user_id,project_id);
+CREATE INDEX build_jobs_project_active ON build_jobs(project_id) WHERE state='running' OR cleanup<>'released';
+CREATE INDEX build_jobs_user_active ON build_jobs(user_id) WHERE state='running' OR cleanup<>'released';
+CREATE INDEX build_jobs_active ON build_jobs(state,cleanup) WHERE state='running' OR cleanup<>'released';
 
 CREATE INDEX app_owner_erasures_expiry ON app_owner_erasures(expires_at);
 
@@ -3201,6 +3241,79 @@ END;
 
 CREATE TRIGGER application_build_immutable BEFORE UPDATE ON application_builds
  BEGIN SELECT RAISE(ABORT,'application_build_immutable'); END;
+
+-- WH-074: a build job exists only for an owner's pending Chat request that already saved its build intent.
+-- Visitor, public, webhook and scheduled paths have no such turn and cannot create, wake or extend a job.
+-- Bounded shared pool: one active job per project, three per account and sixteen platform-wide, where a job stays
+-- active until its cleanup is recorded as released.
+CREATE TRIGGER build_job_admit BEFORE INSERT ON build_jobs BEGIN
+ SELECT RAISE(ABORT,'build_job_owner') WHERE NOT EXISTS(
+  SELECT 1 FROM application_builds b JOIN projects p ON p.id=b.project_id AND p.owner_user_id=b.user_id
+  JOIN chat_turns t ON t.id=b.id AND t.user_id=b.user_id AND t.status='pending'
+  WHERE b.id=NEW.id AND b.project_id=NEW.project_id AND b.user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'build_job_invalid') WHERE NEW.state<>'running' OR NEW.cleanup<>'pending' OR NEW.dispatched_at IS NOT NULL OR NEW.finished_at IS NOT NULL OR NEW.diagnostics_json IS NOT NULL
+  OR NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440
+  OR NEW.expires_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.expires_at) OR NEW.expires_at<=NEW.created_at OR NEW.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'+120 seconds')
+  OR NOT EXISTS(SELECT 1 FROM backend_versions v WHERE v.id=NEW.id AND v.project_id=NEW.project_id AND NEW.artifact_key='private/'||v.project_id||'/'||v.id||'/'||v.digest);
+ SELECT RAISE(ABORT,'build_job_capacity') WHERE (SELECT count(*) FROM build_jobs WHERE project_id=NEW.project_id AND (state='running' OR cleanup<>'released'))>=1
+  OR (SELECT count(*) FROM build_jobs WHERE user_id=NEW.user_id AND (state='running' OR cleanup<>'released'))>=3
+  OR (SELECT count(*) FROM build_jobs WHERE state='running' OR cleanup<>'released')>=16;
+END;
+
+-- Identity, lease, inputs and keys are immutable. Dispatch (the only spend) happens once, while running and unexpired.
+-- Success needs that dispatch and the job's own passing receipt. Cancellation and expiry are terminal for execution.
+CREATE TRIGGER build_job_transition BEFORE UPDATE ON build_jobs BEGIN
+ SELECT RAISE(ABORT,'build_job_immutable') WHERE NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.user_id<>OLD.user_id OR NEW.purpose<>OLD.purpose OR NEW.origin<>OLD.origin
+  OR NEW.lease_digest<>OLD.lease_digest OR NEW.input_digest<>OLD.input_digest OR NEW.toolchain_key<>OLD.toolchain_key OR NEW.artifact_key<>OLD.artifact_key OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at
+  OR (OLD.dispatched_at IS NOT NULL AND NEW.dispatched_at IS NOT OLD.dispatched_at) OR (OLD.finished_at IS NOT NULL AND NEW.finished_at IS NOT OLD.finished_at)
+  OR (OLD.diagnostics_json IS NOT NULL AND NEW.diagnostics_json IS NOT OLD.diagnostics_json);
+ SELECT RAISE(ABORT,'build_job_inactive') WHERE OLD.dispatched_at IS NULL AND NEW.dispatched_at IS NOT NULL AND (OLD.state<>'running' OR NEW.state<>'running' OR OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  OR NEW.dispatched_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.dispatched_at) OR abs(julianday(NEW.dispatched_at)-julianday('now'))>1.0/1440);
+ SELECT RAISE(ABORT,'build_job_transition') WHERE NEW.state<>OLD.state AND NOT (
+  (OLD.state='running' AND NEW.state IN ('succeeded','failed') AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  OR (OLD.state='running' AND NEW.state='expired' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  OR (OLD.state IN ('running','succeeded') AND NEW.state='cancelled')
+  OR (OLD.state='succeeded' AND NEW.state='published' AND OLD.cleanup='released'));
+ SELECT RAISE(ABORT,'build_job_transition') WHERE NEW.state<>OLD.state AND OLD.state='running' AND (NEW.finished_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.finished_at) OR abs(julianday(NEW.finished_at)-julianday('now'))>1.0/1440);
+ SELECT RAISE(ABORT,'build_job_success') WHERE NEW.state='succeeded' AND OLD.state='running' AND (OLD.dispatched_at IS NULL OR NOT EXISTS(
+  SELECT 1 FROM backend_runs r WHERE r.id=OLD.id AND r.version_id=OLD.id AND r.project_id=OLD.project_id AND r.user_id=OLD.user_id AND r.state='complete'
+  AND json_extract(r.result_json,'$.ok')=1 AND json_extract(r.result_json,'$.check.status')='passed'));
+ SELECT RAISE(ABORT,'build_job_cleanup') WHERE NEW.cleanup<>OLD.cleanup AND (OLD.cleanup='released' OR NOT EXISTS(
+  SELECT 1 FROM build_job_cleanups c WHERE c.job_id=OLD.id AND c.outcome=NEW.cleanup AND c.attempt=(SELECT max(attempt) FROM build_job_cleanups WHERE job_id=OLD.id)));
+END;
+
+-- The job's own test reservation is its only spend. A cancelled, expired, finished or undispatched job cannot reserve it,
+-- and no job can reserve a run for another project, owner or version.
+CREATE TRIGGER build_job_spend BEFORE INSERT ON backend_runs WHEN EXISTS(SELECT 1 FROM build_jobs j WHERE j.id=NEW.id AND NOT(
+ j.state='running' AND j.dispatched_at IS NOT NULL AND j.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND j.project_id=NEW.project_id AND j.user_id=NEW.user_id AND NEW.version_id=j.id))
+BEGIN SELECT RAISE(ABORT,'build_job_inactive'); END;
+
+-- Output ownership before publication: a review citing a job's receipt needs that exact owner, project and version,
+-- a succeeded (or already published) job whose cleanup was released, and source bytes matching the private artifact key.
+CREATE TRIGGER build_job_publish BEFORE INSERT ON app_activation_reviews WHEN NEW.run_id IS NOT NULL AND EXISTS(SELECT 1 FROM build_jobs j WHERE j.id=NEW.run_id AND NOT(
+ j.state IN ('succeeded','published') AND j.cleanup='released' AND j.project_id=NEW.project_id AND j.user_id=NEW.user_id AND NEW.version_id=j.id
+ AND EXISTS(SELECT 1 FROM backend_versions v WHERE v.id=j.id AND j.artifact_key='private/'||v.project_id||'/'||v.id||'/'||v.digest)))
+BEGIN SELECT RAISE(ABORT,'build_job_output'); END;
+
+CREATE TRIGGER build_job_published AFTER INSERT ON app_activation_reviews WHEN NEW.run_id IS NOT NULL
+BEGIN UPDATE build_jobs SET state='published' WHERE id=NEW.run_id AND state='succeeded'; END;
+
+-- Cleanup attempts follow execution, are numbered without gaps and can only claim release when it is knowable:
+-- never dispatched, or after the runtime's own per-call bound has elapsed since dispatch.
+CREATE TRIGGER build_job_cleanup_admit BEFORE INSERT ON build_job_cleanups BEGIN
+ SELECT RAISE(ABORT,'build_job_cleanup') WHERE NOT EXISTS(SELECT 1 FROM build_jobs j WHERE j.id=NEW.job_id AND j.state<>'running' AND j.cleanup<>'released')
+  OR NEW.attempt<>1+(SELECT count(*) FROM build_job_cleanups WHERE job_id=NEW.job_id)
+  OR NEW.recorded_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.recorded_at) OR abs(julianday(NEW.recorded_at)-julianday('now'))>1.0/1440
+  OR (NEW.reason='not-dispatched' AND EXISTS(SELECT 1 FROM build_jobs WHERE id=NEW.job_id AND dispatched_at IS NOT NULL))
+  OR (NEW.reason IN ('runtime-returned','runtime-unconfirmed') AND EXISTS(SELECT 1 FROM build_jobs WHERE id=NEW.job_id AND dispatched_at IS NULL))
+  OR (NEW.reason='runtime-bound-elapsed' AND NOT EXISTS(SELECT 1 FROM build_jobs WHERE id=NEW.job_id AND dispatched_at IS NOT NULL AND dispatched_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 seconds')));
+END;
+
+CREATE TRIGGER build_job_cleanup_recorded AFTER INSERT ON build_job_cleanups
+BEGIN UPDATE build_jobs SET cleanup=NEW.outcome WHERE id=NEW.job_id; END;
+
+CREATE TRIGGER build_job_cleanup_immutable BEFORE UPDATE ON build_job_cleanups
+BEGIN SELECT RAISE(ABORT,'build_job_cleanup_immutable'); END;
 
 CREATE TRIGGER welcome_first_draft_claim BEFORE INSERT ON welcome_first_drafts
  WHEN NOT EXISTS(SELECT 1 FROM chat_turns t JOIN welcome_onboarding w ON w.user_id=t.user_id

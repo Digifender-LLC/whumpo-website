@@ -1133,6 +1133,49 @@
       }
     },
     {
+      "id": "pooled-build-jobs",
+      "tables": [
+        "build_jobs",
+        "build_job_cleanups"
+      ],
+      "scope": "project",
+      "purpose": "WH-074 envelope for one owner-requested application build: lease digest, input digest, shared toolchain key, private artifact key, state, expiry, deterministic diagnostics and append-only cleanup attempts. Records shared capacity in use; never a container, server or workspace allocation.",
+      "currentRetention": "One row per application build, cascading with its backend version, project or account; cleanup attempts cascade with the job (at most five). Bounded by the backend version quota. No age purge.",
+      "proposedRetention": "Keep while the build's backend version exists; account/project closure purges both tables after in-flight jobs are cancelled or expired and cleanup is released or recorded as failed.",
+      "deletionAuthority": "Only parent version/project/account removal. Owners can cancel a job; models, visitors, workflows and operators cannot edit lease, keys, diagnostics or cleanup records.",
+      "exportPolicy": "Allowlist state, timestamps, diagnostics and cleanup outcomes with the build. Never export the lease digest as authority; a restored job grants no lease, dispatch or publication.",
+      "references": [
+        "src/build-jobs.ts",
+        "src/application-build.ts",
+        "docs/build-jobs.md",
+        "docs/job-envelope.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Owner build status/cancel handlers for their own builds; deterministic reconciliation and admission triggers"
+        ],
+        "processors": [
+          "Application build handler, bounded QuickJS runtime receipt and scheduled deterministic reconciliation; no model reads the lease"
+        ],
+        "remainingExposure": [
+          "Diagnostics codes and timing reveal build activity; the lease itself is never stored, only its SHA-256."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "shared-reuse",
       "tables": [
         "backend_nominations",

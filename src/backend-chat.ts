@@ -10,6 +10,7 @@ import {appRecoveryCommand} from './app-recovery-chat';
 import {readAppStatus,describeAppStatus} from './app-status';
 import type {AppPageExpectation} from './app-page-design';
 import {buildApplication,readApplicationBuild} from './application-build';
+import {cancelBuildJob} from './build-jobs';
 import {backendLibraryCommand,describeBackendLibrary,describeBackendComponent,installBackendComponent} from './backend-library';
 import {compareBackends,describeBackendComparison} from './backend-diff';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage,describeAppPage} from './app-pages';
@@ -33,6 +34,10 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
  if(/^\/application-build(?:\s|$)/i.test(content)){
   const parts=content.trim().split(/\s+/);if(parts.length!==2||!uuid.test(parts[1]))throw new BackendError(400,"Choose a saved application build to inspect.");
   return ()=>readApplicationBuild(db,user,parts[1]);
+ }
+ if(/^\/cancel-build(?:\s|$)/i.test(content)){
+  const parts=content.trim().split(/\s+/);if(parts.length!==2||!uuid.test(parts[1]))throw new BackendError(400,"Choose a build to cancel.");
+  return ()=>cancelBuildJob(db,user,parts[1]);
  }
  const nomination=backendNominationCommand(db,user,turnId,content);if(nomination)return nomination;
  const library=backendLibraryCommand(db,user,turnId,content);if(library)return library;

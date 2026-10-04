@@ -67,6 +67,7 @@ export {cleanPhoto} from './src/photo-format';
   export * as backendChat from './src/backend-chat';
   export * as backendImports from './src/backend-imports';
   export * as appActivation from './src/app-activation';
+  export * as buildJobs from './src/build-jobs';
   export * as appAuth from './src/app-auth';
   export * as appData from './src/app-data';
   export * as appPages from './src/app-pages';

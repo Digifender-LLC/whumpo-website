@@ -47,6 +47,9 @@ export const backlogInventory={
  // Internal attention thresholds only: they promise customers no response time.
  support_open:queue('usage_review_requests',"state='open'",'created_at',3*daily),
  support_delivery:queue('support_deliveries',"state='queued'",'next_attempt_at',3600000),
+ // WH-074: unfinished build jobs past their deadline, and finished jobs whose capacity cleanup is not yet released.
+ build_jobs_expired:queue('build_jobs',"state='running' AND expires_at<=?1",'expires_at',600000),
+ build_cleanup:queue('build_jobs',"state<>'running' AND cleanup<>'released'",'finished_at',600000),
 };
 export const operationInventory={
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},
@@ -71,5 +74,6 @@ export const platformCounterInventory={
  owner_backend_runs:{sql:`SELECT count(*) AS used FROM backend_runs WHERE day=${day}`,ceiling:1000,window:'UTC day',enforcedBy:'backend_runs_quota',evidence:'(SELECT count(*) FROM backend_runs WHERE day=NEW.day)>=1000'},
  owner_backend_runs_retained:{sql:'SELECT count(*) AS used FROM backend_runs',ceiling:5000,window:'retained',enforcedBy:'backend_runs_quota',evidence:'(SELECT count(*) FROM backend_runs)>=5000'},
  photo_files:{sql:'SELECT (SELECT count(*) FROM project_files)+(SELECT count(*) FROM file_cleanup) AS used',ceiling:500,window:'retained',enforcedBy:'project_file_cleanup_capacity',evidence:'(SELECT COUNT(*) FROM project_files)+(SELECT COUNT(*) FROM file_cleanup)>=500'},
+ build_job_pool:{sql:"SELECT count(*) AS used FROM build_jobs WHERE state='running' OR cleanup<>'released'",ceiling:16,window:'concurrent',enforcedBy:'build_job_admit',evidence:"(SELECT count(*) FROM build_jobs WHERE state='running' OR cleanup<>'released')>=16",note:'Shared build capacity in use; a slot is held until its cleanup is released (WH-074).'},
  operator_containments:{sql:'SELECT count(*) AS used FROM operator_containments',ceiling:10000,window:'retained',enforcedBy:'operator_containment_admit',evidence:'(SELECT count(*) FROM operator_containments)>=10000',note:'Containment audit rows are never deleted; at the ceiling new containment fails closed.'},
 };
