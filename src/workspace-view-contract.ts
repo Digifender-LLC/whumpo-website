@@ -15,7 +15,10 @@ export const viewComponents={
  'site-health':{version:1,binding:'project.site-health@1',feature:null},
  // WH-125: configured/registered module instance states for one owned project. Identity and ownership only, so owner
  // read and disable stay available after plan loss; activation handlers re-check inclusion. No visitor values.
- modules:{version:1,binding:'module.instances@1',feature:null}
+ modules:{version:1,binding:'module.instances@1',feature:null},
+ // WH-126: staff roster per registered access instance (opaque visitor ids, dates, staff state). Identity and ownership
+ // only, so owners can read and remove roles after plan loss; granting re-checks core.editing. No credentials or values.
+ 'access-roles':{version:1,binding:'access.roles@1',feature:null}
 } as const;
 export type WidgetKind=keyof typeof viewComponents;
 export const widgetKinds=Object.keys(viewComponents) as WidgetKind[];

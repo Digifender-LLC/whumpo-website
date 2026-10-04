@@ -121,7 +121,7 @@ try{
   const replay=await publicCall(a,first);assert.equal(replay.receipt.replayed,true);assert.deepEqual(replay.result,result.result);assert.equal(replay.receipt.createdAt,result.receipt.createdAt);
   await fails(publicCall(a,{...first,input:{name:'changed',note:marker}}),'request_conflict');
   // A different principal reusing the ID is a conflict, never a readback of someone else's receipt.
-  await fails(m.sharedModules.handleModuleRequest(db,{kind:'visitor',projectId:a.project,visitorId:id(),roles:[],accessRevision:1},first,handlers),'request_conflict');
+  await fails(m.sharedModules.handleModuleRequest(db,{kind:'visitor',projectId:a.project,visitorId:id(),sessionHash:'0'.repeat(64),accessInstanceId:id(),roles:[],accessRevision:1},first,handlers),'request_conflict');
   // Policy runs before any receipt is revealed: an owner cannot use the public form path at all.
   await fails(ownerCall(a,first),'forbidden');
   const racing=submission(records),both=await Promise.all([publicCall(a,racing),publicCall(a,racing)]);
@@ -167,8 +167,8 @@ try{
   assert.deepEqual((await ownerCall(a,envelope(records,'records.get',{target:{recordId:'request'}}))).result,{fields:['name','note'],scope:'all'});
   await activate(a,'members');access=await instance(a,'members');assert.equal(access.activation_revision,3);
   assert.equal((await publicCall(a,submission(records))).receipt.replayed,false);
-  // Visitor principals cannot commit until WH-126 binds visitor sessions and access revisions.
-  await fails(m.sharedModules.handleModuleRequest(db,{kind:'visitor',projectId:a.project,visitorId:id(),roles:[],accessRevision:1},submission(records),handlers),'forbidden');
+  // A visitor principal without a current session and access revision (WH-126 visitorPredicate) cannot commit.
+  await fails(m.sharedModules.handleModuleRequest(db,{kind:'visitor',projectId:a.project,visitorId:id(),sessionHash:'0'.repeat(64),accessInstanceId:access.id,roles:[],accessRevision:1},submission(records),handlers),'forbidden');
  });
 
  await check('withdrawn and stale pins fail closed while owner disable and reads remain',async()=>{

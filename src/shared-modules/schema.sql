@@ -181,6 +181,12 @@ CREATE TRIGGER module_activation_apply AFTER INSERT ON module_activation_applies
   config_revision=(SELECT next_config_revision FROM module_activation_reviews WHERE id=NEW.review_id),updated_at=NEW.created_at
   WHERE instance_id=(SELECT resource_id FROM module_activation_reviews WHERE id=NEW.review_id) AND revision=NEW.activation_revision-1;
  SELECT RAISE(ABORT,'module_activation_changed') WHERE NOT EXISTS(SELECT 1 FROM module_activations WHERE review_id=NEW.review_id AND revision=NEW.activation_revision AND state=NEW.state);
+ -- WH-126: an access instance starts at access revision 1; every later activation, disable or configuration
+ -- change advances it so session-bound decisions, cursors and pending writes from before the change fail.
+ INSERT INTO module_access_states(instance_id,project_id,revision,updated_at)
+  SELECT resource_id,project_id,1,NEW.created_at FROM module_activation_reviews WHERE id=NEW.review_id AND kind='access' AND expected_config_revision=0;
+ UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,NEW.created_at)
+  WHERE instance_id=(SELECT resource_id FROM module_activation_reviews WHERE id=NEW.review_id AND kind='access' AND expected_config_revision>0);
 END;
 CREATE TRIGGER module_activation_apply_immutable BEFORE UPDATE ON module_activation_applies BEGIN SELECT RAISE(ABORT,'module_activation_immutable'); END;
 -- Applied receipts keep their review: a review with a receipt is never pruned.
@@ -215,3 +221,152 @@ CREATE TRIGGER module_request_admit BEFORE INSERT ON module_request_receipts BEG
  SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_request_receipts WHERE instance_id=NEW.instance_id)>=20000 OR abs(NEW.created_at-unixepoch())>60;
 END;
 CREATE TRIGGER module_request_receipt_immutable BEFORE UPDATE ON module_request_receipts BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;
+
+-- WH-126 access module (docs/shared-modules.md#access-module-staff-roles-wh-126--october-4-2026-utc). Visitor
+-- principals are the project's existing visitor identities (app_visitors, passkeys, invitations, recovery and
+-- sessions); this slice adds the access revision, the `staff` role and exact owner role reviews. A role is project
+-- application policy on a visitor identity: it never creates a workspace session, Chat, publication, spending or
+-- identity-management authority, and WH-054 workspace members are never visitor or staff principals.
+CREATE TABLE module_access_states (
+ instance_id TEXT PRIMARY KEY REFERENCES module_instances(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision>=1),
+ updated_at INTEGER NOT NULL CHECK(updated_at>0)
+) STRICT;
+CREATE INDEX module_access_states_project ON module_access_states(project_id);
+
+-- Current grant per (access instance, visitor, role). Revocation keeps the row as a `revoked` suppression with
+-- the review and access revision that changed it; only a new exact owner review can grant again.
+CREATE TABLE module_access_roles (
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ role TEXT NOT NULL CHECK(role='staff'),
+ state TEXT NOT NULL CHECK(state IN ('granted','revoked')),
+ review_id TEXT CHECK(review_id IS NULL OR length(review_id)=36),
+ access_revision INTEGER NOT NULL CHECK(access_revision>=1),
+ granted_at INTEGER NOT NULL CHECK(granted_at>0),
+ updated_at INTEGER NOT NULL CHECK(updated_at>=granted_at),
+ PRIMARY KEY(instance_id,visitor_id,role)
+) STRICT;
+CREATE INDEX module_access_roles_visitor ON module_access_roles(visitor_id);
+CREATE INDEX module_access_roles_project ON module_access_roles(project_id,state);
+
+-- Exact owner role review, prepared by the typed accessRoleReview Chat control. It binds the owned project, access
+-- resource and configuration revision, one visitor identity, the action and the current access revision.
+CREATE TABLE module_access_role_reviews (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ local_id TEXT NOT NULL CHECK(length(local_id) BETWEEN 1 AND 40 AND local_id NOT GLOB '*[^a-z0-9-]*'),
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
+ role TEXT NOT NULL CHECK(role='staff'),
+ action TEXT NOT NULL CHECK(action IN ('grant','revoke')),
+ config_revision INTEGER NOT NULL CHECK(config_revision>=1),
+ expected_access_revision INTEGER NOT NULL CHECK(expected_access_revision>=1),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ review_digest TEXT NOT NULL CHECK(length(review_digest)=64 AND review_digest NOT GLOB '*[^0-9a-f]*'),
+ created_at INTEGER NOT NULL CHECK(created_at>0),
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+600)
+) STRICT;
+CREATE INDEX module_access_role_reviews_project ON module_access_role_reviews(project_id,created_at DESC);
+CREATE INDEX module_access_role_reviews_user ON module_access_role_reviews(user_id);
+CREATE INDEX module_access_role_reviews_visitor ON module_access_role_reviews(visitor_id);
+CREATE INDEX module_access_role_reviews_instance ON module_access_role_reviews(instance_id);
+
+CREATE TABLE module_access_role_links (
+ turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
+ review_id TEXT NOT NULL REFERENCES module_access_role_reviews(id) ON DELETE CASCADE,
+ reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
+) STRICT;
+CREATE INDEX module_access_role_links_review ON module_access_role_links(review_id);
+
+-- Applied receipt; id is the confirming Chat turn. One receipt per review and the access-revision check give one
+-- winner, and a replayed review can never re-grant: its expected access revision is gone once anything changed.
+CREATE TABLE module_access_role_applies (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ review_id TEXT NOT NULL UNIQUE REFERENCES module_access_role_reviews(id) ON DELETE CASCADE,
+ review_digest TEXT NOT NULL CHECK(length(review_digest)=64),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
+ admitted INTEGER,
+ access_revision INTEGER NOT NULL CHECK(access_revision>=2),
+ created_at INTEGER NOT NULL CHECK(created_at>0)
+) STRICT;
+CREATE INDEX module_access_role_applies_user ON module_access_role_applies(user_id);
+
+CREATE TRIGGER module_access_state_update BEFORE UPDATE ON module_access_states
+WHEN NEW.instance_id IS NOT OLD.instance_id OR NEW.project_id IS NOT OLD.project_id OR NEW.revision!=OLD.revision+1
+BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
+CREATE TRIGGER module_access_role_identity BEFORE UPDATE ON module_access_roles
+WHEN NEW.instance_id IS NOT OLD.instance_id OR NEW.visitor_id IS NOT OLD.visitor_id OR NEW.project_id IS NOT OLD.project_id OR NEW.role IS NOT OLD.role OR NEW.granted_at IS NOT OLD.granted_at
+BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
+-- Grants are written only by an applied owner review; a direct grant insert never admits.
+CREATE TRIGGER module_access_role_insert BEFORE INSERT ON module_access_roles
+WHEN NEW.state!='granted' OR NOT EXISTS(SELECT 1 FROM module_access_role_applies a JOIN module_access_role_reviews r ON r.id=a.review_id
+ WHERE a.review_id=NEW.review_id AND r.instance_id=NEW.instance_id AND r.visitor_id=NEW.visitor_id AND r.project_id=NEW.project_id AND r.action='grant')
+BEGIN SELECT RAISE(ABORT,'module_access_changed'); END;
+
+CREATE TRIGGER module_access_role_review_admit BEFORE INSERT ON module_access_role_reviews BEGIN
+ SELECT RAISE(ABORT,'module_access_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t JOIN projects p ON p.id=NEW.project_id AND p.owner_user_id=t.user_id
+  WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='accessRoleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id
+  AND json_extract(t.action_json,'$.instanceId')=NEW.local_id AND json_extract(t.action_json,'$.visitorId')=NEW.visitor_id AND json_extract(t.action_json,'$.action')=NEW.action);
+ SELECT RAISE(ABORT,'module_access_changed') WHERE abs(NEW.created_at-unixepoch())>60;
+ SELECT RAISE(ABORT,'module_access_changed') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_access_states s ON s.instance_id=i.id JOIN app_visitors v ON v.id=NEW.visitor_id AND v.project_id=i.project_id
+  WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.local_id=NEW.local_id AND i.kind='access' AND i.config_revision=NEW.config_revision AND s.revision=NEW.expected_access_revision);
+ SELECT RAISE(ABORT,'module_access_changed') WHERE NEW.action='revoke' AND NOT EXISTS(SELECT 1 FROM module_access_roles WHERE instance_id=NEW.instance_id AND visitor_id=NEW.visitor_id AND role=NEW.role AND state='granted');
+ SELECT RAISE(ABORT,'module_access_capacity') WHERE (SELECT count(*) FROM module_access_role_reviews WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM module_access_role_reviews)>=50000;
+END;
+CREATE TRIGGER module_access_role_review_immutable BEFORE UPDATE ON module_access_role_reviews BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
+CREATE TRIGGER module_access_role_link_admit BEFORE INSERT ON module_access_role_links BEGIN
+ SELECT RAISE(ABORT,'module_access_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns t JOIN module_access_role_reviews r ON r.user_id=t.user_id JOIN projects p ON p.id=r.project_id AND p.owner_user_id=t.user_id WHERE t.id=NEW.turn_id AND r.id=NEW.review_id);
+END;
+CREATE TRIGGER module_access_role_link_immutable BEFORE UPDATE ON module_access_role_links BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
+
+-- The committing statement repeats every decision: typed confirming control with exact digest and revision, current
+-- owner, unexpired review, unchanged access revision and configuration revision; a grant additionally needs an
+-- active access instance whose configuration declares `staff`, an unrevoked visitor and composed core.editing
+-- inclusion (`admitted`); a revoke needs only the current grant, identity and ownership (any activation state).
+CREATE TRIGGER module_access_role_apply_admit BEFORE INSERT ON module_access_role_applies BEGIN
+ SELECT RAISE(ABORT,'module_access_forbidden') WHERE NEW.admitted IS NOT 1;
+ SELECT RAISE(ABORT,'module_access_changed') WHERE NOT EXISTS(SELECT 1 FROM module_access_role_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id
+  JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='accessRoleApply' AND json_extract(t.action_json,'$.reviewId')=r.id
+   AND json_extract(t.action_json,'$.reviewDigest')=r.review_digest AND json_type(t.action_json,'$.expectedRevision')='integer' AND json_extract(t.action_json,'$.expectedRevision')=r.expected_access_revision
+  WHERE r.id=NEW.review_id AND r.user_id=NEW.user_id AND r.review_digest=NEW.review_digest AND NEW.access_revision=r.expected_access_revision+1);
+ SELECT RAISE(ABORT,'module_access_expired') WHERE (SELECT expires_at FROM module_access_role_reviews WHERE id=NEW.review_id)<=unixepoch() OR abs(NEW.created_at-unixepoch())>60;
+ SELECT RAISE(ABORT,'module_access_changed') WHERE EXISTS(SELECT 1 FROM module_access_role_reviews r WHERE r.id=NEW.review_id AND (
+  NOT EXISTS(SELECT 1 FROM module_access_states s JOIN module_instances i ON i.id=s.instance_id WHERE s.instance_id=r.instance_id AND s.project_id=r.project_id AND s.revision=r.expected_access_revision AND i.config_revision=r.config_revision)
+  OR (r.action='revoke' AND NOT EXISTS(SELECT 1 FROM module_access_roles WHERE instance_id=r.instance_id AND visitor_id=r.visitor_id AND role=r.role AND state='granted'))
+  OR (r.action='grant' AND (EXISTS(SELECT 1 FROM module_access_roles WHERE instance_id=r.instance_id AND visitor_id=r.visitor_id AND role=r.role AND state='granted')
+   OR NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=r.visitor_id AND project_id=r.project_id AND revoked=0)
+   OR NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id WHERE i.id=r.instance_id AND a.state='active'
+    AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.roles') WHERE value=r.role))))));
+END;
+CREATE TRIGGER module_access_role_apply AFTER INSERT ON module_access_role_applies BEGIN
+ UPDATE module_access_roles SET state=CASE (SELECT action FROM module_access_role_reviews WHERE id=NEW.review_id) WHEN 'grant' THEN 'granted' ELSE 'revoked' END,
+  review_id=NEW.review_id,access_revision=NEW.access_revision,updated_at=max(updated_at,NEW.created_at)
+  WHERE (instance_id,visitor_id,role)=(SELECT instance_id,visitor_id,role FROM module_access_role_reviews WHERE id=NEW.review_id);
+ INSERT INTO module_access_roles(instance_id,visitor_id,project_id,role,state,review_id,access_revision,granted_at,updated_at)
+  SELECT r.instance_id,r.visitor_id,r.project_id,r.role,'granted',r.id,NEW.access_revision,NEW.created_at,NEW.created_at FROM module_access_role_reviews r
+  WHERE r.id=NEW.review_id AND r.action='grant' AND NOT EXISTS(SELECT 1 FROM module_access_roles x WHERE x.instance_id=r.instance_id AND x.visitor_id=r.visitor_id AND x.role=r.role);
+ UPDATE module_access_states SET revision=NEW.access_revision,updated_at=max(updated_at,NEW.created_at)
+  WHERE instance_id=(SELECT instance_id FROM module_access_role_reviews WHERE id=NEW.review_id) AND revision=NEW.access_revision-1;
+ SELECT RAISE(ABORT,'module_access_changed') WHERE NOT EXISTS(SELECT 1 FROM module_access_states s JOIN module_access_role_reviews r ON r.instance_id=s.instance_id WHERE r.id=NEW.review_id AND s.revision=NEW.access_revision);
+END;
+CREATE TRIGGER module_access_role_apply_immutable BEFORE UPDATE ON module_access_role_applies BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
+CREATE TRIGGER module_access_role_review_retained BEFORE DELETE ON module_access_role_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM app_visitors WHERE id=OLD.visitor_id)
+ AND EXISTS(SELECT 1 FROM module_instances WHERE id=OLD.instance_id) AND EXISTS(SELECT 1 FROM module_access_role_applies WHERE review_id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'module_access_receipt_retained'); END;
+
+-- Revoking or erasing a visitor suppresses their grants and advances every access revision of the project, so
+-- decisions and writes bound to the earlier principal fail at their next check or inside their commit.
+CREATE TRIGGER module_access_visitor_revoked AFTER UPDATE OF revoked ON app_visitors WHEN NEW.revoked=1 AND OLD.revoked=0 BEGIN
+ UPDATE module_access_roles SET state='revoked',review_id=NULL,access_revision=coalesce((SELECT revision+1 FROM module_access_states WHERE instance_id=module_access_roles.instance_id),access_revision),updated_at=max(updated_at,unixepoch())
+  WHERE visitor_id=NEW.id AND state='granted';
+ UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,unixepoch()) WHERE project_id=NEW.project_id;
+END;
+CREATE TRIGGER module_access_visitor_deleted AFTER DELETE ON app_visitors BEGIN
+ UPDATE module_access_states SET revision=revision+1,updated_at=max(updated_at,unixepoch()) WHERE project_id=OLD.project_id;
+END;

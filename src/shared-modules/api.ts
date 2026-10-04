@@ -2,6 +2,7 @@ import {canonicalJSON,jsonDigest} from '../project-specification/v2/json';
 import {workspacePredicate} from '../workspace-identity/admission';
 import {ModuleError,decideModule,moduleOperations,moduleRequest,type ModuleDecision,type ModuleOperation,type ModulePrincipal,type ModuleRequest} from './policy';
 import {resolveResource,type ResolvedResource} from './registry';
+import {accessHandlers,visitorPredicate} from './access';
 
 /** WH-125 shared module request engine (whumpo-modules v1). Every call validates the current envelope,
  * resolves exactly one scoped resource from the server-derived principal, evaluates the policy table and,
@@ -13,9 +14,10 @@ export type ModuleReadHandler=(db:D1Database,context:ModuleContext)=>Promise<Rec
 /** Writes return statements to commit atomically and a bounded result that must not echo submitted values. */
 export type ModuleWriteHandler=(db:D1Database,context:ModuleContext)=>Promise<{statements:D1PreparedStatement[];result:Record<string,unknown>}>;
 export type ModuleHandlers=Partial<{[K in ModuleOperation]:(typeof moduleOperations)[K]['write'] extends true?ModuleWriteHandler:ModuleReadHandler}>;
-/** Delivered operation handlers. WH-125 delivers the engine only; WH-126–129 register their kind's handlers
- * here. An operation without a handler is `unavailable`, never a generated or fallback implementation. */
-export const moduleHandlers:ModuleHandlers=Object.freeze({});
+/** Delivered operation handlers. WH-125 delivered the engine; WH-126 registers `access.me` and `access.list`, and
+ * WH-127–129 register their kind's handlers here. An operation without a handler is `unavailable`, never a generated
+ * or fallback implementation. */
+export const moduleHandlers:ModuleHandlers=Object.freeze({...accessHandlers});
 
 const denied=(d:Extract<ModuleDecision,{decision:'deny'}>)=>new ModuleError(d.reason==='not_found'?'not_found':'forbidden');
 const principalKey=(p:ModulePrincipal)=>p.kind==='owner'?['owner',p.userId,p.projectId]:p.kind==='visitor'?['visitor',p.visitorId,p.projectId]:['public',p.projectId];
@@ -24,8 +26,8 @@ const principalKey=(p:ModulePrincipal)=>p.kind==='owner'?['owner',p.userId,p.pro
 function principalPredicate(db:D1Database,p:ModulePrincipal){
  if(p.kind==='owner'){const actor=workspacePredicate(db,p.userId);return {sql:`(${actor.sql} AND EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?))`,params:[...actor.params,p.projectId,p.userId]};}
  if(p.kind==='public')return {sql:'1',params:[] as unknown[]};
- // Visitor sessions and the access revision are bound by WH-126; until then a visitor principal cannot commit.
- return {sql:'0',params:[] as unknown[]};
+ // WH-126: the same visitor session, identity, active access instance, access revision and staff decision.
+ return visitorPredicate(p);
 }
 type Receipt={request_hash:string;result_json:string;created_at:number;config_revision:number};
 const response=(r:ModuleRequest,result:Record<string,unknown>,receipt:{createdAt:number;replayed:boolean}|null)=>({api:'whumpo-modules' as const,version:1 as const,operation:r.operation,resourceId:r.resourceId,configRevision:r.configRevision,requestId:r.requestId,receipt,result});
@@ -44,8 +46,10 @@ export async function handleModuleRequest(db:D1Database,principal:ModulePrincipa
  if(!op.write){
   if(!handler)throw new ModuleError('unavailable','This module operation is not delivered yet.');
   const result=await (handler as ModuleReadHandler)(db,context);
-  // Fence the read: a revocation, disable or revision change while reading discards the result.
+  // Fence the read: a revocation, disable, role or revision change while reading discards the result.
   await authorize(db,principal,request);
+  const fence=principalPredicate(db,principal);
+  if(!await db.prepare(`SELECT 1 WHERE ${fence.sql}`).bind(...fence.params).first())throw new ModuleError('forbidden');
   return response(request,result,null);
  }
  const requestHash=await jsonDigest({operation:request.operation,resourceId:request.resourceId,configRevision:request.configRevision,target:request.target,input:request.input,principal:principalKey(principal)},65536);

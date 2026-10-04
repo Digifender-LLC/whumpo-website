@@ -27,6 +27,8 @@ export type ChatControl =
  | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
  | {type:'moduleActivationApply';reviewId:string;reviewDigest:string;expectedRevision:number}
+ | {type:'accessRoleReview';projectId:string;instanceId:string;visitorId:string;action:'grant'|'revoke'}
+ | {type:'accessRoleApply';reviewId:string;reviewDigest:string;expectedRevision:number}
  | {type:'appRestore';projectId:string;reviewId:string;confirmation:'RESTORE'}
  | {type:'appMaintenance';kind:'upgrade'|'rollback'|'cancel';reviewId:string;confirmation:'UPGRADE'|'ROLLBACK'|'CANCEL'}
  | {type:'reviewDetail';kind:'backend'|'test';targetId:string}
@@ -61,6 +63,15 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='moduleActivationApply'&&exact(a,['type','reviewId','reviewDigest','expectedRevision'])&&Object.keys(a).length===4&&id(a.reviewId)&&typeof a.reviewDigest==='string'&&/^[0-9a-f]{64}$/.test(a.reviewDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
   const action={type:'moduleActivationApply' as const,reviewId:a.reviewId,reviewDigest:a.reviewDigest,expectedRevision:Number(a.expectedRevision)};
   return {action,command:`/confirm-module-activation ${action.reviewId} ${action.reviewDigest} ${action.expectedRevision}`,label:'Apply the exact reviewed module activation change.',recentAuth:true};
+ }
+ // WH-126: ids, the access instance id, an opaque visitor id and the access revision only.
+ if(a.type==='accessRoleReview'&&exact(a,['type','projectId','instanceId','visitorId','action'])&&Object.keys(a).length===5&&id(a.projectId)&&id(a.visitorId)&&typeof a.instanceId==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(a.instanceId)&&(a.action==='grant'||a.action==='revoke')){
+  const action={type:'accessRoleReview' as const,projectId:a.projectId,instanceId:a.instanceId,visitorId:a.visitorId,action:a.action as 'grant'|'revoke'};
+  return {action,command:`/review-access-role ${action.projectId} ${action.instanceId} ${action.visitorId} ${action.action}`,label:`Review ${action.action==='grant'?'granting':'removing'} the staff role for visitor ${action.visitorId.slice(0,8)}.`,recentAuth:false};
+ }
+ if(a.type==='accessRoleApply'&&exact(a,['type','reviewId','reviewDigest','expectedRevision'])&&Object.keys(a).length===4&&id(a.reviewId)&&typeof a.reviewDigest==='string'&&/^[0-9a-f]{64}$/.test(a.reviewDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=1){
+  const action={type:'accessRoleApply' as const,reviewId:a.reviewId,reviewDigest:a.reviewDigest,expectedRevision:Number(a.expectedRevision)};
+  return {action,command:`/confirm-access-role ${action.reviewId} ${action.reviewDigest} ${action.expectedRevision}`,label:'Apply the exact reviewed staff role change.',recentAuth:true};
  }
  if(a.type==='confirm'&&exact(a,['type','kind','reviewId'])&&typeof a.kind==='string'&&Object.hasOwn(confirmationControls,a.kind)&&id(a.reviewId)){
   const kind=a.kind as keyof typeof confirmationControls,c=confirmationControls[kind];

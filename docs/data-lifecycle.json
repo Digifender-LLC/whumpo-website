@@ -2100,7 +2100,7 @@
       "scope": "project",
       "purpose": "Versioned brand assets, shared styles and reusable sections.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -2187,7 +2187,7 @@
       "scope": "project",
       "purpose": "Private lead stages, notes and due dates derived from admitted submissions.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -2229,7 +2229,7 @@
       "scope": "owner",
       "purpose": "Bounded external mailbox/calendar/CRM content and reviewed action receipts.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -2324,7 +2324,7 @@
       "scope": "owner",
       "purpose": "Issued maintained definitions, draft answers, immutable information submissions and separate admitted continuation receipts. Bounded submitted-task decision summaries and unresolved questions linked to the exact owner Chat result. Server-written creation locators bind an additional project to the originating task independently of untrusted model summaries.",
       "currentRetention": "Owner-approved LC-10, deployed for the existing form storage: unsubmitted form payloads/defaults and drafts become unavailable seven days after the last saved edit (issuance when untouched); hourly maintenance erases up to 100 eligible payloads per pass. Explicit cancel erases its payload immediately. Minimal immutable identity/digest/request-hash metadata survives for replay protection. Submitted answers and unresolved continuations are excluded. Form authority expiry remains distinct from payload retention. Project and account deletion refuse pending/unknown continuations. The account guard runs before the parent user row disappears, so cascades cannot erase unresolved custody. After explicit reconciliation, project deletion cascades content but request tombstones remain until account removal. The current maintained form client expires local unsent answers after seven days since the last local edit, independently retains exact unresolved requests, and clears form recovery on detected account change/sign-out. A server-unavailable form clears its locally edited draft while preserving any unresolved request. Browser/query copies are excluded from PWA Cache Storage. Account-scoped project-intake records do not cascade with a selected project; immutable submitted selection UUIDs remain historical facts with no resource authority. Maintained writing-style submissions have no downstream continuation record. Current project selection, additional-project briefs and custom website-planning forms use the separately receipted model continuation; saving answers alone never dispatches it. Explicit user-requested correction successors carry earlier answers as user-provenance defaults and receive their own seven-day draft clock; predecessor retention is unchanged. Unavailable selected projects are omitted from new defaults, while original submitted facts remain immutable. Project-status card definitions retain only the maintained binding reference under the existing form policy. Read results are private/no-store, opened on demand, never persisted in sessionStorage, history or export and never sent to inference. The mounted query has zero inactive retention, is aborted/evicted on collapse/navigation, and uses the shared account/sign-out fence. Failed, denied or refreshing reads do not show cached project values. Current local recovery also preserves bounded finite numbers, booleans and unique string lists, including zero, false and empty lists. Incomplete numeric or local-time text stays in the same seven-day local draft, not a server submission; explicit request creation validates a separate typed snapshot. Unresolved exact typed requests retain their independent receipt lifetime and account/sign-out clearing. No extra storage class, model context or default is created. Shared resource option queries are also keyed by field and collection, hide earlier names while refreshing or after failure/denial, and retain metadata only while mounted with zero inactive retention. Recovery holds selected IDs only. The reusable photo option adapter introduces no persisted photo answer or runtime photo-form admission; its attachment-copy lifecycle remains a prerequisite for new issuance. Maintained photo upload handoffs reuse the current view envelope and seven-day untouched interaction retention. They store a fixed binding and owned project scope only, with no photo IDs, defaults, answers, bytes or automatic continuation. Only explicit cancel is admitted; it removes the interaction payload and retains its exact receipt. Original upload recovery belongs to the existing file-storage class and is independent of handoff expiry/discard. Current retained history explicitly identifies form versus view and never treats a handoff as evidence of upload or clearance. Current source stores append-only task progress with the immutable submission, task revision and Chat turn. It follows submitted interaction custody and cascades with its submission/task/account; project-scoped task memory also follows its project. Account-scoped additional-project creation locators deliberately survive project deletion. The immutable server-written created_project_id is unique per task and admitted only alongside that owned project and its actual private specification creation receipt. It grants no current resource access. Current reads and subsequent effects recheck ownership and feature admission; removal or transfer cannot cause the same task to recreate a project. Direct deletion of the creation progress record is refused while its task and owner remain. Account/task cascade removes the locator with its independent submitted-task custody. No seven-day draft erasure applies to submitted task memory. It is excluded from ordinary model context; current metadata exposes only task/project/submission IDs, declared purpose, state and question count. Explicit same-task continuation sends the summary/questions, validated submitted fields and current specification to one bounded follow-up. Failed/unknown work never overwrites the last successful state. Broader export/closure and restore suppression retain their roadmap owners. Composed gallery-photo answers/defaults and browser recovery contain opaque existing photo IDs only. LC-10 expiry/discard removes unsubmitted references without deleting the independent asset. Submitted IDs remain historical facts after photo removal and cannot authorize access; current lookups/continuations recheck ownership, digest and clearance. Allowed selected photo names/dimensions may enter existing inspection, model-request, reply, summary and independently approved website copies; those follow their existing retention rather than asset deletion automatically erasing them. Temporary owner-task views reuse the immutable Chat interaction envelope, same task correction links and seven-day issuance expiry/untouched payload retention. They store the current WorkspaceView selectors and fixed registered cards, never query results. Refresh does not extend retention. Explicit dismissal uses the existing cancel request, wipes the payload and retains the exact receipt; late readbacks cannot reopen it. View correction supersedes the earlier interaction in the same task and scope. No submission or continuation is admitted for a view.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Current scoped cancel and the fixed seven-day LC-10 maintenance predicate, enforced by schema constraints. Direct receipt deletion and submitted-payload erasure are refused. Account/project cascades are not a complete closure or independently restore-safe erasure workflow; broader LC policies and backup suppression remain open.",
       "exportPolicy": "Current Chat v2 transcript export includes retained unsubmitted drafts with answer revision, saved/observed timestamps, alongside allowlisted titles, defaults, accepted answers, state and correction links. Ordinary history omits unsent draft values, including copied replacement defaults. Canceled/overdue payloads project only removal metadata, before and after physical cleanup. No active bindings, digests, actor scope, preview URLs or approval controls. Whole-account export remains separate.",
       "references": [
@@ -2394,7 +2394,7 @@
       "scope": "project",
       "purpose": "Private release candidates, environments and exact promotion receipts.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -2436,7 +2436,7 @@
       "scope": "mixed",
       "purpose": "Membership, role and approval relationships between accounts and workspaces.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -2478,7 +2478,7 @@
       "scope": "mixed",
       "purpose": "Exact domain intent, actor/resource pins and durable delivery/recovery metadata. WH-052 supplies the shared decision; the first implementing domain registers its exact journal/outbox storage here, with later domains extending that same contract.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01\u201309 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
+      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
       "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
       "references": [
@@ -2559,6 +2559,54 @@
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; the registry stores configuration and authority metadata, not visitor content, and blanket encryption would not remove authorized processing access.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "project-roles",
+      "tables": [
+        "module_access_states",
+        "module_access_roles",
+        "module_access_role_reviews",
+        "module_access_role_links",
+        "module_access_role_applies"
+      ],
+      "scope": "mixed",
+      "purpose": "WH-126 access module: the per-instance access revision, `staff` role grants and revocation suppressions on project visitor identities (app_visitors), exact owner role reviews, Chat presentation links and applied receipts. Distinct from WH-054 workspace memberships; a staff role grants no workspace session, Chat, publication, spending or identity management. No credential, recovery code, session or visitor-submitted value is stored here.",
+      "currentRetention": "Access state and the current grant row (granted or revoked suppression) remain while the access instance and visitor exist; revocation keeps the row as `revoked` with the review and access revision that changed it. Unapplied role reviews expire after ten minutes and are pruned in bounded batches when a later review is prepared; a review with an applied receipt is retained while its project, account, visitor and instance exist. Visitor erasure, instance removal, project and account deletion cascade.",
+      "proposedRetention": "Keep grants and receipts while the access instance and visitor exist; revoked suppressions and receipts are bounded audit metadata never reinstated by restore (restored rows create no authority). Decide a terminal-receipt schedule with the WH-077 export composition.",
+      "deletionAuthority": "Owner exact grant/revoke reviews (revoke needs identity and ownership only and outlives plan loss and instance disable); owner visitor revocation and the visitor's own reviewed erasure suppress or delete grants; project/account deletion cascades. No staff self-service role change; models, Chat text, visitors and jobs cannot grant.",
+      "exportPolicy": "Owner staff list (access.roles@1) with opaque visitor ids, enrollment dates and staff state. Project export serializer not yet delivered (WH-077); never visitor credentials, passkey material, recovery codes, sessions or documents.",
+      "references": [
+        "src/shared-modules/schema.sql",
+        "src/shared-modules/access.ts",
+        "src/shared-modules/access-roles.ts",
+        "docs/shared-modules.md",
+        "docs/app-data.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current project owner through access.roles@1, access.list and exact review/readback handlers; a visitor sees only their own roles through access.me; the shared module resolver and commit predicates for serving decisions"
+        ],
+        "processors": [
+          "Deterministic role review, access revision and session predicates inside committing statements; zero maintainer inference, model context or provider access"
+        ],
+        "remainingExposure": [
+          "Raw rows (visitor ids, review digests and dates) are readable to privileged operators."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "The roles store authorization metadata, not visitor content; blanket encryption would not remove the authorized processing access needed to decide every request.",
         "requirements": [
           "DP-02",
           "DP-03",
@@ -2655,51 +2703,6 @@
       },
       "implementationPackets": [
         "WH-128"
-      ]
-    },
-    {
-      "id": "project-roles",
-      "tables": [],
-      "scope": "mixed",
-      "purpose": "WH-067 access module role grants, revocations and owner role reviews binding the project `staff` role to project visitor identities. Distinct from WH-054 workspace memberships; a staff role grants no workspace session.",
-      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation. Specification schema 3 can describe this configuration; nothing stores or serves it yet.",
-      "proposedRetention": "Current grants retained while the access instance and visitor exist; revocation takes effect at the next decision. Revoked grant and review receipts are bounded audit metadata decided in WH-126 and are never reinstated by restore. Account or project closure deletes grants.",
-      "deletionAuthority": "Owner exact role grant/revoke review and instance disable; visitor erasure revokes their grants. No staff self-service role change.",
-      "exportPolicy": "Owner role list with opaque IDs and dates in the project export; no visitor credentials, passkey material or recovery codes.",
-      "references": [
-        "docs/shared-modules.md",
-        "src/project-specification/v3/modules.ts",
-        "docs/data-protection.md",
-        "docs/roadmap/backlog.json",
-        "docs/inference-privacy.md",
-        "docs/app-data.md"
-      ],
-      "storageStatus": "planned",
-      "protection": {
-        "profile": "planned-adapter",
-        "storage": [
-          "not-admitted"
-        ],
-        "readers": [
-          "Owner role panel and the access module policy check; a staff member sees only their own role through access.me."
-        ],
-        "processors": [
-          "Deterministic role review and revision checks inside committing statements; zero maintainer inference."
-        ],
-        "remainingExposure": [
-          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
-        ],
-        "decision": "planned-adapter",
-        "rationale": "Registered by WH-124 before any table so the WH-067 module slices cannot create unclassified visitor data or a second authority.",
-        "requirements": [
-          "DP-02",
-          "DP-03",
-          "DP-04",
-          "DP-05"
-        ]
-      },
-      "implementationPackets": [
-        "WH-126"
       ]
     }
   ],

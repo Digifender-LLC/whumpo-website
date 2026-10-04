@@ -72,6 +72,8 @@ const metrics={
  activeModuleInstances:['module_instances','project_id IN (SELECT id FROM owned_projects)',"EXISTS(SELECT 1 FROM module_activations a WHERE a.instance_id=module_instances.id AND a.state='active')"],
  moduleActivationReceipts:['module_activation_applies','user_id'],
  moduleRequestReceipts:['module_request_receipts','project_id IN (SELECT id FROM owned_projects)'],
+ staffRoles:['module_access_roles','project_id IN (SELECT id FROM owned_projects)',"state='granted'"],
+ accessRoleReceipts:['module_access_role_applies','user_id'],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

@@ -28,6 +28,10 @@ Provider calls recheck current credential and inclusion together in one database
 
 [Module](shared-modules.md#instance-registry-activation-reviews-and-policy-engine-wh-125--october-4-2026-utc) activation reviews consume `core.forms` (records) or `core.editing` (other kinds): `prepare` when the review is prepared and `confirm` composed with the current principal into the applied-receipt insert, after a recent passkey sign-in. Disabling, the `modules` view and owner module reads need only current identity and ownership. Visitor/public module serving checks the instance's activation state, never the owner's subscription, so plan loss blocks new activation or widening without stopping published serving.
 
+### Staff role reviews (WH-126)
+
+[Staff role](shared-modules.md#access-module-staff-roles-wh-126--october-4-2026-utc) grants consume `core.editing`: `prepare` when the `accessRoleReview` is prepared and `confirm` composed with the current principal into the applied-receipt insert, after a recent passkey sign-in. Removing a role, the `access-roles` view and owner `access.list` need only current identity and ownership, in every activation state. Visitor/staff serving (`access.me`, staff decisions) checks the access instance's activation and the visitor's own session, never the owner's subscription.
+
 ## Protected recovery and local access
 
 Local connection status, owned history, supported source downloads and disconnect remain outside the paid-feature gate. No plan transition takes down a published site. GitHub/DNS history and replay recheck project ownership; a previous owner does not inherit protected access after ownership changes.

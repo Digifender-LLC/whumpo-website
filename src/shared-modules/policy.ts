@@ -63,10 +63,12 @@ export function moduleRequest(value:unknown):ModuleRequest{
  return value as ModuleRequest;
 }
 
-/** Server-derived principals. Visitor/staff principals arrive with the access module (WH-126); WH-054
- * workspace members and maintenance jobs are never module principals. */
+/** Server-derived principals. A visitor principal is derived only from the project's visitor session cookie on the
+ * visitor origin by the access module (WH-126, `visitorPrincipal` in access.ts): the governing access instance, the
+ * session hash, current roles and the access revision are re-checked inside every committing statement. WH-054
+ * workspace members, workspace cookies and maintenance jobs are never module principals. */
 export type ModulePrincipal={kind:'owner';userId:string;projectId:string}|{kind:'public';projectId:string}
- |{kind:'visitor';projectId:string;visitorId:string;roles:[]|['staff'];accessRevision:number};
+ |{kind:'visitor';projectId:string;visitorId:string;sessionHash:string;accessInstanceId:string;roles:[]|['staff'];accessRevision:number};
 export type ModuleDecision={decision:'allow';fields:string[]|null;scope:'all'|'own'|null}|{decision:'deny';reason:'not_found'|'forbidden'|'sign_in_required'};
 
 /** Policy table over the frozen configuration. The registry composes the instance state, revisions and the

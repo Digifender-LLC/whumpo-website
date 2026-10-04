@@ -5,6 +5,9 @@ import {readAppData,readAppReceipt,revokeAppSession,transitionAppData} from './a
 import {BackendError} from './backend-versions';
 import {liveAppPage} from './app-pages';
 import {backendFormConfig} from './backend-form-render';
+import {handleModuleRequest} from './shared-modules/api';
+import {visitorPrincipal} from './shared-modules/access';
+import {ModuleError,moduleRequest} from './shared-modules/policy';
 import type {AuthenticationResponseJSON,RegistrationResponseJSON} from '@simplewebauthn/server';
 
 type AppEnv = Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'>;
@@ -59,6 +62,16 @@ export async function applicationGateway(request:Request,env:AppEnv):Promise<Res
   }
   const deletionStatus=path.match(new RegExp(`^account/deletions/(${uuid})/(0|[1-9][0-9]{0,15})$`));
   if(method==='GET'&&deletionStatus)return json(await readAppDeletion(env.DB,session,project,deletionStatus[1],Number(deletionStatus[2])));
+  // WH-126 shared module requests (whumpo-modules v1), same-origin POST only. The principal is derived solely from this
+  // project's visitor session cookie (never a workspace cookie); module serving checks the instance's own activation.
+  if(path==='modules'){
+   if(method!=='POST')return json({error:'Not found'},404);
+   try{
+    const envelope=moduleRequest(await body(request));
+    const principal=await visitorPrincipal(env.DB,session,project,envelope.resourceId)??{kind:'public' as const,projectId:project};
+    return json(await handleModuleRequest(env.DB,principal,envelope));
+   }catch(cause){if(cause instanceof ModuleError)return json(cause.body(),cause.status);throw cause;}
+  }
   const page=await liveAppPage(env.DB,project);if(!page)return json({error:'Application page unavailable'},404);
   if(method==='GET'&&path==='config')return json({form:JSON.parse(page.config_json),pageId:page.id});
   if(method==='GET'&&path==='export')return await exportAppAccount(env.DB,session,project);

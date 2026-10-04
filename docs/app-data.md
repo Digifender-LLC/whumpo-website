@@ -2,6 +2,10 @@
 
 **Current Chat contract, October 1, 2026:** [Natural-language Chat](natural-language-chat.md) replaces the historical command and guided-navigation examples below. Current app-maintenance inventories return saved review IDs and plain-language guidance. Exact approval controls and their owned immutable receipt checks remain authoritative. The reply cleanup is source-verified separately from test deployment in the [current-version policy](current-version-policy.md).
 
+## Staff roles on visitor identities (WH-126) — October 4, 2026
+
+**Implemented in source and verified locally; not deployed.** The [access module](shared-modules.md#access-module-staff-roles-wh-126--october-4-2026-utc) uses these visitor identities, passkeys, invitations, recovery and sessions unchanged as its visitor principals and adds an owner-reviewed `staff` role, an access revision and `POST /modules` (whumpo-modules v1, `access.me`) on the visitor origin. Owner visitor revocation and the visitor's own reviewed erasure now also suppress or delete staff grants and advance the access revision. Visitor identity is **still owned by the application space** (`app_visitors.project_id → app_spaces`): moving it to the access instance by current-schema cutover is not done, so staff still require an enabled visitor application. The per-visitor document and QuickJS transitions are unchanged.
+
 ## Current owner and visitor authority — October 2, 2026
 
 Current local verification uses the complete schema and admitted workspace scopes for owner program tests, activation, invitations, access management and page reviews. Visitor sign-in, sessions, document transitions, recovery and deletion keep their separate project-scoped authority. A valid workspace cookie cannot authenticate a visitor. The visitor passkey suite verifies actual signatures, challenge/replay checks, host separation and page withdrawal during sign-in/transition; owner stale-proof cases use a distinct aged current session.

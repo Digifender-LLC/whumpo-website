@@ -41,6 +41,7 @@ import {listPhotos} from './files';
 import {photoRemovalCommand} from './photo-removal';
 import {applyServiceClientsCommand,serviceClientChatLinks} from './project-specification/service-clients/store';
 import {prepareModuleActivationCommand,applyModuleActivationCommand,moduleActivationChatLinks,moduleActivationFailure} from './shared-modules/activation';
+import {prepareAccessRoleCommand,applyAccessRoleCommand,accessRoleChatLinks,accessRoleFailure} from './shared-modules/access-roles';
 import {ModuleError} from './shared-modules/policy';
 import {applySpecificationCommand,specificationChatLinks} from './project-specification/store';
 import {inspectWorkspace} from './workspace-read';
@@ -107,6 +108,7 @@ async function projectChatTurns(db:D1Database,userId:string,turns:Record<string,
   await serviceClientActivationChatLinks(db,userId,turns as Record<string,unknown>[]);
   await specificationChatLinks(db,userId,turns as Record<string,unknown>[]);
   await moduleActivationChatLinks(db,userId,turns as Record<string,unknown>[]);
+  await accessRoleChatLinks(db,userId,turns as Record<string,unknown>[]);
   await interactionChatLinks(db,userId,turns as {id:unknown;[key:string]:unknown}[]);
 }
 export async function readSavedChatTurn(db:D1Database,userId:string,turnId:string){
@@ -207,6 +209,9 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   try{
     if(control?.action.type==='moduleActivationReview')moduleReview=await prepareModuleActivationCommand(db,userId,input.id,command);
     if(control?.action.type==='moduleActivationApply')moduleApply=await applyModuleActivationCommand(db,userId,input.id,command);
+    // WH-126 staff role reviews share the module review slot: exactly one typed control runs per turn.
+    if(control?.action.type==='accessRoleReview')moduleReview=await prepareAccessRoleCommand(db,userId,input.id,command);
+    if(control?.action.type==='accessRoleApply')moduleApply=await applyAccessRoleCommand(db,userId,input.id,command);
   }catch(e){if(e instanceof ModuleError)return {status:e.status,error:e.message};throw e;}
   const removal = await photoRemovalCommand(db,userId,input.id,command);
   const domain = await domainCommand(db,userId,input.id,command);
@@ -336,7 +341,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       if(matches(recovered))return {status:200};
       return {status:String(cause).includes('specification_held')?423:409,error:String(cause).includes('version_removal_specification')?'This version is retained by the current website configuration or a pending review.':String(cause).includes('specification_quota')?'Website review history has reached its test capacity.':'The website or its review changed, expired or is held for safety checks. Ask for a fresh review.'};
     }
-    const moduleFailure=moduleActivationFailure(cause);
+    const moduleFailure=moduleActivationFailure(cause)??accessRoleFailure(cause);
     if(moduleFailure){
       const recovered=await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string;action_json:string|null;revision:number}>();
       if(matches(recovered))return {status:200};
