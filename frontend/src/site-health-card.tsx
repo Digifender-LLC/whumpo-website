@@ -26,6 +26,6 @@ function ProjectHealth({p,busy,onCheck}:{p:ProjectDiagnostics;busy:boolean;onChe
  return <section aria-label={p.name+' site health'} className="space-y-3 rounded-md bg-background p-4"><p className="font-semibold break-words">{p.name}</p>
   <dl className="space-y-2 text-sm">{rows.map(([label,value,at,evidence])=><div key={label} className="flex flex-wrap justify-between gap-x-4 gap-y-1"><dt className="text-muted-foreground">{label}</dt><dd className="text-right break-words">{value}<br/><span className="text-xs text-muted-foreground">{evidence}: {when(at)}</span></dd></div>)}</dl>
   <ul className="space-y-2 text-sm">{p.findings.filter(f=>f.severity!=='ok').map(f=><li key={f.code}><span className="font-medium">{mark[f.severity]} · {f.area}.</span> {f.message}{f.action&&<> <span className="block text-xs text-muted-foreground">{f.action.label}: <code>{f.action.command}</code></span></>}</li>)}</ul>
-  {onCheck&&<Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={onCheck}>{busy?'Checking…':'Check this website now'}</Button>}
+  {onCheck&&<Button type="button" variant="secondary" className="min-h-11" disabled={busy} onClick={onCheck}>{busy?'Checking…':'Check this website now'}</Button>}
  </section>;
 }

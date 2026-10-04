@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {ciCommit,ciReview,ciPreflight,ciRelease} from '../tools/deploy-ci.mjs';
+import {ciCommit,ciReview,ciPreflight,ciRelease,scrubCIOverrides} from '../tools/deploy-ci.mjs';
 import {validateCompatibility} from '../tools/release-manifest.mjs';
 
 // Synthetic only: no provider, credential or remote call.
@@ -26,7 +26,10 @@ assert.throws(()=>ciPreflight(driver,observed({schema:{sha256:'0'.repeat(64),obj
 assert.throws(()=>ciPreflight(driver,observed({workers:{platform:{databases:[{binding:'DB',id:'22222222-2222-4222-8222-222222222222'}]}}}),artifact),/control database differs/);
 assert.throws(()=>ciPreflight(driver,observed({cms:[{project_id:'x'}]}),artifact),/CMS registrations/);
 
+const scrubbed=scrubCIOverrides({WRANGLER_CI_OVERRIDE_NAME:'whumpo-platform',WRANGLER_CI_MATCH_TAG:'t',KEEP:'1'});
+assert.deepEqual(scrubbed,{KEEP:'1'});
+assert.throws(()=>scrubCIOverrides({WRANGLER_CI_OVERRIDE_NAME:'whumpo-runtime'}),/linked to whumpo-runtime/);
 let touched=false;
 await assert.rejects(()=>ciRelease(process.cwd(),{observe:async()=>{touched=true;}},{env:{}}),/only in Cloudflare Workers Builds/);
 assert.equal(touched,false);
-console.log('CI release: commit identity, generated schema-unchanged review, schema/database/CMS refusals and the Workers Builds-only guard passed. No provider calls.');
+console.log('CI release: commit identity, generated schema-unchanged review, schema/database/CMS refusals and Workers Builds name-override removal and the Workers Builds-only guard passed. No provider calls.');

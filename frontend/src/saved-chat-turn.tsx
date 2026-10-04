@@ -13,7 +13,7 @@ export function SavedChatTurn({owner,id,children}:{owner:string;id:string;childr
   return turn;
  },staleTime:0,gcTime:0,refetchOnWindowFocus:true,refetchInterval:q=>q.state.data?.status==='pending'?2500:false});
  return <section data-saved-turn-id={id} tabIndex={-1} aria-label="Reopened message" className="rounded-lg border p-4 sm:p-6 mb-8">
-  <div className="flex flex-wrap items-center justify-between gap-3 mb-4"><h2 className="font-semibold">Saved message</h2><Button variant="ghost" className="min-h-11 h-auto max-w-full whitespace-normal text-left" disabled={saved.isFetching} onClick={()=>void saved.refetch()}>Check saved message</Button></div>
+  <div className="flex flex-wrap items-center justify-between gap-3 mb-4"><h2 className="font-semibold">Saved message</h2><Button variant="quiet" className="min-h-11 h-auto max-w-full whitespace-normal text-left" disabled={saved.isFetching} onClick={()=>void saved.refetch()}>Check saved message</Button></div>
   {saved.isFetching||saved.isPending?<p role="status">Checking this saved message…</p>:saved.error?<p role="alert">{message(saved.error)} Use Check saved message to try again.</p>:saved.data?children(saved.data):null}
  </section>;
 }
