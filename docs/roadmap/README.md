@@ -8,6 +8,7 @@ Whumpo should first become a dependable way for an invited customer to create, i
 
 - [GitHub execution hub](https://github.com/zemdregon/whumpo/issues/2): task issues, claims, progress and handoffs. The complete longer-term plan remains in the backlog below.
 - [Logical resources and workload placement](../workload-placement.md): WH-071 interface, lifecycle/export and conditional hosting decision.
+- [Shared modules](../shared-modules.md): WH-067 contract, existing-service mapping and WH-123–130 slices (planned).
 - [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths, current build order and persistent graph checks.
 - [Full backlog](backlog.md): every task, dependency, acceptance criterion and verification boundary.
 - [Chat as the primary workspace](chat-first-experience.md): interactive forms, agent-managed dashboards/views, continuity and WH-105–112 delivery packets.
