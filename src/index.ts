@@ -9,6 +9,7 @@ import {WorkspaceViewError} from './workspace-view-contract';
 import {handleInteractionRequest} from './chat-interactions/http';
 import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
+import {handleSafetyCaseRequest} from './safety-case-http';
 import {IdentityError} from './workspace-identity/authority';
 import {admitWorkspace,workspaceBindings,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
 import {FeatureInclusionError} from './feature-inclusion';
@@ -136,6 +137,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if (!(await env.API_LIMITER.limit({ key: ip })).success) return error(429, "Too many requests. Try again in a minute.");
   if (method === "GET" && pathname === "/api/plans") return json({ plans: publicPlans, featureCatalogue: launchFeatureCatalogue, domainBenefit, byoc: "contact-us", resourceAllowancesStatus: "launch-targets", currency: "USD", draft: true, checkoutMode: "test", subscriptionsEnabled: subscriptionsEnabled(env) });
   if(pathname.startsWith('/api/auth/'))return error(404,'Not found');
+  // WH-132 restricted operator case surface: own authentication/role gates, never the workspace router.
+  const operator=await handleSafetyCaseRequest(request,env);if(operator)return operator;
   const principal=await workspaceIdentity(request,env);
   const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
