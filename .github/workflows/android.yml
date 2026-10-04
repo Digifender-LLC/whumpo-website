@@ -96,6 +96,13 @@ jobs:
             android/gradle/libs.versions.toml
             android/gradle/wrapper/gradle-wrapper.properties
             android/**/*.gradle.kts
+      # The API 36 emulator needs about 7.4 GB free to create its userdata
+      # partition, more than a stock runner has. Remove unused preinstalled
+      # toolchains (not the Android SDK) before booting it.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /usr/local/lib/node_modules "$AGENT_TOOLSDIRECTORY/CodeQL"
+          df -h /
       - name: Run instrumented tests on emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
@@ -103,9 +110,6 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          # The API 36 image's default userdata partition (~7.2 GB) does not fit
-          # the runner's free disk; a smaller partition is enough for these tests.
-          disk-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
           script: ./gradlew connectedLocalDebugAndroidTest connectedDeployedDebugAndroidTest
