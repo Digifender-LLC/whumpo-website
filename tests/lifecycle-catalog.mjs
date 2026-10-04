@@ -8,7 +8,7 @@ const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
  assert.equal(report.tableCount,201);assert.equal(report.classCount,47);assert.equal(schemaFiles.length,5);
- assert.equal(report.plannedClassCount,6);assert.equal(report.protectionClasses.length,53);
+ assert.equal(report.plannedClassCount,9);assert.equal(report.protectionClasses.length,56);
  assert.equal(report.protectionStatus,'decision-not-runtime-enforcement');
  for(const group of report.protectionClasses){assert.equal(group.profile.endToEndEncrypted,false);assert.equal(group.profile.customerUnlockRequired,false);}
  const connections=report.protectionClasses.find(g=>g.id==='connections');
@@ -17,6 +17,12 @@ try{
  assert.ok(report.protectionClasses.find(g=>g.id==='profile-workspace').protection.storage.includes('control-d1'));
  assert.ok(report.protectionClasses.find(g=>g.id==='project-media').protection.storage.includes('private-r2'));
  assert.equal(report.protectionClasses.find(g=>g.id==='guest-feedback').profile.applicationEncoding,'readable-records');assert.equal(report.protectionClasses.find(g=>g.id==='brand-kits').profile.applicationEncoding,'not-admitted');
+ // WH-124 registers the WH-067 module classes before any table: no runtime storage is admitted.
+ for(const [id,packet] of [['module-records','WH-127'],['module-files','WH-128'],['project-roles','WH-126']]){
+  const group=report.protectionClasses.find(g=>g.id===id);assert.equal(group.storageStatus,'planned');assert.deepEqual(group.implementationPackets,[packet]);assert.deepEqual(group.protection.storage,['not-admitted']);
+  assert.ok(!report.tables.some(t=>t.class===id));
+ }
+ assert.match(report.protectionClasses.find(g=>g.id==='module-records').protection.readers.join(' '),/never enter owner Chat, model context or Chat history/);
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
 
  assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['file_cleanup','identity_challenges','operator_containments','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_preservation_holds','safety_preserved_records']);
@@ -70,5 +76,5 @@ try{
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
- console.log(`Lifecycle catalog passed: 201 tables, 47 current/6 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
+ console.log(`Lifecycle catalog passed: 201 tables, 47 current/9 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
 }finally{db.close();}

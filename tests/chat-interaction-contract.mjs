@@ -213,7 +213,7 @@ try {
   });
   await test('first slice compiles through actual content compiler without publication',async()=>{
     const all=JSON.parse(await readFile('tests/fixtures/project-specification/detailing.json','utf8'));
-    const spec={...all,modules:[{id:'content',version:2}],records:[],forms:[],files:[],access:{roles:[]},integrations:[],rules:[]};
+    const spec={...all,modules:[{id:'content',version:2}],instances:[],integrations:[],rules:[]};
     const request=contentRequest(fixture.contentChange,answers,id(4));
     assert.deepEqual(request,{kind:'specification',operation:'change',projectId:id(4),expectedRevision:3,operations:[{type:'content.replace',contentId:'headline',text:answers.headline},{type:'content.replace',contentId:'services',text:answers.services}]});
     const change=await real.compileSpecificationChange(spec,request.operations,real.currentCompilerLock());

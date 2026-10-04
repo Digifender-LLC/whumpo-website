@@ -7149,12 +7149,12 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/shared-modules.md](../../docs/shared-modules.md)
 - [docs/project-specification.md](../../docs/project-specification.md)
 - [docs/project-specification-compiler.md](../../docs/project-specification-compiler.md)
-- [src/project-specification/v2/schema.ts](../../src/project-specification/v2/schema.ts)
+- [src/project-specification/v3/schema.ts](../../src/project-specification/v3/schema.ts)
 - [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/zemdregon/whumpo/issues/157. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 

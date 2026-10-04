@@ -17,6 +17,7 @@ function descriptor(kind,n=1,deps=[{ref:{...accessRef},module:pin(moduleKinds.ac
 }
 const source={specificationVersionId:'66666666-6666-4666-8666-666666666666',specificationDigest:'b'.repeat(64)};
 const records=()=>({contractVersion:1,descriptor:descriptor('records'),configRevision:3,source,config:{
+ retentionDays:90,
  schemas:[{id:'appointment',fieldsRevision:2,staffWrite:['status'],fields:[
   {key:'name',label:'Name',type:'text',optional:false,read:'submitter'},
   {key:'vehicle',label:'Vehicle',type:'text',optional:true,read:'submitter'},
@@ -65,6 +66,7 @@ invalid('staff write on owner-only field',records,i=>i.config.schemas[0].staffWr
 invalid('public attachment intake',records,i=>i.config.forms[0].uploadCollectionId='uploads','INCOMPATIBLE');
 invalid('form to unknown record',records,i=>i.config.forms[0].recordId='missing','MISSING_REFERENCE');
 invalid('arbitrary field type',records,i=>i.config.schemas[0].fields[0].type='sql','UNSUPPORTED_FIELD');
+invalid('retention outside owner-selectable windows',records,i=>i.config.retentionDays=400,'UNSUPPORTED_RETENTION');
 invalid('roles beyond staff',access,i=>i.config.roles=['admin'],'UNSUPPORTED_ROLE');
 invalid('workspace role reuse',access,i=>i.config.roles=['editor'],'UNSUPPORTED_ROLE');
 invalid('open self-enrollment not frozen',access,i=>i.config.enrollment='open','UNSUPPORTED_ENROLLMENT');

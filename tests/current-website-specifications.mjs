@@ -19,7 +19,7 @@ try{
  for(const user of [owner,other]){const authority=await workspaceFixture(db,m,user);owners.set(user,authority);scopes.set(user,await authority.scope());await m.readChat(scope(user),user);sql.prepare("UPDATE workspace_state SET step='ready' WHERE user_id=?").run(user);}
  for(const [p,u] of [[project,owner],[foreignProject,other]])sql.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Garden','Landscaping','draft',?,?)").run(p,u,now(),now());
  const first=await ask({kind:'specification',operation:'create',projectId:project,config});assert.equal(first.turn.status,'completed',first.turn.assistant_text);assert.equal(first.turn.version_id,first.turn.id);
- const saved=await m.readSpecification(scope(owner),owner,project);assert.equal(saved.revision,1);assert.equal(saved.specification.schemaVersion,2);assert.deepEqual(saved.specification.pages[0].photos,[]);assert.equal(saved.otherDraftChanges,false);
+ const saved=await m.readSpecification(scope(owner),owner,project);assert.equal(saved.revision,1);assert.equal(saved.specification.schemaVersion,3);assert.deepEqual(saved.specification.instances,[]);assert.deepEqual(saved.specification.pages[0].photos,[]);assert.equal(saved.otherDraftChanges,false);
  assert.equal(sql.prepare('SELECT count(*) n FROM project_spec_creations WHERE project_id=?').get(project).n,1);
  assert.equal((await m.ownedPreview({DB:scope(owner)},owner,first.turn.id)).status,200);assert.ok(await m.ownedExport(scope(owner),owner,first.turn.id));
  const initialCalls=calls;assert.equal((await m.sendConversation(scope(owner),owner,{id:first.turn.id,revision:first.revision,content:'Please make the requested website change.'},ai)).status,200);assert.equal(calls,initialCalls);
@@ -43,6 +43,12 @@ try{
  await assert.rejects(m.ownedExport(scope(owner),owner,old),e=>e.status===409);await assert.rejects(m.ownedPreview({DB:scope(owner)},owner,old),e=>e.status===409);
  const retired=m.currentCompilerLock();retired.compiler.version=1;await assert.rejects(m.compileProjectSpecification(saved.specification,retired),e=>e.code==='COMPILER_LOCK_MISMATCH');
  const version1={...saved.specification,schemaVersion:1};await assert.rejects(m.compileProjectSpecification(version1,m.currentCompilerLock()),e=>e.code==='UNSUPPORTED_VERSION');
+ // Schema 2 / project-content@2 were reset at the schema 3 cutover: no reader, lock or SQL admission remains.
+ const schema2={...saved.specification,schemaVersion:2,records:[],forms:[],files:[],access:{roles:[]}};delete schema2.instances;await assert.rejects(m.compileProjectSpecification(schema2,m.currentCompilerLock()),e=>e.code==='UNSUPPORTED_VERSION');
+ const lock2=m.currentCompilerLock();lock2.compiler.version=2;lock2.schemaVersion=2;await assert.rejects(m.compileProjectSpecification(saved.specification,lock2),e=>e.code==='COMPILER_LOCK_MISMATCH');
+ const savedRow=sql.prepare('SELECT * FROM project_spec_versions WHERE version_id=?').get(first.turn.id);
+ assert.throws(()=>sql.prepare('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,?,?,?,?,?,?,?)').run(id(),project,99,id(),JSON.stringify(schema2),savedRow.spec_digest,savedRow.lock_json,savedRow.manifest_json,savedRow.manifest_digest),/specification_current_required/);
+ assert.throws(()=>sql.prepare('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,?,?,?,?,?,?,?)').run(id(),project,99,id(),savedRow.spec_json,savedRow.spec_digest,JSON.stringify(lock2),savedRow.manifest_json,savedRow.manifest_digest),/specification_current_required/);
  // Current photos remain reviewed, owned and digest-verified. These are explicitly synthetic
  // safety receipts for boundary testing; no scanning provider or detector is exercised.
  const objects=new Map(),files={get:async key=>{const value=objects.get(key);return value?{size:value.bytes.length,customMetadata:{sha256:value.digest},body:new ReadableStream(),arrayBuffer:async()=>value.bytes.slice().buffer}:null;}};

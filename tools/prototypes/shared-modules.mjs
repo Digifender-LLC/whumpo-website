@@ -43,7 +43,9 @@ export const audiences=Object.freeze(['owner','staff','submitter']);
 const fieldTypes=['text','number','boolean','choice'];
 
 function recordsConfig(c){
- shape(c,['schemas','forms','views'],'config');
+ shape(c,['retentionDays','schemas','forms','views'],'config');
+ // WH-124 retention window: owner decision of October 4, 2026 (#107): default 90 days (src/project-specification/v3/modules.ts).
+ oneOf(c.retentionDays,[30,90,365],'UNSUPPORTED_RETENTION','retentionDays');
  list(c.schemas,1,4,'schemas');unique(c.schemas.map(s=>s?.id),'schemas');
  const schemas=new Map();
  for(const s of c.schemas){

@@ -1,6 +1,6 @@
 # Shared content, forms, records, files and access modules
 
-**WH-067 contract slice (WH-123), October 4, 2026 UTC; source baseline `1343111`.** This freezes module identity, instance/configuration/version shapes, current-only migration hooks, API boundaries and the authorization model for the [WH-067](roadmap/backlog.md#wh-067--expose-shared-content-forms-records-files-and-access-modules) shared modules, and splits delivery into WH-124–130. It is a **planned contract**: no table, route, catalog entry, client, binding, provider or deployment is added. The [offline reference](../tools/prototypes/shared-modules.mjs) and [synthetic checks](../tests/shared-modules-contract.mjs) exercise the frozen shapes and policy table only; no Worker imports them.
+**WH-067 contract slice (WH-123), October 4, 2026 UTC; source baseline `1343111`.** This freezes module identity, instance/configuration/version shapes, current-only migration hooks, API boundaries and the authorization model for the [WH-067](roadmap/backlog.md#wh-067--expose-shared-content-forms-records-files-and-access-modules) shared modules, and splits delivery into WH-124–130. It is a **planned contract**: no table, route, catalog entry, client, binding, provider or deployment is added. The [offline reference](../tools/prototypes/shared-modules.mjs) and [synthetic checks](../tests/shared-modules-contract.mjs) exercise the frozen shapes and policy table only; no Worker imports them. **Update (WH-124):** specification schema 3, the trusted module catalog and planned lifecycle classes are now [implemented in source](#specification-schema-3-delivery-wh-124--october-4-2026-utc); module tables, routes, bindings and serving remain WH-125–130.
 
 It consumes, and does not replace: [WH-064/066 specification and compiler](project-specification.md), [WH-065 capability catalog](capability-planner.md), [WH-071 logical resources and descriptors](workload-placement.md), [WH-116 data classes](data-protection.md) in the [lifecycle catalogue](data-lifecycle.json), [WH-122/090 feature inclusion and admission](feature-admission.md), the [WH-105 Chat interaction and binding contract](chat-interactions.md), the [WH-052 job envelope](job-envelope.md), [content-safety states](safety-coverage.md) and the [current-version policy](current-version-policy.md).
 
@@ -46,7 +46,7 @@ Kind configurations (all objects closed; unknown keys reject):
 
 | Kind | Frozen v1 configuration |
 | --- | --- |
-| `records` | `schemas[1..4]: {id, fieldsRevision, fields[1..8]: {key, label, type: text|number|boolean|choice, optional, read: owner|staff|submitter}, staffWrite[]}`; `forms[0..4]: {id, recordId, submit: public|visitor|staff, uploadCollectionId|null}`; `views[0..8]: {id, recordId, audience: staff|visitor, scope: all|own, fields[], limit ≤ 50}`. Field shapes and bounds reuse [`backend-form-shape.ts`](../src/backend-form-shape.ts). |
+| `records` | `retentionDays: 30|90|365` (added by WH-124; see [retention](#records-retention-and-visitor-values--wh-124)); `schemas[1..4]: {id, fieldsRevision, fields[1..8]: {key, label, type: text|number|boolean|choice, optional, read: owner|staff|submitter}, staffWrite[]}`; `forms[0..4]: {id, recordId, submit: public|visitor|staff, uploadCollectionId|null}`; `views[0..8]: {id, recordId, audience: staff|visitor, scope: all|own, fields[], limit ≤ 50}`. Field shapes and bounds reuse [`backend-form-shape.ts`](../src/backend-form-shape.ts). |
 | `files` | `collections[1..4]: {id, read: owner|staff|submitter, upload[]: owner|staff|visitor, maxBytes ≤ 1 MiB, mediaTypes: ["image/jpeg"], gallery: null | {audience: staff|visitor}}` |
 | `access` | `{roles: [] | ["staff"], enrollment: "invitation"}` |
 | `content` | `collections[1]: {id, type: "directory-listing@1"}` |
@@ -120,11 +120,11 @@ Module APIs cannot bypass existing gates:
 
 | Foundation | WH-067 registration |
 | --- | --- |
-| WH-066 specification/compiler | Specification **schema 3** (WH-124) replaces schema 2's library-only `records/forms/files/access` sections with the frozen configurations above and exact module pins; a new compiler identity is pinned with `tools/check-specification-compiler.mjs`, schema-2 test specs are reset, and no schema-2 reader remains. The mounted homepage adapter and `content@2`/page components are unchanged. |
+| WH-066 specification/compiler | **Implemented in source by WH-124** ([delivery](#specification-schema-3-delivery-wh-124--october-4-2026-utc)). Specification **schema 3** replaces schema 2's library-only `records/forms/files/access` sections with the frozen configurations above and exact module pins; a new compiler identity is pinned with `tools/check-specification-compiler.mjs`, schema-2 test specs are reset, and no schema-2 reader remains. The mounted homepage adapter and `content@2`/page components are unchanged. |
 | WH-065 capability catalog | `schema.optional-field`, `access.staff-files` and the new records/forms/collections entries move from `planned` to `available` only in the slice that implements them. Unimplemented module configuration returns `unsupported`; it never triggers generated source. |
-| Trusted module catalog | Module/schema pins sit beside `compilerCatalog`/`serviceClientCatalog` with `available | withdrawn` state; withdrawal blocks new activation and makes existing instances `unavailable` with owner disable/export intact. |
+| Trusted module catalog | **Implemented in source by WH-124.** Module/schema pins sit beside `compilerCatalog`/`serviceClientCatalog` with `available | withdrawn` state; withdrawal blocks new activation and makes existing instances `unavailable` with owner disable/export intact. |
 | WH-071 descriptors | Each slice ships its descriptor, lifecycle hooks (`export`, `delete`, `restore`, `migrate`), export serializer and import validation with its schema. Visitor-subject data sets use `separate-approval` export. |
-| WH-116 / lifecycle catalogue | Planned classes registered before tables: `module-records` (visitor-subject submissions/records), `module-files` (module uploads, extending `project-media` handling) and `project-roles` (role grants and reviews), each with readers, processing, retention and export policy. General records do **not** inherit the 30-day contact window silently. |
+| WH-116 / lifecycle catalogue | **Registered by WH-124.** Planned classes registered before tables: `module-records` (visitor-subject submissions/records), `module-files` (module uploads, extending `project-media` handling) and `project-roles` (role grants and reviews), each with readers, processing, retention and export policy. General records do **not** inherit the 30-day contact window silently. |
 | WH-052 / WH-069 | Records expose `form.accepted` events and record/action adapters through the job envelope; rule execution and notifications are not part of WH-067. |
 
 ## Existing services and the module each becomes
@@ -167,10 +167,28 @@ WH-067 stays the parent with its acceptance unchanged; it closes only when every
 | WH-129 | Content collections module over the directory service | WH-125 |
 | WH-130 | Connected acceptance: two frontend compositions, cross-tenant/role/direct-API fixtures | WH-127, WH-128, WH-129 |
 
-## Open owner decisions
+## Specification schema 3 delivery (WH-124) — October 4, 2026 UTC
 
-1. **Default retention for general module records.** Contact messages expire after 30 days; WH-071 forbids silently extending that window. Choose before WH-124 registers `module-records`: the same 30 days, owner-controlled until deletion, or a bounded configurable window.
-2. **Visitor-submitted values in owner Chat.** This contract keeps them out of Chat and model context (dashboard panel only, like the inbox). Confirm before WH-125 registers bindings, or approve a non-model, no-history card.
+**Implemented in source; not deployed or accepted.** [Specification schema 3](project-specification.md#specification-v3) replaces schema 2's library-only `records/forms/files/access` sections with `instances[0..8]: {id, kind, module, schema, dependencies, config}` using the closed configurations above and exact `{name, version: 1, digest}` pins. `project-content@3` is the only compiler identity; the schema 2 reader, lock and SQL admission are removed and schema 2 test specifications are reset at the coordinated empty-database cutover, never converted.
+
+- **Trusted module catalog.** `moduleCatalog` in [`src/project-specification/catalog.ts`](../src/project-specification/catalog.ts) sits beside `compilerCatalog` and `serviceClientCatalog` with `available | withdrawn` state. Its digests are generated by `tools/check-specification-compiler.mjs`: a module digest binds the pin name to the pinned configuration validator ([`v3/modules.ts`](../src/project-specification/v3/modules.ts)); a schema digest binds the storage pin name to its lifecycle classes with storage `not-admitted`. Compilation rejects a different digest with `STALE_MODULE_VERSION` and a missing/withdrawn kind with `MODULE_UNAVAILABLE`. A later handler or storage layout is a reviewed identity cutover, not a repin.
+- **Validation.** Pure validation rejects PNG, collections above 1 MiB, `public` read/upload/view audiences, roles other than `staff`, views/galleries/`staffWrite` wider than field or collection policy, visitor views of all records, public attachment intake and records/files audiences without a same-project access dependency (or without the declared `staff` role). Staff upload (`upload: ["staff"]`) and staff write (`staffWrite`) are expressible. Forms resolve upload collections only through a declared files dependency.
+- **Change classification.** `modules.put` (complete instance) and `records.addField` are classified against the saved base: widening a read/upload/submit/view/gallery/staff audience, adding a non-owner field/view/form or lengthening retention returns the `permissions` review; an optional field addition is `additive-optional` with `fieldsRevision + 1` and the `schema` review; required/removed/renamed/retyped fields, changed choice options or optionality, removed schemas/collections and pin or kind changes reject with `MIGRATION_REQUIRED`. Narrowing, labels and view projection changes are hook `none`.
+- **Not serving.** Configuration is not activation: the compiler admits pins and then returns `UNAVAILABLE_CAPABILITY` for any instance, so the mounted single-homepage adapter, `content@2` and page components are unchanged and save only content specifications until WH-125 adds the registry and activation reviews. Capability catalog entries for these modules stay `planned` (`unsupported`).
+- **Lifecycle classes.** `module-records`, `module-files` and `project-roles` are registered as planned classes in [`data-lifecycle.json`](data-lifecycle.json) with readers, processors, retention and export policy; no table is admitted.
+
+### Records retention and visitor values — WH-124
+
+**Owner decision, October 4, 2026 (recorded on #107).** Each records instance declares `retentionDays`: default 90 days, owner-selectable 30, 90 or 365 days, maximum 365 days, counted from submission. General records never inherit the 30-day contact window silently. Shortening applies at the next expiry pass; lengthening requires the permissions review. Account or project closure deletes ordinary records, and active safety holds or restricted preservation override deletion until released. The values live only in `recordsRetention` in [`v3/modules.ts`](../src/project-specification/v3/modules.ts); `tests/specification-compiler.mjs` fails if this section or the `module-records` lifecycle class drifts. Changing them is a compiler identity cutover.
+
+**Owner decision, October 4, 2026 (recorded on #107):** visitor-submitted values stay dashboard-only. They never enter owner Chat, model context or Chat history; WH-125 bindings expose counts and states only.
+
+## Owner decisions
+
+Both WH-123 open decisions were decided by the owner on October 4, 2026 and recorded on #107:
+
+1. **Default retention for general module records.** 90-day default; owner-selectable 30, 90 or 365 days; 365-day maximum; account closure deletes; safety holds override ([details](#records-retention-and-visitor-values--wh-124)).
+2. **Visitor-submitted values in owner Chat.** Dashboard-only; never in owner Chat, model context or Chat history. WH-125 bindings expose counts and states only.
 
 ## Verification
 
