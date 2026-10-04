@@ -13,7 +13,7 @@ await assert.rejects(captureCMSDatabase(query,{maxBytes:10}),/byte limit/);await
 let captures=0;await assert.rejects(stableCMSDatabase(async sql=>{if(sql.startsWith('SELECT type')&&++captures===2)source.exec("INSERT INTO pairs VALUES('changed','capture')");return query(sql);}),/changed during capture/);
 source.close();target.close();console.log('CMS logical snapshot passed: FTS, row identities, triggers, views, blobs, NUL text, 64-bit integer precision, sequence recovery, stable capture and bounds.');
 const {cmsDatabaseIdentity}=await import('../tools/snapshot-cms-database.mjs');
-const project='11111111-1111-4111-8111-111111111111',account='a'.repeat(32),name='townhello-cms-'+project.replaceAll('-','');
+const project='11111111-1111-4111-8111-111111111111',account='a'.repeat(32),name='whumpo-cms-'+project.replaceAll('-','');
 let identity={project_id:project,account_id:account,worker_name:name,database_name:name,database_id:'22222222-2222-4222-8222-222222222222',bucket_name:name+'-media',source_digest:'b'.repeat(64)};
 const control={prepare:()=>({bind:()=>({first:async()=>identity})})};assert.equal((await cmsDatabaseIdentity(control,project,account)).database_id,identity.database_id);
 identity={...identity,account_id:'c'.repeat(32)};await assert.rejects(cmsDatabaseIdentity(control,project,account),/not verified/);

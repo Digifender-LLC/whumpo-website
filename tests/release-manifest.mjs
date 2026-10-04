@@ -13,7 +13,7 @@ let artifact;
 const databaseId='11111111-1111-4111-8111-111111111111',previousDatabaseId='22222222-2222-4222-8222-222222222222';
 const configs={};
 // Nonempty registration metadata only; never provision or invoke a CMS instance.
-const cmsFixture={project_id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',user_id:'fixture-owner',review_id:'fixture-review',worker_name:'townhello-cms-bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb',database_name:'fixture-db',bucket_name:'fixture-bucket',state:'connected',database_id:'fixture-db-id',session_namespace_id:'fixture-namespace',deployed_version_id:'fixture-cms-version',created_at:'2026-09-30T00:00:00.000Z',account_id:'a'.repeat(32),source_digest:'b'.repeat(64),secret_digest:'c'.repeat(64),origin:'https://cms-fixture.example.test',tag:'fixture-cms-tag',deployment_state:'connected',worker_version_id:'fixture-cms-version',platform_version_id:'before-platform'};
+const cmsFixture={project_id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',user_id:'fixture-owner',review_id:'fixture-review',worker_name:'whumpo-cms-bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb',database_name:'fixture-db',bucket_name:'fixture-bucket',state:'connected',database_id:'fixture-db-id',session_namespace_id:'fixture-namespace',deployed_version_id:'fixture-cms-version',created_at:'2026-09-30T00:00:00.000Z',account_id:'a'.repeat(32),source_digest:'b'.repeat(64),secret_digest:'c'.repeat(64),origin:'https://cms-fixture.example.test',tag:'fixture-cms-tag',deployment_state:'connected',worker_version_id:'fixture-cms-version',platform_version_id:'before-platform'};
 const cmsBinding={binding:'CMS_bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb',service:cmsFixture.worker_name,environment:'production'};
 let live,counts,failAfter,failBefore,observeFailure,mutations;
 const reportedServices=role=>[...(configs[role].services??[]).map(s=>({...s,environment:'production'})),...(role==='platform'?[cmsBinding]:[])];
@@ -41,8 +41,8 @@ try{
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
  for(const name of ['tools/artifact-protection.mjs','tools/secret-custody.mjs'])await writeFile(join(root,name),'fixture');
  for(const role of workerOrder){
-  configs[role]={name:'tellumo-'+role,account_id:'a'.repeat(32),main:'src/index.ts',vars:{ENVIRONMENT:'test'},workers_dev:false,preview_urls:false,...(role==='runtime'?{}:{d1_databases:[{binding:'DB',database_name:'tellumo-control',database_id:databaseId}]}),...(['apps','platform'].includes(role)?{assets:{directory:role==='apps'?'./public-app':'./dist'}}:{})};
-  if(role==='apps')configs[role].services=[{binding:'BACKEND_RUNTIME',service:'tellumo-runtime'}];
+  configs[role]={name:'whumpo-'+role,account_id:'a'.repeat(32),main:'src/index.ts',vars:{ENVIRONMENT:'test'},workers_dev:false,preview_urls:false,...(role==='runtime'?{}:{d1_databases:[{binding:'DB',database_name:'whumpo-control-chat-connections-test',database_id:databaseId}]}),...(['apps','platform'].includes(role)?{assets:{directory:role==='apps'?'./public-app':'./dist'}}:{})};
+  if(role==='apps')configs[role].services=[{binding:'BACKEND_RUNTIME',service:'whumpo-runtime'}];
   await writeFile(join(root,configFiles[role]),JSON.stringify(configs[role]));
  }
  await writeFile(join(root,'src/index.ts'),'source');await writeFile(join(root,'dist/index.html'),'static asset');await writeFile(join(root,'public-app/visitor.js'),'visitor');
@@ -61,7 +61,7 @@ try{
  assert.equal(mutations,0);assert.deepEqual(manifest.order,workerOrder);assert.equal(manifest.schema.mode,'none');
  assert.equal(manifest.before.workers.platform.id,'before-platform');
  assert.deepEqual(manifest.cms,[cmsFixture]);assert.deepEqual(manifest.before.cms,[cmsFixture]);assert.deepEqual(manifest.workers.platform.services,[cmsBinding]);
- assert.deepEqual(manifest.workers.apps.services,[{binding:'BACKEND_RUNTIME',service:'tellumo-runtime',environment:'production'}]);
+ assert.deepEqual(manifest.workers.apps.services,[{binding:'BACKEND_RUNTIME',service:'whumpo-runtime',environment:'production'}]);
  for(const mismatch of [{service:'other'},{environment:'staging'},{entrypoint:'Other'}])assert.throws(()=>assertWorker(manifest,'apps',{tag:manifest.workers.apps.tag,services:[{...manifest.workers.apps.services[0],...mismatch}],secrets:[]}),/service bindings changed/);
  assert.throws(()=>assertWorker(manifest,'apps',{tag:manifest.workers.apps.tag,services:manifest.workers.apps.services,databases:[{binding:'DB',id:previousDatabaseId}],secrets:[]}),/database bindings changed/);
  assert.deepEqual(expectedServiceBindings([{binding:'TEST',service:'worker',entrypoint:'API'}]),[{binding:'TEST',service:'worker',environment:'production',entrypoint:'API'}]);
@@ -133,8 +133,8 @@ try{
  // Binding inventory preserves identities while stripping credential values.
  assert.deepEqual(bindingSummary([{type:'secret_text',name:'AI_API_KEY',text:'PRIVATE_VALUE'},{type:'service',name:'CMS_x',service:'cms-x',token:'PRIVATE_VALUE'}]),{databases:[],services:[{binding:'CMS_x',service:'cms-x'}],secrets:['AI_API_KEY']});
  assert.throws(()=>bindingSummary([{type:'plain_text',name:'AI_API_KEY',text:'PRIVATE_VALUE'}]),/custody/);
- const cms=[{project_id:'abc-def',worker_name:'townhello-cms-abcdef',deployment_state:'connected'}];
- assert.deepEqual(archivedConfig('platform',configs.platform,'index.js',cms).services,[{binding:'CMS_abcdef',service:'townhello-cms-abcdef'}]);
+ const cms=[{project_id:'abc-def',worker_name:'whumpo-cms-abcdef',deployment_state:'connected'}];
+ assert.deepEqual(archivedConfig('platform',configs.platform,'index.js',cms).services,[{binding:'CMS_abcdef',service:'whumpo-cms-abcdef'}]);
  assert.throws(()=>archivedConfig('platform',{...configs.platform,build:{command:'unexpected'}},'index.js',[]),/archive support/);
  // Previous candidate bytes are retained after later preparations/deployments.
  await verifyRelease(first.directory);await copyTree(join(first.directory,'payload'),join(root,'restored-payload'));

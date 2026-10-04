@@ -42,7 +42,7 @@ export async function deployPlatform(prepared){
    const master=await cmsMasterKey(db),code=await build({entryPoints:['src/cms-bridge.ts'],bundle:true,format:'esm',platform:'node',write:false}),{deriveCMSSecret}=await import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));
    const {createHash}=await import('node:crypto');
    for(const row of instances){
-    if(row.worker_name!=='townhello-cms-'+row.project_id.replaceAll('-',''))throw Error('Invalid CMS service registry');
+    if(row.worker_name!=='whumpo-cms-'+row.project_id.replaceAll('-',''))throw Error('Invalid CMS service registry');
     const secret=await deriveCMSSecret(master,row.project_id,row.user_id,row.origin);if(createHash('sha256').update(secret).digest('hex')!==row.secret_digest)throw Error('CMS master key does not match existing instance');
     const binding='CMS_'+row.project_id.replaceAll('-','');if(config.services.some(s=>s.binding===binding))throw Error('Duplicate CMS binding');config.services.push({binding,service:row.worker_name});
    }

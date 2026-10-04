@@ -11,7 +11,7 @@ const current=configs.platform.d1_databases[0].database_id,old='11111111-1111-41
 let active=old,retired=false,missingBinding=false,targetInitialized=false,differentRegistry=false;
 const reads=[];
 const api=async(path,body)=>{
- const worker=/^\/workers\/scripts\/tellumo-(runtime|apps|sites|platform)\/(deployments|versions\/v-[a-z]+)$/.exec(path);
+ const worker=/^\/workers\/scripts\/whumpo-(runtime|apps|sites|platform)\/(deployments|versions\/v-[a-z]+)$/.exec(path);
  if(worker){
   const [,role,operation]=worker;
   if(operation==='deployments')return {result:{deployments:[{versions:[{version_id:'v-'+role,percentage:100}]}]}};
@@ -27,7 +27,7 @@ const api=async(path,body)=>{
  return {success:true,result:[{success:true,results}]};
 };
 const driver=await releaseProvider(process.cwd(),{api});
-const manifest={accountId:configs.platform.account_id,controlDatabaseId:current,workers:Object.fromEntries(workerOrder.map(role=>[role,{name:'tellumo-'+role}])),before:{workers:{platform:{databases:[{binding:'DB',id:old}]}}}};
+const manifest={accountId:configs.platform.account_id,controlDatabaseId:current,workers:Object.fromEntries(workerOrder.map(role=>[role,{name:'whumpo-'+role}])),before:{workers:{platform:{databases:[{binding:'DB',id:old}]}}}};
 await driver.observe(manifest);assert.equal(reads.filter(r=>r.sql!==schemaInventorySQL).at(-1).id,old);
 targetInitialized=true;reads.length=0;await driver.observe(manifest);
 assert.deepEqual(reads.filter(r=>r.sql!==schemaInventorySQL).map(r=>r.id),[old,current]);

@@ -14,12 +14,12 @@ export async function verifyCMSRecoveryCapture(directory,{projectId}={}){
  const info=await lstat(directory);if(!info.isDirectory()||info.isSymbolicLink())throw Error('Invalid capture directory');
  const manifest=await jsonFile(join(directory,'manifest.json'),1024*1024),snapshot=await jsonFile(join(directory,'database.json'),70*1024*1024);
  if(projectId&&manifest.identity?.project_id!==projectId)throw Error('Recovery project identity mismatch');
- if(manifest.format!=='townhello-cms-database-manifest-v1'||digest(snapshot)!==manifest.digest)throw Error('Database capture checksum mismatch');
+ if(manifest.format!=='whumpo-cms-database-manifest-v1'||digest(snapshot)!==manifest.digest)throw Error('Database capture checksum mismatch');
  let media;
  if(manifest.media){media=await jsonFile(join(directory,'media.json'),4*1024*1024);if(digest(media)!==manifest.media.digest)throw Error('Media manifest checksum mismatch');await verifyCapturedCMSMedia(join(directory,'media'),media);}
- const temp=await mkdtemp(join(tmpdir(),'townhello-cms-recovery-'));let proxy;
+ const temp=await mkdtemp(join(tmpdir(),'whumpo-cms-recovery-'));let proxy;
  try{
-  const config=join(temp,'wrangler.json');await writeFile(config,JSON.stringify({name:'townhello-cms-recovery-local',compatibility_date:'2026-09-29',workers_dev:false,preview_urls:false,d1_databases:[{binding:'DB',database_name:'isolated-restore',database_id:randomUUID()}],r2_buckets:[{binding:'MEDIA',bucket_name:'isolated-restore-media'}]}),{mode:0o600});
+  const config=join(temp,'wrangler.json');await writeFile(config,JSON.stringify({name:'whumpo-cms-recovery-local',compatibility_date:'2026-09-29',workers_dev:false,preview_urls:false,d1_databases:[{binding:'DB',database_name:'isolated-restore',database_id:randomUUID()}],r2_buckets:[{binding:'MEDIA',bucket_name:'isolated-restore-media'}]}),{mode:0o600});
   proxy=await wrangler.getPlatformProxy({configPath:config,persist:{path:join(temp,'state')},remoteBindings:false});
   const restored=await restoreCapturedCMSD1(proxy.env.DB,snapshot);
   for(const object of media?.objects??[]){
@@ -30,7 +30,7 @@ export async function verifyCMSRecoveryCapture(directory,{projectId}={}){
    for(const [key,value] of Object.entries(http))if(String(result.httpMetadata[key])!==String(value))throw Error('Restored media HTTP metadata differs');
    const actual=result.customMetadata??{},expected=object.metadata.custom_metadata??{};if(Object.keys(actual).length!==Object.keys(expected).length||Object.keys(expected).some(k=>actual[k]!==expected[k]))throw Error('Restored media custom metadata differs');
   }
-  return {format:'townhello-cms-local-recovery-evidence-v1',verifiedAt:new Date().toISOString(),databaseDigest:restored.digest,mediaDigest:manifest.media?.digest??null,tables:restored.snapshot.tables.length,rows:restored.rows,mediaObjects:media?.objects.length??0,scope:'isolated-local-d1-r2-only',productionRecoveryVerified:false};
+  return {format:'whumpo-cms-local-recovery-evidence-v1',verifiedAt:new Date().toISOString(),databaseDigest:restored.digest,mediaDigest:manifest.media?.digest??null,tables:restored.snapshot.tables.length,rows:restored.rows,mediaObjects:media?.objects.length??0,scope:'isolated-local-d1-r2-only',productionRecoveryVerified:false};
  }finally{await proxy?.dispose();await rm(temp,{recursive:true,force:true});}
 }
 async function main(){

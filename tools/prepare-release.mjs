@@ -24,7 +24,7 @@ export function expectedServiceBindings(services){
 export function archivedConfig(role,base,entry,cms){
  assertArtifactConfiguration(base);
  for(const key of Object.keys(base))if(!supportedKeys.includes(key))throw Error('New Worker configuration requires release archive support: '+key);
- if(base.name!=='tellumo-'+role||base.workers_dev!==false||base.preview_urls!==false)throw Error('Unexpected release destination');
+ if(base.name!=='whumpo-'+role||base.workers_dev!==false||base.preview_urls!==false)throw Error('Unexpected release destination');
  const config={...base};delete config.$schema;
  config.main='../workers/'+role+'/'+entry;
  config.base_dir='../workers/'+role;

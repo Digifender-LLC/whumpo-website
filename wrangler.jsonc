@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "tellumo-platform",
+  "name": "whumpo-platform",
   "account_id": "f94d28e88a63fb6f34c3ecbc05aa3faf",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-28",
@@ -57,7 +57,7 @@
   "r2_buckets": [
     {
       "binding": "FILES",
-      "bucket_name": "tellumo-files"
+      "bucket_name": "whumpo-files"
     }
   ],
   "triggers": {
@@ -69,7 +69,7 @@
   "services": [
     {
       "binding": "BACKEND_RUNTIME",
-      "service": "tellumo-runtime"
+      "service": "whumpo-runtime"
     }
   ]
 }

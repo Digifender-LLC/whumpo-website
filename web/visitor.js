@@ -1,8 +1,8 @@
 import {renderVisitorData} from './visitor-data.js';
 import {startRegistration,startAuthentication} from '@simplewebauthn/browser';
 import {replacementAppRecoveryCode} from '../src/app-recovery.ts';
-const $=s=>document.querySelector(s),base=location.pathname.replace(/\/$/,''),pendingKey='townhello-request:'+base;
-const deletionKey='townhello-deletion:'+base;let deletion,deletionReview;
+const $=s=>document.querySelector(s),base=location.pathname.replace(/\/$/,''),pendingKey='whumpo-request:'+base;
+const deletionKey='whumpo-deletion:'+base;let deletion,deletionReview;
 try{const saved=JSON.parse(sessionStorage.getItem(deletionKey)||'null');if(saved&&/^[0-9a-f-]{36}$/.test(saved.id)&&Number.isSafeInteger(saved.revision)&&saved.revision>=0)deletion=saved;}catch{}
 let config,revision=0,busy=false,recovered=false,pending,recoveryAction,idConflict=false;
 try{const saved=sessionStorage.getItem(pendingKey);if(saved&&/^[0-9a-f-]{36}$/.test(saved))pending=saved;}catch{}

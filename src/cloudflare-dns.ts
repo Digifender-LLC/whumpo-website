@@ -23,7 +23,7 @@ export async function listDNSActions(db:D1Database,user:string){const {results}=
 export async function reviewTXT(db:D1Database,user:string,id:string,claimId:string,zoneId:string,config:CloudflareConfig|undefined,transport:typeof fetch=fetch){
  if(!uuid.test(id)||!uuid.test(claimId)||!zoneID.test(zoneId))throw new DomainError(400,'Choose a domain claim and Cloudflare zone.');
  const old=await db.prepare('SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=?').bind(id,user).first<Action>();if(old){if(old.record_type!=='TXT'||old.claim_id!==claimId||old.zone_id!==zoneId)throw new DomainError(409,'DNS review ID already used.');return view(await owned(db,user,old.id));}
- const p=await proof(db,user,claimId),scope=connectionFeature(user,'cloudflare',p.project_id,'prepare'),gate=featurePredicate(db,scope),access=await cloudflareAccess(db,user,config,transport,{projectId:p.project_id,operation:'prepare'}),zoneName=await zone(access,zoneId,p.hostname),name='_tellumo.'+p.hostname,content='tellumo-verification='+p.token,found=await inventory(access,zoneId,name);
+ const p=await proof(db,user,claimId),scope=connectionFeature(user,'cloudflare',p.project_id,'prepare'),gate=featurePredicate(db,scope),access=await cloudflareAccess(db,user,config,transport,{projectId:p.project_id,operation:'prepare'}),zoneName=await zone(access,zoneId,p.hostname),name='_whumpo.'+p.hostname,content='whumpo-verification='+p.token,found=await inventory(access,zoneId,name);
  if(found.records.some(r=>r.type==='CNAME'||r.type==='NS'))throw new DomainError(409,'A CNAME or delegation conflicts with this TXT proof. Resolve it in Cloudflare; Whumpo will not overwrite it.');
  const created=stamp(),expires=new Date(Date.now()+600000).toISOString();
  try{const r=await db.prepare(`INSERT INTO cloudflare_dns_actions(id,user_id,claim_id,project_id,token_id,zone_id,zone_name,record_name,content,inventory_hash,created_at,expires_at)
@@ -72,7 +72,7 @@ export async function confirmDNS(db:D1Database,user:string,id:string,config:Clou
   return view(await owned(db,user,id));
  }
  const p=await proof(db,user,a.claim_id);
- if(a.expires_at<=stamp()||(routing?p.token!==a.proof_token||p.hostname!==a.record_name||a.content!==routingTarget||a.record_name===a.zone_name:'tellumo-verification='+p.token!==a.content||'_tellumo.'+p.hostname!==a.record_name))throw new DomainError(409,'DNS review expired or the proof changed. Prepare a fresh review.');
+ if(a.expires_at<=stamp()||(routing?p.token!==a.proof_token||p.hostname!==a.record_name||a.content!==routingTarget||a.record_name===a.zone_name:'whumpo-verification='+p.token!==a.content||'_whumpo.'+p.hostname!==a.record_name))throw new DomainError(409,'DNS review expired or the proof changed. Prepare a fresh review.');
  if(found.hash!==a.inventory_hash)throw new DomainError(409,'DNS records changed after review. Prepare a fresh review; nothing was overwritten.');
  if(routing)routingConflicts(found.records);
  const existing=found.records.find(matches);

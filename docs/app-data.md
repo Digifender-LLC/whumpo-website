@@ -251,7 +251,7 @@ HTTP equivalents: owned `GET/POST /api/projects/:project/application`, `GET /api
 
 ## Configuration deployment
 
-Owner-configuration release `1fd15da` deployed to `tellumo-platform`, version `fc99af51-bf11-4d7e-99ce-8b191f04ad78`. Remote migration 0051 applied after the independent pricing migrations. Live checks returned health 200, anonymous configuration/review 401, and cross-origin confirmation 403. No production customer app was activated and no visitor data route was exposed. Visitor authentication and application-page acceptance remain required before public access.
+Owner-configuration release `1fd15da` deployed to `whumpo-platform`, version `fc99af51-bf11-4d7e-99ce-8b191f04ad78`. Remote migration 0051 applied after the independent pricing migrations. Live checks returned health 200, anonymous configuration/review 401, and cross-origin confirmation 403. No production customer app was activated and no visitor data route was exposed. Visitor authentication and application-page acceptance remain required before public access.
 
 ## Visitor authentication service
 
@@ -295,7 +295,7 @@ Owners can use **Site & app safety** independently of Chat/profile/generated Das
 
 ## Controlled visitor pages (migration 0057)
 
-The `tellumo-apps` Worker uses `wrangler.apps.jsonc`, the same control D1 and the private QuickJS service binding. It receives no owner AI/provider credentials, R2 binding or owner routes. Fixed assets in `public-app/` are platform code; reviewed form metadata and guest results only become text. CSP permits scripts/styles/connections from self, forbids inline scripts, framing, base overrides and objects. Page/API responses are private/no-store with no CORS permission, no-referrer and nosniff. Request logging is disabled on this credential-bearing host. No paid-only service or plan change is introduced.
+The `whumpo-apps` Worker uses `wrangler.apps.jsonc`, the same control D1 and the private QuickJS service binding. It receives no owner AI/provider credentials, R2 binding or owner routes. Fixed assets in `public-app/` are platform code; reviewed form metadata and guest results only become text. CSP permits scripts/styles/connections from self, forbids inline scripts, framing, base overrides and objects. Page/API responses are private/no-store with no CORS permission, no-referrer and nosniff. Request logging is disabled on this credential-bearing host. No paid-only service or plan change is introduced.
 
 `/configure-app-page PROJECT_ID FORM_JSON` prepares a ten-minute immutable page review; `/app-page-review REVIEW_ID` reads it and only `/confirm-app-page REVIEW_ID` applies it. `/disable-app-page PROJECT_ID` prepares withdrawal. `/app-page PROJECT_ID` reads availability. Equivalent owned routes are `GET/POST /api/projects/:project/application-page` and `GET /api/application-page-reviews/:id`, with POST `/confirm`. The model may read/prepare through `appPage`, `reviewAppPage`, `appPageReview` and `reviewDisableAppPage`; it cannot confirm.
 

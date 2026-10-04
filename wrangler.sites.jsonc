@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "tellumo-sites",
+  "name": "whumpo-sites",
   "account_id": "f94d28e88a63fb6f34c3ecbc05aa3faf",
   "main": "src/site-host.ts",
   "compatibility_date": "2026-09-28",
@@ -22,17 +22,17 @@
   "r2_buckets": [
     {
       "binding": "FILES",
-      "bucket_name": "tellumo-files"
+      "bucket_name": "whumpo-files"
     }
   ],
   "services": [
     {
       "binding": "BACKEND_RUNTIME",
-      "service": "tellumo-runtime"
+      "service": "whumpo-runtime"
     },
     {
       "binding": "APP_HOST",
-      "service": "tellumo-apps"
+      "service": "whumpo-apps"
     }
   ],
   "observability": {

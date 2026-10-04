@@ -8,7 +8,7 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {cmsCloudflareProvider} from '../tools/cms-cloudflare.mjs';
 const {module,identity}=await currentFixtureModules(["src/cms-projects.ts", "src/cms-provision.ts"]);
 const {allocateCMSResources}=await module('src/cms-provision.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts');
-const dir=await mkdtemp('/tmp/townhello-cms-provision-');
+const dir=await mkdtemp('/tmp/whumpo-cms-provision-');
 const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32);
 const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}
@@ -20,12 +20,12 @@ try{
  await allocateCMSResources(db,a,p);assert.equal(p.calls.length,3);await assert.rejects(allocateCMSResources(db,a,{...p,accountId:'b'.repeat(32)}),/account or identity/);assert.equal(p.calls.length,3);
  const b=await fixture(),lost=provider();const create=lost.create;lost.create=async(...args)=>{await create(...args);throw Error('lost create acknowledgement');};await allocateCMSResources(db,b,lost);assert.equal(lost.calls.length,3);
  const c=await fixture(),unknown=provider();unknown.create=async(kind)=>{unknown.calls.push(kind);throw Error('unknown before creation');};await assert.rejects(allocateCMSResources(db,c,unknown),/unresolved/);await assert.rejects(allocateCMSResources(db,c,unknown),/unresolved/);assert.deepEqual(unknown.calls,['database']);assert.equal((await db.prepare('SELECT state FROM cms_instances WHERE project_id=?').bind(c).first()).state,'uncertain');
- const d=await fixture(),collision=provider();collision.resources.set('database:townhello-cms-'+d.replaceAll('-',''),id());await assert.rejects(allocateCMSResources(db,d,collision),/already exists/);assert.equal(collision.calls.length,0);
+ const d=await fixture(),collision=provider();collision.resources.set('database:whumpo-cms-'+d.replaceAll('-',''),id());await assert.rejects(allocateCMSResources(db,d,collision),/already exists/);assert.equal(collision.calls.length,0);
  const e=await fixture(),reserved=provider();let lose=true;
  const lossy=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{const s=target.prepare(sql);if(!sql.startsWith('INSERT INTO cms_resource_jobs'))return s;return {bind(...args){const bound=s.bind(...args);return {async run(){const result=await bound.run();if(lose){lose=false;throw Error('lost reservation acknowledgment');}return result;}};}};};const value=target[key];return typeof value==='function'?value.bind(target):value;}});
  await assert.rejects(allocateCMSResources(lossy,e,reserved),/unresolved/);await assert.rejects(allocateCMSResources(db,e,reserved),/unresolved/);assert.equal(reserved.calls.length,0);
  // A late provider result can be reconciled without repeating the original create.
- unknown.resources.set('database:townhello-cms-'+c.replaceAll('-',''),id());unknown.create=async(kind,name)=>{unknown.calls.push(kind);unknown.resources.set(kind+':'+name,kind==='session'?id().replaceAll('-',''):name);};await allocateCMSResources(db,c,unknown);assert.deepEqual(unknown.calls,['database','media','session']);
+ unknown.resources.set('database:whumpo-cms-'+c.replaceAll('-',''),id());unknown.create=async(kind,name)=>{unknown.calls.push(kind);unknown.resources.set(kind+':'+name,kind==='session'?id().replaceAll('-',''):name);};await allocateCMSResources(db,c,unknown);assert.deepEqual(unknown.calls,['database','media','session']);
  // Resource identities cannot be swapped after a successful receipt.
  await assert.rejects(db.prepare("UPDATE cms_resource_jobs SET provider_id=? WHERE project_id=? AND kind='database'").bind(id(),a).run(),/immutable/);
  p.resources.set('database:'+recorded.database_name,id());await assert.rejects(allocateCMSResources(db,a,p),/replaced or mismatched/);

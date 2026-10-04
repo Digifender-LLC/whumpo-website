@@ -64,10 +64,10 @@ heading('26 Deployed Test Platform and Scope')
 paragraph('The homepage advertises the product. The signed-in workspace opens into a persistent conversation with compact project, live-site and usage statistics. A Details menu exposes files, versions, domains, connected accounts, security and billing. Chat supports guided commands and validated natural-language proposals. Provider consent and passkey device interaction occur outside the conversation; domain and backup reviews remain explicit customer decisions.')
 paragraph('The infrastructure constraint is GitHub free features and Cloudflare services within existing included allowances. The owner authorized the current Workers Standard account allowance; this is not a separate Workers Free account. The owner subsequently authorized the $5/month Workers Paid resources; no further subscription upgrades are implied. The application is invitation-only, and whumpo.com is the platform domain; customer sites use whumpo.site subdomains. Whumpo is the product name.')
 table(['Boundary', 'Deployed implementation'], [
- ('Workspace', 'tellumo-platform Worker, Static Assets and Turnstile at whumpo.com'),
+ ('Workspace', 'whumpo-platform Worker, Static Assets and Turnstile at whumpo.com'),
  ('State', 'One D1 database for identity, chat, projects, usage, versions and publication reviews'),
- ('Files', 'Private Standard R2 bucket tellumo-files; public bucket access disabled'),
- ('Published sites', 'tellumo-sites Worker at PROJECT_ID.whumpo.site; current version and exact photo references only'),
+ ('Files', 'Private Standard R2 bucket whumpo-files; public bucket access disabled'),
+ ('Published sites', 'whumpo-sites Worker at PROJECT_ID.whumpo.site; current version and exact photo references only'),
  ('AI provider', 'OpenAI-compatible Responses transport to OpenCode Go Muse Spark 1.3 Contributor'),
  ('Source control', 'Private GitHub repository zemdregon/Whumpo; deployment from the local CLI'),
 ])

@@ -479,14 +479,14 @@
   // src/app-recovery.ts
   async function replacementAppRecoveryCode(code, nonce) {
     if (!/^[0-9a-f]{64}$/.test(code) || !/^[0-9a-f]{64}$/.test(nonce)) throw new Error("Invalid recovery request");
-    return hashToken("townhello-app-recovery-replacement:" + code + ":" + nonce);
+    return hashToken("whumpo-app-recovery-replacement:" + code + ":" + nonce);
   }
 
   // web/visitor.js
   var $ = (s) => document.querySelector(s);
   var base = location.pathname.replace(/\/$/, "");
-  var pendingKey = "townhello-request:" + base;
-  var deletionKey = "townhello-deletion:" + base;
+  var pendingKey = "whumpo-request:" + base;
+  var deletionKey = "whumpo-deletion:" + base;
   var deletion;
   var deletionReview;
   try {

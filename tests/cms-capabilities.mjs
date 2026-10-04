@@ -5,7 +5,7 @@ const {cmsCapabilities,cmsCapabilitiesPath:path,supportsStructuredCMS,readCMSCap
 const project=crypto.randomUUID(),owner=crypto.randomUUID(),master='local-capability-fixture-'.repeat(3),origin='https://cms.test';
 const config={projectId:project,ownerId:owner,origin,secret:await deriveCMSSecret(master,project,owner,origin)};
 let dispatches=0,writes=0,requests=0;
-const native={TOWNHELLO_CMS_PROJECT_ID:project,TOWNHELLO_CMS_OWNER_ID:owner,TOWNHELLO_CMS_ORIGIN:origin,TOWNHELLO_CMS_BRIDGE_KEY:config.secret,DB:{prepare(){writes++;throw Error('Discovery must not write');}}};
+const native={WHUMPO_CMS_PROJECT_ID:project,WHUMPO_CMS_OWNER_ID:owner,WHUMPO_CMS_ORIGIN:origin,WHUMPO_CMS_BRIDGE_KEY:config.secret,DB:{prepare(){writes++;throw Error('Discovery must not write');}}};
 const gateway=r=>cmsGateway(r,native,async()=>{dispatches++;throw Error('Discovery must not dispatch');});
 const signed=(body,c=config)=>signCMSRequest(c,path,crypto.randomUUID(),body);
 assert.equal((await gateway(new Request(origin+path))).status,403);

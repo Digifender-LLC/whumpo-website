@@ -2,7 +2,7 @@
 
 ## Implemented ownership stage
 
-Customers ask Chat to list domains, prepare an ownership proof for a hostname and project, or check a saved proof. Dashboard → Domains exposes the existing deterministic controls. Preparation creates a random 256-bit TXT proof at `_tellumo.HOSTNAME`. Creation, renewal, verification status, activity and Chat receipts commit under the conversation revision. Retry of a saved message does not repeat the DNS request. Proofs expire after seven days; renewal rotates the token and clears verification.
+Customers ask Chat to list domains, prepare an ownership proof for a hostname and project, or check a saved proof. Dashboard → Domains exposes the existing deterministic controls. Preparation creates a random 256-bit TXT proof at `_whumpo.HOSTNAME`. Creation, renewal, verification status, activity and Chat receipts commit under the conversation revision. Retry of a saved message does not repeat the DNS request. Proofs expire after seven days; renewal rotates the token and clears verification.
 
 Current source accepts natural-language messages and closed, typed review controls. Internal domain dispatch strings are private implementation details. Dated deployment evidence below records earlier interfaces; it does not define a supported command interface. The current identity/schema cutover remains pending under [WH-114C](https://github.com/zemdregon/whumpo/issues/72).
 

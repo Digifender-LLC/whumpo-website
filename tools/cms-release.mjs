@@ -28,9 +28,9 @@ export async function cmsMasterKey(db){
  return (await readFile(file,'utf8')).trim();
 }
 export function instanceConfig(template,artifact,row,account){
- const expected='townhello-cms-'+row.project_id.replaceAll('-','');
+ const expected='whumpo-cms-'+row.project_id.replaceAll('-','');
  if(row.worker_name!==expected||row.database_name!==expected||row.bucket_name!==expected+'-media'||!row.database_id||!row.session_namespace_id)throw Error('CMS resource registry is incomplete');
- const c={...template,name:expected,account_id:account,main:join(artifact,'server',template.main),workers_dev:false,preview_urls:false,routes:[],triggers:{crons:[]},vars:{TOWNHELLO_CMS_PROJECT_ID:row.project_id,TOWNHELLO_CMS_OWNER_ID:row.user_id,TOWNHELLO_CMS_ORIGIN:'https://'+expected+'.whumpo.site',EMDASH_SITE_URL:'https://'+expected+'.whumpo.site'},assets:{...template.assets,directory:join(artifact,'client')},d1_databases:[{binding:'DB',database_name:expected,database_id:row.database_id}],r2_buckets:[{binding:'MEDIA',bucket_name:row.bucket_name}],kv_namespaces:[{binding:'SESSION',id:row.session_namespace_id}]};
+ const c={...template,name:expected,account_id:account,main:join(artifact,'server',template.main),workers_dev:false,preview_urls:false,routes:[],triggers:{crons:[]},vars:{WHUMPO_CMS_PROJECT_ID:row.project_id,WHUMPO_CMS_OWNER_ID:row.user_id,WHUMPO_CMS_ORIGIN:'https://'+expected+'.whumpo.site',EMDASH_SITE_URL:'https://'+expected+'.whumpo.site'},assets:{...template.assets,directory:join(artifact,'client')},d1_databases:[{binding:'DB',database_name:expected,database_id:row.database_id}],r2_buckets:[{binding:'MEDIA',bucket_name:row.bucket_name}],kv_namespaces:[{binding:'SESSION',id:row.session_namespace_id}]};
  for(const key of ['worker_loaders','services','dispatch_namespaces','send_email'])if((c[key]??[]).length)throw Error('Unapproved CMS binding');if(c.images?.binding)throw Error('CMS Images binding is not enabled');return c;
 }
 export async function workerExists(api,name){try{await api('/workers/scripts/'+name+'/versions');return true;}catch(error){if(error.status===404)return false;throw error;}}
@@ -44,7 +44,7 @@ export async function privateCMSProbe(account,worker,origin,directory){
  const port=await new Promise((resolve,reject)=>{const server=createServer();server.once('error',reject);server.listen(0,'127.0.0.1',()=>{const port=server.address().port;server.close(()=>resolve(port));});});
  const entry=join(directory,'probe.mjs'),config=join(directory,'probe.json');
  await writeFile(entry,'export default {fetch(request,env){const u=new URL(request.url);return env.CMS.fetch(new Request('+JSON.stringify(origin)+'+u.pathname+u.search,request));}};');
- await writeFile(config,JSON.stringify({name:'townhello-cms-probe-'+worker.slice(-8),account_id:account,main:entry,compatibility_date:'2026-09-29',workers_dev:false,preview_urls:false,services:[{binding:'CMS',service:worker}]}));
+ await writeFile(config,JSON.stringify({name:'whumpo-cms-probe-'+worker.slice(-8),account_id:account,main:entry,compatibility_date:'2026-09-29',workers_dev:false,preview_urls:false,services:[{binding:'CMS',service:worker}]}));
  const child=spawn(process.execPath,['node_modules/wrangler/bin/wrangler.js','dev','--remote','--config',config,'--ip','127.0.0.1','--port',String(port)],{stdio:['ignore','pipe','pipe']});let log='';for(const stream of [child.stdout,child.stderr])stream.on('data',data=>{log=(log+data.toString()).slice(-20000);});
  const close=async()=>{if(child.exitCode===null){child.kill('SIGTERM');await new Promise(resolve=>{const timer=setTimeout(()=>{child.kill('SIGKILL');resolve();},4000);child.once('exit',()=>{clearTimeout(timer);resolve();});});}await writeFile(join(directory,'probe.log'),log,{mode:0o600});};
  try{

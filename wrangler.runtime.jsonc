@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "tellumo-runtime",
+  "name": "whumpo-runtime",
   "account_id": "f94d28e88a63fb6f34c3ecbc05aa3faf",
   "main": "src/runtime/worker.ts",
   "compatibility_date": "2026-09-29",

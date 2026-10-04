@@ -8,7 +8,7 @@ An existing repository with an initialized default branch is required. Whumpo do
 
 ## Artifact boundary
 
-Each backup adds readable files under `tellumo/PROJECT_ID/versions/VERSION_ID/`: `public/index.html`, `public/_headers`, `tellumo/site.json`, `README.txt` and, for photo versions, up to four checked JPEG assets. The exact deterministic source archive is used to bind the review to the saved artifact. The archive is unpacked on the server; GitHub receives readable files, not a ZIP. No workspace accounts, chat, runtime secrets, billing data or databases are included. Website text, photos and configuration are included, including in a public repository when explicitly selected.
+Each backup adds readable files under `whumpo/PROJECT_ID/versions/VERSION_ID/`: `public/index.html`, `public/_headers`, `whumpo/site.json`, `README.txt` and, for photo versions, up to four checked JPEG assets. The exact deterministic source archive is used to bind the review to the saved artifact. The archive is unpacked on the server; GitHub receives readable files, not a ZIP. No workspace accounts, chat, runtime secrets, billing data or databases are included. Website text, photos and configuration are included, including in a public repository when explicitly selected.
 
 Generic shared components remain platform-authored and reviewed. A customer's backup is never ingested into the cross-user component catalog. See the existing component reuse design for that separate boundary.
 
@@ -60,7 +60,7 @@ Conversational deployment evidence (September 29): platform `9b595e8a-af4a-423d-
 
 ## Chat receipt link acceptance — September 29, 2026
 
-Completed backup receipts point to the exact immutable source folder (`/tree/COMMIT/tellumo/PROJECT/versions/VERSION`). Chat previously accepted only `/commit/COMMIT`, suppressing its backup button. The shared Chat action component now accepts the actual receipt shape, with an exact GitHub origin, commit and UUID folder structure; extra query strings, path suffixes and alternate hosts are rejected.
+Completed backup receipts point to the exact immutable source folder (`/tree/COMMIT/whumpo/PROJECT/versions/VERSION`). Chat previously accepted only `/commit/COMMIT`, suppressing its backup button. The shared Chat action component now accepts the actual receipt shape, with an exact GitHub origin, commit and UUID folder structure; extra query strings, path suffixes and alternate hosts are rejected.
 
 `pnpm test:backup-chat` now renders the actual React action component using a completed D1 backup receipt. It verifies the visible link, exact destination, safe new-tab attributes and absence of a completed confirmation button, alongside the existing review, replay, ownership and uncertain-result tests. `pnpm check`, the isolated frontend type check and release build passed. The first UI test attempt lacked the frontend import alias; after matching the app alias, the complete suite passed. Real GitHub consent/commit acceptance remains setup-gated.
 
