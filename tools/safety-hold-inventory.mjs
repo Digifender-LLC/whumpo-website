@@ -28,6 +28,8 @@ export const deletionSites={
  'schema/platform.sql::app_recovery_documents':excluded('Point-in-time copies cleared by visitor revocation or recovery-point removal. Revocation is a security control that must not fail visibly; the primary visitor document stays because visitor deletion is blocked. Capturing earlier copies needs an owner decision (see owner questions).'),
  'schema/platform.sql::app_migration_documents':excluded('Transient migration outputs; the primary visitor documents are retained.'),
  'schema/platform.sql::domain_claims':excluded('DNS ownership-claim workflow state; no customer content.'),
+ 'src/public-admission.ts::public_client_usage':excluded('Hashed per-client admission counters (WH-075); no customer content and no source address, only a daily SHA-256 key.'),
+ 'src/public-admission.ts::storage_project_usage':excluded('Per-project monthly photo-read counters (WH-075); usage totals only, no customer content.'),
  'schema/platform.sql::profile_photo_safety':{decision:'preserved',mechanism:'safety_hold_profile_photo',note:'The replaced photo and its safety receipt are copied into safety_preserved_records before profile_photo_safety_invalidate removes the receipt.'},
  'schema/platform.sql::project_spec_proposals':excluded(proposals),
  'schema/platform.sql::service_client_proposals':excluded(proposals),
