@@ -178,6 +178,14 @@ try{
  assert.equal((await c.listAbuseReports(db,reviewer.p)).length,7);ok();
  // A report never becomes a finding by itself: the case stays uncertain until a separate reviewer decision.
  assert.equal((await c.readSafetyCase(db,reviewer.p,{caseId:'case-report-1'})).findings.length,1);ok();
+ // WH-016 owner notice: only a confirmed finding notifies the reported owner, through their Support channel, without the
+ // reporter's identity, email, receipt or report text (tests/safety-appeals.mjs covers notices and appeals in depth).
+ assert.equal(await count('usage_review_requests',"user_id=? AND kind='safety_notice'",ownerA.account),0,'Opening a case from a report sends no notice');
+ const reviewer2=await operator();await c.grantSafetyCaseRole(db,admin.p,{grantId:'g-r2',operatorAccountId:reviewer2.id,role:'case_reviewer'});
+ await c.recordSafetyCaseFinding(db,reviewer2.p,{caseId:'case-report-1',finding:'confirmed_policy_finding',decisionRef:'confirm-report-1'});
+ const support=await m.worker.fetch(new Request('https://whumpo.com/api/support/v1',{headers:{cookie:'__Host-whumpo_session='+ownerA.token}}),{...env,ENVIRONMENT:'test',AUTH_LIMITER:limiter});
+ assert.equal(support.status,200);const supportText=await support.text(),noticeRows=JSON.parse(supportText).requests.filter(x=>x.kind==='safety_notice');
+ assert.equal(noticeRows.length,1);for(const secret of [MARK,first.id,EMAIL,'case-report-1',reviewer2.id,reviewer.id,'abuse-report','/about'])assert.ok(!supportText.toLowerCase().includes(secret.toLowerCase()),secret);ok();
  // The HTTP surface carries the same actions with strict bodies; the customer gets no route.
  const call=async(path,data,token)=>{const response=await r.http.handleSafetyCaseRequest(new Request('https://whumpo.com/api/operator/safety-cases/v1/'+path,{method:'POST',headers:{origin:'https://whumpo.com','content-type':'application/json',cookie:'__Host-whumpo_session='+token},body:JSON.stringify({version:1,...data})}),{DB:db,ENVIRONMENT:'test'});return {status:response.status,body:await response.json(),cache:response.headers.get('cache-control')};};
  const listed=await call('reports/list',{},reviewer.f.token);assert.equal(listed.status,200);assert.equal(listed.cache,'no-store');assert.equal(listed.body.result.length,7);ok();

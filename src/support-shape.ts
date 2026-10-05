@@ -1,5 +1,8 @@
 /** Shared by the Worker and the support page. No server imports. */
-export type SupportKind='usage_review'|'help';
+/** `safety_notice` is a WH-016 notice that a safety decision was recorded against the owner's content (created by
+ * Whumpo, never by the owner); `safety_appeal` is the owner's appeal of one notice. */
+export type SupportKind='usage_review'|'help'|'safety_notice'|'safety_appeal';
+export const supportKinds:readonly SupportKind[]=['usage_review','help','safety_notice','safety_appeal'];
 export type SupportDeliveryState='none'|'queued'|'delivered'|'failed'|'cancelled';
 export type SupportRequest={id:string;kind:SupportKind;reference:string|null;statement:string;createdAt:string;state:'open'|'answered';publicResponse:string|null;answeredAt:string|null;
  /** Saved in Whumpo, external provider acceptance, and customer read are three separate facts. */
@@ -24,9 +27,12 @@ export const supportLink=(code:StatusCode)=>'/workspace/support?ref='+encodeURIC
 export const supportStatusLinks=():SupportStatusLink[]=>statusCodes.map(code=>({code,...copy[code],href:supportLink(code)}));
 export const operationReference=(family:SupportOperation['family'],id:string)=>'operation:'+family+':'+id;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
+/** The reference an appeal carries: the notice it appeals. */
+export const noticeReference=(id:string)=>'safety_notice:'+id;
 /** Structured references only; free text belongs in the statement. */
-export function parseSupportReference(value:unknown):{kind:'status';code:StatusCode}|{kind:'operation';family:SupportOperation['family'];id:string}|null{
+export function parseSupportReference(value:unknown):{kind:'status';code:StatusCode}|{kind:'operation';family:SupportOperation['family'];id:string}|{kind:'notice';id:string}|null{
  if(typeof value!=='string')return null;
+ const notice=/^safety_notice:([0-9a-f-]{36})$/.exec(value);if(notice&&uuid.test(notice[1]))return {kind:'notice',id:notice[1]};
  const status=/^status:([a-z_]+)$/.exec(value);if(status&&(statusCodes as readonly string[]).includes(status[1]))return {kind:'status',code:status[1] as StatusCode};
  const operation=/^operation:([a-z_]+):([0-9a-f-]{36})$/.exec(value);if(operation&&(operationFamilies as readonly string[]).includes(operation[1])&&uuid.test(operation[2]))return {kind:'operation',family:operation[1] as SupportOperation['family'],id:operation[2]};
  return null;
@@ -39,7 +45,7 @@ const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>!!v&&typeof v
 const bounded=(v:unknown,max:number)=>typeof v==='string'&&v.length>=1&&v.length<=max;
 function supportRequestShape(r:unknown):r is SupportRequest{
  if(!exact(r,['id','kind','reference','statement','createdAt','state','publicResponse','answeredAt','response','delivery','read']))return false;
- if(typeof r.id!=='string'||!uuid.test(r.id)||!['help','usage_review'].includes(r.kind as string)||!(r.reference===null||parseSupportReference(r.reference))||!bounded(r.statement,950)||!iso(r.createdAt))return false;
+ if(typeof r.id!=='string'||!uuid.test(r.id)||!supportKinds.includes(r.kind as SupportKind)||!(r.reference===null||parseSupportReference(r.reference))||!bounded(r.statement,950)||!iso(r.createdAt))return false;
  const answered=r.state==='answered';if(!answered&&r.state!=='open')return false;
  if(!exact(r.response,['saved'])||r.response.saved!==answered||!exact(r.delivery,['state'])||!['none','queued','delivered','failed','cancelled'].includes(r.delivery.state as string)||!exact(r.read,['state','at']))return false;
  if(answered)return bounded(r.publicResponse,2000)&&iso(r.answeredAt)&&(r.read.state==='read'?iso(r.read.at):r.read.state==='unread'&&r.read.at===null);

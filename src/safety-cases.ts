@@ -14,7 +14,7 @@ export type SafetyCaseReason='missing_role'|'invalid_input'|'conflict'|'not_foun
 type AuditReason=SafetyCaseReason|'ok'|'unauthenticated'|'conflict_of_interest';
 type Action='bootstrap_administrator'|'grant_role'|'revoke_role'|'open_case'|'link_evidence'|'record_finding'|'place_hold'|'release_hold'|'close_case'|'read_case'|'read_audit'|'list_holds'
  |'capture_evidence'|'dispose_evidence'|'request_disclosure'|'approve_disclosure'|'record_disclosure'|'cancel_disclosure'|'read_disclosure'
- |'list_retention'|'preview_retention'|'decide_retention'|'list_reports'|'read_report'|'triage_report'|'erase_report_contact';
+ |'list_retention'|'preview_retention'|'decide_retention'|'list_reports'|'read_report'|'triage_report'|'erase_report_contact'|'list_appeals'|'read_appeal'|'decide_appeal';
 type Q={sql:string;params:unknown[]};
 type Database=Pick<D1Database,'prepare'|'batch'>;
 type EvidenceEnv={DB:Database;FILES:Pick<R2Bucket,'get'|'put'|'head'|'delete'>};
@@ -58,7 +58,7 @@ function classify(error:unknown):SafetyCaseReason{
  if(/safety_case_closed/.test(text))return 'case_closed';
  if(/safety_case_capacity/.test(text))return 'capacity';
  if(/safety_case_subject_missing|safety_case_evidence_missing|safety_hold_subject/.test(text))return 'not_found';
- if(/safety_case_immutable|abuse_report_immutable|safety_case_finding_order|safety_retention_changed|safety_retention_case_open|UNIQUE|CHECK constraint|FOREIGN KEY/.test(text))return 'conflict';
+ if(/safety_case_immutable|abuse_report_immutable|safety_appeal_independence|safety_appeal_state|safety_case_finding_order|safety_retention_changed|safety_retention_case_open|UNIQUE|CHECK constraint|FOREIGN KEY/.test(text))return 'conflict';
  return 'unavailable';
 }
 async function record(db:Database,actor:string|null,action:Action,caseId:string|null,target:string|null,outcome:'denied'|'rejected',reason:AuditReason){
@@ -162,7 +162,9 @@ export async function linkSafetyCaseEvidence(db:Database,principal:unknown,input
    WHERE ${gate} AND EXISTS(SELECT 1 FROM safety_cases WHERE id=${caseId}) AND NOT EXISTS(SELECT 1 FROM safety_case_evidence WHERE case_id=${caseId} AND evidence_id=${evidenceId})`],
   effect:()=>q`EXISTS(SELECT 1 FROM safety_case_evidence WHERE case_id=${caseId} AND evidence_id=${evidenceId})`,missing:caseMissing(caseId)});
 }
-/** Appends a reviewed decision. Corrections append; earlier decisions remain. */
+/** Appends a reviewed decision. Corrections append; earlier decisions remain. Recording `confirmed_policy_finding` is
+ * the WH-016 "action taken against the owner's content": in the same transaction the schema issues one restricted
+ * notice naming this reviewer and copies a fixed, content-free notice into the subject's support channel. */
 export async function recordSafetyCaseFinding(db:Database,principal:unknown,input:{caseId:string;finding:SafetyCaseFinding;decisionRef:string}){
  const {caseId,finding,decisionRef}=input;
  await attempt(db,{principal,action:'record_finding',caseId,target:decisionRef,roles:['case_reviewer'],valid:findings.includes(finding),
@@ -314,6 +316,68 @@ export async function triageAbuseReport(db:Database,principal:unknown,input:{rep
   writes,effect:actor=>q`EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id} AND triage=${state} AND case_id IS ${caseId} AND triaged_by=${actor} AND triage_ref=${decisionRef})`,
   missing:decision==='link_case'?q`(${reportMissing(id)} OR ${caseMissing(caseId)})`:reportMissing(id)});
  return {reportId:id,triage:state,caseId};
+}
+
+/** WH-016 owner appeals (owner decision October 4, 2026, issue #172). The owner appeals one safety notice through the
+ * support channel (src/support.ts, kind `safety_appeal`); a case reviewer who did NOT record the confirmed finding behind
+ * that notice decides it (separation of duties, repeated by the `safety_appeal_decisions_admit` trigger). The owner sees
+ * only a fixed outcome text; reviewer identity, case identifiers, reports and reporter details never reach them. */
+export type SafetyAppealDecision='upheld'|'reversed';
+export const safetyAppealResponses:Readonly<Record<SafetyAppealDecision,string>>=Object.freeze({
+ upheld:'A Whumpo safety reviewer who did not make the original decision reviewed your appeal and upheld that decision. This answers your appeal.',
+ reversed:'A Whumpo safety reviewer who did not make the original decision reviewed your appeal and reversed that decision. The finding against your content has been withdrawn. This answers your appeal.',
+});
+const appealJoin=q`usage_review_requests a JOIN safety_action_notices n ON a.reference='safety_notice:'||n.id AND a.user_id=n.subject_user_id`;
+const appealIndependent=(id:unknown)=>(account:string)=>q`NOT EXISTS(SELECT 1 FROM ${appealJoin} WHERE a.id=${id} AND n.subject_user_id=${account})`;
+const appealMissing=(id:unknown)=>q`NOT EXISTS(SELECT 1 FROM ${appealJoin} WHERE a.id=${id} AND a.kind='safety_appeal')`;
+export type SafetyAppealItem={appealId:string;noticeId:string;caseId:string;subjectUserId:string;createdAt:string;actedByYou:boolean};
+/** Open appeals, oldest first (at most 100), identifiers only. `actedByYou` marks appeals this operator may not decide.
+ * Appeals by the operator's own account are never listed to them. */
+export async function listSafetyAppeals(db:Database,principal:unknown):Promise<SafetyAppealItem[]>{
+ const {rows:[rows]}=await attempt(db,{principal,action:'list_appeals',roles:['case_reviewer','case_auditor'],
+  reads:(gate,actor)=>[q`SELECT a.id AS appealId,n.id AS noticeId,n.case_id AS caseId,n.subject_user_id AS subjectUserId,a.created_at AS createdAt,n.acted_by=${actor} AS actedByYou
+   FROM ${appealJoin} WHERE a.kind='safety_appeal' AND a.state='open' AND 'human:'||n.subject_user_id<>${actor} AND ${gate} ORDER BY a.created_at,a.id LIMIT 100`],
+  effect:()=>q`1`});
+ return rows.map(r=>({...r,actedByYou:!!r.actedByYou})) as SafetyAppealItem[];
+}
+/** Reviewer-only read of one appeal: the owner's statement, its notice, the case's current finding and any decision. */
+export async function readSafetyAppeal(db:Database,principal:unknown,input:{appealId:string}){
+ const id=input.appealId;
+ const {rows:[rows]}=await attempt(db,{principal,action:'read_appeal',target:id,roles:['case_reviewer'],valid:isReport(id),independent:appealIndependent(id),
+  reads:(gate,actor)=>[q`SELECT a.id AS appealId,n.id AS noticeId,n.case_id AS caseId,n.subject_user_id AS subjectUserId,n.finding_seq AS findingSeq,n.issued_at AS noticeIssuedAt,
+    n.acted_by=${actor} AS actedByYou,a.statement,a.created_at AS createdAt,a.state,
+    (SELECT finding FROM safety_case_findings f WHERE f.case_id=n.case_id ORDER BY f.seq DESC LIMIT 1) AS currentFinding,
+    d.decision,d.decided_by AS decidedBy,d.decided_at AS decidedAt
+   FROM ${appealJoin} LEFT JOIN safety_appeal_decisions d ON d.appeal_id=a.id WHERE a.id=${id} AND a.kind='safety_appeal' AND ${gate}`],
+  effect:()=>q`NOT ${appealMissing(id)}`,missing:appealMissing(id)});
+ const row=rows[0];if(!row)throw new SafetyCaseError('unavailable');
+ return {...row,actedByYou:!!row.actedByYou} as {appealId:string;noticeId:string;caseId:string;subjectUserId:string;findingSeq:number;noticeIssuedAt:number;actedByYou:boolean;
+  statement:string;createdAt:string;state:'open'|'answered';currentFinding:SafetyCaseFinding;decision:SafetyAppealDecision|null;decidedBy:string|null;decidedAt:number|null};
+}
+/** One audited, independent appeal decision. The deciding reviewer must not be the reviewer who recorded the confirmed
+ * finding behind the notice (refused as `conflict`) or the subject. `reversed` also appends the case's `not_confirmed`
+ * correction by this reviewer (allowed even on a closed case, only for a reversed appeal) unless the finding was already
+ * corrected. The owner's appeal is answered with the fixed outcome text in the same transaction. Exact retries are
+ * idempotent; an appeal is decided once. */
+export async function decideSafetyAppeal(db:Database,principal:unknown,input:{appealId:string;decision:SafetyAppealDecision;decisionRef:string}){
+ const {appealId:id,decision,decisionRef}=input;
+ const valid=isReport(id)&&(decision==='upheld'||decision==='reversed')&&isOpaque(decisionRef),response=valid?safetyAppealResponses[decision]:'';
+ const decided=(actor:string)=>q`EXISTS(SELECT 1 FROM safety_appeal_decisions WHERE appeal_id=${id} AND decided_by=${actor} AND decision=${decision} AND decision_ref=${decisionRef})`;
+ await attempt(db,{principal,action:'decide_appeal',target:id,roles:['case_reviewer'],valid,independent:appealIndependent(id),
+  writes:(gate,actor)=>[
+   q`INSERT INTO safety_appeal_decisions(appeal_id,notice_id,case_id,decision,decision_ref,decided_by,decided_at) SELECT a.id,n.id,n.case_id,${decision},${decisionRef},${actor},unixepoch()
+    FROM ${appealJoin} WHERE a.id=${id} AND a.kind='safety_appeal' AND a.state='open' AND n.acted_by<>${actor} AND ${gate} AND NOT EXISTS(SELECT 1 FROM safety_appeal_decisions WHERE appeal_id=${id})`,
+   q`INSERT INTO safety_case_findings(case_id,seq,finding,reviewer_ref,decision_ref,recorded_at)
+    SELECT d.case_id,(SELECT max(seq) FROM safety_case_findings WHERE case_id=d.case_id)+1,'not_confirmed',${actor},${decisionRef},unixepoch() FROM safety_appeal_decisions d
+    WHERE d.appeal_id=${id} AND d.decision='reversed' AND d.decided_by=${actor} AND d.decision_ref=${decisionRef} AND ${gate}
+     AND (SELECT finding FROM safety_case_findings WHERE case_id=d.case_id ORDER BY seq DESC LIMIT 1)='confirmed_policy_finding'
+     AND NOT EXISTS(SELECT 1 FROM safety_case_findings WHERE case_id=d.case_id AND decision_ref=${decisionRef})`,
+   q`UPDATE usage_review_requests SET state='answered',public_response=${response},answered_by='safety_review',answered_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    WHERE id=${id} AND kind='safety_appeal' AND state='open' AND ${decided(actor)} AND ${gate}`],
+  effect:actor=>q`(${decided(actor)} AND EXISTS(SELECT 1 FROM usage_review_requests WHERE id=${id} AND state='answered' AND public_response=${response})
+   AND (${decision}='upheld' OR (SELECT f.finding FROM safety_case_findings f JOIN safety_appeal_decisions d ON d.case_id=f.case_id WHERE d.appeal_id=${id} ORDER BY f.seq DESC LIMIT 1)<>'confirmed_policy_finding'))`,
+  missing:appealMissing(id)});
+ return {appealId:id,decision,answered:true as const};
 }
 
 type CaptureSource={bytes:()=>Promise<Uint8Array>;sha256:string;size:number;contentType:'image/jpeg'|'application/json';covered:Q};

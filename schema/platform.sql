@@ -1337,8 +1337,10 @@ CREATE TABLE standard_ai_requests (
 CREATE TABLE usage_review_requests (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- kind TEXT NOT NULL DEFAULT 'usage_review' CHECK(kind IN ('usage_review','help')),
- source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support','chat_form')),
+ -- WH-016: 'safety_notice' is the in-app owner notice of a recorded safety action (source 'safety', created answered by
+ -- trigger from safety_action_notices); 'safety_appeal' is the owner's appeal of one notice (source 'support').
+ kind TEXT NOT NULL DEFAULT 'usage_review' CHECK(kind IN ('usage_review','help','safety_notice','safety_appeal')),
+ source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support','chat_form','safety')),
  reference TEXT CHECK(reference IS NULL OR length(reference) BETWEEN 1 AND 200),
  statement TEXT NOT NULL CHECK(length(statement) BETWEEN 1 AND 950),
  created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -1349,7 +1351,9 @@ CREATE TABLE usage_review_requests (
  customer_read_at TEXT,
  CHECK((state='open' AND public_response IS NULL AND answered_by IS NULL AND answered_at IS NULL AND customer_read_at IS NULL) OR
        (state='answered' AND public_response IS NOT NULL AND answered_by IS NOT NULL AND answered_at IS NOT NULL)),
- CHECK(source='support' OR (source='chat' AND kind='usage_review' AND reference IS NULL) OR (source='chat_form' AND kind='help' AND reference IS NULL))
+ CHECK((source='support' AND kind IN ('usage_review','help','safety_appeal')) OR (source='chat' AND kind='usage_review' AND reference IS NULL) OR (source='chat_form' AND kind='help' AND reference IS NULL)
+  OR (source='safety' AND kind='safety_notice' AND reference IS NULL)),
+ CHECK((kind='safety_appeal')=(coalesce(reference,'') GLOB 'safety_notice:*'))
 );
 
 -- External notification of a saved response. A row exists only when an owner-selected,
@@ -1981,6 +1985,8 @@ CREATE INDEX backend_nominations_owner ON backend_nominations(user_id,created_at
 CREATE INDEX standard_ai_owner_time ON standard_ai_requests(user_id,created_at,id);
 
 CREATE UNIQUE INDEX usage_review_one_open ON usage_review_requests(user_id,kind) WHERE state='open';
+-- WH-016: one appeal per safety notice.
+CREATE UNIQUE INDEX usage_review_one_appeal ON usage_review_requests(reference) WHERE kind='safety_appeal';
 
 CREATE INDEX usage_review_queue ON usage_review_requests(state,created_at,id);
 
@@ -3653,9 +3659,14 @@ WHEN OLD.ai_context_allowed=0 AND NEW.ai_context_allowed!=0
 BEGIN SELECT RAISE(ABORT,'private_chat_context'); END;
 
 CREATE TRIGGER usage_review_insert BEFORE INSERT ON usage_review_requests BEGIN
- SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.state!='open' OR NEW.customer_read_at IS NOT NULL OR NOT (
-  (NEW.source='chat' AND EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0))
-  OR (NEW.source='support' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
+ SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.customer_read_at IS NOT NULL OR (NEW.state!='open')<>(NEW.source='safety') OR NOT (
+  -- WH-016 owner notice: only the trigger copy of a restricted safety_action_notices row, to that row's subject.
+  (NEW.source='safety' AND NEW.state='answered' AND NEW.answered_by='safety_review' AND EXISTS(SELECT 1 FROM safety_action_notices n WHERE n.id=NEW.id AND n.subject_user_id=NEW.user_id))
+  -- WH-016 appeal: the owner's own appeal of one of their own notices.
+  OR (NEW.source='support' AND NEW.kind='safety_appeal' AND EXISTS(SELECT 1 FROM usage_review_requests n WHERE n.id=substr(NEW.reference,15) AND n.user_id=NEW.user_id AND n.kind='safety_notice')
+   AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
+  OR (NEW.source='chat' AND EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0))
+  OR (NEW.source='support' AND NEW.kind IN ('usage_review','help') AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
   -- WH-035 Chat help intake: only the owner's own explicit submission of the maintained support form, with its exact statement.
   OR (NEW.source='chat_form' AND EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
    WHERE s.id=NEW.id AND s.user_id=NEW.user_id AND i.project_id IS NULL AND i.state='submitted'
@@ -3666,6 +3677,10 @@ CREATE TRIGGER usage_review_update BEFORE UPDATE ON usage_review_requests BEGIN
  SELECT RAISE(ABORT,'usage_review_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.kind IS NOT OLD.kind OR NEW.source IS NOT OLD.source OR NEW.reference IS NOT OLD.reference OR NEW.statement IS NOT OLD.statement OR NEW.created_at IS NOT OLD.created_at OR NOT (
   (OLD.state='open' AND NEW.state='answered' AND NEW.customer_read_at IS NULL)
   OR (OLD.state='answered' AND NEW.state='answered' AND OLD.customer_read_at IS NULL AND NEW.customer_read_at IS NOT NULL AND NEW.public_response IS OLD.public_response AND NEW.answered_by IS OLD.answered_by AND NEW.answered_at IS OLD.answered_at));
+ -- WH-016: an appeal is answered only with its recorded independent decision (src/safety-cases.ts), and only appeals use
+ -- the generic 'safety_review' responder (the reviewer's identity stays in the restricted decision row).
+ SELECT RAISE(ABORT,'usage_review_immutable') WHERE OLD.state='open' AND NEW.state='answered'
+  AND ((OLD.kind='safety_appeal')<>(NEW.answered_by='safety_review') OR (OLD.kind='safety_appeal' AND NOT EXISTS(SELECT 1 FROM safety_appeal_decisions WHERE appeal_id=NEW.id)));
 END;
 
 CREATE TRIGGER usage_review_delete BEFORE DELETE ON usage_review_requests
@@ -4887,7 +4902,7 @@ CREATE TABLE safety_case_audit (
  actor_ref TEXT CHECK(actor_ref IS NULL OR (actor_ref GLOB 'human:?*' AND length(actor_ref)<=128 AND actor_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
   'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
-  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report','erase_report_contact')),
+  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report','erase_report_contact','list_appeals','read_appeal','decide_appeal')),
  case_id TEXT CHECK(case_id IS NULL OR (length(case_id) BETWEEN 1 AND 128 AND case_id NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  target_ref TEXT CHECK(target_ref IS NULL OR (length(target_ref) BETWEEN 1 AND 128 AND target_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
@@ -5028,7 +5043,9 @@ BEGIN SELECT RAISE(ABORT,'safety_hold_active'); END;
 CREATE TRIGGER safety_cases_retained BEFORE DELETE ON safety_cases BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 
 CREATE TRIGGER safety_case_findings_admit BEFORE INSERT ON safety_case_findings BEGIN
- SELECT RAISE(ABORT,'safety_case_closed') WHERE EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NOT NULL);
+ -- A closed case takes one kind of finding: the not_confirmed correction of an appeal an independent reviewer reversed.
+ SELECT RAISE(ABORT,'safety_case_closed') WHERE EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NOT NULL)
+  AND NOT (NEW.finding='not_confirmed' AND EXISTS(SELECT 1 FROM safety_appeal_decisions d WHERE d.case_id=NEW.case_id AND d.decision='reversed' AND d.decision_ref=NEW.decision_ref AND d.decided_by=NEW.reviewer_ref));
  SELECT RAISE(ABORT,'safety_case_finding_order') WHERE NEW.seq<>COALESCE((SELECT max(seq) FROM safety_case_findings WHERE case_id=NEW.case_id),0)+1
   OR (NEW.seq=1 AND NEW.finding<>'uncertain_flag')
   OR (NEW.seq>1 AND NEW.finding=(SELECT finding FROM safety_case_findings WHERE case_id=NEW.case_id AND seq=NEW.seq-1));
@@ -5150,6 +5167,61 @@ CREATE TRIGGER abuse_reports_retained BEFORE DELETE ON abuse_reports BEGIN
   OLD.triaged_at IS NOT NULL AND OLD.triaged_at<=unixepoch()-31536000 AND (OLD.triage='not_actionable'
    OR (OLD.triage IN ('case_opened','case_linked') AND EXISTS(SELECT 1 FROM safety_case_retention WHERE case_id=OLD.case_id AND released=1))));
 END;
+
+-- WH-016 owner notice and independent appeal (owner decision October 4, 2026, issue #172).
+-- "Action taken against the owner's content" means a recorded confirmed_policy_finding: the only case decision that
+-- determines the subject's content breaks the policy. Opening a case, an uncertain flag, linking evidence or reports,
+-- a preservation hold (which may be confidential legal process), evidence capture, disclosure and retention decisions are
+-- not actions against content and never produce a notice. Each confirmed finding generates exactly one restricted notice
+-- row here (generation), by trigger, naming the reviewer who acted; a second trigger copies a fixed, content-free notice
+-- into the subject's support channel (usage_review_requests kind 'safety_notice') while the account exists (in-app
+-- delivery; the owner's read receipt is the customer read). The notice carries no reporter identity, report text, case
+-- identifier or reviewer identity. Restricted rows have no foreign key to users, so they outlive the account.
+CREATE TABLE safety_action_notices (
+ id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ finding_seq INTEGER NOT NULL,
+ subject_user_id TEXT NOT NULL CHECK(length(subject_user_id) BETWEEN 1 AND 122 AND subject_user_id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ acted_by TEXT NOT NULL CHECK(acted_by GLOB 'human:?*' AND length(acted_by)<=128 AND acted_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ issued_at INTEGER NOT NULL CHECK(issued_at>=0),
+ UNIQUE(case_id,finding_seq),
+ FOREIGN KEY(case_id,finding_seq) REFERENCES safety_case_findings(case_id,seq)
+);
+CREATE INDEX safety_action_notices_subject ON safety_action_notices(subject_user_id,issued_at);
+CREATE TRIGGER safety_action_notices_admit BEFORE INSERT ON safety_action_notices BEGIN
+ SELECT RAISE(ABORT,'safety_case_immutable') WHERE NEW.issued_at<>unixepoch() OR NOT EXISTS(SELECT 1 FROM safety_case_findings f JOIN safety_cases c ON c.id=f.case_id
+  WHERE f.case_id=NEW.case_id AND f.seq=NEW.finding_seq AND f.finding='confirmed_policy_finding' AND f.reviewer_ref=NEW.acted_by AND c.subject_user_id=NEW.subject_user_id);
+END;
+CREATE TRIGGER safety_action_notices_immutable BEFORE UPDATE ON safety_action_notices BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_action_notices_retained BEFORE DELETE ON safety_action_notices BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_case_findings_notice AFTER INSERT ON safety_case_findings WHEN NEW.finding='confirmed_policy_finding' BEGIN
+ INSERT INTO safety_action_notices(id,case_id,finding_seq,subject_user_id,acted_by,issued_at)
+  SELECT lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-'||substr('89ab',1+abs(random()%4),1)||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),NEW.case_id,NEW.seq,c.subject_user_id,NEW.reviewer_ref,unixepoch() FROM safety_cases c WHERE c.id=NEW.case_id;
+END;
+CREATE TRIGGER safety_action_notices_deliver AFTER INSERT ON safety_action_notices BEGIN
+ INSERT INTO usage_review_requests(id,user_id,statement,kind,source,state,public_response,answered_by,answered_at)
+  SELECT NEW.id,NEW.subject_user_id,'Safety review notice','safety_notice','safety','answered','Whumpo''s safety reviewers confirmed that content in your Whumpo account breaks the Acceptable Use Policy (https://digifender.com/legal/whumpo). This notice is sent only because a decision was recorded against your content. It does not say who reported anything or what they wrote. If you think the decision is wrong, you can appeal: open Support (/workspace/support), open this notice, choose Appeal this decision and explain why. A safety reviewer who did not make this decision will review your appeal, and the answer will appear here.','safety_review',strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  WHERE EXISTS(SELECT 1 FROM users WHERE id=NEW.subject_user_id);
+END;
+-- One independent decision per appeal. The deciding case reviewer must differ from the reviewer who acted (the notice's
+-- acted_by) and from the subject; the appeal must be the subject's open appeal of exactly this notice.
+CREATE TABLE safety_appeal_decisions (
+ appeal_id TEXT PRIMARY KEY CHECK(length(appeal_id)=36 AND appeal_id NOT GLOB '*[^0-9a-f-]*'),
+ notice_id TEXT NOT NULL UNIQUE REFERENCES safety_action_notices(id),
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ decision TEXT NOT NULL CHECK(decision IN ('upheld','reversed')),
+ decision_ref TEXT NOT NULL CHECK(length(decision_ref) BETWEEN 1 AND 128 AND decision_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decided_by TEXT NOT NULL CHECK(decided_by GLOB 'human:?*' AND length(decided_by)<=128 AND decided_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decided_at INTEGER NOT NULL CHECK(decided_at>=0)
+);
+CREATE TRIGGER safety_appeal_decisions_admit BEFORE INSERT ON safety_appeal_decisions BEGIN
+ SELECT RAISE(ABORT,'safety_appeal_independence') WHERE EXISTS(SELECT 1 FROM safety_action_notices n WHERE n.id=NEW.notice_id AND (n.acted_by=NEW.decided_by OR 'human:'||n.subject_user_id=NEW.decided_by))
+  OR NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.decided_by AND role='case_reviewer' AND revoked_at IS NULL);
+ SELECT RAISE(ABORT,'safety_appeal_state') WHERE NEW.decided_at<>unixepoch() OR NOT EXISTS(SELECT 1 FROM safety_action_notices n JOIN usage_review_requests a ON a.reference='safety_notice:'||n.id
+  WHERE n.id=NEW.notice_id AND n.case_id=NEW.case_id AND a.id=NEW.appeal_id AND a.kind='safety_appeal' AND a.state='open' AND a.user_id=n.subject_user_id);
+END;
+CREATE TRIGGER safety_appeal_decisions_immutable BEFORE UPDATE ON safety_appeal_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_appeal_decisions_retained BEFORE DELETE ON safety_appeal_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 
 CREATE TRIGGER safety_preserved_records_admit BEFORE INSERT ON safety_preserved_records BEGIN
  SELECT RAISE(ABORT,'safety_hold_subject') WHERE NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE id=NEW.hold_id AND released_at IS NULL);
