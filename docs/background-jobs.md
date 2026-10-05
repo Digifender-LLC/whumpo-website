@@ -70,6 +70,8 @@ For Queues later: store the D1 outbox in the admission transaction, send IDs, an
 4. Treat R2/provider deletions as separate remote effects. Verify scope and current preservation, persist intent, perform the permitted idempotent action, confirm outcome and then advance. A timeout holds that phase; unrelated eligible work may proceed when it does not destroy reconciliation authority.
 5. After primary deletion, wait for all relevant backups/exports/provider copies to expire or reconcile under the policy. Report those stages separately. The job journal in the control database is **not** the independent restore suppression store required by WH-019/059.
 
+October 5, 2026 (source and local tests only, not deployed): the WH-018 implementation follows this D1/cron decision. Confirmed closures continue in the existing hourly/daily maintenance pass as the `account_closures` job, reusing the closure's own journaled compare-and-swap steps (the closure revision is the fence; no separate envelope, lease table, queue or schedule). It is bounded to ten closures and 20 seconds per pass, isolates failures per closure and reports health through `maintenance_health` ([account closure](account-closure.md#background-continuation-account_closures-maintenance-job--october-5-2026-utc)).
+
 ## Cost, entitlement and retention — rechecked October 2, 2026 (UTC)
 
 Public plan availability is verified below; **remaining allowance, enabled product entitlements and other apps' usage in this account were not read**. The owner already authorized the existing Workers Paid subscription. No queue/workflow is provisioned, no plan upgraded and no minimum added here. Reverify prices/account capacity at activation; include scanner/email/provider charges separately.
