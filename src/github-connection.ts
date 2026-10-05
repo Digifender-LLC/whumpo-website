@@ -129,8 +129,13 @@ export async function finishGitHub(db:D1Database,userId:string,state:string,code
  return {connected:true};
 }
 export async function disconnectGitHub(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){
+ await revokeGitHubCustody(db,userId,configuration,transport);return connectionStatus(db,userId,configuration);
+}
+/** The disconnect effect without the status read: cancel authorization attempts, mark every token `revoking` and
+ * attempt provider revocation when configured. Shared by disconnect and WH-018 account closure (owner or maintenance). */
+export async function revokeGitHubCustody(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){
  await db.batch([db.prepare('DELETE FROM github_oauth_states WHERE user_id=?').bind(userId),db.prepare("UPDATE github_token_vault SET state='revoking' WHERE user_id=?").bind(userId),db.prepare('UPDATE github_connections SET active_token_id=NULL WHERE user_id=?').bind(userId),db.prepare('DELETE FROM github_token_staging WHERE token_id IN (SELECT id FROM github_token_vault WHERE user_id=?)').bind(userId)]);
- await cleanupGitHub(db,configuration,transport,userId);return connectionStatus(db,userId,configuration);
+ await cleanupGitHub(db,configuration,transport,userId);
 }
 
 export async function githubInstallations(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){

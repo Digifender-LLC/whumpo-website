@@ -19,11 +19,14 @@ const objects=new Map(),FILES={
  get:async key=>{const bytes=objects.get(key);return bytes?{size:bytes.length,arrayBuffer:async()=>bytes.slice().buffer,body:{cancel:async()=>{}}}:null;},
  head:async key=>objects.has(key)?{size:objects.get(key).length}:null,put:async()=>assert.fail('No upload in this suite'),delete:async key=>{objects.delete(key);},list:async()=>({objects:[],truncated:false}),
 };
-let failNext=null;const intercepted=interceptDatabase(db,/./,async()=>{},async()=>{});
+let failNext=null,failAccount=null;const intercepted=interceptDatabase(db,/./,async()=>{},async()=>{});
 // Interruption hook: throw once on the next statement/batch whose SQL matches the armed pattern (a lost worker or response).
-const armedDB={prepare:q=>{const s=intercepted.prepare(q);const guard=fn=>async(...a)=>{if(failNext&&failNext.test(q)){failNext=null;throw Error('synthetic interruption');}return fn(...a);};
- const wrap=st=>({bind:(...v)=>wrap(st.bind(...v)),first:guard(st.first),all:guard(st.all),run:guard(st.run),__q:q,__s:st});return wrap(s);},
- batch:async list=>{if(failNext&&list.some(s=>failNext.test(s.__q))){failNext=null;throw Error('synthetic interruption');}return intercepted.batch(list.map(s=>s.__s));}};
+// failAccount makes every statement bound to that account fail (one broken closure among several in a maintenance pass).
+const armedDB={prepare:q=>{const s=intercepted.prepare(q);
+ const wrap=(st,v=[])=>{const guard=fn=>async(...a)=>{if(failNext&&failNext.test(q)){failNext=null;throw Error('synthetic interruption');}if(failAccount&&v.includes(failAccount))throw Error('synthetic closure failure');return fn(...a);};
+  return {bind:(...n)=>wrap(st.bind(...n),n),first:guard(st.first),all:guard(st.all),run:guard(st.run),__q:q,__s:st,__v:v};};
+ return wrap(s);},
+ batch:async list=>{if(failNext&&list.some(s=>failNext.test(s.__q))){failNext=null;throw Error('synthetic interruption');}if(failAccount&&list.some(s=>s.__v.includes(failAccount)))throw Error('synthetic closure failure');return intercepted.batch(list.map(s=>s.__s));}};
 const env={DB:armedDB,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},FILES};
 const row=(q,...p)=>db.prepare(q).bind(...p).first(),rows=async(q,...p)=>(await db.prepare(q).bind(...p).all()).results,run=(q,...p)=>db.prepare(q).bind(...p).run();
 let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(error){originals.error(name);throw error;}};
@@ -216,10 +219,63 @@ try{
   assert.ok(await row('SELECT 1 x FROM users WHERE id=?',d.user),'Retained finance records are never deleted by implication');
  });
 
+ await check('maintenance continues waiting closures without the owner: holds block, failures are isolated, re-runs are idempotent',async()=>{
+  const e=await owner(),f=await owner(),g=await owner();
+  await run("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES('token-e',?,?,'2027-01-01','active')",e.user,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${e.user}:token-e`,'gho_SYNTHETIC_E'));
+  const ai=id();await run("INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))",ai,f.user,'b'.repeat(64));
+  await run("UPDATE standard_ai_requests SET state='dispatched' WHERE id=?",ai);await run("UPDATE standard_ai_requests SET state='uncertain' WHERE id=?",ai);
+  const hold=async(o,scope)=>{const caseId='case-bg-'+id().slice(0,8),holdId='hold-bg-'+id().slice(0,8);
+   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,o.user);
+   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,?,?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",holdId,caseId,o.user,scope,scope==='account'?null:o.project);
+   return ()=>run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?",holdId);};
+  const releaseG=await hold(g,'project');
+  const se=await ok(await confirm(e,await closureReview(e))),sf=await ok(await confirm(f,await closureReview(f))),sg=await ok(await confirm(g,await closureReview(g)));
+  assert.equal(steps(se).credentials,'waiting');assert.equal(steps(sf).operations,'waiting');assert.equal(steps(sg).holds,'blocked');
+  assert.equal(se.closure.steps.find(s=>s.step==='credentials').origin,'owner');
+  const closure=o=>row('SELECT * FROM account_closures WHERE account_id=?',o.user),step=(o,name)=>row("SELECT s.* FROM account_closure_steps s JOIN account_closures c ON c.id=s.closure_id WHERE c.account_id=? AND s.step=?",o.user,name);
+  const health=async()=>({...await row("SELECT status,failure_category FROM maintenance_health WHERE job='account_closures'")});
+  const hourly=async()=>{try{await m.worker.scheduled({cron:'47 * * * *'},env);}catch(error){assert.match(String(error),/Scheduled maintenance or telemetry failed/);}return health();};
+  // The provider confirms e's revocation (scheduled connection cleanup removed the token); nobody presses resume.
+  await run("DELETE FROM github_token_vault WHERE id='token-e'");
+  // Pass 1: e's closure fails mid-pass. It is untouched; the others are still re-checked and journaled; health reports failure.
+  const fBefore=await step(f,'operations');failAccount=e.user;
+  assert.deepEqual(await hourly(),{status:'failed',failure_category:'job_failed'});failAccount=null;
+  assert.equal((await step(e,'credentials')).state,'waiting');assert.ok(await row('SELECT 1 x FROM users WHERE id=?',e.user));
+  const fAfter=await step(f,'operations');assert.equal(fAfter.state,'waiting');assert.equal(fAfter.attempts,fBefore.attempts+1);assert.equal(fAfter.last_origin,'maintenance');
+  assert.equal((await row('SELECT state FROM standard_ai_requests WHERE id=?',ai)).state,'uncertain','The continuation never releases an unresolved operation');
+  assert.equal((await step(g,'holds')).state,'blocked');assert.equal((await step(g,'holds')).last_origin,'maintenance');assert.ok(await row('SELECT 1 x FROM projects WHERE id=?',g.project),'Never purged under hold');
+  // Pass 2: e advances to completion through the same journaled steps, without any session.
+  assert.equal((await hourly()).status,'completed');
+  const ce=await closure(e);assert.equal(ce.state,'complete');assert.equal(await row('SELECT 1 x FROM users WHERE id=?',e.user),null);
+  assert.equal((await step(e,'purge')).last_origin,'maintenance');assert.equal((await step(e,'credentials')).last_origin,'maintenance');
+  assert.ok(await row("SELECT 1 x FROM restore_suppressions WHERE kind='account' AND subject_id=?",e.user),'The purge records the same suppression entry');
+  assert.equal((await closure(g)).state,'blocked');assert.ok(await row('SELECT 1 x FROM users WHERE id=?',g.user));
+  // Idempotent re-run: a completed receipt is never selected or changed again.
+  await hourly();assert.equal((await closure(e)).revision,ce.revision);assert.equal((await closure(e)).updated_at,ce.updated_at);
+  // A hold placed after the holds step finished still stops the purge (f); release lets the next pass finish.
+  const releaseF=await hold(f,'account');await run("UPDATE standard_ai_requests SET state='completed',input_tokens=1,output_tokens=1 WHERE id=?",ai);
+  await hourly();
+  assert.equal((await step(f,'operations')).state,'done');const purgeF=await step(f,'purge');assert.equal(purgeF.state,'blocked');
+  assert.deepEqual(JSON.parse(purgeF.detail_json),{reason:'retention_review',support:true});assert.ok(await row('SELECT 1 x FROM users WHERE id=?',f.user),'Never purged under hold');
+  await releaseF();await releaseG();
+  // Two overlapping continuation passes (and an owner resume) after release: compare-and-swap journal, one purge each.
+  const results=await Promise.all([m.continueAccountClosures(env),m.continueAccountClosures(env),account(g,'closure/resume')]);
+  // The owner sees the receipt, or (when the background purged the account mid-request) an honest session refusal.
+  {const r=results[2],body=await r.json();assert.ok(r.status===200&&body.closure.state==='complete'||[401,409].includes(r.status)&&['proof_required','identity_changed'].includes(body.code),r.status+' '+JSON.stringify(body));}
+  for(const o of [f,g]){assert.equal((await closure(o)).state,'complete');assert.equal(await row('SELECT 1 x FROM users WHERE id=?',o.user),null);
+   assert.equal((await rows("SELECT step FROM account_closure_steps s JOIN account_closures c ON c.id=s.closure_id WHERE c.account_id=? AND s.state='done'",o.user)).length,6);}
+  // Bounds: batch size, time budget, and maintenance-only authority.
+  const one=await m.continueAccountClosures(env,{limit:1});assert.ok(one.selected<=1);
+  let t=0;const late=await m.continueAccountClosures(env,{clock:()=>(t+=m.closureContinuation.budgetMs)});assert.equal(late.deferred,late.selected);
+  await assert.rejects(()=>m.continueAccountClosures(env,{limit:m.closureContinuation.batch+1}),/Invalid closure continuation bounds/);
+  await assert.rejects(()=>m.continueAccountClosures({...env,DB:b.scope}),/Platform maintenance authority is required/);
+  assert.equal((await call(b,'/projects',undefined,'GET')).status,200,'The other tenant is untouched');
+ });
+
  assert.equal(network,0,'No provider or network call was made');
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  assert.ok(!logs.join('\n').includes(marker)&&!logs.join('\n').includes('gho_'),'No private value was logged');
- say(`Account lifecycle passed: ${cases} groups (two-tenant export with exact review, owner/visitor scopes and manifest digests; fresh-passkey closure, stop-new-work and delayed callback refusal, interrupted confirmation/journal/purge with resume, unresolved-operation and provider-revocation waits, preservation-hold refusal and release, owner-action and retained-record blockers, surviving receipt) on ${process.argv.includes('--d1')?'local D1':'disposable SQLite'}.`);
+ say(`Account lifecycle passed: ${cases} groups (two-tenant export with exact review, owner/visitor scopes and manifest digests; fresh-passkey closure, stop-new-work and delayed callback refusal, interrupted confirmation/journal/purge with resume, unresolved-operation and provider-revocation waits, preservation-hold refusal and release, owner-action and retained-record blockers, surviving receipt, hourly maintenance continuation with hold refusal, failure isolation and idempotent re-runs) on ${process.argv.includes('--d1')?'local D1':'disposable SQLite'}.`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{globalThis.fetch=originalFetch;for(const k of consoleMethods)console[k]=originals[k];await fixture.close();}
 async function workspaceSessionFor(o,proofOffset){

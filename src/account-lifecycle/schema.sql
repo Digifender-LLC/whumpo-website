@@ -52,6 +52,8 @@ CREATE TABLE account_closure_steps (
  detail_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(detail_json) AND json_type(detail_json)='object' AND length(CAST(detail_json AS BLOB))<=2048),
  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),
  updated_at INTEGER NOT NULL CHECK(updated_at>0),
+ -- Who ran the latest journal write: the owner's session or the hourly maintenance continuation (NULL until first run).
+ last_origin TEXT CHECK(last_origin IS NULL OR last_origin IN ('owner','maintenance')),
  PRIMARY KEY(closure_id,step),
  UNIQUE(closure_id,position)
 ) STRICT;

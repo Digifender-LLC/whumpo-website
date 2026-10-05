@@ -10,9 +10,9 @@
  * Cloudflare zones and other external resources are never deleted; they are listed as remaining obligations. */
 import {hashToken} from '../security';
 import {IdentityError} from '../workspace-identity/authority';
-import {assertWorkspace,requireFreshWorkspace} from '../workspace-identity/admission';
-import {disconnectGitHub,githubConfig} from '../github-connection';
-import {disconnectCloudflare,cloudflareConfig} from '../cloudflare-connection';
+import {assertWorkspace,assertMaintenanceDatabase,requireFreshWorkspace} from '../workspace-identity/admission';
+import {revokeGitHubCustody,githubConfig} from '../github-connection';
+import {revokeCloudflareCustody,cloudflareConfig} from '../cloudflare-connection';
 import {closureCounts,type ClosureCounts} from './inventory';
 
 export class AccountLifecycleError extends Error{
@@ -25,7 +25,9 @@ type Step=typeof closureSteps[number];
 type StepState='pending'|'done'|'waiting'|'blocked';
 type StepResult={state:Exclude<StepState,'pending'>;detail:Record<string,number|string|boolean>};
 type ClosureRow={id:string;account_id:string;review_digest:string;obligations_json:string;state:'closing'|'waiting'|'blocked'|'complete';revision:number;created_at:number;updated_at:number;completed_at:number|null};
-type StepRow={step:Step;position:number;state:StepState;detail_json:string;attempts:number;updated_at:number};
+/** Who ran a journal write: the owner's session (`closure/confirm`, `closure/resume`) or the hourly maintenance continuation. */
+type Origin='owner'|'maintenance';
+type StepRow={step:Step;position:number;state:StepState;detail_json:string;attempts:number;updated_at:number;last_origin:Origin|null};
 const now=()=>Math.floor(Date.now()/1000);
 const sum=(c:ClosureCounts,keys:readonly string[])=>keys.reduce((n,k)=>n+c[k],0);
 
@@ -138,8 +140,8 @@ export async function confirmClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string
  const at=now(),statements=[
   db.prepare("INSERT INTO account_closures(id,account_id,policy_version,review_digest,obligations_json,state,revision,created_at,updated_at) SELECT ?,?,1,?,?,'closing',1,?,? WHERE EXISTS(SELECT 1 FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='closure' AND review_digest=? AND expires_at>?)")
    .bind(reviewId,user,reviewDigest,JSON.stringify(obligations),at,at,reviewId,user,reviewDigest,at),
-  ...closureSteps.map((step,i)=>db.prepare("INSERT INTO account_closure_steps(closure_id,step,position,state,detail_json,attempts,updated_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM account_closures WHERE id=? AND account_id=?)")
-   .bind(reviewId,step,i+1,step==='freeze'?'done':'pending',step==='freeze'?JSON.stringify({newWorkStopped:true}):'{}',step==='freeze'?1:0,at,reviewId,user)),
+  ...closureSteps.map((step,i)=>db.prepare("INSERT INTO account_closure_steps(closure_id,step,position,state,detail_json,attempts,updated_at,last_origin) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM account_closures WHERE id=? AND account_id=?)")
+   .bind(reviewId,step,i+1,step==='freeze'?'done':'pending',step==='freeze'?JSON.stringify({newWorkStopped:true}):'{}',step==='freeze'?1:0,at,step==='freeze'?'owner':null,reviewId,user)),
  ];
  try{
   const results=await db.batch(statements);
@@ -154,13 +156,14 @@ export async function confirmClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string
 async function readClosure(db:D1Database,user:string){
  const closure=await db.prepare('SELECT * FROM account_closures WHERE account_id=?').bind(user).first<ClosureRow>();
  if(!closure)return null;
- const steps=(await db.prepare('SELECT step,position,state,detail_json,attempts,updated_at FROM account_closure_steps WHERE closure_id=? ORDER BY position').bind(closure.id).all<StepRow>()).results;
+ const steps=(await db.prepare('SELECT step,position,state,detail_json,attempts,updated_at,last_origin FROM account_closure_steps WHERE closure_id=? ORDER BY position').bind(closure.id).all<StepRow>()).results;
  return {closure,steps};
 }
+const presentStep=(s:StepRow)=>({step:s.step,state:s.state,attempts:s.attempts,updatedAt:s.updated_at,origin:s.last_origin,detail:JSON.parse(s.detail_json) as Record<string,unknown>});
 function presentStatus(closure:ClosureRow,steps:StepRow[]){
  return {version:1 as const,closure:{id:closure.id,state:closure.state,revision:closure.revision,createdAt:closure.created_at,updatedAt:closure.updated_at,completedAt:closure.completed_at,
   obligations:JSON.parse(closure.obligations_json) as Record<string,unknown>,
-  steps:steps.map(s=>({step:s.step,state:s.state,attempts:s.attempts,updatedAt:s.updated_at,detail:JSON.parse(s.detail_json) as Record<string,unknown>}))}};
+  steps:steps.map(presentStep)}};
 }
 export async function closureStatus(db:D1Database,user:string,input:unknown){
  record(input,[]);
@@ -182,12 +185,12 @@ async function withdraw(db:D1Database,user:string):Promise<StepResult>{
  ]);
  return {state:'done',detail:{websitesWithdrawn:results[0].meta.changes,guestLinksRevoked:results[2].meta.changes,modulesSuspended:results[3].meta.changes}};
 }
-/** Reuses the existing disconnect paths: they cancel pending authorization attempts, mark every token `revoking` and
+/** Reuses the existing disconnect effect (without its status read, which needs a session): they cancel pending authorization attempts, mark every token `revoking` and
  * attempt provider revocation when configured. Tokens and their encryption keys stay until the provider confirms; the
  * scheduled connection cleanup keeps retrying. The step waits until no credential custody remains. */
 async function revokeCredentials(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:typeof fetch):Promise<StepResult>{
  const db=env.DB;let retry=false;
- for(const disconnect of [()=>disconnectGitHub(db,user,githubConfig(env as Env),transport),()=>disconnectCloudflare(db,user,cloudflareConfig(env as Env),transport)]){
+ for(const disconnect of [()=>revokeGitHubCustody(db,user,githubConfig(env as Env),transport),()=>revokeCloudflareCustody(db,user,cloudflareConfig(env as Env),transport)]){
   try{await disconnect();}catch(error){if(error instanceof IdentityError)throw error;retry=true;}
  }
  const counts=await closureCounts(db,user),pending=sum(counts,credentials);
@@ -203,11 +206,11 @@ async function operations(db:D1Database,user:string):Promise<StepResult>{
  return open?{state:'waiting',detail:{unresolvedOperations:open}}:{state:'done',detail:{unresolvedOperations:0}};
 }
 
-async function journal(db:D1Database,closure:ClosureRow,step:Step,result:StepResult,closureState:ClosureRow['state'],extra:D1PreparedStatement[]=[]){
+async function journal(db:D1Database,closure:ClosureRow,step:Step,result:StepResult,closureState:ClosureRow['state'],origin:Origin,extra:D1PreparedStatement[]=[]){
  const at=now(),complete=closureState==='complete';
  const results=await db.batch([
-  db.prepare('UPDATE account_closure_steps SET state=?,detail_json=?,attempts=attempts+1,updated_at=? WHERE closure_id=? AND step=? AND state!=\'done\' AND (SELECT revision FROM account_closures WHERE id=?)=?')
-   .bind(result.state,JSON.stringify(result.detail),at,closure.id,step,closure.id,closure.revision),
+  db.prepare('UPDATE account_closure_steps SET state=?,detail_json=?,attempts=attempts+1,updated_at=?,last_origin=? WHERE closure_id=? AND step=? AND state!=\'done\' AND (SELECT revision FROM account_closures WHERE id=?)=?')
+   .bind(result.state,JSON.stringify(result.detail),at,origin,closure.id,step,closure.id,closure.revision),
   db.prepare('UPDATE account_closures SET state=?,revision=revision+1,updated_at=?,completed_at=? WHERE id=? AND revision=?').bind(closureState,at,complete?at:null,closure.id,closure.revision),
   ...extra,
  ]);
@@ -215,8 +218,10 @@ async function journal(db:D1Database,closure:ClosureRow,step:Step,result:StepRes
 }
 
 /** Runs unfinished steps in order until one waits, blocks or the account is purged. Safe to call concurrently or after
- * an interruption: every step is idempotent and each journal write is a compare-and-swap on the closure revision. */
-async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:typeof fetch=globalThis.fetch.bind(globalThis)){
+ * an interruption: every step is idempotent and each journal write is a compare-and-swap on the closure revision.
+ * `owner` callers pass the admitted workspace database (closure `permit`); the maintenance continuation passes the raw
+ * platform database, where the durable confirmed closure row is the only authority and no session is created. */
+async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:typeof fetch=globalThis.fetch.bind(globalThis),origin:Origin='owner'){
  const db=env.DB;
  for(let guard=0;guard<closureSteps.length+1;guard++){
   const current=await readClosure(db,user);
@@ -224,10 +229,17 @@ async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
   const {closure,steps}=current,next=steps.find(s=>s.state!=='done');
   if(closure.state==='complete'||!next)return presentStatus(closure,steps);
   if(next.step==='purge'){
+   // A hold placed after the holds step finished still stops the purge before any delete is attempted (the account,
+   // project and file hold triggers refuse the cascade inside the batch as well).
+   const held=await holds(db,user);
+   if(held.state!=='done'){
+    if(!await journal(db,closure,'purge',held,'blocked',origin))continue;
+    const after=await readClosure(db,user);return presentStatus(after!.closure,after!.steps);
+   }
    const counts=await closureCounts(db,user),retained=[...Object.keys(ownerActions),...operatorRecords].filter(k=>counts[k]>0);
    if(retained.length){
     const result:StepResult={state:'blocked',detail:{reason:'retained_records',retainedRecordKinds:retained.length,support:true}};
-    if(!await journal(db,closure,'purge',result,'blocked'))continue;
+    if(!await journal(db,closure,'purge',result,'blocked',origin))continue;
     const after=await readClosure(db,user);return presentStatus(after!.closure,after!.steps);
    }
    const result:StepResult={state:'done',detail:{projectsRemoved:counts.projects,objectsQueuedForCleanup:counts.projectFileRecords,primaryAccountRowsDeleted:true}};
@@ -235,7 +247,7 @@ async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
    try{
     // The users cascade and the completed journal commit together, after the identity assertion; a hold, an unresolved
     // continuation guard or any non-cascading reference aborts the whole batch and the journal stays unfinished.
-    const ok=await journal(db,closure,'purge',result,'complete',[
+    const ok=await journal(db,closure,'purge',result,'complete',origin,[
      db.prepare(`DELETE FROM identity_challenges WHERE account_id=? AND ${fence}`).bind(user,closure.id,user,closure.revision+1),
      db.prepare(`DELETE FROM users WHERE id=? AND ${fence}`).bind(user,closure.id,user,closure.revision+1),
     ]);
@@ -247,18 +259,55 @@ async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
     if(!hold&&!/FOREIGN KEY|constraint|RAISE|_retained|_guard|unresolved/i.test(text))throw error;
     const blocked:StepResult={state:'blocked',detail:hold?{reason:'retention_review',support:true}:{reason:'retained_records',support:true}};
     const again=await readClosure(db,user);if(!again)throw error;
-    await journal(db,again.closure,'purge',blocked,'blocked');
+    await journal(db,again.closure,'purge',blocked,'blocked',origin);
     const after=await readClosure(db,user);return presentStatus(after!.closure,after!.steps);
    }
    // The account and its session are gone; read the receipt with the raw closure id (no account authority remains).
    return {version:1 as const,closure:{id:closure.id,state:'complete' as const,completedAt:now(),obligations:JSON.parse(closure.obligations_json) as Record<string,unknown>,
-    steps:[...steps.filter(s=>s.step!=='purge').map(s=>({step:s.step,state:s.state,attempts:s.attempts,updatedAt:s.updated_at,detail:JSON.parse(s.detail_json) as Record<string,unknown>})),{step:'purge' as const,state:'done' as const,attempts:next.attempts+1,updatedAt:now(),detail:result.detail}]}};
+    steps:[...steps.filter(s=>s.step!=='purge').map(presentStep),{step:'purge' as const,state:'done' as const,attempts:next.attempts+1,updatedAt:now(),origin,detail:result.detail}]}};
   }
   const result=next.step==='withdraw'?await withdraw(db,user):next.step==='credentials'?await revokeCredentials(env,user,transport):next.step==='holds'?await holds(db,user):await operations(db,user);
   const state:ClosureRow['state']=result.state==='done'?'closing':result.state;
-  if(!await journal(db,closure,next.step,result,state))continue;
+  if(!await journal(db,closure,next.step,result,state,origin))continue;
   if(result.state!=='done'){const after=await readClosure(db,user);return presentStatus(after!.closure,after!.steps);}
  }
- await assertWorkspace(db,user);
+ if(origin==='owner')await assertWorkspace(db,user);
  throw new AccountLifecycleError(503,'closure_unavailable','Account closure could not make progress. Try again shortly.');
+}
+
+/** Bounds for one maintenance continuation pass (hourly and daily `account_closures` job). */
+export const closureContinuation=Object.freeze({batch:10,budgetMs:20000});
+export type ClosureContinuationOutcome={selected:number;advanced:number;unchanged:number;completed:number;failed:number;deferred:number};
+/** WH-018 background continuation of confirmed closures that wait on provider revocation, unresolved operations, a
+ * released hold or an operator. It runs the SAME journaled compare-and-swap steps as `closure/resume` (no second
+ * implementation), on the raw platform database: the confirmed closure row is the authority, so no session, Chat turn,
+ * model or new provider capability is involved. Holds keep blocking exactly as for the owner. At most `limit` unfinished
+ * closures are selected per pass, least recently journaled first (each journal write moves a closure to the back), and
+ * no new closure starts after `budgetMs`; a closure in flight finishes its current step sequence. Each closure is
+ * isolated: a failure is counted and the rest continue; the pass then throws a content-free error so maintenance health
+ * records `failed`. A closure that only re-confirms its waiting/blocked state still journals the attempt and origin. */
+export async function continueAccountClosures(env:Pick<Env,'DB'>&Partial<Env>,options:{limit?:number;budgetMs?:number;clock?:()=>number;transport?:typeof fetch}={}):Promise<ClosureContinuationOutcome>{
+ assertMaintenanceDatabase(env.DB);
+ const limit=options.limit??closureContinuation.batch,budgetMs=options.budgetMs??closureContinuation.budgetMs,clock=options.clock??Date.now;
+ if(!Number.isSafeInteger(limit)||limit<1||limit>closureContinuation.batch||!Number.isSafeInteger(budgetMs)||budgetMs<1||budgetMs>closureContinuation.budgetMs)throw new Error('Invalid closure continuation bounds');
+ const transport=options.transport??globalThis.fetch.bind(globalThis),started=clock();
+ const {results}=await env.DB.prepare("SELECT account_id,revision FROM account_closures WHERE state!='complete' ORDER BY updated_at,id LIMIT ?").bind(limit).all<{account_id:string;revision:number}>();
+ const outcome:ClosureContinuationOutcome={selected:results.length,advanced:0,unchanged:0,completed:0,failed:0,deferred:0};
+ for(const row of results){
+  if(clock()-started>=budgetMs){outcome.deferred++;continue;}
+  try{
+   const before=(await env.DB.prepare("SELECT count(*) n FROM account_closure_steps s JOIN account_closures c ON c.id=s.closure_id WHERE c.account_id=? AND s.state='done'").bind(row.account_id).first<{n:number}>())?.n??0;
+   const status=await runClosure(env,row.account_id,transport,'maintenance');
+   if(status.closure.state==='complete')outcome.completed++;
+   else if(status.closure.steps.filter(s=>s.state==='done').length>before)outcome.advanced++;
+   else outcome.unchanged++;
+  }catch{
+   // An overlapping pass or owner resume may have completed this closure between our read and our step (the account
+   // rows are then gone); that is completion, not failure. Anything else is isolated to this closure.
+   const latest=await env.DB.prepare('SELECT state FROM account_closures WHERE account_id=?').bind(row.account_id).first<{state:string}>().catch(()=>null);
+   if(latest?.state==='complete')outcome.completed++;else outcome.failed++;
+  }
+ }
+ if(outcome.failed)throw new Error('Account closure continuation failed');
+ return outcome;
 }

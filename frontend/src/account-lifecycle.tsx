@@ -118,12 +118,13 @@ function ClosureProgress({initial}:{initial:ClosureStatus}){
  }
  const complete=status.state==='complete';
  return <Card><CardHeader><CardTitle>{complete?'Your account is closed':'Your account is closing'}</CardTitle>
-  <CardDescription>{complete?'Your account data was deleted. Keep this receipt; you will not be able to sign in to this account again.':'New work is stopped. Each step below runs once and can be resumed safely; nothing is repeated or released because it is retried.'}</CardDescription></CardHeader>
+  <CardDescription>{complete?'Your account data was deleted. Keep this receipt; you will not be able to sign in to this account again.':'New work is stopped. Each step below runs once and can be resumed safely; nothing is repeated or released because it is retried. Waiting steps are also checked automatically about once an hour, so closure finishes even if you do not return.'}</CardDescription></CardHeader>
   <CardContent className="space-y-4">
    <p className="text-sm"><StatusBadge status={badge(status.state)}>{closureStateLabels[status.state]}</StatusBadge> <span className="break-all">Closure {status.id}</span></p>
    <ol className="space-y-2" aria-label="Closure steps">{status.steps.map(s=><li key={s.step} className="rounded-md border p-3 text-sm space-y-1">
     <p className="flex flex-wrap items-center gap-2"><span className="font-medium">{closureStepLabels[s.step]}</span><StatusBadge status={badge(s.state)}>{closureStateLabels[s.state]}</StatusBadge></p>
     {closureDetail(s.detail).map(d=><p key={d} className="text-muted-foreground">{d}</p>)}
+    {s.origin==='maintenance'&&<p className="text-muted-foreground">Last checked automatically.</p>}
    </li>)}</ol>
    {!complete&&<div className="flex flex-wrap gap-3"><Button className={wrap} disabled={busy} onClick={()=>void resume()}>{busy?'Continuing…':'Continue closure'}</Button><Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Get support</Link></Button></div>}
    {error&&<p role="alert" className="text-sm">{error}</p>}
