@@ -14,7 +14,7 @@ export type SafetyCaseReason='missing_role'|'invalid_input'|'conflict'|'not_foun
 type AuditReason=SafetyCaseReason|'ok'|'unauthenticated'|'conflict_of_interest';
 type Action='bootstrap_administrator'|'grant_role'|'revoke_role'|'open_case'|'link_evidence'|'record_finding'|'place_hold'|'release_hold'|'close_case'|'read_case'|'read_audit'|'list_holds'
  |'capture_evidence'|'dispose_evidence'|'request_disclosure'|'approve_disclosure'|'record_disclosure'|'cancel_disclosure'|'read_disclosure'
- |'list_retention'|'preview_retention'|'decide_retention'|'list_reports'|'read_report'|'triage_report'|'erase_report_contact'|'list_appeals'|'read_appeal'|'decide_appeal';
+ |'list_retention'|'preview_retention'|'decide_retention'|'list_reports'|'read_report'|'triage_report'|'erase_report_contact'|'list_appeals'|'read_appeal'|'decide_appeal'|'place_notice_delay'|'lift_notice_delay';
 type Q={sql:string;params:unknown[]};
 type Database=Pick<D1Database,'prepare'|'batch'>;
 type EvidenceEnv={DB:Database;FILES:Pick<R2Bucket,'get'|'put'|'head'|'delete'>};
@@ -58,7 +58,7 @@ function classify(error:unknown):SafetyCaseReason{
  if(/safety_case_closed/.test(text))return 'case_closed';
  if(/safety_case_capacity/.test(text))return 'capacity';
  if(/safety_case_subject_missing|safety_case_evidence_missing|safety_hold_subject/.test(text))return 'not_found';
- if(/safety_case_immutable|abuse_report_immutable|safety_appeal_independence|safety_appeal_state|safety_case_finding_order|safety_retention_changed|safety_retention_case_open|UNIQUE|CHECK constraint|FOREIGN KEY/.test(text))return 'conflict';
+ if(/safety_case_immutable|abuse_report_immutable|safety_appeal_independence|safety_appeal_state|safety_notice_delay|safety_case_finding_order|safety_retention_changed|safety_retention_case_open|UNIQUE|CHECK constraint|FOREIGN KEY/.test(text))return 'conflict';
  return 'unavailable';
 }
 async function record(db:Database,actor:string|null,action:Action,caseId:string|null,target:string|null,outcome:'denied'|'rejected',reason:AuditReason){
@@ -200,20 +200,48 @@ export async function closeSafetyCase(db:Database,principal:unknown,input:{caseI
   writes:(gate,actor)=>[q`UPDATE safety_cases SET closed_at=unixepoch(),closed_by=${actor},close_ref=${closeRef} WHERE id=${caseId} AND closed_at IS NULL AND ${gate}`],
   effect:actor=>q`EXISTS(SELECT 1 FROM safety_cases WHERE id=${caseId} AND closed_by=${actor} AND close_ref=${closeRef})`,missing:caseMissing(caseId)});
 }
+/** WH-016 notice delay under legal process (owner decision October 5, 2026, issue #172). A preservation approver who is
+ * not the case subject marks a case "legal hold - delay notice" with a restricted, bounded reason (1-500 printable
+ * characters). While the mark is active, a confirmed finding still records its restricted notice row but the schema
+ * delivers no in-app notice; lifting is a separate audited action that delivers the same fixed notice then. The reason is
+ * returned only by the restricted case read; it is never audited, logged, shown to the owner or given to a model. The mark
+ * is placed on the case, before the finding is confirmed, because a confirmed finding delivers its notice in the same
+ * transaction. */
+const delayReason=/^[^\u0000-\u001f\u007f]{1,500}$/;
+export const safetyNoticeDelayReasonLimit=500;
+export async function placeSafetyNoticeDelay(db:Database,principal:unknown,input:{delayId:string;caseId:string;reason:string}){
+ const {delayId,caseId,reason}=input;
+ await attempt(db,{principal,action:'place_notice_delay',caseId,target:delayId,roles:['preservation_approver'],valid:isOpaque(delayId)&&typeof reason==='string'&&delayReason.test(reason),
+  writes:(gate,actor)=>[q`INSERT INTO safety_notice_delays(id,case_id,reason,placed_by,placed_at) SELECT ${delayId},id,${reason},${actor},unixepoch() FROM safety_cases
+   WHERE id=${caseId} AND ${gate} AND NOT EXISTS(SELECT 1 FROM safety_notice_delays WHERE id=${delayId}) AND NOT EXISTS(SELECT 1 FROM safety_notice_delays WHERE case_id=${caseId} AND lifted_at IS NULL)`],
+  effect:actor=>q`EXISTS(SELECT 1 FROM safety_notice_delays WHERE id=${delayId} AND case_id=${caseId} AND reason=${reason} AND placed_by=${actor})`,missing:caseMissing(caseId)});
+ return {delayId,caseId,active:true as const};
+}
+/** Separate, audited lift. In the same transaction the schema delivers every undelivered notice of the case (not for a
+ * withdrawn finding or a deleted account); the appeal window starts at that delivery. */
+export async function liftSafetyNoticeDelay(db:Database,principal:unknown,input:{delayId:string;caseId:string;liftRef:string}){
+ const {delayId,caseId,liftRef}=input;
+ await attempt(db,{principal,action:'lift_notice_delay',caseId,target:delayId,roles:['preservation_approver'],valid:isOpaque(delayId)&&isOpaque(liftRef),
+  writes:(gate,actor)=>[q`UPDATE safety_notice_delays SET lifted_at=unixepoch(),lifted_by=${actor},lift_ref=${liftRef} WHERE id=${delayId} AND case_id=${caseId} AND lifted_at IS NULL AND ${gate}`],
+  effect:actor=>q`EXISTS(SELECT 1 FROM safety_notice_delays WHERE id=${delayId} AND case_id=${caseId} AND lifted_by=${actor} AND lift_ref=${liftRef})`,
+  missing:q`NOT EXISTS(SELECT 1 FROM safety_notice_delays WHERE id=${delayId} AND case_id=${caseId})`});
+ return {delayId,caseId,active:false as const};
+}
 type HoldView={id:string;scope:SafetyHoldScope;projectId:string|null;fileId:string|null;legalBasisRef:string;approvedBy:string;placedAt:number;reviewDueAt:number;
  releasedAt:number|null;releasedBy:string|null;releaseRef:string|null;active:boolean;overdue:boolean};
 export type SafetyEvidenceObjectView={id:string;source:SafetyEvidenceSource;sourceRef:string;contentType:string;sha256:string;size:number;capturedBy:string;capturedAt:number;retentionDueAt:number;storedAt:number|null;disposedAt:number|null};
 export type SafetyRetentionDecisionView={seq:number;decision:'extend'|'release';reviewedDueAt:number;nextDueAt:number|null;reviewSha256:string;decisionRef:string;decidedBy:string;decidedAt:number};
+export type NoticeDelayView={id:string;reason:string;placedBy:string;placedAt:number;liftedBy:string|null;liftedAt:number|null;liftRef:string|null;active:boolean};
 export type SafetyCaseView={id:string;subjectUserId:string;intakeRef:string;openedBy:string;openedAt:number;closedAt:number|null;
  retention:{dueAt:number;released:boolean;reviewDue:boolean;decisions:SafetyRetentionDecisionView[]};
  currentFinding:SafetyCaseFinding;findings:{seq:number;finding:SafetyCaseFinding;reviewerRef:string;decisionRef:string;recordedAt:number}[];
- evidenceIds:string[];holds:HoldView[];evidenceObjects:SafetyEvidenceObjectView[];disclosures:{id:string;state:string;itemCount:number;requestedAt:number}[]};
+ evidenceIds:string[];holds:HoldView[];noticeDelays:NoticeDelayView[];evidenceObjects:SafetyEvidenceObjectView[];disclosures:{id:string;state:string;itemCount:number;requestedAt:number}[]};
 const evidenceColumns=q`id,source,source_ref AS sourceRef,content_type AS contentType,sha256,size,captured_by AS capturedBy,captured_at AS capturedAt,retention_due_at AS retentionDueAt,stored_at AS storedAt,disposed_at AS disposedAt`;
 const decisionColumns=q`seq,decision,reviewed_due_at AS reviewedDueAt,next_due_at AS nextDueAt,review_sha256 AS reviewSha256,decision_ref AS decisionRef,decided_by AS decidedBy,decided_at AS decidedAt`;
 /** Restricted read: identifiers, digests and decisions only, never evidence bytes. The read itself is audited. */
 export async function readSafetyCase(db:Database,principal:unknown,input:{caseId:string}):Promise<SafetyCaseView>{
  const {caseId}=input;
- const {rows:[cases,rows,links,held,objects,disclosures,retention,decisions]}=await attempt(db,{principal,action:'read_case',caseId,roles:caseRoles,
+ const {rows:[cases,rows,links,held,objects,disclosures,retention,decisions,delays]}=await attempt(db,{principal,action:'read_case',caseId,roles:caseRoles,
   reads:gate=>[
    q`SELECT id,subject_user_id AS subjectUserId,intake_ref AS intakeRef,opened_by AS openedBy,opened_at AS openedAt,closed_at AS closedAt FROM safety_cases WHERE id=${caseId} AND ${gate}`,
    q`SELECT seq,finding,reviewer_ref AS reviewerRef,decision_ref AS decisionRef,recorded_at AS recordedAt FROM safety_case_findings WHERE case_id=${caseId} AND ${gate} ORDER BY seq`,
@@ -223,12 +251,13 @@ export async function readSafetyCase(db:Database,principal:unknown,input:{caseId
    q`SELECT ${evidenceColumns} FROM safety_evidence_objects WHERE case_id=${caseId} AND ${gate} ORDER BY captured_at,id`,
    q`SELECT id,state,item_count AS itemCount,requested_at AS requestedAt FROM safety_disclosures WHERE case_id=${caseId} AND ${gate} ORDER BY requested_at,id`,
    q`SELECT due_at AS dueAt,released,(released=0 AND due_at<=unixepoch()) AS reviewDue FROM safety_case_retention WHERE case_id=${caseId} AND ${gate}`,
-   q`SELECT ${decisionColumns} FROM safety_retention_decisions WHERE case_id=${caseId} AND ${gate} ORDER BY seq`],
+   q`SELECT ${decisionColumns} FROM safety_retention_decisions WHERE case_id=${caseId} AND ${gate} ORDER BY seq`,
+   q`SELECT id,reason,placed_by AS placedBy,placed_at AS placedAt,lifted_by AS liftedBy,lifted_at AS liftedAt,lift_ref AS liftRef,lifted_at IS NULL AS active FROM safety_notice_delays WHERE case_id=${caseId} AND ${gate} ORDER BY placed_at,id`],
   effect:()=>q`EXISTS(SELECT 1 FROM safety_cases WHERE id=${caseId})`,missing:caseMissing(caseId)});
  const row=cases[0],term=retention[0];if(!row||!rows.length||!term)throw new SafetyCaseError('unavailable');
  return {...(row as Pick<SafetyCaseView,'id'|'subjectUserId'|'intakeRef'|'openedBy'|'openedAt'|'closedAt'>),
   retention:{dueAt:term.dueAt as number,released:!!term.released,reviewDue:!!term.reviewDue,decisions:decisions as SafetyRetentionDecisionView[]},currentFinding:rows.at(-1)!.finding as SafetyCaseFinding,findings:rows as SafetyCaseView['findings'],
-  evidenceIds:links.map(l=>l.evidenceId as string),holds:held.map(h=>({...h,active:!!h.active,overdue:!!h.overdue})) as HoldView[],
+  evidenceIds:links.map(l=>l.evidenceId as string),holds:held.map(h=>({...h,active:!!h.active,overdue:!!h.overdue})) as HoldView[],noticeDelays:delays.map(d=>({...d,active:!!d.active})) as NoticeDelayView[],
   evidenceObjects:objects as SafetyEvidenceObjectView[],disclosures:disclosures as SafetyCaseView['disclosures']};
 }
 /** Auditor-only access history for one case. */

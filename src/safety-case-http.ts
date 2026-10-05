@@ -39,6 +39,8 @@ const actions:Record<string,{keys:readonly string[];optional?:readonly string[];
   run:(e,p,d)=>cases.placePreservationHold(e.DB,p,{holdId:s(d.holdId),caseId:s(d.caseId),legalBasisRef:s(d.legalBasisRef),reviewDays:d.reviewDays as number,scope:d.scope as cases.SafetyHoldScope,
    ...(d.projectId===undefined?{}:{projectId:s(d.projectId)}),...(d.fileId===undefined?{}:{fileId:s(d.fileId)})})},
  'holds/release':{keys:['holdId','caseId','releaseRef'],run:(e,p,d)=>cases.releasePreservationHold(e.DB,p,{holdId:s(d.holdId),caseId:s(d.caseId),releaseRef:s(d.releaseRef)})},
+ 'notice-delays/place':{keys:['delayId','caseId','reason'],run:(e,p,d)=>cases.placeSafetyNoticeDelay(e.DB,p,{delayId:s(d.delayId),caseId:s(d.caseId),reason:s(d.reason)})},
+ 'notice-delays/lift':{keys:['delayId','caseId','liftRef'],run:(e,p,d)=>cases.liftSafetyNoticeDelay(e.DB,p,{delayId:s(d.delayId),caseId:s(d.caseId),liftRef:s(d.liftRef)})},
  'holds/list':{keys:[],run:(e,p)=>cases.listActivePreservationHolds(e.DB,p)},
  'evidence/capture':{keys:['objectId','caseId','holdId','source','sourceRef'],run:(e,p,d)=>cases.captureSafetyEvidence(e,p,{objectId:s(d.objectId),caseId:s(d.caseId),holdId:s(d.holdId),source:d.source as cases.SafetyEvidenceSource,sourceRef:s(d.sourceRef)})},
  'evidence/dispose':{keys:['objectId','caseId','disposeRef'],run:(e,p,d)=>cases.disposeSafetyEvidence(e,p,{objectId:s(d.objectId),caseId:s(d.caseId),disposeRef:s(d.disposeRef)})},

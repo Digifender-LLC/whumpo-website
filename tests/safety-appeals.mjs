@@ -3,7 +3,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {runUsageReview} from '../tools/usage-review-input.mjs';
-Error.stackTraceLimit=0;
+Error.stackTraceLimit=process.env.TRACE?20:0;
 // WH-016 owner notice and independent appeal (owner decision October 4, 2026, issue #172) over the actual Worker (Support
 // API, Chat orchestration and the Chat support view), the restricted safety-case module and the operator HTTP surface.
 // Synthetic placeholders and scripted inference only; no network, provider, email or real case. SQLite by default;
@@ -172,9 +172,90 @@ try{
  await run('DELETE FROM users WHERE id=?',b.user);
  assert.equal(await count('safety_action_notices'),4);assert.equal(await count('safety_appeal_decisions'),2);ok();
 
+ // ---- Notice delay under legal process (owner decision October 5, 2026): marked by a preservation approver who is not the
+ // case subject; while marked, generation is recorded and nothing is delivered; lifting (a separate audited action) delivers.
+ const d=await owner(),subjectKeeper=await operator(d),REASON='SYNTHETIC-LEGAL-PROCESS-REASON-CANARY';
+ await c.grantSafetyCaseRole(db,admin.p,{grantId:'g-subject-keeper',operatorAccountId:subjectKeeper.id,role:'preservation_approver'});
+ await c.openSafetyCase(db,actor.p,{caseId:'case-d1',subjectUserId:d.user,intakeRef:'manual-d1'});
+ const place=(by,extra={})=>c.placeSafetyNoticeDelay(db,by.p,{delayId:'delay-d1',caseId:'case-d1',reason:REASON,...extra});
+ // Role, separation and input checks (code and schema).
+ await refused(()=>place(actor),'missing_role');await refused(()=>place(auditor),'missing_role');await refused(()=>place(outsider),'missing_role');await refused(()=>place(admin),'missing_role');
+ await refused(()=>place(subjectKeeper),'not_found');
+ for(const reason of ['','x'.repeat(501),'bad\u0000reason','bad\nreason',7])await refused(()=>place(keeper,{reason}),'invalid_input');
+ await refused(()=>place(keeper,{delayId:'bad id'}),'invalid_input');await refused(()=>c.placeSafetyNoticeDelay(db,keeper.p,{delayId:'delay-none',caseId:'case-missing',reason:REASON}),'not_found');
+ assert.equal(await count('safety_notice_delays'),0);ok();
+ for(const by of ['human:'+actor.id,'human:'+d.user,'human:'+auditor.id])await assert.rejects(()=>run("INSERT INTO safety_notice_delays(id,case_id,reason,placed_by,placed_at) VALUES('raw','case-d1','r',?,unixepoch())",by),/safety_notice_delay/,by);
+ await assert.rejects(()=>run("INSERT INTO safety_notice_delays(id,case_id,reason,placed_by,placed_at) VALUES('raw','case-d1','',?,unixepoch())",'human:'+keeper.id),/CHECK/);ok();
+ // Over HTTP: strict body, declared actors refused, restricted role required.
+ assert.equal((await operatorCall(keeper.authority.token,'notice-delays/place',{delayId:'delay-d1',caseId:'case-d1',reason:REASON,actor:'human:x'})).status,400);
+ assert.equal((await operatorCall(actor.authority.token,'notice-delays/place',{delayId:'delay-d1',caseId:'case-d1',reason:REASON})).status,403);
+ assert.equal((await operatorCall(subjectKeeper.authority.token,'notice-delays/place',{delayId:'delay-d1',caseId:'case-d1',reason:REASON})).status,404);ok();
+ const placed=await operatorCall(keeper.authority.token,'notice-delays/place',{delayId:'delay-d1',caseId:'case-d1',reason:REASON});assert.equal(placed.status,200,JSON.stringify(placed.body));assert.deepEqual(placed.body.result,{delayId:'delay-d1',caseId:'case-d1',active:true});
+ assert.ok(!JSON.stringify(placed.body).includes(REASON),'The write response never echoes the reason');ok();
+ assert.deepEqual(await place(keeper),{delayId:'delay-d1',caseId:'case-d1',active:true},'Exact retry');
+ await refused(()=>place(keeper,{reason:'a different reason'}),'conflict');await refused(()=>place(keeper,{delayId:'delay-d1b'}),'conflict');
+ assert.equal(await count('safety_notice_delays'),1,'One active mark per case');ok();
+ // While marked: the confirmed finding records its restricted notice but delivers nothing; the owner sees and learns nothing.
+ await c.recordSafetyCaseFinding(db,actor.p,{caseId:'case-d1',finding:'confirmed_policy_finding',decisionRef:'decision-d1'});
+ const nd=await row("SELECT * FROM safety_action_notices WHERE case_id='case-d1'");assert.ok(nd,'Generation is still recorded');assert.equal(nd.acted_by,'human:'+actor.id);
+ assert.equal(await count('usage_review_requests','id=?',nd.id),0,'No delivery while delayed');assert.deepEqual(await notices(d),[]);ok();
+ assert.deepEqual((await overview(d)).requests,[]);const hidden=JSON.stringify(await overview(d));for(const secret of [REASON,'delay-d1','case-d1','legal','human:'])assert.ok(!hidden.toLowerCase().includes(secret.toLowerCase()),secret);ok();
+ await json(d,'/api/support/v1/requests/'+nd.id,undefined,404);await appeal(d,nd.id,'too early',{status:404});ok();
+ // The schema itself refuses delivery while delayed, even by a direct insert.
+ await assert.rejects(()=>run("INSERT INTO usage_review_requests(id,user_id,statement,kind,source,state,public_response,answered_by,answered_at) VALUES(?,?,'Safety review notice','safety_notice','safety','answered','x','safety_review',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",nd.id,d.user),/usage_review_initial/);
+ assert.equal(await count('usage_review_requests','id=?',nd.id),0);ok();
+ // The reason never reaches the model: Chat context and the agent's support read carry nothing of it.
+ await chat(d,'Did Whumpo send me a notice?',[body=>{const text=JSON.stringify(body);assert.ok(!text.includes(REASON)&&!text.includes('delay-d1')&&!text.includes('case-d1'));return {kind:'interaction',operation:'readSupport',requestId:null};},
+  body=>{const text=JSON.stringify(body);assert.ok(!text.includes(REASON)&&!text.includes('safety_notice'),'Nothing delivered, nothing to read');return null;}]);ok();
+ // Restricted reads: the reason is visible only in the restricted case read; the audit and owner surfaces never carry it.
+ const viewed=await c.readSafetyCase(db,auditor.p,{caseId:'case-d1'});assert.deepEqual(viewed.noticeDelays.map(x=>[x.id,x.reason,x.placedBy,x.active,x.liftedAt]),[['delay-d1',REASON,'human:'+keeper.id,true,null]]);ok();
+ assert.ok(!JSON.stringify(await all('SELECT * FROM safety_case_audit')).includes(REASON));
+ assert.deepEqual((await all("SELECT outcome,reason FROM safety_case_audit WHERE action='place_notice_delay' AND outcome='allowed'")).map(x=>x.reason),['ok','ok'],'Audited placements (the HTTP call and its exact retry) with identifiers only');ok();
+ // The delay row is immutable except for one lift.
+ await assert.rejects(()=>run("UPDATE safety_notice_delays SET reason='changed' WHERE id='delay-d1'"),/safety_case_immutable/);await assert.rejects(()=>run('DELETE FROM safety_notice_delays'),/safety_case_immutable/);
+ await assert.rejects(()=>run("UPDATE safety_notice_delays SET lifted_by=?,lifted_at=unixepoch(),lift_ref='raw' WHERE id='delay-d1'",'human:'+actor.id),/safety_notice_delay/,'A lift needs the restricted role');
+ await assert.rejects(()=>run("UPDATE safety_notice_delays SET lifted_by=?,lifted_at=unixepoch(),lift_ref='raw' WHERE id='delay-d1'",'human:'+d.user),/safety_notice_delay/,'The subject cannot lift');ok();
+ assert.equal(await count('usage_review_requests','id=?',nd.id),0);
+ // Lifting is separate, role-gated, audited and idempotent; it delivers the fixed notice then.
+ const lift=(by,extra={})=>c.liftSafetyNoticeDelay(db,by.p,{delayId:'delay-d1',caseId:'case-d1',liftRef:'lift-d1',...extra});
+ await refused(()=>lift(actor),'missing_role');await refused(()=>lift(subjectKeeper),'not_found');await refused(()=>lift(keeper,{liftRef:'bad ref'}),'invalid_input');await refused(()=>lift(keeper,{delayId:'delay-unknown'}),'not_found');
+ assert.equal(await count('usage_review_requests','id=?',nd.id),0);ok();
+ assert.equal((await operatorCall(actor.authority.token,'notice-delays/lift',{delayId:'delay-d1',caseId:'case-d1',liftRef:'lift-d1'})).status,403);
+ const lifted=await operatorCall(keeper.authority.token,'notice-delays/lift',{delayId:'delay-d1',caseId:'case-d1',liftRef:'lift-d1'});assert.equal(lifted.status,200,JSON.stringify(lifted.body));assert.deepEqual(lifted.body.result,{delayId:'delay-d1',caseId:'case-d1',active:false});ok();
+ const [delivered]=await notices(d);assert.equal(delivered.id,nd.id);assert.equal(delivered.read.state,'unread');assert.match(delivered.publicResponse,/confirmed that content in your Whumpo account breaks the Acceptable Use Policy/);
+ assert.equal(delivered.publicResponse,(await notices(a))[0].publicResponse,'The delayed notice carries the same fixed text');
+ const shownToD=JSON.stringify(await overview(d));for(const secret of [REASON,'delay-d1','lift-d1','case-d1','human:',keeper.id,actor.id])assert.ok(!shownToD.includes(secret),secret);ok();
+ assert.deepEqual(await lift(keeper),{delayId:'delay-d1',caseId:'case-d1',active:false},'Exact lift retry');await refused(()=>lift(keeper,{liftRef:'lift-other'}),'conflict');
+ assert.equal(await count('usage_review_requests','id=?',nd.id),1,'Delivered once');ok();
+ assert.ok((await all("SELECT reason FROM safety_case_audit WHERE action='lift_notice_delay' AND outcome='allowed'")).length>=2);
+ assert.equal((await c.readSafetyCase(db,auditor.p,{caseId:'case-d1'})).noticeDelays[0].active,false);ok();
+ // After delivery the owner appeals normally.
+ assert.equal((await appeal(d,nd.id,APPEAL+'-d1')).request.state,'open');ok();
+ // A lifted case takes a new mark; a new finding then delays again.
+ await c.placeSafetyNoticeDelay(db,keeper.p,{delayId:'delay-d1-second',caseId:'case-d1',reason:REASON});
+ await c.recordSafetyCaseFinding(db,actor.p,{caseId:'case-d1',finding:'not_confirmed',decisionRef:'decision-d1-nc'});
+ await c.recordSafetyCaseFinding(db,actor.p,{caseId:'case-d1',finding:'confirmed_policy_finding',decisionRef:'decision-d1-again'});
+ const nd2=await row("SELECT id FROM safety_action_notices WHERE case_id='case-d1' AND finding_seq=4");assert.equal(await count('usage_review_requests','id=?',nd2.id),0,'The second mark delays the second notice');
+ // A withdrawn finding is never delivered on lift.
+ await c.recordSafetyCaseFinding(db,independent.p,{caseId:'case-d1',finding:'not_confirmed',decisionRef:'decision-d1-withdrawn'});
+ await c.liftSafetyNoticeDelay(db,keeper.p,{delayId:'delay-d1-second',caseId:'case-d1',liftRef:'lift-d1-second'});
+ assert.equal(await count('usage_review_requests','id=?',nd2.id),0,'A notice for a withdrawn finding stays undelivered');ok();
+ // A deleted account gets generation and no delivery on lift.
+ const dead=await owner();await c.openSafetyCase(db,actor.p,{caseId:'case-dead',subjectUserId:dead.user,intakeRef:'manual-dead'});
+ await c.placeSafetyNoticeDelay(db,keeper.p,{delayId:'delay-dead',caseId:'case-dead',reason:REASON});
+ await c.recordSafetyCaseFinding(db,actor.p,{caseId:'case-dead',finding:'confirmed_policy_finding',decisionRef:'decision-dead'});
+ await run('DELETE FROM users WHERE id=?',dead.user);await c.liftSafetyNoticeDelay(db,keeper.p,{delayId:'delay-dead',caseId:'case-dead',liftRef:'lift-dead'});
+ assert.equal(await count('safety_action_notices',"case_id='case-dead'"),1);assert.equal(await count('usage_review_requests',"kind='safety_notice' AND user_id=?",dead.user),0);ok();
+ // Without any mark nothing changes: the ordinary path still delivers in the finding's transaction (checked above for case-n1).
+ // A mark on a case never delays another case.
+ await c.openSafetyCase(db,actor.p,{caseId:'case-d2',subjectUserId:d.user,intakeRef:'manual-d2'});await c.openSafetyCase(db,actor.p,{caseId:'case-d3',subjectUserId:d.user,intakeRef:'manual-d3'});
+ await c.placeSafetyNoticeDelay(db,keeper.p,{delayId:'delay-d2',caseId:'case-d2',reason:REASON});
+ await c.recordSafetyCaseFinding(db,actor.p,{caseId:'case-d3',finding:'confirmed_policy_finding',decisionRef:'decision-d3'});
+ assert.equal(await count('usage_review_requests',"kind='safety_notice' AND user_id=?",d.user),2,'case-d3 delivers while case-d2 is delayed');ok();
+
  // ---- Audit: identifiers only.
  const audit=await all("SELECT * FROM safety_case_audit WHERE action IN ('list_appeals','read_appeal','decide_appeal')");
  assert.ok(audit.some(x=>x.action==='read_appeal'&&x.outcome==='denied'&&x.reason==='conflict_of_interest'));assert.ok(audit.some(x=>x.action==='decide_appeal'&&x.outcome==='allowed'));
  assert.ok(!JSON.stringify(await all('SELECT * FROM safety_case_audit')).includes(APPEAL));ok();
- console.log(`Safety appeals passed (${d1?'local D1':'SQLite'}): ${checks} checks. A notice only on a confirmed finding (not on open, flag, hold or not_confirmed), one restricted generation record and one in-app support notice per finding, no reporter/report/case/reviewer detail to the owner, Chat view without model text, owner-only single appeal through Support, generic operator path refused, separation of duties in code and schema, independent reversal (even after closure) and upholding, fixed outcome text, account-less generation without delivery, identifier-only audit. No network or email.`);
+ console.log(`Safety appeals passed (${d1?'local D1':'SQLite'}): ${checks} checks. A notice only on a confirmed finding (not on open, flag, hold or not_confirmed), one restricted generation record and one in-app support notice per finding, no reporter/report/case/reviewer detail to the owner, Chat view without model text, owner-only single appeal through Support, generic operator path refused, separation of duties in code and schema, independent reversal (even after closure) and upholding, fixed outcome text, account-less generation without delivery, notice delay under legal process (role and subject separation, no delivery while marked, separate lift delivers, reason kept from owner, model and audit), identifier-only audit. No network or email.`);
 }finally{globalThis.fetch=originalFetch;await fixture.close?.();}

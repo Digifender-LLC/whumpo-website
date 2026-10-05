@@ -7,7 +7,7 @@ await validateLifecycleReferences(catalog);
 const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,228);assert.equal(report.classCount,55);assert.equal(schemaFiles.length,7);
+ assert.equal(report.tableCount,229);assert.equal(report.classCount,55);assert.equal(schemaFiles.length,7);
  assert.equal(report.plannedClassCount,6);assert.equal(report.protectionClasses.length,61);
  assert.equal(report.protectionStatus,'decision-not-runtime-enforcement');
  for(const group of report.protectionClasses){assert.equal(group.profile.endToEndEncrypted,false);assert.equal(group.profile.customerUnlockRequired,false);}
@@ -33,7 +33,7 @@ try{
  assert.match(recordsClass.protection.readers.join(' '),/never enter owner Chat, model context or Chat history/);
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
 
- assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['account_closure_steps','account_closures','contact_notification_send_ledger','file_cleanup','identity_challenges','operator_containments','restore_suppressions','safety_action_notices','safety_appeal_decisions','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_preservation_holds','safety_preserved_records','safety_retention_decisions']);
+ assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['account_closure_steps','account_closures','contact_notification_send_ledger','file_cleanup','identity_challenges','operator_containments','restore_suppressions','safety_action_notices','safety_appeal_decisions','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_notice_delays','safety_preservation_holds','safety_preserved_records','safety_retention_decisions']);
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='domain_connections'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='gateway_spend_attempts'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='chat_review_receipts'&&t.onDelete==='NO ACTION'));
@@ -84,5 +84,5 @@ try{
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
- console.log(`Lifecycle catalog passed: 228 tables, 55 current/6 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
+ console.log(`Lifecycle catalog passed: 229 tables, 55 current/6 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
 }finally{db.close();}

@@ -3661,7 +3661,8 @@ BEGIN SELECT RAISE(ABORT,'private_chat_context'); END;
 CREATE TRIGGER usage_review_insert BEFORE INSERT ON usage_review_requests BEGIN
  SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.customer_read_at IS NOT NULL OR (NEW.state!='open')<>(NEW.source='safety') OR NOT (
   -- WH-016 owner notice: only the trigger copy of a restricted safety_action_notices row, to that row's subject.
-  (NEW.source='safety' AND NEW.state='answered' AND NEW.answered_by='safety_review' AND EXISTS(SELECT 1 FROM safety_action_notices n WHERE n.id=NEW.id AND n.subject_user_id=NEW.user_id))
+  (NEW.source='safety' AND NEW.state='answered' AND NEW.answered_by='safety_review' AND EXISTS(SELECT 1 FROM safety_action_notices n WHERE n.id=NEW.id AND n.subject_user_id=NEW.user_id
+    AND NOT EXISTS(SELECT 1 FROM safety_notice_delays d WHERE d.case_id=n.case_id AND d.lifted_at IS NULL)))
   -- WH-016 appeal: the owner's own appeal of one of their own notices.
   OR (NEW.source='support' AND NEW.kind='safety_appeal' AND EXISTS(SELECT 1 FROM usage_review_requests n WHERE n.id=substr(NEW.reference,15) AND n.user_id=NEW.user_id AND n.kind='safety_notice')
    AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
@@ -4902,7 +4903,7 @@ CREATE TABLE safety_case_audit (
  actor_ref TEXT CHECK(actor_ref IS NULL OR (actor_ref GLOB 'human:?*' AND length(actor_ref)<=128 AND actor_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
   'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
-  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report','erase_report_contact','list_appeals','read_appeal','decide_appeal')),
+  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report','erase_report_contact','list_appeals','read_appeal','decide_appeal','place_notice_delay','lift_notice_delay')),
  case_id TEXT CHECK(case_id IS NULL OR (length(case_id) BETWEEN 1 AND 128 AND case_id NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  target_ref TEXT CHECK(target_ref IS NULL OR (length(target_ref) BETWEEN 1 AND 128 AND target_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
@@ -5201,7 +5202,8 @@ END;
 CREATE TRIGGER safety_action_notices_deliver AFTER INSERT ON safety_action_notices BEGIN
  INSERT INTO usage_review_requests(id,user_id,statement,kind,source,state,public_response,answered_by,answered_at)
   SELECT NEW.id,NEW.subject_user_id,'Safety review notice','safety_notice','safety','answered','Whumpo''s safety reviewers confirmed that content in your Whumpo account breaks the Acceptable Use Policy (https://digifender.com/legal/whumpo). This notice is sent only because a decision was recorded against your content. It does not say who reported anything or what they wrote. If you think the decision is wrong, you can appeal: open Support (/workspace/support), open this notice, choose Appeal this decision and explain why. A safety reviewer who did not make this decision will review your appeal, and the answer will appear here.','safety_review',strftime('%Y-%m-%dT%H:%M:%fZ','now')
-  WHERE EXISTS(SELECT 1 FROM users WHERE id=NEW.subject_user_id);
+  WHERE EXISTS(SELECT 1 FROM users WHERE id=NEW.subject_user_id)
+   AND NOT EXISTS(SELECT 1 FROM safety_notice_delays d WHERE d.case_id=NEW.case_id AND d.lifted_at IS NULL);
 END;
 -- One independent decision per appeal. The deciding case reviewer must differ from the reviewer who acted (the notice's
 -- acted_by) and from the subject; the appeal must be the subject's open appeal of exactly this notice.
@@ -5222,6 +5224,45 @@ CREATE TRIGGER safety_appeal_decisions_admit BEFORE INSERT ON safety_appeal_deci
 END;
 CREATE TRIGGER safety_appeal_decisions_immutable BEFORE UPDATE ON safety_appeal_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_appeal_decisions_retained BEFORE DELETE ON safety_appeal_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+-- WH-016 notice delay under legal process (owner decision October 5, 2026, issue #172). A preservation approver (not the
+-- case subject, fresh passkey) marks a case "legal hold - delay notice" with a restricted, bounded reason. While the mark is
+-- active, a confirmed finding still records its restricted notice row (generation) but no in-app notice is delivered, enforced
+-- by safety_action_notices_deliver and the usage_review_insert gate. Lifting is a separate audited action: the lift trigger
+-- delivers the same fixed notice then (never for a withdrawn finding or a deleted account). The reason is read only through
+-- the restricted case view; it never reaches an owner, a support row, the audit or a model. The appeal window starts at delivery.
+CREATE TABLE safety_notice_delays (
+ id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 128 AND id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
+ placed_by TEXT NOT NULL CHECK(placed_by GLOB 'human:?*' AND length(placed_by)<=128 AND placed_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ placed_at INTEGER NOT NULL CHECK(placed_at>=0),
+ lifted_by TEXT CHECK(lifted_by IS NULL OR (lifted_by GLOB 'human:?*' AND length(lifted_by)<=128 AND lifted_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ lifted_at INTEGER CHECK(lifted_at IS NULL OR lifted_at>=placed_at),
+ lift_ref TEXT CHECK(lift_ref IS NULL OR (length(lift_ref) BETWEEN 1 AND 128 AND lift_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ CHECK((lifted_by IS NULL)=(lifted_at IS NULL) AND (lifted_at IS NULL)=(lift_ref IS NULL))
+);
+CREATE UNIQUE INDEX safety_notice_delays_active ON safety_notice_delays(case_id) WHERE lifted_at IS NULL;
+CREATE TRIGGER safety_notice_delays_admit BEFORE INSERT ON safety_notice_delays BEGIN
+ SELECT RAISE(ABORT,'safety_notice_delay') WHERE NEW.placed_at<>unixepoch() OR NEW.lifted_at IS NOT NULL
+  OR NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.placed_by AND role='preservation_approver' AND revoked_at IS NULL)
+  OR EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND 'human:'||subject_user_id=NEW.placed_by);
+END;
+CREATE TRIGGER safety_notice_delays_update BEFORE UPDATE ON safety_notice_delays BEGIN
+ SELECT RAISE(ABORT,'safety_case_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.case_id IS NOT OLD.case_id OR NEW.reason IS NOT OLD.reason OR NEW.placed_by IS NOT OLD.placed_by
+  OR NEW.placed_at IS NOT OLD.placed_at OR OLD.lifted_at IS NOT NULL OR NEW.lifted_at IS NULL;
+ SELECT RAISE(ABORT,'safety_notice_delay') WHERE NEW.lifted_at<>unixepoch()
+  OR NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.lifted_by AND role='preservation_approver' AND revoked_at IS NULL)
+  OR EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND 'human:'||subject_user_id=NEW.lifted_by);
+END;
+CREATE TRIGGER safety_notice_delays_retained BEFORE DELETE ON safety_notice_delays BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_notice_delays_lift AFTER UPDATE ON safety_notice_delays BEGIN
+ INSERT INTO usage_review_requests(id,user_id,statement,kind,source,state,public_response,answered_by,answered_at)
+  SELECT n.id,n.subject_user_id,'Safety review notice','safety_notice','safety','answered','Whumpo''s safety reviewers confirmed that content in your Whumpo account breaks the Acceptable Use Policy (https://digifender.com/legal/whumpo). This notice is sent only because a decision was recorded against your content. It does not say who reported anything or what they wrote. If you think the decision is wrong, you can appeal: open Support (/workspace/support), open this notice, choose Appeal this decision and explain why. A safety reviewer who did not make this decision will review your appeal, and the answer will appear here.','safety_review',strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  FROM safety_action_notices n WHERE n.case_id=NEW.case_id AND EXISTS(SELECT 1 FROM users WHERE id=n.subject_user_id)
+   AND NOT EXISTS(SELECT 1 FROM usage_review_requests r WHERE r.id=n.id)
+   AND NOT EXISTS(SELECT 1 FROM safety_case_findings f WHERE f.case_id=n.case_id AND f.seq>n.finding_seq AND f.finding='not_confirmed');
+END;
 
 CREATE TRIGGER safety_preserved_records_admit BEFORE INSERT ON safety_preserved_records BEGIN
  SELECT RAISE(ABORT,'safety_hold_subject') WHERE NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE id=NEW.hold_id AND released_at IS NULL);

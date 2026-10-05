@@ -908,7 +908,8 @@
         "safety_disclosure_items",
         "safety_retention_decisions",
         "safety_action_notices",
-        "safety_appeal_decisions"
+        "safety_appeal_decisions",
+        "safety_notice_delays"
       ],
       "scope": "mixed",
       "purpose": "Restricted case references, append-only uncertain/confirmed/corrected findings, links to reviewed risk evidence, account/project/object preservation holds, trigger-preserved small payloads (replaced profile photos, discarded or expired Chat drafts, overwritten app visitor documents and cleared app recovery-point copies) under an active hold, restricted evidence-object copies, two-person lawful-disclosure manifests, WH-016 owner-notice generation records (one per confirmed finding, naming the acting reviewer) and independent appeal decisions (the deciding reviewer, upheld/reversed and an opaque reference). Opaque identifiers and digests only in case rows; preserved payloads and evidence bytes are restricted content.",
