@@ -72,6 +72,32 @@ export function abuseReportInput(data:{id:unknown;category:unknown;details:unkno
  return {id,category:category as AbuseReportCategory,details:text||null,email:reporterEmailInput(data.email)};
 }
 
+/** Report retention (owner decision October 4, 2026, issue #172), in days after triage. */
+export const abuseReportRetentionDays=365;
+const retentionSeconds=abuseReportRetentionDays*86400;
+/** Daily maintenance (the `contacts` job in src/index.ts). Deletes, in bounded batches, exactly the reports the schema
+ * trigger `abuse_reports_retained` allows: not linked to a case and triaged at least a year ago, or linked to a case whose
+ * retention an operator has released and triaged at least a year ago. Untriaged reports are kept; a report whose case or
+ * subject is covered by any active hold is skipped (and the trigger refuses it). Each deletion is recorded in the WH-019
+ * restore suppression ledger by trigger. At most 25 batches a run; returns the number deleted. */
+export async function cleanupAbuseReports(db:Pick<D1Database,'prepare'>,batch=200){
+ let deleted=0;
+ for(let round=0;round<25;round++){
+  const changes=await deleteDueReports(db,batch);deleted+=changes;
+  if(changes<batch)break;
+ }
+ return deleted;
+}
+async function deleteDueReports(db:Pick<D1Database,'prepare'>,batch:number){
+ const result=await db.prepare(`DELETE FROM abuse_reports WHERE id IN (SELECT r.id FROM abuse_reports r
+   WHERE r.triaged_at IS NOT NULL AND r.triaged_at<=unixepoch()-? AND (r.triage='not_actionable'
+    OR (r.triage IN ('case_opened','case_linked') AND EXISTS(SELECT 1 FROM safety_case_retention v WHERE v.case_id=r.case_id AND v.released=1)))
+   AND NOT EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND (h.case_id=r.case_id OR h.subject_user_id=r.subject_user_id))
+   ORDER BY r.triaged_at,r.id LIMIT ?) RETURNING id`).bind(retentionSeconds,batch).all<{id:string}>();
+ // Counted from RETURNING: D1's change count also includes the ledger rows written by trigger.
+ return result.results.length;
+}
+
 /** Stores one report atomically under the schema's target, capacity and rate guards. An exact retry with the same receipt
  * returns the same receipt; a different report reusing a receipt is refused. Returns the receipt identifier only. The
  * email is compared directly rather than hashed, so no digest of it outlives an erasure. */

@@ -5084,7 +5084,7 @@ CREATE TRIGGER safety_case_audit_retained BEFORE DELETE ON safety_case_audit BEG
 -- it. An audited operator erasure clears it (refused while a hold covers the report's case or subject), the clearing is
 -- recorded in the WH-019 restore suppression ledger, and it is deleted with the report. Triage is one audited human
 -- decision: open a new uncertain_flag case, link an existing open case of the same subject, or record the report as not
--- actionable. A report is never a finding.
+-- actionable. A report is never a finding. Retention (owner decision October 4, 2026) is abuse_reports_retained below.
 CREATE TABLE abuse_reports (
  id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
  project_id TEXT NOT NULL CHECK(length(project_id)=36 AND project_id NOT GLOB '*[^0-9a-f-]*'),
@@ -5137,8 +5137,19 @@ CREATE TRIGGER abuse_reports_update BEFORE UPDATE ON abuse_reports BEGIN
  SELECT RAISE(ABORT,'safety_preservation_hold') WHERE OLD.reporter_email IS NOT NULL AND NEW.reporter_email IS NULL
   AND EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND (case_id=OLD.case_id OR subject_user_id=OLD.subject_user_id));
 END;
--- Retained: there is no deletion path (retention term is an owner/counsel decision, docs/content-safety.md).
-CREATE TRIGGER abuse_reports_retained BEFORE DELETE ON abuse_reports BEGIN SELECT RAISE(ABORT,'abuse_report_immutable'); END;
+-- Retention (owner decision October 4, 2026, issue #172; the daily maintenance cleanup in src/abuse-reports.ts deletes
+-- exactly these). A report awaiting triage is kept until triaged. A report not linked to a case (not_actionable) may be
+-- deleted 365 days after triage. A report linked to a case follows that case: it may be deleted only once an operator has
+-- released the case's retention (WH-132 reviewed release, itself at least one year after opening) AND at least 365 days
+-- after triage. Nothing is deleted while any hold covers the report's case or its subject. The one other delete is the
+-- WH-019 operator replay of a deletion already recorded in the restore suppression ledger (an isolated restore candidate),
+-- which still honours holds. Deleting a report also deletes its optional reporter email.
+CREATE TRIGGER abuse_reports_retained BEFORE DELETE ON abuse_reports BEGIN
+ SELECT RAISE(ABORT,'safety_preservation_hold') WHERE EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND (case_id=OLD.case_id OR subject_user_id=OLD.subject_user_id));
+ SELECT RAISE(ABORT,'abuse_report_immutable') WHERE NOT EXISTS(SELECT 1 FROM restore_suppressions WHERE kind='abuse_report' AND subject_id=OLD.id) AND NOT (
+  OLD.triaged_at IS NOT NULL AND OLD.triaged_at<=unixepoch()-31536000 AND (OLD.triage='not_actionable'
+   OR (OLD.triage IN ('case_opened','case_linked') AND EXISTS(SELECT 1 FROM safety_case_retention WHERE case_id=OLD.case_id AND released=1))));
+END;
 
 CREATE TRIGGER safety_preserved_records_admit BEFORE INSERT ON safety_preserved_records BEGIN
  SELECT RAISE(ABORT,'safety_hold_subject') WHERE NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE id=NEW.hold_id AND released_at IS NULL);

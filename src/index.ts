@@ -70,6 +70,7 @@ import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
 import {abuseReportPage,abuseReportPath} from './abuse-report-page';
+import {cleanupAbuseReports} from './abuse-reports';
 import {policyConsentPath,policyConsentRoute} from './policy-consent';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
 import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
@@ -658,8 +659,8 @@ export default {
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
       {name:'applications',run:async()=>{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}},
       // Form-submission expiry: the contact inbox and WH-127 module records (both skip safety-held projects), then content-free
-      // module request receipts past their 30-day replay window.
-      {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);}},
+      // module request receipts past their 30-day replay window, then WH-016 abuse reports past their retention (skips held).
+      {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);await cleanupAbuseReports(env.DB);}},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},

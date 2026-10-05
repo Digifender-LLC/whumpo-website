@@ -11,10 +11,10 @@
  * referenced by a saved version whose removal happened after the backup) aborts as a whole and stays held. Content-free:
  * opaque identifiers, effects and staff revisions only. */
 
-export type SuppressionKind='account'|'project'|'visitor'|'staff'|'record'|'file'|'github_token'|'cloudflare_token'|'report_contact';
+export type SuppressionKind='account'|'project'|'visitor'|'staff'|'record'|'file'|'github_token'|'cloudflare_token'|'report_contact'|'abuse_report';
 export type SuppressionEntry={kind:SuppressionKind;subjectId:string;effect:'deleted'|'revoked';revision:number|null;recordedAt:number};
 export type SuppressionLedger={version:1;format:'whumpo-restore-suppressions-v1';entries:SuppressionEntry[];sha256:string};
-const kinds:readonly SuppressionKind[]=['account','project','visitor','staff','record','file','github_token','cloudflare_token','report_contact'];
+const kinds:readonly SuppressionKind[]=['account','project','visitor','staff','record','file','github_token','cloudflare_token','report_contact','abuse_report'];
 const maxEntries=100000;
 
 async function sha256(text:string){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(v=>v.toString(16).padStart(2,'0')).join('');}
@@ -49,8 +49,9 @@ const presence:Record<SuppressionKind,string>={
  file:"SELECT count(*) n FROM project_files WHERE id IN (SELECT json_extract(value,'$.subject') FROM json_each(?1) WHERE json_extract(value,'$.kind')='file')",
  github_token:"SELECT count(*) n FROM github_token_vault t WHERE EXISTS(SELECT 1 FROM json_each(?1) WHERE json_extract(value,'$.kind')='github_token' AND json_extract(value,'$.subject')=t.id AND (json_extract(value,'$.effect')='deleted' OR t.state!='revoking'))",
  cloudflare_token:"SELECT count(*) n FROM cloudflare_token_vault t WHERE EXISTS(SELECT 1 FROM json_each(?1) WHERE json_extract(value,'$.kind')='cloudflare_token' AND json_extract(value,'$.subject')=t.id AND (json_extract(value,'$.effect')='deleted' OR t.state!='revoking'))",
- // WH-016 erased reporter emails on abuse reports (restricted operator table; this module never reads the address).
+ // WH-016 abuse reports deleted by retention and erased reporter emails (restricted operator table; this module never reads the address).
  report_contact:"SELECT count(*) n FROM abuse_reports WHERE reporter_email IS NOT NULL AND id IN (SELECT json_extract(value,'$.subject') FROM json_each(?1) WHERE json_extract(value,'$.kind')='report_contact')",
+ abuse_report:"SELECT count(*) n FROM abuse_reports WHERE id IN (SELECT json_extract(value,'$.subject') FROM json_each(?1) WHERE json_extract(value,'$.kind')='abuse_report')",
 };
 /** The traffic gate: `clear` only when no suppressed subject is present or active and the candidate's own ledger holds
  * every current entry (so its guards keep refusing later logical restores). */
@@ -79,6 +80,7 @@ export async function replayRestoreSuppressions(db:D1Database,ledger:Suppression
   db.prepare(`DELETE FROM cloudflare_token_vault WHERE id IN ${ids('cloudflare_token','deleted')}`),
   db.prepare("UPDATE module_access_roles SET state='revoked',review_id=NULL,updated_at=max(updated_at,unixepoch()) WHERE state='granted' AND EXISTS(SELECT 1 FROM restore_suppressions s WHERE s.kind='staff' AND s.subject_id=module_access_roles.instance_id||'/'||module_access_roles.visitor_id||'/'||module_access_roles.role AND module_access_roles.access_revision<s.revision)"),
   db.prepare(`UPDATE app_visitors SET revoked=1 WHERE revoked=0 AND id IN ${ids('visitor')}`),
+  db.prepare(`DELETE FROM abuse_reports WHERE id IN ${ids('abuse_report')}`),
   db.prepare(`UPDATE abuse_reports SET reporter_email=NULL WHERE reporter_email IS NOT NULL AND id IN ${ids('report_contact')}`),
   db.prepare(`DELETE FROM module_records WHERE id IN ${ids('record')}`),
   db.prepare(`DELETE FROM app_visitors WHERE id IN ${ids('visitor','deleted')}`),
@@ -87,7 +89,7 @@ export async function replayRestoreSuppressions(db:D1Database,ledger:Suppression
   db.prepare(`DELETE FROM identity_challenges WHERE account_id IN ${ids('account')}`),
   db.prepare(`DELETE FROM users WHERE id IN ${ids('account')}`),
  ];
- const labels=['ledgerEntriesAdded','staffRevisionsRaised','githubTokensRevoking','githubRefreshCustodyRemoved','githubTokensRemoved','cloudflareTokensRevoking','cloudflareTokensRemoved','staffGrantsRevoked','visitorsRevoked','reportContactsErased','recordsRemoved','visitorsRemoved','filesRemoved','projectsRemoved','identityChallengesRemoved','accountsRemoved'];
+ const labels=['ledgerEntriesAdded','staffRevisionsRaised','githubTokensRevoking','githubRefreshCustodyRemoved','githubTokensRemoved','cloudflareTokensRevoking','cloudflareTokensRemoved','staffGrantsRevoked','visitorsRevoked','reportsRemoved','reportContactsErased','recordsRemoved','visitorsRemoved','filesRemoved','projectsRemoved','identityChallengesRemoved','accountsRemoved'];
  const results=await db.batch(statements);
  return {version:1 as const,ledgerSha256:ledger.sha256,applied:Object.fromEntries(labels.map((l,i)=>[l,results[i].meta.changes])) as Record<string,number>};
 }

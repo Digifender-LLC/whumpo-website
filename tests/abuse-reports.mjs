@@ -197,7 +197,7 @@ try{
  // ---- Erasing the optional reporter email: audited, case reviewer only, blocked while a hold covers the report, restore-safe.
  const keeper=await operator();await c.grantSafetyCaseRole(db,admin.p,{grantId:'g-k',operatorAccountId:keeper.id,role:'preservation_approver'});
  let directory=null,candidateSQL=null;
- if(fixture.sql){directory=await mkdtemp('/tmp/whumpo-abuse-contact-');await backup(fixture.sql,join(directory,'before.sqlite'));}
+ if(fixture.sql){directory=await mkdtemp('/tmp/whumpo-abuse-contact-');await backup(fixture.sql,join(directory,'before.sqlite'));await backup(fixture.sql,join(directory,'before-retention.sqlite'));}
  await refused(()=>c.eraseAbuseReportContact(db,auditor.p,{reportId:first.id}),'missing_role');
  await refused(()=>c.eraseAbuseReportContact(db,subjectOperator.p,{reportId:first.id}),'not_found');
  await refused(()=>c.eraseAbuseReportContact(db,reviewer.p,{reportId:'nope'}),'invalid_input');
@@ -229,6 +229,67 @@ try{
   assert.ok(Object.values((await r.suppression.replayRestoreSuppressions(candidate,current)).applied).every(n=>n===0),'A duplicate replay changes nothing');
   gate=await r.suppression.checkRestoreSuppressions(candidate,current);assert.equal(gate.clear,true);
   assert.equal((await candidate.prepare('SELECT reporter_email FROM abuse_reports WHERE id=?').bind(first.id).first()).reporter_email,null);ok();
+  candidateSQL.close();
+ }
+ // ---- Retention (owner decision October 4, 2026): untriaged reports are kept; reports not linked to a case go 365 days
+ // after triage; linked reports follow their case's operator-released retention and are never deleted under a hold.
+ assert.equal(r.reports.abuseReportRetentionDays,365);
+ /** Simulated passage of time: lift the named immutability guards for one statement and restore the exact schema. */
+ const lifted=async(names,fn)=>{const guards=await all(`SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name IN (${names.map(()=>'?').join(',')})`,...names);
+  assert.equal(guards.length,names.length);for(const g of guards)await run(`DROP TRIGGER ${g.name}`);try{await fn();}finally{for(const g of guards)await run(g.sql);}};
+ const ageReports=(days,where='1')=>lifted(['abuse_reports_update'],()=>run(`UPDATE abuse_reports SET received_at=received_at-?,triaged_at=triaged_at-? WHERE ${where}`,days*86400,days*86400));
+ const ageCase=(caseId,days=400)=>lifted(['safety_cases_update','safety_cases_close_held'],()=>run('UPDATE safety_cases SET opened_at=opened_at-?,retention_due_at=retention_due_at-? WHERE id=?',days*86400,days*86400,caseId));
+ const present=async id=>!!(await row('SELECT 1 AS x FROM abuse_reports WHERE id=?',id));
+ const scheduled=async()=>{await m.worker.scheduled({cron:'17 3 * * *'},{DB:db,FILES:{list:async()=>({objects:[],truncated:false}),delete:async()=>assert.fail('No photo cleanup here')}});
+  assert.equal((await row("SELECT status FROM maintenance_health WHERE job='contacts'")).status,'completed');};
+ const untriaged=await count('abuse_reports',"triage='received'"),total=await count('abuse_reports');
+ // Nothing is due yet: a fresh triage is kept, and the real scheduler deletes nothing.
+ await scheduled();assert.equal(await count('abuse_reports'),total);ok();
+ await assert.rejects(()=>run('DELETE FROM abuse_reports WHERE id=?',third),/abuse_report_immutable/);ok();
+ // 364 days after triage: still kept.
+ await ageReports(364);assert.equal(await r.reports.cleanupAbuseReports(db),0);assert.ok(await present(third));ok();
+ await ageReports(2);
+ // A hold on the subject (here through another case about the same owner) blocks the due deletion: skipped and refused.
+ await c.placePreservationHold(db,keeper.p,{holdId:'hold-subject',caseId:'case-report-2',legalBasisRef:'basis-3',reviewDays:30});
+ assert.equal(await r.reports.cleanupAbuseReports(db),0);await assert.rejects(()=>run('DELETE FROM abuse_reports WHERE id=?',third),/safety_preservation_hold/);assert.ok(await present(third));ok();
+ await c.releasePreservationHold(db,keeper.p,{holdId:'hold-subject',caseId:'case-report-2',releaseRef:'release-2'});
+ // Released: the not-linked report goes; linked reports (case retention not released) and untriaged reports stay.
+ await scheduled();assert.ok(!await present(third));assert.ok(await present(first.id)&&await present(second)&&await present(fourth));
+ assert.equal(await count('abuse_reports',"triage='received'"),untriaged,'Untriaged reports are kept however old');assert.equal(await count('abuse_reports'),total-1);ok();
+ assert.deepEqual((await all("SELECT subject_id FROM restore_suppressions WHERE kind='abuse_report'")).map(x=>x.subject_id),[third],'The deletion is recorded by identifier');ok();
+ await assert.rejects(()=>run("INSERT INTO abuse_reports(id,project_id,subject_user_id,surface,host_kind,path,category,request_hash,received_at) VALUES(?,?,?,'site','platform','/','other',?,unixepoch())",third,projectA,ownerA.account,'a'.repeat(64)),/restore_suppressed/,'A deleted report cannot be logically restored');ok();
+ // A report linked to a case only today stays even after that case's retention is released (one-year minimum after triage).
+ const recent=(await c.listAbuseReports(db,reviewer.p))[0].id;
+ await c.triageAbuseReport(db,reviewer.p,{reportId:recent,decision:'link_case',caseId:'case-report-2',decisionRef:'triage-recent'});
+ // Linked reports wait for the operator-reviewed release of their case's retention, which needs a closed, due case.
+ for(const caseId of ['case-report-1','case-report-2'])await c.closeSafetyCase(db,reviewer.p,{caseId,closeRef:'close-'+caseId});
+ assert.equal(await r.reports.cleanupAbuseReports(db),0,'Closed but not released: kept');ok();
+ for(const caseId of ['case-report-1','case-report-2']){
+  await ageCase(caseId);
+  const preview=await c.previewSafetyRetentionDecision(db,keeper.p,{caseId,decision:'release',decisionRef:'ret-'+caseId});
+  await c.applySafetyRetentionDecision(db,keeper.p,{caseId,decision:'release',decisionRef:'ret-'+caseId,reviewSha256:preview.reviewSha256});
+  if(caseId==='case-report-1'){
+   // After its case is released, a hold on the subject from any other case still keeps the linked reports.
+   await c.openSafetyCase(db,reviewer.p,{caseId:'case-late',subjectUserId:ownerA.account,intakeRef:'manual-late'});
+   await c.placePreservationHold(db,keeper.p,{holdId:'hold-late',caseId:'case-late',legalBasisRef:'basis-4',reviewDays:30});
+   assert.equal(await r.reports.cleanupAbuseReports(db),0);await assert.rejects(()=>run('DELETE FROM abuse_reports WHERE id=?',first.id),/safety_preservation_hold/);assert.ok(await present(first.id));ok();
+   await c.releasePreservationHold(db,keeper.p,{holdId:'hold-late',caseId:'case-late',releaseRef:'release-3'});
+  }
+ }
+ assert.equal(await r.reports.cleanupAbuseReports(db),3);
+ assert.ok(!await present(first.id)&&!await present(second)&&!await present(fourth),'Linked reports follow the released case');assert.ok(await present(recent),'Triaged less than a year ago: kept');ok();
+ await assert.rejects(()=>run('DELETE FROM abuse_reports WHERE id=?',recent),/abuse_report_immutable/);ok();
+ assert.equal(await count('abuse_reports',"triage='received'"),untriaged-1);ok();
+ // Cases, findings and audit rows stay (identifiers only); only the reports and their optional emails are gone.
+ assert.equal(await count('safety_cases',"id IN ('case-report-1','case-report-2')"),2);ok();
+ if(fixture.sql){
+  // An older whole-database backup still has the deleted reports; the WH-019 replay removes them before it serves.
+  candidateSQL=new DatabaseSync(join(directory,'before-retention.sqlite'));candidateSQL.exec('PRAGMA foreign_keys=ON');const candidate=sqliteD1Adapter(candidateSQL);
+  const current=await r.suppression.captureRestoreSuppressions(db);let gate=await r.suppression.checkRestoreSuppressions(candidate,current);
+  assert.equal(gate.pending.abuse_report,4);
+  const replay=await r.suppression.replayRestoreSuppressions(candidate,current);assert.equal(replay.applied.reportsRemoved,4);
+  gate=await r.suppression.checkRestoreSuppressions(candidate,current);assert.equal(gate.clear,true);
+  assert.equal((await candidate.prepare('SELECT count(*) AS n FROM abuse_reports').first()).n,total-4);ok();
   candidateSQL.close();
  }
  if(directory)await rm(directory,{recursive:true,force:true});

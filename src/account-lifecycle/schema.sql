@@ -70,7 +70,7 @@ BEGIN SELECT RAISE(ABORT,'account_closure_retained'); END;
 -- un-revoking a visitor or token, replaying an older staff grant) aborts with `restore_suppressed`; the operator replay
 -- (src/restore-suppression.ts) applies the current ledger to an isolated whole-database candidate before admission.
 CREATE TABLE restore_suppressions (
- kind TEXT NOT NULL CHECK(kind IN ('account','project','visitor','staff','record','file','github_token','cloudflare_token','report_contact')),
+ kind TEXT NOT NULL CHECK(kind IN ('account','project','visitor','staff','record','file','github_token','cloudflare_token','report_contact','abuse_report')),
  subject_id TEXT NOT NULL CHECK(length(subject_id) BETWEEN 1 AND 200),
  effect TEXT NOT NULL CHECK(effect IN ('deleted','revoked')),
  revision INTEGER CHECK((kind='staff')=(revision IS NOT NULL) AND (revision IS NULL OR revision>=1)),
@@ -119,10 +119,15 @@ BEGIN INSERT OR IGNORE INTO restore_suppressions(kind,subject_id,effect,recorded
 -- report identifier; the address itself is never recorded.
 CREATE TRIGGER restore_suppress_report_contact AFTER UPDATE OF reporter_email ON abuse_reports WHEN OLD.reporter_email IS NOT NULL AND NEW.reporter_email IS NULL
 BEGIN INSERT OR IGNORE INTO restore_suppressions(kind,subject_id,effect,recorded_at) VALUES('report_contact',OLD.id,'deleted',unixepoch()); END;
+-- WH-016 abuse-report retention deletion (src/abuse-reports.ts cleanup), keyed by the report identifier.
+CREATE TRIGGER restore_suppress_abuse_report AFTER DELETE ON abuse_reports
+BEGIN INSERT OR IGNORE INTO restore_suppressions(kind,subject_id,effect,recorded_at) VALUES('abuse_report',OLD.id,'deleted',unixepoch()); END;
 
 -- Consultation inside later commits: an erased or revoked subject cannot come back through a logical restore.
 -- Opaque identifiers are random and never reused, so a legitimate new row never matches.
 CREATE TRIGGER restore_guard_account BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM restore_suppressions WHERE kind='account' AND subject_id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'restore_suppressed'); END;
+CREATE TRIGGER restore_guard_abuse_report BEFORE INSERT ON abuse_reports WHEN EXISTS(SELECT 1 FROM restore_suppressions WHERE kind='abuse_report' AND subject_id=NEW.id)
 BEGIN SELECT RAISE(ABORT,'restore_suppressed'); END;
 CREATE TRIGGER restore_guard_report_contact BEFORE INSERT ON abuse_reports WHEN NEW.reporter_email IS NOT NULL AND EXISTS(SELECT 1 FROM restore_suppressions WHERE kind='report_contact' AND subject_id=NEW.id)
 BEGIN SELECT RAISE(ABORT,'restore_suppressed'); END;
