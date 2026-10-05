@@ -3,8 +3,10 @@
  * Anyone can report a published site or application without an account. The report is bound server-side to the project
  * and owner currently serving that address and stored in the restricted `abuse_reports` queue, which only the WH-132
  * authenticated case-role surface reads and triages (src/safety-cases.ts). The site owner, Chat, the maintainer agent and
- * every model path never read it. No reporter address, IP, contact detail or upload is stored; the reporter receives only
- * a receipt identifier. A report is never a finding or a violation by anyone: triage is a separate human decision.
+ * every model path never read it. No reporter IP or upload is stored. The reporter may optionally give an email address
+ * for follow-up (owner decision October 4, 2026): it is validated and bounded here, stored in the same restricted row,
+ * readable only by a case reviewer, never logged and never emailed by this code. The reporter receives only a receipt
+ * identifier. A report is never a finding or a violation by anyone: triage is a separate human decision.
  * Callers must already have checked Origin, the bounded body, the connection rate limit and Turnstile. */
 import {customerProject,visitorProject} from './hosts';
 import {hashToken} from './security';
@@ -26,6 +28,17 @@ export type AbuseReportTarget={projectId:string;ownerId:string;surface:'site'|'a
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const control=/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 export const maxReportDetails=1000;
+export const maxReporterEmail=254;
+// A deliberately plain address shape: one @, a bounded local part of common characters and a dotted DNS name.
+const emailShape=/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
+/** The optional reporter email: blank means none. The domain is lower-cased; nothing is sent to it. */
+export function reporterEmailInput(value:unknown):string|null{
+ if(value==null)return null;
+ if(typeof value!=='string')throw new AbuseReportError(400,'Enter a valid email address, or leave it blank.');
+ const text=value.trim();if(!text)return null;
+ if(text.length<6||text.length>maxReporterEmail||!emailShape.test(text))throw new AbuseReportError(400,'Enter a valid email address, or leave it blank.');
+ const at=text.lastIndexOf('@');return text.slice(0,at)+'@'+text.slice(at+1).toLowerCase();
+}
 
 /** Resolves a reporter-supplied address to the project currently publishing it. Only the path is kept (no query or
  * fragment), and only a currently published site or enabled application of a known owner is reportable here. */
@@ -50,29 +63,30 @@ export async function resolveAbuseReportTarget(db:D1Database,address:unknown):Pr
  return {projectId,ownerId:live.owner,surface,hostKind,path};
 }
 
-export function abuseReportInput(data:{id:unknown;category:unknown;details:unknown}){
+export function abuseReportInput(data:{id:unknown;category:unknown;details:unknown;email?:unknown}){
  const {id,category,details}=data;
  if(typeof id!=='string'||!uuid.test(id))throw new AbuseReportError(400,'Reload the report form.');
  if(typeof category!=='string'||!Object.hasOwn(abuseReportCategories,category))throw new AbuseReportError(400,'Choose what kind of problem you are reporting.');
  const text=typeof details==='string'?details.trim():details==null?'':null;
  if(text===null||text.length>maxReportDetails||control.test(text.replace(/[\r\n\t]/g,' ')))throw new AbuseReportError(400,`Describe the problem in up to ${maxReportDetails.toLocaleString('en-US')} characters, without attachments.`);
- return {id,category:category as AbuseReportCategory,details:text||null};
+ return {id,category:category as AbuseReportCategory,details:text||null,email:reporterEmailInput(data.email)};
 }
 
 /** Stores one report atomically under the schema's target, capacity and rate guards. An exact retry with the same receipt
- * returns the same receipt; a different report reusing a receipt is refused. Returns the receipt identifier only. */
+ * returns the same receipt; a different report reusing a receipt is refused. Returns the receipt identifier only. The
+ * email is compared directly rather than hashed, so no digest of it outlives an erasure. */
 export async function saveAbuseReport(db:D1Database,target:AbuseReportTarget,input:ReturnType<typeof abuseReportInput>){
  const hash=await hashToken(JSON.stringify([target.projectId,target.surface,target.path,input.category,input.details]));
  const same=async()=>{
-  const saved=await db.prepare('SELECT request_hash FROM abuse_reports WHERE id=?').bind(input.id).first<{request_hash:string}>();
+  const saved=await db.prepare('SELECT request_hash,reporter_email FROM abuse_reports WHERE id=?').bind(input.id).first<{request_hash:string;reporter_email:string|null}>();
   if(!saved)return false;
-  if(saved.request_hash!==hash)throw new AbuseReportError(409,'This report form was already used. Open a fresh form to send another report.');
+  if(saved.request_hash!==hash||saved.reporter_email!==input.email)throw new AbuseReportError(409,'This report form was already used. Open a fresh form to send another report.');
   return true;
  };
  if(await same())return {receipt:input.id};
  try{
-  await db.prepare('INSERT INTO abuse_reports(id,project_id,subject_user_id,surface,host_kind,path,category,details,request_hash,received_at) VALUES(?,?,?,?,?,?,?,?,?,unixepoch())')
-   .bind(input.id,target.projectId,target.ownerId,target.surface,target.hostKind,target.path,input.category,input.details,hash).run();
+  await db.prepare('INSERT INTO abuse_reports(id,project_id,subject_user_id,surface,host_kind,path,category,details,reporter_email,request_hash,received_at) VALUES(?,?,?,?,?,?,?,?,?,?,unixepoch())')
+   .bind(input.id,target.projectId,target.ownerId,target.surface,target.hostKind,target.path,input.category,input.details,input.email,hash).run();
  }catch(cause){
   const text=String(cause);
   // A concurrent identical retry or a lost acknowledgement recovers the committed receipt.

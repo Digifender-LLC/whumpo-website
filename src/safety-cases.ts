@@ -14,7 +14,7 @@ export type SafetyCaseReason='missing_role'|'invalid_input'|'conflict'|'not_foun
 type AuditReason=SafetyCaseReason|'ok'|'unauthenticated'|'conflict_of_interest';
 type Action='bootstrap_administrator'|'grant_role'|'revoke_role'|'open_case'|'link_evidence'|'record_finding'|'place_hold'|'release_hold'|'close_case'|'read_case'|'read_audit'|'list_holds'
  |'capture_evidence'|'dispose_evidence'|'request_disclosure'|'approve_disclosure'|'record_disclosure'|'cancel_disclosure'|'read_disclosure'
- |'list_retention'|'preview_retention'|'decide_retention'|'list_reports'|'read_report'|'triage_report';
+ |'list_retention'|'preview_retention'|'decide_retention'|'list_reports'|'read_report'|'triage_report'|'erase_report_contact';
 type Q={sql:string;params:unknown[]};
 type Database=Pick<D1Database,'prepare'|'batch'>;
 type EvidenceEnv={DB:Database;FILES:Pick<R2Bucket,'get'|'put'|'head'|'delete'>};
@@ -250,32 +250,45 @@ export async function listActivePreservationHolds(db:Database,principal:unknown)
 /** WH-016 abuse-report triage. Public reports (src/abuse-reports.ts) wait in this restricted queue; only an authenticated
  * case role reads them, and the report's subject never sees their own reports. A report is never a finding: triage is one
  * named human decision to open a new `uncertain_flag` case, link an existing open case of the same subject, or record the
- * report as not actionable. Report details are reporter-supplied text: never route them to Chat, an agent or a model. */
+ * report as not actionable. Report details and the optional reporter email are reporter-supplied: never route them to
+ * Chat, an agent, a model, the reported owner or a log. Only `readAbuseReport` returns the email. */
 export type AbuseReportDecision='open_case'|'link_case'|'not_actionable';
 const reportId=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const isReport=(v:unknown):v is string=>typeof v==='string'&&reportId.test(v);
 const reportIndependent=(id:unknown)=>(account:string)=>q`NOT EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id} AND subject_user_id=${account})`;
 const reportMissing=(id:unknown)=>q`NOT EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id})`;
-export type AbuseReportQueueItem={id:string;projectId:string;subjectUserId:string;surface:'site'|'app';hostKind:'platform'|'custom';category:string;hasDetails:boolean;receivedAt:number};
+export type AbuseReportQueueItem={id:string;projectId:string;subjectUserId:string;surface:'site'|'app';hostKind:'platform'|'custom';category:string;hasDetails:boolean;hasReporterEmail:boolean;receivedAt:number};
+const queueColumns=q`id,project_id AS projectId,subject_user_id AS subjectUserId,surface,host_kind AS hostKind,category,details IS NOT NULL AS hasDetails,reporter_email IS NOT NULL AS hasReporterEmail,received_at AS receivedAt`;
+const queueItem=(r:Record<string,unknown>)=>({...r,hasDetails:!!r.hasDetails,hasReporterEmail:!!r.hasReporterEmail});
 /** Reports awaiting triage, oldest first (at most 100). Reports about the operator themself are never listed to them. */
 export async function listAbuseReports(db:Database,principal:unknown):Promise<AbuseReportQueueItem[]>{
  const {rows:[rows]}=await attempt(db,{principal,action:'list_reports',roles:['case_reviewer','case_auditor'],
-  reads:(gate,actor)=>[q`SELECT id,project_id AS projectId,subject_user_id AS subjectUserId,surface,host_kind AS hostKind,category,details IS NOT NULL AS hasDetails,received_at AS receivedAt
+  reads:(gate,actor)=>[q`SELECT ${queueColumns}
    FROM abuse_reports WHERE triage='received' AND 'human:'||subject_user_id<>${actor} AND ${gate} ORDER BY received_at,id LIMIT 100`],
   effect:()=>q`1`});
- return rows.map(r=>({...r,hasDetails:!!r.hasDetails})) as AbuseReportQueueItem[];
+ return rows.map(queueItem) as AbuseReportQueueItem[];
 }
-export type AbuseReportView=AbuseReportQueueItem&{path:string;details:string|null;triage:'received'|'case_opened'|'case_linked'|'not_actionable';caseId:string|null;triagedBy:string|null;triagedAt:number|null;triageRef:string|null};
-/** Reviewer-only read of one report, including the reporter's bounded description. The read is audited; a report about
- * the operator reads as absent. */
+export type AbuseReportView=AbuseReportQueueItem&{path:string;details:string|null;reporterEmail:string|null;triage:'received'|'case_opened'|'case_linked'|'not_actionable';caseId:string|null;triagedBy:string|null;triagedAt:number|null;triageRef:string|null};
+/** Reviewer-only read of one report, including the reporter's bounded description and optional follow-up email. The
+ * read is audited (identifiers only); a report about the operator reads as absent. */
 export async function readAbuseReport(db:Database,principal:unknown,input:{reportId:string}):Promise<AbuseReportView>{
  const id=input.reportId;
  const {rows:[rows]}=await attempt(db,{principal,action:'read_report',target:id,roles:['case_reviewer'],valid:isReport(id),independent:reportIndependent(id),
-  reads:gate=>[q`SELECT id,project_id AS projectId,subject_user_id AS subjectUserId,surface,host_kind AS hostKind,category,details IS NOT NULL AS hasDetails,received_at AS receivedAt,
-   path,details,triage,case_id AS caseId,triaged_by AS triagedBy,triaged_at AS triagedAt,triage_ref AS triageRef FROM abuse_reports WHERE id=${id} AND ${gate}`],
+  reads:gate=>[q`SELECT ${queueColumns},path,details,reporter_email AS reporterEmail,triage,case_id AS caseId,triaged_by AS triagedBy,triaged_at AS triagedAt,triage_ref AS triageRef FROM abuse_reports WHERE id=${id} AND ${gate}`],
   effect:()=>q`EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id})`,missing:reportMissing(id)});
  const row=rows[0];if(!row)throw new SafetyCaseError('unavailable');
- return {...row,hasDetails:!!row.hasDetails} as AbuseReportView;
+ return queueItem(row) as AbuseReportView;
+}
+/** Audited erasure of a report's optional reporter email (for example at the reporter's request). Only the email is
+ * cleared; the report and its triage stay. Refused as `active_hold` while a hold covers the report's case or subject
+ * (schema trigger); the clearing is recorded in the WH-019 restore suppression ledger so a restored backup cannot bring
+ * the address back. Exact retries, and reports without an email, succeed without change. */
+export async function eraseAbuseReportContact(db:Database,principal:unknown,input:{reportId:string}){
+ const id=input.reportId;
+ await attempt(db,{principal,action:'erase_report_contact',target:id,roles:['case_reviewer'],valid:isReport(id),independent:reportIndependent(id),
+  writes:gate=>[q`UPDATE abuse_reports SET reporter_email=NULL WHERE id=${id} AND reporter_email IS NOT NULL AND ${gate}`],
+  effect:()=>q`EXISTS(SELECT 1 FROM abuse_reports WHERE id=${id} AND reporter_email IS NULL)`,missing:reportMissing(id)});
+ return {reportId:id,reporterEmail:null};
 }
 /** One audited triage decision. `open_case` opens a new case (always `uncertain_flag`, intake reference
  * `abuse-report:<report id>`) in the same transaction; `link_case` attaches the report to an existing open case of the same

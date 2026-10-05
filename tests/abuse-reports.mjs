@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {readdir,readFile} from 'node:fs/promises';
+import {readdir,readFile,mkdtemp,rm} from 'node:fs/promises';
+import {backup,DatabaseSync} from 'node:sqlite';
+import {join} from 'node:path';
+import {sqliteD1Adapter} from './sqlite-d1.mjs';
 import {currentSiteFixtureHandlers,createFixtureWebsite} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
@@ -10,7 +13,7 @@ Error.stackTraceLimit=0;
 const d1=process.argv.includes('--d1');
 const m=await currentSiteFixtureHandlers();
 const built=await build({stdin:{contents:`export * from './src/abuse-report-page.ts';export * as reports from './src/abuse-reports.ts';export * as cases from './src/safety-cases.ts';
- export * as http from './src/safety-case-http.ts';export {sendAIChat} from './src/ai-chat.ts';
+ export * as http from './src/safety-case-http.ts';export {sendAIChat} from './src/ai-chat.ts';export * as suppression from './src/restore-suppression.ts';
  export {admitWorkspace} from './src/workspace-identity/admission.ts';export {resolveIdentity} from './src/workspace-identity/authority.ts';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const r=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64')),{cases:c}=r;
 const fixture=await databaseFixture({d1}),{db}=fixture;
@@ -18,6 +21,10 @@ const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{ne
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first(),all=async(q,...p)=>(await db.prepare(q).bind(...p).all()).results;
 const count=async(table,where='1',...p)=>(await row(`SELECT count(*) AS n FROM ${table} WHERE ${where}`,...p)).n;
 const MARK='SYNTHETIC-REPORT-DETAIL-CANARY';let checks=0;const ok=()=>checks++;
+// The optional reporter email (owner decision October 4, 2026). Its domain is lower-cased on intake.
+const EMAIL_INPUT='reporter.canary+wh016@Example.ORG',EMAIL='reporter.canary+wh016@example.org';
+const logs=[],consoleMethods=['log','info','warn','error','debug'],originalConsole=Object.fromEntries(consoleMethods.map(k=>[k,console[k]]));
+for(const k of consoleMethods)console[k]=(...args)=>{logs.push(args.map(String).join(' '));if(k==='log')originalConsole.log(...args);};
 const refused=async(fn,reason)=>{await assert.rejects(fn,e=>e instanceof c.SafetyCaseError&&e.reason===reason,reason);ok();};
 let allow=true;const limiter={limit:async()=>({success:allow})};
 const env={DB:db,ENVIRONMENT:'test',TURNSTILE_SECRET:'fixture-secret',TURNSTILE_SITE_KEY:'fixture-site-key',API_LIMITER:limiter};
@@ -45,7 +52,10 @@ try{
  const get=await r.abuseReportPage(page({},'?site='+encodeURIComponent('<script>x</script>')),env,turnstile),html=await get.text();
  assert.equal(get.status,200);assert.equal(get.headers.get('cache-control'),'no-store');assert.match(get.headers.get('content-security-policy'),/frame-ancestors 'none'/);
  assert.match(html,/data-action="abuse_report"/);assert.match(html,/data-cdata="abuse-report"/);
- for(const id of ['site','category','details'])assert.match(html,new RegExp(`<label for="${id}">`));
+ for(const id of ['site','category','details','email'])assert.match(html,new RegExp(`<label for="${id}">`));
+ // The email field is plainly optional and says why it exists, who sees it and that nothing is sent automatically.
+ assert.match(html,/<label for="email">Your email \(optional\)<\/label>/);assert.match(html,/type="email"[^>]*maxlength="254"/);assert.doesNotMatch(html,/id="email"[^>]*required/);
+ assert.match(html,/contact you about this report/);assert.match(html,/never shown to the site's owner or given to any AI/);assert.match(html,/deleted with your report/);assert.match(html,/does not email you automatically/);ok();
  assert.ok(!html.includes('<script>x'));assert.match(html,/&lt;script&gt;x/);assert.match(html,/not sent to the site's owner or to any AI/);ok();
  const head=await r.abuseReportPage(page({method:'HEAD'}),env,turnstile);assert.equal(head.status,200);assert.equal(await head.text(),'');ok();
  assert.equal((await r.abuseReportPage(page({method:'PUT'}),env,turnstile)).status,405);ok();
@@ -56,7 +66,11 @@ try{
  const nothing=async()=>{assert.equal(await count('abuse_reports'),0);ok();};
  assert.equal((await submit(report(siteA),{origin:'https://evil.example'})).status,403);await nothing();
  assert.equal((await submit(report(siteA),{type:'text/plain'})).status,415);await nothing();
- assert.equal((await submit({...report(siteA),email:'x@example.invalid'})).status,400);await nothing();
+ assert.equal((await submit({...report(siteA),contact:'x@example.invalid'})).status,400);await nothing();
+ // Invalid or oversized optional emails are refused before anything is stored or verified.
+ for(const email of ['not-an-email','a@b','two@@example.org','x@example.org\nBcc: y@example.org','<x@example.org>','x@exa mple.org','x'.repeat(250)+'@example.org']){
+  const spent=siteverify;assert.equal((await submit({...report(siteA),email})).status,400,String(email));assert.equal(siteverify,spent);await nothing();}
+ assert.equal((await submit(new URLSearchParams(report(siteA)).toString()+'&email=a%40example.org&email=b%40example.org')).status,400);await nothing();
  assert.equal((await submit(new URLSearchParams(report(siteA)).toString()+'&site=x')).status,400);await nothing();
  assert.equal((await submit({...report(siteA),details:'x'.repeat(17000)})).status,413);await nothing();
  assert.equal((await submit({...report(siteA),details:'x'.repeat(1001)})).status,400);await nothing();
@@ -73,17 +87,22 @@ try{
  assert.equal((await submit({...report(siteA),'cf-turnstile-response':''},{ip:'198.51.100.22'})).status,400);await nothing();
 
  // ---- A verified report: bound to the serving project and owner, path only, receipt without case details.
- const first=report(siteA+'/about?ref=secret#frag');
+ const first=report(siteA+'/about?ref=secret#frag',{email:'  '+EMAIL_INPUT+' '});
  const accepted=await submit(first,{ip:'198.51.100.30'});
  assert.equal(accepted.status,200);assert.match(accepted.html,new RegExp('Receipt: <code>'+first.id));
  assert.ok(!accepted.html.includes(MARK)&&!accepted.html.includes(projectA)&&!accepted.html.includes(ownerA.account),'The receipt shows no report details, project or owner');
+ assert.ok(!accepted.html.toLowerCase().includes(EMAIL),'The receipt does not echo the email');assert.match(accepted.html,/may contact you about this report\. Nothing is sent automatically/);ok();
  const saved=await row('SELECT * FROM abuse_reports WHERE id=?',first.id);
  assert.deepEqual({project:saved.project_id,subject:saved.subject_user_id,surface:saved.surface,host:saved.host_kind,path:saved.path,category:saved.category,triage:saved.triage,caseId:saved.case_id},
   {project:projectA,subject:ownerA.account,surface:'site',host:'platform',path:'/about',category:'fraud_phishing',triage:'received',caseId:null});
- assert.ok(saved.details.startsWith(MARK));assert.ok(!JSON.stringify(saved).includes('198.51.100'),'No reporter address stored');ok();
+ assert.ok(saved.details.startsWith(MARK));assert.ok(!JSON.stringify(saved).includes('198.51.100'),'No reporter IP stored');ok();
+ assert.equal(saved.reporter_email,EMAIL,'Optional email stored trimmed with a lower-cased domain');assert.ok(!saved.request_hash.includes(EMAIL));ok();
+ // A blank email stores none.
+ for(const email of [undefined,null,'','   '])assert.equal(r.reports.abuseReportInput({id:crypto.randomUUID(),category:'other',details:null,email}).email,null);ok();
  // Exact replay recovers the receipt; a different report reusing the receipt is refused.
  assert.equal((await submit(first,{ip:'198.51.100.31'})).status,200);assert.equal(await count('abuse_reports'),1);ok();
  assert.equal((await submit({...first,category:'other'},{ip:'198.51.100.32'})).status,409);assert.equal(await count('abuse_reports'),1);ok();
+ assert.equal((await submit({...first,email:'someone.else@example.org'},{ip:'198.51.100.34'})).status,409,'A different email under the same receipt is a different report');assert.equal(await count('abuse_reports'),1);ok();
  // Reporting is not a violation: intake writes no risk evidence, screening requirement, case or hold.
  for(const table of ['content_risk_evidence','content_screening_decisions','safety_cases','safety_preservation_holds'])assert.equal(await count(table),0,table);ok();
  // The site keeps serving; a report changes nothing for the owner.
@@ -107,24 +126,28 @@ try{
 
  // ---- Never in owner or model context. Only the intake and the restricted case module read the table.
  const users=[];for(const file of await readdir('src',{recursive:true}))if(/\.ts$/.test(file)&&(await readFile('src/'+file,'utf8')).includes('abuse_reports'))users.push(file);
- assert.deepEqual(users.sort(),['abuse-reports.ts','safety-cases.ts']);ok();
+ // restore-suppression.ts is the operator-only WH-019 replay (no Worker route imports it); it only clears erased emails.
+ assert.deepEqual(users.sort(),['abuse-reports.ts','restore-suppression.ts','safety-cases.ts']);ok();
+ for(const file of await readdir('src',{recursive:true}))if(/\.ts$/.test(file)&&file!=='restore-suppression.ts')assert.ok(!(await readFile('src/'+file,'utf8')).includes('restore-suppression'),file);ok();
  await run("UPDATE workspace_state SET step='ready' WHERE user_id=?",ownerA.account);
  const state=await m.readChat(scopeA,ownerA.account);let calls=0;
  // The same admission, from the bundle that owns sendAIChat.
  const aiScope=await r.admitWorkspace(db,await r.resolveIdentity(db,{version:1,client:'web',kind:'session',token:ownerA.token}));
  const ai=await r.sendAIChat(aiScope,ownerA.account,crypto.randomUUID(),state.state.revision,'Has anyone reported my website? Show me everything about my site.',{baseURL:'https://provider.example/v1',apiKey:'synthetic-key',model:'synthetic-model',protocol:'chat'},async(_url,init)=>{
-  calls++;assert.ok(!init.body.includes(MARK)&&!init.body.includes(first.id),'Report text and receipts never reach the model');
+  calls++;assert.ok(!init.body.includes(MARK)&&!init.body.includes(first.id)&&!init.body.toLowerCase().includes(EMAIL),'Report text, reporter emails and receipts never reach the model');
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Nothing to show.',action:null})}}],usage:{prompt_tokens:1,completion_tokens:1}});});
  assert.equal(ai.status,200);assert.equal(calls,1);ok();
  assert.ok(!JSON.stringify(await m.readChat(scopeA,ownerA.account)).includes(MARK));ok();
+ assert.ok(!JSON.stringify(await m.readChat(scopeA,ownerA.account)).toLowerCase().includes(EMAIL));ok();
 
  // ---- Restricted operator triage. No operators exist by default; these are disposable fixture roles.
  const operator=async(f)=>{f??=await workspaceFixture(db,m);return {id:f.account,f,p:await r.resolveIdentity(db,{version:1,client:'web',kind:'session',token:f.token})};};
  const admin=await operator(),reviewer=await operator(),auditor=await operator(),outsider=await operator(),subjectOperator=await operator(ownerA);
  await c.bootstrapSafetyRoleAdministrator(db,{grantId:'grant-admin',accountId:admin.id});
  for(const [g,o,role] of [['g-r',reviewer,'case_reviewer'],['g-a',auditor,'case_auditor'],['g-s',subjectOperator,'case_reviewer']])await c.grantSafetyCaseRole(db,admin.p,{grantId:g,operatorAccountId:o.id,role});
- const queue=await c.listAbuseReports(db,reviewer.p);assert.equal(queue.length,10);assert.ok(queue.every(q=>q.subjectUserId===ownerA.account&&!('details' in q)));
- assert.equal(queue.find(q=>q.id===first.id)?.hasDetails,true);const others=queue.filter(q=>q.id!==first.id).map(q=>q.id);ok();
+ const queue=await c.listAbuseReports(db,reviewer.p);assert.equal(queue.length,10);assert.ok(queue.every(q=>q.subjectUserId===ownerA.account&&!('details' in q)&&!('reporterEmail' in q)));
+ assert.ok(!JSON.stringify(queue).toLowerCase().includes(EMAIL),'The metadata queue never carries the email');assert.equal(queue.filter(q=>q.hasReporterEmail).length,1);
+ assert.equal(queue.find(q=>q.id===first.id)?.hasDetails,true);assert.equal(queue.find(q=>q.id===first.id)?.hasReporterEmail,true);const others=queue.filter(q=>q.id!==first.id).map(q=>q.id);ok();
  assert.equal((await c.listAbuseReports(db,auditor.p)).length,10);ok();
  await refused(()=>c.readAbuseReport(db,auditor.p,{reportId:first.id}),'missing_role');
  await refused(()=>c.listAbuseReports(db,outsider.p),'missing_role');
@@ -133,7 +156,7 @@ try{
  assert.equal((await c.listAbuseReports(db,subjectOperator.p)).length,0);
  await refused(()=>c.readAbuseReport(db,subjectOperator.p,{reportId:first.id}),'not_found');
  await refused(()=>c.triageAbuseReport(db,subjectOperator.p,{reportId:first.id,decision:'not_actionable',decisionRef:'self'}),'not_found');
- const read=await c.readAbuseReport(db,reviewer.p,{reportId:first.id});assert.ok(read.details.startsWith(MARK));assert.equal(read.path,'/about');assert.equal(read.triage,'received');ok();
+ const read=await c.readAbuseReport(db,reviewer.p,{reportId:first.id});assert.ok(read.details.startsWith(MARK));assert.equal(read.reporterEmail,EMAIL,'Only the reviewer read returns the email');assert.equal(read.path,'/about');assert.equal(read.triage,'received');ok();
  await refused(()=>c.readAbuseReport(db,reviewer.p,{reportId:crypto.randomUUID()}),'not_found');
  await refused(()=>c.readAbuseReport(db,reviewer.p,{reportId:'not-a-report'}),'invalid_input');
  // Open a case from the report: always an uncertain flag, intake reference names the report, in one transaction.
@@ -164,13 +187,52 @@ try{
  // Audit rows record every attempt with identifiers only.
  const audit=await all("SELECT action,outcome,reason,target_ref FROM safety_case_audit WHERE action IN ('list_reports','read_report','triage_report')");
  assert.ok(audit.some(a=>a.action==='read_report'&&a.outcome==='denied'&&a.reason==='conflict_of_interest'));assert.ok(audit.some(a=>a.action==='triage_report'&&a.outcome==='allowed'));
- assert.ok(!JSON.stringify(await all('SELECT * FROM safety_case_audit')).includes(MARK));ok();
+ assert.ok(!JSON.stringify(await all('SELECT * FROM safety_case_audit')).includes(MARK));assert.ok(!JSON.stringify(await all('SELECT * FROM safety_case_audit')).toLowerCase().includes(EMAIL));ok();
  // Stored reports are immutable except the single triage transition, and retained.
  await assert.rejects(()=>run('UPDATE abuse_reports SET details=? WHERE id=?','changed',fifth),/abuse_report_immutable/);ok();
  await assert.rejects(()=>run("UPDATE abuse_reports SET triage='received',case_id=NULL,triaged_by=NULL,triaged_at=NULL,triage_ref=NULL WHERE id=?",first.id),/abuse_report_immutable/);ok();
  await assert.rejects(()=>run('DELETE FROM abuse_reports WHERE id=?',fifth),/abuse_report_immutable/);ok();
  await assert.rejects(()=>run("INSERT INTO abuse_reports(id,project_id,subject_user_id,surface,host_kind,path,category,request_hash,received_at,triage) VALUES(?,?,?,'site','platform','/','other',?,unixepoch(),'case_opened')",crypto.randomUUID(),projectA,ownerA.account,'a'.repeat(64)),/abuse_report_immutable|CHECK/);ok();
  await assert.rejects(()=>run("INSERT INTO abuse_reports(id,project_id,subject_user_id,surface,host_kind,path,category,request_hash,received_at) VALUES(?,?,?,'site','platform','/','other',?,unixepoch())",crypto.randomUUID(),projectA,ownerB.account,'a'.repeat(64)),/abuse_report_target/,'Subject must be the current owner');ok();
+ // ---- Erasing the optional reporter email: audited, case reviewer only, blocked while a hold covers the report, restore-safe.
+ const keeper=await operator();await c.grantSafetyCaseRole(db,admin.p,{grantId:'g-k',operatorAccountId:keeper.id,role:'preservation_approver'});
+ let directory=null,candidateSQL=null;
+ if(fixture.sql){directory=await mkdtemp('/tmp/whumpo-abuse-contact-');await backup(fixture.sql,join(directory,'before.sqlite'));}
+ await refused(()=>c.eraseAbuseReportContact(db,auditor.p,{reportId:first.id}),'missing_role');
+ await refused(()=>c.eraseAbuseReportContact(db,subjectOperator.p,{reportId:first.id}),'not_found');
+ await refused(()=>c.eraseAbuseReportContact(db,reviewer.p,{reportId:'nope'}),'invalid_input');
+ assert.equal((await call('reports/erase-contact',{reportId:first.id},ownerB.token)).status,403,'No customer route');ok();
+ // A hold on another subject does not block; a hold on the report's case (or its subject) does.
+ await c.placePreservationHold(db,keeper.p,{holdId:'hold-other',caseId:'case-other',legalBasisRef:'basis-1',reviewDays:30});
+ await c.placePreservationHold(db,keeper.p,{holdId:'hold-report',caseId:'case-report-1',legalBasisRef:'basis-2',reviewDays:30});
+ await refused(()=>c.eraseAbuseReportContact(db,reviewer.p,{reportId:first.id}),'active_hold');
+ await assert.rejects(()=>run('UPDATE abuse_reports SET reporter_email=NULL WHERE id=?',first.id),/safety_preservation_hold/);
+ assert.equal((await row('SELECT reporter_email FROM abuse_reports WHERE id=?',first.id)).reporter_email,EMAIL);ok();
+ await c.releasePreservationHold(db,keeper.p,{holdId:'hold-report',caseId:'case-report-1',releaseRef:'release-1'});
+ assert.deepEqual(await c.eraseAbuseReportContact(db,reviewer.p,{reportId:first.id}),{reportId:first.id,reporterEmail:null});ok();
+ assert.equal((await c.readAbuseReport(db,reviewer.p,{reportId:first.id})).reporterEmail,null);assert.equal((await row('SELECT triage,case_id FROM abuse_reports WHERE id=?',first.id)).case_id,'case-report-1','Only the email is cleared');ok();
+ assert.deepEqual(await c.eraseAbuseReportContact(db,reviewer.p,{reportId:first.id}),{reportId:first.id,reporterEmail:null},'Exact retry succeeds');ok();
+ assert.equal((await call('reports/erase-contact',{reportId:fifth},reviewer.f.token)).status,200,'A report without an email erases nothing');ok();
+ const ledgerRows=await all("SELECT kind,subject_id,effect FROM restore_suppressions WHERE kind='report_contact'");
+ assert.deepEqual(ledgerRows.map(x=>[x.kind,x.subject_id,x.effect]),[['report_contact',first.id,'deleted']],'Only the erased report is recorded, by identifier');ok();
+ assert.ok(!JSON.stringify(await all('SELECT * FROM restore_suppressions')).toLowerCase().includes(EMAIL));ok();
+ // An erased email cannot be written back; the ledger also guards re-inserts and whole-database restores (below).
+ await assert.rejects(()=>run('UPDATE abuse_reports SET reporter_email=? WHERE id=?',EMAIL,first.id),/abuse_report_immutable/);ok();
+ assert.ok((await all("SELECT action,outcome,reason FROM safety_case_audit WHERE action='erase_report_contact'")).some(a=>a.outcome==='rejected'&&a.reason==='active_hold'));ok();
+ if(fixture.sql){
+  // An older whole-database backup still holds the address; the WH-019 replay clears it before the candidate serves.
+  candidateSQL=new DatabaseSync(join(directory,'before.sqlite'));candidateSQL.exec('PRAGMA foreign_keys=ON');const candidate=sqliteD1Adapter(candidateSQL);
+  assert.equal((await candidate.prepare('SELECT reporter_email FROM abuse_reports WHERE id=?').bind(first.id).first()).reporter_email,EMAIL);
+  const current=await r.suppression.captureRestoreSuppressions(db);let gate=await r.suppression.checkRestoreSuppressions(candidate,current);
+  assert.equal(gate.clear,false);assert.equal(gate.pending.report_contact,1);
+  const replay=await r.suppression.replayRestoreSuppressions(candidate,current);assert.equal(replay.applied.reportContactsErased,1);
+  assert.ok(Object.values((await r.suppression.replayRestoreSuppressions(candidate,current)).applied).every(n=>n===0),'A duplicate replay changes nothing');
+  gate=await r.suppression.checkRestoreSuppressions(candidate,current);assert.equal(gate.clear,true);
+  assert.equal((await candidate.prepare('SELECT reporter_email FROM abuse_reports WHERE id=?').bind(first.id).first()).reporter_email,null);ok();
+  candidateSQL.close();
+ }
+ if(directory)await rm(directory,{recursive:true,force:true});
  assert.equal(network,0,'No external delivery or report is sent');ok();
+ assert.ok(!logs.some(l=>l.toLowerCase().includes(EMAIL)||l.includes(MARK)),'Nothing submitted is logged');ok();
  console.log(`abuse reports: ${checks} checks passed (${d1?'local D1':'SQLite'})`);
-}finally{globalThis.fetch=originalFetch;await fixture.close?.();}
+}finally{globalThis.fetch=originalFetch;for(const k of consoleMethods)console[k]=originalConsole[k];await fixture.close?.();}

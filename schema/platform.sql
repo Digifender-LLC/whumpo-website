@@ -4887,7 +4887,7 @@ CREATE TABLE safety_case_audit (
  actor_ref TEXT CHECK(actor_ref IS NULL OR (actor_ref GLOB 'human:?*' AND length(actor_ref)<=128 AND actor_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
   'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
-  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report')),
+  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report','erase_report_contact')),
  case_id TEXT CHECK(case_id IS NULL OR (length(case_id) BETWEEN 1 AND 128 AND case_id NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  target_ref TEXT CHECK(target_ref IS NULL OR (length(target_ref) BETWEEN 1 AND 128 AND target_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
@@ -5078,9 +5078,13 @@ CREATE TRIGGER safety_case_audit_retained BEFORE DELETE ON safety_case_audit BEG
 -- intake behind origin, bounded body, Turnstile, a per-connection daily allowance (public_client_usage scope 'abuse')
 -- and the platform/project caps below, into the restricted WH-132 operator queue. No foreign key to users or projects:
 -- a report survives the subject's account or project deletion. Owner, Chat, agent, model and customer paths never read
--- this table; only the authenticated case-role surface lists, reads and triages it. No reporter address, IP, contact
--- detail or uploaded material is stored. Triage is one audited human decision: open a new uncertain_flag case, link an
--- existing open case of the same subject, or record the report as not actionable. A report is never a finding.
+-- this table; only the authenticated case-role surface lists, reads and triages it. No reporter IP or uploaded material
+-- is stored. The reporter may OPTIONALLY give an email address for follow-up (owner decision October 4, 2026): it is
+-- readable only through the case-reviewer report read, never by the owner, Chat, agents, models or logs; nothing emails
+-- it. An audited operator erasure clears it (refused while a hold covers the report's case or subject), the clearing is
+-- recorded in the WH-019 restore suppression ledger, and it is deleted with the report. Triage is one audited human
+-- decision: open a new uncertain_flag case, link an existing open case of the same subject, or record the report as not
+-- actionable. A report is never a finding.
 CREATE TABLE abuse_reports (
  id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
  project_id TEXT NOT NULL CHECK(length(project_id)=36 AND project_id NOT GLOB '*[^0-9a-f-]*'),
@@ -5090,6 +5094,8 @@ CREATE TABLE abuse_reports (
  path TEXT NOT NULL CHECK(length(path) BETWEEN 1 AND 512 AND substr(path,1,1)='/'),
  category TEXT NOT NULL CHECK(category IN ('child_safety','sexual_content','copyright','fraud_phishing','hate_harassment','gambling','malware_security','spam_abuse','other')),
  details TEXT CHECK(details IS NULL OR length(details) BETWEEN 1 AND 1000),
+ reporter_email TEXT CHECK(reporter_email IS NULL OR (length(reporter_email) BETWEEN 6 AND 254 AND reporter_email GLOB '?*@?*.?*'
+  AND reporter_email NOT GLOB '*@*@*' AND reporter_email NOT GLOB '*[^A-Za-z0-9.!#$%&''*+/=?^_`{|}~@-]*')),
  request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
  received_at INTEGER NOT NULL CHECK(received_at>=0),
  triage TEXT NOT NULL DEFAULT 'received' CHECK(triage IN ('received','case_opened','case_linked','not_actionable')),
@@ -5118,13 +5124,19 @@ CREATE TRIGGER abuse_reports_admit BEFORE INSERT ON abuse_reports BEGIN
  SELECT RAISE(ABORT,'abuse_report_rate') WHERE (SELECT count(*) FROM abuse_reports WHERE received_at>unixepoch()-3600)>=100
   OR (SELECT count(*) FROM abuse_reports WHERE project_id=NEW.project_id AND received_at>unixepoch()-3600)>=10;
 END;
--- Only the single triage transition is allowed. A linked or opened case must be an open case about the same subject.
-CREATE TRIGGER abuse_reports_update BEFORE UPDATE ON abuse_reports
-WHEN OLD.triage<>'received' OR NEW.triage='received' OR NEW.id IS NOT OLD.id OR NEW.project_id IS NOT OLD.project_id OR NEW.subject_user_id IS NOT OLD.subject_user_id
- OR NEW.surface IS NOT OLD.surface OR NEW.host_kind IS NOT OLD.host_kind OR NEW.path IS NOT OLD.path OR NEW.category IS NOT OLD.category
- OR NEW.details IS NOT OLD.details OR NEW.request_hash IS NOT OLD.request_hash OR NEW.received_at IS NOT OLD.received_at
- OR (NEW.case_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND subject_user_id=OLD.subject_user_id AND closed_at IS NULL))
-BEGIN SELECT RAISE(ABORT,'abuse_report_immutable'); END;
+-- Only two transitions are allowed: the single triage decision (a linked or opened case must be an open case about the
+-- same subject), and erasing the optional reporter email, which is refused while any hold covers the case or subject.
+CREATE TRIGGER abuse_reports_update BEFORE UPDATE ON abuse_reports BEGIN
+ SELECT RAISE(ABORT,'abuse_report_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.project_id IS NOT OLD.project_id OR NEW.subject_user_id IS NOT OLD.subject_user_id
+  OR NEW.surface IS NOT OLD.surface OR NEW.host_kind IS NOT OLD.host_kind OR NEW.path IS NOT OLD.path OR NEW.category IS NOT OLD.category
+  OR NEW.details IS NOT OLD.details OR NEW.request_hash IS NOT OLD.request_hash OR NEW.received_at IS NOT OLD.received_at
+  OR NOT ((OLD.triage='received' AND NEW.triage<>'received' AND NEW.reporter_email IS OLD.reporter_email
+    AND (NEW.case_id IS NULL OR EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND subject_user_id=OLD.subject_user_id AND closed_at IS NULL)))
+   OR (OLD.reporter_email IS NOT NULL AND NEW.reporter_email IS NULL AND NEW.triage IS OLD.triage AND NEW.case_id IS OLD.case_id
+    AND NEW.triaged_by IS OLD.triaged_by AND NEW.triaged_at IS OLD.triaged_at AND NEW.triage_ref IS OLD.triage_ref));
+ SELECT RAISE(ABORT,'safety_preservation_hold') WHERE OLD.reporter_email IS NOT NULL AND NEW.reporter_email IS NULL
+  AND EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND (case_id=OLD.case_id OR subject_user_id=OLD.subject_user_id));
+END;
 -- Retained: there is no deletion path (retention term is an owner/counsel decision, docs/content-safety.md).
 CREATE TRIGGER abuse_reports_retained BEFORE DELETE ON abuse_reports BEGIN SELECT RAISE(ABORT,'abuse_report_immutable'); END;
 

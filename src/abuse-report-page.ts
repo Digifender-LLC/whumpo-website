@@ -4,7 +4,7 @@
  * server-side Turnstile), then src/abuse-reports.ts stores the report in the restricted operator queue. Submitted values,
  * tokens and verification responses are never logged. */
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
-import {abuseReportCategories,abuseReportInput,resolveAbuseReportTarget,saveAbuseReport,AbuseReportError,maxReportDetails} from './abuse-reports';
+import {abuseReportCategories,abuseReportInput,resolveAbuseReportTarget,saveAbuseReport,AbuseReportError,maxReportDetails,maxReporterEmail} from './abuse-reports';
 import {verifyTurnstile} from './turnstile';
 
 export const abuseReportPath='/report';
@@ -20,13 +20,13 @@ async function readForm(request:Request){
  while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>16384){await reader.cancel();throw new AbuseReportError(413,'Report too large.');}chunks.push(value);}
  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
  const form=new URLSearchParams(new TextDecoder().decode(bytes));
- const allowed=['id','site','category','details','cf-turnstile-response'];
+ const allowed=['id','site','category','details','email','cf-turnstile-response'];
  for(const key of form.keys())if(!allowed.includes(key)||form.getAll(key).length!==1)throw new AbuseReportError(400,'Reload the report form.');
  return form;
 }
 function formHTML(env:Pick<Env,'TURNSTILE_SITE_KEY'>,local:boolean,site:string){
  const options=Object.entries(abuseReportCategories).map(([value,label])=>`<option value="${value}">${esc(label)}</option>`).join('');
- return `<p>Tell Whumpo's safety reviewers about a published Whumpo website or app that breaks the <a href="https://digifender.com/legal/whumpo">Acceptable Use Policy</a>. You do not need an account.</p>${urgent}<form method="post"><input type="hidden" name="id" value="${crypto.randomUUID()}"><label for="site">Address of the site or app</label><input id="site" name="site" maxlength="2048" inputmode="url" autocomplete="off" spellcheck="false" required aria-describedby="site-hint" value="${esc(site)}"><p class="hint" id="site-hint">For example <code>https://…whumpo.site/</code> or the site's own domain.</p><label for="category">What is the problem?</label><select id="category" name="category" required><option value="">Choose one</option>${options}</select><label for="details">What did you see? (optional)</label><textarea id="details" name="details" maxlength="${maxReportDetails}" aria-describedby="details-hint"></textarea><p class="hint" id="details-hint">Up to ${maxReportDetails.toLocaleString('en-US')} characters. Describe it and say where on the page it is. <strong>Do not paste or upload prohibited material, passwords or payment details.</strong></p><p class="note">Reports go to Whumpo's safety reviewers. They are not sent to the site's owner or to any AI. We do not store your IP address or ask for your contact details. Formal copyright notices follow the <a href="https://digifender.com/legal/whumpo">Copyright and Abuse Policy</a>.</p>${local?'':`<div class="cf-turnstile" data-sitekey="${esc(env.TURNSTILE_SITE_KEY)}" data-action="${abuseTurnstile.action}" data-cdata="${abuseTurnstile.cdata}"></div><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`}<button type="submit">Send report</button></form>`;
+ return `<p>Tell Whumpo's safety reviewers about a published Whumpo website or app that breaks the <a href="https://digifender.com/legal/whumpo">Acceptable Use Policy</a>. You do not need an account.</p>${urgent}<form method="post"><input type="hidden" name="id" value="${crypto.randomUUID()}"><label for="site">Address of the site or app</label><input id="site" name="site" maxlength="2048" inputmode="url" autocomplete="off" spellcheck="false" required aria-describedby="site-hint" value="${esc(site)}"><p class="hint" id="site-hint">For example <code>https://…whumpo.site/</code> or the site's own domain.</p><label for="category">What is the problem?</label><select id="category" name="category" required><option value="">Choose one</option>${options}</select><label for="details">What did you see? (optional)</label><textarea id="details" name="details" maxlength="${maxReportDetails}" aria-describedby="details-hint"></textarea><p class="hint" id="details-hint">Up to ${maxReportDetails.toLocaleString('en-US')} characters. Describe it and say where on the page it is. <strong>Do not paste or upload prohibited material, passwords or payment details.</strong></p><label for="email">Your email (optional)</label><input id="email" name="email" type="email" maxlength="${maxReporterEmail}" autocomplete="email" spellcheck="false" aria-describedby="email-hint"><p class="hint" id="email-hint">Only if you want Whumpo's safety reviewers to be able to contact you about this report, for example with a question. Leave it blank to report without it. Only safety reviewers can see it: it is never shown to the site's owner or given to any AI, and it is deleted with your report. Whumpo does not email you automatically.</p><p class="note">Reports go to Whumpo's safety reviewers. They are not sent to the site's owner or to any AI. We do not store your IP address. Formal copyright notices follow the <a href="https://digifender.com/legal/whumpo">Copyright and Abuse Policy</a>.</p>${local?'':`<div class="cf-turnstile" data-sitekey="${esc(env.TURNSTILE_SITE_KEY)}" data-action="${abuseTurnstile.action}" data-cdata="${abuseTurnstile.cdata}"></div><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`}<button type="submit">Send report</button></form>`;
 }
 export async function abuseReportPage(request:Request,env:Pick<Env,'DB'|'API_LIMITER'|'ENVIRONMENT'|'TURNSTILE_SITE_KEY'>&{TURNSTILE_SECRET?:string},fetcher:typeof fetch=fetch):Promise<Response>{
  let stage='availability';
@@ -44,7 +44,7 @@ export async function abuseReportPage(request:Request,env:Pick<Env,'DB'|'API_LIM
   }
   stage='form-read';
   const form=await readForm(request);
-  const input=abuseReportInput({id:form.get('id'),category:form.get('category'),details:form.get('details')});
+  const input=abuseReportInput({id:form.get('id'),category:form.get('category'),details:form.get('details'),email:form.get('email')});
   stage='target';
   const target=await resolveAbuseReportTarget(env.DB,form.get('site'));
   // One connection may send at most three reports about the same project per UTC day, counted before verification.
@@ -59,7 +59,7 @@ export async function abuseReportPage(request:Request,env:Pick<Env,'DB'|'API_LIM
   }
   stage='save-report';
   const {receipt}=await saveAbuseReport(env.DB,target,input);
-  return page('Report received',`<p>Thank you. Your report is in Whumpo's restricted safety review queue.</p><p>Receipt: <code>${esc(receipt)}</code></p><p>Keep this receipt if you contact <a href="mailto:legal@digifender.com">legal@digifender.com</a> about this report. Reviewers decide what happens next. This page does not show case details or outcomes, and your report is not sent to the site owner.</p>${urgent}`);
+  return page('Report received',`<p>Thank you. Your report is in Whumpo's restricted safety review queue.</p><p>Receipt: <code>${esc(receipt)}</code></p><p>Keep this receipt if you contact <a href="mailto:legal@digifender.com">legal@digifender.com</a> about this report. Reviewers decide what happens next. This page does not show case details or outcomes, and your report is not sent to the site owner.</p>${input.email?'<p>You gave an email address, so a safety reviewer may contact you about this report. Nothing is sent automatically.</p>':''}${urgent}`);
  }catch(cause){
   if(cause instanceof AbuseReportError)return page('Unable to send report',`<p role="alert">${esc(cause.message)}</p><p><a href="${abuseReportPath}">Open a fresh form</a></p>`,cause.status);
   console.error(JSON.stringify({event:'abuse_report.failed',stage,category:'unexpected'}));

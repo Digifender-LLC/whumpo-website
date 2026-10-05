@@ -952,7 +952,7 @@
         "abuse_reports"
       ],
       "scope": "platform",
-      "purpose": "Public abuse reports about published Whumpo sites and applications (WH-016): the server-resolved project, its owner at intake, surface, host kind, reported path (no query), category, an optional reporter description of at most 1,000 characters, request digest and the single audited triage decision (case opened, case linked or not actionable). No reporter address, IP, contact detail or upload is stored.",
+      "purpose": "Public abuse reports about published Whumpo sites and applications (WH-016): the server-resolved project, its owner at intake, surface, host kind, reported path (no query), category, an optional reporter description of at most 1,000 characters, an optional reporter email for follow-up (owner decision October 4, 2026; readable only through the case-reviewer report read, never emailed by Whumpo), request digest and the single audited triage decision (case opened, case linked or not actionable). No reporter IP or upload is stored.",
       "currentRetention": "Independent of the customer account lifecycle: no foreign key to users or projects and no delete path (a trigger refuses deletion). Bounded at 10,000 retained reports, 1,000 awaiting triage and 50 awaiting triage per project; intake fails closed beyond those caps.",
       "proposedRetention": "Requires an owner/counsel schedule (for example a fixed term after triage for reports not linked to a case, and the linked case's retention for the rest). Nothing is purged automatically until then.",
       "deletionAuthority": "No ordinary deletion. Owner, customer, model and agents cannot read, change or remove reports; triage is one authenticated case-reviewer decision.",
@@ -976,7 +976,7 @@
           "Public intake handler (Origin, bounded body, rate limiter, per-connection allowance, Turnstile) writes once; schema triggers enforce target, caps and the single triage transition"
         ],
         "remainingExposure": [
-          "Reporter descriptions are untrusted free text that may name people or describe sensitive material; they are readable by Cloudflare-managed storage and Worker code. No retention schedule or reporter follow-up channel exists yet."
+          "Reporter descriptions are untrusted free text that may name people or describe sensitive material, and the optional reporter email is personal data; both are readable by Cloudflare-managed storage and Worker code. An audited case-reviewer erasure clears the email (refused while a hold covers the case or subject) and records a report_contact restore suppression; no follow-up sending channel exists."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
