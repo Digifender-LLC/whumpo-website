@@ -253,9 +253,55 @@ try{
  await c.recordSafetyCaseFinding(db,actor.p,{caseId:'case-d3',finding:'confirmed_policy_finding',decisionRef:'decision-d3'});
  assert.equal(await count('usage_review_requests',"kind='safety_notice' AND user_id=?",d.user),2,'case-d3 delivers while case-d2 is delayed');ok();
 
+ // ---- Appeal deadline (owner decision October 5, 2026): 30 days from delivery; later the Support page shows the window
+ // closed and server and trigger refuse. One appeal per notice stays.
+ const e=await owner();
+ const backdate=async(notice,seconds)=>{ // Fixture-only: age one delivered notice by moving its delivery time, then restore the immutability trigger.
+  const {sql}=await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='usage_review_update'");
+  await run('DROP TRIGGER usage_review_update');
+  try{await run("UPDATE usage_review_requests SET answered_at=strftime('%Y-%m-%dT%H:%M:%fZ','now',?) WHERE id=?",(seconds>=0?'+':'')+seconds+' seconds',notice);}
+  finally{await run(sql);}
+  await assert.rejects(()=>run("UPDATE usage_review_requests SET statement='x' WHERE id=?",notice),/usage_review_immutable/,'The immutability trigger is restored');
+ };
+ const day=86400,confirmed=async(name,delivered=true)=>{await c.openSafetyCase(db,actor.p,{caseId:'case-'+name,subjectUserId:e.user,intakeRef:'manual-'+name});
+  await c.recordSafetyCaseFinding(db,actor.p,{caseId:'case-'+name,finding:'confirmed_policy_finding',decisionRef:'decision-'+name});return (await row('SELECT id FROM safety_action_notices WHERE case_id=?','case-'+name)).id;};
+ const windowOf=async notice=>(await overview(e)).requests.find(r=>r.id===notice).appealWindow;
+ assert.equal(shape.safetyAppealWindowDays,30);
+ // A fresh notice: window open until 30 days after delivery.
+ const fresh=await confirmed('e-fresh'),freshRow=await row('SELECT answered_at FROM usage_review_requests WHERE id=?',fresh);
+ assert.deepEqual(await windowOf(fresh),{state:'open',closesAt:new Date(Date.parse(freshRow.answered_at)+30*day*1000).toISOString()});
+ const helpRequest=(await overview(e)).requests;assert.ok(helpRequest.every(r=>r.kind==='safety_notice'||r.appealWindow.state==='not_applicable'));ok();
+ // Just inside the 30 days: the appeal is accepted; just outside: server and trigger refuse, the page reports it closed.
+ const inside=await confirmed('e-inside');await backdate(inside,-(30*day-60));assert.equal((await windowOf(inside)).state,'open');
+ const outside=await confirmed('e-outside');await backdate(outside,-(30*day+60));assert.equal((await windowOf(outside)).state,'closed');ok();
+ const late=await appeal(e,outside,APPEAL+'-late',{status:409});assert.match(late.error,/30-day window.*closed/);assert.equal(await count('usage_review_requests',"reference=?",'safety_notice:'+outside),0);
+ await assert.rejects(()=>run("INSERT INTO usage_review_requests(id,user_id,statement,kind,source,reference) VALUES(?,?,'x','safety_appeal','support',?)",id(),e.user,'safety_notice:'+outside),/safety_appeal_window/,'The schema refuses a late appeal even without the API');ok();
+ const insideAppeal=id();assert.equal((await appeal(e,inside,APPEAL+'-inside',{id:insideAppeal})).request.state,'open');ok();
+ // One appeal per notice stays, replay is still answered from the saved row, and a window that closes later does not touch a filed appeal.
+ assert.equal((await appeal(e,inside,APPEAL+'-inside',{id:insideAppeal})).replayed,true);await appeal(e,inside,'another',{status:409});assert.equal(await count('usage_review_requests',"reference=?",'safety_notice:'+inside),1);ok();
+ await backdate(inside,-(31*day));assert.equal((await windowOf(inside)).state,'closed');assert.equal((await json(e,'/api/support/v1/requests/'+insideAppeal)).request.state,'open');ok();
+ // The Chat support view carries the window and its shared reader accepts it.
+ const eTurn=(await chat(e,'Show my notices',[body=>({kind:'interaction',operation:'showSupport'})])).turn.interaction_id;
+ const eViewTurn=eTurn;
+ const eView=await json(e,'/api/chat/interactions/v1/read',{version:1,interactionId:eViewTurn,client});
+ const eCard=await json(e,'/api/chat/interactions/v1/card',{version:1,interactionId:eView.envelope.id,definitionDigest:eView.envelope.definitionDigest,cardId:'support-requests'});
+ assert.ok(shape.readSupportRequestsCard(eCard));assert.ok(eCard.data.requests.some(r=>r.id===outside&&r.appealWindow.state==='closed'));
+ const forged=JSON.parse(JSON.stringify(eCard));forged.data.requests[0].appealWindow={state:'open',closesAt:null};assert.equal(shape.readSupportRequestsCard(forged),null);ok();
+ const f=await owner();
+ // The window starts at delivery, not generation: a delayed notice has none until the lift, then a full 30 days.
+ await c.openSafetyCase(db,actor.p,{caseId:'case-e-delay',subjectUserId:f.user,intakeRef:'manual-e-delay'});
+ await c.placeSafetyNoticeDelay(db,keeper.p,{delayId:'delay-e',caseId:'case-e-delay',reason:REASON});
+ await c.recordSafetyCaseFinding(db,actor.p,{caseId:'case-e-delay',finding:'confirmed_policy_finding',decisionRef:'decision-e-delay'});
+ const delayed=await row("SELECT id,issued_at FROM safety_action_notices WHERE case_id='case-e-delay'");
+ assert.equal((await overview(f)).requests.find(r=>r.id===delayed.id),undefined);await appeal(f,delayed.id,'before delivery',{status:404});
+ await c.liftSafetyNoticeDelay(db,keeper.p,{delayId:'delay-e',caseId:'case-e-delay',liftRef:'lift-e'});
+ const afterLift=await row('SELECT answered_at FROM usage_review_requests WHERE id=?',delayed.id),w=(await overview(f)).requests.find(r=>r.id===delayed.id).appealWindow;
+ assert.ok(Date.parse(afterLift.answered_at)>=delayed.issued_at*1000,'Delivery is at or after generation');assert.equal(w.state,'open');assert.equal(w.closesAt,new Date(Date.parse(afterLift.answered_at)+30*day*1000).toISOString());
+ assert.equal((await appeal(f,delayed.id,APPEAL+'-delayed')).request.state,'open');ok();
+
  // ---- Audit: identifiers only.
  const audit=await all("SELECT * FROM safety_case_audit WHERE action IN ('list_appeals','read_appeal','decide_appeal')");
  assert.ok(audit.some(x=>x.action==='read_appeal'&&x.outcome==='denied'&&x.reason==='conflict_of_interest'));assert.ok(audit.some(x=>x.action==='decide_appeal'&&x.outcome==='allowed'));
  assert.ok(!JSON.stringify(await all('SELECT * FROM safety_case_audit')).includes(APPEAL));ok();
- console.log(`Safety appeals passed (${d1?'local D1':'SQLite'}): ${checks} checks. A notice only on a confirmed finding (not on open, flag, hold or not_confirmed), one restricted generation record and one in-app support notice per finding, no reporter/report/case/reviewer detail to the owner, Chat view without model text, owner-only single appeal through Support, generic operator path refused, separation of duties in code and schema, independent reversal (even after closure) and upholding, fixed outcome text, account-less generation without delivery, notice delay under legal process (role and subject separation, no delivery while marked, separate lift delivers, reason kept from owner, model and audit), identifier-only audit. No network or email.`);
+ console.log(`Safety appeals passed (${d1?'local D1':'SQLite'}): ${checks} checks. A notice only on a confirmed finding (not on open, flag, hold or not_confirmed), one restricted generation record and one in-app support notice per finding, no reporter/report/case/reviewer detail to the owner, Chat view without model text, owner-only single appeal through Support, generic operator path refused, separation of duties in code and schema, independent reversal (even after closure) and upholding, fixed outcome text, account-less generation without delivery, appeal deadline (30 days from delivery, boundary, server and schema refusal, closed state on the Support projection and Chat card), notice delay under legal process (role and subject separation, no delivery while marked, separate lift delivers, reason kept from owner, model and audit), identifier-only audit. No network or email.`);
 }finally{globalThis.fetch=originalFetch;await fixture.close?.();}

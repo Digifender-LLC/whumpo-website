@@ -92,7 +92,7 @@ export function SupportPage(){
      <dl className="grid gap-1 text-sm"><div><dt className="inline font-medium">Response: </dt><dd className="inline">{responseLabel(r)}</dd></div><div><dt className="inline font-medium">Notification: </dt><dd className="inline">{r.response.saved?deliveryLabel(r.delivery.state):'None yet'}</dd></div><div><dt className="inline font-medium">Read: </dt><dd className="inline">{readLabel(r)}</dd></div></dl>
      <Button variant="secondary" className={wrap} aria-expanded={openId===r.id} onClick={()=>setOpenId(openId===r.id?null:r.id)}>{openId===r.id?'Hide details':'Open request'}</Button>
      {openId===r.id&&<div className="space-y-3 border-t pt-3"><SupportRequestBody r={r} label="Your statement:"/>
-      {r.kind==='safety_notice'&&(appealed.has(noticeReference(r.id))?<p className="text-sm">You have appealed this notice; the answer appears with your appeal.</p>:<Button variant="secondary" className={wrap} onClick={()=>startAppeal(r)}>Appeal this decision</Button>)}</div>}
+      {r.kind==='safety_notice'&&(appealed.has(noticeReference(r.id))?<p className="text-sm">You have appealed this notice; the answer appears with your appeal.</p>:r.appealWindow.state==='closed'?<p className="text-sm" data-appeal-window="closed">The 30-day appeal window for this notice closed {when(r.appealWindow.closesAt!)}. Appeals can no longer be sent.</p>:<><p className="text-sm" data-appeal-window="open">You can appeal until {when(r.appealWindow.closesAt!)} (30 days after the notice was delivered).</p><Button variant="secondary" className={wrap} onClick={()=>startAppeal(r)}>Appeal this decision</Button></>)}</div>}
     </article></li>)}</ul></section>
   </>}
  </div></main>;

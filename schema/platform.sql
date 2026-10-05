@@ -3659,6 +3659,10 @@ WHEN OLD.ai_context_allowed=0 AND NEW.ai_context_allowed!=0
 BEGIN SELECT RAISE(ABORT,'private_chat_context'); END;
 
 CREATE TRIGGER usage_review_insert BEFORE INSERT ON usage_review_requests BEGIN
+ -- WH-016 appeal deadline (owner decision October 5, 2026): an owner may appeal within 30 days of the notice's delivery
+ -- (its answered_at); later the trigger refuses. One appeal per notice stays (usage_review_one_appeal).
+ SELECT RAISE(ABORT,'safety_appeal_window') WHERE NEW.kind='safety_appeal' AND EXISTS(SELECT 1 FROM usage_review_requests n WHERE n.id=substr(NEW.reference,15) AND n.user_id=NEW.user_id AND n.kind='safety_notice'
+  AND strftime('%Y-%m-%dT%H:%M:%fZ','now')>strftime('%Y-%m-%dT%H:%M:%fZ',n.answered_at,'+30 days'));
  SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.customer_read_at IS NOT NULL OR (NEW.state!='open')<>(NEW.source='safety') OR NOT (
   -- WH-016 owner notice: only the trigger copy of a restricted safety_action_notices row, to that row's subject.
   (NEW.source='safety' AND NEW.state='answered' AND NEW.answered_by='safety_review' AND EXISTS(SELECT 1 FROM safety_action_notices n WHERE n.id=NEW.id AND n.subject_user_id=NEW.user_id

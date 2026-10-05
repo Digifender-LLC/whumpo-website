@@ -4,7 +4,13 @@
 export type SupportKind='usage_review'|'help'|'safety_notice'|'safety_appeal';
 export const supportKinds:readonly SupportKind[]=['usage_review','help','safety_notice','safety_appeal'];
 export type SupportDeliveryState='none'|'queued'|'delivered'|'failed'|'cancelled';
+/** Owner decision (WH-016, 2026-10-05): an owner may appeal a safety notice within this many days of its delivery. The schema
+ * trigger usage_review_insert repeats the bound (`+30 days` on the notice's answered_at). */
+export const safetyAppealWindowDays=30;
+export type AppealWindow={state:'not_applicable'|'open'|'closed';closesAt:string|null};
 export type SupportRequest={id:string;kind:SupportKind;reference:string|null;statement:string;createdAt:string;state:'open'|'answered';publicResponse:string|null;answeredAt:string|null;
+ /** Only a safety notice has a window: it opens at delivery and closes after safetyAppealWindowDays. */
+ appealWindow:AppealWindow;
  /** Saved in Whumpo, external provider acceptance, and customer read are three separate facts. */
  response:{saved:boolean};delivery:{state:SupportDeliveryState};read:{state:'unread'|'read'|'not_applicable';at:string|null}};
 export type SupportOperation={id:string;family:'chat'|'standard_ai'|'hosting'|'backup'|'dns';label:string;state:string;since:string;ageMinutes:number|null;needsAttention:boolean;reference:string;next:string};
@@ -44,7 +50,8 @@ const iso=(v:unknown)=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new 
 const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===[...keys].sort().join(',');
 const bounded=(v:unknown,max:number)=>typeof v==='string'&&v.length>=1&&v.length<=max;
 function supportRequestShape(r:unknown):r is SupportRequest{
- if(!exact(r,['id','kind','reference','statement','createdAt','state','publicResponse','answeredAt','response','delivery','read']))return false;
+ if(!exact(r,['id','kind','reference','statement','createdAt','state','publicResponse','answeredAt','appealWindow','response','delivery','read']))return false;
+ if(!exact(r.appealWindow,['state','closesAt'])||(r.kind==='safety_notice'?(r.appealWindow.state!=='open'&&r.appealWindow.state!=='closed')||!iso(r.appealWindow.closesAt):r.appealWindow.state!=='not_applicable'||r.appealWindow.closesAt!==null))return false;
  if(typeof r.id!=='string'||!uuid.test(r.id)||!supportKinds.includes(r.kind as SupportKind)||!(r.reference===null||parseSupportReference(r.reference))||!bounded(r.statement,950)||!iso(r.createdAt))return false;
  const answered=r.state==='answered';if(!answered&&r.state!=='open')return false;
  if(!exact(r.response,['saved'])||r.response.saved!==answered||!exact(r.delivery,['state'])||!['none','queued','delivered','failed','cancelled'].includes(r.delivery.state as string)||!exact(r.read,['state','at']))return false;

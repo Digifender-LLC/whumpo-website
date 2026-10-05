@@ -1,6 +1,6 @@
 import {BillingError} from './billing';
 import {listUsageReviewRequests,markReadStatement,type UsageReviewRequest} from './usage-review-requests';
-import {parseSupportReference,operationReference,supportStatusLinks,type SupportConfigView,type SupportKind,type SupportOperation,type SupportOverview,type SupportRequest,type SupportDeliveryState} from './support-shape';
+import {safetyAppealWindowDays,parseSupportReference,operationReference,supportStatusLinks,type SupportConfigView,type SupportKind,type SupportOperation,type SupportOverview,type SupportRequest,type SupportDeliveryState} from './support-shape';
 export type SupportEnv={SUPPORT_HOURS?:string;SUPPORT_NOTIFICATION_PROVIDER?:string;SUPPORT_NOTIFICATION_REVIEW?:string};
 /** Notification senders implemented in this repository. None is selected or implemented yet. */
 export const implementedNotificationProviders:readonly string[]=[];
@@ -14,11 +14,16 @@ export function supportConfig(env:SupportEnv,implemented:readonly string[]=imple
  return {hours:cleaned(env.SUPPORT_HOURS,300),settings};
 }
 export const supportConfigView=(config:ReturnType<typeof supportConfig>):SupportConfigView=>({hours:config.hours,notifications:{enabled:config.settings!==null}});
-const columns="r.id,r.kind,r.reference,r.statement,r.created_at,r.state,r.public_response,r.answered_at,r.customer_read_at,d.state AS delivery_state";
-type Row=UsageReviewRequest&{delivery_state:Exclude<SupportDeliveryState,'none'>|null};
+/** The appeal window (owner decision 2026-10-05) opens at a safety notice's delivery (its answered_at) and closes safetyAppealWindowDays later;
+ * the same expression guards usage_review_insert. */
+const appealCloses=`strftime('%Y-%m-%dT%H:%M:%fZ',r.answered_at,'+${safetyAppealWindowDays} days')`;
+const columns=`r.id,r.kind,r.reference,r.statement,r.created_at,r.state,r.public_response,r.answered_at,r.customer_read_at,d.state AS delivery_state,
+ CASE WHEN r.kind='safety_notice' THEN ${appealCloses} END AS appeal_closes_at,CASE WHEN r.kind='safety_notice' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now')<=${appealCloses} END AS appeal_open`;
+type Row=UsageReviewRequest&{delivery_state:Exclude<SupportDeliveryState,'none'>|null;appeal_closes_at:string|null;appeal_open:number|null};
 export function supportRequest(row:Row):SupportRequest{
  const answered=row.state==='answered';
  return {id:row.id,kind:row.kind,reference:row.reference,statement:row.statement,createdAt:row.created_at,state:row.state,publicResponse:answered?row.public_response:null,answeredAt:answered?row.answered_at:null,
+  appealWindow:row.kind==='safety_notice'?{state:row.appeal_open?'open':'closed',closesAt:row.appeal_closes_at}:{state:'not_applicable',closesAt:null},
   response:{saved:answered},delivery:{state:answered?row.delivery_state??'none':'none'},read:{state:answered?(row.customer_read_at?'read':'unread'):'not_applicable',at:row.customer_read_at}};
 }
 async function readOwned(db:Pick<D1Database,'prepare'>,user:string,id:string){
@@ -97,6 +102,7 @@ export async function createSupportRequest(db:Pick<D1Database,'prepare'>,user:st
   if(!await db.prepare("SELECT 1 AS x FROM usage_review_requests WHERE id=? AND user_id=? AND kind='safety_notice'").bind(ref.id,user).first())throw new BillingError(404,'That safety notice was not found in your account.');
   const appealed=await db.prepare("SELECT id FROM usage_review_requests WHERE reference=? AND kind='safety_appeal'").bind(input.reference).first<{id:string}>();
   if(appealed)throw new BillingError(409,'You have already appealed this notice ('+appealed.id+'). Its answer will appear there.');
+  if(!(await readOwned(db,user,ref.id))?.appeal_open)throw new BillingError(409,'The '+safetyAppealWindowDays+'-day window to appeal this notice has closed.');
  }
  const open=await db.prepare("SELECT id FROM usage_review_requests WHERE user_id=? AND kind=? AND state='open'").bind(user,input.kind).first<{id:string}>();
  if(open)throw new BillingError(409,'You already have an open '+({help:'help request',usage_review:'usage review',safety_appeal:'appeal'}[input.kind])+' ('+open.id+'). Read it before opening another.');
@@ -105,6 +111,7 @@ export async function createSupportRequest(db:Pick<D1Database,'prepare'>,user:st
  try{await db.prepare("INSERT INTO usage_review_requests(id,user_id,statement,kind,source,reference) VALUES(?,?,?,?,'support',?)").bind(input.id,user,input.statement,input.kind,input.reference).run();}
  catch(cause){
   const raced=await readOwned(db,user,input.id);if(raced&&same(raced))return {request:supportRequest(raced),replayed:true};
+  if(String(cause).includes('safety_appeal_window'))throw new BillingError(409,'The '+safetyAppealWindowDays+'-day window to appeal this notice has closed.');
   if(String(cause).includes('usage_review_requests.reference'))throw new BillingError(409,'You have already appealed this notice.');
   if(String(cause).includes('usage_review_requests.user_id')||String(cause).includes('UNIQUE'))throw new BillingError(409,'You already have an open request of this kind. Read it before opening another.');
   throw cause;
