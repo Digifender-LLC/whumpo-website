@@ -117,6 +117,31 @@ try{
   assert.equal((await call(a,'/account/v1/export/prepare',undefined,'GET')).status,404);
  });
 
+ await check('export downloads are single use and bounded per account, so repeated exports cannot exhaust shared photo reads',async()=>{
+  const e=await owner(),f=await owner();await photo(e,true);await photo(f,true);
+  const usage=async o=>({...await row("SELECT downloads,photo_reads FROM account_export_usage WHERE user_id=? AND period=strftime('%Y-%m','now')",o.user)});
+  const platform=async()=>(await row("SELECT read_ops FROM storage_usage WHERE period=strftime('%Y-%m','now')"))?.read_ops??0;
+  const first=await exportArchive(e);
+  assert.deepEqual(await usage(e),{downloads:1,photo_reads:1});
+  // The download consumed its review: the same review cannot be downloaded again.
+  await refused(await account(e,'export/download',{reviewId:first.prepared.id,reviewDigest:first.prepared.digest}),409,'stale_review');
+  assert.deepEqual(await usage(e),{downloads:1,photo_reads:1});
+  // The monthly download allowance refuses before any read and keeps the review.
+  await run("UPDATE account_export_usage SET downloads=10 WHERE user_id=?",e.user);
+  const capped=(await ok(await account(e,'export/prepare',{requestId:id(),visitorData:false}))).review;
+  const before=await platform();
+  await refused(await account(e,'export/download',{reviewId:capped.id,reviewDigest:capped.digest}),409,'request_conflict');
+  assert.ok(await row('SELECT 1 x FROM account_lifecycle_reviews WHERE id=?',capped.id));assert.equal(await platform(),before);
+  // The per-account photo-read allowance stops the archive before the platform-wide ceiling is touched.
+  await run("UPDATE account_export_usage SET downloads=0,photo_reads=5000 WHERE user_id=?",e.user);
+  const response=await account(e,'export/download',{reviewId:capped.id,reviewDigest:capped.digest});
+  assert.equal(response.status,200);await assert.rejects(()=>response.arrayBuffer());
+  assert.equal(await platform(),before);assert.deepEqual(await usage(e),{downloads:1,photo_reads:5000});
+  // Another account is unaffected.
+  await exportArchive(f);assert.deepEqual(await usage(f),{downloads:1,photo_reads:1});assert.equal(await platform(),before+1);
+  await assert.rejects(()=>run("UPDATE account_export_usage SET downloads=11 WHERE user_id=?",f.user),/CHECK/);
+ });
+
  let closureA;
  await check('closure review and confirmation: exact, fresh passkey, replay-safe; new work and delayed OAuth callbacks stop',async()=>{
   const review=await closureReview(a);

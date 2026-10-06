@@ -18,6 +18,18 @@ CREATE TRIGGER account_lifecycle_reviews_capacity BEFORE INSERT ON account_lifec
 WHEN (SELECT count(*) FROM account_lifecycle_reviews WHERE user_id=NEW.user_id)>=20
 BEGIN SELECT RAISE(ABORT,'account_lifecycle_review_capacity'); END;
 
+-- Per-account monthly export allowance (owner security review, October 6, 2026): each download consumes its exact
+-- review (single use) and one of 10 monthly downloads, and each exported photo read draws on this account's 5,000 monthly
+-- reads before the platform-wide storage ceiling, so repeated exports by one account cannot exhaust shared capacity.
+-- Counters only; cascades with the account.
+CREATE TABLE account_export_usage (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ period TEXT NOT NULL CHECK(length(period)=7 AND period GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
+ downloads INTEGER NOT NULL DEFAULT 0 CHECK(downloads BETWEEN 0 AND 10),
+ photo_reads INTEGER NOT NULL DEFAULT 0 CHECK(photo_reads BETWEEN 0 AND 5000),
+ PRIMARY KEY(user_id,period)
+) STRICT;
+
 -- One closure per account id. Deliberately WITHOUT a foreign key to users: the closure and its step journal are the
 -- final deletion receipt and must survive the account cascade. Counts only; never names, emails or content.
 -- States: closing (steps running), waiting (unresolved operation or pending provider revocation),

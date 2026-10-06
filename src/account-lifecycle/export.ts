@@ -21,7 +21,7 @@ import {getBilling} from '../billing';
 import {directoryHistory,exportDirectory} from '../directory';
 import {approvedPhotoSQL,ownerLibrarySQL,photoBytesMatch} from '../photo-safety';
 import {maxPhotoBytes} from '../photo-format';
-import {reserveStorage} from '../storage-budget';
+import {reserveStorage,StorageLimitError} from '../storage-budget';
 import {exportAccessRoles} from '../shared-modules/access-export';
 import {exportRecords} from '../shared-modules/records-export';
 import {exportFiles} from '../shared-modules/files-export';
@@ -69,6 +69,16 @@ export async function prepareAccountExport(db:D1Database,user:string,input:unkno
   notice:'The download is a private copy for you. It is not a backup Whumpo can restore, and it is generated from current data when you download it.'}};
 }
 
+/** Per-account monthly export allowance (account_export_usage): 10 downloads and 5,000 photo reads per account, checked
+ * before the platform-wide storage ceiling, so one account's repeated exports cannot exhaust shared photo capacity. */
+export const exportDownloadsPerMonth=10,exportPhotoReadsPerMonth=5000;
+const allowanceMessage='This account reached its monthly export allowance. Try again after the monthly reset.';
+async function reserveExportPhotoRead(db:D1Database,user:string){
+ const row=await db.prepare(`INSERT INTO account_export_usage(user_id,period,photo_reads) VALUES(?,strftime('%Y-%m','now'),1)
+  ON CONFLICT(user_id,period) DO UPDATE SET photo_reads=photo_reads+1 WHERE photo_reads<${exportPhotoReadsPerMonth} RETURNING photo_reads`).bind(user).first();
+ if(!row)throw new StorageLimitError(allowanceMessage);
+ await reserveStorage(db,'read');
+}
 const json=(value:unknown)=>strToU8(JSON.stringify(value,null,2)+'\n');
 async function sha256(bytes:Uint8Array){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(v=>v.toString(16).padStart(2,'0')).join('');}
 const configIds=(value:string,key:'schemas'|'collections')=>{const list=(JSON.parse(value) as Record<string,unknown>)[key];return Array.isArray(list)?list.map(x=>(x as {id:string}).id).filter(x=>typeof x==='string'):[];};
@@ -104,7 +114,7 @@ async function* sections(env:Env,user:string,binding:Awaited<ReturnType<typeof e
   for(const f of photos){
    if(!env.FILES)throw new AccountLifecycleError(503,'closure_unavailable','Photo storage is unavailable. Try the export again later.');
    if(f.size>maxPhotoBytes)throw new AccountLifecycleError(503,'closure_unavailable','A photo could not be verified.');
-   await reserveStorage(db,'read');
+   await reserveExportPhotoRead(db,user);
    const object=await env.FILES.get(f.object_key);
    if(!object||object.size!==f.size){await object?.body.cancel();throw new AccountLifecycleError(503,'closure_unavailable','A photo could not be verified.');}
    const bytes=new Uint8Array(await object.arrayBuffer());
@@ -146,6 +156,20 @@ export async function downloadAccountExport(env:Env,user:string,input:unknown){
  const stored=JSON.parse(review.binding_json) as Awaited<ReturnType<typeof exportBinding>>;
  const binding=await exportBinding(db,user,stored.visitorData===true);
  if(JSON.stringify(binding)!==review.binding_json)throw new AccountLifecycleError(409,'stale_review','Your projects changed since this review. Prepare a new export review.');
+ // Single use: the download consumes its exact review and one monthly download in one transaction.
+ let consumed:D1Result[];
+ try{
+  consumed=await db.batch([
+   db.prepare(`INSERT INTO account_export_usage(user_id,period,downloads) SELECT ?,strftime('%Y-%m','now'),1
+    WHERE EXISTS(SELECT 1 FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='export' AND review_digest=? AND expires_at>unixepoch())
+    ON CONFLICT(user_id,period) DO UPDATE SET downloads=downloads+1`).bind(user,data.reviewId,user,data.reviewDigest),
+   db.prepare("DELETE FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='export' AND review_digest=? AND expires_at>unixepoch() RETURNING id").bind(data.reviewId,user,data.reviewDigest),
+  ]);
+ }catch(error){
+  if(/CHECK constraint failed/i.test(String(error)))throw new AccountLifecycleError(409,'request_conflict',allowanceMessage);
+  throw error;
+ }
+ if(!consumed[1]?.results?.length)throw new AccountLifecycleError(409,'stale_review','This export review is no longer current. Prepare a new review.');
  const omissions:Omission[]=[
   {section:'credentials',reason:'never-exported'},{section:'safety-restricted',reason:'never-exported'},
   {section:'contacts',reason:'separate-inbox-retention'},{section:'visitor-application-documents',reason:'exported-by-each-visitor'},

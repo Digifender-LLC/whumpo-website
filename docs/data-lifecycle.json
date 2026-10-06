@@ -2169,13 +2169,14 @@
       "id": "account-lifecycle",
       "tables": [
         "account_lifecycle_reviews",
+        "account_export_usage",
         "account_closures",
         "account_closure_steps",
         "restore_suppressions"
       ],
       "scope": "mixed",
       "purpose": "WH-018 exact owner reviews for the platform account export and account closure (content-free binding of counts, project/module revisions and requested scope) and the resumable closure journal: one closure row per account id and six ordered, idempotent step rows with content-free counts. The closure row and journal are the final deletion receipt. WH-019 adds the restore suppression ledger: one content-free row (opaque identifier, effect, staff revision) per erased account, project, visitor, record, file or revoked/deleted visitor, staff grant and provider token, written by database triggers inside the erasure/revocation commit and consulted by guard triggers and the operator restore replay.",
-      "currentRetention": "Reviews expire after ten minutes; the owner's expired reviews are removed when the next review is prepared and every review cascades with the account. Closure rows and steps have no foreign key to users, survive the account cascade and cannot be updated after completion or deleted (database triggers). Restore suppression rows have no foreign key, survive every cascade and cannot be deleted; only a staff revision may increase. No expiry is implemented.",
+      "currentRetention": "Reviews expire after ten minutes; the owner's expired reviews are removed when the next review is prepared, an export review is consumed by its download, and every review cascades with the account. Monthly export allowance counters (downloads and photo reads per account and month) cascade with the account; no other expiry is implemented. Closure rows and steps have no foreign key to users, survive the account cascade and cannot be updated after completion or deleted (database triggers). Restore suppression rows have no foreign key, survive every cascade and cannot be deleted; only a staff revision may increase. No expiry is implemented.",
       "proposedRetention": "Keep the closure receipt while it is needed to prove deletion and reconcile restores (LC-08), then expire it under an approved schedule; no expiry is implemented yet. Keep restore suppression rows at least as long as any restorable copy (platform backups, recovery points, saved versions) can contain the subject; an approved compaction schedule is still open (LC-08).",
       "deletionAuthority": "Reviews: account cascade or opportunistic expiry. Closure receipt: none in this release; a future approved retention job only. Restore suppression ledger: none (append-only).",
       "exportPolicy": "Reviews and the closure journal are not exported; the owner sees the closure status and receipt in the closure response. Never export review bindings of another account. The restore suppression ledger is never exported; the operator replay captures it for an isolated candidate only.",
