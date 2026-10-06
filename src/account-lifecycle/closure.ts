@@ -48,8 +48,12 @@ const operatorRecords=['gatewaySpendBuckets','gatewaySpendAttempts','githubGrant
 const unresolved=['unresolvedStandardAI','unresolvedChatInteractionContinuations','pendingScanTickets','githubGrantUncertain','unresolvedConnectionExchanges','connectionRotationGuards','uncertainGitHubBackups','unresolvedDomainRecords'] as const;
 const credentials=['githubCredentials','cloudflareCredentials','githubRefreshCustody'] as const;
 /** Identity rows change with every reauthentication ceremony and funnel rows with hourly derivation; both are removed
- * by the purge and are excluded from the exact binding so a fresh-passkey retry does not invalidate the review. */
-const bound=(counts:ClosureCounts)=>Object.fromEntries(Object.entries(counts).filter(([k])=>!k.startsWith('identity')&&k!=='funnelEvents').sort(([a],[b])=>a<b?-1:1));
+ * by the purge and are excluded from the exact binding so a fresh-passkey retry does not invalidate the review.
+ * Restricted safety state (preservation holds, risk-ledger evidence and corrections) is never shown to the subject, so it
+ * is not part of what the owner reviews either: a hold placed or released never changes a review or makes it stale, and
+ * the holds step pauses the closure with a generic retention reason instead. A hold is never disclosed. */
+const restricted:ReadonlySet<string>=new Set(['activePreservationHolds','riskEvidence','riskCorrections']);
+const bound=(counts:ClosureCounts)=>Object.fromEntries(Object.entries(counts).filter(([k])=>!k.startsWith('identity')&&k!=='funnelEvents'&&!restricted.has(k)).sort(([a],[b])=>a<b?-1:1));
 
 function record(value:unknown,keys:readonly string[]):Record<string,unknown>{
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.getPrototypeOf(value)!==Object.prototype)throw new AccountLifecycleError(400,'invalid_request','Use the current account request.');
@@ -89,8 +93,11 @@ function presentClosure(id:string,reviewDigest:string,expiresAt:number,b:Awaited
   ]};
 }
 
+/** The client-visible review digest is opaque: a hash of a fresh server-side random value with the binding, so it
+ * reveals nothing about the binding (equal bindings give different digests). Exactness is enforced server-side by the
+ * stored digest and binding. */
 async function saveReview(db:D1Database,user:string,kind:'export'|'closure',requestId:string,requestHash:string,binding:unknown){
- const reviewDigest=await hashToken(JSON.stringify(binding)),created=now(),expires=created+reviewSeconds;
+ const reviewDigest=await hashToken(JSON.stringify([crypto.randomUUID(),crypto.randomUUID(),binding])),created=now(),expires=created+reviewSeconds;
  const existing=await db.prepare('SELECT request_hash,review_digest,binding_json,expires_at FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind=?').bind(requestId,user,kind).first<{request_hash:string;review_digest:string;binding_json:string;expires_at:number}>();
  if(existing){
   if(existing.request_hash!==requestHash)throw new AccountLifecycleError(409,'request_conflict','This request ID was already used for a different review.');
@@ -134,7 +141,7 @@ export async function confirmClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string
  const review=await db.prepare("SELECT binding_json,review_digest FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='closure' AND expires_at>?").bind(reviewId,user,now()).first<{binding_json:string;review_digest:string}>();
  if(!review||review.review_digest!==reviewDigest)throw new AccountLifecycleError(409,'stale_review','This closure review is no longer current. Prepare a new review.');
  const b=await closureBinding(db,user);
- if(JSON.stringify(b.binding)!==review.binding_json||await hashToken(review.binding_json)!==reviewDigest)throw new AccountLifecycleError(409,'stale_review','Your account changed since this review. Prepare a new review.');
+ if(JSON.stringify(b.binding)!==review.binding_json)throw new AccountLifecycleError(409,'stale_review','Your account changed since this review. Prepare a new review.');
  if(b.required.length)throw new AccountLifecycleError(409,'action_required','Complete the listed actions before closing your account.');
  const obligations={githubRepositoriesPreserved:b.counts.githubBackupRepositories,cloudflareZonesPreserved:true,providerCopies:'not-recallable',downloadedExports:'not-recallable',platformBackups:'expire-up-to-30-days',restoreSuppression:'ledger-recorded'};
  const at=now(),statements=[

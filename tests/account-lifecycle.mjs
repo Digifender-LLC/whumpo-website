@@ -198,7 +198,12 @@ try{
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,c.user);
   await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",hold,caseId,c.user,c.project);
-  const fresh=await closureReview(c),status=await ok(await confirm(c,fresh));
+  // A hold is never disclosed through the review: the client view (including its opaque digest) does not depend on hold
+  // or risk-ledger state, and a review prepared before the hold is still exact afterwards.
+  const fresh=await closureReview(c),view=r=>JSON.stringify({...r,id:undefined,digest:undefined,expiresAt:undefined});
+  assert.equal(view(fresh),view(review));assert.notEqual(fresh.digest,review.digest);
+  const again=await closureReview(c);assert.notEqual(again.digest,fresh.digest,'Equal bindings still give unrelated digests');
+  const status=await ok(await confirm(c,review));
   assert.equal(status.closure.state,'blocked');assert.equal(steps(status).holds,'blocked');
   assert.deepEqual(status.closure.steps.find(s=>s.step==='holds').detail,{reason:'retention_review',support:true});
   assert.doesNotMatch(JSON.stringify(status),/case-|hold-|basis|safety/);
