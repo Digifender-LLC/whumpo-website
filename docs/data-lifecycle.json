@@ -995,11 +995,12 @@
       "id": "safety-case-access",
       "tables": [
         "safety_case_roles",
-        "safety_case_audit"
+        "safety_case_audit",
+        "safety_case_denied_attempts"
       ],
       "scope": "platform",
-      "purpose": "Authenticated named human operator role grants/revocations (including role administration bootstrapped once by operator tooling) and the append-only audit of every case access attempt and decision.",
-      "currentRetention": "Append-only; no delete path. Bounded at 1,000 role rows and 100,000 audit rows, after which operations fail closed.",
+      "purpose": "Authenticated named human operator role grants/revocations (including role administration bootstrapped once by operator tooling), the append-only audit of every role-verified case access attempt and decision, and a separate bounded, content-free log of identity, input and role failures.",
+      "currentRetention": "Roles and audit are append-only with no delete path, bounded at 1,000 role rows and 100,000 audit rows (the last 10,000 reserved for placing holds and capturing evidence; other actions at most 2,000 rows per operator per day), after which operations fail closed. Denied attempts self-prune to the newest 10,000 rows within 30 days, at most 60 rows per principal per hour.",
       "proposedRetention": "Retain at least as long as the related cases; schedule requires owner/counsel review.",
       "deletionAuthority": "No ordinary deletion; revocation is one-way and audited.",
       "exportPolicy": "Operator audit only; never in customer exports, ordinary logs or model context.",

@@ -4900,7 +4900,9 @@ CREATE TABLE safety_preservation_holds (
 CREATE INDEX safety_preservation_holds_active ON safety_preservation_holds(subject_user_id) WHERE released_at IS NULL;
 CREATE INDEX safety_preservation_holds_project ON safety_preservation_holds(project_id) WHERE released_at IS NULL AND project_id IS NOT NULL;
 
--- Every case access attempt and decision, allowed or not. No inputs beyond validated opaque identifiers.
+-- Every role-verified case access attempt and decision (allowed, conflict of interest or rejected), written in the same
+-- transaction as its effect. No inputs beyond validated opaque identifiers. Identity, input and role failures go to the
+-- separate bounded safety_case_denied_attempts log below, so they can never consume this immutable table's capacity.
 CREATE TABLE safety_case_audit (
  seq INTEGER PRIMARY KEY AUTOINCREMENT,
  at INTEGER NOT NULL CHECK(at>=0),
@@ -4913,6 +4915,26 @@ CREATE TABLE safety_case_audit (
  outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
  reason TEXT NOT NULL CHECK(reason IN ('ok','unauthenticated','missing_role','conflict_of_interest','invalid_input','conflict','not_found','active_hold','case_closed','capacity','unavailable'))
 );
+
+CREATE INDEX safety_case_audit_actor ON safety_case_audit(actor_ref,at);
+
+-- WH-132 audit-exhaustion fix (owner decision October 6, 2026, "separate ring + per-principal budget"): attempts that fail
+-- identity, input validation or role. Content-free (principal, action, outcome, time), bounded to the newest 10,000 rows and
+-- 30 days, self-pruning, and never read or required by a privileged action. Each principal (or the shared anonymous bucket,
+-- principal_ref NULL) records at most 60 rows per rolling hour; further attempts are refused without a row.
+CREATE TABLE safety_case_denied_attempts (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT,
+ at INTEGER NOT NULL CHECK(at>=0),
+ principal_ref TEXT CHECK(principal_ref IS NULL OR (principal_ref GLOB 'human:?*' AND length(principal_ref)<=128 AND principal_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
+  'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
+  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report','erase_report_contact','list_appeals','read_appeal','decide_appeal','place_notice_delay','lift_notice_delay')),
+ outcome TEXT NOT NULL CHECK(outcome IN ('denied','rejected')),
+ reason TEXT NOT NULL CHECK(reason IN ('unauthenticated','missing_role','invalid_input')),
+ CHECK((outcome='rejected')=(reason='invalid_input'))
+);
+CREATE INDEX safety_case_denied_attempts_principal ON safety_case_denied_attempts(principal_ref,at);
+CREATE INDEX safety_case_denied_attempts_at ON safety_case_denied_attempts(at);
 
 -- Projects and project photos currently inside an unreleased hold's scope.
 CREATE VIEW safety_held_projects AS
@@ -5091,10 +5113,22 @@ WHEN OLD.released_at IS NULL AND NEW.released_at IS NOT NULL BEGIN
  DELETE FROM safety_preserved_records WHERE hold_id=NEW.id;
 END;
 
-CREATE TRIGGER safety_case_audit_capacity BEFORE INSERT ON safety_case_audit WHEN (SELECT count(*) FROM safety_case_audit)>=100000
-BEGIN SELECT RAISE(ABORT,'safety_case_capacity'); END;
+-- 100,000 rows in all. The last 10,000 are reserved for the protective actions (placing a hold, capturing evidence), and
+-- each operator's other actions are bounded at 2,000 rows per rolling day, so routine reads cannot crowd out a hold.
+CREATE TRIGGER safety_case_audit_capacity BEFORE INSERT ON safety_case_audit BEGIN
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_case_audit)>=100000
+  OR (NEW.action NOT IN ('place_hold','capture_evidence') AND ((SELECT count(*) FROM safety_case_audit)>=90000
+   OR (NEW.actor_ref IS NOT NULL AND (SELECT count(*) FROM safety_case_audit WHERE actor_ref=NEW.actor_ref AND at>NEW.at-86400)>=2000)));
+END;
 CREATE TRIGGER safety_case_audit_immutable BEFORE UPDATE ON safety_case_audit BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_case_audit_retained BEFORE DELETE ON safety_case_audit BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_case_denied_attempts_budget BEFORE INSERT ON safety_case_denied_attempts
+WHEN (SELECT count(*) FROM safety_case_denied_attempts WHERE principal_ref IS NEW.principal_ref AND at>NEW.at-3600)>=60
+BEGIN SELECT RAISE(IGNORE); END;
+CREATE TRIGGER safety_case_denied_attempts_prune AFTER INSERT ON safety_case_denied_attempts BEGIN
+ DELETE FROM safety_case_denied_attempts WHERE seq<=NEW.seq-10000 OR at<NEW.at-2592000;
+END;
+CREATE TRIGGER safety_case_denied_attempts_update BEFORE UPDATE ON safety_case_denied_attempts BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 
 -- WH-016 public abuse reports about published Whumpo sites and applications (src/abuse-reports.ts). Unauthenticated
 -- intake behind origin, bounded body, Turnstile, a per-connection daily allowance (public_client_usage scope 'abuse')

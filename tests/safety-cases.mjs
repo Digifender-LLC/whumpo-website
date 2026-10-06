@@ -12,6 +12,7 @@ const count=async(table,where='1',...p)=>(await row(`SELECT count(*) AS n FROM $
 const refused=async(fn,reason)=>{await assert.rejects(fn,e=>e instanceof c.SafetyCaseError&&e.reason===reason,reason);checks++;};
 const blocked=async(fn)=>{await assert.rejects(fn,/safety_preservation_hold/);checks++;};
 const lastAudit=async()=>({...await row('SELECT actor_ref AS actor,action,case_id AS caseId,target_ref AS target,outcome,reason FROM safety_case_audit ORDER BY seq DESC LIMIT 1')});
+const lastDenied=async()=>({...await row('SELECT principal_ref AS actor,action,outcome,reason FROM safety_case_denied_attempts ORDER BY seq DESC LIMIT 1')});
 const MARK='SYNTHETIC-PRIVATE-MARKER';
 // Operators are real ready passkey identities with fresh session proofs; actor references are derived, never declared.
 const principal=(token,database=db)=>m.resolveIdentity(database,{version:1,client:'web',kind:'session',token});
@@ -52,14 +53,16 @@ try{
  // A stale passkey proof (older than ten minutes) is refused and audited before any role check.
  const stale=await principal((await workspaceSession(db,m,{account:rev.id,credential:rev.fixture.credential},-700)).token);
  await assert.rejects(()=>c.openSafetyCase(db,stale,{caseId:'case-1',subjectUserId:'u',intakeRef:'intake-1'}),e=>e instanceof m.IdentityError&&e.code==='proof_required');checks++;
- assert.deepEqual(await lastAudit(),{actor:rev.ref,action:'open_case',caseId:'case-1',target:null,outcome:'denied',reason:'unauthenticated'});
+ assert.deepEqual(await lastDenied(),{actor:rev.ref,action:'open_case',outcome:'denied',reason:'unauthenticated'});
 
  // Opening requires the reviewer role; a model/agent actor or raw text is rejected without being copied.
  await refused(()=>c.openSafetyCase(db,nobody,{caseId:'case-1',subjectUserId:a,intakeRef:'intake-1'}),'missing_role');
- assert.deepEqual(await lastAudit(),{actor:none.ref,action:'open_case',caseId:'case-1',target:null,outcome:'denied',reason:'missing_role'});
+ assert.deepEqual(await lastDenied(),{actor:none.ref,action:'open_case',outcome:'denied',reason:'missing_role'});
  await refused(()=>c.openSafetyCase(db,approver,{caseId:'case-1',subjectUserId:a,intakeRef:'intake-1'}),'missing_role');
  await assert.rejects(()=>c.openSafetyCase(db,'model:assistant',{caseId:'case-1',subjectUserId:a,intakeRef:'intake-1'}),e=>e instanceof m.IdentityError);checks++;
- assert.deepEqual(await lastAudit(),{actor:null,action:'open_case',caseId:'case-1',target:null,outcome:'denied',reason:'unauthenticated'});
+ assert.deepEqual(await lastDenied(),{actor:null,action:'open_case',outcome:'denied',reason:'unauthenticated'});
+ // Identity and role failures never reach the immutable privileged audit.
+ assert.equal(await count('safety_case_audit',"reason IN ('unauthenticated','missing_role','invalid_input')"),0);checks++;
  // An operator cannot open (or see) a case about their own account.
  await refused(()=>c.openSafetyCase(db,reviewer,{caseId:'case-self',subjectUserId:rev.id,intakeRef:'intake-1'}),'not_found');
  assert.deepEqual(await lastAudit(),{actor:rev.ref,action:'open_case',caseId:'case-self',target:null,outcome:'denied',reason:'conflict_of_interest'});
@@ -164,6 +167,34 @@ try{
  await c.releasePreservationHold(db,approver,{holdId:'hold-d',caseId:'case-2',releaseRef:'release-d'});
  await run('DELETE FROM users WHERE id=?',d);assert.equal(await count('content_risk_evidence','user_id=?',d),0);assert.equal(await count('safety_cases',"id='case-2'"),1);checks++;
 
+ // Audit exhaustion (owner security review, October 6, 2026): identity, input and role failures go only to the bounded,
+ // self-pruning denied-attempt log with a per-principal budget, so they can never stop an approver from placing a hold.
+ const e=crypto.randomUUID();await run("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-10-04')",e,e+'@example.invalid');
+ await c.openSafetyCase(db,reviewer,{caseId:'case-3',subjectUserId:e,intakeRef:'intake-3'});
+ const auditRows=await count('safety_case_audit');
+ // Snapshot the earlier refusals before the flood evicts them (asserted with the audit below).
+ const deniedSeen=new Set((await all('SELECT action,outcome,reason FROM safety_case_denied_attempts')).map(e=>e.action+':'+e.outcome+':'+e.reason));
+ for(let i=0;i<80;i++){
+  await refused(()=>c.placePreservationHold(db,nobody,{holdId:'hold-flood-'+i,caseId:'case-3',legalBasisRef:'basis-flood',reviewDays:30}),'missing_role');
+  await refused(()=>c.placePreservationHold(db,nobody,{holdId:'hold-flood-'+i,caseId:'case-3',legalBasisRef:'raw text',reviewDays:30}),'invalid_input');
+  await assert.rejects(()=>c.placePreservationHold(db,'model:assistant',{holdId:'hold-flood-'+i,caseId:'case-3',legalBasisRef:'basis-flood',reviewDays:30}),e=>e instanceof m.IdentityError);
+ }
+ assert.equal(await count('safety_case_audit'),auditRows,'Denied attempts never consume the privileged audit');checks++;
+ assert.equal(await count('safety_case_denied_attempts','principal_ref=?',none.ref),60,'Per-principal hourly budget');checks++;
+ assert.equal(await count('safety_case_denied_attempts','principal_ref IS NULL'),60,'Shared anonymous budget');checks++;
+ // Fill the log to its cap (many distinct principals); the oldest rows are evicted and inserts keep succeeding.
+ await run("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10050) INSERT INTO safety_case_denied_attempts(at,principal_ref,action,outcome,reason) SELECT unixepoch(),'human:filler-'||i,'place_hold','denied','missing_role' FROM n");
+ assert.equal(await count('safety_case_denied_attempts'),10000);assert.equal(await count('safety_case_denied_attempts','principal_ref=?',none.ref),0,'Oldest rows evicted first');checks++;
+ await refused(()=>c.placePreservationHold(db,nobody,{holdId:'hold-flood-x',caseId:'case-3',legalBasisRef:'basis-flood',reviewDays:30}),'missing_role');
+ assert.equal(await count('safety_case_denied_attempts'),10000);checks++;
+ await run("UPDATE safety_case_denied_attempts SET at=0 WHERE seq=(SELECT max(seq) FROM safety_case_denied_attempts)").then(()=>assert.fail('denied log is append-only'),()=>{});checks++;
+ // A real approver still places (and audits) a hold in the same transaction.
+ await c.placePreservationHold(db,approver,{holdId:'hold-cap',caseId:'case-3',legalBasisRef:'basis-cap',reviewDays:30});
+ assert.equal(await count('safety_preservation_holds',"id='hold-cap' AND released_at IS NULL"),1);
+ assert.deepEqual(await lastAudit(),{actor:appr.ref,action:'place_hold',caseId:'case-3',target:'hold-cap',outcome:'allowed',reason:'ok'});
+ assert.equal(await count('safety_case_audit'),auditRows+1);checks++;
+ await c.releasePreservationHold(db,approver,{holdId:'hold-cap',caseId:'case-3',releaseRef:'release-cap'});
+
  // Revocation is one-way and immediately effective.
  await c.revokeSafetyCaseRole(db,owner,{grantId:'grant-1',revokeRef:'revoke-1'});await c.revokeSafetyCaseRole(db,owner,{grantId:'grant-1',revokeRef:'revoke-1'});
  await refused(()=>c.readSafetyCase(db,reviewer,{caseId:'case-1'}),'missing_role');
@@ -173,10 +204,34 @@ try{
  await refused(()=>c.readSafetyCaseAudit(db,approver,{caseId:'case-1'}),'missing_role');
  const audit=await c.readSafetyCaseAudit(db,auditor,{caseId:'case-1'});
  const seen=new Set(audit.map(e=>e.action+':'+e.outcome+':'+e.reason));
- for(const expected of ['open_case:denied:missing_role','open_case:rejected:invalid_input','open_case:allowed:ok','open_case:rejected:conflict','link_evidence:rejected:not_found','record_finding:allowed:ok','record_finding:rejected:conflict',
-  'place_hold:denied:missing_role','place_hold:allowed:ok','place_hold:rejected:unavailable','close_case:rejected:active_hold','release_hold:allowed:ok','release_hold:denied:missing_role','read_case:allowed:ok','read_case:denied:missing_role','record_finding:rejected:case_closed','close_case:allowed:ok'])
+ for(const expected of ['open_case:allowed:ok','open_case:rejected:conflict','link_evidence:rejected:not_found','record_finding:allowed:ok','record_finding:rejected:conflict',
+  'place_hold:allowed:ok','place_hold:rejected:unavailable','close_case:rejected:active_hold','release_hold:allowed:ok','read_case:allowed:ok','record_finding:rejected:case_closed','close_case:allowed:ok'])
   {assert.ok(seen.has(expected),expected);checks++;}
- const everything=JSON.stringify([await all('SELECT * FROM safety_case_audit'),await all('SELECT * FROM safety_cases'),await all('SELECT * FROM safety_case_findings'),await all('SELECT * FROM safety_preservation_holds'),view,audit]);
+ // Identity, input and role failures are in the separate bounded denied-attempt log, never in the privileged audit.
+ assert.ok(audit.every(e=>!['unauthenticated','missing_role','invalid_input'].includes(e.reason)));checks++;
+ for(const expected of ['open_case:denied:missing_role','open_case:rejected:invalid_input','open_case:denied:unauthenticated','place_hold:denied:missing_role','release_hold:denied:missing_role'])
+  {assert.ok(deniedSeen.has(expected),expected);checks++;}
+ for(const action of ['read_case','read_audit'])assert.equal(await count('safety_case_denied_attempts',"action=? AND outcome='denied' AND reason='missing_role'",action),1,action);checks++;
+ const everything=JSON.stringify([await all('SELECT * FROM safety_case_audit'),await all('SELECT * FROM safety_case_denied_attempts'),await all('SELECT * FROM safety_cases'),await all('SELECT * FROM safety_case_findings'),await all('SELECT * FROM safety_preservation_holds'),view,audit]);
  assert.doesNotMatch(everything,new RegExp(MARK+'|example\\.invalid|raw text|model:|agent:'));checks++;
+ // Privileged audit headroom: one operator's routine actions are bounded per day, and the last 10,000 of the 100,000 rows
+ // are reserved for protective actions, so a hold can still be placed when routine reads are refused for capacity.
+ const rev2=await operator(),reviewer2=rev2.p,f=crypto.randomUUID();
+ await c.grantSafetyCaseRole(db,owner,{grantId:'grant-r2',operatorAccountId:rev2.id,role:'case_reviewer'});
+ await run("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-10-04')",f,f+'@example.invalid');
+ await c.openSafetyCase(db,reviewer2,{caseId:'case-4',subjectUserId:f,intakeRef:'intake-4'});
+ const used=(await row('SELECT count(*) AS n FROM safety_case_audit WHERE actor_ref=? AND at>unixepoch()-86400',appr.ref)).n;
+ await run(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<${2000-used}) INSERT INTO safety_case_audit(at,actor_ref,action,case_id,target_ref,outcome,reason) SELECT unixepoch(),?,'list_holds',NULL,NULL,'allowed','ok' FROM n`,appr.ref);
+ await refused(()=>c.listActivePreservationHolds(db,approver),'capacity');
+ await c.placePreservationHold(db,approver,{holdId:'hold-budget',caseId:'case-4',legalBasisRef:'basis-budget',reviewDays:30});
+ assert.equal((await lastAudit()).target,'hold-budget');checks++;
+ const capacity=(await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='safety_case_audit_capacity'")).sql;
+ await run('DROP TRIGGER safety_case_audit_capacity');
+ const total=await count('safety_case_audit');
+ await run(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<${90000-total}) INSERT INTO safety_case_audit(at,actor_ref,action,case_id,target_ref,outcome,reason) SELECT 0,NULL,'list_holds',NULL,NULL,'allowed','ok' FROM n`);
+ await run(capacity);
+ await refused(()=>c.readSafetyCase(db,reviewer2,{caseId:'case-4'}),'capacity');
+ await c.placePreservationHold(db,approver,{holdId:'hold-reserve',caseId:'case-4',legalBasisRef:'basis-reserve',reviewDays:30});
+ assert.equal((await lastAudit()).target,'hold-reserve');assert.equal(await count('safety_preservation_holds',"case_id='case-4' AND released_at IS NULL"),2);checks++;
  console.log(`Safety cases passed (${process.argv.includes('--d1')?'local D1':'SQLite'}): ${checks} checks. Fresh-passkey authenticated operators (declared, forged and stale actors refused), bootstrap-only role administration, conflict-of-interest refusal, audited allowed/denied/rejected attempts, uncertain vs confirmed append-only findings, bounded holds that block account/project/contact deletion and contact expiry, overdue holds that never lapse, explicit release, case survival outside the account cascade, lost acknowledgement and closure inventory. Synthetic placeholders only; no scanner, provider or reporting path.`);
 }finally{await fixture.close();}

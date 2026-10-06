@@ -37,6 +37,7 @@ export const deletionSites={
  'schema/platform.sql::profile_photo_safety':{decision:'preserved',mechanism:'safety_hold_profile_photo',note:'The replaced photo and its safety receipt are copied into safety_preserved_records before profile_photo_safety_invalidate removes the receipt.'},
  'schema/platform.sql::project_spec_proposals':excluded(proposals),
  'schema/platform.sql::service_client_proposals':excluded(proposals),
+ 'schema/platform.sql::safety_case_denied_attempts':excluded('WH-132 content-free, self-pruning log of operator-surface identity, input and role failures (principal reference, action, outcome, time); no customer content and never evidence. Privileged attempts stay in the immutable safety_case_audit.'),
  'schema/platform.sql::safety_preserved_records':{decision:'hold-mechanism',mechanism:'safety_preservation_holds_release',note:'Preserved payloads are removed only when the last covering hold is released; a direct delete under an active hold is refused.'},
  'src/workspace-identity/kits.ts::users':blocked('safety_hold_account_retained','Pending-enrollment cancellation (account deletion) of a held account fails with its existing generic error.'),
  'src/contacts.ts::contact_submissions':{decision:'blocked',mechanism:'safety_hold_contact_retained + cleanupContacts excludes safety_held_projects',note:'Owner deletion is refused; expiry skips held projects. The inbox already hides expired messages.'},

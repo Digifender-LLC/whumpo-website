@@ -63,9 +63,11 @@ try{
  r=await read(session,'cases/read',{caseId:'case-ui'},async()=>{reauths++;session.token=(await workspaceSession(db,m,{account:auditor.id,credential:auditor.fixture.credential})).token;});
  assert.equal(r.state,'ok');assert.equal(reauths,1);checks++;
  r=await read({token:stale.token},'cases/read',{caseId:'case-ui'},async()=>{reauths++;});assert.equal(r.state,'error');assert.equal(reauths,2,'Only one reauthentication per read');checks++;
- // Every read attempt, including refusals, is in the server audit; the review reads changed no case state.
+ // Every read attempt is recorded: role-verified ones in the privileged audit, refusals in the bounded denied-attempt log; the review reads changed no case state.
  const audit=await c.readSafetyCaseAudit(db,auditor.p,{caseId:'case-ui'}),seen=new Set(audit.map(e=>e.action+':'+e.outcome+':'+e.reason));
- for(const expected of ['read_case:allowed:ok','read_case:denied:missing_role','read_audit:denied:missing_role','read_case:denied:conflict_of_interest'])assert.ok(seen.has(expected),expected);checks++;
+ for(const expected of ['read_case:allowed:ok','read_case:denied:conflict_of_interest'])assert.ok(seen.has(expected),expected);checks++;
+ const denied=new Set((await db.prepare('SELECT action,outcome,reason FROM safety_case_denied_attempts').all()).results.map(e=>e.action+':'+e.outcome+':'+e.reason));
+ for(const expected of ['read_case:denied:missing_role','read_audit:denied:missing_role'])assert.ok(denied.has(expected),expected);checks++;
  assert.equal((await db.prepare('SELECT count(*) n FROM safety_case_findings').first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM safety_preservation_holds WHERE released_at IS NULL").first()).n,1);assert.equal((await db.prepare('SELECT count(*) n FROM safety_retention_decisions').first()).n,0);checks++;
  assert.equal(network,0);
  console.log(`Operator safety review passed (${d1?'local D1':'SQLite'}): ${checks} checks. Read-only client limited to holds/list, retention/list, cases/read, cases/audit and disclosures/read (retention term on the case, due queue); per-section role gating; customer and subject non-disclosure; one passkey reauthentication per stale read; audited refusals; no navigation link; no state change.`);
