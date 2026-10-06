@@ -301,7 +301,7 @@ October 6, 2026 UTC, owner security review of PR #170 (blocking finding: audit e
 
 ### Holds and their scope
 
-A hold needs a preservation approver, an opaque `legal_basis_ref` and a review term of 1–366 days. It stays in force until an explicit audited release. Past its review date it reports `overdue`, but it never lapses. There are three scopes:
+A hold needs a preservation approver, an opaque `legal_basis_ref` and a review term of 1–366 days. It stays in force until an explicit audited release. **Release approval (owner decision, October 6, 2026):** placing and releasing are single-approver for now, because the owner is the only administrator. The schema itself (`safety_preservation_holds_admit` and `safety_preservation_holds_release_approver`, like the notice-delay triggers) refuses a hold whose `approved_by`, or a release whose `released_by`, does not currently hold `preservation_approver` or is the case subject, so even a direct write cannot bypass the role. **Two-person release is planned, not implemented.** Past its review date it reports `overdue`, but it never lapses. There are three scopes:
 
 - `account`: everything the subject owns.
 - `project`: one project owned by the subject.

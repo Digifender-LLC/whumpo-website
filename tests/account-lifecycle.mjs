@@ -196,6 +196,7 @@ try{
   await refused(await confirm(stale,review),401,'proof_required');
   const caseId='case-wh018-'+id().slice(0,8),hold='hold-wh018-'+id().slice(0,8);
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,c.user);
+  await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",hold,caseId,c.user,c.project);
   const fresh=await closureReview(c),status=await ok(await confirm(c,fresh));
   assert.equal(status.closure.state,'blocked');assert.equal(steps(status).holds,'blocked');
@@ -226,6 +227,7 @@ try{
   await run("UPDATE standard_ai_requests SET state='dispatched' WHERE id=?",ai);await run("UPDATE standard_ai_requests SET state='uncertain' WHERE id=?",ai);
   const hold=async(o,scope)=>{const caseId='case-bg-'+id().slice(0,8),holdId='hold-bg-'+id().slice(0,8);
    await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,o.user);
+   await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
    await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,?,?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",holdId,caseId,o.user,scope,scope==='account'?null:o.project);
    return ()=>run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?",holdId);};
   const releaseG=await hold(g,'project');

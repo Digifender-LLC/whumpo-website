@@ -59,6 +59,7 @@ function classify(error:unknown):SafetyCaseReason{
  if(/safety_case_closed/.test(text))return 'case_closed';
  if(/safety_case_capacity/.test(text))return 'capacity';
  if(/safety_case_subject_missing|safety_case_evidence_missing|safety_hold_subject/.test(text))return 'not_found';
+ if(/safety_hold_approver/.test(text))return 'missing_role';
  if(/safety_case_immutable|abuse_report_immutable|safety_appeal_independence|safety_appeal_state|safety_notice_delay|safety_case_finding_order|safety_retention_changed|safety_retention_case_open|UNIQUE|CHECK constraint|FOREIGN KEY/.test(text))return 'conflict';
  return 'unavailable';
 }

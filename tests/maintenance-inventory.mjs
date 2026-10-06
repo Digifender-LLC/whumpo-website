@@ -54,6 +54,7 @@ try{
  sql.prepare("INSERT INTO users VALUES(?,?,?)").run(held,'PRIVATE_HELD_CANARY@example.invalid',at(0));
  sql.prepare("INSERT INTO account_closures(id,account_id,policy_version,review_digest,obligations_json,state,revision,created_at,updated_at) VALUES(?,?,1,?,'{}','blocked',1,?,?)").run(id(),held,'f'.repeat(64),closureAt,closureAt);
  sql.prepare("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-inv',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+86400)").run(held);
+ sql.prepare("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())").run(); // holds need a current preservation approver
  sql.prepare("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-inv','case-inv',?,'account',NULL,'basis-1','human:approver',unixepoch(),unixepoch()+86400)").run(held);
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());

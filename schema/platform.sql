@@ -5095,6 +5095,16 @@ CREATE TRIGGER safety_preservation_holds_admit BEFORE INSERT ON safety_preservat
   OR (NEW.scope IN ('project','object') AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.subject_user_id))
   OR (NEW.scope='object' AND NOT EXISTS(SELECT 1 FROM project_files WHERE id=NEW.file_id AND project_id=NEW.project_id));
  SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_preservation_holds)>=10000;
+ -- The approver must currently hold preservation_approver and is never the case subject (as for notice delays).
+ SELECT RAISE(ABORT,'safety_hold_approver') WHERE NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.approved_by AND role='preservation_approver' AND revoked_at IS NULL)
+  OR NEW.approved_by='human:'||NEW.subject_user_id;
+END;
+-- Release is single-approver for now (owner decision October 6, 2026; the owner is the only administrator): the releasing
+-- operator must currently hold preservation_approver and is never the subject. Two-person release is planned, not implemented.
+CREATE TRIGGER safety_preservation_holds_release_approver BEFORE UPDATE OF released_at,released_by ON safety_preservation_holds
+WHEN OLD.released_at IS NULL AND NEW.released_at IS NOT NULL BEGIN
+ SELECT RAISE(ABORT,'safety_hold_approver') WHERE NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.released_by AND role='preservation_approver' AND revoked_at IS NULL)
+  OR NEW.released_by='human:'||NEW.subject_user_id;
 END;
 CREATE TRIGGER safety_preservation_holds_update BEFORE UPDATE ON safety_preservation_holds
 WHEN OLD.released_at IS NOT NULL OR NEW.released_at IS NULL OR NEW.id IS NOT OLD.id OR NEW.case_id IS NOT OLD.case_id

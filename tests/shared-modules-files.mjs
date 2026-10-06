@@ -451,6 +451,7 @@ try{
   // Owner removal works in every activation state and inside a safety hold, because it deletes no content.
   await activation(r,'media','disable');
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh128-remove',?,'intake-2','human:reviewer',unixepoch(),unixepoch()+31536000)",r.user);
+  await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh128-remove','case-wh128-remove',?,'project',?,'basis-2','human:approver',unixepoch(),unixepoch()+86400)",r.user,r.project);
   state=await facts(r);assert.equal(state.collections[0].state,'inactive');
   assert.deepEqual(await ui.collectionRemover(send(r))(r.project,ui.collectionOf(state,p2),p2),{fileId:p2,collectionId:'library',removed:true});
@@ -472,6 +473,7 @@ try{
  await check('removal uses the exact photo review, respects safety holds; visitor erasure removes their uploads',async()=>{
   const fresh=await instance(a,'media');
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh128',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",a.user);
+  await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh128','case-wh128',?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",a.user,a.project);
   const review=await chat(a,'/delete-photo '+first);assert.equal(review.result.status,200);
   // The confirmation is refused inside the commit (safety_preservation_hold), so nothing is removed.

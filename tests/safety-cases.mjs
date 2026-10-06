@@ -108,6 +108,9 @@ try{
  const hold=await row("SELECT placed_at,review_due_at,subject_user_id FROM safety_preservation_holds WHERE id='hold-1'");
  assert.equal(hold.review_due_at-hold.placed_at,30*86400);assert.equal(hold.subject_user_id,a);
  await assert.rejects(()=>run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('too-long','case-1',?,'account','b',?,unixepoch(),unixepoch()+31708800)",a,appr.ref));checks++;
+ // The schema itself requires a current preservation approver to place or release a hold (single approver for now).
+ for(const by of [rev.ref,none.ref,'human:'+a])await assert.rejects(()=>run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-raw','case-1',?,'account','b',?,unixepoch(),unixepoch()+86400)",a,by),/safety_hold_approver/);checks++;
+ for(const by of [rev.ref,none.ref,'human:'+a])await assert.rejects(()=>run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by=?,release_ref='raw' WHERE id='hold-1'",by),/safety_hold_approver/);checks++;
  // An overdue review keeps blocking: it never lapses silently.
  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-overdue','case-1',?,'account','basis-0',?,unixepoch()-200*86400,unixepoch()-86400)",a,appr.ref);
  const listed=await c.listActivePreservationHolds(db,auditor);
