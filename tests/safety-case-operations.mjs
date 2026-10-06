@@ -336,10 +336,11 @@ try{
 
  // ---- Audit: every attempt is recorded with identifiers only; no raw material in case storage or responses.
  const audit=await c.readSafetyCaseAudit(db,auditor.p,{caseId:'case-1'}),seen=new Set(audit.map(e=>e.action+':'+e.outcome+':'+e.reason));
- for(const expected of ['open_case:denied:unauthenticated','open_case:denied:missing_role','open_case:allowed:ok','place_hold:rejected:invalid_input','place_hold:rejected:not_found','capture_evidence:denied:missing_role',
+ for(const expected of ['open_case:denied:missing_role','open_case:allowed:ok','place_hold:rejected:invalid_input','place_hold:rejected:not_found','capture_evidence:denied:missing_role',
   'capture_evidence:allowed:ok','capture_evidence:rejected:conflict','request_disclosure:rejected:invalid_input','approve_disclosure:rejected:conflict','approve_disclosure:allowed:ok','record_disclosure:allowed:ok',
-  'cancel_disclosure:allowed:ok','read_disclosure:allowed:ok','dispose_evidence:rejected:conflict','dispose_evidence:allowed:ok','preview_retention:rejected:conflict','preview_retention:denied:missing_role','preview_retention:allowed:ok','decide_retention:rejected:conflict','decide_retention:denied:missing_role','decide_retention:allowed:ok','close_case:rejected:active_hold','close_case:allowed:ok','read_case:denied:unauthenticated'])
+  'cancel_disclosure:allowed:ok','read_disclosure:allowed:ok','dispose_evidence:rejected:conflict','dispose_evidence:allowed:ok','preview_retention:rejected:conflict','preview_retention:denied:missing_role','preview_retention:allowed:ok','decide_retention:rejected:conflict','decide_retention:denied:missing_role','decide_retention:allowed:ok','close_case:rejected:active_hold','close_case:allowed:ok'])
   {assert.ok(seen.has(expected),expected);checks++;}
+ assert.equal((await row("SELECT count(*) AS n FROM safety_case_audit WHERE reason='unauthenticated'")).n,0);checks++; // identity failures are not audited
  const everything=JSON.stringify([await all('SELECT * FROM safety_case_audit'),await all('SELECT * FROM safety_cases'),await all('SELECT * FROM safety_preservation_holds'),await all('SELECT * FROM safety_evidence_objects'),await all('SELECT * FROM safety_disclosures'),audit,manifest]);
  assert.doesNotMatch(everything,new RegExp(MARK+'|example\\.invalid|raw'));checks++;
  assert.equal(network,0);

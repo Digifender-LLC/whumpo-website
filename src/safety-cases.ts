@@ -11,7 +11,7 @@ export type SafetyCaseFinding='uncertain_flag'|'confirmed_policy_finding'|'not_c
 export type SafetyHoldScope='account'|'project'|'object';
 export type SafetyEvidenceSource='project_photo'|'profile_photo'|'preserved_record';
 export type SafetyCaseReason='missing_role'|'invalid_input'|'conflict'|'not_found'|'active_hold'|'case_closed'|'capacity'|'unavailable';
-type AuditReason=SafetyCaseReason|'ok'|'unauthenticated'|'conflict_of_interest';
+type AuditReason=SafetyCaseReason|'ok'|'conflict_of_interest';
 type Action='bootstrap_administrator'|'grant_role'|'revoke_role'|'open_case'|'link_evidence'|'record_finding'|'place_hold'|'release_hold'|'close_case'|'read_case'|'read_audit'|'list_holds'
  |'capture_evidence'|'dispose_evidence'|'request_disclosure'|'approve_disclosure'|'record_disclosure'|'cancel_disclosure'|'read_disclosure'
  |'list_retention'|'preview_retention'|'decide_retention'|'list_reports'|'read_report'|'triage_report'|'erase_report_contact'|'list_appeals'|'read_appeal'|'decide_appeal'|'place_notice_delay'|'lift_notice_delay';
@@ -61,8 +61,15 @@ function classify(error:unknown):SafetyCaseReason{
  if(/safety_case_immutable|abuse_report_immutable|safety_appeal_independence|safety_appeal_state|safety_notice_delay|safety_case_finding_order|safety_retention_changed|safety_retention_case_open|UNIQUE|CHECK constraint|FOREIGN KEY/.test(text))return 'conflict';
  return 'unavailable';
 }
+/** Customer sessions reach `attempt` before any role check, so an actor who has never held a case role may add audit rows
+ * only while the table has headroom: no signed-in customer can use up the capacity that privileged actions need (their audit
+ * row commits with their effect, and fails closed at the hard cap). `max(seq)` is used because the table has no actor index;
+ * "ever held" (not "holds now") keeps an action that revokes its own actor's role from losing the audit row of a commit
+ * that succeeded. The roles table is capped at 1000 rows. Bootstrap (no actor) is never guarded. */
+export const safetyAuditSoftLimit=50000;
+const headroom=(actor:string|null)=>actor===null?q`1`:q`(EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=${actor}) OR (SELECT COALESCE(max(seq),0) FROM safety_case_audit)<${safetyAuditSoftLimit})`;
 async function record(db:Database,actor:string|null,action:Action,caseId:string|null,target:string|null,outcome:'denied'|'rejected',reason:AuditReason){
- try{await db.prepare("INSERT INTO safety_case_audit(at,actor_ref,action,case_id,target_ref,outcome,reason) VALUES(unixepoch(),?,?,?,?,?,?)").bind(actor,action,caseId,target,outcome,reason).run();}
+ try{await statement(db,q`INSERT INTO safety_case_audit(at,actor_ref,action,case_id,target_ref,outcome,reason) SELECT unixepoch(),${actor},${action},${caseId},${target},${outcome},${reason} WHERE ${headroom(actor)}`).run();}
  catch(error){throw new SafetyCaseError(classify(error)==='capacity'?'capacity':'unavailable');}
 }
 type Attempt={principal:unknown;action:Action;caseId?:unknown;target?:unknown;valid?:boolean;roles:readonly SafetyCaseRole[];
@@ -71,17 +78,15 @@ type Attempt={principal:unknown;action:Action;caseId?:unknown;target?:unknown;va
  writes?:(gate:Q,actor:string)=>Q[];reads?:(gate:Q,actor:string)=>Q[];effect:(actor:string)=>Q;missing?:Q};
 /** Authenticates the session's fresh passkey proof, then runs one transaction: gated effect(s), gated reads and one audit
  * row that states what actually happened. The commit itself re-checks the identity, so a proof revoked or aged after
- * admission cannot commit. */
+ * admission cannot commit. An identity failure writes no audit row (any signed-in session could otherwise fill the table
+ * before holding a role); the audit row is gated on the same identity predicate, so an identity lost at commit also writes none. */
 async function attempt(db:Database,a:Attempt){
  const caseId=a.caseId===undefined?null:a.caseId,target=a.target===undefined?null:a.target;
  const safeCase=isOpaque(caseId)?caseId:null,safeTarget=isOpaque(target)?target:null;
- let identity:Q;
- try{identity=identityPredicate(db,a.principal as IdentityPrincipal,operatorPolicy);}
- catch(error){await record(db,null,a.action,safeCase,safeTarget,'denied','unauthenticated');throw error;}
+ const identity=identityPredicate(db,a.principal as IdentityPrincipal,operatorPolicy);
  const principal=a.principal as IdentityPrincipal,accountId=principal.accountId,actor='human:'+accountId;
  if(!isAccount(accountId))throw new IdentityError(403,'identity_incomplete','Operator access requires a current account.');
- try{await assertCurrentIdentity(db,principal,operatorPolicy);}
- catch(error){await record(db,actor,a.action,safeCase,safeTarget,'denied','unauthenticated');throw error;}
+ await assertCurrentIdentity(db,principal,operatorPolicy);
  if((caseId!==null&&!isOpaque(caseId))||(target!==null&&!isOpaque(target))||a.valid===false){
   await record(db,actor,a.action,safeCase,safeTarget,'rejected','invalid_input');
   throw new SafetyCaseError('invalid_input');
@@ -91,14 +96,19 @@ async function attempt(db:Database,a:Attempt){
  const gate=q`(${identity} AND ${role} AND ${independent})`;
  const writes=a.writes?.(gate,actor)??[],reads=a.reads?.(gate,actor)??[];
  const audit=q`INSERT INTO safety_case_audit(at,actor_ref,action,case_id,target_ref,outcome,reason) SELECT unixepoch(),${actor},${a.action},${caseId},${target},
-  CASE WHEN NOT ${identity} OR NOT ${role} OR NOT ${independent} THEN 'denied' WHEN ${a.effect(actor)} THEN 'allowed' ELSE 'rejected' END,
-  CASE WHEN NOT ${identity} THEN 'unauthenticated' WHEN NOT ${role} THEN 'missing_role' WHEN NOT ${independent} THEN 'conflict_of_interest'
-   WHEN ${a.effect(actor)} THEN 'ok' WHEN ${a.missing??q`0`} THEN 'not_found' ELSE 'conflict' END RETURNING reason`;
+  CASE WHEN NOT ${role} OR NOT ${independent} THEN 'denied' WHEN ${a.effect(actor)} THEN 'allowed' ELSE 'rejected' END,
+  CASE WHEN NOT ${role} THEN 'missing_role' WHEN NOT ${independent} THEN 'conflict_of_interest'
+   WHEN ${a.effect(actor)} THEN 'ok' WHEN ${a.missing??q`0`} THEN 'not_found' ELSE 'conflict' END WHERE ${identity} AND ${headroom(actor)} RETURNING reason`;
  let results:D1Result[];
  try{results=await db.batch([...writes,...reads,audit].map(x=>statement(db,x)));}
  catch(error){const reason=classify(error);await record(db,actor,a.action,safeCase,safeTarget,'rejected',reason);throw new SafetyCaseError(reason);}
  const reason=(results.at(-1)?.results?.[0] as {reason?:string}|undefined)?.reason;
- if(reason==='unauthenticated')throw new IdentityError(409,'identity_changed','Your account access changed. Verify your current access and review this action again.');
+ if(reason===undefined){
+  // No audit row: the identity no longer holds at commit, or a never-privileged actor is past the headroom limit (a role-less actor's refusal is not audited).
+  const changed=new IdentityError(409,'identity_changed','Your account access changed. Verify your current access and review this action again.');
+  try{await assertCurrentIdentity(db,principal,operatorPolicy);}catch{throw changed;}
+  throw new SafetyCaseError('missing_role');
+ }
  // A case about the operator themself is indistinguishable from an absent case.
  if(reason==='conflict_of_interest')throw new SafetyCaseError('not_found');
  if(reason!=='ok')throw new SafetyCaseError(reason==='missing_role'||reason==='not_found'||reason==='conflict'?reason:'unavailable');

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
+import {currentSchema} from '../tools/current-schema.mjs';
 import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
 // Synthetic, benign placeholders only. No real allegation, imagery, message or identity is used.
 const built=await build({stdin:{contents:"export * as cases from './src/safety-cases.ts';export * as contacts from './src/contacts.ts';export * as risk from './src/content-risk-evidence.ts';export {newSessionToken,hashToken} from './src/security.ts';export {resolveIdentity,IdentityError} from './src/workspace-identity/authority.ts';export {admitWorkspace} from './src/workspace-identity/admission.ts';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
@@ -49,17 +50,20 @@ try{
  await assert.rejects(()=>c.openSafetyCase(db,'human:'+rev.id,{caseId:'case-x',subjectUserId:'u',intakeRef:'i'}),e=>e instanceof m.IdentityError);checks++;
  await assert.rejects(()=>run("INSERT INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('direct','agent:bot','case_reviewer',?,1)",admin.ref));checks++;
  await assert.rejects(()=>run("INSERT INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('direct','human:x','case_reviewer','operator:bootstrap',1)"));checks++;
- // A stale passkey proof (older than ten minutes) is refused and audited before any role check.
+ // A stale passkey proof (older than ten minutes) is refused before any role check and writes no audit row: an identity
+ // failure is not attributable, and any signed-in session could otherwise fill the audit table.
  const stale=await principal((await workspaceSession(db,m,{account:rev.id,credential:rev.fixture.credential},-700)).token);
+ const auditRows=await count('safety_case_audit');
  await assert.rejects(()=>c.openSafetyCase(db,stale,{caseId:'case-1',subjectUserId:'u',intakeRef:'intake-1'}),e=>e instanceof m.IdentityError&&e.code==='proof_required');checks++;
- assert.deepEqual(await lastAudit(),{actor:rev.ref,action:'open_case',caseId:'case-1',target:null,outcome:'denied',reason:'unauthenticated'});
+ assert.equal(await count('safety_case_audit'),auditRows);checks++;
 
  // Opening requires the reviewer role; a model/agent actor or raw text is rejected without being copied.
  await refused(()=>c.openSafetyCase(db,nobody,{caseId:'case-1',subjectUserId:a,intakeRef:'intake-1'}),'missing_role');
  assert.deepEqual(await lastAudit(),{actor:none.ref,action:'open_case',caseId:'case-1',target:null,outcome:'denied',reason:'missing_role'});
  await refused(()=>c.openSafetyCase(db,approver,{caseId:'case-1',subjectUserId:a,intakeRef:'intake-1'}),'missing_role');
+ const rowsBeforeModel=await count('safety_case_audit');
  await assert.rejects(()=>c.openSafetyCase(db,'model:assistant',{caseId:'case-1',subjectUserId:a,intakeRef:'intake-1'}),e=>e instanceof m.IdentityError);checks++;
- assert.deepEqual(await lastAudit(),{actor:null,action:'open_case',caseId:'case-1',target:null,outcome:'denied',reason:'unauthenticated'});
+ assert.equal(await count('safety_case_audit'),rowsBeforeModel);checks++;
  // An operator cannot open (or see) a case about their own account.
  await refused(()=>c.openSafetyCase(db,reviewer,{caseId:'case-self',subjectUserId:rev.id,intakeRef:'intake-1'}),'not_found');
  assert.deepEqual(await lastAudit(),{actor:rev.ref,action:'open_case',caseId:'case-self',target:null,outcome:'denied',reason:'conflict_of_interest'});
@@ -178,5 +182,43 @@ try{
   {assert.ok(seen.has(expected),expected);checks++;}
  const everything=JSON.stringify([await all('SELECT * FROM safety_case_audit'),await all('SELECT * FROM safety_cases'),await all('SELECT * FROM safety_case_findings'),await all('SELECT * FROM safety_preservation_holds'),view,audit]);
  assert.doesNotMatch(everything,new RegExp(MARK+'|example\\.invalid|raw text|model:|agent:'));checks++;
+ assert.equal(await count('safety_case_audit',"reason='unauthenticated'"),0);checks++;
+
+ // Audit capacity: a signed-in customer who has never held a case role must not be able to use up the audit capacity that
+ // preservation holds depend on. Seeding drops the O(n) cap trigger (it counts every row per insert), bulk-inserts, then
+ // recreates the exact trigger from the current schema text.
+ const capTrigger=(await currentSchema()).match(/CREATE TRIGGER safety_case_audit_capacity[\s\S]*?END;/)?.[0];
+ assert.ok(capTrigger&&capTrigger.includes('100000'));
+ const seedAudit=async(actorRef,target)=>{
+  const rows=target-await count('safety_case_audit');assert.ok(rows>0);
+  await run('DROP TRIGGER safety_case_audit_capacity');
+  await run("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO safety_case_audit(at,actor_ref,action,case_id,target_ref,outcome,reason) SELECT 1,?,'open_case',NULL,NULL,'denied','missing_role' FROM n",rows,actorRef);
+  await run(capTrigger);assert.equal(await count('safety_case_audit'),target);assert.equal(await count('sqlite_master',"name='safety_case_audit_capacity'"),1);
+ };
+ const rev2=await operator(),subjectE=crypto.randomUUID();
+ await run("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-10-04')",subjectE,subjectE+'@example.invalid');
+ await c.grantSafetyCaseRole(db,owner,{grantId:'grant-rev2',operatorAccountId:rev2.id,role:'case_reviewer'});
+ await c.openSafetyCase(db,rev2.p,{caseId:'case-cap',subjectUserId:subjectE,intakeRef:'intake-cap'});
+ assert.equal(await count('safety_case_roles','operator_ref=?',none.ref),0);
+ await seedAudit(none.ref,99997);
+ // Role-less refusals (and identity failures) leave the nearly full table untouched.
+ await refused(()=>c.openSafetyCase(db,nobody,{caseId:'case-cap',subjectUserId:subjectE,intakeRef:'intake-cap'}),'missing_role');
+ await refused(()=>c.placePreservationHold(db,nobody,{holdId:'hold-cap-x',caseId:'case-cap',legalBasisRef:'basis-cap',reviewDays:30}),'missing_role');
+ await refused(()=>c.openSafetyCase(db,nobody,{caseId:'case-cap',subjectUserId:subjectE,intakeRef:MARK+' raw text'}),'invalid_input');
+ await assert.rejects(()=>c.openSafetyCase(db,stale,{caseId:'case-cap',subjectUserId:subjectE,intakeRef:'intake-cap'}),e=>e instanceof m.IdentityError);checks++;
+ assert.equal(await count('safety_case_audit'),99997);checks++;
+ // The privileged action still succeeds, and its audit row commits with it.
+ await c.placePreservationHold(db,approver,{holdId:'hold-cap',caseId:'case-cap',legalBasisRef:'basis-cap',reviewDays:30});
+ assert.equal(await count('safety_preservation_holds',"id='hold-cap'"),1);assert.equal(await count('safety_case_audit'),99998);checks++;
+ assert.deepEqual(await lastAudit(),{actor:appr.ref,action:'place_hold',caseId:'case-cap',target:'hold-cap',outcome:'allowed',reason:'ok'});
+ // At the hard cap a privileged action fails closed: its audit insert is aborted and the effect does not commit.
+ await seedAudit(rev.ref,100000);
+ await refused(()=>c.placePreservationHold(db,approver,{holdId:'hold-cap-2',caseId:'case-cap',legalBasisRef:'basis-cap',reviewDays:30}),'capacity');
+ assert.equal(await count('safety_preservation_holds',"id='hold-cap-2'"),0);assert.equal(await count('safety_case_audit'),100000);checks++;
+ await refused(()=>c.releasePreservationHold(db,approver,{holdId:'hold-cap',caseId:'case-cap',releaseRef:'release-cap'}),'capacity');
+ assert.equal(await count('safety_preservation_holds',"id='hold-cap' AND released_at IS NULL"),1);checks++;
+ // A role-less caller is still refused plainly at the hard cap; nothing is written and the refusal is not a capacity error.
+ await refused(()=>c.openSafetyCase(db,nobody,{caseId:'case-cap',subjectUserId:subjectE,intakeRef:'intake-cap'}),'missing_role');
+ assert.equal(await count('safety_case_audit'),100000);checks++;
  console.log(`Safety cases passed (${process.argv.includes('--d1')?'local D1':'SQLite'}): ${checks} checks. Fresh-passkey authenticated operators (declared, forged and stale actors refused), bootstrap-only role administration, conflict-of-interest refusal, audited allowed/denied/rejected attempts, uncertain vs confirmed append-only findings, bounded holds that block account/project/contact deletion and contact expiry, overdue holds that never lapse, explicit release, case survival outside the account cascade, lost acknowledgement and closure inventory. Synthetic placeholders only; no scanner, provider or reporting path.`);
 }finally{await fixture.close();}
