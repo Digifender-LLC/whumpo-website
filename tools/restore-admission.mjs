@@ -36,7 +36,17 @@ const effectReceipts={
  inference_calls:['status',['observed','released']],gateway_spend_attempts:['status',['settled','released']],
  stripe_subscription_orders:['state',['complete','expired']],connection_oauth_exchanges:['state',['rejected','revoked']],
  github_grant_revocations:['state',['revoked','cancelled']],
+ // Provider acceptance and proved-unsent terminal outcomes are durable; dispatch/uncertain rows never reconcile.
+ contact_notification_outbox:['state',['accepted','failed','cancelled','bounced','complained']],
 };
+
+function terminalEffect(store,row){
+ const [column,states]=effectReceipts[store];
+ if(!row||!states.includes(row[column]))return false;
+ // An attempted generic cancellation is not independent proof of non-delivery. The unique claimant's
+ // not_sent receipt proves the provider had not begun; an attempt-free cancellation never dispatched.
+ return store!=='contact_notification_outbox'||row.state!=='cancelled'||row.attempts===0||row.last_error==='not_sent';
+}
 
 async function currentContract(){
  const schema=await currentSchemaArtifact(),content=await checkSpecificationCompiler(),clients=await checkServiceClientCompiler();
@@ -137,10 +147,10 @@ export async function captureRestoreConstraint(db,selection){
    kind=s.kind;data={projectId:s.projectId,surface:s.surface};
   }else if(exact(s,['kind','store','effectId'])&&s.kind==='external-effect'&&Object.hasOwn(effectReceipts,s.store)&&id(s.effectId)){
    const oauth=s.store==='connection_oauth_exchanges';
-   const row=find(oauth?'connection_oauth_outcomes':s.store,{id:s.effectId}),[column,terminal]=effectReceipts[s.store];
+   const row=find(oauth?'connection_oauth_outcomes':s.store,{id:s.effectId});
    const pending=oauth?find(s.store,{token_id:s.effectId}):null;
    requireCheck(row||pending,'constraint');
-   const reconciled=!!row&&terminal.includes(row[column])&&!pending;
+   const reconciled=terminalEffect(s.store,row)&&!pending;
    kind=s.kind;data={effectId:s.effectId,store:s.store,state:reconciled?'reconciled':'unknown',receipt:reconciled?{sha256:digest(canonical(row))}:null};
   }else throw new Error('constraint');
   // Detach selected keys from the caller before any asynchronous persistence.
@@ -233,8 +243,8 @@ function applyEvidence(evidence,state,contract){
  }
  for(const effect of external.values()){
   requireCheck(effect.state==='reconciled','uncertain-effect');
-  const row=rowFor(effect.store==='connection_oauth_exchanges'?'connection_oauth_outcomes':effect.store,{id:effect.effectId}),[column,terminal]=effectReceipts[effect.store];
-  requireCheck(row&&terminal.includes(row[column])&&digest(canonical(row))===effect.receipt.sha256,'uncertain-effect');
+  const row=rowFor(effect.store==='connection_oauth_exchanges'?'connection_oauth_outcomes':effect.store,{id:effect.effectId});
+  requireCheck(terminalEffect(effect.store,row)&&digest(canonical(row))===effect.receipt.sha256,'uncertain-effect');
  }
 }
 
@@ -245,6 +255,7 @@ function checkUnsettled(state,observedAt=Date.now()){
   &&!state.rows.get('identity_sessions').some(row=>row.client==='android')
   &&!state.rows.get('identity_challenges').some(row=>row.client==='android'),'native-reauthentication-required');
  const checks=[
+  ['contact_notification_outbox','state',['dispatching','uncertain']],
   ['github_backups','state',['dispatching','uncertain']],['cloudflare_dns_actions','state',['sending','uncertain']],
   ['domain_connections','state',['creating','uncertain','provisioning','disconnecting']],
   ['inference_calls','status',['reserved','dispatched','uncertain']],['gateway_spend_attempts','status',['reserved','dispatched','uncertain']],

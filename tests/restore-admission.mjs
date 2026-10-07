@@ -10,7 +10,7 @@ import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fi
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {fixtureKeyring,initializeFixtureKeys,fixtureCiphertext} from './helpers/connection-keyring.mjs';
 import {keyBackupFixture} from './helpers/key-backup.mjs';
-import {captureRestoreManifest,inspectIsolatedRestore,restoreManifestDigest} from '../tools/restore-admission.mjs';
+import {captureRestoreManifest,captureRestoreConstraint,captureRestoreRecordSnapshot,inspectIsolatedRestore,restoreManifestDigest} from '../tools/restore-admission.mjs';
 
 Error.stackTraceLimit=0;
 const fixture=await databaseFixture(),{db}=fixture,m=await currentSiteFixtureHandlers(),id=()=>crypto.randomUUID();
@@ -198,5 +198,53 @@ try{
  await held(options(manifest),'key-rotation-unsettled');
  await rotation.rotateConnectionBatch(db,next,'restore-rotation','restore-batch');
  clear();manifest=await current();const rotated=await passed(options(manifest));assert.deepEqual(rotated.keys.keyIds,['fixture-current','fixture-next']);
+ // Contact sends use their actual durable dispatch/outcome rows, not an archive's claim of certainty.
+ const noticeOwner=await workspaceFixture(db,m),noticeScope=await noticeOwner.scope(),noticeProject=(await createFixtureProject(noticeScope,noticeOwner.account,'Notice restore','Synthetic effects only')).project;
+ const notices=m.contactNotifications,noticeSettings={provider:'fixture-provider',review:'synthetic-fixed-sender',sendCeiling:100};
+ await notices.proposeContactDestination(db,noticeOwner.account,noticeProject,'restore-notice@example.invalid');
+ await notices.requestContactVerification(db,noticeSettings,noticeOwner.account,noticeProject);
+ await notices.runContactDelivery(db,noticeSettings,async()=>({accepted:true,providerRef:'synthetic-accepted'}));
+ const acceptedNotice=await db.prepare("SELECT * FROM contact_notification_outbox WHERE project_id=?").bind(noticeProject).first();assert.equal(acceptedNotice.state,'accepted');
+ const acceptedConstraint=await captureRestoreConstraint(db,{kind:'external-effect',store:'contact_notification_outbox',effectId:acceptedNotice.id});
+ assert.equal(acceptedConstraint.data.state,'reconciled');assert.equal(acceptedConstraint.data.receipt.sha256,rowHash(acceptedNotice));
+ clear();manifest=await current();event('external-effect',{effectId:acceptedNotice.id,store:'contact_notification_outbox',state:'unknown',receipt:null});await held(options(manifest),'uncertain-effect');
+ event('external-effect',{...acceptedConstraint.data,receipt:{sha256:'f'.repeat(64)}});await held(options(manifest),'uncertain-effect');
+ event(acceptedConstraint.kind,acceptedConstraint.data);await passed(options(manifest));
+ // A generic cancellation after a refused attempt stays an unknown independent effect observation.
+ const cancelledProject=(await createFixtureProject(noticeScope,noticeOwner.account,'Cancelled notice restore','Synthetic cancellation only')).project;
+ await notices.proposeContactDestination(db,noticeOwner.account,cancelledProject,'restore-cancelled@example.invalid');
+ await notices.requestContactVerification(db,noticeSettings,noticeOwner.account,cancelledProject);
+ await notices.runContactDelivery(db,noticeSettings,async()=>({accepted:false,retryable:true}));
+ await db.prepare("INSERT INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,'unsubscribe',?)").bind(noticeOwner.account,'restore-cancelled@example.invalid',new Date().toISOString()).run();
+ const genericCancelled=await db.prepare("SELECT * FROM contact_notification_outbox WHERE project_id=?").bind(cancelledProject).first();assert.equal(genericCancelled.state,'cancelled');assert.equal(genericCancelled.attempts,1);
+ assert.equal((await captureRestoreConstraint(db,{kind:'external-effect',store:'contact_notification_outbox',effectId:genericCancelled.id})).data.state,'unknown');
+ clear();manifest=await current();event('external-effect',{effectId:genericCancelled.id,store:'contact_notification_outbox',state:'reconciled',receipt:{sha256:rowHash(genericCancelled)}});await held(options(manifest),'uncertain-effect');
+ // The unique active claimant can instead prove its provider call never started.
+ const unsentProject=(await createFixtureProject(noticeScope,noticeOwner.account,'Unsent notice restore','Synthetic proven-unsent cancellation')).project;
+ await notices.proposeContactDestination(db,noticeOwner.account,unsentProject,'restore-unsent@example.invalid');
+ await notices.requestContactVerification(db,noticeSettings,noticeOwner.account,unsentProject);
+ let revoked=false;
+ const revokeAfterClaim=interceptDatabase(db,/UPDATE contact_notification_outbox SET state='dispatching'/,async()=>{},async()=>{if(revoked)return;revoked=true;await db.prepare("INSERT INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,'unsubscribe',?)").bind(noticeOwner.account,'restore-unsent@example.invalid',new Date().toISOString()).run();});
+ await notices.runContactDelivery(revokeAfterClaim,noticeSettings,async()=>assert.fail('A proven-unsent cancellation cannot call the provider'));
+ const unsent=await db.prepare("SELECT * FROM contact_notification_outbox WHERE project_id=?").bind(unsentProject).first();assert.equal(unsent.state,'cancelled');assert.equal(unsent.last_error,'not_sent');
+ const unsentConstraint=await captureRestoreConstraint(db,{kind:'external-effect',store:'contact_notification_outbox',effectId:unsent.id});assert.equal(unsentConstraint.data.state,'reconciled');
+ clear();manifest=await current();event(unsentConstraint.kind,unsentConstraint.data);await passed(options(manifest));
+ await notices.requestContactVerification(db,noticeSettings,noticeOwner.account,noticeProject);
+ let providerCalls=0;
+ const interrupted=interceptDatabase(db,/UPDATE contact_notification_outbox SET state='dispatching'/,async()=>{},()=>{throw Error('Synthetic lost contact claim acknowledgement');});
+ await assert.rejects(notices.runContactDelivery(interrupted,noticeSettings,async()=>{providerCalls++;return {accepted:true};}),/Synthetic lost contact/);assert.equal(providerCalls,0);
+ const unresolved=await db.prepare("SELECT * FROM contact_notification_outbox WHERE project_id=? AND state='dispatching'").bind(noticeProject).first();assert.ok(unresolved);
+ const dispatchConstraint=await captureRestoreConstraint(db,{kind:'external-effect',store:'contact_notification_outbox',effectId:unresolved.id});assert.equal(dispatchConstraint.data.state,'unknown');assert.equal(dispatchConstraint.data.receipt,null);
+ await assert.rejects(captureRestoreRecordSnapshot(db),/Current recovery source could not be observed/);
+ clear();manifest=await current();await held(options(manifest),'uncertain-effect');
+ await notices.reconcileContactDelivery(db,new Date(Date.parse(unresolved.dispatched_at)+60001));
+ const uncertainConstraint=await captureRestoreConstraint(db,{kind:'external-effect',store:'contact_notification_outbox',effectId:unresolved.id});assert.equal(uncertainConstraint.data.state,'unknown');assert.equal(uncertainConstraint.data.receipt,null);
+ await assert.rejects(captureRestoreRecordSnapshot(db),/Current recovery source could not be observed/);
+ clear();manifest=await current();await held(options(manifest),'uncertain-effect');
+ // Echoing the exact uncertain row's digest cannot turn it into a terminal receipt.
+ const uncertainNotice=await db.prepare('SELECT * FROM contact_notification_outbox WHERE id=?').bind(unresolved.id).first();
+ event('external-effect',{effectId:unresolved.id,store:'contact_notification_outbox',state:'reconciled',receipt:{sha256:rowHash(uncertainNotice)}});await held(options(manifest),'uncertain-effect');
+ await assert.rejects(captureRestoreConstraint(db,{kind:'external-effect',store:'contact_notification_outbox',effectId:id()}),/could not be observed/);
+ assert.equal(providerCalls,0);
  console.log(`Isolated current restore admission passed: ${refusals} holds, four authenticated credential stores, complete schema/compiler manifest, independent synthetic archive/event service, stale identity/deletion/review/publication/effect checks, private object integrity and readback races. No serving, provider dispatch, key retirement or operational backup claim.`);
 }finally{globalThis.fetch=originalFetch;journal.close();await backupFixture.close();await fixture.close();}
