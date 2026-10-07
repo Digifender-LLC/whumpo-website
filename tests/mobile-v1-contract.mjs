@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {build} from 'esbuild';
 import {createHash} from 'node:crypto';
 import {readFileSync,readdirSync} from 'node:fs';
 import {admitClient,authorize,control,controlCapabilities,controlCapability,errors,excluded,exchangeHandoff,fieldTypes,interactionBindings,operationById,operations,pathParams,
@@ -10,6 +11,8 @@ const dir=new URL('./fixtures/mobile-v1/',import.meta.url),read=n=>JSON.parse(re
 const text=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const fx={client:read('client.json'),operations:read('operations.json'),errors:read('errors.json'),rejections:read('rejections.json'),push:read('push.json'),reviews:read('reviews.json')};
 const minimumBuild=fx.client.minimumBuild;
+const controlsBundle=await build({entryPoints:[new URL('../src/chat-controls.ts',import.meta.url).pathname],bundle:true,platform:'node',format:'esm',write:false});
+const {chatControl}=await import('data:text/javascript;base64,'+Buffer.from(controlsBundle.outputFiles[0].text).toString('base64'));
 let count=0;
 function test(name,fn){try{fn();count++;}catch(error){throw new Error(name,{cause:error});}}
 const rejects=(fn,code)=>assert.throws(fn,e=>e.code===code,`expected ${code}`);
@@ -44,14 +47,23 @@ test('operations map to existing handlers or declare an explicit new adapter',()
   for(const [file,symbol] of o.source)assert.ok(text(file).includes(symbol),`${o.id}: ${symbol} not in ${file}`);
  }
 });
-test('admitted controls match src/chat-controls.ts exactly',()=>{
- const src=text('src/chat-controls.ts');
- for(const needle of ["a.type==='specificationApply'","exact(a,['type','reviewId','proposalDigest','expectedRevision'])","a.type==='confirm'&&exact(a,['type','kind','reviewId'])","site:{verb:'confirm'","application:{verb:'confirm-application'",
-  "a.type==='appRestore'&&exact(a,['type','projectId','reviewId','confirmation'])","a.confirmation==='RESTORE'"])assert.ok(src.includes(needle),needle);
+test('admitted controls execute the actual shared parser with exact keys and freshness',()=>{
+ const reviewId='11111111-1111-4111-8111-111111111111',projectId='22222222-2222-4222-8222-222222222222';
+ const cases=[
+  [{type:'specificationApply',reviewId,proposalDigest:'a'.repeat(64),expectedRevision:1},true,'/confirm-specification '],
+  [{type:'confirm',kind:'site',reviewId},false,'/confirm '],
+  [{type:'confirm',kind:'application',reviewId},false,'/confirm-application '],
+  [{type:'appRestore',projectId,reviewId,confirmation:'RESTORE'},true,'/confirm-app-restore '],
+ ];
+ for(const [value,recentAuth,command] of cases){
+  const parsed=chatControl(value);assert.ok(parsed,JSON.stringify(value));assert.deepEqual(parsed.action,value);assert.equal(parsed.recentAuth,recentAuth);assert.ok(parsed.command.startsWith(command));
+  assert.equal(chatControl({...value,command:'/unpublish '+projectId}),undefined);
+  for(const key of Object.keys(value)){const incomplete={...value};delete incomplete[key];assert.equal(chatControl(incomplete),undefined,`${value.type} without ${key}`);}
+ }
+ // Connector backup confirmations deliberately require their own exact receipt and price.
+ assert.equal(chatControl({type:'confirm',kind:'backup',reviewId}),undefined);
+ assert.equal(chatControl({type:'appRestore',projectId,reviewId,confirmation:'restore'}),undefined);
  assert.deepEqual(Object.keys(reviewKinds).map(k=>reviewKinds[k].capability).sort(),[...controlCapabilities].sort());
- // Fresh passkey requirement mirrors recentAuth in chatControl: specificationApply/appRestore true; confirm false.
- assert.match(src,/specificationApply[\s\S]{0,400}recentAuth:true/);
- assert.match(src,/appRestore[\s\S]*label:'Restore the exact reviewed application data.',recentAuth:true/);
  assert.equal(reviewKinds['app-restore'].freshPasskey,true);
 });
 test('admitted interaction field types and bindings exist in the WH-105 registry; photo bindings wait for WH-085',()=>{
