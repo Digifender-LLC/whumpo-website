@@ -1,3 +1,4 @@
+import {withConnectorConfirmations,connectorConfirmationCommand} from './helpers/connector-confirmation.mjs';
 import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import assert from 'node:assert/strict';
@@ -5,7 +6,7 @@ import {build} from 'esbuild';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 const b=await build({stdin:{contents:"export {reviewCNAME,reviewTXT,confirmDNS,listDNSActions} from './src/cloudflare-dns';export {seal} from './src/connection-vault';export {reviewHosting} from './src/domain-hosting';export {sendChat,readChat} from './src/chat';export {sendAIChat} from './src/ai-chat';export {getBilling} from './src/billing';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+const m=withConnectorConfirmations(await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64')));
 const {reviewCNAME,reviewTXT,confirmDNS,listDNSActions,seal,reviewHosting,sendChat,readChat,sendAIChat,getBilling}=m;
 const fixture=await databaseFixture({d1:true}),db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 const config={clientId:'fixture',clientSecret:'fixture-secret',key:fixtureKeyring('a'.repeat(64))},zone='b'.repeat(32),target='hosting.whumpo.site',now=()=>new Date().toISOString();
@@ -59,7 +60,7 @@ try{
  // Internal handler strings exercise committed Chat actions; the public input
  // remains natural language (natural-chat.mjs covers that boundary).
  const chat=await account(),cp=provider(chat),opts={config,transport:cp.send,hostingReady:true};
- const msg=async(content,id=crypto.randomUUID(),revision)=>{const state=await readChat(scope(chat.user),chat.user);return sendChat(scope(chat.user),chat.user,{id,content,revision:revision??state.state.revision},undefined,opts);};
+ const msg=async(content,id=crypto.randomUUID(),revision)=>{content=await connectorConfirmationCommand(db,content);const state=await readChat(scope(chat.user),chat.user);return sendChat(scope(chat.user),chat.user,{id,content,revision:revision??state.state.revision},undefined,opts);};
  const reviewId=crypto.randomUUID();await msg('/review-routing '+chat.connection+' '+zone,reviewId);assert.match((await readChat(scope(chat.user),chat.user)).turns.at(-1).assistant_text,/DNS-only CNAME/);assert.equal(cp.posts,0);
  await msg('/check-dns '+reviewId);assert.equal(cp.posts,0);
  const rev=(await readChat(scope(chat.user),chat.user)).state.revision,id=crypto.randomUUID();await msg('/confirm-dns '+reviewId,id,rev);await msg('/confirm-dns '+reviewId,id,rev);assert.equal(cp.posts,1);assert.equal((await getBilling(scope(chat.user),chat.user)).standardAI.creditCharge,0);

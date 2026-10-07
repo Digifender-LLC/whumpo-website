@@ -1,3 +1,4 @@
+import {connectorConfirmationCommand} from './helpers/connector-confirmation.mjs';
 import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {createFixtureProject,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
@@ -48,11 +49,12 @@ try{
   return Response.json({data:{createCommitOnBranch:{commit:{oid:head}}}});
  };
  const options={github:config,githubTransport:transport,files:fixture.env.FILES};
- async function message(content,id=crypto.randomUUID(),revision,database,who=user){const state=await readChat(scope(who),who);const result=await sendChat(database??scope(who),who,{id,content,revision:revision??state.state.revision},undefined,options);return {id,result,turn:(await readChat(scope(who),who)).turns.at(-1)};}
+ async function message(content,id=crypto.randomUUID(),revision,database,who=user){content=await connectorConfirmationCommand(db,content);const state=await readChat(scope(who),who);const result=await sendChat(database??scope(who),who,{id,content,revision:revision??state.state.revision},undefined,options);return {id,result,turn:(await readChat(scope(who),who)).turns.at(-1)};}
  // Private handler dispatch is distinct from the natural-language HTTP surface.
  assert.match((await message('/github-installations')).turn.assistant_text,/Installation: 1/);
  assert.match((await message('/github-repos 1')).turn.assistant_text,/Repository ID: 17/);
- repoPrivate=false;const review=await message('/review-backup '+version+' test/backup 17');assert.equal(review.result.status,200);assert.match(review.turn.assistant_text,/PUBLIC — anyone can read/);assert.match(review.turn.assistant_text,/SHA-256:/);assert.equal(review.turn.backup_confirmation_id,review.id);assert.equal(writes,0);
+ const discovery=await db.prepare("SELECT ai_context_allowed FROM chat_turns WHERE user_id=? ORDER BY revision DESC LIMIT 2").bind(user).all();assert.ok(discovery.results.every(t=>t.ai_context_allowed===0),'Provider discovery never re-enters later model history');
+ repoPrivate=false;const review=await message('/review-backup '+version+' test/backup 17');assert.equal(review.result.status,200);assert.match(review.turn.assistant_text,/PUBLIC — anyone can read/);assert.match(review.turn.assistant_text,/SHA-256:/);assert.equal(review.turn.backup_confirmation_id,review.id);assert.equal(writes,0);assert.match(review.turn.assistant_text,/Included in your plan; no per-use charge/);assert.match(renderActions(review.turn),/Confirm GitHub backup/);assert.doesNotMatch(renderActions({...review.turn,backup_price_json:'{}'}),/Confirm GitHub backup/);
  await message('/check-backup '+review.id);assert.equal(writes,0);
  assert.match((await message('/backups',crypto.randomUUID(),undefined,undefined,other)).turn.assistant_text,/No GitHub backup reviews/);
  assert.match((await message('/confirm-backup '+review.id,crypto.randomUUID(),undefined,undefined,other)).turn.assistant_text,/not found/);

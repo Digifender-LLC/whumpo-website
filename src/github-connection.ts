@@ -169,7 +169,7 @@ export async function githubAccess(db:D1Database,userId:string,configuration:Git
 
  await assertCurrent();
  return {tokenId:current.id,githubUserId:current.github_user_id,assertCurrent,async send(id:ConnectorOperationId<'github'>,params:Record<string,unknown>={},body?:unknown){
-  const built=buildConnectorRequest('github',id,params,body),operation=connectorOperationUse('github',id,use);
+  const operation=connectorOperationUse('github',id,use),built=buildConnectorRequest('github',id,params,body);
   const row=await db.prepare("SELECT t.ciphertext FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.id=? AND t.state='active' AND t.expires_at>?").bind(userId,current.id,new Date().toISOString()).first<{ciphertext:string}>();
   if(!row)throw new ConnectionError(401,'GitHub access changed. Reconnect and prepare a new review.');
   const token=await unseal(config.key,aad(userId,current.id,'token'),row.ciphertext);

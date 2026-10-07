@@ -1,3 +1,4 @@
+import {includedConnectorPrice,ConnectorReviewError} from './connector-receipts';
 import {FeatureInclusionError} from './feature-inclusion';
 import {ConnectionError,githubInstallations,type GitHubConfig} from './github-connection';
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
@@ -5,7 +6,7 @@ export type BackupChatOptions={github?:GitHubConfig;githubTransport?:typeof fetc
 const uuid=/^[0-9a-f-]{36}$/,positive=(s:string)=>/^[1-9][0-9]*$/.test(s)&&Number.isSafeInteger(Number(s));
 type Receipt=Awaited<ReturnType<typeof reviewBackup>>;
 function describe(b:Receipt){
- const header=`GitHub backup: ${b.state}\nReview: ${b.id}\nVersion: ${b.versionId}\nRepository: ${b.repository} (${b.private?'private':'PUBLIC — anyone can read these files'})\nBranch: ${b.branch}\nFolder: ${b.path}`;
+ const header=`GitHub backup: ${b.connector.state}\n${includedConnectorPrice}\nReview: ${b.id}\nVersion: ${b.versionId}\nRepository: ${b.repository} (${b.private?'private':'PUBLIC — anyone can read these files'})\nBranch: ${b.branch}\nFolder: ${b.path}`;
  if(b.state==='pending')return `${header}\n\nFiles: ${b.files.join(', ')}\nSource size: ${b.bytes} bytes\nSHA-256: ${b.sha256}\n\nConfirming copies this saved website's source and included photos to GitHub in one commit. It excludes account credentials and chat history. Existing repository files are preserved; a changed branch or conflicting folder requires another review. This does not publish or alter your Whumpo website.\nReview expires: ${b.expiresAt}\n\nUse the confirmation button for backup ${b.id} to authorize this exact backup.`;
  if(b.state==='expired')return header+"\nThis review expired. Ask to prepare a fresh review for the saved website version and authorized repository.";
  return `${header}\n${b.detail}\n${b.url?'Verified source copy: '+b.url:['dispatching','uncertain'].includes(b.state)?'Ask to check saved backup '+b.id+'; this reads GitHub without resending a commit. If unresolved, operator reconciliation is required.':'Prepare a fresh review after resolving the reported problem.'}\nThis is a historical receipt, not a guarantee of the repository\'s current contents or visibility.`;
@@ -15,7 +16,7 @@ export function backupChatCommand(db:D1Database,user:string,turnId:string,comman
  const [verb,...args]=command.split(/\s+/);
  if(!['/backups','/github-installations','/github-repos','/review-backup','/confirm-backup','/check-backup'].includes(verb))return;
  const repo=args[1]?.split('/');
- const invalid=['/backups','/github-installations'].includes(verb)?args.length>0:verb==='/github-repos'?args.length<1||args.length>2||!positive(args[0])||args.length===2&&(!positive(args[1])||Number(args[1])>50):verb==='/review-backup'?args.length!==3||!uuid.test(args[0])||repo?.length!==2||!/^[A-Za-z0-9-]{1,39}$/.test(repo[0])||!/^[A-Za-z0-9_.-]{1,100}$/.test(repo[1])||['.','..'].includes(repo[1])||!positive(args[2]):args.length!==1||!uuid.test(args[0]);
+ const invalid=['/backups','/github-installations'].includes(verb)?args.length>0:verb==='/github-repos'?args.length<1||args.length>2||!positive(args[0])||args.length===2&&(!positive(args[1])||Number(args[1])>50):verb==='/review-backup'?args.length!==3||!uuid.test(args[0])||repo?.length!==2||!/^[A-Za-z0-9-]{1,39}$/.test(repo[0])||!/^[A-Za-z0-9_.-]{1,100}$/.test(repo[1])||['.','..'].includes(repo[1])||!positive(args[2]):verb==='/confirm-backup'?args.length!==4||!uuid.test(args[0])||!/^[0-9a-f]{64}$/.test(args[1])||args[2]!=='0'||args[3]!=='plan-inclusion':args.length!==1||!uuid.test(args[0]);
  if(invalid)throw new ConnectionError(400,"Choose an authorized GitHub installation, repository or saved backup review.");
  return async()=>{
   try{
@@ -25,7 +26,7 @@ Ask to list repositories in this installation.`).join('\n\n'):'No active GitHub 
    if(verb==='/github-repos'){const page=Number(args[1]??1),result=await githubRepositories(db,user,options.github,Number(args[0]),page,options.githubTransport);return (result.repositories.length?result.repositories.map(r=>`${r.owner}/${r.name} · ${r.private?'private':'PUBLIC'} · default branch: ${r.branch}\nRepository ID: ${r.id}`).join('\n\n'):'No writable repositories on this page.')+(result.hasMore?"\n\nMore repositories are available. Ask for repositories from installation "+args[0]+', page '+(page+1):'')+"\n\nAsk to prepare an exact saved-source backup review. Public repositories expose the source and included photos to anyone.";}
    if(verb==='/review-backup')return describe(await reviewBackup(db,options.files,user,{id:turnId,versionId:args[0],owner:repo![0],repo:repo![1],repoId:Number(args[2])},options.github,options.githubTransport));
    if(verb==='/check-backup'){const {backups}=await listBackups(db,user),b=backups.find(b=>b.id===args[0]);if(!b)throw new ConnectionError(404,'Backup review not found.');if(['pending','expired','complete','failed'].includes(b.state))return describe(b)+'\nThis check did not authorize a commit.';}
-   return describe(await confirmBackup(db,options.files,user,args[0],options.github,options.githubTransport));
-  }catch(cause){return (cause instanceof ConnectionError||cause instanceof FeatureInclusionError)?cause.message+"\nAsk to inspect your saved backup reviews.":"The backup result could not be saved. Ask to inspect your saved backup reviews. This Chat request will not be dispatched again.";}
+   return describe(await confirmBackup(db,options.files,user,args[0],options.github,options.githubTransport,verb==='/confirm-backup'?{reviewDigest:args[1],acceptedPrice:{customerUnits:Number(args[2]),basis:args[3]}}:undefined));
+  }catch(cause){return (cause instanceof ConnectionError||cause instanceof FeatureInclusionError||cause instanceof ConnectorReviewError)?cause.message+"\nAsk to inspect your saved backup reviews.":"The backup result could not be saved. Ask to inspect your saved backup reviews. This Chat request will not be dispatched again.";}
  };
 }

@@ -1,3 +1,4 @@
+import {isConnectorConfirmation,type ConnectorConfirmation} from './connector-review-shape';
 /** Explicit UI intents. These are never accepted as agent proposals or parsed from chat text.
  * Command strings below are private adapters for the existing receipt handlers. */
 export const confirmationControls = {
@@ -23,7 +24,8 @@ export const confirmationControls = {
 export type ChatControl =
  | {type:'githubGrant';operation:'confirm';reviewId:string;confirmation:'REVOKE_APP_ACCESS'}
  | {type:'githubGrant';operation:'cancel';reviewId:string}
- | {type:'confirm';kind:keyof typeof confirmationControls;reviewId:string}
+ | ({type:'confirm';kind:'backup';reviewId:string}&ConnectorConfirmation)
+ | {type:'confirm';kind:Exclude<keyof typeof confirmationControls,'backup'>;reviewId:string}
  | {type:'serviceClientApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
@@ -92,8 +94,12 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
   const action={type:'accessRoleApply' as const,reviewId:a.reviewId,reviewDigest:a.reviewDigest,expectedRevision:Number(a.expectedRevision)};
   return {action,command:`/confirm-access-role ${action.reviewId} ${action.reviewDigest} ${action.expectedRevision}`,label:'Apply the exact reviewed staff role change.',recentAuth:true};
  }
- if(a.type==='confirm'&&exact(a,['type','kind','reviewId'])&&typeof a.kind==='string'&&Object.hasOwn(confirmationControls,a.kind)&&id(a.reviewId)){
-  const kind=a.kind as keyof typeof confirmationControls,c=confirmationControls[kind];
+ if(a.type==='confirm'&&a.kind==='backup'&&id(a.reviewId)&&exact(a,['type','kind','reviewId','reviewDigest','acceptedPrice'])){
+  const confirmation={reviewDigest:a.reviewDigest,acceptedPrice:a.acceptedPrice};if(!isConnectorConfirmation(confirmation))return;
+  return {action:{type:'confirm',kind:'backup',reviewId:a.reviewId,...confirmation},command:`/confirm-backup ${a.reviewId} ${confirmation.reviewDigest} ${confirmation.acceptedPrice.customerUnits} ${confirmation.acceptedPrice.basis}`,label:'Authorize the reviewed GitHub backup, included in your plan with no per-use charge.',recentAuth:false};
+ }
+ if(a.type==='confirm'&&a.kind!=='backup'&&exact(a,['type','kind','reviewId'])&&typeof a.kind==='string'&&Object.hasOwn(confirmationControls,a.kind)&&id(a.reviewId)){
+  const kind=a.kind as Exclude<keyof typeof confirmationControls,'backup'>,c=confirmationControls[kind];
   return {action:{type:'confirm',kind,reviewId:a.reviewId},command:`/${c.verb} ${a.reviewId}`,label:c.label+'.',recentAuth:false};
  }
  if(a.type==='appRestore'&&exact(a,['type','projectId','reviewId','confirmation'])&&id(a.projectId)&&id(a.reviewId)&&a.confirmation==='RESTORE')return {action:{type:'appRestore',projectId:a.projectId,reviewId:a.reviewId,confirmation:'RESTORE'},command:`/confirm-app-restore ${a.projectId} ${a.reviewId} RESTORE`,label:'Restore the exact reviewed application data.',recentAuth:true};

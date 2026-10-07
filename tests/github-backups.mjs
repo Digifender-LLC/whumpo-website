@@ -1,3 +1,5 @@
+import {runConformance} from './helpers/connectors-conformance.mjs';
+import {withConnectorConfirmations,connectorConfirmationCommand} from './helpers/connector-confirmation.mjs';
 import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {createFixtureProject,currentSiteFixtureHandlers} from './current-site-fixture.mjs';
@@ -8,7 +10,7 @@ import {execFileSync} from 'node:child_process';
 import {unzipSync} from 'fflate';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
-const m=await currentSiteFixtureHandlers(),{reviewBackup,confirmBackup,listBackups,githubRepositories,worker,ownedExport,seal}=m;
+const source=await currentSiteFixtureHandlers(),m=withConnectorConfirmations(source),{reviewBackup,confirmBackup,listBackups,githubRepositories,worker,ownedExport,seal}=m;
 const fixture=await databaseFixture({d1:true,r2:true}),db=fixture.db,dir=await mkdtemp('/tmp/whumpo-backups-'),identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'test',key:fixtureKeyring('ab'.repeat(32))},now=new Date().toISOString();
 async function account(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
@@ -43,12 +45,28 @@ try{
  const review=(i=input())=>reviewBackup(scope(user),fixture.env.FILES,user,i,config,transport);
  const confirm=(id,database=scope(user))=>confirmBackup(database,fixture.env.FILES,user,id,config,transport);
  const reset=()=>{head='a'.repeat(40);repoPrivate=true;repoId=17;branch='main';remote=false;parentFile=false;malformed=false;mode='ok';};
+ let conformanceCases=0;
+ await runConformance('github-d1',async()=>{
+  reset();const reviewed=await review();let outcome='ok',dispatches=0;
+  const provider=async(url,init={})=>{
+   if(url==='https://api.github.com/graphql'&&JSON.parse(init.body).query.startsWith('mutation')){
+    dispatches++;if(outcome==='lost-before')throw Error('Synthetic lost request');
+    if(outcome==='429'||outcome==='500')return new Response('{}',{status:Number(outcome)});
+    if(outcome==='redirect')return new Response(null,{status:302,headers:{location:'https://never-follow.invalid'}});
+    if(outcome==='unreadable')return new Response('{');
+    const result=await transport(url,init);if(outcome==='lost-after')throw Error('Synthetic lost response');return result;
+   }
+   return transport(url,init);
+  };
+  return {review:reviewed,confirm:approval=>source.confirmBackup(scope(user),fixture.env.FILES,user,reviewed.id,config,provider,approval),writes:()=>dispatches,outcome:value=>outcome=value,observedState:'applied',tamper:field=>db.prepare(`UPDATE github_backups SET ${field}=? WHERE id=?`).bind(field==='price_json'?'{}':'0'.repeat(64),reviewed.id).run()};
+ },async(name,run)=>{try{await run();conformanceCases++;}catch(cause){throw Error(name,{cause});}},'actions');
+ assert.equal(conformanceCases,8);console.log('GitHub D1: 8 shared action conformance cases passed.');reset();writes=0;
  assert.equal((await githubRepositories(scope(user),user,config,1,1,transport)).repositories.length,1);await assert.rejects(()=>githubRepositories(scope(user),user,config,2,1,transport));
  await assert.rejects(()=>reviewBackup(scope(other),fixture.env.FILES,other,input(),config,denied));
  const i=input(),r=await review(i);assert.equal(writes,0);assert.equal(r.state,'pending');assert.equal(r.private,true);assert.equal((await db.prepare('SELECT tree_sha FROM github_backups WHERE id=?').bind(r.id).first()).tree_sha,independentTree);
  assert.deepEqual(await review(i),r);await assert.rejects(()=>review({...i,repo:'different'}));assert.equal((await listBackups(scope(other),other)).backups.length,0);await assert.rejects(()=>confirmBackup(scope(other),fixture.env.FILES,other,r.id,config,denied));
  const results=await Promise.all([confirm(r.id),confirm(r.id)]);assert.ok(results.some(x=>x.state==='complete'));assert.equal(writes,1);assert.equal((await confirm(r.id)).state,'complete');assert.equal(writes,1);assert.ok((await confirm(r.id)).url.includes(head));
- assert.equal((await db.prepare("SELECT COUNT(*) n FROM activity_events WHERE action='github.backup'").first()).n,1);
+ assert.equal((await db.prepare("SELECT COUNT(*) n FROM activity_events WHERE action='github.backup' AND id=?").bind('github-backup:'+r.id).first()).n,1);
  reset();repoPrivate=false;const publicReview=await review();assert.equal(publicReview.private,false);repoPrivate=true;await assert.rejects(()=>confirm(publicReview.id),/visibility/);
  for(const change of [()=>repoId=18,()=>branch='other',()=>head='d'.repeat(40),()=>parentFile=true,()=>remote='wrong',()=>malformed=true]){reset();const r=await review();change();await assert.rejects(()=>confirm(r.id));assert.equal(writes,1);}
  reset();const existing=await review();remote=true;assert.equal((await confirm(existing.id)).state,'complete');assert.equal(writes,1);

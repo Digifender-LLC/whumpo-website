@@ -89,7 +89,7 @@ export type ConnectorOperationId<P extends ConnectorProvider>=keyof typeof conne
 export type ActiveConnectorProvider={[P in ConnectorProvider]:typeof connectorCatalog.providers[P]['readiness'] extends 'planned'?never:P}[ConnectorProvider];
 export function isConnectorProvider(value:unknown):value is ConnectorProvider{return typeof value==='string'&&Object.hasOwn(connectorCatalog.providers,value);}
 export function isActiveConnectorProvider(value:unknown):value is ActiveConnectorProvider{return isConnectorProvider(value)&&connectorCatalog.providers[value].readiness!=='planned';}
-export class ConnectorOperationError extends Error{readonly status=400;constructor(readonly code:string){super('This connector operation is unavailable or invalid.');}}
+export class ConnectorOperationError extends Error{constructor(readonly code:string,readonly status=400){super('This connector operation is unavailable or invalid.');}}
 function requireValue(value:unknown,code:string):asserts value{if(!value)throw new ConnectorOperationError(code);}
 const plain=(v:unknown):v is Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&[Object.prototype,null].includes(Object.getPrototypeOf(v));
 function shape(v:unknown,required:readonly string[],optional:readonly string[]=[]):asserts v is Record<string,unknown>{requireValue(plain(v)&&required.every(k=>Object.hasOwn(v,k))&&Object.keys(v).every(k=>required.includes(k)||optional.includes(k)),'INVALID_SHAPE');}

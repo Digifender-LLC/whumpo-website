@@ -260,6 +260,10 @@ WHEN NEW.state='dispatching' AND (
 BEGIN SELECT RAISE(ABORT,'github_grant_scope_changed'); END;
 
 CREATE TABLE github_backups (
+ operation_digest TEXT NOT NULL CHECK(length(operation_digest)=64 AND operation_digest NOT GLOB '*[^0-9a-f]*'),
+ request_digest TEXT NOT NULL CHECK(length(request_digest)=64 AND request_digest NOT GLOB '*[^0-9a-f]*'),
+ review_digest TEXT NOT NULL CHECK(length(review_digest)=64 AND review_digest NOT GLOB '*[^0-9a-f]*'),
+ price_json TEXT NOT NULL CHECK(price_json='{"basis":"plan-inclusion","customerUnits":0}'),
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -349,6 +353,10 @@ CREATE TABLE cloudflare_token_vault (
 );
 
 CREATE TABLE cloudflare_dns_actions (
+ operation_digest TEXT NOT NULL CHECK(length(operation_digest)=64 AND operation_digest NOT GLOB '*[^0-9a-f]*'),
+ request_digest TEXT NOT NULL CHECK(length(request_digest)=64 AND request_digest NOT GLOB '*[^0-9a-f]*'),
+ review_digest TEXT NOT NULL CHECK(length(review_digest)=64 AND review_digest NOT GLOB '*[^0-9a-f]*'),
+ price_json TEXT NOT NULL CHECK(price_json='{"basis":"plan-inclusion","customerUnits":0}'),
  id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  claim_id TEXT NOT NULL REFERENCES domain_claims(id) ON DELETE CASCADE,
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -2293,7 +2301,7 @@ BEGIN
 END;
 
 CREATE TRIGGER github_backup_identity BEFORE UPDATE ON github_backups
-WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.version_id!=OLD.version_id OR NEW.request_hash!=OLD.request_hash OR NEW.github_user_id!=OLD.github_user_id OR NEW.repo_id!=OLD.repo_id OR NEW.repo_owner!=OLD.repo_owner OR NEW.repo_name!=OLD.repo_name OR NEW.repo_private!=OLD.repo_private OR NEW.branch!=OLD.branch OR NEW.path!=OLD.path OR NEW.sha256!=OLD.sha256 OR NEW.tree_sha!=OLD.tree_sha OR NEW.base_head!=OLD.base_head OR NEW.files_json!=OLD.files_json OR NEW.byte_length!=OLD.byte_length OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at OR (NEW.token_id IS NOT OLD.token_id AND NEW.token_id IS NOT NULL)
+WHEN NEW.operation_digest!=OLD.operation_digest OR NEW.request_digest!=OLD.request_digest OR NEW.review_digest!=OLD.review_digest OR NEW.price_json!=OLD.price_json OR NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.version_id!=OLD.version_id OR NEW.request_hash!=OLD.request_hash OR NEW.github_user_id!=OLD.github_user_id OR NEW.repo_id!=OLD.repo_id OR NEW.repo_owner!=OLD.repo_owner OR NEW.repo_name!=OLD.repo_name OR NEW.repo_private!=OLD.repo_private OR NEW.branch!=OLD.branch OR NEW.path!=OLD.path OR NEW.sha256!=OLD.sha256 OR NEW.tree_sha!=OLD.tree_sha OR NEW.base_head!=OLD.base_head OR NEW.files_json!=OLD.files_json OR NEW.byte_length!=OLD.byte_length OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at OR (NEW.token_id IS NOT OLD.token_id AND NEW.token_id IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'github_backup_immutable'); END;
 
 CREATE TRIGGER domain_connection_owner BEFORE INSERT ON domain_connections BEGIN
@@ -2364,7 +2372,7 @@ WHEN (SELECT COUNT(*) FROM cloudflare_dns_actions WHERE user_id=NEW.user_id)>=10
 BEGIN SELECT RAISE(ABORT,'cloudflare_dns_quota'); END;
 
 CREATE TRIGGER cloudflare_dns_identity BEFORE UPDATE ON cloudflare_dns_actions
-WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.claim_id!=OLD.claim_id OR NEW.project_id!=OLD.project_id OR NEW.token_id!=OLD.token_id OR NEW.zone_id!=OLD.zone_id OR NEW.zone_name!=OLD.zone_name OR NEW.record_name!=OLD.record_name OR NEW.content!=OLD.content OR NEW.inventory_hash!=OLD.inventory_hash OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at
+WHEN NEW.operation_digest!=OLD.operation_digest OR NEW.request_digest!=OLD.request_digest OR NEW.review_digest!=OLD.review_digest OR NEW.price_json!=OLD.price_json OR NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.claim_id!=OLD.claim_id OR NEW.project_id!=OLD.project_id OR NEW.token_id!=OLD.token_id OR NEW.zone_id!=OLD.zone_id OR NEW.zone_name!=OLD.zone_name OR NEW.record_name!=OLD.record_name OR NEW.content!=OLD.content OR NEW.inventory_hash!=OLD.inventory_hash OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at
 BEGIN SELECT RAISE(ABORT,'cloudflare_dns_immutable'); END;
 
 CREATE TRIGGER version_removal_identity BEFORE UPDATE ON version_removals

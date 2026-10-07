@@ -146,7 +146,7 @@ export async function cloudflareAccess(db:D1Database,userId:string,configuration
 
  await assertCurrent();
  return {tokenId:row.id,assertCurrent,async send(id:ConnectorOperationId<'cloudflare'>,params:Record<string,unknown>={},body?:unknown){
-  const built=buildConnectorRequest('cloudflare',id,params,body),operation=connectorOperationUse('cloudflare',id,use);
+  const operation=connectorOperationUse('cloudflare',id,use),built=buildConnectorRequest('cloudflare',id,params,body);
   const active=await db.prepare("SELECT ciphertext FROM cloudflare_token_vault WHERE id=? AND user_id=? AND state='active' AND expires_at>?").bind(row.id,userId,now()).first<{ciphertext:string}>();
   if(!active)throw new ConnectionError(401,'Cloudflare access changed. Refresh its status.');
   const tokens=JSON.parse(await unseal(config.key,aad(userId,row.id,'token'),active.ciphertext)) as Tokens;

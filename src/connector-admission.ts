@@ -1,6 +1,6 @@
 import {connectorOperation,ConnectorOperationError,type ConnectorProvider} from './connector-catalog';
 import type {FeatureOperation} from './feature-inclusion';
-function requireOperation(value:unknown,code:string):asserts value{if(!value)throw new ConnectorOperationError(code);}
+function requireOperation(value:unknown,code:string):asserts value{if(!value)throw new ConnectorOperationError(code,403);}
 /** Lifecycle admission remains separate from operation feature inclusion. Rules stay refused until WH-145. */
 export function connectorOperationUse(provider:ConnectorProvider,id:string,use:{projectId:string|null;operation:Exclude<FeatureOperation,'connect'>}|{recoveryId:string}):Exclude<FeatureOperation,'connect'>|null{
  const op=connectorOperation(provider,id);
