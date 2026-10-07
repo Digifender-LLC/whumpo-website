@@ -59,7 +59,9 @@ export function validRecordsSummaryFacts(d:unknown):d is RecordsSummaryFacts{
 export type OwnerFileCollections={
  /** Which step of the standard photo collection setup (`filesModuleReview`) comes next; ids and states only. */
  setup:{state:'website-required'|'not-configured'|'saved'|'registered'|'unavailable';instanceId:string|null};
+ sharedSetups:{audience:SharedFileAudience;state:'website-required'|'access-required'|'staff-role-required'|'not-configured'|'saved'|'inactive'|'active'|'suspended'|'migrating'|'unavailable';instanceId:string|null;collectionId:string|null}[];
  pages:{id:string;path:string}[];
  candidates:{fileId:string;sha256:string}[];
  collections:{instanceId:string;resourceId:string;configRevision:number;state:'inactive'|'active'|'suspended'|'migrating';collectionId:string;files:{fileId:string;safety:'pending'|'approved'|'blocked'}[]}[];
 };
+export type SharedFileAudience='staff'|'visitor';

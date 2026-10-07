@@ -1,4 +1,4 @@
-import type {OwnerFileCollections} from '../../../src/shared-modules/shape';
+import type {OwnerFileCollections,SharedFileAudience} from '../../../src/shared-modules/shape';
 import type {ChatControl} from '../../../src/chat-controls';
 
 /** WH-128 owner Photos panel client (docs/shared-modules.md#owner-photos-panel-controls-wh-128--october-4-2026-utc).
@@ -26,6 +26,10 @@ export function fileIntoCollectionBody(c:Pick<OwnerCollection,'resourceId'|'conf
 /** WH-128 standard photo collection setup: the typed `filesModuleReview` control (project id only; the server chooses
  * the fixed owner-only instance), then the separate `moduleActivationReview` once the saved instance is not active. */
 export const filesSetupAction=(projectId:string):ChatControl=>({type:'filesModuleReview',projectId});
+export const sharedFilesSetupAction=(projectId:string,audience:SharedFileAudience):ChatControl=>({type:'filesCollectionReview',projectId,audience});
+export function sharedFilesActivationAction(projectId:string,setup:OwnerFileCollections['sharedSetups'][number]):ChatControl|null{
+ return setup.instanceId&&(setup.state==='saved'||setup.state==='inactive')?{type:'moduleActivationReview',projectId,instanceId:setup.instanceId,action:'activate'}:null;
+}
 export function filesActivationAction(projectId:string,d:OwnerFileCollections|undefined):ChatControl|null{
  const s=d?.setup;if(!s?.instanceId)return null;
  const registered=d!.collections.filter(c=>c.instanceId===s.instanceId);

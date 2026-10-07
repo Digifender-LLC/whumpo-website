@@ -2,7 +2,7 @@ import {useRef,useState} from 'react';
 import type {OwnerFileCollections} from '../../src/shared-modules/shape';
 import {Button} from './components/ui/button';
 import {api,message} from './lib/api';
-import {candidateOf,collectionFiler,collectionRemover,collectionKey,collectionLabel,collectionOf,fileableCollections,filesActivationAction,filesSetupAction,galleryReady,galleryReviewAction} from './lib/photo-collections';
+import {candidateOf,collectionFiler,collectionRemover,collectionKey,collectionLabel,collectionOf,fileableCollections,filesActivationAction,filesSetupAction,sharedFilesSetupAction,sharedFilesActivationAction,galleryReady,galleryReviewAction} from './lib/photo-collections';
 import {useWorkspace} from './workspace';
 
 const states={inactive:'Disabled',active:'Active',suspended:'Suspended',migrating:'Migrating'} as const;
@@ -46,14 +46,40 @@ export function PhotoCollectionSetup({project,data}:{project:string;data:OwnerFi
   try{await runAction(action);}catch(e){setError(message(e));}finally{lock.current=false;}
  }
  const setup=data?.setup,activate=filesActivationAction(project,data);
- if(!setup||setup.state==='registered'&&!activate)return null;
- return <div className="space-y-3 rounded-md bg-secondary/50 p-4 text-sm">
+ if(!setup)return null;
+ return <div className="space-y-4">{(setup.state!=='registered'||!!activate)&&<div className="space-y-3 rounded-md bg-secondary/50 p-4 text-sm">
   {setup.state==='website-required'&&<p>Photo collections are saved in this project’s website configuration. Ask Whumpo to draft the project’s private website first.</p>}
   {setup.state==='unavailable'&&<p>The saved website configuration could not be read.</p>}
   {setup.state==='not-configured'&&<><p>Set up a private photo collection that only you can add to. Chat shows the exact website configuration change to save (no staff or visitor uploads, nothing published); activating it is a separate review.</p><Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void run(filesSetupAction(project))}>Set up photo collection</Button></>}
   {activate&&<><p>The photo collection is saved but not active. Review activating it in Chat.</p><Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void run(activate)}>Review activating photo collection</Button></>}
   {error&&<p role="alert">{error}</p>}
- </div>;
+ </div>}<SharedFileCollectionSetup project={project} data={data}/></div>;
+}
+
+/** Maintained staff/visitor presets, prepared through the exact owner website review. No visitor values or uploads
+ * are listed here. The access module still owns enrollment and staff grants; saving and activation remain separate. */
+function SharedFileCollectionSetup({project,data}:{project:string;data:OwnerFileCollections|undefined}){
+ const {runAction,commandBusy}=useWorkspace(),[error,setError]=useState(''),lock=useRef(false);
+ if(!data)return null;
+ async function run(action:Parameters<typeof runAction>[0]){
+  if(lock.current)return;lock.current=true;setError('');
+  try{await runAction(action);}catch(e){setError(message(e));}finally{lock.current=false;}
+ }
+ return <div className="space-y-3"><h4 className="font-medium text-sm">Staff and visitor files</h4>{data.sharedSetups.map(setup=>{
+  const label=setup.audience==='staff'?'Staff':'Visitor',activate=sharedFilesActivationAction(project,setup);
+  return <section key={setup.audience} aria-label={label+' file collection setup'} className="rounded-md bg-secondary/50 p-4 space-y-3 text-sm">
+   <p className="font-medium">{label} file collection</p>
+   <p className="text-muted-foreground">{setup.audience==='staff'?'Only staff can upload here. Current staff can view the collection’s approved photos.':'Visitors can upload here and view their own approved photos. Staff can view approved photos across this collection.'} Files stay private and held until safety checks clear them. This does not publish a gallery.</p>
+   {setup.state==='website-required'&&<p>Draft this project’s private website first.</p>}
+   {setup.state==='access-required'&&<p>Set up visitor access in Visitors first.</p>}
+   {setup.state==='staff-role-required'&&<p>Set up the staff role in Visitors first.</p>}
+   {setup.state==='not-configured'&&<Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void run(sharedFilesSetupAction(project,setup.audience))}>Set up {setup.audience} files</Button>}
+   {activate&&<><p>The collection is saved. Activate its visitor access dependency before activating the collection.</p><Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void run(activate)}>Review activating {setup.audience} files</Button></>}
+   {setup.state==='active'&&<p>Active collection: {setup.instanceId} · {setup.collectionId}. Visitor access must stay active, and viewers must sign in to this project.</p>}
+   {(setup.state==='suspended'||setup.state==='migrating')&&<p>The collection is {setup.state}. Check its status in the modules view.</p>}
+   {setup.state==='unavailable'&&<p>The saved collection configuration could not be read.</p>}
+  </section>;
+ })}{error&&<p role="alert" className="text-sm">{error}</p>}</div>;
 }
 
 /** WH-128 "Prepare gallery page": per owner collection, a page choice and a button that sends the typed

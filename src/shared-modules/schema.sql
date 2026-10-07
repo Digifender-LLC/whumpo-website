@@ -606,6 +606,46 @@ WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_
  );
 END;
 
+-- WH-128 maintained staff/visitor file collection setup. The typed owner control appends exactly one preset, depending
+-- on the project's saved access instance. A staff preset requires its declared staff role; no other config can change.
+CREATE TRIGGER project_spec_files_collection_setup_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='filesCollectionReview') BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+  JOIN chat_turns t ON t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.projectId')=NEW.project_id
+  JOIN json_each(v.spec_json,'$.instances') access ON json_extract(access.value,'$.kind')='access'
+  WHERE h.project_id=NEW.project_id AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+  AND json_extract(t.action_json,'$.audience') IN ('staff','visitor')
+  AND (json_extract(t.action_json,'$.audience')='visitor' OR EXISTS(SELECT 1 FROM json_each(access.value,'$.config.roles') role WHERE role.value='staff'))
+  AND json_array_length(NEW.spec_json,'$.instances')=json_array_length(v.spec_json,'$.instances')+1
+  AND json(json_remove(NEW.spec_json,'$.instances[#-1]'))=json(v.spec_json)
+  AND NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.instances') i WHERE json_extract(i.value,'$.id')=json_extract(t.action_json,'$.audience')||'-files'
+   OR json_extract(i.value,'$.kind')='files' AND EXISTS(SELECT 1 FROM json_each(i.value,'$.config.collections') c
+    WHERE json_extract(c.value,'$.id')=json_extract(t.action_json,'$.audience')||'-uploads'
+     OR EXISTS(SELECT 1 FROM json_each(c.value,'$.upload') u WHERE u.value=json_extract(t.action_json,'$.audience'))))
+  AND NOT EXISTS(SELECT 1 FROM module_instances i WHERE i.project_id=NEW.project_id AND (i.local_id=json_extract(t.action_json,'$.audience')||'-files'
+   OR i.kind='files' AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.collections') c
+    WHERE json_extract(c.value,'$.id')=json_extract(t.action_json,'$.audience')||'-uploads'
+     OR EXISTS(SELECT 1 FROM json_each(c.value,'$.upload') u WHERE u.value=json_extract(t.action_json,'$.audience')))))
+  AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1]'))=6
+  AND json_extract(NEW.spec_json,'$.instances[#-1].id')=json_extract(t.action_json,'$.audience')||'-files'
+  AND json_extract(NEW.spec_json,'$.instances[#-1].kind')='files'
+  AND json_extract(NEW.spec_json,'$.instances[#-1].module.name')='module-files' AND json_extract(NEW.spec_json,'$.instances[#-1].schema.name')='files-data'
+  AND json_array_length(NEW.spec_json,'$.instances[#-1].dependencies')=1
+  AND json_extract(NEW.spec_json,'$.instances[#-1].dependencies[0]')=json_extract(access.value,'$.id')
+  AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1].config'))=1 AND json_array_length(NEW.spec_json,'$.instances[#-1].config.collections')=1
+  AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1].config.collections[0]'))=6
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].id')=json_extract(t.action_json,'$.audience')||'-uploads'
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].read')=CASE json_extract(t.action_json,'$.audience') WHEN 'staff' THEN 'staff' ELSE 'submitter' END
+  AND json_array_length(NEW.spec_json,'$.instances[#-1].config.collections[0].upload')=1
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].upload[0]')=json_extract(t.action_json,'$.audience')
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].maxBytes')=1048576
+  AND json_array_length(NEW.spec_json,'$.instances[#-1].config.collections[0].mediaTypes')=1 AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].mediaTypes[0]')='image/jpeg'
+  AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1].config.collections[0].gallery'))=1
+  AND json_extract(NEW.spec_json,'$.instances[#-1].config.collections[0].gallery.audience')=json_extract(t.action_json,'$.audience')
+ );
+END;
+
 -- WH-128 published gallery. A proposal prepared by the typed galleryPageReview control is exactly the current head with
 -- only the named page's photos (and its photo component) replaced by one to four photos that the owner filed into the
 -- named collection of this project's registered files instance and that currently have an exact-digest approval.
