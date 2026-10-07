@@ -1,3 +1,4 @@
+import {fillConnectorBudget,resetConnectorBudgets} from './helpers/connector-budget.mjs';
 import {runConformance} from './helpers/connectors-conformance.mjs';
 import {withConnectorConfirmations,connectorConfirmationCommand} from './helpers/connector-confirmation.mjs';
 import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
@@ -48,8 +49,19 @@ try{
  const racing=await account(),race=provider(),r1=await review(racing,race),r2=await review(racing,race);let release,entered;const gate=new Promise(r=>release=r),atClaim=new Promise(r=>entered=r);
  const waitingDB=await identities.get(racing.user).scope(interceptDatabase(db,/UPDATE cloudflare_dns_actions SET state=\?/,async()=>{entered();await gate;}));
  const delayed=confirm(racing,race,r2.id,waitingDB);await atClaim;await confirm(racing,race,r1.id);release();await assert.rejects(delayed,{status:409});assert.equal(race.posts,1);
+ // An exhausted action budget rolls back the receipt CAS before any provider POST.
+ const capped=await account('limited.example.com'),cap=provider('_whumpo.limited.example.com'),capReview=await review(capped,cap);await fillConnectorBudget(db,capped.user,'cloudflare','action',10);
+ await assert.rejects(confirm(capped,cap,capReview.id),{status:429,code:'connector_rate_limited'});assert.equal((await db.prepare('SELECT state FROM cloudflare_dns_actions WHERE id=?').bind(capReview.id).first()).state,'review');assert.equal(cap.posts,0);
+ await resetConnectorBudgets(db,capped.user);assert.equal((await confirm(capped,cap,capReview.id)).state,'applied');const actionCount=await db.prepare("SELECT used FROM connector_request_budgets WHERE user_id=? AND provider='cloudflare' AND kind='action'").bind(capped.user).first();assert.equal(actionCount.used,1);await confirm(capped,cap,capReview.id);assert.equal(cap.posts,1);
+ // Distinct exact reviews compete atomically for the last action slot in the same account/provider.
+ const finalSlot=await account('last-slot-a.example.com'),lastA=provider('_whumpo.last-slot-a.example.com'),lastB=provider('_whumpo.last-slot-b.example.com'),claimB=crypto.randomUUID();
+ await db.prepare("INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at) VALUES(?,?,'last-slot-b.example.com',?,?,?)").bind(claimB,finalSlot.project,finalSlot.proof,new Date(Date.now()+86400000).toISOString(),now()).run();
+ const finalB={...finalSlot,claim:claimB},lastReviewA=await review(finalSlot,lastA),lastReviewB=await review(finalB,lastB);await fillConnectorBudget(db,finalSlot.user,'cloudflare','action',9);
+ let slotArrivals=0,slotRelease;const slotBarrier=new Promise(resolve=>slotRelease=resolve),slotDB=await identities.get(finalSlot.user).scope(interceptDatabase(db,/UPDATE cloudflare_dns_actions SET state=\?/,async()=>{if(++slotArrivals===2)slotRelease();await slotBarrier;}));
+ const lastResults=await Promise.allSettled([confirm(finalSlot,lastA,lastReviewA.id,slotDB),confirm(finalB,lastB,lastReviewB.id,slotDB)]);assert.equal(lastResults.filter(result=>result.status==='fulfilled'&&result.value.state==='applied').length,1);assert.equal(lastResults.find(result=>result.status==='rejected').reason.code,'connector_rate_limited');assert.equal(lastA.posts+lastB.posts,1);
+ assert.equal((await db.prepare("SELECT used FROM connector_request_budgets WHERE user_id=? AND provider='cloudflare' AND kind='action'").bind(finalSlot.user).first()).used,10);assert.equal((await db.prepare("SELECT count(*) n FROM cloudflare_dns_actions WHERE user_id=? AND state='review'").bind(finalSlot.user).first()).n,1);
  // A lost provider acknowledgement may only be reconciled by observing the exact marker.
- const uncertain=await account(),u=provider();u.lose=true;const ur=await review(uncertain,u);assert.equal((await confirm(uncertain,u,ur.id)).state,'uncertain');assert.equal((await confirm(uncertain,u,ur.id)).state,'observed');assert.equal(u.posts,1);
+ const uncertain=await account(),u=provider();u.lose=true;const ur=await review(uncertain,u);assert.equal((await confirm(uncertain,u,ur.id)).state,'uncertain');await fillConnectorBudget(db,uncertain.user,'cloudflare','read',60);await fillConnectorBudget(db,uncertain.user,'cloudflare','action',10);assert.equal((await confirm(uncertain,u,ur.id)).state,'observed');assert.equal(u.posts,1);
 
  // Lost D1 receipt acknowledgement does not resend or downgrade a saved result.
  const saved=await account(),d=provider(),dr=await review(saved,d);const lossy=await identities.get(saved.user).scope(interceptDatabase(db,/UPDATE cloudflare_dns_actions SET state='applied'/,async()=>{},async()=>{throw Error('Lost D1 acknowledgement');}));assert.equal((await confirm(saved,d,dr.id,lossy)).state,'applied');assert.equal(d.posts,1);

@@ -15,9 +15,7 @@ const proposals='Unapplied, short-lived proposal/review state; saved versions an
 const blocked=(trigger,note)=>({decision:'blocked',mechanism:trigger,note});
 const excluded=rationale=>({decision:'excluded',rationale});
 export const deletionSites={
- 'src/mobile/handoff.ts::mobile_identity_handoffs':excluded(credential),
- 'src/mobile/http.ts::identity_challenges':excluded(credential),
- 'src/mobile/http.ts::identity_sessions':excluded(credential),
+ 'src/connectors/budgets.ts::connector_request_budgets':excluded('Expired per-owner/provider request counters contain no query, content, credential or action authority; current-window enforcement precedes expiry.'),
  'src/connectors/lookups.ts::connector_lookup_consents':excluded('Temporary one-use read authority containing digests and identifiers only. Query/result content is transient and never stored; expiry must not preserve executable consent.'),
  'src/mobile/http.ts::identity_challenges':excluded(credential),
  'src/mobile/http.ts::identity_sessions':excluded(credential),

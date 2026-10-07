@@ -1,3 +1,4 @@
+import {claimConnectorRead,connectorDispatchReceipt} from './connectors/budgets';
 import {connectorOperationUse} from './connector-admission';
 import {buildConnectorRequest,type ConnectorOperationId} from './connector-catalog';
 import {prepareConnectionHandoff} from './chat-interactions/connection-handoff';
@@ -173,13 +174,17 @@ export async function githubAccess(db:D1Database,userId:string,configuration:Git
  }
 
  await assertCurrent();
+ let actionSent=false;
  return {tokenId:current.id,githubUserId:current.github_user_id,assertCurrent,async send(id:ConnectorOperationId<'github'>,params:Record<string,unknown>={},body?:unknown){
   const operation=connectorOperationUse('github',id,use),built=buildConnectorRequest('github',id,params,body);
   const row=await db.prepare("SELECT t.ciphertext FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.id=? AND t.state='active' AND t.expires_at>?").bind(userId,current.id,new Date().toISOString()).first<{ciphertext:string}>();
   if(!row)throw new ConnectionError(401,'GitHub access changed. Reconnect and prepare a new review.');
   const token=await unseal(config.key,aad(userId,current.id,'token'),row.ciphertext);
-  const recovery=await assertCurrent(operation);
+  const currentRecovery=await assertCurrent(operation),claim='recoveryId' in use?null:await connectorDispatchReceipt(db,userId,'github',use.dispatchId,current.id,use.projectId),recovery=currentRecovery??(built.op.kind==='read'?claim:null);
   if(recovery&&!backupRecoveryRead(recovery,built.path,{method:built.method,body:built.body}))throw new ConnectionError(403,'Backup reconciliation can only inspect its recorded destination.');
+  if(built.op.kind==='action'){if(!claim||claim.state!=='dispatching'||actionSent)throw new ConnectionError(403,'A current claimed backup review is required.');actionSent=true;}
+  else if(!recovery)await claimConnectorRead(db,userId,'github');
+  await assertCurrent(operation);
   const response=await request(built.url,{method:built.method,body:built.body,headers:{...apiHeaders,'content-type':'application/json',authorization:'Bearer '+token}},transport);
   try{await assertCurrent(operation);}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
   return response;

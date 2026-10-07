@@ -2,7 +2,7 @@ import {connectorCatalog,type ConnectorProvider} from './connector-catalog';
 import {assertWorkspace,workspacePredicate} from './workspace-identity/admission';
 import {featureRequest,inclusionPredicate,resolveFeatureInclusion,FeatureInclusionError,type FeatureRequest,type FeatureOperation} from './feature-inclusion';
 
-export type ConnectionUse={projectId:string|null;operation:Exclude<FeatureOperation,'connect'>}|{recoveryId:string};
+export type ConnectionUse={projectId:string|null;operation:Exclude<FeatureOperation,'connect'>;dispatchId?:string}|{recoveryId:string};
 export function connectionFeature(userId:string,provider:ConnectorProvider,projectId:string|null,operation:FeatureOperation):FeatureRequest {
  return featureRequest({userId,projectId,featureId:connectorCatalog.providers[provider].featureId,operation});
 }

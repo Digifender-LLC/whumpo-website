@@ -1,3 +1,4 @@
+import {ConnectorBudgetError,cleanupConnectorBudgets} from './connectors/budgets';
 import {handleConnectorLookupRequest} from './connectors/http';
 import {ConnectorLookupError,cleanupConnectorLookups} from './connectors/lookups';
 import {ConnectorReviewError} from './connector-receipts';
@@ -661,10 +662,10 @@ export default {
     // WH-018 bounded continuation of confirmed account closures through the same journaled steps as closure/resume.
     const closures={name:'account_closures' as const,run:()=>continueAccountClosures(env)};
     if(_event.cron==='47 * * * *'){
-      await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:async()=>{await cleanupInteractionDrafts(env.DB);await cleanupConnectorLookups(env.DB);}},
+      await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:async()=>{await cleanupInteractionDrafts(env.DB);await cleanupConnectorLookups(env.DB);await cleanupConnectorBudgets(env.DB);}},
       {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)},closures]);return;
     }
-    await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:async()=>{await cleanupInteractionDrafts(env.DB);await cleanupConnectorLookups(env.DB);}},
+    await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:async()=>{await cleanupInteractionDrafts(env.DB);await cleanupConnectorLookups(env.DB);await cleanupConnectorBudgets(env.DB);}},
       {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
@@ -699,6 +700,7 @@ export default {
       if(cause instanceof WorkspaceViewError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if(cause instanceof IdentityError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if(cause instanceof ModuleError)return comparisonErrorResponse(request,json(cause.body(),cause.status));
+      if(cause instanceof ConnectorBudgetError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code,retryAfterSeconds:cause.retryAfterSeconds},429,{'retry-after':String(cause.retryAfterSeconds)}));
       if (cause instanceof ConnectorLookupError || cause instanceof ConnectorReviewError || cause instanceof ConnectorOperationError || cause instanceof FeatureInclusionError || cause instanceof GuestPreviewError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, category: "unexpected" }));
       return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));

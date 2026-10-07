@@ -42,3 +42,36 @@ WHEN NEW.state!='active'
 BEGIN UPDATE connector_lookup_consents SET state='void' WHERE user_id=OLD.user_id AND provider='cloudflare' AND credential_id=OLD.id AND state IN ('review','confirmed'); END;
 CREATE TRIGGER connector_lookup_cloudflare_delete BEFORE DELETE ON cloudflare_token_vault
 BEGIN UPDATE connector_lookup_consents SET state='void' WHERE user_id=OLD.user_id AND provider='cloudflare' AND credential_id=OLD.id AND state IN ('review','confirmed'); END;
+
+-- Content-free counters, never credential or action authority. At most four rows per account.
+CREATE TABLE connector_request_budgets (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL CHECK(provider IN ('github','cloudflare')),
+ kind TEXT NOT NULL CHECK(kind IN ('read','action')),
+ window_start INTEGER NOT NULL CHECK(window_start>=0 AND window_start%60=0),
+ used INTEGER NOT NULL CHECK(used>=1),
+ PRIMARY KEY(user_id,provider,kind)
+);
+CREATE TRIGGER connector_budget_initial BEFORE INSERT ON connector_request_budgets
+WHEN NEW.used!=1
+BEGIN SELECT RAISE(ABORT,'connector_budget_initial'); END;
+CREATE TRIGGER connector_budget_identity BEFORE UPDATE ON connector_request_budgets
+WHEN NEW.user_id!=OLD.user_id OR NEW.provider!=OLD.provider OR NEW.kind!=OLD.kind
+ OR NOT ((NEW.window_start=OLD.window_start AND NEW.used=OLD.used+1) OR (NEW.window_start>OLD.window_start AND NEW.used=1))
+BEGIN SELECT RAISE(ABORT,'connector_budget_immutable'); END;
+CREATE TRIGGER connector_budget_limit BEFORE UPDATE ON connector_request_budgets
+WHEN NEW.used>CASE NEW.kind WHEN 'read' THEN 60 ELSE 10 END
+BEGIN SELECT RAISE(ABORT,'connector_provider_rate_limited'); END;
+-- These counters and the receipt claim commit together. Replayed and losing claims consume no slot.
+CREATE TRIGGER connector_budget_github_action BEFORE UPDATE OF state ON github_backups
+WHEN OLD.state='pending' AND NEW.state='dispatching'
+BEGIN
+ INSERT INTO connector_request_budgets(user_id,provider,kind,window_start,used) VALUES(NEW.user_id,'github','action',(unixepoch()/60)*60,1)
+ ON CONFLICT(user_id,provider,kind) DO UPDATE SET window_start=MAX(window_start,excluded.window_start),used=CASE WHEN excluded.window_start>window_start THEN 1 ELSE used+1 END;
+END;
+CREATE TRIGGER connector_budget_cloudflare_action BEFORE UPDATE OF state ON cloudflare_dns_actions
+WHEN OLD.state='review' AND NEW.state='sending'
+BEGIN
+ INSERT INTO connector_request_budgets(user_id,provider,kind,window_start,used) VALUES(NEW.user_id,'cloudflare','action',(unixepoch()/60)*60,1)
+ ON CONFLICT(user_id,provider,kind) DO UPDATE SET window_start=MAX(window_start,excluded.window_start),used=CASE WHEN excluded.window_start>window_start THEN 1 ELSE used+1 END;
+END;

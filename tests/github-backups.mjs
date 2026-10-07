@@ -1,3 +1,4 @@
+import {fillConnectorBudget,resetConnectorBudgets} from './helpers/connector-budget.mjs';
 import {runConformance} from './helpers/connectors-conformance.mjs';
 import {withConnectorConfirmations,connectorConfirmationCommand} from './helpers/connector-confirmation.mjs';
 import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
@@ -44,10 +45,14 @@ try{
  const input=()=>({id:crypto.randomUUID(),versionId:version,owner:'test',repo:'backup',repoId:17});
  const review=(i=input())=>reviewBackup(scope(user),fixture.env.FILES,user,i,config,transport);
  const confirm=(id,database=scope(user))=>confirmBackup(database,fixture.env.FILES,user,id,config,transport);
- const reset=()=>{head='a'.repeat(40);repoPrivate=true;repoId=17;branch='main';remote=false;parentFile=false;malformed=false;mode='ok';};
+ const reset=async()=>{await resetConnectorBudgets(db,user);head='a'.repeat(40);repoPrivate=true;repoId=17;branch='main';remote=false;parentFile=false;malformed=false;mode='ok';};
+ // Independent scenarios reset only synthetic rate counters; source limit tests exercise exhaustion separately.
+ const limited=await review();await fillConnectorBudget(db,user,'github','action',10);
+ await assert.rejects(confirm(limited.id),{status:429,code:'connector_rate_limited'});assert.equal((await db.prepare('SELECT state FROM github_backups WHERE id=?').bind(limited.id).first()).state,'pending');assert.equal(writes,0);
+ await reset();
  let conformanceCases=0;
  await runConformance('github-d1',async()=>{
-  reset();const reviewed=await review();let outcome='ok',dispatches=0;
+  await reset();const reviewed=await review();let outcome='ok',dispatches=0;
   const provider=async(url,init={})=>{
    if(url==='https://api.github.com/graphql'&&JSON.parse(init.body).query.startsWith('mutation')){
     dispatches++;if(outcome==='lost-before')throw Error('Synthetic lost request');
@@ -60,21 +65,21 @@ try{
   };
   return {review:reviewed,confirm:approval=>source.confirmBackup(scope(user),fixture.env.FILES,user,reviewed.id,config,provider,approval),writes:()=>dispatches,outcome:value=>outcome=value,observedState:'applied',tamper:field=>db.prepare(`UPDATE github_backups SET ${field}=? WHERE id=?`).bind(field==='price_json'?'{}':'0'.repeat(64),reviewed.id).run()};
  },async(name,run)=>{try{await run();conformanceCases++;}catch(cause){throw Error(name,{cause});}},'actions');
- assert.equal(conformanceCases,8);console.log('GitHub D1: 8 shared action conformance cases passed.');reset();writes=0;
+ assert.equal(conformanceCases,8);console.log('GitHub D1: 8 shared action conformance cases passed.');await reset();writes=0;
  assert.equal((await githubRepositories(scope(user),user,config,1,1,transport)).repositories.length,1);await assert.rejects(()=>githubRepositories(scope(user),user,config,2,1,transport));
  await assert.rejects(()=>reviewBackup(scope(other),fixture.env.FILES,other,input(),config,denied));
  const i=input(),r=await review(i);assert.equal(writes,0);assert.equal(r.state,'pending');assert.equal(r.private,true);assert.equal((await db.prepare('SELECT tree_sha FROM github_backups WHERE id=?').bind(r.id).first()).tree_sha,independentTree);
  assert.deepEqual(await review(i),r);await assert.rejects(()=>review({...i,repo:'different'}));assert.equal((await listBackups(scope(other),other)).backups.length,0);await assert.rejects(()=>confirmBackup(scope(other),fixture.env.FILES,other,r.id,config,denied));
- const results=await Promise.all([confirm(r.id),confirm(r.id)]);assert.ok(results.some(x=>x.state==='complete'));assert.equal(writes,1);assert.equal((await confirm(r.id)).state,'complete');assert.equal(writes,1);assert.ok((await confirm(r.id)).url.includes(head));
+ const results=await Promise.all([confirm(r.id),confirm(r.id)]);assert.ok(results.some(x=>x.state==='complete'));assert.equal(writes,1);assert.equal((await confirm(r.id)).state,'complete');assert.equal(writes,1);assert.ok((await confirm(r.id)).url.includes(head));assert.equal((await db.prepare("SELECT used FROM connector_request_budgets WHERE user_id=? AND provider='github' AND kind='action'").bind(user).first()).used,1);
  assert.equal((await db.prepare("SELECT COUNT(*) n FROM activity_events WHERE action='github.backup' AND id=?").bind('github-backup:'+r.id).first()).n,1);
- reset();repoPrivate=false;const publicReview=await review();assert.equal(publicReview.private,false);repoPrivate=true;await assert.rejects(()=>confirm(publicReview.id),/visibility/);
- for(const change of [()=>repoId=18,()=>branch='other',()=>head='d'.repeat(40),()=>parentFile=true,()=>remote='wrong',()=>malformed=true]){reset();const r=await review();change();await assert.rejects(()=>confirm(r.id));assert.equal(writes,1);}
- reset();const existing=await review();remote=true;assert.equal((await confirm(existing.id)).state,'complete');assert.equal(writes,1);
- reset();const after=await review();mode='after';assert.equal((await confirm(after.id)).state,'uncertain');assert.equal(writes,2);assert.equal((await confirm(after.id)).state,'complete');assert.equal(writes,2);
- reset();const before=await review();mode='before';assert.equal((await confirm(before.id)).state,'uncertain');assert.equal(writes,3);assert.equal((await confirm(before.id)).state,'uncertain');assert.equal(writes,3);
- reset();const stale=await review();mode='stale';assert.equal((await confirm(stale.id)).state,'uncertain');await confirm(stale.id);assert.equal(writes,4);
- reset();const lost=await review();let dropped=false;const lossy=await identities.get(user).scope(interceptDatabase(db,/UPDATE github_backups SET state='complete'/,async()=>{},async()=>{if(!dropped){dropped=true;throw Error('Lost database acknowledgement');}}));assert.equal((await confirm(lost.id,lossy)).state,'complete');assert.ok(dropped);assert.equal(writes,5);
- reset();const changedToken=await review();
+ await reset();repoPrivate=false;const publicReview=await review();assert.equal(publicReview.private,false);repoPrivate=true;await assert.rejects(()=>confirm(publicReview.id),/visibility/);
+ for(const change of [()=>repoId=18,()=>branch='other',()=>head='d'.repeat(40),()=>parentFile=true,()=>remote='wrong',()=>malformed=true]){await reset();const r=await review();change();await assert.rejects(()=>confirm(r.id));assert.equal(writes,1);}
+ await reset();const existing=await review();remote=true;assert.equal((await confirm(existing.id)).state,'complete');assert.equal(writes,1);
+ await reset();const after=await review();mode='after';assert.equal((await confirm(after.id)).state,'uncertain');assert.equal(writes,2);await fillConnectorBudget(db,user,'github','read',60);await fillConnectorBudget(db,user,'github','action',10);assert.equal((await confirm(after.id)).state,'complete');assert.equal(writes,2);
+ await reset();const before=await review();mode='before';assert.equal((await confirm(before.id)).state,'uncertain');assert.equal(writes,3);assert.equal((await confirm(before.id)).state,'uncertain');assert.equal(writes,3);
+ await reset();const stale=await review();mode='stale';assert.equal((await confirm(stale.id)).state,'uncertain');await confirm(stale.id);assert.equal(writes,4);
+ await reset();const lost=await review();let dropped=false;const lossy=await identities.get(user).scope(interceptDatabase(db,/UPDATE github_backups SET state='complete'/,async()=>{},async()=>{if(!dropped){dropped=true;throw Error('Lost database acknowledgement');}}));assert.equal((await confirm(lost.id,lossy)).state,'complete');assert.ok(dropped);assert.equal(writes,5);
+ await reset();const changedToken=await review();
  const replacement=crypto.randomUUID();await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(replacement,user,await seal(config.key,`whumpo:github:token:${user}:${replacement}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
  await db.prepare('UPDATE github_connections SET active_token_id=? WHERE user_id=?').bind(replacement,user).run();await assert.rejects(()=>confirm(changedToken.id),/connection changed/);
  await db.prepare('UPDATE github_connections SET active_token_id=? WHERE user_id=?').bind(token,user).run();
@@ -83,7 +88,7 @@ try{
  const request=(path,method='GET',authenticated=true,origin='https://whumpo.com')=>worker.fetch(new Request('https://whumpo.com/api'+path,{method,headers:{...(authenticated?{cookie:'__Host-whumpo_session='+session}:{}),origin,'content-type':'application/json'},...(method==='POST'?{body:'{}'}:{})}),env);
  assert.equal((await request('/github/backups','GET',false)).status,401);assert.deepEqual(await(await request('/github/backups')).json(),{backups:[]});
  assert.equal((await request('/github/backups/'+r.id+'/confirm','POST')).status,404);assert.equal((await request('/github/backups/review','POST',true,'https://evil.test')).status,403);assert.equal((await request('/github/backups/review','POST')).status,400);
- reset();const expiry=await review();await assert.rejects(db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE id=?").bind(token).run(),/github_vault_immutable/);await db.prepare("UPDATE github_token_vault SET state='revoking' WHERE id=?").bind(token).run();await assert.rejects(()=>confirm(expiry.id));assert.equal(writes,5);
+ await reset();const expiry=await review();await assert.rejects(db.prepare("UPDATE github_token_vault SET expires_at='2000-01-01' WHERE id=?").bind(token).run(),/github_vault_immutable/);await db.prepare("UPDATE github_token_vault SET state='revoking' WHERE id=?").bind(token).run();await assert.rejects(()=>confirm(expiry.id));assert.equal(writes,5);
  // Local history remains readable when provider authorization has expired/disconnected.
  await db.prepare('UPDATE github_connections SET active_token_id=NULL WHERE user_id=?').bind(user).run();
  const ownerSession=identities.get(user).token;

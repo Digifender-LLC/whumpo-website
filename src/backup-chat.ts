@@ -1,3 +1,4 @@
+import {ConnectorBudgetError} from './connectors/budgets';
 import {includedConnectorPrice,ConnectorReviewError} from './connector-receipts';
 import {FeatureInclusionError} from './feature-inclusion';
 import {ConnectionError,githubInstallations,type GitHubConfig} from './github-connection';
@@ -27,6 +28,6 @@ Ask to list repositories in this installation.`).join('\n\n'):'No active GitHub 
    if(verb==='/review-backup')return describe(await reviewBackup(db,options.files,user,{id:turnId,versionId:args[0],owner:repo![0],repo:repo![1],repoId:Number(args[2])},options.github,options.githubTransport));
    if(verb==='/check-backup'){const {backups}=await listBackups(db,user),b=backups.find(b=>b.id===args[0]);if(!b)throw new ConnectionError(404,'Backup review not found.');if(['pending','expired','complete','failed'].includes(b.state))return describe(b)+'\nThis check did not authorize a commit.';}
    return describe(await confirmBackup(db,options.files,user,args[0],options.github,options.githubTransport,verb==='/confirm-backup'?{reviewDigest:args[1],acceptedPrice:{customerUnits:Number(args[2]),basis:args[3]}}:undefined));
-  }catch(cause){return (cause instanceof ConnectionError||cause instanceof FeatureInclusionError||cause instanceof ConnectorReviewError)?cause.message+"\nAsk to inspect your saved backup reviews.":"The backup result could not be saved. Ask to inspect your saved backup reviews. This Chat request will not be dispatched again.";}
+  }catch(cause){return (cause instanceof ConnectionError||cause instanceof FeatureInclusionError||cause instanceof ConnectorBudgetError||cause instanceof ConnectorReviewError)?cause.message+"\nAsk to inspect your saved backup reviews.":"The backup result could not be saved. Ask to inspect your saved backup reviews. This Chat request will not be dispatched again.";}
  };
 }

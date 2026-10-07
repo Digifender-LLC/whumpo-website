@@ -1,3 +1,4 @@
+import {connectorBudgetStatement} from './connectors/budgets';
 import {prepareConnectorContract,assertConnectorConfirmation,connectorReceipt,type ConnectorSavedContract} from './connector-receipts';
 import {unzipSync} from 'fflate';
 import {ConnectionError,githubAccess,githubInstallations,readGitHubJSON,type GitHubConfig} from './github-connection';
@@ -79,7 +80,7 @@ export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,user
  if(b.state==='pending')await assertConnectorConfirmation('github','backup.commit',b,confirmation);
  if(b.state==='pending'&&b.expires_at<=new Date().toISOString())throw new ConnectionError(409,'This backup review expired. Prepare a fresh review.');
  const scope=connectionFeature(userId,'github',b.project_id,'confirm'),gate=featurePredicate(db,scope),dispatchScope=connectionFeature(userId,'github',b.project_id,'dispatch'),dispatchGate=featurePredicate(db,dispatchScope);
- const access=await githubAccess(db,userId,config,transport,b.state==='pending'?{projectId:b.project_id,operation:'confirm'}:{recoveryId:b.id});if(access.githubUserId!==b.github_user_id||b.state==='pending'&&access.tokenId!==b.token_id)throw new ConnectionError(409,'The GitHub connection changed. Prepare a fresh review.');
+ const access=await githubAccess(db,userId,config,transport,b.state==='pending'?{projectId:b.project_id,operation:'confirm',dispatchId:b.id}:{recoveryId:b.id});if(access.githubUserId!==b.github_user_id||b.state==='pending'&&access.tokenId!==b.token_id)throw new ConnectionError(409,'The GitHub connection changed. Prepare a fresh review.');
  const repo=await repository(access,b.repo_owner,b.repo_name);
  if(repo.id!==b.repo_id||repo.private!==!!b.repo_private||repo.branch!==b.branch)throw new ConnectionError(409,'Repository identity, visibility or default branch changed. Prepare a fresh review.');
  // Rechecks are read-only after a write was dispatched, even when GitHub still reports no file.
@@ -93,7 +94,7 @@ export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,user
  if(!existing&&head!==b.base_head)throw new ConnectionError(409,'The repository branch changed after review. Prepare a fresh review.');
  const tree=await sourceTree(archive);
  await requireFeature(db,dispatchScope);await access.assertCurrent();
- const claimed=await db.prepare(`UPDATE github_backups SET state='dispatching',dispatched_at=? WHERE id=? AND user_id=? AND state='pending' AND expires_at>? AND operation_digest=? AND review_digest=? AND price_json=? AND ${gate.sql} AND ${dispatchGate.sql} AND EXISTS(SELECT 1 FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=github_backups.user_id AND t.id=github_backups.token_id AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) RETURNING id`).bind(new Date().toISOString(),id,userId,new Date().toISOString(),b.operation_digest,b.review_digest,b.price_json,...gate.params,...dispatchGate.params).first();
+ const claimed=await connectorBudgetStatement(db,userId,'github','action',()=>db.prepare(`UPDATE github_backups SET state='dispatching',dispatched_at=? WHERE id=? AND user_id=? AND state='pending' AND expires_at>? AND operation_digest=? AND review_digest=? AND price_json=? AND ${gate.sql} AND ${dispatchGate.sql} AND EXISTS(SELECT 1 FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=github_backups.user_id AND t.id=github_backups.token_id AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) RETURNING id`).bind(new Date().toISOString(),id,userId,new Date().toISOString(),b.operation_digest,b.review_digest,b.price_json,...gate.params,...dispatchGate.params).first());
  if(!claimed){await assertFeature(db,scope);await assertFeature(db,dispatchScope);return view(await owned(db,userId,id));}
  try{
   if(existing)return await completeBackup(db,userId,b,head);

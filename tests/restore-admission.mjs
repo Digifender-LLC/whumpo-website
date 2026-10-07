@@ -46,7 +46,7 @@ async function current(){const manifest=await capture();permit(manifest);return 
 const options=manifest=>({db,manifest,keyBackup,evidenceSource,expectedStreamId:streamId,objects,now:()=>now});
 let refusals=0;
 async function held(input,code){const report=await inspectIsolatedRestore(input);assert.deepEqual(report.holds,[code]);assert.equal(report.status,'held');assert.equal(report.servingAllowed,false);assert.equal(report.providerDispatchAllowed,false);assert.ok(!JSON.stringify(report).includes(canary));assert.ok(!JSON.stringify(report).includes(objectKey));refusals++;return report;}
-async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,233);return result;}
+async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,234);return result;}
 const altered=(mutate)=>({async fetch(request){const response=await evidenceSource.fetch(request);const body=await response.json();await mutate(body);return Response.json(body);}});
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>assert.fail('Restore verification cannot dispatch to any real provider');
 try{
@@ -76,6 +76,11 @@ try{
  await db.prepare("INSERT INTO identity_sessions SELECT ?,?,account_id,policy_version,auth_epoch,'android',credential_id,proof_method,proof_at,issued_at,expires_at FROM identity_sessions WHERE id=?").bind(nativeId,'3'.repeat(64),owner.authority).run();
  await held(options(await current()),'native-reauthentication-required');
  await db.prepare('DELETE FROM identity_sessions WHERE id=?').bind(nativeId).run();
+ // A restore may not roll back an active provider budget; expired content-free counters grant no authority.
+ await db.prepare("INSERT INTO connector_request_budgets VALUES(?,'github','read',?,1)").bind(owner.account,(Math.floor(now/60000)+1)*60).run();
+ await held(options(await current()),'connector-budget-window');await db.prepare('DELETE FROM connector_request_budgets WHERE user_id=?').bind(owner.account).run();
+ await db.prepare("INSERT INTO connector_request_budgets VALUES(?,'github','read',?,1)").bind(owner.account,(Math.floor(now/60000)-2)*60).run();
+ await passed(options(await current()));await db.prepare('DELETE FROM connector_request_budgets WHERE user_id=?').bind(owner.account).run();
  for(const proof of [undefined,{},JSON.stringify(keyBackup)])await held({...options(manifest),keyBackup:proof},'key-backup-binding');
  await held({...options(manifest),keyring,keyBackup:undefined},'current-input');
  await held({...options(manifest),keyBackup:{...keyBackup}},'key-backup-unavailable');

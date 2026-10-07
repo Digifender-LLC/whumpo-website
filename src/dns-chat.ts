@@ -1,3 +1,4 @@
+import {ConnectorBudgetError} from './connectors/budgets';
 import {includedConnectorPrice,ConnectorReviewError} from './connector-receipts';
 import {FeatureInclusionError} from './feature-inclusion';
 import type {CMSContent} from './cms-content';
@@ -35,6 +36,6 @@ export function dnsChatCommand(db:D1Database,user:string,turnId:string,command:s
     if(action.state==='review')return describe(action)+'\nNo DNS write was authorized by this check.';
    }
    return describe(await confirmDNS(db,user,args[0],options.config,options.transport,options.hostingReady,verb==='/confirm-dns'?{reviewDigest:args[1],acceptedPrice:{customerUnits:Number(args[2]),basis:args[3]}}:undefined));
-  }catch(cause){return cause instanceof ConnectorReviewError||cause instanceof FeatureInclusionError||cause instanceof DomainError||cause instanceof ConnectionError?cause.message+"\nNo automatic retry will be sent. Ask to inspect the saved DNS review.":"The DNS result could not be saved. Ask to inspect the saved review and check its uncertain outcome. This request will not be dispatched again.";}
+  }catch(cause){return cause instanceof ConnectorBudgetError||cause instanceof ConnectorReviewError||cause instanceof FeatureInclusionError||cause instanceof DomainError||cause instanceof ConnectionError?cause.message+"\nNo automatic retry will be sent. Ask to inspect the saved DNS review.":"The DNS result could not be saved. Ask to inspect the saved review and check its uncertain outcome. This request will not be dispatched again.";}
  };
 }

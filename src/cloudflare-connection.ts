@@ -1,3 +1,4 @@
+import {claimConnectorRead,connectorDispatchReceipt} from './connectors/budgets';
 import {connectorOperationUse} from './connector-admission';
 import {buildConnectorRequest,type ConnectorOperationId} from './connector-catalog';
 import {prepareConnectionHandoff} from './chat-interactions/connection-handoff';
@@ -149,13 +150,17 @@ export async function cloudflareAccess(db:D1Database,userId:string,configuration
  }
 
  await assertCurrent();
+ let actionSent=false;
  return {tokenId:row.id,assertCurrent,async send(id:ConnectorOperationId<'cloudflare'>,params:Record<string,unknown>={},body?:unknown){
   const operation=connectorOperationUse('cloudflare',id,use),built=buildConnectorRequest('cloudflare',id,params,body);
   const active=await db.prepare("SELECT ciphertext FROM cloudflare_token_vault WHERE id=? AND user_id=? AND state='active' AND expires_at>?").bind(row.id,userId,now()).first<{ciphertext:string}>();
   if(!active)throw new ConnectionError(401,'Cloudflare access changed. Refresh its status.');
   const tokens=JSON.parse(await unseal(config.key,aad(userId,row.id,'token'),active.ciphertext)) as Tokens;
-  const recovery=await assertCurrent(operation);
+  const currentRecovery=await assertCurrent(operation),claim='recoveryId' in use?null:await connectorDispatchReceipt(db,userId,'cloudflare',use.dispatchId,row.id,use.projectId),recovery=currentRecovery??(built.op.kind==='read'?claim:null);
   if(recovery&&!dnsRecoveryRead(recovery,built.path.slice('/client/v4'.length),built.method,body))throw new ConnectionError(403,'DNS reconciliation can only inspect its recorded destination.');
+  if(built.op.kind==='action'){if(!claim||claim.state!=='sending'||actionSent)throw new ConnectionError(403,'A current claimed DNS review is required.');actionSent=true;}
+  else if(!recovery)await claimConnectorRead(db,userId,'cloudflare');
+  await assertCurrent(operation);
   const data=await json(await request(built.url,{method:built.method,headers:{authorization:'Bearer '+tokens.access,'content-type':'application/json'},body:built.body},transport));
   await assertCurrent(operation);return data;
  }};

@@ -19,6 +19,7 @@ export const closureMetrics:Record<string,readonly [string,string,string?]>={
  identityRecoveryReviews:['identity_recovery_reviews','account_id'],
  identityNativeHandoffs:['mobile_identity_handoffs','account_id'],
  connectorLookupConsents:['connector_lookup_consents','user_id'],
+ connectorRequestBudgets:['connector_request_budgets','user_id'],
  chatTurns:['chat_turns','user_id'],
  chatConversations:['chat_conversations','user_id'],
  chatInteractionTasks:['chat_interaction_tasks','user_id'],

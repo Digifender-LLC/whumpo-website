@@ -1,3 +1,4 @@
+import {connectorBudgetStatement} from './connectors/budgets';
 import {prepareConnectorContract,assertConnectorConfirmation,connectorReceipt,type ConnectorSavedContract} from './connector-receipts';
 import {cloudflareAccess,type CloudflareConfig} from './cloudflare-connection';
 import {DomainError,hostname} from './domains';
@@ -66,7 +67,7 @@ export async function confirmDNS(db:D1Database,user:string,id:string,config:Clou
  // Configuration gates new writes; observation of a prior uncertain dispatch stays read-only.
  if(routing&&a.state==='review')await routingConnection(db,user,a.connection_id!,hostingReady);
  const scope=connectionFeature(user,'cloudflare',a.project_id,'confirm'),gate=featurePredicate(db,scope),dispatchScope=connectionFeature(user,'cloudflare',a.project_id,'dispatch'),dispatchGate=featurePredicate(db,dispatchScope);
- const access=await cloudflareAccess(db,user,config,transport,a.state==='review'?{projectId:a.project_id,operation:'confirm'}:{recoveryId:a.id},a.state==='review'?a.token_id:undefined);
+ const access=await cloudflareAccess(db,user,config,transport,a.state==='review'?{projectId:a.project_id,operation:'confirm',dispatchId:a.id}:{recoveryId:a.id},a.state==='review'?a.token_id:undefined);
  const name=await zone(access,a.zone_id,a.record_name);if(name!==a.zone_name)throw new DomainError(409,'Cloudflare zone identity changed.');
  const found=await inventory(access,a.zone_id,a.record_name,routing);
  const matches=(r:RecordInfo)=>r.type===a.record_type&&(routing?r.content===a.content&&r.proxied===false:proofMatches(r.content,a.content));
@@ -81,7 +82,7 @@ export async function confirmDNS(db:D1Database,user:string,id:string,config:Clou
  if(routing)routingConflicts(found.records);
  const existing=found.records.find(matches);
  await requireFeature(db,dispatchScope);await access.assertCurrent();
- try{const claimed=await db.prepare(`UPDATE cloudflare_dns_actions SET state=?,provider_id=?,detail=? WHERE id=? AND user_id=? AND state='review' AND operation_digest=? AND review_digest=? AND price_json=? AND ${gate.sql} AND ${dispatchGate.sql} RETURNING id`).bind(existing?'unchanged':'sending',existing?.id??null,existing?'The exact '+a.record_type+' record already exists. No DNS write was needed. Verify public DNS and hosting separately.':a.record_type+' create dispatched; its outcome is not confirmed.',id,user,a.operation_digest,a.review_digest,a.price_json,...gate.params,...dispatchGate.params).first();if(!claimed){await assertFeature(db,scope);await assertFeature(db,dispatchScope);}if(!claimed||existing)return view(await owned(db,user,id));}
+ try{const claimed=await connectorBudgetStatement(db,user,'cloudflare','action',()=>db.prepare(`UPDATE cloudflare_dns_actions SET state=?,provider_id=?,detail=? WHERE id=? AND user_id=? AND state='review' AND operation_digest=? AND review_digest=? AND price_json=? AND ${gate.sql} AND ${dispatchGate.sql} RETURNING id`).bind(existing?'unchanged':'sending',existing?.id??null,existing?'The exact '+a.record_type+' record already exists. No DNS write was needed. Verify public DNS and hosting separately.':a.record_type+' create dispatched; its outcome is not confirmed.',id,user,a.operation_digest,a.review_digest,a.price_json,...gate.params,...dispatchGate.params).first());if(!claimed){await assertFeature(db,scope);await assertFeature(db,dispatchScope);}if(!claimed||existing)return view(await owned(db,user,id));}
  catch(cause){if(/cloudflare_dns_stale|UNIQUE constraint/.test(String(cause)))throw new DomainError(409,'DNS review changed, access expired, or another write is unresolved. Refresh before proceeding.');throw cause;}
  // Once sending is persisted, retries can only observe; they never POST again.
  try{

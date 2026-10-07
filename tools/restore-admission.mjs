@@ -238,7 +238,7 @@ function applyEvidence(evidence,state,contract){
  }
 }
 
-function checkUnsettled(state){
+function checkUnsettled(state,observedAt=Date.now()){
  // Native authority is never rehydrated from an archive, even with a current epoch.
  // A reviewed scrub must discard these rows and a current passkey starts new access.
  requireCheck(state.rows.get('mobile_identity_handoffs').length===0
@@ -260,6 +260,7 @@ function checkUnsettled(state){
   &&!state.rows.get('safety_evidence_objects').some(row=>row.stored_at===null),'preservation-hold');
  // One-use lookup permissions are transient authority; a restore cannot re-create consent.
  requireCheck(state.rows.get('connector_lookup_consents').length===0,'connector-consent-authority');
+ requireCheck(!state.rows.get('connector_request_budgets').some(r=>r.window_start+60>observedAt/1000),'connector-budget-window');
  // Native CMS storage/derived keys have their own deferred recovery adapters.
  for(const table of ['cms_instances','cms_media_uploads','cms_wordpress_sources'])requireCheck(state.rows.get(table).length===0,'cms-recovery-unavailable');
  for(const table of ['identity_sessions','identity_grants'])for(const session of state.rows.get(table)){
@@ -317,7 +318,7 @@ export async function inspectIsolatedRestore({db,manifest,keyBackup,evidenceSour
   requireCheck(Object.keys(unknown).length===0,'current-input');
   const contract=await currentContract(),before=await snapshot(db,contract);validateManifest(manifest,contract,before);
   const evidence=await readEvidence(evidenceSource,expectedStreamId,manifest,now);applyEvidence(evidence,before,contract);
-  checkUnsettled(before);
+  checkUnsettled(before,now());
   requireCheck(keyBackup&&same({backupId:keyBackup.backupId,sha256:keyBackup.sha256,keyIds:keyBackup.keyIds},evidence.keyBackup),'key-backup-binding');
   let recovered;
   try{recovered=await withRecoveredConnectionKeys(keyBackup,async keyring=>{
