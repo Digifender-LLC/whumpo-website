@@ -1,3 +1,4 @@
+import {validatePresentation} from '../../visitor-presentation/contract';
 import {photoConfig} from '../../components';
 import {SpecificationError,canonicalJSON,copyJSON,plain,requireSpec as check,shape as exactShape} from '../v2/json';
 import {classifyModuleChange,staffRole,validateInstances,type ModuleInstance} from './modules';
@@ -16,7 +17,7 @@ export function validateSpecification(input:unknown):ProjectSpecification {
   // Public JSON transport must enforce a streaming byte bound before parsing too.
   const spec=copyJSON(input) as ProjectSpecification;
   check(plain(spec),'INVALID_SHAPE','request');check(spec.schemaVersion===3,'UNSUPPORTED_VERSION','schemaVersion');
-  shape(spec,['schemaVersion','name','design','modules','content','pages','instances','integrations','rules']);
+  shape(spec,['schemaVersion','name','design','modules','content','pages','instances','integrations','rules',...(Object.hasOwn(spec,'presentation')?['presentation']:[])]);
   text(spec.name,100,'name');
   shape(spec.design,['theme'],[],'design');check(['ocean','clay','forest'].includes(spec.design.theme),'INCOMPATIBLE','design.theme');
   list(spec.modules,3,'modules');unique(spec.modules,'id','modules');
@@ -53,6 +54,7 @@ export function validateSpecification(input:unknown):ProjectSpecification {
    check(schema.fields.some(f=>f.read!=='owner'),'INCOMPATIBLE','rules.recipientAccess');
    check(spec.integrations.some(i=>i.id===r.effect.integrationId),'MISSING_REFERENCE','rules.integrationId');
   }
+  if(spec.presentation!==undefined)validatePresentation(spec.presentation,instances);
   return spec;
  }
 /** Applies operations to a detached candidate and classifies the net instance change against the saved base.
@@ -96,6 +98,17 @@ export function changeSpecification(before:unknown,input:unknown,removable:reado
     case 'pages.setAudience':shape(op,['type','pageId','audience']);found(next.pages,op.pageId,'pageId').audience=op.audience;reviews.add('permissions');break;
     case 'rules.put':{
      shape(op,['type','rule']);check(plain(op.rule),'INVALID_SHAPE','rule');identity(op.rule.id,'rule.id');const at=next.rules.findIndex(r=>r.id===op.rule.id);if(at<0)next.rules.push(copy(op.rule));else next.rules[at]=copy(op.rule);reviews.add('integration');reviews.add('spending');break;
+    }
+    case 'presentation.set':shape(op,['type','presentation']);next.presentation=copy(op.presentation);break;
+    case 'presentation.setLayout':shape(op,['type','layout']);check(next.presentation,'MISSING_REFERENCE','presentation');next.presentation.layout=op.layout;break;
+    case 'presentation.putBlock':{
+     shape(op,['type','block']);check(next.presentation,'MISSING_REFERENCE','presentation');check(plain(op.block),'INVALID_SHAPE','block');identity(op.block.id,'block.id');
+     const at=next.presentation.blocks.findIndex(b=>b.id===op.block.id);if(at<0)next.presentation.blocks.push(copy(op.block));else next.presentation.blocks[at]=copy(op.block);break;
+    }
+    case 'presentation.setOrder':{
+     shape(op,['type','blockIds']);check(next.presentation,'MISSING_REFERENCE','presentation');list(op.blockIds,8,'blockIds');
+     const blocks=next.presentation.blocks;check(op.blockIds.length===blocks.length&&new Set(op.blockIds).size===blocks.length,'INCOMPATIBLE','blockIds');
+     next.presentation.blocks=op.blockIds.map(id=>found(blocks,id,'blockIds'));break;
     }
     default:fail('UNSUPPORTED_OPERATION','operations.type');
    }

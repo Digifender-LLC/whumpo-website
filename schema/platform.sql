@@ -2117,10 +2117,10 @@ CREATE VIEW blocked_cms_publications AS
  JOIN cms_media_safety s ON s.upload_id=u.id WHERE s.state='blocked';
 
 -- Every saved website version (generated, restored or any future writer) is held by its exact rendered HTML digest, and a
--- specification version also by its specification and manifest digests. Preview, export, diff, publication, serving,
+-- specification version also by its specification, manifest and portal HTML/private-preview digests. Preview, export, diff, publication, serving,
 -- guest previews and module activation all consume this one view through requireSpecificationAvailable or triggers.
 CREATE VIEW project_spec_held AS SELECT s.id version_id FROM site_versions s JOIN projects p ON p.id=s.project_id LEFT JOIN project_spec_versions v ON v.version_id=s.id AND v.project_id=s.project_id
- WHERE EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=p.owner_user_id AND d.digest IN(v.spec_digest,v.manifest_digest,s.digest));
+ WHERE EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=p.owner_user_id AND d.digest IN(v.spec_digest,v.manifest_digest,s.digest,json_extract(v.manifest_json,'$.presentation.digest'),json_extract(v.manifest_json,'$.presentation.previewDigest')));
 
 CREATE VIEW service_client_current AS SELECT p.id project_id,p.owner_user_id,
  coalesce(s.revision,0) site_revision,s.version_id live_version_id,
@@ -3980,7 +3980,7 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
    -- WH-127 owner enquiry setup only appends the bounded server-selected records configuration.
    OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='recordsModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
    -- WH-128 owner photo collection setup: the typed filesModuleReview control of this project prepares a change.
-   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type') IN ('filesModuleReview','filesCollectionReview') AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type') IN ('filesModuleReview','filesCollectionReview','presentationReview') AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
    -- WH-128 published gallery: the typed galleryPageReview control of this project prepares a change.
    OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='galleryPageReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id))
   LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id
@@ -3990,7 +3990,7 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
  );
  SELECT RAISE(ABORT,'specification_changed') WHERE NEW.target_version_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM site_versions WHERE id=NEW.target_version_id AND project_id=NEW.project_id);
  SELECT RAISE(ABORT,'specification_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds WHERE user_id=NEW.user_id AND digest IN (NEW.spec_digest,NEW.manifest_digest,NEW.html_digest));
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds WHERE user_id=NEW.user_id AND digest IN (NEW.spec_digest,NEW.manifest_digest,NEW.html_digest,json_extract(NEW.manifest_json,'$.presentation.digest'),json_extract(NEW.manifest_json,'$.presentation.previewDigest')));
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id IN(NEW.base_version_id,NEW.target_version_id));
  SELECT RAISE(ABORT,'specification_quota') WHERE (SELECT count(*) FROM project_spec_proposals WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM project_spec_proposals)>=4000;
 END;
@@ -4261,7 +4261,7 @@ CREATE TRIGGER project_spec_apply_admit BEFORE INSERT ON project_spec_applies BE
   AND (q.target_version_id IS NULL OR EXISTS(SELECT 1 FROM site_versions WHERE id=q.target_version_id AND project_id=q.project_id))
  );
  SELECT RAISE(ABORT,'specification_expired') WHERE (SELECT expires_at FROM project_spec_proposals WHERE id=NEW.proposal_id)<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds s JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND s.user_id=q.user_id AND s.digest IN(q.spec_digest,q.manifest_digest,q.html_digest));
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds s JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND s.user_id=q.user_id AND s.digest IN(q.spec_digest,q.manifest_digest,q.html_digest,json_extract(q.manifest_json,'$.presentation.digest'),json_extract(q.manifest_json,'$.presentation.previewDigest')));
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held h JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND h.version_id IN(q.base_version_id,q.target_version_id));
  SELECT RAISE(ABORT,'specification_quota') WHERE (SELECT count(*) FROM project_spec_applies WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM project_spec_applies)>=20000;
 END;
@@ -4288,12 +4288,12 @@ WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 
 BEGIN SELECT RAISE(ABORT,'specification_receipt_retained'); END;
 
 CREATE TRIGGER project_spec_current_proposal BEFORE INSERT ON project_spec_proposals BEGIN
- SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 5;
+ SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 6;
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=NEW.project_id AND json_extract(v.spec_json,'$.schemaVersion')=3 AND h.draft_revision=NEW.draft_revision);
 END;
 
 CREATE TRIGGER project_spec_version_admit BEFORE INSERT ON project_spec_versions BEGIN
- SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 5;
+ SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 6;
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
   SELECT 1 FROM project_spec_proposals q JOIN site_versions v ON v.id=NEW.version_id AND v.project_id=q.project_id
   JOIN projects p ON p.id=q.project_id AND p.owner_user_id=q.user_id
@@ -4321,7 +4321,7 @@ CREATE TRIGGER project_spec_creation_admit BEFORE INSERT ON project_spec_creatio
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=1
   AND NEW.id=NEW.version_id AND v.version_id=NEW.version_id AND s.source='ai'
   AND NOT EXISTS(SELECT 1 FROM project_spec_heads WHERE project_id=p.id)
-  AND json_extract(v.spec_json,'$.schemaVersion')=3 AND json_extract(v.lock_json,'$.compiler.version')=5
+  AND json_extract(v.spec_json,'$.schemaVersion')=3 AND json_extract(v.lock_json,'$.compiler.version')=6
  );
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=NEW.version_id);
 END;
@@ -5619,3 +5619,16 @@ BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
 CREATE TRIGGER policy_cms_publication BEFORE UPDATE OF status ON cms_publication_reviews
 WHEN NEW.status IN ('approved','published') AND NEW.status<>OLD.status AND EXISTS(SELECT 1 FROM policy_consent_missing WHERE user_id=NEW.user_id)
 BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+
+-- WH-070 typed presentation review: exact data-only payload, no instance/website mutation through this control.
+CREATE TRIGGER project_spec_presentation_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.id AND json_extract(action_json,'$.type')='presentationReview') BEGIN
+ SELECT RAISE(ABORT,'presentation_review_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_turns t JOIN project_spec_heads h ON h.project_id=NEW.project_id
+  JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+  WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND h.version_id=NEW.base_version_id
+  AND json_remove(NEW.spec_json,'$.presentation')=json_remove(v.spec_json,'$.presentation')
+  AND json_extract(NEW.spec_json,'$.presentation')=json_extract(t.action_json,'$.presentation')
+  AND json_extract(NEW.spec_json,'$.presentation.version')=1
+  AND json_extract(NEW.spec_json,'$.presentation.template')='module-portal@1');
+END;

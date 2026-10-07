@@ -1,3 +1,4 @@
+import {preparePortalReview} from './visitor-presentation/setup';
 import {interactionChatLinks} from './chat-interactions/links';
 import {assertWorkspace,workspaceTransport,requireFreshWorkspace} from './workspace-identity/admission';
 import {serviceClientActivationChatLinks} from './project-specification/service-clients/activation';
@@ -232,6 +233,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(control?.action.type==='collectionRestoreReview')directory=await prepareCollectionRestoreCommand(db,userId,input.id,command);
     // WH-128 owner photo collection setup: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='filesModuleReview')accessSetup=await prepareFilesModuleCommand(db,userId,input.id,command);
+    if(control?.action.type==='presentationReview')accessSetup=await preparePortalReview(db,userId,input.id,control.action.projectId,control.action.presentation);
     if(control?.action.type==='filesCollectionReview')accessSetup=await prepareFilesCollectionCommand(db,userId,input.id,command);
     // WH-128 published gallery: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='galleryPageReview')accessSetup=await prepareGalleryPageCommand(db,userId,input.id,command);

@@ -1,3 +1,4 @@
+import type {PortalPresentation,PortalBlock} from '../../visitor-presentation/contract';
 import type {SiteConfig} from '../../components';
 import type {ModuleInstance} from './modules';
 export type {ModuleInstance,ModuleKind,ModulePin,RecordsConfig,FilesConfig,AccessConfig,CollectionsConfig,RecordField} from './modules';
@@ -8,7 +9,7 @@ export type SpecificationRule={id:string;trigger:{type:'form.accepted';formId:st
 export type ProjectSpecification={
  schemaVersion:3;name:string;design:{theme:SiteConfig['theme']};modules:{id:ModuleId;version:1|2}[];
  content:{id:string;text:string}[];pages:SpecificationPage[];
- instances:ModuleInstance[];
+ instances:ModuleInstance[];presentation?:PortalPresentation;
  integrations:{id:string;capability:'email.staff'}[];rules:SpecificationRule[];
 };
 export type SpecificationReview='schema'|'permissions'|'integration'|'spending';
@@ -24,4 +25,8 @@ export type SpecificationOperation=
  |{type:'modules.remove';instanceId:string}
  |{type:'records.addField';instanceId:string;schemaId:string;field:Record<string,unknown>}
  |{type:'pages.setAudience';pageId:string;audience:'public'|'staff'}
- |{type:'rules.put';rule:SpecificationRule};
+ |{type:'rules.put';rule:SpecificationRule}
+ |{type:'presentation.set';presentation:PortalPresentation}
+ |{type:'presentation.setLayout';layout:PortalPresentation['layout']}
+ |{type:'presentation.putBlock';block:PortalBlock}
+ |{type:'presentation.setOrder';blockIds:string[]};

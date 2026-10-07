@@ -10,6 +10,7 @@ export function inspectionRequest(raw:string){
  const a=data.action;
  if(a&&typeof a==='object'&&!Array.isArray(a)&&a.kind==='workspace')return a.operation==='read'&&Object.keys(a).sort().join(',')==='kind,operation';
  if(interactionActionRequest(a))return a.operation==='read'||a.operation==='readSubmittedAnswers'||a.operation==='readSupport';
+ if(a&&typeof a==='object'&&!Array.isArray(a)&&a.kind==='specification'&&a.operation==='readPresentation')return Object.keys(a).sort().join(',')==='blockId,kind,operation,projectId'&&typeof a.projectId==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(a.projectId)&&(a.blockId===null||typeof a.blockId==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(a.blockId));
  if(a&&typeof a==='object'&&!Array.isArray(a)&&(a.kind==='specification'&&a.operation==='read'||a.kind==='serviceClients'&&['read','history','activations'].includes(a.operation)))return Object.keys(a).every(k=>['kind','operation','projectId'].includes(k))&&typeof a.projectId==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(a.projectId);
  if(capabilityRequest(a))return true;
  if(a&&typeof a==='object'&&!Array.isArray(a)&&knowledgeRequest(a))return true;

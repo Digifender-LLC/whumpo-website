@@ -12,7 +12,7 @@ export async function currentSiteFixtureHandlers(){
   export {hashToken,newSessionToken} from './src/security';
   export {admitWorkspace,assertWorkspace,requireFreshWorkspace,workspaceTransport,workspaceBindings} from './src/workspace-identity/admission';
   export {resolveIdentity} from './src/workspace-identity/authority';
-  export {createWebsite,prepareSpecification,readSpecificationProposal,readSpecification,specificationPreview,applySpecificationCommand} from './src/project-specification/store';
+  export {createWebsite,prepareSpecification,readSpecificationProposal,readSpecification,specificationPreview,specificationAction,applySpecificationCommand} from './src/project-specification/store';
   export {readChat,sendChat,sendChatControl,sendConversation,chatState} from './src/chat';
   export {chatControl,confirmationControls} from './src/chat-controls';
   export {agentPrompt} from './src/site-agent';

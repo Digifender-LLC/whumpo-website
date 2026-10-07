@@ -1,9 +1,11 @@
+import {compileProjectSpecification} from './project-specification/compiler';
+import {canonicalJSON} from './project-specification/v2/json';
 import {requireSpecificationAvailable} from './specification-safety';
 import {siteConfig,photoConfig,componentCatalog} from './components';
 import {hashToken} from './security';
 export class DiffError extends Error {constructor(public status:number,message:string){super(message);}}
-type Version={id:string;component_id:string;config_json:string;html:string;digest:string;created_at:string};
-type Metadata=Omit<Version,'config_json'|'html'>;
+type Version={id:string;component_id:string;config_json:string;html:string;digest:string;created_at:string;presentation?:string|null};
+type Metadata=Omit<Version,'config_json'|'html'|'presentation'>;
 type Change={label:string;before:string|null;after:string|null};
 export type VersionDiff={project:{id:string;name:string};kind:'comparison'|'publish'|'restore'|'unpublish';baseline:'live'|'selected'|'empty';before:Metadata|null;after:Metadata|null;changes:Change[];htmlChanged:boolean;reviewId?:string;expiresAt?:string;publicationRevision:number|null};
 type Snapshot={project_id:string;name:string;kind:VersionDiff['kind'];baseline:VersionDiff['baseline'];before_json:string;after_json:string;current_revision:number|null;review_id?:string;status?:string;expires_at?:string;expected_revision?:number};
@@ -11,7 +13,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Two artifacts and the publication/review identity are read in one database snapshot.
 const artifacts=`SELECT c.*,json_object('id',b.id,'component_id',b.component_id,'config_json',b.config_json,'html',b.html,'digest',b.digest,'created_at',b.created_at) AS before_json,json_object('id',t.id,'component_id',t.component_id,'config_json',t.config_json,'html',t.html,'digest',t.digest,'created_at',t.created_at) AS after_json FROM chosen c LEFT JOIN site_versions b ON b.id=c.baseline_id AND b.project_id=c.project_id LEFT JOIN site_versions t ON t.id=c.target_id AND t.project_id=c.project_id`;
 function fields(v:Version|null){
- const result=new Map<string,string>();if(!v)return result;
+ const result=new Map<string,string>();if(!v)return result;if(v.presentation)result.set('Visitor portal',v.presentation);
  let value:unknown;try{value=JSON.parse(v.config_json);}catch{throw new DiffError(503,'This saved configuration cannot be compared.');}
  try{
   const c=v.component_id==='site-page@1'?siteConfig(value):v.component_id==='photo-page@1'?photoConfig(value):null;
@@ -22,7 +24,9 @@ function fields(v:Version|null){
  }catch{throw new DiffError(503,'This saved component cannot be compared.');}
  return result;
 }
-async function version(db:D1Database,raw:string):Promise<Version|null>{const parsed=JSON.parse(raw) as Version;if(parsed.id===null)return null;await requireSpecificationAvailable(db,parsed.id);if(await hashToken(parsed.html)!==parsed.digest)throw new DiffError(503,'Saved content failed its integrity check.');return parsed;}
+async function version(db:D1Database,raw:string):Promise<Version|null>{const parsed=JSON.parse(raw) as Version;if(parsed.id===null)return null;await requireSpecificationAvailable(db,parsed.id);if(await hashToken(parsed.html)!==parsed.digest)throw new DiffError(503,'Saved content failed its integrity check.');const spec=await db.prepare('SELECT spec_json,lock_json,spec_digest,manifest_digest FROM project_spec_versions WHERE version_id=?').bind(parsed.id).first<{spec_json:string;lock_json:string;spec_digest:string;manifest_digest:string}>();
+ if(spec){try{const compiled=await compileProjectSpecification(JSON.parse(spec.spec_json),JSON.parse(spec.lock_json));if(compiled.specificationDigest!==spec.spec_digest||compiled.manifestDigest!==spec.manifest_digest)throw Error('Integrity');parsed.presentation=compiled.specification.presentation?canonicalJSON(compiled.specification.presentation,12000):null;}catch{throw new DiffError(503,'This saved specification cannot be compared.');}}
+ return parsed;}
 const metadata=(v:Version|null):Metadata|null=>v?{id:v.id,component_id:v.component_id,digest:v.digest,created_at:v.created_at}:null;
 async function compare(db:D1Database,row:Snapshot):Promise<VersionDiff>{
  const [before,after]=await Promise.all([version(db,row.before_json),version(db,row.after_json)]);

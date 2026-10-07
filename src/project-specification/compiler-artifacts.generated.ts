@@ -1,7 +1,11 @@
-// Generated from compiler-locks/project-content-v5.json. Do not repin an existing compiler ID.
+// Generated from compiler-locks/project-content-v6.json. Do not repin an existing compiler ID.
 export const compilerArtifacts = {
-  "compiler": "a00fe52f67453a586463fa7107ed9788f691bedc75032fa6d211759ed3af627f",
-  "content": "da02913c438da11aa463547694cf487e948bf8dc1ee9947ffc04773d098f7d53",
+  "compiler": "526a440de7b713990587f49364e08cde0257f993613b0e44fcd9250146753ddb",
+  "portalClient": {
+    "digest": "6ffe4b5551b7db9357882dd346d36ded62228439a07cce7b87299b94dddcfab6",
+    "bytes": 19953
+  },
+  "content": "88b59ff5e7a6f3e60ed22f7a1c8e274aa6f4dea08ed9cddad964a669817bbbe9",
   "component": "c0dd3e64533cea88b7486a08dac8fd93ba0bceb3d932eb9d41fee74487fe8318",
   "modules": {
     "content": {

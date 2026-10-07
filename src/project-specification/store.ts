@@ -1,4 +1,5 @@
 import {requireArtifactsAvailable} from '../artifact-admission';
+import {renderPortal} from '../visitor-presentation/render';
 import {BackendError} from '../backend-error';
 import {previewHeaders,type SiteConfig,type PhotoConfig} from '../components';
 import {contentPolicyVersion} from '../content-policy';
@@ -59,7 +60,8 @@ function home(compiled:Awaited<ReturnType<typeof compileProjectSpecification>>){
 const moduleText=(i:ProjectSpecification['instances'][number]|undefined)=>i?canonicalJSON({kind:i.kind,module:`${i.module.name}@${i.module.version}`,dependencies:i.dependencies,config:i.config},16384):null;
 function fieldDiff(before:SiteConfig|PhotoConfig|null,after:SiteConfig|PhotoConfig,beforeSpec:ProjectSpecification|null,afterSpec:ProjectSpecification){
  const fields=(c:SiteConfig|PhotoConfig|null,spec:ProjectSpecification|null)=>({...(c?Object.fromEntries([['Site name',c.name],['Headline',c.headline],['Introduction',c.description],['Theme',c.theme],['About heading',c.aboutTitle],['About text',c.aboutText],['Photos','photos' in c?JSON.stringify(c.photos):'[]'],...c.sections.flatMap((s,i)=>[[`Section ${i+1} heading`,s.heading],[`Section ${i+1} text`,s.text]])]):{}),
-  ...Object.fromEntries((spec?.instances??[]).map(i=>[`Module ${i.id}`,moduleText(i)]))}) as Record<string,string|null>;
+  ...Object.fromEntries((spec?.instances??[]).map(i=>[`Module ${i.id}`,moduleText(i)])),
+  ...(spec?.presentation?{'Visitor portal':canonicalJSON(spec.presentation,12000)}:{})}) as Record<string,string|null>;
  const a=fields(before,beforeSpec),b=fields(after,afterSpec),rows=[...new Set([...Object.keys(a),...Object.keys(b)])].filter(key=>a[key]!==b[key]).map(label=>({label,before:a[label]??null,after:b[label]??null}));
  // The saved comparison must stay within the review display bounds; a larger change is split, never truncated.
  if(rows.length>20||rows.some(row=>[row.before,row.after].some(v=>v!==null&&v.length>16384)))throw new BackendError(422,'This website change is too large to review at once. Ask for a smaller change.');
@@ -87,7 +89,7 @@ export async function createWebsite(db:D1Database,user:string,turn:string,projec
   if(await db.prepare('SELECT id FROM site_versions WHERE project_id=? LIMIT 1').bind(project).first())throw new BackendError(409,'This project already has a website. Read its specification and prepare a change review.');
   const compiled=await compileNewWebsite(input),{artifact,config,photos}=home(compiled),now=new Date().toISOString();
   await requireSpecificationPhotos(db,user,project,photos);
-  await held(db,user,[compiled.specificationDigest,compiled.manifestDigest,artifact.digest]);
+  await held(db,user,[compiled.specificationDigest,compiled.manifestDigest,artifact.digest,...(compiled.presentation?[compiled.presentation.digest,compiled.presentation.previewDigest]:[])]);
   const requestHash=await jsonDigest({kind:'website.create',projectId:project,config:input});
   return {reply:`Saved the first private website for “${config.name}”. Open the preview below, then tell me what to change. Publishing requires a separate review.`,statements:[
    db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source) SELECT ?,?,?,?,?,?,?,'ai' FROM chat_turns t JOIN projects p ON p.id=? AND p.owner_user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.mode='ai' AND t.status='pending' AND t.action_json IS NULL").bind(turn,project,artifact.component,canonicalJSON(config),artifact.html,artifact.digest,now,project,turn,user),
@@ -129,7 +131,7 @@ export async function prepareSpecification(db:D1Database,user:string,turn:string
   }
   const {artifact,config,photos}=home(compiled);
   await requireSpecificationPhotos(db,user,current.project_id,photos);
-  await held(db,user,[compiled.specificationDigest,compiled.manifestDigest,artifact.digest]);
+  await held(db,user,[compiled.specificationDigest,compiled.manifestDigest,artifact.digest,...(compiled.presentation?[compiled.presentation.digest,compiled.presentation.previewDigest]:[])]);
   const priorCompiled=await compileProjectSpecification(JSON.parse(current.spec_json),JSON.parse(current.lock_json));
   const diff=fieldDiff(home(priorCompiled).config,config,priorCompiled.specification,compiled.specification),expiresAt=new Date(Date.now()+600000).toISOString();
   const envelope={id:turn,projectId:current.project_id,operation,expectedRevision:current.revision,draftRevision:current.draft_revision,baseVersionId:current.version_id,targetVersionId:target,baseDigest:current.spec_digest,nextDigest:compiled.specificationDigest,manifestDigest:compiled.manifestDigest,diffDigest:await jsonDigest(diff,65536),requiredReviews:reviews,expiresAt,policyVersion:policy};
@@ -157,7 +159,8 @@ export async function readSpecificationProposal(db:D1Database,user:string,review
   if(await jsonDigest(envelope)!==q.proposal_digest||envelope.id!==q.id||envelope.projectId!==q.project_id||envelope.operation!==q.operation||envelope.expectedRevision!==q.expected_revision||envelope.draftRevision!==q.draft_revision||envelope.baseVersionId!==q.base_version_id||envelope.targetVersionId!==q.target_version_id||envelope.baseDigest!==q.base_digest||envelope.nextDigest!==q.spec_digest||envelope.manifestDigest!==q.manifest_digest||envelope.policyVersion!==q.policy_version||envelope.expiresAt!==q.expires_at||canonicalJSON(requiredReviews(envelope.requiredReviews))!==canonicalJSON(envelope.requiredReviews)||envelope.diffDigest!==await jsonDigest(JSON.parse(q.diff_json),65536)||compiled.specificationDigest!==q.spec_digest||compiled.manifestDigest!==q.manifest_digest||canonicalJSON(compiled.manifest)!==q.manifest_json||canonicalJSON(config)!==q.config_json||artifact.html!==q.html||artifact.digest!==q.html_digest)throw changed();
  }catch(error){return safe(error);}
  await requireSpecificationPhotos(db,user,q.project_id,projectPage(JSON.parse(q.spec_json),'home').photos);
- await held(db,user,[q.spec_digest,q.manifest_digest,q.html_digest]);return q;
+ const presentation=JSON.parse(q.manifest_json).presentation;
+ await held(db,user,[q.spec_digest,q.manifest_digest,q.html_digest,...(presentation?[presentation.digest,presentation.previewDigest]:[])]);return q;
 }
 
 export async function applySpecificationCommand(db:D1Database,user:string,turn:string,command:string){
@@ -182,6 +185,20 @@ export async function applySpecificationCommand(db:D1Database,user:string,turn:s
 export async function specificationAction(db:D1Database,user:string,turn:string,request:Record<string,unknown>){
  try{
   if(request.operation==='create'){shape(request,['kind','operation','projectId','config']);id(request.projectId);if(!await db.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(request.projectId,user).first())throw new BackendError(404,'Project not found.');return createWebsite(db,user,turn,request.projectId,request.config);}
+  if(request.operation==='readPresentation'){
+   shape(request,['kind','operation','projectId','blockId']);id(request.projectId);
+   if(request.blockId!==null&&(typeof request.blockId!=='string'||!/^[a-z][a-z0-9-]{0,39}$/.test(request.blockId)))throw new BackendError(400,'Choose one portal component or its summary.');
+   const current=await head(db,user,request.projectId);if(!current.version_id||!current.spec_json||!current.lock_json)throw new BackendError(404,'Saved visitor portal not found.');
+   await requireSpecificationAvailable(db,current.version_id);
+   const compiled=await compileProjectSpecification(JSON.parse(current.spec_json),JSON.parse(current.lock_json)),p=compiled.specification.presentation;
+   if(compiled.specificationDigest!==current.spec_digest)throw changed();if(!p)throw new BackendError(404,'Set up this project’s visitor portal in Records first.');
+   const block=request.blockId===null?null:p.blocks.find(b=>b.id===request.blockId);if(request.blockId!==null&&!block)throw new BackendError(404,'Portal component not found.');
+   const instance=block&&block.kind!=='custom-card'?compiled.specification.instances.find(i=>i.id===block.instanceId):null;
+   const facts={type:'visitor_presentation_component',projectId:request.projectId,revision:current.revision,template:p.template,presentationVersion:p.version,layout:p.layout,
+    ...(block?{component:block,backend:instance?{id:instance.id,kind:instance.kind,module:instance.module,schema:instance.schema}:null}:{title:p.title,components:p.blocks.map(b=>({id:b.id,kind:b.kind,title:b.title}))}),
+    contract:{customCard:'Plain title <=80 characters, 1–4 paragraphs <=400 characters each, emphasis quiet|strong. No markup, URLs, styling, script or authority.',edits:['presentation.putBlock','presentation.setLayout','presentation.setOrder'],publication:'Exact private save, then separate website publication review; module permissions never change.'}};
+   return {reply:'Read the selected visitor presentation configuration. No visitor data was read.',inspection:JSON.stringify(facts),statements:[] as D1PreparedStatement[]};
+  }
   if(request.operation==='read'){
    shape(request,['kind','operation','projectId']);id(request.projectId);const data=await readSpecification(db,user,request.projectId);
    // Inspection continuations accept a bounded string. Include editable references
@@ -229,4 +246,22 @@ export async function specificationPreview(db:D1Database,user:string,review:stri
  const rows=JSON.parse(q.diff_json) as {label:string;before:string|null;after:string|null}[];
  const html=`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review website changes · Whumpo</title><style>body{font:16px/1.6 system-ui;background:#f8fafc;color:#0f2d5b;margin:0}main{max-width:850px;margin:auto;padding:24px}section{background:white;border:1px solid #dae5f0;border-radius:16px;padding:20px;margin:16px 0}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}h1{font-size:30px}h2{font-size:20px}h3{font-size:14px}</style><main><h1>Review website changes</h1><p>Approval saves a private version. Publishing remains a separate review. Return to Chat to approve this exact change.</p>${rows.length?rows.map(row=>`<section><h2>${escape(row.label)}</h2><h3>Before</h3><pre>${escape(row.before??'Not included')}</pre><h3>After</h3><pre>${escape(row.after??'Not included')}</pre></section>`).join(''):'<p>The website text and theme are unchanged. This records a new configuration version.</p>'}</main></html>`;
  return new Response(html,{headers:previewHeaders});
+}
+
+/** Inert owned proposal preview: validates the exact proposal, current head, compiler and safety before rendering. */
+export async function presentationPreview(db:D1Database,user:string,review:string){
+ const q=await readSpecificationProposal(db,user,review),spec=JSON.parse(q.spec_json) as ProjectSpecification;
+ if(!spec.presentation)throw new BackendError(404,'This review has no visitor portal.');
+ return new Response(renderPortal(spec.presentation,true),{headers:previewHeaders});
+}
+
+export async function savedPresentationPreview(db:D1Database,user:string,version:string){
+ id(version);
+ const q=await db.prepare('SELECT v.spec_json,v.lock_json,v.spec_digest,v.manifest_digest FROM project_spec_versions v JOIN projects p ON p.id=v.project_id WHERE v.version_id=? AND p.owner_user_id=?').bind(version,user).first<{spec_json:string;lock_json:string;spec_digest:string;manifest_digest:string}>();
+ if(!q)throw new BackendError(404,'Saved visitor portal not found.');
+ await requireSpecificationAvailable(db,version);
+ const c=await compileProjectSpecification(JSON.parse(q.spec_json),JSON.parse(q.lock_json));
+ if(c.specificationDigest!==q.spec_digest||c.manifestDigest!==q.manifest_digest)throw new BackendError(409,'The saved portal failed its integrity check.');
+ if(!c.presentation)throw new BackendError(404,'This version has no visitor portal.');
+ return new Response(c.presentation.preview,{headers:previewHeaders});
 }

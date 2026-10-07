@@ -1,3 +1,4 @@
+import {compilePortal} from '../../visitor-presentation/render';
 import {renderSite,renderPhotoPage,previewHeaders,photoConfig} from '../../components';
 import {copyJSON,jsonDigest,requireSpec,sha256} from '../v2/json';
 import {changeSpecification,projectPage,specificationDifference,transitionReviews,validateSpecification} from './schema';
@@ -17,7 +18,9 @@ export async function renderContentSpecification(input:unknown){
   requireSpec(bytes<=32768,'OUTPUT_TOO_LARGE','pages');
   artifacts.push({pageId:page.id,path:page.path,component:page.component,audience:page.audience,mediaType:'text/html; charset=utf-8',bytes,digest:await sha256(html),html});
  }
- return {specification:spec,specificationDigest:await jsonDigest(spec),artifacts,previewHeaders:{...previewHeaders}};
+ const presentation=spec.presentation?await compilePortal(spec.presentation):null;
+ requireSpec(!presentation||presentation.bytes<=32768,'OUTPUT_TOO_LARGE','presentation');
+ return {specification:spec,specificationDigest:await jsonDigest(spec),artifacts,presentation,previewHeaders:{...previewHeaders}};
 }
 
 /** New website input only. Existing saved artifacts are never imported or converted. */

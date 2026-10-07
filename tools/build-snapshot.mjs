@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {assertArtifactPath,assertArtifactConfiguration} from './artifact-protection.mjs';
 // No secret/configuration-value output. Only explicitly versioned build inputs.
 const trees=['src','frontend','web','public-app'];
-const files=['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v5.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v4.json'];
+const files=['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v6.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v4.json'];
 const snapshotPath='.secrets/build-snapshot.json';
 files.push('tools/artifact-protection.mjs','tools/secret-custody.mjs');
 async function walk(root,base){
@@ -37,10 +37,10 @@ async function fingerprint(root,paths){
 }
 export async function readBuildInputs(root=process.cwd()){
  const inputs=[...files];for(const tree of trees)inputs.push(...await walk(root,tree));
- return fingerprint(root,inputs.filter(path=>path!=='public-app/visitor.js'));
+ return fingerprint(root,inputs.filter(path=>!['public-app/visitor.js','public-app/module-portal.js'].includes(path)));
 }
 async function state(root){
- return {version:1,inputs:await readBuildInputs(root),assets:await fingerprint(root,[...await walk(root,'dist'),'public-app/visitor.js'])};
+ return {version:1,inputs:await readBuildInputs(root),assets:await fingerprint(root,[...await walk(root,'dist'),'public-app/visitor.js','public-app/module-portal.js'])};
 }
 export async function saveBuildSnapshot(root=process.cwd(),expectedInputs){
  const result=await state(root);

@@ -241,7 +241,7 @@ try{
  rejects(()=>m.assertCompilerAvailable(lock,[]),'COMPILER_UNAVAILABLE');
  // project-content@5: instance configuration compiles against exact trusted pins as saved, inactive configuration
  // (serving needs WH-125 activation). Notification/automation modules, integrations and rules stay unavailable.
- assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',5,3]);
+ assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',6,3]);
  await rejectsAsync(()=>m.compileProjectSpecification(detailing,lock),'UNAVAILABLE_CAPABILITY');
  const configured={...clone(content),instances:clone(detailing.instances)},configuredOutput=await m.compileProjectSpecification(configured,lock);
  assert.deepEqual(configuredOutput.artifacts.map(a=>[a.path,a.digest]),output.artifacts.map(a=>[a.path,a.digest]),'Instances add no compiled artifact');
@@ -314,18 +314,18 @@ try{
  const missing=clone(content);delete missing.pages[0].photos;rejects(()=>m.validateSpecification(missing),'MISSING_FIELD');
  const {photos:omitted,...oldInput}=page;await assert.rejects(m.compileNewWebsite(oldInput));
  assert.equal(networkCalls,0);
- console.log('Compiler fixtures passed: project-content@5 instance-bearing compile/change/restore classification, never-activated modules.remove, and @3/@4 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
+ console.log('Compiler fixtures passed: project-content@6 instance-bearing compile/change/restore classification, never-activated modules.remove, and @3/@4 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
 }finally{globalThis.fetch=fetch;}
 
 // A second checkout/process proves input-path independence and that the build gate
 // rejects source/constant drift without rewriting any working-tree file.
 const dir=await mkdtemp('/tmp/whumpo-compiler-lock-');
 try{
- const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v5.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
+ const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v6.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
  for(const path of paths){await mkdir(dirname(join(dir,path)),{recursive:true});await copyFile(path,join(dir,path));}
  await symlink(resolve('node_modules'),join(dir,'node_modules'),'dir');
  const run=args=>spawnSync(process.execPath,['tools/check-specification-compiler.mjs',...args],{cwd:dir,encoding:'utf8'});
- assert.equal(run(['--check']).status,0);
+ const isolatedCheck=run(['--check']);assert.equal(isolatedCheck.status,0,isolatedCheck.stderr);
  await writeFile(join(dir,'fixture.json'),JSON.stringify(content));
  await writeFile(join(dir,'compile-fixture.mjs'),`import {build} from 'esbuild';import {readFile} from 'node:fs/promises';
 globalThis.fetch=async()=>{throw Error('No compiler network');};

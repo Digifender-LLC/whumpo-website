@@ -1,0 +1,134 @@
+{
+  "formatVersion": 1,
+  "compiler": "project-content@6",
+  "schemaVersion": 3,
+  "esbuildVersion": "0.28.2",
+  "target": "es2022",
+  "content": "88b59ff5e7a6f3e60ed22f7a1c8e274aa6f4dea08ed9cddad964a669817bbbe9",
+  "component": "c0dd3e64533cea88b7486a08dac8fd93ba0bceb3d932eb9d41fee74487fe8318",
+  "portalClient": {
+    "digest": "6ffe4b5551b7db9357882dd346d36ded62228439a07cce7b87299b94dddcfab6",
+    "bytes": 19953
+  },
+  "modules": [
+    {
+      "kind": "content",
+      "module": {
+        "name": "module-collections",
+        "version": 1,
+        "digest": "a39345861954f5b86011432d08764d59a70da05948118e8a6cd04bef5354866e"
+      },
+      "schema": {
+        "name": "collections-data",
+        "version": 1,
+        "digest": "3895ac44d441c8ea50d738f1b0b0f50febad414b206c20fd29ae0990d6fbc7eb"
+      }
+    },
+    {
+      "kind": "records",
+      "module": {
+        "name": "module-records",
+        "version": 1,
+        "digest": "07d587dafd4fb1748d28beeacb93905d8dd9c15a1b49ecc6bbcbfd2af72be791"
+      },
+      "schema": {
+        "name": "records-data",
+        "version": 1,
+        "digest": "a4ad8fdf727ac1fb3476badabb952c0c21e4806ce6a4d203428b64c1ff5f9cb9"
+      }
+    },
+    {
+      "kind": "files",
+      "module": {
+        "name": "module-files",
+        "version": 1,
+        "digest": "fdf8c7e14ae36468e514c3b2fc07bb31dfe43e3c730cb58e611a4c0139fba117"
+      },
+      "schema": {
+        "name": "files-data",
+        "version": 1,
+        "digest": "9fb9c402dfb8319789958afc9f089e5f103b3568e78e121201ded2e65528a9ad"
+      }
+    },
+    {
+      "kind": "access",
+      "module": {
+        "name": "module-access",
+        "version": 1,
+        "digest": "aeb82b9532da01daa87c6ffe41e27f23f632df918be8288d915fa45f1e969df2"
+      },
+      "schema": {
+        "name": "access-data",
+        "version": 1,
+        "digest": "02a6604b0be2ad8414cfb3dfa3865e152f17b8829e6f41bf71ce01685eabd122"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "path": "pnpm-lock.yaml",
+      "digest": "a270731d02176ed860729b83efa934f1b38975052b6b6de14584b60c3f73d374"
+    },
+    {
+      "path": "src/backend-error.ts",
+      "digest": "808c17694679ca7756d6b3a82f602a0157e6798f74b9dad73abd97b1770ea8e4"
+    },
+    {
+      "path": "src/backend-form-config.ts",
+      "digest": "77023ba3b85ce57c89ed3dc7f3ca5345fc7a89cb3b2a240c05f97195d5498a68"
+    },
+    {
+      "path": "src/backend-form-shape.ts",
+      "digest": "52b86170fea9f2a671bfe7e92eac7322618830ee889d596d7ffd53951cbc5288"
+    },
+    {
+      "path": "src/components.ts",
+      "digest": "c0dd3e64533cea88b7486a08dac8fd93ba0bceb3d932eb9d41fee74487fe8318"
+    },
+    {
+      "path": "src/project-specification/compiler.ts",
+      "digest": "6f3d93148f0a4eaa233e3f16e93ba3bb6d34563352a984fd8ebdc7a3cd4829b4"
+    },
+    {
+      "path": "src/project-specification/v2/json.ts",
+      "digest": "0e5cbf8aba1687fbf8a921a669cb9e5e64152fc32a341277fe216467a041732a"
+    },
+    {
+      "path": "src/project-specification/v3/content.ts",
+      "digest": "f19512645ec7467e15a48b9121007e0e4e94b1787e916aaac7d96601dc30988c"
+    },
+    {
+      "path": "src/project-specification/v3/modules.ts",
+      "digest": "329b9e6f5504d5c40c04fca3c3d902523b788712bd3d4bfd9bc1d58ba8c5efd8"
+    },
+    {
+      "path": "src/project-specification/v3/schema.ts",
+      "digest": "9b6dafc1f8e2c3866583407b9307669a159d21de904caabd5fd778f114e0d66c"
+    },
+    {
+      "path": "src/project-specification/v3/types.ts",
+      "digest": "97036148cdd6cf1230d91b39812551d663e6a29bcb7e3cadf18d7f12ea3809fa"
+    },
+    {
+      "path": "src/visitor-presentation/contract.ts",
+      "digest": "99032b2347c2faa4420d6809cab15c10f60eb9dd39f26d409b01815e0456365b"
+    },
+    {
+      "path": "src/visitor-presentation/render.ts",
+      "digest": "062ecfeaeaca2895ae336dcf06b6afe443f53be2793146a6200e83dcbd49aa04"
+    },
+    {
+      "path": "web/module-client.js",
+      "digest": "eba455f51af2772a4c1a8daca8c12f91f4965407e0e2a7680645b6e99f8d98eb"
+    },
+    {
+      "path": "web/module-portal.js",
+      "digest": "cf03fb9d89ec6f6ce897c55fdcd20c128ad617d0df3d15216f6a09c482ec870c"
+    },
+    {
+      "path": "web/visitor-passkey.js",
+      "digest": "96cd0c90c52d114a049bf75b117cb63e4ade121bbda4c7ae3ad07590d21ae97e"
+    }
+  ],
+  "compilerDigest": "526a440de7b713990587f49364e08cde0257f993613b0e44fcd9250146753ddb"
+}

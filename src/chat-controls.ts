@@ -1,3 +1,4 @@
+import {validatePresentation,type PortalPresentation} from './visitor-presentation/contract';
 import {isConnectorConfirmation,type ConnectorConfirmation} from './connector-review-shape';
 /** Explicit UI intents. These are never accepted as agent proposals or parsed from chat text.
  * Command strings below are private adapters for the existing receipt handlers. */
@@ -22,6 +23,7 @@ export const confirmationControls = {
  photo:{verb:'confirm-photo-delete',label:'Delete the reviewed photo'},
 } as const;
 export type ChatControl =
+ | {type:'presentationReview';projectId:string;presentation:PortalPresentation}
  | {type:'githubGrant';operation:'confirm';reviewId:string;confirmation:'REVOKE_APP_ACCESS'}
  | {type:'githubGrant';operation:'cancel';reviewId:string}
  | ({type:'confirm';kind:'backup';reviewId:string}&ConnectorConfirmation)
@@ -97,6 +99,13 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='filesModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
   const action={type:'filesModuleReview' as const,projectId:a.projectId};
   return {action,command:`/review-photo-collection-setup ${action.projectId}`,label:'Review setting up a photo collection for this project.',recentAuth:false};
+ }
+ if(a.type==='presentationReview'&&exact(a,['type','projectId','presentation'])&&Object.keys(a).length===3&&id(a.projectId)){
+  try{
+   const action={type:'presentationReview' as const,projectId:a.projectId,presentation:validatePresentation(a.presentation,null)};
+   if(JSON.stringify(action).length>2048)return;
+   return {action,command:`/review-visitor-presentation ${action.projectId}`,label:'Review the exact visitor portal design and components. Saving stays private; publishing needs a separate review.',recentAuth:false};
+  }catch{return;}
  }
  if(a.type==='filesCollectionReview'&&exact(a,['type','projectId','audience'])&&Object.keys(a).length===3&&id(a.projectId)&&(a.audience==='staff'||a.audience==='visitor')){
   const action:Extract<ChatControl,{type:'filesCollectionReview'}>={type:'filesCollectionReview',projectId:a.projectId,audience:a.audience};

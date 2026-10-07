@@ -1,3 +1,4 @@
+import {publishedPortal} from './visitor-presentation/serve';
 import {visitorProject,visitorOrigin} from './hosts';
 import {deleteAppAccount,exportAppAccount,prepareAppDeletion,readAppDeletion} from './app-lifecycle';
 import {appPasskeyOptions,appPasskeyVerify,recoverAppVisitor} from './app-auth';
@@ -64,6 +65,7 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
   const ip=request.headers.get('cf-connecting-ip')??'unknown';
   if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);
   const session=token(request,project,'session',local);
+  if(method==='GET'&&path==='portal/config'){const portal=await publishedPortal(env.DB,project);return portal?json(portal.manifest):json({error:'This portal is unavailable.'},404);}
   // Exact deletion receipts remain checkable after withdrawal or sign-out.
   // They prove only this request's completion, never restore authorization.
   if(method==='POST'&&path==='account/delete'){

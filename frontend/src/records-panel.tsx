@@ -1,3 +1,4 @@
+import {VisitorPortalSetup} from './visitor-portal-setup';
 import {useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
@@ -39,7 +40,7 @@ export function RecordsPanel(){
  const options=(summary.data?.items??[]).flatMap(i=>i.schemas.map(s=>({value:i.resourceId+'/'+s.recordId,label:`${i.localId} · ${s.recordId} (${total(s)})`})));
  const current=options.some(o=>o.value===selected)?selected:options[0]?.value??'';
  return <div className="space-y-6 max-w-[900px]"><ProjectSelect value={project} onChange={v=>{setSelected('');choose(v);}}/><StaleProject stale={stale}/>
-  {project&&<><QueryStatus pending={summary.isPending} error={summary.error}/>
+  {project&&<><VisitorPortalSetup key={project} project={project}/><QueryStatus pending={summary.isPending} error={summary.error}/>
    {summary.data&&<EnquirySetup key={project} facts={summary.data.setup} project={project} active={summary.data.items.some(i=>i.localId===summary.data!.setup.instanceId&&i.state==='active')}/>}
    {summary.data&&!options.length&&<p className="text-sm text-muted-foreground">No form records are set up for this project yet.</p>}
    {options.length>0&&<label className="flex flex-col gap-2 text-sm font-medium">Records<select value={current} onChange={e=>setSelected(e.target.value)} className="h-11 px-3 border rounded-md bg-card">{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>}

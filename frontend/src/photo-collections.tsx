@@ -75,7 +75,7 @@ function SharedFileCollectionSetup({project,data}:{project:string;data:OwnerFile
    {setup.state==='staff-role-required'&&<p>Set up the staff role in Visitors first.</p>}
    {setup.state==='not-configured'&&<Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void run(sharedFilesSetupAction(project,setup.audience))}>Set up {setup.audience} files</Button>}
    {activate&&<><p>The collection is saved. Activate its visitor access dependency before activating the collection.</p><Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void run(activate)}>Review activating {setup.audience} files</Button></>}
-   {setup.state==='active'&&<p>Active collection: {setup.instanceId} · {setup.collectionId}. Visitor access must stay active, and viewers must sign in to this project.</p>}
+   {setup.state==='active'&&<p>{label} uploads are active. Visitor access must stay active, and viewers must sign in to this project.</p>}
    {(setup.state==='suspended'||setup.state==='migrating')&&<p>The collection is {setup.state}. Check its status in the modules view.</p>}
    {setup.state==='unavailable'&&<p>The saved collection configuration could not be read.</p>}
   </section>;
