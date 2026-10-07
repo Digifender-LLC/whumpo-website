@@ -33,8 +33,8 @@ export class ModuleError extends Error{
 export const moduleOperations=Object.freeze({
  'records.view':{kind:'records',write:false},'records.get':{kind:'records',write:false},
  'forms.submit':{kind:'records',write:true},'records.update':{kind:'records',write:true},'records.remove':{kind:'records',write:true},
- 'files.prepareUpload':{kind:'files',write:true},'files.putBytes':{kind:'files',write:true},'files.read':{kind:'files',write:false},
- 'files.gallery':{kind:'files',write:false},'files.requestRemoval':{kind:'files',write:true},
+ 'files.putBytes':{kind:'files',write:true},'files.read':{kind:'files',write:false},
+ 'files.gallery':{kind:'files',write:false},
  'access.me':{kind:'access',write:false},'access.list':{kind:'access',write:false},
  'access.prepareRole':{kind:'access',write:true},'access.confirmRole':{kind:'access',write:true},
  'collections.readPublic':{kind:'content',write:false},
@@ -107,9 +107,8 @@ export function decideModule(p:ModulePrincipal,instance:ModuleInstance,operation
   return p.kind==='visitor'?allow(s.fields.filter(f=>f.read==='submitter').map(f=>f.key),'own'):anonymous();
  }
  if(instance.kind==='files'){
-  if(operation==='files.requestRemoval')return p.kind==='owner'?allow():deny('forbidden');
   const x=instance.config.collections.find(y=>y.id===t.collectionId);if(!x)return deny('not_found');
-  if(operation==='files.prepareUpload'||operation==='files.putBytes'){
+  if(operation==='files.putBytes'){
    // Upload authority is the collection role policy; names, prefixes and object keys are never consulted.
    const as=p.kind==='owner'?'owner':staff?'staff':p.kind==='visitor'?'visitor':null;
    return as&&x.upload.includes(as)?allow():anonymous();

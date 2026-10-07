@@ -250,9 +250,14 @@ try{
   assert.equal((await raw(a,envelope(requests,'records.view',{viewId:'desk',cursor:null}),{cookie:staff.cookie,origin:'https://evil.example'})).status,403,'Foreign Origin refused');
   assert.equal((await raw(a,envelope(requests,'records.view',{viewId:'desk',cursor:null}),{cookie:`__Host-whumpo_session=${a.token}`})).body.code,'forbidden','A workspace cookie never authenticates on the visitor origin');
   assert.ok([401,403].includes((await workspace(a,`/api/projects/${a.project}/modules`,{method:'POST',payload:envelope(requests,'records.get',{recordId:'request',entryId:entry}),cookie:staff.cookie})).status),'A visitor cookie never authenticates on the workspace origin');
-  // Operations in the closed set without a delivered handler are refused after authorization, never improvised.
-  assert.equal((await raw(a,envelope(media,'files.prepareUpload',{collectionId:'intake'},{mediaType:'image/jpeg',byteLength:jpegA.length,sha256:await hex(jpegA)}),{cookie:staff.cookie})).body.code,'unavailable');
-  for(const [resource,operation,target] of [[media,'files.requestRemoval',{collectionId:'intake',fileId:staffFile}],[members,'access.prepareRole',{visitorId:v1.visitorId}],[members,'access.confirmRole',{}]]){
+  // Retired file operation names cannot silently acquire a second upload or deletion authority.
+  for(const operation of ['files.prepareUpload','files.requestRemoval']){
+   const retired={...envelope(media,'files.putBytes',{collectionId:'intake'}),operation};
+   assert.equal((await raw(a,retired,{cookie:staff.cookie})).body.code,'client_update_required');
+   assert.equal((await ownerCall(a,retired)).body.code,'client_update_required');
+  }
+  // Access operations without a delivered handler remain refused after authorization.
+  for(const [resource,operation,target] of [[members,'access.prepareRole',{visitorId:v1.visitorId}],[members,'access.confirmRole',{}]]){
    const r=await raw(a,envelope(resource,operation,target),{cookie:staff.cookie});assert.ok(r.status>=400&&['unavailable','forbidden','not_found','invalid_request'].includes(r.body.code),operation);
    const o=await ownerCall(a,envelope(resource,operation,target));assert.ok(o.status>=400,operation+' never succeeds for the owner either');
   }
@@ -306,7 +311,7 @@ try{
 
  await check('no public bucket, bearer URL, booking engine or maintainer inference in module or composition paths',async()=>{
   for(const config of ['wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc']){const text=await readFile(config,'utf8');assert.ok(!/r2\.dev|public_access|presign/i.test(text),config);}
-  assert.deepEqual(Object.keys(m.modulePolicy.moduleOperations).sort(),['access.confirmRole','access.list','access.me','access.prepareRole','collections.readPublic','files.gallery','files.prepareUpload','files.putBytes','files.read','files.requestRemoval','forms.submit','records.get','records.remove','records.update','records.view']);
+  assert.deepEqual(Object.keys(m.modulePolicy.moduleOperations).sort(),['access.confirmRole','access.list','access.me','access.prepareRole','collections.readPublic','files.gallery','files.putBytes','files.read','forms.submit','records.get','records.remove','records.update','records.view']);
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
   for(const entry of ['tests/fixtures/module-compositions/staff-portal.mjs','tests/fixtures/module-compositions/visitor-intake.mjs','src/app-gateway.ts','src/shared-modules/api.ts','src/shared-modules/records.ts','src/shared-modules/files.ts','src/shared-modules/access.ts','src/shared-modules/collections.ts']){
    const out=await build({entryPoints:[entry],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent'});

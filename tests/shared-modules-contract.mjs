@@ -119,15 +119,15 @@ test('staff updates only staff-writable fields',()=>{
 });
 test('only owner removes records',()=>{assert.ok(allowed(owner,records(),'records.remove',{}));assert.equal(reason(staff,records(),'records.remove',{}),'forbidden');});
 test('staff-only upload is a role policy',()=>{
- assert.ok(allowed(staff,files(),'files.prepareUpload',{collectionId:'uploads'}));
- assert.equal(reason(visitor,files(),'files.prepareUpload',{collectionId:'uploads'}),'forbidden');
+ assert.ok(allowed(staff,files(),'files.putBytes',{collectionId:'uploads'}));
+ assert.equal(reason(visitor,files(),'files.putBytes',{collectionId:'uploads'}),'forbidden');
  assert.equal(reason(visitor,files(),'files.putBytes',{collectionId:'uploads',name:'staff/photo.jpg'}),'forbidden');
- assert.equal(reason(anonymous,files(),'files.prepareUpload',{collectionId:'uploads'}),'sign_in_required');
- assert.equal(reason(owner,files(),'files.prepareUpload',{collectionId:'uploads'}),'forbidden');
+ assert.equal(reason(anonymous,files(),'files.putBytes',{collectionId:'uploads'}),'sign_in_required');
+ assert.equal(reason(owner,files(),'files.putBytes',{collectionId:'uploads'}),'forbidden');
 });
 test('file reads only expose approved bytes',()=>{for(const p of [owner,staff])assert.equal(decide(p,files(),'files.read',{collectionId:'uploads'}).fields.clearance,'approved-only');});
 test('revoked staff role loses access on the next decision',()=>assert.equal(reason({...staff,roles:[],accessRevision:5},files(),'files.gallery',{collectionId:'uploads'}),'forbidden'));
-test('file removal uses owner review',()=>{assert.equal(decide(owner,files(),'files.requestRemoval',{}).fields.review,'exact-owner-review');assert.equal(reason(staff,files(),'files.requestRemoval',{}),'forbidden');});
+test('retired file operations require a current client',()=>{for(const operation of ['files.prepareUpload','files.requestRemoval'])rejects(()=>validateRequest(request({operation})),'UNSUPPORTED_OPERATION');});
 test('role grants are owner reviews; staff cannot grant',()=>{assert.equal(decide(owner,access(),'access.prepareRole',{}).fields.review,'exact-owner-review');assert.equal(reason(staff,access(),'access.confirmRole',{}),'forbidden');});
 test('public collection serves approved snapshot only',()=>assert.equal(decide(anonymous,content(),'collections.readPublic',{}).fields.snapshot,'approved-public-only'));
 test('operation must match instance kind',()=>rejects(()=>decide(staff,files(),'records.view',{viewId:'queue'}),'UNSUPPORTED_OPERATION'));

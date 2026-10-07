@@ -144,7 +144,7 @@ const read:ModuleReadHandler=async(db,context)=>{
  return {fileId:row.id,bytes};
 };
 
-/** Delivered files handlers (WH-128). `files.prepareUpload` stays unregistered: `files.putBytes` carries the declared
- * metadata with the bytes in one request (staff and visitors) or names an existing owner photo (owner). `files.requestRemoval` stays unregistered: owners remove module uploads with the
- * existing exact photo removal review, which already respects saved-version references and safety holds. */
+/** Delivered files handlers (WH-128). `files.putBytes` carries metadata with bytes in one visitor/staff request or names
+ * an existing owner photo. Owner removal uses the existing exact photo removal review, including its safety holds and
+ * saved-version checks. Dormant prepareUpload/requestRemoval names are not part of the current operation contract. */
 export const filesHandlers:ModuleHandlers=Object.freeze({'files.putBytes':putBytes,'files.gallery':gallery,'files.read':read});

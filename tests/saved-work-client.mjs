@@ -69,7 +69,7 @@ const digest='a'.repeat(64),now=Date.parse('2026-10-04T00:00:00Z');
 const seeded=(owner,{project=id(),chatRequest=id(),form=id(),pendingForm=id(),requestId=id(),photo=id(),turn=id()}={})=>({ids:{project,chatRequest,form,pendingForm,requestId,photo,turn},store:memory({
  'whumpo.chat-recovery':JSON.stringify({version:2,owner,updatedAt:now-1000,draft:'PRIVATE DRAFT TEXT',pending:{id:chatRequest,revision:4,content:'PRIVATE SENT TEXT'}}),
  'whumpo.chat-forms.v1':JSON.stringify({version:1,owner,forms:{[form]:{definitionDigest:digest,answerRevision:0,answers:{name:'PRIVATE ANSWER'},updatedAt:now-1000,dismissed:false,pending:null},[pendingForm]:{definitionDigest:digest,answerRevision:2,answers:null,updatedAt:now-1000,dismissed:false,pending:{version:1,requestId,interactionId:pendingForm,definitionDigest:digest,expectedAnswerRevision:2,operation:'submit',answers:{name:'PRIVATE SUBMITTED'}}}}}),
- 'whumpo.photo-upload-recovery':JSON.stringify({version:1,owner,uploads:[{id:photo,projectId:project,name:'Front garden',digest:'b'.repeat(64),size:2048,width:800,height:600,handoff:null}]}),
+ 'whumpo.photo-upload-recovery':JSON.stringify({version:2,owner,uploads:[{id:photo,projectId:project,name:'Front garden',digest:'b'.repeat(64),size:2048,width:800,height:600,handoff:null,collection:null}]}),
  'whumpo.chat-location':JSON.stringify({version:2,owner,kind:'turn',id:turn,updatedAt:now-1000}),
 })});
 test('local summary lists each existing store without copying text, answers or bytes',()=>{
@@ -97,6 +97,12 @@ test('another account, stale versions and expired drafts are not listed',()=>{
  assert.deepEqual(later.items.map(i=>i.kind).sort(),['chat-request','form-request','photo'],'Unresolved requests outlive draft/locator expiry; drafts do not');
  const stale=memory({'whumpo.chat-recovery':JSON.stringify({version:1,owner,draft:'x'})});assert.deepEqual(local.readLocalRecovery(stale,owner,now).items,[]);
  const broken=memory({'whumpo.photo-upload-recovery':'{"version":0}'});assert.equal(local.readLocalRecovery(broken,owner,now).failed,true,'Unreadable photo recovery is reported, not hidden');
+});
+test('a saved photo never claims its collection request was confirmed',()=>{
+ const owner=id(),{store}=seeded(owner),item=local.readLocalRecovery(store,owner,now).items.find(i=>i.kind==='photo');
+ const upload={...item.upload,collection:{resourceId:id(),configRevision:1,collectionId:'library',requestId:id()}}, {collection,...photo}=upload;
+ const result=local.checkPhotoUpload(upload,{version:1,closedHandoff:null,photo:{...photo,status:'ready',safetyStatus:'approved'}});
+ assert.deepEqual(result,{state:'collection'});assert.match(local.localRecoveryCopy({...item,upload},result).detail,/original collection request/);
 });
 for(const [name,fn] of Object.entries({
  'Chat request checks distinguish absent, confirmed and different records':async()=>{

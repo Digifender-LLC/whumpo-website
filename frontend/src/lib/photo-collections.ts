@@ -20,7 +20,7 @@ export const candidateOf=(d:OwnerFileCollections|undefined,fileId:string)=>(d?.c
 /** A gallery needs a saved page and at least one approved owner-filed photo; held photos are never candidates. */
 export const galleryReady=(c:OwnerCollection,pages:OwnerFileCollections['pages'])=>pages.length>0&&c.files.some(f=>f.safety==='approved');
 
-export function fileIntoCollectionBody(c:OwnerCollection,candidate:CollectionCandidate,requestId:string){
+export function fileIntoCollectionBody(c:Pick<OwnerCollection,'resourceId'|'configRevision'|'collectionId'>,candidate:CollectionCandidate,requestId:string){
  return {api:'whumpo-modules',version:1,operation:'files.putBytes',resourceId:c.resourceId,configRevision:c.configRevision,requestId,target:{collectionId:c.collectionId},input:{fileId:candidate.fileId,sha256:candidate.sha256}};
 }
 /** WH-128 standard photo collection setup: the typed `filesModuleReview` control (project id only; the server chooses

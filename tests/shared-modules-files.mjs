@@ -339,6 +339,57 @@ try{
   const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['module-files','Add to collection','Prepare gallery page'])assert.ok(!prompt.includes(word),word);
  });
 
+ await check('Chat photo collection handoff persists one exact filing request and recovers without resending image bytes',async()=>{
+  const built=await build({stdin:{contents:"export * from './frontend/src/lib/photo-upload-collection';export * from './frontend/src/lib/photo-upload-recovery';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+  const ui=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+  const c=await owner(),d=await owner();await configureFixtureModules(c.scope,c.user,c.project,[{...filesInstance,dependencies:[],config:{collections:[collection('library','owner',['owner'],null)]}}]);await activation(c,'media');
+  const resource=await instance(c,'media'),turn=id();
+  await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) SELECT ?,user_id,revision+1,'Add a photo','Private uploader',datetime('now'),'ai','completed' FROM workspace_state WHERE user_id=?",turn,c.user);
+  await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',c.user);
+  const prepared=await m.preparePhotoIntake(c.scope,c.user,{originTurnId:turn,projectId:c.project});await c.scope.batch(prepared.statements);
+  const intake=await m.readInteraction(c.scope,c.user,prepared.interactionId),handoff={interactionId:intake.envelope.id,definitionDigest:intake.envelope.definitionDigest};
+  const cleaned=m.cleanPhoto(jpegA),photoId=id(),pending={id:photoId,projectId:c.project,name:'Collection upload',digest:await hex(cleaned.bytes),size:cleaned.bytes.length,width:cleaned.width,height:cleaned.height,handoff,
+   collection:{resourceId:resource.id,configRevision:resource.config_revision,collectionId:'library',requestId:id()}};
+  const values=new Map(),storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+  ui.writePhotoRecovery(storage,c.user,pending);
+  let writes=0,drop=false;
+  const send=o=>async(path,init={})=>{
+   const response=await m.worker.fetch(new Request('https://whumpo.com/api'+path,{...init,headers:{cookie:`__Host-whumpo_session=${o.token}`,origin:'https://whumpo.com','content-type':'application/json',...init.headers}}),{...(fixture.env??{}),...env},{waitUntil(){}});
+   const body=await response.json();if(!response.ok)throw Object.assign(Error(body.error),{code:body.code,status:response.status});
+   if(init.method==='POST'){writes++;if(drop){drop=false;throw Error('Connection lost after filing');}}return body;
+  };
+  await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':JSON.stringify(handoff),'x-photo-name':pending.name},body:jpegA}),{...env,DB:c.scope},c.user,c.project,photoId);
+  const photo=await m.readPhotoUpload(c.scope,c.user,c.project,photoId,handoff);assert.equal(photo.photo.status,'ready');assert.equal(photo.photo.safetyStatus,'pending');assert.deepEqual(photo.photo.handoff,handoff);
+  const restored=ui.readPhotoRecovery(storage,c.user,c.project);assert.deepEqual(restored,pending);
+  assert.equal(await ui.photoCollectionStatus(send(c),restored),'pending');assert.equal(writes,0,'Opening or checking the uploader never files a photo');
+  const beforeObjects=(await FILES.list()).objects.length;
+  drop=true;await assert.rejects(ui.finishPhotoCollection(send(c),restored),/Connection lost after filing/);
+  assert.deepEqual(ui.readPhotoRecovery(storage,c.user,c.project),pending,'Lost acknowledgement keeps both upload and filing identity');
+  await ui.finishPhotoCollection(send(c),restored);assert.equal(writes,2);
+  assert.equal((await row('SELECT count(*) n FROM module_request_receipts WHERE instance_id=? AND request_id=?',resource.id,pending.collection.requestId)).n,1);
+  assert.equal((await row('SELECT count(*) n FROM module_files WHERE file_id=?',photoId)).n,1);
+  assert.equal((await FILES.list()).objects.length,beforeObjects,'Filing never writes image bytes');
+  assert.equal(await ui.photoCollectionStatus(send(c),restored),'filed');
+  await activation(c,'media','disable');assert.equal(await ui.photoCollectionStatus(send(c),restored),'filed','Read-only recovery still works after disable');
+  ui.resolvePhotoRecovery(storage,c.user,restored);assert.equal(ui.readPhotoRecovery(storage,c.user,c.project),null);
+  const unf=crypto.randomUUID();await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':'Unfiled'},body:jpegB}),{...env,DB:c.scope},c.user,c.project,unf);
+  const second=await m.readPhotoUpload(c.scope,c.user,c.project,unf),{status,safetyStatus,...metadata}=second.photo;
+  const retry={...metadata,collection:{...pending.collection,requestId:id()}};ui.writePhotoRecovery(storage,c.user,retry);
+  await assert.rejects(ui.finishPhotoCollection(send(c),retry),{code:'unavailable'});assert.equal(await ui.photoCollectionStatus(send(c),retry),'pending');assert.deepEqual(ui.readPhotoRecovery(storage,c.user,c.project),retry);
+  await activation(c,'media');await assert.rejects(ui.finishPhotoCollection(send(c),{...retry,collection:{...retry.collection,configRevision:resource.config_revision+1}}),{code:'stale_configuration'});
+  await send(c)(`/projects/${c.project}/module-files/remove`,{method:'POST',body:JSON.stringify({resourceId:resource.id,collectionId:'library',fileId:photoId})});
+  await assert.rejects(ui.finishPhotoCollection(send(c),restored),/collection membership changed/,'A past receipt cannot claim current membership after removal');
+  await assert.rejects(ui.finishPhotoCollection(send(d),retry),{status:404});
+  await assert.rejects(ui.finishPhotoCollection(send(c),{...retry,digest:'0'.repeat(64)}),{code:'invalid_request'});
+  assert.equal(await row('SELECT 1 FROM module_files WHERE file_id=?',unf),null,'Refusals leave the private photo intact and unfiled');
+  await ui.finishPhotoCollection(send(c),retry);assert.equal(await ui.photoCollectionStatus(send(c),retry),'filed');
+  assert.equal(await ui.photoCollectionStatus(send(c),{...retry,collection:{...retry.collection,collectionId:'other'}}),'different');
+  await assert.rejects(ui.finishPhotoCollection(async()=>({api:'whumpo-modules'}),retry),/could not be confirmed/);
+  assert.equal((await row('SELECT state FROM project_photo_safety WHERE file_id=?',unf)).state,'pending');
+  await assert.rejects(m.readPhoto({...env,DB:c.scope},c.user,unf),{status:423});
+  const transcript=JSON.stringify((await m.readChat(c.scope,c.user)).turns);assert.ok(!transcript.includes(photoId)&&!transcript.includes(pending.digest),'The collection adapter adds no photo values or digest to Chat');
+ });
+
  await check('owner photo collection setup: the typed control prepares the exact standard website review; saving and activation stay separate',async()=>{
   const built=await build({entryPoints:['frontend/src/lib/photo-collections.ts'],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
   const ui=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
@@ -519,6 +570,6 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the typed filesModuleReview setup control (exact standard owner-only instance through the existing review, tampered proposals refused inside the commit, separate save and activation, existing collection, taken ids, no website and foreign owner refused), the owner Photos panel client over the real routes (panel facts, Add to collection with request-id replay, Prepare gallery page, disabled-instance refusal, no staff/visitor uploads listed), Remove from collection (owner only, idempotent after a lost acknowledgement, photo, object and receipt kept, re-filing, foreign/unknown/non-owner/staff-upload/malformed refusals, refused while the saved website shows the photo, allowed when disabled and inside a hold), the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
+ process.stdout.write(`Shared module files passed: ${cases} groups on ${d1?'local D1 and local R2':'SQLite with an in-memory private bucket'} — over-wide gallery rejection, staff-only upload by collection role policy through the visitor upload route (plain visitor, anonymous, foreign, workspace-cookie, owner and revoked staff refused; caller locations and names refused; declared digest/length/type checked; replay and conflict), pending safety receipt on every upload, held/blocked/tampered files never served, approved bytes re-hashed, own-scope visitor galleries, existing owner photos filed into an owner collection by id and exact digest (no duplicate row or object; module uploads, foreign photos, wrong digests and non-owner collections refused; filed photos stay in the owner library and survive instance removal), a published gallery through the typed galleryPageReview control, the typed filesModuleReview setup control (exact standard owner-only instance through the existing review, tampered proposals refused inside the commit, separate save and activation, existing collection, taken ids, no website and foreign owner refused), the Chat photo collection handoff (persisted exact target/request, read-only interrupted recovery, module receipt replay, no duplicate bytes, disabled/stale/foreign/digest refusals), the owner Photos panel client over the real routes (panel facts, Add to collection with request-id replay, Prepare gallery page, disabled-instance refusal, no staff/visitor uploads listed), Remove from collection (owner only, idempotent after a lost acknowledgement, photo, object and receipt kept, re-filing, foreign/unknown/non-owner/staff-upload/malformed refusals, refused while the saved website shows the photo, allowed when disabled and inside a hold), the exact specification review (tampered proposals refused inside the commit), specificationApply and the exact publication review with approved exact-digest photos only and a later block stopping delivery, module uploads refused as website photos, the owner files export serializer (approved re-hashed bytes only, withheld count, visitor-scoped slice, tamper-checked import validation), exclusion from the owner photo library and model context, exact photo removal review under and after a safety hold, visitor erasure, caps, direct-write refusals, closure counts, instance-removal cascade and a static no-inference check. Synthetic clearances only; no scanner, network, model or provider.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

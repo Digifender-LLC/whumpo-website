@@ -139,8 +139,8 @@ export function admitInstance(input,catalog){
 export const moduleOperations=Object.freeze({
  'records.view':{kind:'records',write:false},'records.get':{kind:'records',write:false},
  'forms.submit':{kind:'records',write:true},'records.update':{kind:'records',write:true},'records.remove':{kind:'records',write:true},
- 'files.prepareUpload':{kind:'files',write:true},'files.putBytes':{kind:'files',write:true},'files.read':{kind:'files',write:false},
- 'files.gallery':{kind:'files',write:false},'files.requestRemoval':{kind:'files',write:true},
+ 'files.putBytes':{kind:'files',write:true},'files.read':{kind:'files',write:false},
+ 'files.gallery':{kind:'files',write:false},
  'access.me':{kind:'access',write:false},'access.list':{kind:'access',write:false},
  'access.prepareRole':{kind:'access',write:true},'access.confirmRole':{kind:'access',write:true},
  'collections.readPublic':{kind:'content',write:false},
@@ -210,7 +210,7 @@ export function decide(principalInput,instanceInput,operation,target){
    // A visitor reads only its own submitted record and only submitter-readable fields.
    return p.kind==='visitor'?allow({fields:s.fields.filter(f=>f.read==='submitter').map(f=>f.key),scope:'own'}):deny('sign_in_required');
   }
-  case 'files.prepareUpload':case 'files.putBytes':{
+  case 'files.putBytes':{
    const x=c.collections.find(y=>y.id===target?.collectionId);if(!x)return deny('not_found');
    const as=p.kind==='owner'?'owner':staff?'staff':p.kind==='visitor'?'visitor':null;
    // Upload authority is the collection's role policy. Names, prefixes and object keys are never consulted.
@@ -223,7 +223,6 @@ export function decide(principalInput,instanceInput,operation,target){
    if(operation==='files.gallery'&&(!x.gallery||(x.gallery.audience==='staff'&&!staff)))return deny('forbidden');
    return ok?allow({clearance:'approved-only',scope:staff?'all':'own'}):deny(p.kind==='public'?'sign_in_required':'forbidden');
   }
-  case 'files.requestRemoval':return p.kind==='owner'?allow({review:'exact-owner-review'}):deny('forbidden');
   case 'access.me':return p.kind==='visitor'?allow():deny('sign_in_required');
   case 'access.list':case 'access.prepareRole':case 'access.confirmRole':return p.kind==='owner'?allow(operation==='access.list'?null:{review:'exact-owner-review'}):deny('forbidden');
   case 'collections.readPublic':return allow({snapshot:'approved-public-only'});

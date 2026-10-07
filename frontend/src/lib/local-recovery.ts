@@ -1,10 +1,10 @@
 import {readRecovery} from './chat-recovery';
 import {readChatLocation,type ChatLocation} from './chat-location';
 import {listFormRecovery} from './interaction-recovery';
-import {listPhotoRecovery} from './photo-upload-recovery';
+import {listPhotoRecovery,type PhotoRecovery} from './photo-upload-recovery';
 import {matchesChatRequest,type ChatRequest} from './chat-delivery';
 import {matchesInteractionReceipt} from './interaction-delivery';
-import {samePhotoUpload,type PhotoUpload,type PhotoUploadStatus} from '../../../src/photo-upload-shape';
+import {samePhotoUpload,type PhotoUploadStatus} from '../../../src/photo-upload-shape';
 import type {InteractionReceipt,Mutation} from '../../../src/chat-interactions/types';
 import type {Turn} from './api';
 
@@ -16,7 +16,7 @@ export type LocalRecoveryItem=
  {key:string;kind:'chat-request';request:ChatRequest}|
  {key:string;kind:'form-draft';interactionId:string}|
  {key:string;kind:'form-request';interactionId:string;request:Mutation}|
- {key:string;kind:'photo';upload:PhotoUpload}|
+ {key:string;kind:'photo';upload:PhotoRecovery}|
  {key:string;kind:'location';target:ChatLocation};
 type Store=Pick<Storage,'getItem'|'setItem'|'removeItem'>;
 
@@ -34,7 +34,7 @@ export const localRecoveryNeedsCheck=(item:LocalRecoveryItem)=>item.kind==='chat
 
 export type LocalCheck=
  {state:'absent'}|{state:'confirmed';detail:'pending'|'completed'|'failed'|'uncertain'|'saved'|'approved'|'held'|'blocked'}|
- {state:'started'}|{state:'closed'}|{state:'different'};
+ {state:'started'}|{state:'closed'}|{state:'different'}|{state:'collection'};
 /** `read` returns null only for the server's "not found" reply. */
 export async function checkChatRequest(request:ChatRequest,read:(id:string)=>Promise<Turn|null>):Promise<LocalCheck>{
  const turn=await read(request.id);if(!turn)return {state:'absent'};
@@ -44,11 +44,12 @@ export async function checkFormRequest(request:Mutation,read:(requestId:string)=
  const receipt=await read(request.requestId);if(!receipt)return {state:'absent'};
  return await matchesInteractionReceipt(request,receipt)?{state:'confirmed',detail:'saved'}:{state:'different'};
 }
-export function checkPhotoUpload(upload:PhotoUpload,status:PhotoUploadStatus):LocalCheck{
+export function checkPhotoUpload(upload:PhotoRecovery,status:PhotoUploadStatus):LocalCheck{
  if(status.closedHandoff)return upload.handoff&&status.closedHandoff.interactionId===upload.handoff.interactionId&&status.closedHandoff.definitionDigest===upload.handoff.definitionDigest?{state:'closed'}:{state:'different'};
  if(!status.photo)return {state:'absent'};
  if(!samePhotoUpload(upload,status.photo))return {state:'different'};
  if(status.photo.status!=='ready')return {state:'started'};
+ if(upload.collection)return {state:'collection'};
  return {state:'confirmed',detail:status.photo.safetyStatus==='approved'?'approved':status.photo.safetyStatus==='blocked'?'blocked':'held'};
 }
 
@@ -76,6 +77,7 @@ export function localRecoveryCopy(item:LocalRecoveryItem,check:LocalCheck|'check
  if(check.state==='confirmed')return {title,label:localRecoveryLabels.confirmed,detail:confirmedDetail[check.detail]};
  if(check.state==='absent')return {title,label:localRecoveryLabels.absent,detail:item.kind==='photo'?'No saved upload was found yet. That does not prove the earlier upload stopped. Retry in Photos uses the original upload ID and the original file.':'No saved record was found yet. That does not prove the request stopped. Opening it lets you retry the same request; nothing is sent automatically.'};
  if(check.state==='started')return {title,label:'Started, not confirmed',detail:'The upload started but did not finish. Retry the same photo in Photos to complete it.'};
+ if(check.state==='collection')return {title,label:'Photo saved; collection needs checking',detail:'The photo is saved privately. Open Photos to check or finish the original collection request without uploading the image again.'};
  if(check.state==='closed')return {title,label:localRecoveryLabels.absent,detail:'The uploader closed before this upload was reserved, so it cannot start. Open Photos to clear this device record or choose a new photo.'};
  return {title,label:'Different saved record',detail:'The server has a different record for this request ID. Keep this tab open and open the item to review it before doing anything else.'};
 }

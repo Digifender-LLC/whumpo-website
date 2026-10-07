@@ -43,7 +43,7 @@ export async function currentSiteFixtureHandlers(){
   export {jsonDigest} from './src/project-specification/v2/json';
   export {readViewBinding,readSavedViewComponent} from './src/workspace-view-bindings';
   export {readTemporaryViewComponent} from './src/chat-interactions/view-cards';
-  export {prepareWorkspaceView,readInteraction} from './src/chat-interactions/store';
+  export {prepareWorkspaceView,preparePhotoIntake,readInteraction} from './src/chat-interactions/store';
   export {bindings as interactionBindings} from './src/chat-interactions/protocol';
   export {readViewComponentData} from './src/workspace-view-data';
   export {reserveStorage} from './src/storage-budget';
