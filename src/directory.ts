@@ -71,6 +71,8 @@ export async function directoryAction(db:D1Database,user:string,turn:string,acti
  if(kind==='unpublish')change='Take this directory page and its JSON API offline. The private draft and review history remain.';
  const digest=await hashToken(snapshot);
  return result(`${p.name}\n\n${change}\n\n${kind==='edit'?'Your existing public snapshot will not change. ':''}Review ${turn}\nSnapshot SHA-256: ${digest}\nNothing changes until you use this review’s confirmation button within 10 minutes.`,[
+  // Prune only this project's eligible terminal reviews; keep the exact source about to be referenced.
+  db.prepare('DELETE FROM directory_reviews WHERE id IN (SELECT id FROM prunable_directory_reviews WHERE project_id=? AND id IS NOT ? LIMIT 500)').bind(project,source),
   db.prepare('INSERT OR IGNORE INTO directories(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(project,turn,user),
   db.prepare('INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,source_review_id) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,user,project,kind,snapshot,digest,p.revision,p.current_publication??-1,new Date(Date.now()+600000).toISOString(),source,turn,user)
  ]);
@@ -97,4 +99,14 @@ export async function directoryCommand(db:D1Database,user:string,turn:string,com
 export async function publicDirectory(db:D1Database,project:string){
  const p=await db.prepare('SELECT p.name,d.live_json,d.published_at FROM directories d JOIN projects p ON p.id=d.project_id JOIN publications s ON s.project_id=d.project_id WHERE d.project_id=? AND d.live_json IS NOT NULL AND s.version_id IS NOT NULL AND d.publication_revision=s.revision').bind(project).first<{name:string;live_json:string;published_at:string}>();
  return p?{name:p.name,publishedAt:p.published_at,listings:entries(p.live_json)}:null;
+}
+
+/** Existing daily maintenance: at most ten 500-row batches. The shared SQL policy also guards direct deletes and
+ * excludes holds, all current/ancestry/export references and unknown authority. Owner preparation performs one
+ * scoped batch so eligible history cannot force an operator database edit while waiting for the schedule. */
+export async function cleanupDirectoryReviews(db:D1Database){
+ for(let batch=0;batch<10;batch++){
+  const result=await db.prepare('DELETE FROM directory_reviews WHERE id IN (SELECT id FROM prunable_directory_reviews LIMIT 500)').run();
+  if((result.meta?.changes??0)<500)break;
+ }
 }

@@ -16,6 +16,7 @@ const blocked=(trigger,note)=>({decision:'blocked',mechanism:trigger,note});
 const excluded=rationale=>({decision:'excluded',rationale});
 export const deletionSites={
  'src/connectors/lookups.ts::connector_lookup_consents':excluded('Temporary one-use read authority containing digests and identifiers only. Query/result content is transient and never stored; expiry must not preserve executable consent.'),
+ 'src/directory.ts::directory_reviews':blocked('safety_hold_directory_review_retained','WH-061 directory review cleanup selects only prunable terminal reviews; project holds block both bounded scheduled/on-demand cleanup and direct receipt deletion. Current draft/live, ancestry/export and unknown authority stay referenced.'),
  'src/shared-modules/schema.sql::project_files':blocked('safety_hold_file_retained','WH-128 module uploads are project_files rows: module_file_visitor_erased (visitor erasure) and module_file_instance_removed (files instance removal, today only with its project) delete them through the same table, so a held file refuses the delete and the erasure or removal fails; nothing is queued for R2 cleanup.'),
  'schema/platform.sql::project_files':blocked('safety_hold_file_retained','Confirmed photo removal (photo_removal_apply) inside an account/project/object hold fails with the existing generic error; the R2 object is never queued.'),
  'schema/platform.sql::site_versions':blocked('safety_hold_version_retained','Confirmed saved-version removal (version_removal_apply) inside a held project.'),

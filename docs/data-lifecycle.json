@@ -1000,9 +1000,9 @@
       ],
       "scope": "project",
       "purpose": "Structured directory records, public snapshots and exact change/export authority.",
-      "currentRetention": "Current draft/live data and immutable reviews remain with project; no age purge of review payloads.",
-      "proposedRetention": "Active records until explicit removal/closure; strip duplicate obsolete snapshot payloads only after preserving required receipt identity. Reapply record deletion on restores.",
-      "deletionAuthority": "Exact owner mutation/closure review; identify third-party personal data and lawful request routing.",
+      "currentRetention": "Current draft/live data and provenance, ancestry/export references and unknown-operation authority remain with the project. Completed expired unapplied reviews and superseded completed applied reviews after 90 days are pruned in bounded batches, skipping safety-held projects; recent/actionable reviews use a rolling 100-review admission window.",
+      "proposedRetention": "Current source retention is implemented. Permanently referenced ancestry/export evidence can grow with owner actions and is not deleted to meet a count cap; record deletion reapplication on broader portable restores remains separately scoped.",
+      "deletionAuthority": "Exact owner mutation/closure review or bounded terminal-review retention under shared SQL preservation guards; holds and current/referenced/unknown authority prevent pruning. Identify third-party personal data and lawful request routing.",
       "exportPolicy": "Owned directory snapshots/records in a separately labeled project-data section, with current safety/privacy authorization.",
       "references": [
         "docs/directories.md",

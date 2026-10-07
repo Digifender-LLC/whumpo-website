@@ -2509,7 +2509,7 @@ BEGIN SELECT RAISE(ABORT,'directory_changed'); END;
 CREATE TRIGGER directory_review_insert BEFORE INSERT ON directory_reviews
 BEGIN
  SELECT RAISE(ABORT,'directory_changed') WHERE NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
- SELECT RAISE(ABORT,'directory_capacity') WHERE NEW.kind!='unpublish' AND (SELECT COUNT(*) FROM directory_reviews WHERE project_id=NEW.project_id AND kind!='unpublish')>=100;
+ SELECT RAISE(ABORT,'directory_capacity') WHERE NEW.kind!='unpublish' AND (SELECT COUNT(*) FROM directory_reviews r WHERE r.project_id=NEW.project_id AND r.kind!='unpublish' AND NOT EXISTS(SELECT 1 FROM directory_reviews_outside_window old WHERE old.id=r.id))>=100;
 END;
 
 CREATE TRIGGER backend_versions_immutable BEFORE UPDATE ON backend_versions BEGIN SELECT RAISE(ABORT,'backend_immutable'); END;
@@ -5212,3 +5212,37 @@ BEGIN
  FROM safety_preservation_holds WHERE released_at IS NULL
   AND ((scope='account' AND subject_user_id=OLD.user_id) OR (OLD.project_id IS NOT NULL AND scope='project' AND project_id=OLD.project_id)) ORDER BY placed_at,id LIMIT 1;
 END;
+
+-- WH-061 bounded directory review turnover. Recent approvals and unknown/in-progress Chat authority remain in
+-- the admission window. Expired completed proposals and applied completed receipts older than 90 days leave it;
+-- permanently referenced historical evidence never exhausts the operational 100-review allowance.
+CREATE VIEW directory_reviews_outside_window AS
+ SELECT r.id,r.project_id FROM directory_reviews r JOIN chat_turns origin ON origin.id=r.id AND origin.user_id=r.user_id AND origin.status='completed'
+ LEFT JOIN chat_turns approval ON approval.id=r.confirmed_by AND approval.user_id=r.user_id
+ WHERE (r.status='pending' AND julianday(r.expires_at)<=julianday('now'))
+  OR (r.status='applied' AND approval.status='completed' AND julianday(approval.created_at)<=julianday('now','-90 days'));
+CREATE INDEX directory_reviews_ancestry ON directory_reviews(source_review_id) WHERE source_review_id IS NOT NULL;
+CREATE INDEX directory_reviews_applied ON directory_reviews(project_id,status,kind,expected_revision);
+CREATE INDEX directory_exports_snapshot ON directory_exports(review_id);
+
+-- Preserve current state and draft/live provenance, every source ancestry/export reference, safety holds and
+-- unknown-operation authority. Protected ancestry or exported snapshots can grow with owner actions; these are
+-- deliberately not pruned to meet a count cap. Cleanup is bounded per invocation, not a fixed lifetime total.
+CREATE VIEW prunable_directory_reviews AS
+ SELECT r.id,r.project_id FROM directory_reviews r JOIN directory_reviews_outside_window old ON old.id=r.id
+ WHERE NOT EXISTS(SELECT 1 FROM safety_held_projects h WHERE h.project_id=r.project_id)
+  AND NOT EXISTS(SELECT 1 FROM directory_reviews child WHERE child.source_review_id=r.id)
+  AND NOT EXISTS(SELECT 1 FROM directory_exports export WHERE export.review_id=r.id)
+  AND NOT EXISTS(SELECT 1 FROM directories d WHERE d.project_id=r.project_id AND r.status='applied' AND (
+   r.expected_revision=d.revision-1
+   OR (r.kind='edit' AND r.snapshot_json=d.draft_json AND r.expected_revision=(SELECT max(other.expected_revision) FROM directory_reviews other WHERE other.project_id=r.project_id AND other.status='applied' AND other.kind='edit' AND other.snapshot_json=d.draft_json))
+   OR (r.kind='publish' AND r.snapshot_json=d.live_json AND r.publication_revision=d.publication_revision AND r.expected_revision=(SELECT max(other.expected_revision) FROM directory_reviews other WHERE other.project_id=r.project_id AND other.status='applied' AND other.kind='publish' AND other.snapshot_json=d.live_json AND other.publication_revision=d.publication_revision))
+  ));
+CREATE TRIGGER directory_review_retained BEFORE DELETE ON directory_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+ AND NOT EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+ AND NOT EXISTS(SELECT 1 FROM prunable_directory_reviews WHERE id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'directory_review_retained'); END;
+CREATE TRIGGER safety_hold_directory_review_retained BEFORE DELETE ON directory_reviews
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
