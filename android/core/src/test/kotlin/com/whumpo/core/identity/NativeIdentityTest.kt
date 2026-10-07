@@ -294,6 +294,29 @@ class NativeIdentityTest {
         assertEquals("new owner draft", stateStore.read(AccountScope.of(b), StateSlot.CHAT_DRAFT))
     }
 
+    @Test fun lateFailuresAfterAnAccountCycleCannotReachReceiptRecoveryOrRevokeTheNewSession() = runTest {
+        val io = StandardTestDispatcher(testScheduler); val api = Api(); val stateStore = store
+        val controller = NativeIdentityController(api, stateStore, pending, environment, io) { clock }
+        controller.initialize(); controller.passkey(PasskeyPrompt { "fixture-credential" })
+        for (code in listOf("not_found", "network", "proof_required", "identity_changed", "account_closing")) {
+            val gate = CompletableDeferred<Unit>(); var oldFailureDelivered = false; var cancelled = false
+            val old = launch {
+                try { controller.authorized(AccountScope.of(a)) { gate.await(); throw IdentityFailure(code) } }
+                catch (_: kotlinx.coroutines.CancellationException) { cancelled = true }
+                catch (_: IdentityFailure) { oldFailureDelivered = true; stateStore.write(AccountScope.of(a), NativeWorkspaceController.PENDING_SLOT, "stale response changed custody") }
+            }
+            runCurrent()
+            api.account = b; controller.passkey(PasskeyPrompt { "fixture-credential" })
+            api.account = a; controller.passkey(PasskeyPrompt { "fixture-credential" })
+            stateStore.write(AccountScope.of(a), NativeWorkspaceController.PENDING_SLOT, "new session exact request")
+            gate.complete(Unit); old.join()
+            assertTrue("Old $code must be cancelled", cancelled); assertFalse(oldFailureDelivered)
+            assertEquals(AccountScope.of(a), controller.activeAccount.value); assertTrue(controller.state.value.signedIn)
+            assertFalse(controller.state.value.accountClosing)
+            assertEquals("new session exact request", stateStore.read(AccountScope.of(a), NativeWorkspaceController.PENDING_SLOT))
+        }
+    }
+
     @Test fun tamperedExpiredOrForeignKeyPendingStateIsErased() {
         val fixture = PendingIdentity(BrowserPurpose.SIGN_IN, "a".repeat(43), "b".repeat(43), clock.plusSeconds(300), PendingPhase.STARTING)
         pending.save(fixture)

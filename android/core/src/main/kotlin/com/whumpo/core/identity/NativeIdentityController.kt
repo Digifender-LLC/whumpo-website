@@ -331,9 +331,17 @@ class NativeIdentityController(
                 }
             }
             result
-        } catch (error: IdentityFailure) {
-            if (error.code == "account_closing") freezeForClosure(ticket)
-            else if (error.code in setOf("proof_required", "identity_changed", "identity_incomplete")) failed(ticket, error)
+        } catch (error: Exception) {
+            // A stale failure is just as private as a stale successful reply. In particular,
+            // a late 404 must not update a new session's pending receipt after A → B → A.
+            synchronized(lock) {
+                if (generation != ticket || active.value != owner || session?.token != candidate.token) {
+                    throw CancellationException("Account changed")
+                }
+            }
+            val code = (error as? IdentityFailure)?.code
+            if (code == "account_closing") freezeForClosure(ticket)
+            else if (code in setOf("proof_required", "identity_changed", "identity_incomplete")) failed(ticket, error)
             throw error
         }
     }
